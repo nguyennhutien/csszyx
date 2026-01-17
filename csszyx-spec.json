@@ -1,0 +1,1941 @@
+{
+    "project_name": "csszyx",
+    "version": "0.0.0",
+    "spec_format": "AI-Agent Executable Specification",
+    "description": "CSS-in-JS framework with Tailwind object syntax, automatic minification, and SSR safety. The name 'csszyx' represents class names encoded in reversed sequence z→y→x (memorable and distinctive). Optimizes bundle size through tier-based class encoding and intelligent CSS variable reuse.",
+
+    "universal_architecture": {
+        "description": "csszyx is designed as a universal tool like Tailwind - supporting all major bundlers and frameworks with a single installation.",
+
+        "plugin_system": {
+            "engine": "unplugin",
+            "description": "Built on unplugin for universal bundler compatibility. Single codebase, multiple bundler targets.",
+            "repository": "https://github.com/unjs/unplugin",
+
+            "supported_bundlers": {
+                "vite": {
+                    "import": "import csszyx from 'csszyx/vite'",
+                    "status": "primary",
+                    "features": ["HMR", "dev server integration", "build optimization"]
+                },
+                "webpack": {
+                    "import": "const csszyx = require('csszyx/webpack')",
+                    "status": "supported",
+                    "features": ["loader integration", "plugin hooks", "watch mode"]
+                },
+                "rollup": {
+                    "import": "import csszyx from 'csszyx/rollup'",
+                    "status": "supported",
+                    "features": ["bundle optimization", "tree-shaking"]
+                },
+                "esbuild": {
+                    "import": "import csszyx from 'csszyx/esbuild'",
+                    "status": "supported",
+                    "features": ["fast compilation", "minimal config"]
+                },
+                "rspack": {
+                    "import": "const csszyx = require('csszyx/rspack')",
+                    "status": "supported",
+                    "features": ["Rust-based performance", "webpack compatibility"]
+                }
+            },
+
+            "meta_frameworks": {
+                "nextjs": {
+                    "config": "next.config.js with csszyx plugin wrapper",
+                    "features": [
+                        "App Router support",
+                        "Pages Router support",
+                        "RSC boundary guards"
+                    ]
+                },
+                "nuxt": {
+                    "config": "nuxt.config.ts with csszyx module",
+                    "features": ["Auto-import", "Nitro SSR support"]
+                },
+                "remix": {
+                    "config": "vite.config.ts (Remix v2+)",
+                    "features": ["Server/client boundary handling"]
+                },
+                "astro": {
+                    "config": "astro.config.mjs with csszyx integration",
+                    "features": ["Island architecture support", "partial hydration"]
+                }
+            }
+        },
+
+        "framework_support": {
+            "description": "Framework-agnostic JSX/template transformation. csszyx works with any framework that uses JSX or has template compilation.",
+
+            "react": {
+                "syntax": "<div sz={{ p: 4, bg: 'blue-500' }} />",
+                "transform": "JSX attribute transformation via Babel/SWC",
+                "typescript": "Full IntelliSense via declaration merging",
+                "features": [
+                    "Concurrent Mode safe",
+                    "Suspense compatible",
+                    "RSC boundary guards"
+                ]
+            },
+            "vue": {
+                "syntax": "<div :sz=\"{ p: 4, bg: 'blue-500' }\" />",
+                "transform": "Template compiler plugin",
+                "typescript": "Volar type extensions",
+                "features": ["Composition API support", "Nuxt integration"]
+            },
+            "svelte": {
+                "syntax": "<div sz={{ p: 4, bg: 'blue-500' }} />",
+                "transform": "Svelte preprocessor",
+                "typescript": "Svelte-kit type generation",
+                "features": ["SvelteKit SSR support"]
+            },
+            "solid": {
+                "syntax": "<div sz={{ p: 4, bg: 'blue-500' }} />",
+                "transform": "JSX transformation (Solid compiler)",
+                "typescript": "Native Solid types",
+                "features": ["Fine-grained reactivity preserved"]
+            },
+            "qwik": {
+                "syntax": "<div sz={{ p: 4, bg: 'blue-500' }} />",
+                "transform": "QwikCity integration",
+                "typescript": "Qwik optimizer compatible",
+                "features": ["Resumability preserved", "lazy loading"]
+            }
+        },
+
+        "installation": {
+            "single_package": "npm install csszyx",
+            "peer_dependencies": "tailwindcss (auto-detected version)",
+            "config_file": "csszyx.config.js (optional, sensible defaults)",
+
+            "quickstart": {
+                "step_1": "npm install csszyx",
+                "step_2": "Add plugin to bundler config",
+                "step_3": "Use sz prop in components",
+                "step_4": "Build (automatic mangling in production)"
+            },
+
+            "example_configs": {
+                "vite_react": "import csszyx from 'csszyx/vite'\n\nexport default defineConfig({\n  plugins: [csszyx(), react()]\n})",
+                "webpack": "module.exports = {\n  plugins: [require('csszyx/webpack')()]\n}",
+                "nextjs": "const withCsszyx = require('csszyx/next')\n\nmodule.exports = withCsszyx({\n  // next config\n})"
+            }
+        }
+    },
+
+    "execution_protocol": {
+        "description": "Mandatory protocol for AI agents when processing any csszyx-related task",
+        "mandatory_steps": {
+            "step_1_task_classification": {
+                "action": "Analyze task and map to one or more domains via decision_matrix",
+                "output": "Array of domain IDs in priority order",
+                "example": "Task 'optimize SSR hydration' → ['Architectural_Core_&_Safety', 'Performance_GPU_&_Runtime_Optimization']"
+            },
+            "step_2_sequential_validation": {
+                "action": "Iterate through each domain in priority_order",
+                "rule": "Higher priority domain has veto power over lower priority domain decisions",
+                "example": "Safety rules from Architectural_Core veto performance optimizations if conflict exists"
+            },
+            "step_3_conflict_resolution": {
+                "action": "If conflicts exist between domains, apply conflict_resolution_table",
+                "guarantee": "Always exactly 1 outcome, no ambiguity"
+            }
+        },
+        "priority_order": [
+            "Architectural_Core_&_Safety",
+            "Syntax_Parsing_&_DSL_Hardening",
+            "Logic_Transformation_&_Collision_Guard",
+            "Performance_GPU_&_Runtime_Optimization",
+            "Production_Hygiene_&_DevEx"
+        ]
+    },
+
+    "domain_decision_matrix": {
+        "description": "Mapping table from task keywords to domains. AI agent MUST consult this table before accessing skills.",
+        "routing_rules": {
+            "SSR": ["Architectural_Core_&_Safety"],
+            "hydration": [
+                "Architectural_Core_&_Safety",
+                "Performance_GPU_&_Runtime_Optimization"
+            ],
+            "RSC|Server_Components": ["Architectural_Core_&_Safety"],
+            "build_pipeline|compilation": [
+                "Architectural_Core_&_Safety",
+                "Production_Hygiene_&_DevEx"
+            ],
+            "syntax|parsing|DSL": ["Syntax_Parsing_&_DSL_Hardening"],
+            "variant|nesting|group": ["Syntax_Parsing_&_DSL_Hardening"],
+            "collision|hash|canonical": ["Logic_Transformation_&_Collision_Guard"],
+            "CSS_variable|isolation": ["Logic_Transformation_&_Collision_Guard"],
+            "GPU|will-change|animation": ["Performance_GPU_&_Runtime_Optimization"],
+            "mangling|minification|production": ["Production_Hygiene_&_DevEx"],
+            "bundler|plugin|integration": ["Architectural_Core_&_Safety"],
+            "framework|react|vue|svelte": ["Architectural_Core_&_Safety"]
+        },
+        "conflict_resolution_table": {
+            "SSR_hydration_vs_GPU_optimization": {
+                "winner": "Architectural_Core_&_Safety",
+                "reason": "Determinism > Performance",
+                "action": "Apply hydration safety rules first, then optimize within constraints"
+            },
+            "syntax_sugar_vs_collision_guard": {
+                "winner": "Logic_Transformation_&_Collision_Guard",
+                "reason": "Correctness > Convenience",
+                "action": "Reject sugar syntax if it causes hash collision"
+            },
+            "performance_vs_hygiene": {
+                "winner": "Production_Hygiene_&_DevEx",
+                "reason": "Debug-ability > Micro-optimization",
+                "action": "Keep audit attributes if performance gain < 1%"
+            }
+        }
+    },
+
+    "skills_library": {
+        "Architectural_Core_&_Safety": {
+            "scope": "Core architecture, SSR/RSC safety, build pipeline integrity, universal plugin system",
+
+            "engine_specs": {
+                "language": "TypeScript / Rust (via WASM)",
+                "parser": "AST-based manipulation (SWC/Babel) via unplugin",
+                "plugin_engine": "unplugin for universal bundler support",
+                "type_generation": {
+                    "description": "Automatically scan tailwind.config.js to generate strict TypeScript union types for 'sz' prop",
+                    "output": "csszyx.d.ts with literal types for all valid Tailwind classes"
+                },
+                "ast_budget_guard": {
+                    "max_nodes_per_file": 50000,
+                    "detection": "Recursive AST traversal with early bailout",
+                    "on_exceed": {
+                        "action": "Fatal Build Error",
+                        "error_format": "csszyxASTBudgetError: File {path} has {count} nodes (limit: 50000)",
+                        "mitigation": "Suggest code splitting or lazy loading"
+                    }
+                }
+            },
+
+            "framework_integration": {
+                "plugin_system": "unplugin-based universal compatibility",
+                "bundlers": ["Vite", "Webpack", "Rollup", "esbuild", "Rspack"],
+                "frameworks": ["React", "Vue", "Svelte", "Solid", "Qwik"],
+                "meta_frameworks": ["Next.js", "Nuxt", "Remix", "Astro", "SvelteKit"],
+
+                "rsc_boundary_guard": {
+                    "description": "Prevent runtime helpers (_sz, __csszyx_runtime__) from leaking into React Server Components",
+                    "forbidden_symbols": ["_sz", "__csszyx_runtime__"],
+                    "enforcement": {
+                        "method": "Static Graph Analysis + Module Boundary Tracking",
+                        "scan_targets": [
+                            "direct imports",
+                            "re-exports (export { _sz as foo })",
+                            "dynamic imports",
+                            "monorepo symlinks (resolve to real path before scanning)"
+                        ],
+                        "detection_algorithm": {
+                            "step_1": "Build module dependency graph",
+                            "step_2": "Mark all 'use server' modules",
+                            "step_3": "Traverse import chains from server modules",
+                            "step_4": "Flag any import that resolves to forbidden symbols"
+                        }
+                    },
+                    "on_violation": {
+                        "action": "Fatal Build Error",
+                        "error_format": "csszyxRSCViolation: {symbol} imported in Server Component {path}\n  Import chain: {chain}",
+                        "example": "csszyxRSCViolation: _sz imported in Server Component app/page.tsx\n  Import chain: page.tsx → utils.ts → csszyx/runtime"
+                    }
+                },
+
+                "ssr_hydration_safety": {
+                    "description": "Ensure mangle map synchronization between server-rendered HTML and client hydration",
+                    "implementation": "Build-time Virtual Module Aggregation",
+                    "mangle_map_versioning": {
+                        "enabled": true,
+                        "algorithm": "Content-based hash of entire mangle map",
+                        "format": "data-sz-checksum=\"{hash}\" on <html> tag"
+                    },
+
+                    "hydration_guard": {
+                        "require_complete_map": true,
+                        "description": "Enforce strict hydration determinism to prevent SSR/Client mismatch",
+
+                        "modes": {
+                            "strict": {
+                                "status": "Default (PRODUCTION ONLY)",
+                                "enabled_in": ["production"],
+                                "disabled_in": ["development", "test"],
+                                "behavior": {
+                                    "on_mismatch": "Trigger Hydration Abort Protocol",
+                                    "abort_protocol": {
+                                        "step_1": "Terminate hydration at affected subtree root",
+                                        "step_2": "Preserve static HTML/CSS state from SSR (no re-render)",
+                                        "step_3": "Log audit: 'Mangle Checksum Mismatch at {path}'",
+                                        "step_4": "Inject attribute 'data-sz-hydration-aborted=\"{timestamp}\"' to subtree root",
+                                        "step_5": "Block all event handlers in subtree to prevent partial interactivity"
+                                    },
+                                    "no_auto_recovery": "Absolutely NO automatic CSR re-render",
+                                    "rationale": "Preserve SSR Invariant > User interactivity. Developer must fix mismatch at source."
+                                }
+                            },
+
+                            "allow_csr_recovery": {
+                                "status": "Opt-in (DEVELOPMENT ONLY)",
+                                "enabled_in": ["development"],
+                                "disabled_in": ["production", "test"],
+                                "behavior": {
+                                    "on_mismatch": "After Abort, trigger ONE-TIME client-side re-render to sync DOM with current mangle map",
+                                    "warning": "Console warning: 'Hydration mismatch recovered via CSR. Fix root cause before production.'",
+                                    "limitation": "Only works when global flag window.__SZ_ALLOW_CSR_RECOVERY__ = true"
+                                }
+                            }
+                        },
+
+                        "explicit_recovery_contract": {
+                            "description": "Compile-time directive with cryptographic token verification to prevent tampering and ensure recovery decisions are statically provable",
+                            "declaration": "szRecover",
+                            "type": "Static JSX attribute with automatic token generation",
+                            "scope": "per-subtree (not inherited)",
+                            "binding": "Must be static literal, runtime expressions not allowed",
+
+                            "syntax": {
+                                "developer_writes": [
+                                    "<Component szRecover=\"csr\" />",
+                                    "<Component szRecover=\"dev-only\" />"
+                                ],
+                                "build_output": [
+                                    "<Component szRecover=\"csr\" data-sz-recovery-token=\"a94f1c...\" />",
+                                    "<Component szRecover=\"dev-only\" data-sz-recovery-token=\"b82e3d...\" />"
+                                ],
+                                "invalid": [
+                                    "<Component szRecover={someVar} />",
+                                    "<Component {...{szRecover: 'csr'}} />"
+                                ]
+                            },
+
+                            "validation": {
+                                "must_be_static": true,
+                                "allowed_values": ["csr", "dev-only"],
+                                "compile_time_check": "Reject if value is not string literal 'csr' or 'dev-only'",
+                                "on_invalid": "Fatal Build Error: 'szRecover must be static literal \"csr\" or \"dev-only\"'"
+                            },
+
+                            "token_generation": {
+                                "description": "Build automatically generates cryptographic token for each szRecover declaration",
+                                "timing": "Phase 2 (JSX Transform)",
+                                "algorithm": {
+                                    "hash_function": "SHA-256",
+                                    "input_components": [
+                                        "component_name",
+                                        "file_path (absolute)",
+                                        "line_number",
+                                        "column_number",
+                                        "recovery_mode (csr/dev-only)",
+                                        "build_id (from environment or git hash)"
+                                    ],
+                                    "encoding": "Base62 (first 12 chars of hash)",
+                                    "example": {
+                                        "input": {
+                                            "component": "DataTable",
+                                            "path": "/src/components/DataTable.tsx",
+                                            "line": 42,
+                                            "column": 8,
+                                            "mode": "csr",
+                                            "buildId": "abc123def456"
+                                        },
+                                        "hash": "SHA256(...) → a94f1cb82e3d7f5a...",
+                                        "token": "a94f1cb82e3d"
+                                    }
+                                },
+                                "attribute_injection": {
+                                    "development": "Add data-sz-recovery-token + data-sz-recovery-source (debug info)",
+                                    "production": "Add data-sz-recovery-token only",
+                                    "example_dev": "<Component szRecover=\"csr\" data-sz-recovery-token=\"a94f1c...\" data-sz-recovery-source=\"/src/Component.tsx:42\" />",
+                                    "example_prod": "<Component szRecover=\"csr\" data-sz-recovery-token=\"a94f1c...\" />"
+                                }
+                            },
+
+                            "manifest_generation": {
+                                "description": "Build creates manifest mapping tokens to recovery configs",
+                                "format": "JSON object embedded in HTML",
+                                "location": "<script type=\"application/json\" id=\"__SZ_RECOVERY_MANIFEST__\">",
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "buildId": "string (git hash or timestamp)",
+                                        "checksum": "string (hash of entire manifest)",
+                                        "tokens": {
+                                            "type": "object",
+                                            "keys": "token strings",
+                                            "values": {
+                                                "mode": "csr | dev-only",
+                                                "component": "string (component name)",
+                                                "path": "string (file path, dev only)"
+                                            }
+                                        }
+                                    }
+                                },
+                                "example": {
+                                    "buildId": "abc123def456",
+                                    "checksum": "x9y8z7w6...",
+                                    "tokens": {
+                                        "a94f1cb82e3d": {
+                                            "mode": "csr",
+                                            "component": "DataTable"
+                                        },
+                                        "b82e3d7f5a1c": {
+                                            "mode": "dev-only",
+                                            "component": "ChartWidget"
+                                        }
+                                    }
+                                },
+                                "stripping_policy": {
+                                    "production": "Remove path info, keep only mode + component",
+                                    "development": "Include full debug info (path, line, column)"
+                                }
+                            },
+
+                            "value_semantics": {
+                                "csr": {
+                                    "description": "Enable recovery in both development and production",
+                                    "use_case": "Components thoroughly tested and need recovery behavior in prod",
+                                    "behavior": "Identical across all environments",
+                                    "token_validation": "Required in all environments"
+                                },
+                                "dev-only": {
+                                    "description": "Enable recovery ONLY in development, ignore in production",
+                                    "use_case": "Debugging hydration issues, not ready for production",
+                                    "behavior": {
+                                        "development": "Enable recovery like szRecover=\"csr\"",
+                                        "production": "Attribute + token stripped, behavior like no szRecover"
+                                    },
+                                    "warning": "Console warning in dev: 'Component has dev-only recovery. Consider adding szRecover=\"csr\" for production or fix hydration issue.'",
+                                    "token_validation": "Required in development, stripped in production"
+                                }
+                            },
+
+                            "runtime_verification": {
+                                "description": "Runtime verify token before allowing recovery",
+                                "timing": "Immediately after hydration abort detection",
+
+                                "verification_algorithm": {
+                                    "step_1": "Read szRecover attribute from aborted subtree root",
+                                    "step_2": "Read data-sz-recovery-token attribute",
+                                    "step_3": "Load manifest from <script id=\"__SZ_RECOVERY_MANIFEST__\">",
+                                    "step_4": "Lookup token in manifest.tokens",
+                                    "step_5": {
+                                        "if_not_found": "Log security warning + abort hydration (possible tampering)",
+                                        "if_found": "Verify mode matches attribute value"
+                                    },
+                                    "step_6": {
+                                        "if_mode_mismatch": "Log security warning + abort hydration (possible tampering)",
+                                        "if_mode_match": "Proceed to recovery execution"
+                                    }
+                                },
+
+                                "security_checks": {
+                                    "token_exists": {
+                                        "check": "data-sz-recovery-token attribute present?",
+                                        "on_missing": "Reject: 'Recovery token missing - possible manual edit or build corruption'"
+                                    },
+                                    "token_in_manifest": {
+                                        "check": "Token exists in manifest?",
+                                        "on_missing": "Reject: 'Invalid recovery token - possible tampering or build mismatch'"
+                                    },
+                                    "mode_match": {
+                                        "check": "manifest[token].mode === szRecover value?",
+                                        "on_mismatch": "Reject: 'Recovery mode mismatch - possible tampering'"
+                                    },
+                                    "manifest_checksum": {
+                                        "check": "Verify manifest.checksum matches hash(manifest.tokens)",
+                                        "on_mismatch": "Reject: 'Manifest corruption detected'"
+                                    }
+                                },
+
+                                "error_messages": {
+                                    "missing_token": "csszyxSecurityError: Recovery declared but token missing. Component: {name}",
+                                    "invalid_token": "csszyxSecurityError: Invalid recovery token. This may indicate tampering or build mismatch.",
+                                    "mode_mismatch": "csszyxSecurityError: Recovery mode mismatch (expected: {manifest}, actual: {attribute})",
+                                    "manifest_corrupt": "csszyxSecurityError: Recovery manifest checksum mismatch"
+                                }
+                            },
+
+                            "behavior": {
+                                "production": {
+                                    "csr_with_valid_token": "Allow EXACTLY ONE client re-render for this subtree",
+                                    "csr_without_token": "Reject + security error",
+                                    "csr_invalid_token": "Reject + security error",
+                                    "dev_only": "Attribute + token stripped, behavior like strict mode (no recovery)",
+                                    "guarantee": "Only re-render once with valid token, then lock state"
+                                },
+                                "development": {
+                                    "csr_with_valid_token": "Same as production + console info about recovery execution",
+                                    "csr_without_token": "Reject + security error",
+                                    "dev_only_with_valid_token": "Enable recovery + console warning about dev-only status",
+                                    "dev_only_without_token": "Reject + security error"
+                                }
+                            },
+
+                            "stripping_policy": {
+                                "production": {
+                                    "csr": "KEEP both szRecover + data-sz-recovery-token (has semantic runtime effect)",
+                                    "dev_only": "REMOVE both attributes (no production effect)"
+                                },
+                                "development": {
+                                    "csr": "KEEP + add data-sz-recovery-mode=\"csr\" + data-sz-recovery-source",
+                                    "dev_only": "KEEP + add data-sz-recovery-mode=\"dev-only\" + data-sz-recovery-source"
+                                }
+                            },
+
+                            "tamper_detection": {
+                                "description": "Token system prevents common tampering scenarios",
+                                "protected_against": [
+                                    "Manual attribute modification via DevTools",
+                                    "XSS injection adding szRecover attributes",
+                                    "Build corruption changing recovery modes",
+                                    "Third-party scripts setting recovery flags"
+                                ],
+                                "scenarios": {
+                                    "devtools_edit": {
+                                        "attack": "Developer manually adds szRecover=\"csr\" in Elements panel",
+                                        "detection": "No matching token in manifest",
+                                        "result": "Recovery rejected + security warning"
+                                    },
+                                    "xss_injection": {
+                                        "attack": "XSS adds <div szRecover=\"csr\"> to DOM",
+                                        "detection": "No data-sz-recovery-token attribute",
+                                        "result": "Recovery rejected + security warning"
+                                    },
+                                    "build_corruption": {
+                                        "attack": "Build process corrupts szRecover=\"csr\" to szRecover=\"csr \"",
+                                        "detection": "Mode mismatch (manifest says 'csr', attribute says 'csr ')",
+                                        "result": "Recovery rejected + security warning"
+                                    }
+                                }
+                            }
+                        },
+
+                        "development_mode_config": {
+                            "description": "Build-time configuration for development experience. All settings are compile-time transforms, no runtime flags.",
+                            "config_location": "csszyx.config.js or bundler config",
+
+                            "auto_inject_recovery": {
+                                "enabled": false,
+                                "description": "Automatically inject szRecover=\"dev-only\" into components WITHOUT explicit szRecover",
+                                "default": false,
+                                "rationale": "Default false to avoid false confidence. Opt-in when debugging entire app.",
+
+                                "behavior": {
+                                    "when_enabled": {
+                                        "transform": "Every component without szRecover → auto-inject szRecover=\"dev-only\"",
+                                        "example": {
+                                            "source": "<Component />",
+                                            "compiled_dev": "<Component szRecover=\"dev-only\" data-sz-auto-injected=\"true\" />",
+                                            "compiled_prod": "<Component />"
+                                        },
+                                        "warning": "Console warning each auto-inject: 'Auto-recovery enabled for <Component>. Add explicit szRecover if needed in prod.'"
+                                    },
+                                    "when_disabled": "No transform, components behave according to explicit declarations"
+                                },
+
+                                "use_cases": {
+                                    "exploratory_phase": "Week 1-2: Enable to collect data about hydration issues",
+                                    "progressive_fix": "Week 3-4: Disable, manually add szRecover=\"dev-only\" to components needing debug",
+                                    "production_ready": "Week 5+: Remove all dev-only, keep only szRecover=\"csr\" for production"
+                                }
+                            },
+
+                            "strict_mode": {
+                                "enabled": false,
+                                "description": "Enable strict hydration mode in development to test exact production behavior",
+                                "default": false,
+
+                                "behavior": {
+                                    "when_enabled": {
+                                        "dev_behavior": "Identical to production (no auto-inject, szRecover=\"dev-only\" ignored)",
+                                        "purpose": "Pre-production validation",
+                                        "warning": "Build warning if szRecover=\"dev-only\" detected: 'Component has dev-only recovery which will be disabled in strict mode.'"
+                                    }
+                                },
+
+                                "recommended_workflow": {
+                                    "step_1": "Development with strict_mode: false, auto_inject: false/true",
+                                    "step_2": "Fix hydration issues gradually",
+                                    "step_3": "Enable strict_mode: true before merge",
+                                    "step_4": "Test with exact prod behavior",
+                                    "step_5": "Merge when zero warnings"
+                                }
+                            },
+
+                            "warning_levels": {
+                                "description": "Console warning system to guide progressive migration",
+                                "levels": {
+                                    "info": {
+                                        "trigger": "Auto-injected recovery or dev-only recovery used",
+                                        "format": "[csszyx] Component has temporary recovery. Consider fixing hydration issue.",
+                                        "color": "blue"
+                                    },
+                                    "warn": {
+                                        "trigger": "szRecover=\"dev-only\" in strict mode",
+                                        "format": "[csszyx] dev-only recovery will be disabled in production.",
+                                        "color": "yellow"
+                                    },
+                                    "error": {
+                                        "trigger": "Hydration abort in component WITHOUT recovery declaration",
+                                        "format": "[csszyx] Hydration aborted. Add szRecover=\"csr\" or fix issue.",
+                                        "color": "red"
+                                    }
+                                }
+                            }
+                        },
+
+                        "escape_hatch_mechanism": {
+                            "description": "Local escape hatch mechanism following ESLint/TSLint pattern. Allows disabling hydration guards per-file or per-block when needed.",
+                            "style": "Comment-based directives (compile-time)",
+
+                            "directives": {
+                                "disable_hydration_guard": {
+                                    "syntax": "// @csszyx-disable-hydration",
+                                    "scope": "Next JSX element only",
+                                    "effect": "Automatically inject szRecover=\"dev-only\" into next element",
+                                    "example": {
+                                        "source": "// @csszyx-disable-hydration\n<ProblematicComponent />",
+                                        "compiled_dev": "<ProblematicComponent szRecover=\"dev-only\" data-sz-directive=\"true\" />",
+                                        "compiled_prod": "<ProblematicComponent />"
+                                    },
+                                    "use_case": "Quick debugging, third-party components, known issues"
+                                },
+
+                                "disable_file": {
+                                    "syntax": "// @csszyx-disable-file",
+                                    "scope": "Entire file",
+                                    "effect": "Auto-inject szRecover=\"dev-only\" for ALL components in file",
+                                    "example": "// @csszyx-disable-file\n\nexport default function Page() { ... }",
+                                    "warning": "Build warning: 'File-level hydration guard disabled. Review before production.'",
+                                    "use_case": "Legacy code migration, experimental features"
+                                },
+
+                                "enable_strict": {
+                                    "syntax": "// @csszyx-enable-strict",
+                                    "scope": "Next JSX element only",
+                                    "effect": "Force strict mode for this element (ignore global auto_inject config)",
+                                    "example": "// @csszyx-enable-strict\n<CriticalComponent />",
+                                    "use_case": "Override auto_inject for critical paths"
+                                }
+                            },
+
+                            "audit_trail": {
+                                "description": "Track directive usage for review before production",
+                                "output": ".csszyx/directives.log",
+                                "format": "JSON Lines with location and reason",
+                                "example": {
+                                    "file": "/src/components/LegacyWidget.tsx",
+                                    "line": 42,
+                                    "directive": "disable_hydration_guard",
+                                    "component": "LegacyWidget",
+                                    "timestamp": "2024-01-15T10:30:00Z"
+                                }
+                            },
+
+                            "ci_validation": {
+                                "description": "Optional CI check to prevent accidental disables in production code",
+                                "rule": "Fail CI if @csszyx-disable directives found in production branches",
+                                "config": "csszyx.config.js → allowDirectivesInProd: boolean",
+                                "recommended": false
+                            }
+                        },
+
+                        "mismatch_detection_strategy": {
+                            "checksum_location": "Embedded in <script type=\"application/json\" id=\"__SZ_MANGLE_MAP__\">",
+                            "manifest_location": "Embedded in <script type=\"application/json\" id=\"__SZ_RECOVERY_MANIFEST__\">",
+                            "validation_timing": "Before first useEffect/useLayoutEffect",
+
+                            "state_machine": {
+                                "state_1_loading": {
+                                    "description": "Mangle map and recovery manifest not yet loaded",
+                                    "timeout": "150ms",
+                                    "on_timeout": "If timeout and maps still missing → transition to state_2_missing"
+                                },
+                                "state_2_missing": {
+                                    "description": "Map or manifest does not exist or is corrupt",
+                                    "action": "Trigger Hydration Abort Protocol immediately"
+                                },
+                                "state_3_mismatch": {
+                                    "description": "Map exists but checksum does not match server",
+                                    "detection": "Compare data-sz-checksum with hash of client map",
+                                    "action": "Trigger Hydration Abort Protocol immediately"
+                                },
+                                "state_4_valid": {
+                                    "description": "Checksum matches",
+                                    "action": "Proceed with normal hydration"
+                                },
+                                "state_5_recovery_check": {
+                                    "description": "Hydration aborted, check recovery eligibility",
+                                    "trigger": "After abort protocol executed",
+                                    "steps": {
+                                        "step_1": "Read szRecover attribute from aborted subtree root",
+                                        "step_2": "If no szRecover → Stay aborted (no recovery)",
+                                        "step_3": "If szRecover present → Read data-sz-recovery-token",
+                                        "step_4": "If no token → Security error + stay aborted",
+                                        "step_5": "Verify token with recovery manifest",
+                                        "step_6": "If invalid token → Security error + stay aborted",
+                                        "step_7": "If valid token → Check mode (csr/dev-only)",
+                                        "step_8": "If dev-only in prod → Stay aborted",
+                                        "step_9": "If csr or (dev-only in dev) → Execute ONE-TIME recovery"
+                                    }
+                                }
+                            },
+
+                            "recovery_token_verification": {
+                                "description": "Verify cryptographic token before allowing recovery",
+                                "manifest_load": {
+                                    "source": "document.getElementById('__SZ_RECOVERY_MANIFEST__').textContent",
+                                    "parse": "JSON.parse(content)",
+                                    "cache": "Cache in memory for subsequent verifications"
+                                },
+                                "verification_steps": {
+                                    "step_1_token_exists": {
+                                        "check": "element.hasAttribute('data-sz-recovery-token')",
+                                        "on_false": "Reject with csszyxSecurityError: 'Recovery token missing'"
+                                    },
+                                    "step_2_manifest_checksum": {
+                                        "check": "SHA256(manifest.tokens) === manifest.checksum",
+                                        "on_false": "Reject with csszyxSecurityError: 'Manifest corruption detected'"
+                                    },
+                                    "step_3_token_lookup": {
+                                        "check": "token in manifest.tokens",
+                                        "on_false": "Reject with csszyxSecurityError: 'Invalid recovery token'"
+                                    },
+                                    "step_4_mode_match": {
+                                        "check": "manifest.tokens[token].mode === element.getAttribute('szRecover')",
+                                        "on_false": "Reject with csszyxSecurityError: 'Recovery mode mismatch'"
+                                    },
+                                    "step_5_environment_check": {
+                                        "if_mode_dev_only": {
+                                            "in_production": "Reject (attribute should be stripped)",
+                                            "in_development": "Allow"
+                                        },
+                                        "if_mode_csr": "Allow in both environments"
+                                    }
+                                },
+                                "on_verification_success": "Proceed to recovery execution",
+                                "on_verification_failure": "Log security error + preserve abort state"
+                            }
+                        },
+
+                        "dev_prod_parity_enforcement": {
+                            "description": "Ensure detection logic identical between dev and prod. Recovery decision differs ONLY via explicit declarations (szRecover values), not via runtime flags.",
+
+                            "core_guarantee": "Hydration mismatch detection algorithm IDENTICAL in all environments",
+
+                            "allowed_differences": {
+                                "recovery_execution": {
+                                    "szRecover_csr": {
+                                        "dev": "Execute recovery + performance warning",
+                                        "prod": "Execute recovery (no warning)",
+                                        "parity": "Behavior identical, only logging differs"
+                                    },
+                                    "szRecover_dev_only": {
+                                        "dev": "Execute recovery + dev-only warning",
+                                        "prod": "NO recovery (attribute stripped)",
+                                        "parity": "Intentionally different - progressive migration tool"
+                                    },
+                                    "no_szRecover": {
+                                        "dev": "Abort without recovery (strict mode)",
+                                        "prod": "Abort without recovery (strict mode)",
+                                        "parity": "Behavior identical"
+                                    }
+                                },
+
+                                "logging_visualization": {
+                                    "dev": "Verbose console warnings, DevTools integration, audit logs",
+                                    "prod": "Minimal logging, error reporting only",
+                                    "parity": "Different logging OK - same decision logic"
+                                }
+                            },
+
+                            "prohibited_differences": {
+                                "detection_algorithm": "MUST be identical - same checksum validation, same state machine",
+                                "runtime_branching": "NO runtime flags affecting hydration outcome",
+                                "global_state": "NO mutable global state influencing decisions",
+                                "implicit_recovery": "NO automatic recovery without explicit declaration (except when auto_inject enabled via build config)"
+                            },
+
+                            "validation": {
+                                "ci_check": "Integration test suite runs scenarios in both dev and prod mode",
+                                "assertions": [
+                                    "Detection events identical for same input",
+                                    "Recovery only executes when explicitly declared",
+                                    "No runtime flag dependencies",
+                                    "Build config changes ONLY affect compile output, not runtime logic"
+                                ]
+                            },
+
+                            "build_config_transparency": {
+                                "principle": "Build config settings (auto_inject, strict_mode) only affect compile-time transform, not runtime decision graph",
+                                "example": {
+                                    "auto_inject_enabled": {
+                                        "source": "<Component />",
+                                        "compiled": "<Component szRecover=\"dev-only\" />",
+                                        "runtime": "Runtime sees explicit szRecover, behaves accordingly"
+                                    },
+                                    "auto_inject_disabled": {
+                                        "source": "<Component />",
+                                        "compiled": "<Component />",
+                                        "runtime": "Runtime sees no szRecover, behaves accordingly"
+                                    },
+                                    "conclusion": "Runtime logic does not know about build config - only sees compiled output"
+                                }
+                            },
+
+                            "migration_path": {
+                                "description": "Progressive migration from exploratory to production-ready",
+                                "phases": {
+                                    "phase_1_exploration": {
+                                        "config": { "auto_inject": true, "strict_mode": false },
+                                        "goal": "Collect data about hydration issues",
+                                        "acceptance": "Identify components needing recovery"
+                                    },
+                                    "phase_2_progressive_fix": {
+                                        "config": { "auto_inject": false, "strict_mode": false },
+                                        "goal": "Fix issues or add explicit szRecover=\"dev-only\"",
+                                        "acceptance": "Warnings decreasing"
+                                    },
+                                    "phase_3_pre_production": {
+                                        "config": { "auto_inject": false, "strict_mode": true },
+                                        "goal": "Test with exact production behavior",
+                                        "acceptance": "Zero warnings, zero aborts, or only szRecover=\"csr\" components"
+                                    },
+                                    "phase_4_production": {
+                                        "config": "Production build (szRecover=\"dev-only\" stripped)",
+                                        "goal": "Ship",
+                                        "acceptance": "Stable hydration"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+
+            "build_pipeline": {
+                "description": "5-phase linear pipeline with rollback support and incremental build",
+                "phases": [
+                    {
+                        "id": "phase_1_type_generation",
+                        "name": "Type-Generator",
+                        "input": "tailwind.config.js",
+                        "output": "csszyx.d.ts",
+                        "cache_key": "content_hash(tailwind.config.js)",
+                        "rollback": "Delete csszyx.d.ts if phase fails"
+                    },
+                    {
+                        "id": "phase_2_jsx_transform",
+                        "name": "JSX Transform + Recovery Token Generation",
+                        "input": "*.tsx, *.jsx files (framework-agnostic)",
+                        "output": "Transformed AST with sz prop → className + recovery tokens",
+                        "dependency": "phase_1_type_generation",
+                        "cache_key": "content_hash(source) + type_defs_hash",
+
+                        "substeps": {
+                            "step_1_sz_transform": "Transform sz object → className string",
+                            "step_2_recovery_scan": "Scan for szRecover attributes",
+                            "step_3_token_generation": {
+                                "description": "Generate cryptographic tokens for recovery declarations",
+                                "for_each_szRecover": {
+                                    "compute_hash": "SHA256(component + path + line + mode + buildId)",
+                                    "generate_token": "Base62(first 12 chars of hash)",
+                                    "inject_attribute": "Add data-sz-recovery-token=\"{token}\"",
+                                    "store_in_manifest": "Map token → { mode, component, path }"
+                                }
+                            },
+                            "step_4_conflict_resolution": "Resolve sz vs className conflicts"
+                        },
+
+                        "rollback": "Restore original AST from cache + clear token manifest"
+                    },
+                    {
+                        "id": "phase_3_tailwind_jit",
+                        "name": "Tailwind JIT Compilation",
+                        "input": "Transformed source code",
+                        "output": "CSS bundle with all used classes",
+                        "dependency": "phase_2_jsx_transform",
+                        "cache_key": "content_hash(all_classnames)",
+                        "rollback": "Delete CSS bundle"
+                    },
+                    {
+                        "id": "phase_4_global_mangling",
+                        "name": "Global Mangling",
+                        "input": "CSS bundle + JS bundle",
+                        "output": "Minified CSS + JS + mangle map",
+                        "dependency": "phase_3_tailwind_jit",
+                        "validation": {
+                            "pre_check": "Run collision detection BEFORE mangling",
+                            "on_collision": "Fatal error with detailed report"
+                        },
+                        "rollback": {
+                            "action": "Restore unmangled CSS/JS from cache",
+                            "cleanup": "Delete partial mangle map"
+                        }
+                    },
+                    {
+                        "id": "phase_5_output_emit",
+                        "name": "Output/Emit + Manifest Embedding",
+                        "input": "Minified assets + mangle map + recovery manifest",
+                        "output": "Final build artifacts with content hashing + embedded manifests",
+                        "dependency": "phase_4_global_mangling",
+                        "finalization": {
+                            "inject_checksum": "Add data-sz-checksum to HTML (mangle map checksum)",
+                            "embed_mangle_map": "Inline mangle map into <script id=\"__SZ_MANGLE_MAP__\">",
+                            "embed_recovery_manifest": {
+                                "description": "Embed recovery token manifest into HTML",
+                                "script_id": "__SZ_RECOVERY_MANIFEST__",
+                                "type": "application/json",
+                                "content": {
+                                    "buildId": "git hash or timestamp",
+                                    "checksum": "SHA256(manifest.tokens)",
+                                    "tokens": "{ token: { mode, component } }"
+                                },
+                                "placement": "Adjacent to mangle map script"
+                            },
+                            "content_hashing": "Hash final assets for immutable caching"
+                        },
+                        "rollback": "Delete entire dist/ directory"
+                    }
+                ],
+
+                "incremental_build_strategy": {
+                    "enabled": true,
+                    "cache_location": ".csszyx/cache/",
+                    "cache_invalidation": "Per-phase cache key comparison",
+                    "skip_logic": "If cache_key unchanged, skip phase and reuse output",
+                    "example": "Edit 1 file → Only re-run phase_2 for that file + phase_3,4,5"
+                },
+
+                "rollback_protocol": {
+                    "trigger": "Any phase throws error",
+                    "action": {
+                        "step_1": "Log error with phase context",
+                        "step_2": "Execute rollback of current phase",
+                        "step_3": "Execute rollback of all previous phases in reverse order",
+                        "step_4": "Restore workspace to pre-build state"
+                    },
+                    "guarantee": "No partial artifacts left after rollback"
+                },
+
+                "parallelization": {
+                    "phase_1_2": "Sequential (2 depends on 1)",
+                    "phase_3": "Parallel with multi-file phase_2 (wait for all files complete)",
+                    "phase_4": "Sequential (depends on 3)",
+                    "phase_5": "Sequential (depends on 4)"
+                }
+            }
+        },
+
+        "Syntax_Parsing_&_DSL_Hardening": {
+            "scope": "Syntax validation, variant nesting, sugar syntax transforms",
+
+            "nesting_engine": {
+                "named_groups": {
+                    "syntax": "group: 'identifier'",
+                    "identifier_rules": {
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+                        "max_length": 32,
+                        "reserved": ["default", "none", "auto"]
+                    },
+                    "referencing": "group-{modifier}/identifier or group/identifier",
+                    "example": {
+                        "declaration": "group: 'sidebar'",
+                        "usage": "group-hover/sidebar:bg-blue-500"
+                    },
+                    "description": "Supports multiple nested group contexts"
+                },
+
+                "recursive_resolution": {
+                    "max_depth": 4,
+                    "behavior_on_exceed": {
+                        "action": "Warning (does not fail build)",
+                        "message": "Deep nesting detected (depth {n}). Consider refactoring.",
+                        "audit_log": "Log to .csszyx/audit.log with file path and nesting chain"
+                    },
+                    "flattening": {
+                        "description": "Nested keys are joined with Tailwind's ':' before JIT processing",
+                        "example": "group-hover:group-focus:bg-red → group-hover:group-focus:bg-red (unchanged)"
+                    },
+                    "optimization": {
+                        "cache_resolved_chains": true,
+                        "cache_key": "hash(variant_chain)",
+                        "cache_ttl": "Per build session"
+                    }
+                }
+            },
+
+            "variant_classification_logic": {
+                "description": "Classify variants to determine sort strategy. Uses LRU cache for performance optimization.",
+                "classification_cache": {
+                    "enabled": true,
+                    "cache_key": "variant_name",
+                    "eviction": "LRU with max 10000 entries"
+                },
+
+                "categories": {
+                    "commutative": {
+                        "members": ["sm", "md", "lg", "xl", "2xl"],
+                        "sort_strategy": "Stable sort by breakpoint order (sm < md < lg < xl < 2xl)",
+                        "rationale": "Media queries have clear CSS specificity rules"
+                    },
+                    "conditionally_commutative": {
+                        "members": [
+                            "dark",
+                            "hover",
+                            "focus",
+                            "active",
+                            "visited",
+                            "disabled"
+                        ],
+                        "sort_strategy": "Sort if no order_sensitive variants in same chain",
+                        "sort_order": "Alphabetical"
+                    },
+                    "order_sensitive": {
+                        "members": [
+                            "arbitrary_variants (any variant with '[' or '&')",
+                            "structural_pseudos (:first-child, :last-child, :nth-child)",
+                            "named_groups (group/*, group-*/*)",
+                            "peer (peer-*, peer-*/*)",
+                            "directive_based (rtl:, ltr:)"
+                        ],
+                        "sort_strategy": "NEVER sort, preserve order from source",
+                        "rationale": "Order affects CSS specificity or selector semantics"
+                    }
+                },
+
+                "resolution_algorithm": {
+                    "step_1": "Tokenize variant chain (split by ':')",
+                    "step_2": "Classify each variant via cache lookup",
+                    "step_3": {
+                        "condition": "Any order_sensitive variant present?",
+                        "if_true": "Return original order (no sort)",
+                        "if_false": "Proceed to step_4"
+                    },
+                    "step_4": "Sort commutative variants by breakpoint order",
+                    "step_5": "Sort conditionally_commutative variants alphabetically",
+                    "step_6": "Concatenate sorted parts",
+                    "complexity": "O(n log n) worst case, O(n) average with cache"
+                },
+
+                "arbitrary_variant_detection": {
+                    "regex": "/\\[|&|>|\\+|~/",
+                    "examples_matched": [
+                        "[&:nth-child(3)]",
+                        "[&>div]",
+                        "[.custom-class_&]"
+                    ]
+                }
+            },
+
+            "advanced_parser": {
+                "type": "Recursive Descent Parser with Lookahead",
+                "architecture": "Stack-based balanced bracket matching",
+                "supports": [
+                    "Nested parentheses: calc(100% - (20px + 10px))",
+                    "Quoted strings: content-['hello\\'world']",
+                    "Escaped characters: \\\\, \\[, \\]",
+                    "Arbitrary values: [color:rgb(255,0,0)]"
+                ],
+
+                "security": {
+                    "forbidden_tokens": {
+                        "list": [
+                            ";",
+                            "{",
+                            "}",
+                            "@",
+                            "javascript:",
+                            "<script",
+                            "expression("
+                        ],
+                        "detection": "Scan before parsing",
+                        "on_violation": {
+                            "action": "Fatal Build Error",
+                            "error_format": "csszyxSecurityError: Forbidden token '{token}' in class '{class}' at {path}:{line}:{col}",
+                            "rationale": "Prevent CSS injection and XSS"
+                        }
+                    },
+                    "max_value_length": 512,
+                    "max_nesting_depth": 8
+                },
+
+                "error_recovery": {
+                    "strategy": "Fail-fast (no recovery attempt)",
+                    "rationale": "Ambiguous error recovery can create silent bugs"
+                }
+            },
+
+            "sugar_syntax_spec": {
+                "description": "Convenience transforms to reduce verbosity. Precedence order is critical for deterministic output.",
+
+                "precedence_order": [
+                    "step_1_security_check",
+                    "step_2_numerical_mapping",
+                    "step_3_color_modifier",
+                    "step_4_auto_brackets"
+                ],
+
+                "step_1_security_check": {
+                    "action": "Scan forbidden tokens",
+                    "on_violation": "Reject entire input"
+                },
+
+                "step_2_numerical_mapping": {
+                    "negative_values": {
+                        "detection": "Value starts with '-' and is number",
+                        "transform": "{ m: -4 } → '-m-4'",
+                        "examples": [
+                            "{ m: -4 } → '-m-4'",
+                            "{ top: '-10px' } → '-top-[10px]'",
+                            "{ translate: '-50%' } → '-translate-x-[50%]'"
+                        ]
+                    },
+                    "opacity": {
+                        "detection": "Property is opacity/bg-opacity/text-opacity AND value in range 0-1",
+                        "transform": "Multiply by 100",
+                        "examples": [
+                            "{ opacity: 0.5 } → 'opacity-50'",
+                            "{ bgOpacity: 0.75 } → 'bg-opacity-75'"
+                        ],
+                        "edge_cases": {
+                            "{ opacity: 1 }": "opacity-100",
+                            "{ opacity: 0 }": "opacity-0",
+                            "{ opacity: 50 }": "opacity-50 (unchanged, since > 1)"
+                        }
+                    }
+                },
+
+                "step_3_color_modifier": {
+                    "syntax": "propertyName: { color: 'colorName', op: opacityValue }",
+                    "detection": "Value is object with 'color' key",
+                    "transform": "Generates 'prefix-colorName/opacity' Tailwind class",
+                    "examples": [
+                        "{ text: { color: 'red-500', op: 50 } } → 'text-red-500/50'",
+                        "{ bg: { color: 'blue-600', op: 25 } } → 'bg-blue-600/25'",
+                        "{ bg: { color: 'blue-500', op: '--alpha' } } → 'bg-blue-500/(--alpha)'"
+                    ],
+                    "format_opacity": {
+                        "number": "op: 50 → /50 (bare value)",
+                        "css_variable": "op: '--alpha' → /(--alpha) (parentheses)",
+                        "arbitrary": "op: '0.5' → /[0.5] (square brackets)"
+                    }
+                },
+
+                "step_4_auto_brackets": {
+                    "description": "Automatically wrap arbitrary values in '[]' if needed",
+                    "trigger_conditions": [
+                        "Value contains space ' '",
+                        "Value contains parentheses '(' or ')'",
+                        "Value contains comma ','",
+                        "Value contains dot '.' (EXCEPT when valid Tailwind scale like '0.5')",
+                        "Value starts with 'calc/'"
+                    ],
+                    "transform": {
+                        "action": "Wrap in '[...]'",
+                        "space_escape": "Replace ' ' with '_'",
+                        "examples": [
+                            "{ gridCols: '200px 1fr' } → 'grid-cols-[200px_1fr]'",
+                            "{ w: 'calc(100% - 20px)' } → 'w-[calc(100%-20px)]'",
+                            "{ p: '1.5rem 2rem' } → 'p-[1.5rem_2rem]'"
+                        ]
+                    },
+                    "exceptions": {
+                        "valid_tailwind_scale": "{ w: '0.5' } → 'w-0.5' (no bracket)",
+                        "integer_values": "{ p: 4 } → 'p-4' (no bracket)"
+                    }
+                },
+
+                "execution_example": {
+                    "input": "{ m: '-4px' }",
+                    "steps": [
+                        "Step 1: Security check → Pass",
+                        "Step 2: Detect '-' → Apply negative prefix → '-m-[4px]'",
+                        "Step 3: No '/' → Skip",
+                        "Step 4: No trigger chars → Skip",
+                        "Output: '-m-[4px]'"
+                    ]
+                }
+            }
+        },
+
+        "Logic_Transformation_&_Collision_Guard": {
+            "scope": "Hash collision prevention, CSS variable management, conflict resolution",
+
+            "canonical_engine": {
+                "description": "Ensure each unique CSS selector has exactly 1 hash ID with zero collision probability",
+
+                "injective_hashing": {
+                    "description": "Dual-hash algorithm to detect and prevent collisions",
+                    "primary_hash": {
+                        "algorithm": "SHA-256",
+                        "input": "OrderedSelectorChain + AtomicPropertyID + VariantCount",
+                        "output": "64-bit integer"
+                    },
+                    "secondary_hash": {
+                        "algorithm": "SHA-256",
+                        "input": "Same as primary",
+                        "output": "32-bit integer",
+                        "purpose": "Collision verification"
+                    },
+
+                    "collision_detection": {
+                        "all_environments": "Dual-hash validation in both dev and production",
+                        "algorithm": {
+                            "step_1": "Compute primary_hash(selector_A)",
+                            "step_2": "Lookup hash table",
+                            "step_3": {
+                                "if_exists": {
+                                    "step_3a": "Retrieve stored selector_B",
+                                    "step_3b": "Compute secondary_hash(selector_A) and secondary_hash(selector_B)",
+                                    "step_3c": {
+                                        "if_both_match": "TRUE COLLISION → Fatal Build Error",
+                                        "if_differ": "False positive → Fallback to string comparison"
+                                    }
+                                },
+                                "if_not_exists": "Store (primary_hash, selector_A) → Proceed"
+                            }
+                        }
+                    },
+
+                    "collision_strategy": {
+                        "all_environments": {
+                            "action": "Fatal Build Error",
+                            "error_format": "csszyxCollisionError: Hash collision detected\n  Selector A: {selector_a}\n  Selector B: {selector_b}\n  Hash: {hash}\n  Suggestion: Rename class or adjust variant order",
+                            "rationale": "Zero tolerance for collisions to ensure correctness"
+                        },
+                        "ci_validation": {
+                            "pre_merge_check": "Run full hash table build and verify zero collisions",
+                            "gate": "Block merge if collision exists"
+                        }
+                    },
+
+                    "hash_space_size": "2^64 (SHA-256) → Collision probability < 10^-15 with 10M classes"
+                },
+
+                "implementation_phases": {
+                    "phase_a_ast_analysis": {
+                        "description": "Assign unique integer ID to each atomic CSS property",
+                        "example": {
+                            "padding-left": 1,
+                            "padding-right": 2,
+                            "background-color": 3
+                        },
+                        "scope": "Tailwind core utilities + custom utilities from config"
+                    },
+                    "phase_b_hash_lookup": {
+                        "description": "O(1) hash table lookup with collision guard",
+                        "data_structure": "HashMap<u64, (String, u32)>",
+                        "key": "primary_hash (u64)",
+                        "value": "(original_selector: String, secondary_hash: u32)"
+                    }
+                }
+            },
+
+            "variable_isolation": {
+                "description": "Optimized CSS variable system with intelligent reuse and tier-based naming",
+                "strategy": "Hybrid Content-Hash + Tier-Based Scoping",
+
+                "naming_convention": {
+                    "format": "--{tierPrefix}{contentHash}",
+                    "description": "Tier prefix (1 char) + content-based hash (4-5 chars) = 5-6 chars total, optimized for bundle size",
+
+                    "tiers": {
+                        "global": {
+                            "prefix": "g",
+                            "format": "--g{hash}",
+                            "condition": "Value used in 3+ components OR defined in tailwind.config theme",
+                            "scope": ":root (injected once, referenced everywhere)",
+                            "example": "--ga3f2: #ff0000",
+                            "injection": "Inject into :root in CSS bundle"
+                        },
+                        "component": {
+                            "prefix": "c",
+                            "format": "--c{hash}",
+                            "condition": "Value used in 2+ elements in same subtree",
+                            "scope": "Nearest common ancestor of elements using it",
+                            "example": "--ca3f2: #00ff00",
+                            "injection": "Inject into LCA inline style"
+                        },
+                        "local": {
+                            "prefix": "s",
+                            "format": "--s{hash}",
+                            "condition": "Value used only once",
+                            "scope": "Element-local",
+                            "example": "--sa3f2: #0000ff",
+                            "injection": "Inject into element inline style"
+                        }
+                    },
+
+                    "hash_generation": {
+                        "algorithm": "SHA-256 of variable VALUE (not position)",
+                        "encoding": "Base62 (4-5 characters)",
+                        "determinism": "Same value → same hash → REUSE across elements",
+                        "example": {
+                            "value": "#ff0000",
+                            "hash_32bit": 2864434397,
+                            "base62": "a3f2e1",
+                            "truncated": "a3f2 (4 chars)",
+                            "final": "--ga3f2"
+                        }
+                    }
+                },
+
+                "intelligent_reuse": {
+                    "description": "Automatically detect and reuse variables to minimize duplication",
+
+                    "rule_1_literal_values": {
+                        "condition": "Value is literal (not CSS variable reference)",
+                        "action": "Do not create CSS variable, use value directly",
+                        "example": {
+                            "input": "sz({ bg: '#ff0000' })",
+                            "output": "background-color: #ff0000 (no variable generated)",
+                            "rationale": "Literal values < 10 chars do not need variable overhead"
+                        },
+                        "exception": "If same literal appears 2+ times → promote to variable"
+                    },
+
+                    "rule_2_value_deduplication": {
+                        "condition": "Same value used in multiple elements",
+                        "action": "Generate variable once, reference multiple times",
+                        "example": {
+                            "scenario": "3 elements all use #ff0000",
+                            "output": "<parent style='--c-a3f2: #ff0000'>\n  <div style='color: var(--c-a3f2)' />\n  <span style='color: var(--c-a3f2)' />\n  <button style='color: var(--c-a3f2)' />\n</parent>",
+                            "benefit": "Define once vs define 3x = 66% reduction"
+                        }
+                    },
+
+                    "rule_3_theme_promotion": {
+                        "condition": "Value defined in tailwind.config theme",
+                        "action": "Promote to global tier automatically",
+                        "example": {
+                            "config": "{ theme: { colors: { primary: '#ff0000' } } }",
+                            "usage": "sz({ bg: '--primary' })",
+                            "output": ":root { --g-a3f2: #ff0000 } ... background: var(--g-a3f2)",
+                            "benefit": "Single definition in :root, zero element-level overhead"
+                        }
+                    }
+                },
+
+                "collision_handling": {
+                    "detection": "Track (hash → value) map during build",
+                    "on_collision": {
+                        "action": "Increment hash suffix until unique",
+                        "example": {
+                            "value1": "#ff0000 → SHA-256 → a3f2e1 → --g-a3f2",
+                            "value2": "#00ff00 → SHA-256 → a3f2e1 (collision!) → --g-a3f3 (incremented)",
+                            "guarantee": "Each value gets unique variable name"
+                        }
+                    },
+                    "collision_probability": {
+                        "hash_space": "62^5 = 916 million combinations",
+                        "typical_vars": "< 1000 per app",
+                        "probability": "< 10^-6 (negligible)",
+                        "fallback": "Increment until no collision"
+                    }
+                },
+
+                "scope_guarantee": {
+                    "isolation_level": "Tier-aware scoping prevents cross-contamination",
+                    "implementation": {
+                        "global": "Injected to :root once during build",
+                        "component": "Injected to LCA inline style with proper scoping",
+                        "local": "Injected to element inline style"
+                    },
+                    "no_leakage": "Tier prefixes (g/c/s) prevent naming conflicts across scopes",
+                    "no_shadow_dom_required": true,
+                    "css_validity": "All prefixes valid per CSS Custom Properties spec"
+                }
+            },
+
+            "transformation_rules": {
+                "description": "Handle conversion from sz object to className string with mode detection",
+
+                "mode_detection": {
+                    "static": {
+                        "condition": "All values are literals (no variables, ternaries, function calls)",
+                        "output": "className=\"p-4 bg-blue-500\"",
+                        "example": "sz={{ p: 4, bg: 'blue-500' }} → className=\"p-4 bg-blue-500\""
+                    },
+                    "css_variable": {
+                        "condition": "Some values are dynamic expressions (not finite-branch)",
+                        "output": "className=\"p-[var(--_sz-p)] bg-blue-500\" style={{ '--_sz-p': '...' }}",
+                        "example": "sz={{ p: spacing, bg: 'blue-500' }} → className=\"p-[var(--_sz-p)] bg-blue-500\" style={{ '--_sz-p': spacing }}"
+                    },
+                    "ternary": {
+                        "condition": "Finite-branch conditionals (ternary, logical OR, if/else with known branches)",
+                        "output": "className={cond ? \"p-4\" : \"p-2\"}",
+                        "example": "sz={{ p: isLarge ? 4 : 2 }} → className={isLarge ? \"p-4\" : \"p-2\"}"
+                    },
+                    "fallback": {
+                        "condition": "Spread, computed keys, unanalyzable expressions",
+                        "output": "className={_sz(expr)}",
+                        "example": "sz={{ ...dynamicProps }} → className={_sz(dynamicProps)}"
+                    }
+                },
+
+                "conflict_resolution": {
+                    "rule": "sz prop ALWAYS wins over className for same atomic CSS property",
+                    "detection": {
+                        "step_1": "Parse both sz object and className string",
+                        "step_2": "Extract atomic properties from both",
+                        "step_3": "Build conflict map: { property → source }",
+                        "step_4": "Remove conflicting classes from className",
+                        "step_5": "Append sz classes"
+                    },
+                    "example": {
+                        "jsx": "<div className=\"p-1 bg-blue-500\" sz={{ p: 2 }} />",
+                        "analysis": "Conflict: padding from both className ('p-1') and sz ({ p: 2 })",
+                        "resolution": "Remove 'p-1' from className",
+                        "output": "<div className=\"bg-blue-500 p-2\" />"
+                    },
+                    "edge_case_responsive": {
+                        "jsx": "<div className=\"p-1 md:p-3\" sz={{ p: 2 }} />",
+                        "conflict": "Base padding: p-1 (className) vs p-2 (sz)",
+                        "resolution": "Remove p-1, keep md:p-3 (different breakpoint)",
+                        "output": "<div className=\"md:p-3 p-2\" />"
+                    }
+                }
+            },
+
+            "css_variable_auto_compile": {
+                "description": "Automatic CSS variable compilation for dynamic expressions",
+
+                "trigger": "Dynamic expression detected in sz prop value that is NOT a finite-branch conditional",
+
+                "strategy": {
+                    "description": "Generate a static arbitrary-value Tailwind class combined with a CSS variable set via inline style",
+                    "output_className": "Static arbitrary-value class referencing a CSS variable, e.g. p-[var(--_sz-p)]",
+                    "output_style": "Inline style setting the CSS variable value, e.g. { '--_sz-p': dynamicExpr }"
+                },
+
+                "variable_naming": {
+                    "dev_format": "--_sz-{variant}-{property}",
+                    "dev_example": "--_sz-hover-p, --_sz-md-bg, --_sz-p",
+                    "prod_format": "Mangled along with other CSS variables in production build",
+                    "no_variant": "Omit variant segment for base properties: --_sz-p, --_sz-bg"
+                },
+
+                "property_unit_mapping": {
+                    "spacing": {
+                        "properties": ["p", "m", "gap", "inset", "top", "right", "bottom", "left", "w", "h", "size"],
+                        "transform": "calc(N * var(--spacing))",
+                        "example": "sz={{ p: size }} → style={{ '--_sz-p': `calc(${size} * var(--spacing))` }}"
+                    },
+                    "color": {
+                        "properties": ["bg", "color", "text", "borderColor", "fill", "stroke"],
+                        "transform": "__szColorVar(value)",
+                        "example": "sz={{ bg: themeColor }} → style={{ '--_sz-bg': __szColorVar(themeColor) }}"
+                    },
+                    "raw": {
+                        "properties": ["opacity", "z", "fontWeight", "lineHeight", "scale"],
+                        "transform": "Pass value directly (no unit conversion)",
+                        "example": "sz={{ opacity: val }} → style={{ '--_sz-opacity': val }}"
+                    }
+                },
+
+                "color_resolver": {
+                    "function": "__szColorVar()",
+                    "description": "Resolves Tailwind color names to their CSS variable equivalents at runtime",
+                    "examples": {
+                        "tw_color": "__szColorVar('blue-500') → 'var(--color-blue-500)'",
+                        "css_var": "__szColorVar('--my-color') → 'var(--my-color)'",
+                        "raw_value": "__szColorVar('#ff0000') → '#ff0000'"
+                    },
+                    "import": "Auto-injected by compiler when css_variable mode is used for color properties"
+                },
+
+                "rsc_compatibility": {
+                    "description": "Fully compatible with React Server Components",
+                    "reason": "Output is only className (string) + style (object) — no runtime import needed",
+                    "no_client_directive": "No 'use client' required for css_variable mode"
+                }
+            },
+
+            "color_opacity_object_form": {
+                "description": "Object form for specifying color with opacity on all color-accepting properties",
+
+                "syntax": {
+                    "form": "{ color: string, op: number | string }",
+                    "key_name": "op",
+                    "rationale": "Short and consistent key name across all color properties"
+                },
+
+                "affected_properties": [
+                    "bg", "backgroundColor",
+                    "color", "text (when used as color)",
+                    "decorationColor", "borderColor", "divideColor",
+                    "outlineColor", "ringColor", "ringOffsetColor", "shadowColor",
+                    "accent", "caret", "fill", "stroke",
+                    "from", "via", "to"
+                ],
+
+                "not_affected": {
+                    "properties": ["border", "ring", "outline"],
+                    "reason": "These properties are primarily width values, not colors"
+                },
+
+                "format_opacity": {
+                    "number": {
+                        "input": "op: 50",
+                        "output": "bg-blue-500/50",
+                        "rule": "Number values are used bare as Tailwind opacity modifier"
+                    },
+                    "css_variable": {
+                        "input": "op: '--my-opacity'",
+                        "output": "bg-blue-500/(--my-opacity)",
+                        "rule": "CSS variable references wrapped in parentheses"
+                    },
+                    "arbitrary_string": {
+                        "input": "op: '0.5'",
+                        "output": "bg-blue-500/[0.5]",
+                        "rule": "Other string values wrapped in square brackets as arbitrary value"
+                    }
+                },
+
+                "examples": {
+                    "basic": {
+                        "input": "sz={{ bg: { color: 'blue-500', op: 50 } }}",
+                        "output": "className=\"bg-blue-500/50\""
+                    },
+                    "css_var_opacity": {
+                        "input": "sz={{ bg: { color: 'blue-500', op: '--my-opacity' } }}",
+                        "output": "className=\"bg-blue-500/(--my-opacity)\""
+                    },
+                    "arbitrary_opacity": {
+                        "input": "sz={{ bg: { color: 'blue-500', op: '0.5' } }}",
+                        "output": "className=\"bg-blue-500/[0.5]\""
+                    },
+                    "gradient_stop": {
+                        "input": "sz={{ from: { color: 'red-500', op: 75 } }}",
+                        "output": "className=\"from-red-500/75\""
+                    }
+                }
+            }
+        },
+
+        "Performance_GPU_&_Runtime_Optimization": {
+            "scope": "GPU memory management, runtime efficiency, CSS optimization",
+
+            "gpu_memory_safety": {
+                "will_change_engine": {
+                    "description": "Opt-in will-change property mapping via sz prop",
+                    "mode": "Explicit opt-in only (no auto-detection)",
+
+                    "mapping": {
+                        "willChange: 'transform'": "will-change-transform",
+                        "willChange: 'opacity'": "will-change-opacity",
+                        "willChange: 'auto'": "will-change-auto",
+                        "willChange: 'scroll'": "will-change-scroll-position"
+                    },
+
+                    "design_decisions": {
+                        "no_mutation_observer": "No MutationObserver — user explicitly declares will-change",
+                        "no_intersection_observer": "No IntersectionObserver — no viewport-based logic",
+                        "no_quota_management": "No quota or eviction — user controls what gets will-change",
+                        "rationale": "will-change is a performance hint best controlled by the developer, not automated"
+                    },
+
+                    "example": {
+                        "input": "sz={{ willChange: 'transform' }}",
+                        "output": "className=\"will-change-transform\""
+                    }
+                }
+            },
+
+            "hoisting_logic": {
+                "css_var_hoisting": {
+                    "description": "Hoist CSS variables to LCA (Lowest Common Ancestor) within same component scope",
+
+                    "rule": "Hoisting is ALWAYS safe within the same component scope. CSS custom properties inherit naturally through the DOM tree, so hoisting to a parent element has no correctness risk.",
+
+                    "when_to_hoist": "Hoist when multiple elements share an identical CSS variable name and value",
+
+                    "algorithm": {
+                        "step_1": "Identify all elements using the same CSS variable name+value",
+                        "step_2": "Find the Lowest Common Ancestor (LCA) in the JSX tree",
+                        "step_3": "Add the CSS variable to the LCA's style attribute",
+                        "step_4": "Remove the CSS variable from each child element's style"
+                    },
+
+                    "skip_condition": {
+                        "condition": "LCA is a Fragment (<> or React.Fragment)",
+                        "reason": "Fragments cannot hold style attributes",
+                        "action": "Do not hoist — keep CSS variables on individual elements"
+                    },
+
+                    "example": {
+                        "before": "<div>\n  <span style={{ '--_sz-color': theme }} className=\"text-[var(--_sz-color)]\" />\n  <p style={{ '--_sz-color': theme }} className=\"text-[var(--_sz-color)]\" />\n</div>",
+                        "after": "<div style={{ '--_sz-color': theme }}>\n  <span className=\"text-[var(--_sz-color)]\" />\n  <p className=\"text-[var(--_sz-color)]\" />\n</div>"
+                    }
+                }
+            },
+
+            "runtime_efficiency": {
+                "zero_alloc_helper": {
+                    "description": "Eliminate memory allocation on hot paths via compile-time arity specialization",
+                    "strategy": "Compile-time Arity Specialization",
+
+                    "implementation": {
+                        "0_args": "return ''",
+                        "1_arg": "return arg || ''",
+                        "2_args": "return (arg1 || '') + ' ' + (arg2 || '')",
+                        "3_args": "return (arg1 || '') + ' ' + (arg2 || '') + ' ' + (arg3 || '')",
+                        "4_args": "return (arg1 || '') + ' ' + (arg2 || '') + ' ' + (arg3 || '') + ' ' + (arg4 || '')",
+                        "5_plus_args": "Use loop: for (let i = 0; i < args.length; i++) { if (args[i]) result += args[i] + ' ' }"
+                    },
+
+                    "code_generation": {
+                        "detection": "Static analysis of argument count at call site",
+                        "optimization": "Inline specialized version at compile-time",
+                        "example": {
+                            "source": "_sz('a', 'b', 'c')",
+                            "compiled": "'a' + ' ' + 'b' + ' ' + 'c'"
+                        }
+                    },
+
+                    "performance": {
+                        "specialized_0_4_args": "~5ns per call (zero allocation)",
+                        "loop_5_plus": "~30ns per call (single allocation)"
+                    }
+                },
+
+                "early_static_detection": {
+                    "description": "Identify PURE_STATIC nodes to bypass runtime analysis",
+                    "detection": {
+                        "step_1": "AST analysis at compile-time",
+                        "step_2": "Mark nodes with no dynamic dependencies",
+                        "step_3": "Generate static className string"
+                    },
+                    "cache": {
+                        "type": "Permanent (no expiry)",
+                        "key": "content_hash(static_props)",
+                        "storage": "Embedded in compiled code as string literal"
+                    },
+                    "example": {
+                        "source": "sz({ p: 4, bg: 'red-500' })",
+                        "detection": "All values are literals → PURE_STATIC",
+                        "output": "className=\"a1 b2\" (no runtime helper)"
+                    }
+                }
+            }
+        },
+
+        "Production_Hygiene_&_DevEx": {
+            "scope": "Mangling, debugging tools, error reporting, audit logging",
+
+            "mangling_engine": {
+                "strategy": "Post-Tailwind Mangling with Tier-Based Deterministic Encoding",
+                "description": "Mangle class names AFTER Tailwind JIT compilation. Uses tier-based sequence to optimize bundle size.",
+
+                "encoding": {
+                    "sequence": "Base62 Deterministic Reversed: [z-aZ-A] → [z-aZ-A][9-0] → [z-aZ-A]{2} → [z-aZ-A][9-0]{2} → [z-aZ-A]{3,}",
+                    "rule": "No ID starts with digit (CSS selector compliance). Start from z and go backwards to a, then Z to A.",
+                    "rationale": "Reversed sequence (z→y→x) creates memorable pattern and distinguishes from traditional a→z encoding",
+
+                    "tiers": [
+                        {
+                            "tier": 1,
+                            "pattern": "[z-aZ-A]",
+                            "range": [0, 51],
+                            "capacity": 52,
+                            "examples": ["z", "y", "x", "...", "a", "Z", "Y", "...", "A"],
+                            "description": "Single letter, most compact, reversed order"
+                        },
+                        {
+                            "tier": 2,
+                            "pattern": "[z-aZ-A][9-0]",
+                            "range": [52, 571],
+                            "capacity": 520,
+                            "examples": ["z9", "z8", "z7", "...", "z0", "y9", "...", "A0"],
+                            "description": "Letter (reversed) + digit (reversed)"
+                        },
+                        {
+                            "tier": 3,
+                            "pattern": "[z-aZ-A]{2}",
+                            "range": [572, 3275],
+                            "capacity": 2704,
+                            "examples": ["zz", "zy", "zx", "...", "za", "zZ", "...", "AA"],
+                            "description": "Two letters (both reversed)"
+                        },
+                        {
+                            "tier": 4,
+                            "pattern": "[z-aZ-A][9-0]{2}",
+                            "range": [3276, 8475],
+                            "capacity": 5200,
+                            "examples": ["z99", "z98", "...", "A00"],
+                            "description": "Letter (reversed) + two digits (reversed)"
+                        },
+                        {
+                            "tier": 5,
+                            "pattern": "[z-aZ-A]{3,}",
+                            "range": [8476, "infinity"],
+                            "capacity": "140608+ (expandable)",
+                            "examples": ["zzz", "zzy", "...", "AAA", "zzzz"],
+                            "description": "Three+ letters (all reversed) for very large apps"
+                        }
+                    ],
+
+                    "encoding_algorithm": {
+                        "description": "Tier-based bijective mapping from index to string ID with reversed sequence",
+                        "implementation": "function encode(index) {\n  // Reversed letter sequences\n  const letters = 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA';\n  const digits = '9876543210';\n  \n  if (index < 52) {\n    return letters[index];\n  } else if (index < 572) {\n    const i = index - 52;\n    return letters[Math.floor(i / 10)] + digits[i % 10];\n  } else if (index < 3276) {\n    const i = index - 572;\n    return letters[Math.floor(i / 52)] + letters[i % 52];\n  } else if (index < 8476) {\n    const i = index - 3276;\n    return letters[Math.floor(i / 100)] + digits[Math.floor((i % 100) / 10)] + digits[i % 10];\n  } else {\n    const i = index - 8476;\n    let result = '';\n    let n = i;\n    do {\n      result = letters[n % 52] + result;\n      n = Math.floor(n / 52);\n    } while (n >= 52);\n    return letters[n] + result;\n  }\n}",
+                        "complexity": "O(log n)",
+                        "performance": "~25ns per encoding (build-time only)"
+                    }
+                },
+
+                "determinism": {
+                    "guarantee": "Same input always produces same output (cross-build stability)",
+                    "implementation": "Sorted iteration through class map + deterministic tier-based encoding",
+                    "seed": "content_hash(tailwind.config.js)",
+                    "proof": "Encoding function is pure mathematical bijection"
+                },
+
+                "specificity_safeguard": {
+                    "description": "Ensure mangled classes follow Tailwind CSS layer order",
+                    "tailwind_layers": ["base", "components", "utilities", "variants"],
+                    "enforcement": {
+                        "method": "Layer-aware mangling",
+                        "algorithm": {
+                            "step_1": "Group classes by Tailwind layer",
+                            "step_2": "Mangle each layer independently",
+                            "step_3": "Emit CSS in layer order",
+                            "step_4": "Ensure layer boundaries have no cross-contamination"
+                        }
+                    },
+                    "validation": {
+                        "post_mangle_check": "Parse CSS and verify layer order",
+                        "on_violation": "Fatal Build Error with detailed layer trace"
+                    }
+                },
+
+                "collision_prevention": {
+                    "check": "Verify no duplicate Base62 IDs",
+                    "on_collision": "Increment ID and retry (max 3 attempts)",
+                    "fallback": "Use longer ID (add 1 digit)"
+                }
+            },
+
+            "hygiene_and_audit": {
+                "attribute_stripping": {
+                    "description": "Remove debug attributes from production HTML",
+                    "targets": ["data-sz-origin", "data-sz-trace", "data-sz-debug"],
+                    "phase": "Transform phase of production build",
+                    "implementation": "AST walker removes attributes per whitelist",
+                    "exceptions": {
+                        "keep_in_prod": [
+                            "data-sz-hydration-aborted (has semantic runtime effect)",
+                            "data-sz-checksum (required for hydration validation)"
+                        ]
+                    }
+                },
+
+                "error_policy": {
+                    "invalid_tokens": {
+                        "action": "Passthrough + Warning (Yellow)",
+                        "message": "Invalid Tailwind class '{class}' at {path}:{line}. Will be passed to CSS as-is.",
+                        "log_level": "warn"
+                    },
+                    "syntax_error": {
+                        "action": "Fatal Build Error (Red)",
+                        "message": "Syntax error in sz object at {path}:{line}:{col}",
+                        "log_level": "error",
+                        "exit_code": 1
+                    },
+                    "reporting": {
+                        "format": "JSON Lines (.csszyx/audit.log)",
+                        "schema": {
+                            "timestamp": "ISO8601",
+                            "level": "error | warn | info",
+                            "type": "syntax_error | invalid_token | collision | ...",
+                            "message": "Human-readable description",
+                            "location": {
+                                "file": "Absolute path",
+                                "line": "1-indexed",
+                                "column": "1-indexed"
+                            },
+                            "context": "Surrounding code snippet"
+                        }
+                    }
+                },
+
+                "audit_log_rotation": {
+                    "max_size": "10MB",
+                    "on_exceed": "Rotate to audit.log.1, audit.log.2, ...",
+                    "max_files": 5,
+                    "compression": "gzip older logs"
+                }
+            },
+
+            "dev_tools": {
+                "reverse_mangle_map": {
+                    "enabled": "development only",
+                    "description": "Allow reverse lookup from minified class to original selector",
+                    "format": {
+                        "a": "p-4",
+                        "b": "bg-red-500",
+                        "c": "hover:bg-blue-600"
+                    },
+                    "exposure": {
+                        "method": "Inject into window.__CSSZYX_REVERSE_MAP__",
+                        "availability": "Browser DevTools console"
+                    },
+                    "stripping": {
+                        "production": "Dead-code elimination via Terser",
+                        "verification": "Assert window.__CSSZYX_REVERSE_MAP__ === undefined in prod bundle"
+                    }
+                },
+
+                "hydration_debugger": {
+                    "description": "Visual debugging tool for hydration mismatches",
+                    "features": {
+                        "attribute_injection": {
+                            "development": "Inject data-sz-hydration-aborted with timestamp",
+                            "styling": "Apply red outline via injected <style> tag"
+                        },
+                        "devtools_panel": {
+                            "description": "Browser extension panel displaying hydration state",
+                            "data_source": "Read from window.__CSSZYX_HYDRATION_STATE__",
+                            "display": [
+                                "List of aborted subtrees",
+                                "Checksum mismatch details",
+                                "Link to source code location"
+                            ]
+                        }
+                    },
+                    "installation": {
+                        "chrome": "Install from Chrome Web Store",
+                        "firefox": "Install from Firefox Add-ons"
+                    }
+                },
+
+                "performance_profiler": {
+                    "description": "Measure csszyx runtime overhead",
+                    "metrics": [
+                        "sz() call count",
+                        "Average call duration",
+                        "Cache hit rate",
+                        "will-change management overhead"
+                    ],
+                    "visualization": {
+                        "method": "Inject into browser Performance timeline",
+                        "access": "Chrome DevTools → Performance tab → User Timing"
+                    }
+                }
+            }
+        }
+    },
+
+    "configuration_examples": {
+        "description": "Practical configuration examples for different use cases",
+
+        "basic_csszyx_config": {
+            "file": "csszyx.config.js",
+            "default_config": {
+                "development": {
+                    "auto_inject_recovery": false,
+                    "strict_mode": false,
+                    "warning_levels": {
+                        "auto_inject": "info",
+                        "dev_only": "info",
+                        "abort": "error"
+                    }
+                },
+                "production": {
+                    "strict_mode": true
+                }
+            }
+        },
+
+        "exploratory_phase": {
+            "description": "When starting project or migrating legacy code",
+            "config": {
+                "development": {
+                    "auto_inject_recovery": true,
+                    "strict_mode": false
+                }
+            },
+            "workflow": "Run app, observe console warnings, identify components needing attention"
+        },
+
+        "progressive_hardening": {
+            "description": "After identifying issues, begin gradual fixes",
+            "config": {
+                "development": {
+                    "auto_inject_recovery": false,
+                    "strict_mode": false
+                }
+            },
+            "workflow": "Manually add szRecover=\"dev-only\" to components needing debug, fix issues gradually"
+        },
+
+        "pre_production_validation": {
+            "description": "Before merging to production branch",
+            "config": {
+                "development": {
+                    "auto_inject_recovery": false,
+                    "strict_mode": true
+                }
+            },
+            "workflow": "Test with exact prod behavior, ensure zero warnings"
+        },
+
+        "ci_integration": {
+            "description": "CI/CD pipeline validation",
+            "example": {
+                "test_script": "NODE_ENV=test CSSZYX_STRICT=true npm run test",
+                "lint_directives": "csszyx-lint --no-directives src/",
+                "pre_merge": "Require zero hydration aborts or all aborts covered by szRecover=\"csr\""
+            }
+        },
+
+        "escape_hatch_examples": {
+            "quick_debug": {
+                "code": "// @csszyx-disable-hydration\n<ThirdPartyWidget />",
+                "use_case": "Third-party component with known hydration issues"
+            },
+            "legacy_file": {
+                "code": "// @csszyx-disable-file\n\n// Legacy code, will refactor later",
+                "use_case": "Entire file needs temporary bypass"
+            },
+            "critical_path": {
+                "code": "// @csszyx-enable-strict\n<PaymentForm />",
+                "use_case": "Override auto_inject for critical components"
+            }
+        }
+    },
+
+    "bundle_size_optimization": {
+        "description": "Comprehensive bundle size reduction through class name compression and CSS variable optimization",
+
+        "class_name_compression": {
+            "method": "Tier-based encoding with bijective mapping",
+            "capacity": "149,084 classes before exceeding 3 characters",
+            "savings": {
+                "small_app_500_classes": "24% reduction",
+                "medium_app_2000_classes": "38% reduction",
+                "large_app_5000_classes": "38% reduction"
+            }
+        },
+
+        "css_variable_optimization": {
+            "method": "Hybrid content-hash + tier-based scoping + intelligent reuse",
+            "format": "--{tier}{hash} (5-6 chars vs 16 chars)",
+            "savings": "56% per variable name",
+            "reuse_benefit": "Automatic deduplication of duplicate values"
+        },
+
+        "real_world_impact": {
+            "medium_app_example": {
+                "classes": 2000,
+                "variables": 100,
+                "total_reduction": "41.9% uncompressed",
+                "gzip_reduction": "56% compressed",
+                "network_savings": "~1.8KB saved over network (3G: 36ms faster)"
+            }
+        }
+    }
+}

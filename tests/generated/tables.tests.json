@@ -1,0 +1,115 @@
+{
+    "tests": [
+        {
+            "id": "tables-border-collapse-collapse",
+            "szInput": {
+                "borderCollapse": "collapse"
+            },
+            "expectedClass": "border-collapse",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Collapse"
+        },
+        {
+            "id": "tables-border-collapse-separate",
+            "szInput": {
+                "borderCollapse": "separate"
+            },
+            "expectedClass": "border-separate",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Collapse"
+        },
+        {
+            "id": "tables-border-spacing-spacing",
+            "szInput": {
+                "borderSpacing": 4
+            },
+            "expectedClass": "border-spacing-4",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Spacing"
+        },
+        {
+            "id": "tables-border-spacing-x-spacing",
+            "szInput": {
+                "borderSpacingX": 4
+            },
+            "expectedClass": "border-spacing-x-4",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Spacing"
+        },
+        {
+            "id": "tables-border-spacing-y-spacing",
+            "szInput": {
+                "borderSpacingY": 4
+            },
+            "expectedClass": "border-spacing-y-4",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Spacing"
+        },
+        {
+            "id": "tables-border-spacing-arbitrary",
+            "szInput": {
+                "borderSpacing": "3px"
+            },
+            "expectedClass": "border-spacing-[3px]",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Spacing"
+        },
+        {
+            "id": "tables-border-spacing-variable",
+            "szInput": {
+                "borderSpacing": "--s"
+            },
+            "expectedClass": "border-spacing-(--s)",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Border Spacing"
+        },
+        {
+            "id": "tables-table-layout-auto",
+            "szInput": {
+                "tableLayout": "auto"
+            },
+            "expectedClass": "table-auto",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Table Layout"
+        },
+        {
+            "id": "tables-table-layout-fixed",
+            "szInput": {
+                "tableLayout": "fixed"
+            },
+            "expectedClass": "table-fixed",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Table Layout"
+        },
+        {
+            "id": "tables-caption-side-top",
+            "szInput": {
+                "caption": "top"
+            },
+            "expectedClass": "caption-top",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Caption Side"
+        },
+        {
+            "id": "tables-caption-side-bottom",
+            "szInput": {
+                "caption": "bottom"
+            },
+            "expectedClass": "caption-bottom",
+            "tailwindVersion": "4",
+            "category": "Tables",
+            "subcategory": "Caption Side"
+        }
+    ],
+    "totalTests": 11
+}

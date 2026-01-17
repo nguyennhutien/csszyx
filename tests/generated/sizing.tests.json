@@ -1,0 +1,5005 @@
+{
+    "tests": [
+        {
+            "id": "sizing-width-edge-case-999",
+            "szInput": {
+                "w": 999
+            },
+            "expectedClass": "w-999",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-edge-case-fraction-99-100",
+            "szInput": {
+                "w": "99/100"
+            },
+            "expectedClass": "w-99/100",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-0",
+            "szInput": {
+                "w": 0
+            },
+            "expectedClass": "w-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-px",
+            "szInput": {
+                "w": "px"
+            },
+            "expectedClass": "w-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-0-5",
+            "szInput": {
+                "w": 0.5
+            },
+            "expectedClass": "w-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-1",
+            "szInput": {
+                "w": 1
+            },
+            "expectedClass": "w-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-1-5",
+            "szInput": {
+                "w": 1.5
+            },
+            "expectedClass": "w-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-2",
+            "szInput": {
+                "w": 2
+            },
+            "expectedClass": "w-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-2-5",
+            "szInput": {
+                "w": 2.5
+            },
+            "expectedClass": "w-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-3",
+            "szInput": {
+                "w": 3
+            },
+            "expectedClass": "w-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-3-5",
+            "szInput": {
+                "w": 3.5
+            },
+            "expectedClass": "w-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-4",
+            "szInput": {
+                "w": 4
+            },
+            "expectedClass": "w-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-5",
+            "szInput": {
+                "w": 5
+            },
+            "expectedClass": "w-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-6",
+            "szInput": {
+                "w": 6
+            },
+            "expectedClass": "w-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-7",
+            "szInput": {
+                "w": 7
+            },
+            "expectedClass": "w-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-8",
+            "szInput": {
+                "w": 8
+            },
+            "expectedClass": "w-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-9",
+            "szInput": {
+                "w": 9
+            },
+            "expectedClass": "w-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-10",
+            "szInput": {
+                "w": 10
+            },
+            "expectedClass": "w-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-11",
+            "szInput": {
+                "w": 11
+            },
+            "expectedClass": "w-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-12",
+            "szInput": {
+                "w": 12
+            },
+            "expectedClass": "w-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-14",
+            "szInput": {
+                "w": 14
+            },
+            "expectedClass": "w-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-16",
+            "szInput": {
+                "w": 16
+            },
+            "expectedClass": "w-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-20",
+            "szInput": {
+                "w": 20
+            },
+            "expectedClass": "w-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-24",
+            "szInput": {
+                "w": 24
+            },
+            "expectedClass": "w-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-28",
+            "szInput": {
+                "w": 28
+            },
+            "expectedClass": "w-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-32",
+            "szInput": {
+                "w": 32
+            },
+            "expectedClass": "w-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-36",
+            "szInput": {
+                "w": 36
+            },
+            "expectedClass": "w-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-40",
+            "szInput": {
+                "w": 40
+            },
+            "expectedClass": "w-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-44",
+            "szInput": {
+                "w": 44
+            },
+            "expectedClass": "w-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-48",
+            "szInput": {
+                "w": 48
+            },
+            "expectedClass": "w-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-52",
+            "szInput": {
+                "w": 52
+            },
+            "expectedClass": "w-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-56",
+            "szInput": {
+                "w": 56
+            },
+            "expectedClass": "w-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-60",
+            "szInput": {
+                "w": 60
+            },
+            "expectedClass": "w-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-64",
+            "szInput": {
+                "w": 64
+            },
+            "expectedClass": "w-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-72",
+            "szInput": {
+                "w": 72
+            },
+            "expectedClass": "w-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-80",
+            "szInput": {
+                "w": 80
+            },
+            "expectedClass": "w-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-spacing-scale-96",
+            "szInput": {
+                "w": 96
+            },
+            "expectedClass": "w-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-1-2",
+            "szInput": {
+                "w": "1/2"
+            },
+            "expectedClass": "w-1/2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-1-3",
+            "szInput": {
+                "w": "1/3"
+            },
+            "expectedClass": "w-1/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-2-3",
+            "szInput": {
+                "w": "2/3"
+            },
+            "expectedClass": "w-2/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-1-4",
+            "szInput": {
+                "w": "1/4"
+            },
+            "expectedClass": "w-1/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-2-4",
+            "szInput": {
+                "w": "2/4"
+            },
+            "expectedClass": "w-2/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-3-4",
+            "szInput": {
+                "w": "3/4"
+            },
+            "expectedClass": "w-3/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-1-5",
+            "szInput": {
+                "w": "1/5"
+            },
+            "expectedClass": "w-1/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-2-5",
+            "szInput": {
+                "w": "2/5"
+            },
+            "expectedClass": "w-2/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-3-5",
+            "szInput": {
+                "w": "3/5"
+            },
+            "expectedClass": "w-3/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-4-5",
+            "szInput": {
+                "w": "4/5"
+            },
+            "expectedClass": "w-4/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-1-6",
+            "szInput": {
+                "w": "1/6"
+            },
+            "expectedClass": "w-1/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-2-6",
+            "szInput": {
+                "w": "2/6"
+            },
+            "expectedClass": "w-2/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-3-6",
+            "szInput": {
+                "w": "3/6"
+            },
+            "expectedClass": "w-3/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-4-6",
+            "szInput": {
+                "w": "4/6"
+            },
+            "expectedClass": "w-4/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-5-6",
+            "szInput": {
+                "w": "5/6"
+            },
+            "expectedClass": "w-5/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-1-12",
+            "szInput": {
+                "w": "1/12"
+            },
+            "expectedClass": "w-1/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-2-12",
+            "szInput": {
+                "w": "2/12"
+            },
+            "expectedClass": "w-2/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-3-12",
+            "szInput": {
+                "w": "3/12"
+            },
+            "expectedClass": "w-3/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-4-12",
+            "szInput": {
+                "w": "4/12"
+            },
+            "expectedClass": "w-4/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-5-12",
+            "szInput": {
+                "w": "5/12"
+            },
+            "expectedClass": "w-5/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-6-12",
+            "szInput": {
+                "w": "6/12"
+            },
+            "expectedClass": "w-6/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-7-12",
+            "szInput": {
+                "w": "7/12"
+            },
+            "expectedClass": "w-7/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-8-12",
+            "szInput": {
+                "w": "8/12"
+            },
+            "expectedClass": "w-8/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-9-12",
+            "szInput": {
+                "w": "9/12"
+            },
+            "expectedClass": "w-9/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-10-12",
+            "szInput": {
+                "w": "10/12"
+            },
+            "expectedClass": "w-10/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-11-12",
+            "szInput": {
+                "w": "11/12"
+            },
+            "expectedClass": "w-11/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fraction-full",
+            "szInput": {
+                "w": "full"
+            },
+            "expectedClass": "w-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-percentage",
+            "szInput": {
+                "w": "25%"
+            },
+            "expectedClass": "w-[25%]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-full",
+            "szInput": {
+                "w": "full"
+            },
+            "expectedClass": "w-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-screen",
+            "szInput": {
+                "w": "screen"
+            },
+            "expectedClass": "w-screen",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-viewport-svw",
+            "szInput": {
+                "w": "svw"
+            },
+            "expectedClass": "w-svw",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-viewport-lvw",
+            "szInput": {
+                "w": "lvw"
+            },
+            "expectedClass": "w-lvw",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-viewport-dvw",
+            "szInput": {
+                "w": "dvw"
+            },
+            "expectedClass": "w-dvw",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-min-content",
+            "szInput": {
+                "w": "min"
+            },
+            "expectedClass": "w-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-max-content",
+            "szInput": {
+                "w": "max"
+            },
+            "expectedClass": "w-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-fit-content",
+            "szInput": {
+                "w": "fit"
+            },
+            "expectedClass": "w-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-auto",
+            "szInput": {
+                "w": "auto"
+            },
+            "expectedClass": "w-auto",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-arbitrary",
+            "szInput": {
+                "w": "3px"
+            },
+            "expectedClass": "w-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-width-css-variable",
+            "szInput": {
+                "w": "--w"
+            },
+            "expectedClass": "w-(--w)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-0",
+            "szInput": {
+                "minW": 0
+            },
+            "expectedClass": "min-w-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-px",
+            "szInput": {
+                "minW": "px"
+            },
+            "expectedClass": "min-w-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-0-5",
+            "szInput": {
+                "minW": 0.5
+            },
+            "expectedClass": "min-w-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-1",
+            "szInput": {
+                "minW": 1
+            },
+            "expectedClass": "min-w-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-1-5",
+            "szInput": {
+                "minW": 1.5
+            },
+            "expectedClass": "min-w-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-2",
+            "szInput": {
+                "minW": 2
+            },
+            "expectedClass": "min-w-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-2-5",
+            "szInput": {
+                "minW": 2.5
+            },
+            "expectedClass": "min-w-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-3",
+            "szInput": {
+                "minW": 3
+            },
+            "expectedClass": "min-w-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-3-5",
+            "szInput": {
+                "minW": 3.5
+            },
+            "expectedClass": "min-w-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-4",
+            "szInput": {
+                "minW": 4
+            },
+            "expectedClass": "min-w-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-5",
+            "szInput": {
+                "minW": 5
+            },
+            "expectedClass": "min-w-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-6",
+            "szInput": {
+                "minW": 6
+            },
+            "expectedClass": "min-w-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-7",
+            "szInput": {
+                "minW": 7
+            },
+            "expectedClass": "min-w-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-8",
+            "szInput": {
+                "minW": 8
+            },
+            "expectedClass": "min-w-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-9",
+            "szInput": {
+                "minW": 9
+            },
+            "expectedClass": "min-w-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-10",
+            "szInput": {
+                "minW": 10
+            },
+            "expectedClass": "min-w-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-11",
+            "szInput": {
+                "minW": 11
+            },
+            "expectedClass": "min-w-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-12",
+            "szInput": {
+                "minW": 12
+            },
+            "expectedClass": "min-w-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-14",
+            "szInput": {
+                "minW": 14
+            },
+            "expectedClass": "min-w-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-16",
+            "szInput": {
+                "minW": 16
+            },
+            "expectedClass": "min-w-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-20",
+            "szInput": {
+                "minW": 20
+            },
+            "expectedClass": "min-w-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-24",
+            "szInput": {
+                "minW": 24
+            },
+            "expectedClass": "min-w-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-28",
+            "szInput": {
+                "minW": 28
+            },
+            "expectedClass": "min-w-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-32",
+            "szInput": {
+                "minW": 32
+            },
+            "expectedClass": "min-w-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-36",
+            "szInput": {
+                "minW": 36
+            },
+            "expectedClass": "min-w-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-40",
+            "szInput": {
+                "minW": 40
+            },
+            "expectedClass": "min-w-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-44",
+            "szInput": {
+                "minW": 44
+            },
+            "expectedClass": "min-w-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-48",
+            "szInput": {
+                "minW": 48
+            },
+            "expectedClass": "min-w-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-52",
+            "szInput": {
+                "minW": 52
+            },
+            "expectedClass": "min-w-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-56",
+            "szInput": {
+                "minW": 56
+            },
+            "expectedClass": "min-w-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-60",
+            "szInput": {
+                "minW": 60
+            },
+            "expectedClass": "min-w-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-64",
+            "szInput": {
+                "minW": 64
+            },
+            "expectedClass": "min-w-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-72",
+            "szInput": {
+                "minW": 72
+            },
+            "expectedClass": "min-w-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-80",
+            "szInput": {
+                "minW": 80
+            },
+            "expectedClass": "min-w-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-spacing-scale-96",
+            "szInput": {
+                "minW": 96
+            },
+            "expectedClass": "min-w-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-full",
+            "szInput": {
+                "minW": "full"
+            },
+            "expectedClass": "min-w-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-min-content",
+            "szInput": {
+                "minW": "min"
+            },
+            "expectedClass": "min-w-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-max-content",
+            "szInput": {
+                "minW": "max"
+            },
+            "expectedClass": "min-w-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fit-content",
+            "szInput": {
+                "minW": "fit"
+            },
+            "expectedClass": "min-w-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-1-2",
+            "szInput": {
+                "minW": "1/2"
+            },
+            "expectedClass": "min-w-1/2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-1-3",
+            "szInput": {
+                "minW": "1/3"
+            },
+            "expectedClass": "min-w-1/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-2-3",
+            "szInput": {
+                "minW": "2/3"
+            },
+            "expectedClass": "min-w-2/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-1-4",
+            "szInput": {
+                "minW": "1/4"
+            },
+            "expectedClass": "min-w-1/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-2-4",
+            "szInput": {
+                "minW": "2/4"
+            },
+            "expectedClass": "min-w-2/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-3-4",
+            "szInput": {
+                "minW": "3/4"
+            },
+            "expectedClass": "min-w-3/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-1-5",
+            "szInput": {
+                "minW": "1/5"
+            },
+            "expectedClass": "min-w-1/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-2-5",
+            "szInput": {
+                "minW": "2/5"
+            },
+            "expectedClass": "min-w-2/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-3-5",
+            "szInput": {
+                "minW": "3/5"
+            },
+            "expectedClass": "min-w-3/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-4-5",
+            "szInput": {
+                "minW": "4/5"
+            },
+            "expectedClass": "min-w-4/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-1-6",
+            "szInput": {
+                "minW": "1/6"
+            },
+            "expectedClass": "min-w-1/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-2-6",
+            "szInput": {
+                "minW": "2/6"
+            },
+            "expectedClass": "min-w-2/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-3-6",
+            "szInput": {
+                "minW": "3/6"
+            },
+            "expectedClass": "min-w-3/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-4-6",
+            "szInput": {
+                "minW": "4/6"
+            },
+            "expectedClass": "min-w-4/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-5-6",
+            "szInput": {
+                "minW": "5/6"
+            },
+            "expectedClass": "min-w-5/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-1-12",
+            "szInput": {
+                "minW": "1/12"
+            },
+            "expectedClass": "min-w-1/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-2-12",
+            "szInput": {
+                "minW": "2/12"
+            },
+            "expectedClass": "min-w-2/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-3-12",
+            "szInput": {
+                "minW": "3/12"
+            },
+            "expectedClass": "min-w-3/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-4-12",
+            "szInput": {
+                "minW": "4/12"
+            },
+            "expectedClass": "min-w-4/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-5-12",
+            "szInput": {
+                "minW": "5/12"
+            },
+            "expectedClass": "min-w-5/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-6-12",
+            "szInput": {
+                "minW": "6/12"
+            },
+            "expectedClass": "min-w-6/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-7-12",
+            "szInput": {
+                "minW": "7/12"
+            },
+            "expectedClass": "min-w-7/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-8-12",
+            "szInput": {
+                "minW": "8/12"
+            },
+            "expectedClass": "min-w-8/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-9-12",
+            "szInput": {
+                "minW": "9/12"
+            },
+            "expectedClass": "min-w-9/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-10-12",
+            "szInput": {
+                "minW": "10/12"
+            },
+            "expectedClass": "min-w-10/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-11-12",
+            "szInput": {
+                "minW": "11/12"
+            },
+            "expectedClass": "min-w-11/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-fraction-full",
+            "szInput": {
+                "minW": "full"
+            },
+            "expectedClass": "min-w-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-arbitrary",
+            "szInput": {
+                "minW": "3px"
+            },
+            "expectedClass": "min-w-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-min-width-css-variable",
+            "szInput": {
+                "minW": "--w"
+            },
+            "expectedClass": "min-w-(--w)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-0",
+            "szInput": {
+                "maxW": 0
+            },
+            "expectedClass": "max-w-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-px",
+            "szInput": {
+                "maxW": "px"
+            },
+            "expectedClass": "max-w-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-0-5",
+            "szInput": {
+                "maxW": 0.5
+            },
+            "expectedClass": "max-w-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-1",
+            "szInput": {
+                "maxW": 1
+            },
+            "expectedClass": "max-w-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-1-5",
+            "szInput": {
+                "maxW": 1.5
+            },
+            "expectedClass": "max-w-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-2",
+            "szInput": {
+                "maxW": 2
+            },
+            "expectedClass": "max-w-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-2-5",
+            "szInput": {
+                "maxW": 2.5
+            },
+            "expectedClass": "max-w-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-3",
+            "szInput": {
+                "maxW": 3
+            },
+            "expectedClass": "max-w-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-3-5",
+            "szInput": {
+                "maxW": 3.5
+            },
+            "expectedClass": "max-w-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-4",
+            "szInput": {
+                "maxW": 4
+            },
+            "expectedClass": "max-w-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-5",
+            "szInput": {
+                "maxW": 5
+            },
+            "expectedClass": "max-w-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-6",
+            "szInput": {
+                "maxW": 6
+            },
+            "expectedClass": "max-w-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-7",
+            "szInput": {
+                "maxW": 7
+            },
+            "expectedClass": "max-w-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-8",
+            "szInput": {
+                "maxW": 8
+            },
+            "expectedClass": "max-w-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-9",
+            "szInput": {
+                "maxW": 9
+            },
+            "expectedClass": "max-w-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-10",
+            "szInput": {
+                "maxW": 10
+            },
+            "expectedClass": "max-w-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-11",
+            "szInput": {
+                "maxW": 11
+            },
+            "expectedClass": "max-w-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-12",
+            "szInput": {
+                "maxW": 12
+            },
+            "expectedClass": "max-w-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-14",
+            "szInput": {
+                "maxW": 14
+            },
+            "expectedClass": "max-w-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-16",
+            "szInput": {
+                "maxW": 16
+            },
+            "expectedClass": "max-w-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-20",
+            "szInput": {
+                "maxW": 20
+            },
+            "expectedClass": "max-w-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-24",
+            "szInput": {
+                "maxW": 24
+            },
+            "expectedClass": "max-w-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-28",
+            "szInput": {
+                "maxW": 28
+            },
+            "expectedClass": "max-w-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-32",
+            "szInput": {
+                "maxW": 32
+            },
+            "expectedClass": "max-w-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-36",
+            "szInput": {
+                "maxW": 36
+            },
+            "expectedClass": "max-w-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-40",
+            "szInput": {
+                "maxW": 40
+            },
+            "expectedClass": "max-w-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-44",
+            "szInput": {
+                "maxW": 44
+            },
+            "expectedClass": "max-w-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-48",
+            "szInput": {
+                "maxW": 48
+            },
+            "expectedClass": "max-w-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-52",
+            "szInput": {
+                "maxW": 52
+            },
+            "expectedClass": "max-w-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-56",
+            "szInput": {
+                "maxW": 56
+            },
+            "expectedClass": "max-w-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-60",
+            "szInput": {
+                "maxW": 60
+            },
+            "expectedClass": "max-w-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-64",
+            "szInput": {
+                "maxW": 64
+            },
+            "expectedClass": "max-w-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-72",
+            "szInput": {
+                "maxW": 72
+            },
+            "expectedClass": "max-w-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-80",
+            "szInput": {
+                "maxW": 80
+            },
+            "expectedClass": "max-w-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-scale-96",
+            "szInput": {
+                "maxW": 96
+            },
+            "expectedClass": "max-w-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-full",
+            "szInput": {
+                "maxW": "full"
+            },
+            "expectedClass": "max-w-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-none",
+            "szInput": {
+                "maxW": "none"
+            },
+            "expectedClass": "max-w-none",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-container-legacy",
+            "szInput": {
+                "maxW": "container"
+            },
+            "expectedClass": "container",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-0",
+            "szInput": {
+                "maxW": 0
+            },
+            "expectedClass": "max-w-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-px",
+            "szInput": {
+                "maxW": "px"
+            },
+            "expectedClass": "max-w-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-0-5",
+            "szInput": {
+                "maxW": 0.5
+            },
+            "expectedClass": "max-w-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-1",
+            "szInput": {
+                "maxW": 1
+            },
+            "expectedClass": "max-w-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-1-5",
+            "szInput": {
+                "maxW": 1.5
+            },
+            "expectedClass": "max-w-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-2",
+            "szInput": {
+                "maxW": 2
+            },
+            "expectedClass": "max-w-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-2-5",
+            "szInput": {
+                "maxW": 2.5
+            },
+            "expectedClass": "max-w-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-3",
+            "szInput": {
+                "maxW": 3
+            },
+            "expectedClass": "max-w-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-3-5",
+            "szInput": {
+                "maxW": 3.5
+            },
+            "expectedClass": "max-w-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-4",
+            "szInput": {
+                "maxW": 4
+            },
+            "expectedClass": "max-w-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-5",
+            "szInput": {
+                "maxW": 5
+            },
+            "expectedClass": "max-w-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-6",
+            "szInput": {
+                "maxW": 6
+            },
+            "expectedClass": "max-w-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-7",
+            "szInput": {
+                "maxW": 7
+            },
+            "expectedClass": "max-w-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-8",
+            "szInput": {
+                "maxW": 8
+            },
+            "expectedClass": "max-w-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-9",
+            "szInput": {
+                "maxW": 9
+            },
+            "expectedClass": "max-w-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-10",
+            "szInput": {
+                "maxW": 10
+            },
+            "expectedClass": "max-w-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-11",
+            "szInput": {
+                "maxW": 11
+            },
+            "expectedClass": "max-w-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-12",
+            "szInput": {
+                "maxW": 12
+            },
+            "expectedClass": "max-w-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-14",
+            "szInput": {
+                "maxW": 14
+            },
+            "expectedClass": "max-w-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-16",
+            "szInput": {
+                "maxW": 16
+            },
+            "expectedClass": "max-w-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-20",
+            "szInput": {
+                "maxW": 20
+            },
+            "expectedClass": "max-w-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-24",
+            "szInput": {
+                "maxW": 24
+            },
+            "expectedClass": "max-w-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-28",
+            "szInput": {
+                "maxW": 28
+            },
+            "expectedClass": "max-w-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-32",
+            "szInput": {
+                "maxW": 32
+            },
+            "expectedClass": "max-w-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-36",
+            "szInput": {
+                "maxW": 36
+            },
+            "expectedClass": "max-w-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-40",
+            "szInput": {
+                "maxW": 40
+            },
+            "expectedClass": "max-w-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-44",
+            "szInput": {
+                "maxW": 44
+            },
+            "expectedClass": "max-w-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-48",
+            "szInput": {
+                "maxW": 48
+            },
+            "expectedClass": "max-w-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-52",
+            "szInput": {
+                "maxW": 52
+            },
+            "expectedClass": "max-w-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-56",
+            "szInput": {
+                "maxW": 56
+            },
+            "expectedClass": "max-w-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-60",
+            "szInput": {
+                "maxW": 60
+            },
+            "expectedClass": "max-w-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-64",
+            "szInput": {
+                "maxW": 64
+            },
+            "expectedClass": "max-w-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-72",
+            "szInput": {
+                "maxW": 72
+            },
+            "expectedClass": "max-w-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-80",
+            "szInput": {
+                "maxW": 80
+            },
+            "expectedClass": "max-w-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-breakpoints-96",
+            "szInput": {
+                "maxW": 96
+            },
+            "expectedClass": "max-w-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-0",
+            "szInput": {
+                "maxW": 0
+            },
+            "expectedClass": "max-w-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-px",
+            "szInput": {
+                "maxW": "px"
+            },
+            "expectedClass": "max-w-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-0-5",
+            "szInput": {
+                "maxW": 0.5
+            },
+            "expectedClass": "max-w-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-1",
+            "szInput": {
+                "maxW": 1
+            },
+            "expectedClass": "max-w-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-1-5",
+            "szInput": {
+                "maxW": 1.5
+            },
+            "expectedClass": "max-w-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-2",
+            "szInput": {
+                "maxW": 2
+            },
+            "expectedClass": "max-w-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-2-5",
+            "szInput": {
+                "maxW": 2.5
+            },
+            "expectedClass": "max-w-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-3",
+            "szInput": {
+                "maxW": 3
+            },
+            "expectedClass": "max-w-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-3-5",
+            "szInput": {
+                "maxW": 3.5
+            },
+            "expectedClass": "max-w-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-4",
+            "szInput": {
+                "maxW": 4
+            },
+            "expectedClass": "max-w-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-5",
+            "szInput": {
+                "maxW": 5
+            },
+            "expectedClass": "max-w-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-6",
+            "szInput": {
+                "maxW": 6
+            },
+            "expectedClass": "max-w-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-7",
+            "szInput": {
+                "maxW": 7
+            },
+            "expectedClass": "max-w-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-8",
+            "szInput": {
+                "maxW": 8
+            },
+            "expectedClass": "max-w-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-9",
+            "szInput": {
+                "maxW": 9
+            },
+            "expectedClass": "max-w-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-10",
+            "szInput": {
+                "maxW": 10
+            },
+            "expectedClass": "max-w-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-11",
+            "szInput": {
+                "maxW": 11
+            },
+            "expectedClass": "max-w-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-12",
+            "szInput": {
+                "maxW": 12
+            },
+            "expectedClass": "max-w-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-14",
+            "szInput": {
+                "maxW": 14
+            },
+            "expectedClass": "max-w-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-16",
+            "szInput": {
+                "maxW": 16
+            },
+            "expectedClass": "max-w-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-20",
+            "szInput": {
+                "maxW": 20
+            },
+            "expectedClass": "max-w-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-24",
+            "szInput": {
+                "maxW": 24
+            },
+            "expectedClass": "max-w-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-28",
+            "szInput": {
+                "maxW": 28
+            },
+            "expectedClass": "max-w-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-32",
+            "szInput": {
+                "maxW": 32
+            },
+            "expectedClass": "max-w-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-36",
+            "szInput": {
+                "maxW": 36
+            },
+            "expectedClass": "max-w-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-40",
+            "szInput": {
+                "maxW": 40
+            },
+            "expectedClass": "max-w-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-44",
+            "szInput": {
+                "maxW": 44
+            },
+            "expectedClass": "max-w-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-48",
+            "szInput": {
+                "maxW": 48
+            },
+            "expectedClass": "max-w-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-52",
+            "szInput": {
+                "maxW": 52
+            },
+            "expectedClass": "max-w-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-56",
+            "szInput": {
+                "maxW": 56
+            },
+            "expectedClass": "max-w-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-60",
+            "szInput": {
+                "maxW": 60
+            },
+            "expectedClass": "max-w-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-64",
+            "szInput": {
+                "maxW": 64
+            },
+            "expectedClass": "max-w-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-72",
+            "szInput": {
+                "maxW": 72
+            },
+            "expectedClass": "max-w-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-80",
+            "szInput": {
+                "maxW": 80
+            },
+            "expectedClass": "max-w-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-spacing-96",
+            "szInput": {
+                "maxW": 96
+            },
+            "expectedClass": "max-w-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-prose",
+            "szInput": {
+                "maxW": "prose"
+            },
+            "expectedClass": "max-w-prose",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-min-content",
+            "szInput": {
+                "maxW": "min"
+            },
+            "expectedClass": "max-w-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-max-content",
+            "szInput": {
+                "maxW": "max"
+            },
+            "expectedClass": "max-w-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fit-content",
+            "szInput": {
+                "maxW": "fit"
+            },
+            "expectedClass": "max-w-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-1-2",
+            "szInput": {
+                "maxW": "1/2"
+            },
+            "expectedClass": "max-w-1/2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-1-3",
+            "szInput": {
+                "maxW": "1/3"
+            },
+            "expectedClass": "max-w-1/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-2-3",
+            "szInput": {
+                "maxW": "2/3"
+            },
+            "expectedClass": "max-w-2/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-1-4",
+            "szInput": {
+                "maxW": "1/4"
+            },
+            "expectedClass": "max-w-1/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-2-4",
+            "szInput": {
+                "maxW": "2/4"
+            },
+            "expectedClass": "max-w-2/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-3-4",
+            "szInput": {
+                "maxW": "3/4"
+            },
+            "expectedClass": "max-w-3/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-1-5",
+            "szInput": {
+                "maxW": "1/5"
+            },
+            "expectedClass": "max-w-1/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-2-5",
+            "szInput": {
+                "maxW": "2/5"
+            },
+            "expectedClass": "max-w-2/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-3-5",
+            "szInput": {
+                "maxW": "3/5"
+            },
+            "expectedClass": "max-w-3/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-4-5",
+            "szInput": {
+                "maxW": "4/5"
+            },
+            "expectedClass": "max-w-4/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-1-6",
+            "szInput": {
+                "maxW": "1/6"
+            },
+            "expectedClass": "max-w-1/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-2-6",
+            "szInput": {
+                "maxW": "2/6"
+            },
+            "expectedClass": "max-w-2/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-3-6",
+            "szInput": {
+                "maxW": "3/6"
+            },
+            "expectedClass": "max-w-3/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-4-6",
+            "szInput": {
+                "maxW": "4/6"
+            },
+            "expectedClass": "max-w-4/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-5-6",
+            "szInput": {
+                "maxW": "5/6"
+            },
+            "expectedClass": "max-w-5/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-1-12",
+            "szInput": {
+                "maxW": "1/12"
+            },
+            "expectedClass": "max-w-1/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-2-12",
+            "szInput": {
+                "maxW": "2/12"
+            },
+            "expectedClass": "max-w-2/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-3-12",
+            "szInput": {
+                "maxW": "3/12"
+            },
+            "expectedClass": "max-w-3/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-4-12",
+            "szInput": {
+                "maxW": "4/12"
+            },
+            "expectedClass": "max-w-4/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-5-12",
+            "szInput": {
+                "maxW": "5/12"
+            },
+            "expectedClass": "max-w-5/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-6-12",
+            "szInput": {
+                "maxW": "6/12"
+            },
+            "expectedClass": "max-w-6/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-7-12",
+            "szInput": {
+                "maxW": "7/12"
+            },
+            "expectedClass": "max-w-7/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-8-12",
+            "szInput": {
+                "maxW": "8/12"
+            },
+            "expectedClass": "max-w-8/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-9-12",
+            "szInput": {
+                "maxW": "9/12"
+            },
+            "expectedClass": "max-w-9/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-10-12",
+            "szInput": {
+                "maxW": "10/12"
+            },
+            "expectedClass": "max-w-10/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-11-12",
+            "szInput": {
+                "maxW": "11/12"
+            },
+            "expectedClass": "max-w-11/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-fraction-full",
+            "szInput": {
+                "maxW": "full"
+            },
+            "expectedClass": "max-w-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-arbitrary",
+            "szInput": {
+                "maxW": "3px"
+            },
+            "expectedClass": "max-w-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-width-css-variable",
+            "szInput": {
+                "maxW": "--w"
+            },
+            "expectedClass": "max-w-(--w)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-height-spacing-scale-0",
+            "szInput": {
+                "h": 0
+            },
+            "expectedClass": "h-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-px",
+            "szInput": {
+                "h": "px"
+            },
+            "expectedClass": "h-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-0-5",
+            "szInput": {
+                "h": 0.5
+            },
+            "expectedClass": "h-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-1",
+            "szInput": {
+                "h": 1
+            },
+            "expectedClass": "h-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-1-5",
+            "szInput": {
+                "h": 1.5
+            },
+            "expectedClass": "h-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-2",
+            "szInput": {
+                "h": 2
+            },
+            "expectedClass": "h-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-2-5",
+            "szInput": {
+                "h": 2.5
+            },
+            "expectedClass": "h-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-3",
+            "szInput": {
+                "h": 3
+            },
+            "expectedClass": "h-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-3-5",
+            "szInput": {
+                "h": 3.5
+            },
+            "expectedClass": "h-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-4",
+            "szInput": {
+                "h": 4
+            },
+            "expectedClass": "h-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-5",
+            "szInput": {
+                "h": 5
+            },
+            "expectedClass": "h-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-6",
+            "szInput": {
+                "h": 6
+            },
+            "expectedClass": "h-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-7",
+            "szInput": {
+                "h": 7
+            },
+            "expectedClass": "h-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-8",
+            "szInput": {
+                "h": 8
+            },
+            "expectedClass": "h-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-9",
+            "szInput": {
+                "h": 9
+            },
+            "expectedClass": "h-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-10",
+            "szInput": {
+                "h": 10
+            },
+            "expectedClass": "h-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-11",
+            "szInput": {
+                "h": 11
+            },
+            "expectedClass": "h-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-12",
+            "szInput": {
+                "h": 12
+            },
+            "expectedClass": "h-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-14",
+            "szInput": {
+                "h": 14
+            },
+            "expectedClass": "h-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-16",
+            "szInput": {
+                "h": 16
+            },
+            "expectedClass": "h-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-20",
+            "szInput": {
+                "h": 20
+            },
+            "expectedClass": "h-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-24",
+            "szInput": {
+                "h": 24
+            },
+            "expectedClass": "h-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-28",
+            "szInput": {
+                "h": 28
+            },
+            "expectedClass": "h-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-32",
+            "szInput": {
+                "h": 32
+            },
+            "expectedClass": "h-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-36",
+            "szInput": {
+                "h": 36
+            },
+            "expectedClass": "h-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-40",
+            "szInput": {
+                "h": 40
+            },
+            "expectedClass": "h-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-44",
+            "szInput": {
+                "h": 44
+            },
+            "expectedClass": "h-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-48",
+            "szInput": {
+                "h": 48
+            },
+            "expectedClass": "h-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-52",
+            "szInput": {
+                "h": 52
+            },
+            "expectedClass": "h-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-56",
+            "szInput": {
+                "h": 56
+            },
+            "expectedClass": "h-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-60",
+            "szInput": {
+                "h": 60
+            },
+            "expectedClass": "h-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-64",
+            "szInput": {
+                "h": 64
+            },
+            "expectedClass": "h-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-72",
+            "szInput": {
+                "h": 72
+            },
+            "expectedClass": "h-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-80",
+            "szInput": {
+                "h": 80
+            },
+            "expectedClass": "h-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-spacing-scale-96",
+            "szInput": {
+                "h": 96
+            },
+            "expectedClass": "h-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-1-2",
+            "szInput": {
+                "h": "1/2"
+            },
+            "expectedClass": "h-1/2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-1-3",
+            "szInput": {
+                "h": "1/3"
+            },
+            "expectedClass": "h-1/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-2-3",
+            "szInput": {
+                "h": "2/3"
+            },
+            "expectedClass": "h-2/3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-1-4",
+            "szInput": {
+                "h": "1/4"
+            },
+            "expectedClass": "h-1/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-2-4",
+            "szInput": {
+                "h": "2/4"
+            },
+            "expectedClass": "h-2/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-3-4",
+            "szInput": {
+                "h": "3/4"
+            },
+            "expectedClass": "h-3/4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-1-5",
+            "szInput": {
+                "h": "1/5"
+            },
+            "expectedClass": "h-1/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-2-5",
+            "szInput": {
+                "h": "2/5"
+            },
+            "expectedClass": "h-2/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-3-5",
+            "szInput": {
+                "h": "3/5"
+            },
+            "expectedClass": "h-3/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-4-5",
+            "szInput": {
+                "h": "4/5"
+            },
+            "expectedClass": "h-4/5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-1-6",
+            "szInput": {
+                "h": "1/6"
+            },
+            "expectedClass": "h-1/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-2-6",
+            "szInput": {
+                "h": "2/6"
+            },
+            "expectedClass": "h-2/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-3-6",
+            "szInput": {
+                "h": "3/6"
+            },
+            "expectedClass": "h-3/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-4-6",
+            "szInput": {
+                "h": "4/6"
+            },
+            "expectedClass": "h-4/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-5-6",
+            "szInput": {
+                "h": "5/6"
+            },
+            "expectedClass": "h-5/6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-1-12",
+            "szInput": {
+                "h": "1/12"
+            },
+            "expectedClass": "h-1/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-2-12",
+            "szInput": {
+                "h": "2/12"
+            },
+            "expectedClass": "h-2/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-3-12",
+            "szInput": {
+                "h": "3/12"
+            },
+            "expectedClass": "h-3/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-4-12",
+            "szInput": {
+                "h": "4/12"
+            },
+            "expectedClass": "h-4/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-5-12",
+            "szInput": {
+                "h": "5/12"
+            },
+            "expectedClass": "h-5/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-6-12",
+            "szInput": {
+                "h": "6/12"
+            },
+            "expectedClass": "h-6/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-7-12",
+            "szInput": {
+                "h": "7/12"
+            },
+            "expectedClass": "h-7/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-8-12",
+            "szInput": {
+                "h": "8/12"
+            },
+            "expectedClass": "h-8/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-9-12",
+            "szInput": {
+                "h": "9/12"
+            },
+            "expectedClass": "h-9/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-10-12",
+            "szInput": {
+                "h": "10/12"
+            },
+            "expectedClass": "h-10/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-11-12",
+            "szInput": {
+                "h": "11/12"
+            },
+            "expectedClass": "h-11/12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fraction-full",
+            "szInput": {
+                "h": "full"
+            },
+            "expectedClass": "h-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-full",
+            "szInput": {
+                "h": "full"
+            },
+            "expectedClass": "h-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-screen",
+            "szInput": {
+                "h": "screen"
+            },
+            "expectedClass": "h-screen",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-viewport-svh",
+            "szInput": {
+                "h": "svh"
+            },
+            "expectedClass": "h-svh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-viewport-lvh",
+            "szInput": {
+                "h": "lvh"
+            },
+            "expectedClass": "h-lvh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-viewport-dvh",
+            "szInput": {
+                "h": "dvh"
+            },
+            "expectedClass": "h-dvh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-min-content",
+            "szInput": {
+                "h": "min"
+            },
+            "expectedClass": "h-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-max-content",
+            "szInput": {
+                "h": "max"
+            },
+            "expectedClass": "h-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-fit-content",
+            "szInput": {
+                "h": "fit"
+            },
+            "expectedClass": "h-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-auto",
+            "szInput": {
+                "h": "auto"
+            },
+            "expectedClass": "h-auto",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-arbitrary",
+            "szInput": {
+                "h": "3px"
+            },
+            "expectedClass": "h-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-height-css-variable",
+            "szInput": {
+                "h": "--h"
+            },
+            "expectedClass": "h-(--h)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-0",
+            "szInput": {
+                "minH": 0
+            },
+            "expectedClass": "min-h-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-px",
+            "szInput": {
+                "minH": "px"
+            },
+            "expectedClass": "min-h-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-0-5",
+            "szInput": {
+                "minH": 0.5
+            },
+            "expectedClass": "min-h-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-1",
+            "szInput": {
+                "minH": 1
+            },
+            "expectedClass": "min-h-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-1-5",
+            "szInput": {
+                "minH": 1.5
+            },
+            "expectedClass": "min-h-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-2",
+            "szInput": {
+                "minH": 2
+            },
+            "expectedClass": "min-h-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-2-5",
+            "szInput": {
+                "minH": 2.5
+            },
+            "expectedClass": "min-h-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-3",
+            "szInput": {
+                "minH": 3
+            },
+            "expectedClass": "min-h-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-3-5",
+            "szInput": {
+                "minH": 3.5
+            },
+            "expectedClass": "min-h-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-4",
+            "szInput": {
+                "minH": 4
+            },
+            "expectedClass": "min-h-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-5",
+            "szInput": {
+                "minH": 5
+            },
+            "expectedClass": "min-h-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-6",
+            "szInput": {
+                "minH": 6
+            },
+            "expectedClass": "min-h-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-7",
+            "szInput": {
+                "minH": 7
+            },
+            "expectedClass": "min-h-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-8",
+            "szInput": {
+                "minH": 8
+            },
+            "expectedClass": "min-h-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-9",
+            "szInput": {
+                "minH": 9
+            },
+            "expectedClass": "min-h-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-10",
+            "szInput": {
+                "minH": 10
+            },
+            "expectedClass": "min-h-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-11",
+            "szInput": {
+                "minH": 11
+            },
+            "expectedClass": "min-h-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-12",
+            "szInput": {
+                "minH": 12
+            },
+            "expectedClass": "min-h-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-14",
+            "szInput": {
+                "minH": 14
+            },
+            "expectedClass": "min-h-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-16",
+            "szInput": {
+                "minH": 16
+            },
+            "expectedClass": "min-h-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-20",
+            "szInput": {
+                "minH": 20
+            },
+            "expectedClass": "min-h-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-24",
+            "szInput": {
+                "minH": 24
+            },
+            "expectedClass": "min-h-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-28",
+            "szInput": {
+                "minH": 28
+            },
+            "expectedClass": "min-h-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-32",
+            "szInput": {
+                "minH": 32
+            },
+            "expectedClass": "min-h-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-36",
+            "szInput": {
+                "minH": 36
+            },
+            "expectedClass": "min-h-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-40",
+            "szInput": {
+                "minH": 40
+            },
+            "expectedClass": "min-h-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-44",
+            "szInput": {
+                "minH": 44
+            },
+            "expectedClass": "min-h-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-48",
+            "szInput": {
+                "minH": 48
+            },
+            "expectedClass": "min-h-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-52",
+            "szInput": {
+                "minH": 52
+            },
+            "expectedClass": "min-h-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-56",
+            "szInput": {
+                "minH": 56
+            },
+            "expectedClass": "min-h-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-60",
+            "szInput": {
+                "minH": 60
+            },
+            "expectedClass": "min-h-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-64",
+            "szInput": {
+                "minH": 64
+            },
+            "expectedClass": "min-h-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-72",
+            "szInput": {
+                "minH": 72
+            },
+            "expectedClass": "min-h-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-80",
+            "szInput": {
+                "minH": 80
+            },
+            "expectedClass": "min-h-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-spacing-scale-96",
+            "szInput": {
+                "minH": 96
+            },
+            "expectedClass": "min-h-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-full",
+            "szInput": {
+                "minH": "full"
+            },
+            "expectedClass": "min-h-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-screen",
+            "szInput": {
+                "minH": "screen"
+            },
+            "expectedClass": "min-h-screen",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-viewport-svh",
+            "szInput": {
+                "minH": "svh"
+            },
+            "expectedClass": "min-h-svh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-viewport-lvh",
+            "szInput": {
+                "minH": "lvh"
+            },
+            "expectedClass": "min-h-lvh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-viewport-dvh",
+            "szInput": {
+                "minH": "dvh"
+            },
+            "expectedClass": "min-h-dvh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-min-content",
+            "szInput": {
+                "minH": "min"
+            },
+            "expectedClass": "min-h-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-max-content",
+            "szInput": {
+                "minH": "max"
+            },
+            "expectedClass": "min-h-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-fit-content",
+            "szInput": {
+                "minH": "fit"
+            },
+            "expectedClass": "min-h-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-arbitrary",
+            "szInput": {
+                "minH": "3px"
+            },
+            "expectedClass": "min-h-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-min-height-css-variable",
+            "szInput": {
+                "minH": "--h"
+            },
+            "expectedClass": "min-h-(--h)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Min Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-0",
+            "szInput": {
+                "maxH": 0
+            },
+            "expectedClass": "max-h-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-px",
+            "szInput": {
+                "maxH": "px"
+            },
+            "expectedClass": "max-h-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-0-5",
+            "szInput": {
+                "maxH": 0.5
+            },
+            "expectedClass": "max-h-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-1",
+            "szInput": {
+                "maxH": 1
+            },
+            "expectedClass": "max-h-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-1-5",
+            "szInput": {
+                "maxH": 1.5
+            },
+            "expectedClass": "max-h-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-2",
+            "szInput": {
+                "maxH": 2
+            },
+            "expectedClass": "max-h-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-2-5",
+            "szInput": {
+                "maxH": 2.5
+            },
+            "expectedClass": "max-h-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-3",
+            "szInput": {
+                "maxH": 3
+            },
+            "expectedClass": "max-h-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-3-5",
+            "szInput": {
+                "maxH": 3.5
+            },
+            "expectedClass": "max-h-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-4",
+            "szInput": {
+                "maxH": 4
+            },
+            "expectedClass": "max-h-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-5",
+            "szInput": {
+                "maxH": 5
+            },
+            "expectedClass": "max-h-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-6",
+            "szInput": {
+                "maxH": 6
+            },
+            "expectedClass": "max-h-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-7",
+            "szInput": {
+                "maxH": 7
+            },
+            "expectedClass": "max-h-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-8",
+            "szInput": {
+                "maxH": 8
+            },
+            "expectedClass": "max-h-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-9",
+            "szInput": {
+                "maxH": 9
+            },
+            "expectedClass": "max-h-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-10",
+            "szInput": {
+                "maxH": 10
+            },
+            "expectedClass": "max-h-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-11",
+            "szInput": {
+                "maxH": 11
+            },
+            "expectedClass": "max-h-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-12",
+            "szInput": {
+                "maxH": 12
+            },
+            "expectedClass": "max-h-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-14",
+            "szInput": {
+                "maxH": 14
+            },
+            "expectedClass": "max-h-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-16",
+            "szInput": {
+                "maxH": 16
+            },
+            "expectedClass": "max-h-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-20",
+            "szInput": {
+                "maxH": 20
+            },
+            "expectedClass": "max-h-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-24",
+            "szInput": {
+                "maxH": 24
+            },
+            "expectedClass": "max-h-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-28",
+            "szInput": {
+                "maxH": 28
+            },
+            "expectedClass": "max-h-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-32",
+            "szInput": {
+                "maxH": 32
+            },
+            "expectedClass": "max-h-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-36",
+            "szInput": {
+                "maxH": 36
+            },
+            "expectedClass": "max-h-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-40",
+            "szInput": {
+                "maxH": 40
+            },
+            "expectedClass": "max-h-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-44",
+            "szInput": {
+                "maxH": 44
+            },
+            "expectedClass": "max-h-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-48",
+            "szInput": {
+                "maxH": 48
+            },
+            "expectedClass": "max-h-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-52",
+            "szInput": {
+                "maxH": 52
+            },
+            "expectedClass": "max-h-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-56",
+            "szInput": {
+                "maxH": 56
+            },
+            "expectedClass": "max-h-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-60",
+            "szInput": {
+                "maxH": 60
+            },
+            "expectedClass": "max-h-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-64",
+            "szInput": {
+                "maxH": 64
+            },
+            "expectedClass": "max-h-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-72",
+            "szInput": {
+                "maxH": 72
+            },
+            "expectedClass": "max-h-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-80",
+            "szInput": {
+                "maxH": 80
+            },
+            "expectedClass": "max-h-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-spacing-scale-96",
+            "szInput": {
+                "maxH": 96
+            },
+            "expectedClass": "max-h-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-full",
+            "szInput": {
+                "maxH": "full"
+            },
+            "expectedClass": "max-h-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-screen",
+            "szInput": {
+                "maxH": "screen"
+            },
+            "expectedClass": "max-h-screen",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-viewport-svh",
+            "szInput": {
+                "maxH": "svh"
+            },
+            "expectedClass": "max-h-svh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-viewport-lvh",
+            "szInput": {
+                "maxH": "lvh"
+            },
+            "expectedClass": "max-h-lvh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-viewport-dvh",
+            "szInput": {
+                "maxH": "dvh"
+            },
+            "expectedClass": "max-h-dvh",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-min-content",
+            "szInput": {
+                "maxH": "min"
+            },
+            "expectedClass": "max-h-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-max-content",
+            "szInput": {
+                "maxH": "max"
+            },
+            "expectedClass": "max-h-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-fit-content",
+            "szInput": {
+                "maxH": "fit"
+            },
+            "expectedClass": "max-h-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-arbitrary",
+            "szInput": {
+                "maxH": "3px"
+            },
+            "expectedClass": "max-h-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-max-height-css-variable",
+            "szInput": {
+                "maxH": "--h"
+            },
+            "expectedClass": "max-h-(--h)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Height"
+        },
+        {
+            "id": "sizing-size-spacing-scale-0",
+            "szInput": {
+                "size": 0
+            },
+            "expectedClass": "size-0",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-px",
+            "szInput": {
+                "size": "px"
+            },
+            "expectedClass": "size-px",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-0-5",
+            "szInput": {
+                "size": 0.5
+            },
+            "expectedClass": "size-0.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-1",
+            "szInput": {
+                "size": 1
+            },
+            "expectedClass": "size-1",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-1-5",
+            "szInput": {
+                "size": 1.5
+            },
+            "expectedClass": "size-1.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-2",
+            "szInput": {
+                "size": 2
+            },
+            "expectedClass": "size-2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-2-5",
+            "szInput": {
+                "size": 2.5
+            },
+            "expectedClass": "size-2.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-3",
+            "szInput": {
+                "size": 3
+            },
+            "expectedClass": "size-3",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-3-5",
+            "szInput": {
+                "size": 3.5
+            },
+            "expectedClass": "size-3.5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-4",
+            "szInput": {
+                "size": 4
+            },
+            "expectedClass": "size-4",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-5",
+            "szInput": {
+                "size": 5
+            },
+            "expectedClass": "size-5",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-6",
+            "szInput": {
+                "size": 6
+            },
+            "expectedClass": "size-6",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-7",
+            "szInput": {
+                "size": 7
+            },
+            "expectedClass": "size-7",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-8",
+            "szInput": {
+                "size": 8
+            },
+            "expectedClass": "size-8",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-9",
+            "szInput": {
+                "size": 9
+            },
+            "expectedClass": "size-9",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-10",
+            "szInput": {
+                "size": 10
+            },
+            "expectedClass": "size-10",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-11",
+            "szInput": {
+                "size": 11
+            },
+            "expectedClass": "size-11",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-12",
+            "szInput": {
+                "size": 12
+            },
+            "expectedClass": "size-12",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-14",
+            "szInput": {
+                "size": 14
+            },
+            "expectedClass": "size-14",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-16",
+            "szInput": {
+                "size": 16
+            },
+            "expectedClass": "size-16",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-20",
+            "szInput": {
+                "size": 20
+            },
+            "expectedClass": "size-20",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-24",
+            "szInput": {
+                "size": 24
+            },
+            "expectedClass": "size-24",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-28",
+            "szInput": {
+                "size": 28
+            },
+            "expectedClass": "size-28",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-32",
+            "szInput": {
+                "size": 32
+            },
+            "expectedClass": "size-32",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-36",
+            "szInput": {
+                "size": 36
+            },
+            "expectedClass": "size-36",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-40",
+            "szInput": {
+                "size": 40
+            },
+            "expectedClass": "size-40",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-44",
+            "szInput": {
+                "size": 44
+            },
+            "expectedClass": "size-44",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-48",
+            "szInput": {
+                "size": 48
+            },
+            "expectedClass": "size-48",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-52",
+            "szInput": {
+                "size": 52
+            },
+            "expectedClass": "size-52",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-56",
+            "szInput": {
+                "size": 56
+            },
+            "expectedClass": "size-56",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-60",
+            "szInput": {
+                "size": 60
+            },
+            "expectedClass": "size-60",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-64",
+            "szInput": {
+                "size": 64
+            },
+            "expectedClass": "size-64",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-72",
+            "szInput": {
+                "size": 72
+            },
+            "expectedClass": "size-72",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-80",
+            "szInput": {
+                "size": 80
+            },
+            "expectedClass": "size-80",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-spacing-scale-96",
+            "szInput": {
+                "size": 96
+            },
+            "expectedClass": "size-96",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-full",
+            "szInput": {
+                "size": "full"
+            },
+            "expectedClass": "size-full",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-min-content",
+            "szInput": {
+                "size": "min"
+            },
+            "expectedClass": "size-min",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-max-content",
+            "szInput": {
+                "size": "max"
+            },
+            "expectedClass": "size-max",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-fit-content",
+            "szInput": {
+                "size": "fit"
+            },
+            "expectedClass": "size-fit",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-fraction",
+            "szInput": {
+                "size": "1/2"
+            },
+            "expectedClass": "size-1/2",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-arbitrary",
+            "szInput": {
+                "size": "3px"
+            },
+            "expectedClass": "size-[3px]",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-size-css-variable",
+            "szInput": {
+                "size": "--s"
+            },
+            "expectedClass": "size-(--s)",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Size"
+        },
+        {
+            "id": "sizing-container-enable",
+            "szInput": {
+                "container": true
+            },
+            "expectedClass": "container",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Container"
+        },
+        {
+            "id": "sizing-typography-plugin-prose-enable-prose",
+            "szInput": {
+                "prose": true
+            },
+            "expectedClass": "prose",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Typography Plugin (Prose)"
+        },
+        {
+            "id": "sizing-typography-plugin-prose-size",
+            "szInput": {
+                "prose": "lg"
+            },
+            "expectedClass": "prose-lg",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Typography Plugin (Prose)"
+        },
+        {
+            "id": "sizing-typography-plugin-prose-invert",
+            "szInput": {
+                "proseInvert": true
+            },
+            "expectedClass": "prose-invert",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Typography Plugin (Prose)"
+        },
+        {
+            "id": "sizing-typography-plugin-prose-gray-color",
+            "szInput": {
+                "prose": "gray"
+            },
+            "expectedClass": "prose-gray",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Typography Plugin (Prose)"
+        },
+        {
+            "id": "sizing-max-w-screen-sm",
+            "szInput": {
+                "maxW": "screen-sm"
+            },
+            "expectedClass": "max-w-screen-sm",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-w-screen-md",
+            "szInput": {
+                "maxW": "screen-md"
+            },
+            "expectedClass": "max-w-screen-md",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-w-screen-lg",
+            "szInput": {
+                "maxW": "screen-lg"
+            },
+            "expectedClass": "max-w-screen-lg",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-w-screen-xl",
+            "szInput": {
+                "maxW": "screen-xl"
+            },
+            "expectedClass": "max-w-screen-xl",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        },
+        {
+            "id": "sizing-max-w-screen-2xl",
+            "szInput": {
+                "maxW": "screen-2xl"
+            },
+            "expectedClass": "max-w-screen-2xl",
+            "tailwindVersion": "4",
+            "category": "Sizing",
+            "subcategory": "Max Width"
+        }
+    ],
+    "totalTests": 498
+}

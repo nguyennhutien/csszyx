@@ -1,0 +1,81 @@
+{
+    "name": "@csszyx/unplugin",
+    "version": "0.0.0",
+    "description": "Vite and Webpack integration for csszyx",
+    "keywords": [
+        "csszyx",
+        "vite",
+        "webpack",
+        "plugin",
+        "css-in-js",
+        "unplugin"
+    ],
+    "author": "csszyx contributors",
+    "license": "MIT",
+    "homepage": "https://github.com/nguyennhutien/csszyx/tree/main/packages/unplugin#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nguyennhutien/csszyx.git",
+        "directory": "packages/unplugin"
+    },
+    "bugs": {
+        "url": "https://github.com/nguyennhutien/csszyx/issues"
+    },
+    "private": false,
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.cjs"
+        },
+        "./vite": {
+            "types": "./dist/vite.d.ts",
+            "import": "./dist/vite.js",
+            "require": "./dist/vite.cjs"
+        },
+        "./webpack": {
+            "types": "./dist/webpack.d.ts",
+            "import": "./dist/webpack.js",
+            "require": "./dist/webpack.cjs"
+        },
+        "./css-mangler": {
+            "types": "./dist/css-mangler.d.ts",
+            "import": "./dist/css-mangler.js",
+            "require": "./dist/css-mangler.cjs"
+        }
+    },
+    "main": "dist/index.cjs",
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup src/index.ts src/vite.ts src/webpack.ts src/css-mangler.ts --format esm,cjs --dts --clean",
+        "dev": "tsup src/index.ts src/vite.ts src/webpack.ts src/css-mangler.ts --format esm --dts --watch",
+        "lint": "eslint src",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@csszyx/compiler": "workspace:*",
+        "@csszyx/core": "workspace:*",
+        "@csszyx/svelte-adapter": "workspace:*",
+        "@csszyx/types": "workspace:*",
+        "@csszyx/vue-adapter": "workspace:*",
+        "postcss": "^8.4.35",
+        "postcss-selector-parser": "^6.0.15",
+        "unplugin": "^1.10.1"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "esbuild": "^0.27.2",
+        "rollup": "^4.56.0",
+        "tsup": "^8.0.2",
+        "typescript": "^5.4.5",
+        "vite": "^7.3.1",
+        "vitest": "^1.2.0",
+        "webpack": "^5.104.1"
+    }
+}

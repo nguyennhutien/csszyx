@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-csszyx-primary: #6366f1;
+  --color-csszyx-secondary: #8b5cf6;
+  --color-csszyx-accent: #ec4899;
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+:root {
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --foreground-rgb: 255, 255, 255;
+        --background-start-rgb: 0, 0, 0;
+        --background-end-rgb: 0, 0, 0;
+    }
+}
+
+body {
+    color: rgb(var(--foreground-rgb));
+    background: linear-gradient(
+            to bottom,
+            transparent,
+            rgb(var(--background-end-rgb))
+        )
+        rgb(var(--background-start-rgb));
+}
+
+/* Test csszyx class mangling */
+.test-class {
+    color: red;
+}
+
+.hover\:test-class:hover {
+    color: blue;
+}
+
+.md\:test-class {
+    @media (min-width: 768px) {
+        color: green;
+    }
+}

@@ -1,0 +1,14 @@
+{
+    "files": [
+        "sizing.tests.json",
+        "typography.tests.json",
+        "effects.tests.json",
+        "interactivity.tests.json",
+        "transforms.tests.json",
+        "transitions.tests.json",
+        "core.tests.json",
+        "filters.tests.json",
+        "borders.tests.json",
+        "tables.tests.json"
+    ]
+}

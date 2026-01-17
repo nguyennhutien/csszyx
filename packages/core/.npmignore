@@ -1,0 +1,13 @@
+# Whitelist build artifacts
+!pkg/
+!pkg-node/
+
+# Ignore source
+src/
+tests/
+examples/
+benchmarks/
+target/
+.gitignore
+Cargo.toml
+Cargo.lock

@@ -1,0 +1,135 @@
+{
+    "tests": [
+        {
+            "id": "svg-fill-color",
+            "szInput": {
+                "fill": "red-500"
+            },
+            "expectedClass": "fill-red-500",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Fill"
+        },
+        {
+            "id": "svg-fill-none",
+            "szInput": {
+                "fill": "none"
+            },
+            "expectedClass": "fill-none",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Fill"
+        },
+        {
+            "id": "svg-fill-pick",
+            "szInput": {
+                "fill": "current"
+            },
+            "expectedClass": "fill-current",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Fill"
+        },
+        {
+            "id": "svg-fill-arbitrary",
+            "szInput": {
+                "fill": "#50d71e"
+            },
+            "expectedClass": "fill-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Fill"
+        },
+        {
+            "id": "svg-fill-variable",
+            "szInput": {
+                "fill": "--c"
+            },
+            "expectedClass": "fill-(--c)",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Fill"
+        },
+        {
+            "id": "svg-stroke-color",
+            "szInput": {
+                "stroke": "red-500"
+            },
+            "expectedClass": "stroke-red-500",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke"
+        },
+        {
+            "id": "svg-stroke-none",
+            "szInput": {
+                "stroke": "none"
+            },
+            "expectedClass": "stroke-none",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke"
+        },
+        {
+            "id": "svg-stroke-pick",
+            "szInput": {
+                "stroke": "current"
+            },
+            "expectedClass": "stroke-current",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke"
+        },
+        {
+            "id": "svg-stroke-arbitrary",
+            "szInput": {
+                "stroke": "#50d71e"
+            },
+            "expectedClass": "stroke-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke"
+        },
+        {
+            "id": "svg-stroke-variable",
+            "szInput": {
+                "stroke": "--c"
+            },
+            "expectedClass": "stroke-(--c)",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke"
+        },
+        {
+            "id": "svg-stroke-width-scale-1",
+            "szInput": {
+                "strokeWidth": 1
+            },
+            "expectedClass": "stroke-1",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke Width"
+        },
+        {
+            "id": "svg-stroke-width-arbitrary",
+            "szInput": {
+                "strokeWidth": "5px"
+            },
+            "expectedClass": "stroke-[5px]",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke Width"
+        },
+        {
+            "id": "svg-stroke-width-variable",
+            "szInput": {
+                "strokeWidth": "--w"
+            },
+            "expectedClass": "stroke-(--w)",
+            "tailwindVersion": "4",
+            "category": "SVG",
+            "subcategory": "Stroke Width"
+        }
+    ],
+    "totalTests": 13
+}

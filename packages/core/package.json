@@ -1,0 +1,46 @@
+{
+    "name": "@csszyx/core",
+    "version": "0.0.0",
+    "description": "WASM core for csszyx",
+    "keywords": [
+        "csszyx",
+        "wasm",
+        "rust",
+        "core"
+    ],
+    "author": "csszyx contributors",
+    "license": "MIT",
+    "homepage": "https://github.com/nguyennhutien/csszyx/tree/main/packages/core#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nguyennhutien/csszyx.git",
+        "directory": "packages/core"
+    },
+    "bugs": {
+        "url": "https://github.com/nguyennhutien/csszyx/issues"
+    },
+    "type": "module",
+    "main": "./pkg/csszyx_core.js",
+    "types": "./pkg/csszyx_core.d.ts",
+    "exports": {
+        ".": {
+            "types": "./pkg/csszyx_core.d.ts",
+            "node": "./pkg-node/csszyx_core.js",
+            "default": "./pkg/csszyx_core.js"
+        }
+    },
+    "files": [
+        "pkg",
+        "pkg-node"
+    ],
+    "scripts": {
+        "build": "wasm-pack build --target bundler --out-dir pkg && wasm-pack build --target nodejs --out-dir pkg-node && rm -f pkg/.gitignore pkg-node/.gitignore",
+        "build:test": "wasm-pack build --target nodejs --out-dir pkg-node",
+        "test": "npm run build:test && vitest run",
+        "test:watch": "vitest",
+        "clean": "rm -rf pkg pkg-node target"
+    },
+    "devDependencies": {
+        "vitest": "^1.2.0"
+    }
+}

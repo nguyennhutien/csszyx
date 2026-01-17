@@ -1,0 +1,745 @@
+{
+    "tests": [
+        {
+            "id": "borders-border-radius-all-sides-1",
+            "szInput": {
+                "rounded": "sm"
+            },
+            "expectedClass": "rounded-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-none",
+            "szInput": {
+                "rounded": "none"
+            },
+            "expectedClass": "rounded-none",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-top",
+            "szInput": {
+                "roundedT": "sm"
+            },
+            "expectedClass": "rounded-t-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-right",
+            "szInput": {
+                "roundedR": "sm"
+            },
+            "expectedClass": "rounded-r-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-bottom",
+            "szInput": {
+                "roundedB": "sm"
+            },
+            "expectedClass": "rounded-b-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-left",
+            "szInput": {
+                "roundedL": "sm"
+            },
+            "expectedClass": "rounded-l-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-top-left",
+            "szInput": {
+                "roundedTl": "sm"
+            },
+            "expectedClass": "rounded-tl-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-top-right",
+            "szInput": {
+                "roundedTr": "sm"
+            },
+            "expectedClass": "rounded-tr-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-bottom-right",
+            "szInput": {
+                "roundedBr": "sm"
+            },
+            "expectedClass": "rounded-br-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-bottom-left",
+            "szInput": {
+                "roundedBl": "sm"
+            },
+            "expectedClass": "rounded-bl-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-start-logical",
+            "szInput": {
+                "roundedS": "sm"
+            },
+            "expectedClass": "rounded-s-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-end-logical",
+            "szInput": {
+                "roundedE": "sm"
+            },
+            "expectedClass": "rounded-e-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-start-start",
+            "szInput": {
+                "roundedSs": "sm"
+            },
+            "expectedClass": "rounded-ss-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-start-end",
+            "szInput": {
+                "roundedSe": "sm"
+            },
+            "expectedClass": "rounded-se-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-end-start",
+            "szInput": {
+                "roundedEs": "sm"
+            },
+            "expectedClass": "rounded-es-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-end-end",
+            "szInput": {
+                "roundedEe": "sm"
+            },
+            "expectedClass": "rounded-ee-sm",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-arbitrary",
+            "szInput": {
+                "rounded": "5px"
+            },
+            "expectedClass": "rounded-[5px]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-radius-css-variable",
+            "szInput": {
+                "rounded": "--r"
+            },
+            "expectedClass": "rounded-(--r)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Radius"
+        },
+        {
+            "id": "borders-border-width-all-sides",
+            "szInput": {
+                "border": true
+            },
+            "expectedClass": "border",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-width-scale-1",
+            "szInput": {
+                "border": 0
+            },
+            "expectedClass": "border-0",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-width-scale-2",
+            "szInput": {
+                "border": 2
+            },
+            "expectedClass": "border-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-x-axis",
+            "szInput": {
+                "borderX": 2
+            },
+            "expectedClass": "border-x-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-y-axis",
+            "szInput": {
+                "borderY": 2
+            },
+            "expectedClass": "border-y-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-top",
+            "szInput": {
+                "borderT": 2
+            },
+            "expectedClass": "border-t-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-right",
+            "szInput": {
+                "borderR": 2
+            },
+            "expectedClass": "border-r-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-bottom",
+            "szInput": {
+                "borderB": 2
+            },
+            "expectedClass": "border-b-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-left",
+            "szInput": {
+                "borderL": 2
+            },
+            "expectedClass": "border-l-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-start",
+            "szInput": {
+                "borderS": 2
+            },
+            "expectedClass": "border-s-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-end",
+            "szInput": {
+                "borderE": 2
+            },
+            "expectedClass": "border-e-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-arbitrary",
+            "szInput": {
+                "border": "3px"
+            },
+            "expectedClass": "border-[3px]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-width-variable",
+            "szInput": {
+                "border": "--w"
+            },
+            "expectedClass": "border-(--w)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Width"
+        },
+        {
+            "id": "borders-border-color-color",
+            "szInput": {
+                "borderColor": "red-500"
+            },
+            "expectedClass": "border-red-500",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Color"
+        },
+        {
+            "id": "borders-border-color-opacity",
+            "szInput": {
+                "borderColor": { "color": "red-500", "op": 50 }
+            },
+            "expectedClass": "border-red-500/50",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Color"
+        },
+        {
+            "id": "borders-border-color-x-y-t-r-b-l",
+            "szInput": {
+                "borderTColor": "red-500"
+            },
+            "expectedClass": "border-t-red-500",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Color"
+        },
+        {
+            "id": "borders-border-color-arbitrary",
+            "szInput": {
+                "borderColor": "#50d71e"
+            },
+            "expectedClass": "border-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Color"
+        },
+        {
+            "id": "borders-border-color-variable",
+            "szInput": {
+                "borderColor": "--c"
+            },
+            "expectedClass": "border-(--c)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Color"
+        },
+        {
+            "id": "borders-border-style-solid",
+            "szInput": {
+                "borderStyle": "solid"
+            },
+            "expectedClass": "border-solid",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Style"
+        },
+        {
+            "id": "borders-border-style-dashed",
+            "szInput": {
+                "borderStyle": "dashed"
+            },
+            "expectedClass": "border-dashed",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Style"
+        },
+        {
+            "id": "borders-border-style-dotted",
+            "szInput": {
+                "borderStyle": "dotted"
+            },
+            "expectedClass": "border-dotted",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Style"
+        },
+        {
+            "id": "borders-border-style-double",
+            "szInput": {
+                "borderStyle": "double"
+            },
+            "expectedClass": "border-double",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Style"
+        },
+        {
+            "id": "borders-border-style-hidden",
+            "szInput": {
+                "borderStyle": "hidden"
+            },
+            "expectedClass": "border-hidden",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Style"
+        },
+        {
+            "id": "borders-border-style-none",
+            "szInput": {
+                "borderStyle": "none"
+            },
+            "expectedClass": "border-none",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Border Style"
+        },
+        {
+            "id": "borders-divide-width-x",
+            "szInput": {
+                "divideX": true
+            },
+            "expectedClass": "divide-x",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-x-scale-1",
+            "szInput": {
+                "divideX": 2
+            },
+            "expectedClass": "divide-x-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-x-reverse",
+            "szInput": {
+                "divideXReverse": true
+            },
+            "expectedClass": "divide-x-reverse",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-y",
+            "szInput": {
+                "divideY": true
+            },
+            "expectedClass": "divide-y",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-y-scale-1",
+            "szInput": {
+                "divideY": 2
+            },
+            "expectedClass": "divide-y-2",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-y-reverse",
+            "szInput": {
+                "divideYReverse": true
+            },
+            "expectedClass": "divide-y-reverse",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-arbitrary",
+            "szInput": {
+                "divideX": "3px"
+            },
+            "expectedClass": "divide-x-[3px]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-width-variable",
+            "szInput": {
+                "divideX": "--w"
+            },
+            "expectedClass": "divide-x-(--w)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Width"
+        },
+        {
+            "id": "borders-divide-color-color",
+            "szInput": {
+                "divideColor": "red-500"
+            },
+            "expectedClass": "divide-red-500",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Color"
+        },
+        {
+            "id": "borders-divide-color-opacity",
+            "szInput": {
+                "divideColor": { "color": "red-500", "op": 50 }
+            },
+            "expectedClass": "divide-red-500/50",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Color"
+        },
+        {
+            "id": "borders-divide-color-arbitrary",
+            "szInput": {
+                "divideColor": "#50d71e"
+            },
+            "expectedClass": "divide-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Color"
+        },
+        {
+            "id": "borders-divide-color-variable",
+            "szInput": {
+                "divideColor": "--c"
+            },
+            "expectedClass": "divide-(--c)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Color"
+        },
+        {
+            "id": "borders-divide-style-solid",
+            "szInput": {
+                "divideStyle": "solid"
+            },
+            "expectedClass": "divide-solid",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Style"
+        },
+        {
+            "id": "borders-divide-style-dashed",
+            "szInput": {
+                "divideStyle": "dashed"
+            },
+            "expectedClass": "divide-dashed",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Style"
+        },
+        {
+            "id": "borders-divide-style-dotted",
+            "szInput": {
+                "divideStyle": "dotted"
+            },
+            "expectedClass": "divide-dotted",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Style"
+        },
+        {
+            "id": "borders-divide-style-double",
+            "szInput": {
+                "divideStyle": "double"
+            },
+            "expectedClass": "divide-double",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Style"
+        },
+        {
+            "id": "borders-divide-style-none",
+            "szInput": {
+                "divideStyle": "none"
+            },
+            "expectedClass": "divide-none",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Divide Style"
+        },
+        {
+            "id": "borders-outline-width-width-1",
+            "szInput": {
+                "outlineWidth": 1
+            },
+            "expectedClass": "outline-1",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Width"
+        },
+        {
+            "id": "borders-outline-width-arbitrary",
+            "szInput": {
+                "outlineWidth": "3px"
+            },
+            "expectedClass": "outline-[3px]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Width"
+        },
+        {
+            "id": "borders-outline-width-variable",
+            "szInput": {
+                "outlineWidth": "--w"
+            },
+            "expectedClass": "outline-(--w)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Width"
+        },
+        {
+            "id": "borders-outline-color-color",
+            "szInput": {
+                "outlineColor": "red-500"
+            },
+            "expectedClass": "outline-red-500",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Color"
+        },
+        {
+            "id": "borders-outline-color-arbitrary",
+            "szInput": {
+                "outlineColor": "#50d71e"
+            },
+            "expectedClass": "outline-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Color"
+        },
+        {
+            "id": "borders-outline-color-variable",
+            "szInput": {
+                "outlineColor": "--c"
+            },
+            "expectedClass": "outline-(--c)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Color"
+        },
+        {
+            "id": "borders-outline-style-none",
+            "szInput": {
+                "outline": "none"
+            },
+            "expectedClass": "outline-none",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Style"
+        },
+        {
+            "id": "borders-outline-style-solid",
+            "szInput": {
+                "outlineStyle": "solid"
+            },
+            "expectedClass": "outline-solid",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Style"
+        },
+        {
+            "id": "borders-outline-style-dashed",
+            "szInput": {
+                "outlineStyle": "dashed"
+            },
+            "expectedClass": "outline-dashed",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Style"
+        },
+        {
+            "id": "borders-outline-style-dotted",
+            "szInput": {
+                "outlineStyle": "dotted"
+            },
+            "expectedClass": "outline-dotted",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Style"
+        },
+        {
+            "id": "borders-outline-style-double",
+            "szInput": {
+                "outlineStyle": "double"
+            },
+            "expectedClass": "outline-double",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Style"
+        },
+        {
+            "id": "borders-outline-style-hidden",
+            "szInput": {
+                "outlineStyle": "hidden"
+            },
+            "expectedClass": "outline-hidden",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Style"
+        },
+        {
+            "id": "borders-outline-offset-offset-1",
+            "szInput": {
+                "outlineOffset": 0
+            },
+            "expectedClass": "outline-offset-0",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Offset"
+        },
+        {
+            "id": "borders-outline-offset-arbitrary",
+            "szInput": {
+                "outlineOffset": "3px"
+            },
+            "expectedClass": "outline-offset-[3px]",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Offset"
+        },
+        {
+            "id": "borders-outline-offset-variable",
+            "szInput": {
+                "outlineOffset": "--o"
+            },
+            "expectedClass": "outline-offset-(--o)",
+            "tailwindVersion": "4",
+            "category": "Borders",
+            "subcategory": "Outline Offset"
+        }
+    ],
+    "totalTests": 74
+}

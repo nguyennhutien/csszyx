@@ -1,0 +1,25 @@
+{
+    "tests": [
+        {
+            "id": "accessibility-forced-color-adjust-auto",
+            "szInput": {
+                "forcedColorAdjust": "auto"
+            },
+            "expectedClass": "forced-color-adjust-auto",
+            "tailwindVersion": "4",
+            "category": "Accessibility",
+            "subcategory": "Forced Color Adjust"
+        },
+        {
+            "id": "accessibility-forced-color-adjust-none",
+            "szInput": {
+                "forcedColorAdjust": "none"
+            },
+            "expectedClass": "forced-color-adjust-none",
+            "tailwindVersion": "4",
+            "category": "Accessibility",
+            "subcategory": "Forced Color Adjust"
+        }
+    ],
+    "totalTests": 2
+}

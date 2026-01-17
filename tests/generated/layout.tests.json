@@ -1,0 +1,1875 @@
+{
+    "tests": [
+        {
+            "id": "layout-aspect-ratio-auto",
+            "szInput": {
+                "aspect": "auto"
+            },
+            "expectedClass": "aspect-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Aspect Ratio"
+        },
+        {
+            "id": "layout-aspect-ratio-edge-case-fraction-16-9",
+            "szInput": {
+                "aspect": "16/9"
+            },
+            "expectedClass": "aspect-16/9",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Aspect Ratio"
+        },
+        {
+            "id": "layout-aspect-ratio-square",
+            "szInput": {
+                "aspect": "square"
+            },
+            "expectedClass": "aspect-square",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Aspect Ratio"
+        },
+        {
+            "id": "layout-aspect-ratio-video",
+            "szInput": {
+                "aspect": "video"
+            },
+            "expectedClass": "aspect-video",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Aspect Ratio"
+        },
+        {
+            "id": "layout-aspect-ratio-arbitrary",
+            "szInput": {
+                "aspect": "4/3"
+            },
+            "expectedClass": "aspect-[4/3]",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Aspect Ratio"
+        },
+        {
+            "id": "layout-aspect-ratio-css-variable",
+            "szInput": {
+                "aspect": "--my-ratio"
+            },
+            "expectedClass": "aspect-(--my-ratio)",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Aspect Ratio"
+        },
+        {
+            "id": "layout-columns-auto",
+            "szInput": {
+                "columns": "auto"
+            },
+            "expectedClass": "columns-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-1",
+            "szInput": {
+                "columns": 1
+            },
+            "expectedClass": "columns-1",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-2",
+            "szInput": {
+                "columns": 2
+            },
+            "expectedClass": "columns-2",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-3",
+            "szInput": {
+                "columns": 3
+            },
+            "expectedClass": "columns-3",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-4",
+            "szInput": {
+                "columns": 4
+            },
+            "expectedClass": "columns-4",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-5",
+            "szInput": {
+                "columns": 5
+            },
+            "expectedClass": "columns-5",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-6",
+            "szInput": {
+                "columns": 6
+            },
+            "expectedClass": "columns-6",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-7",
+            "szInput": {
+                "columns": 7
+            },
+            "expectedClass": "columns-7",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-8",
+            "szInput": {
+                "columns": 8
+            },
+            "expectedClass": "columns-8",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-9",
+            "szInput": {
+                "columns": 9
+            },
+            "expectedClass": "columns-9",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-10",
+            "szInput": {
+                "columns": 10
+            },
+            "expectedClass": "columns-10",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-11",
+            "szInput": {
+                "columns": 11
+            },
+            "expectedClass": "columns-11",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-count-1-12-12",
+            "szInput": {
+                "columns": 12
+            },
+            "expectedClass": "columns-12",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-3xs",
+            "szInput": {
+                "columns": "3xs"
+            },
+            "expectedClass": "columns-3xs",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-2xs",
+            "szInput": {
+                "columns": "2xs"
+            },
+            "expectedClass": "columns-2xs",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-xs",
+            "szInput": {
+                "columns": "xs"
+            },
+            "expectedClass": "columns-xs",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-sm",
+            "szInput": {
+                "columns": "sm"
+            },
+            "expectedClass": "columns-sm",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-md",
+            "szInput": {
+                "columns": "md"
+            },
+            "expectedClass": "columns-md",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-lg",
+            "szInput": {
+                "columns": "lg"
+            },
+            "expectedClass": "columns-lg",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-xl",
+            "szInput": {
+                "columns": "xl"
+            },
+            "expectedClass": "columns-xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-2xl",
+            "szInput": {
+                "columns": "2xl"
+            },
+            "expectedClass": "columns-2xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-3xl",
+            "szInput": {
+                "columns": "3xl"
+            },
+            "expectedClass": "columns-3xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-4xl",
+            "szInput": {
+                "columns": "4xl"
+            },
+            "expectedClass": "columns-4xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-5xl",
+            "szInput": {
+                "columns": "5xl"
+            },
+            "expectedClass": "columns-5xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-6xl",
+            "szInput": {
+                "columns": "6xl"
+            },
+            "expectedClass": "columns-6xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-width-7xl",
+            "szInput": {
+                "columns": "7xl"
+            },
+            "expectedClass": "columns-7xl",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-arbitrary",
+            "szInput": {
+                "columns": "14rem"
+            },
+            "expectedClass": "columns-[14rem]",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-columns-css-variable",
+            "szInput": {
+                "columns": "--width"
+            },
+            "expectedClass": "columns-(--width)",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Columns"
+        },
+        {
+            "id": "layout-break-after-auto",
+            "szInput": {
+                "breakAfter": "auto"
+            },
+            "expectedClass": "break-after-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-avoid",
+            "szInput": {
+                "breakAfter": "avoid"
+            },
+            "expectedClass": "break-after-avoid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-all",
+            "szInput": {
+                "breakAfter": "all"
+            },
+            "expectedClass": "break-after-all",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-avoid-page",
+            "szInput": {
+                "breakAfter": "avoid-page"
+            },
+            "expectedClass": "break-after-avoid-page",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-page",
+            "szInput": {
+                "breakAfter": "page"
+            },
+            "expectedClass": "break-after-page",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-left",
+            "szInput": {
+                "breakAfter": "left"
+            },
+            "expectedClass": "break-after-left",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-right",
+            "szInput": {
+                "breakAfter": "right"
+            },
+            "expectedClass": "break-after-right",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-after-column",
+            "szInput": {
+                "breakAfter": "column"
+            },
+            "expectedClass": "break-after-column",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break After"
+        },
+        {
+            "id": "layout-break-before-auto",
+            "szInput": {
+                "breakBefore": "auto"
+            },
+            "expectedClass": "break-before-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-avoid",
+            "szInput": {
+                "breakBefore": "avoid"
+            },
+            "expectedClass": "break-before-avoid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-all",
+            "szInput": {
+                "breakBefore": "all"
+            },
+            "expectedClass": "break-before-all",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-avoid-page",
+            "szInput": {
+                "breakBefore": "avoid-page"
+            },
+            "expectedClass": "break-before-avoid-page",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-page",
+            "szInput": {
+                "breakBefore": "page"
+            },
+            "expectedClass": "break-before-page",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-left",
+            "szInput": {
+                "breakBefore": "left"
+            },
+            "expectedClass": "break-before-left",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-right",
+            "szInput": {
+                "breakBefore": "right"
+            },
+            "expectedClass": "break-before-right",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-before-column",
+            "szInput": {
+                "breakBefore": "column"
+            },
+            "expectedClass": "break-before-column",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Before"
+        },
+        {
+            "id": "layout-break-inside-auto",
+            "szInput": {
+                "breakInside": "auto"
+            },
+            "expectedClass": "break-inside-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Inside"
+        },
+        {
+            "id": "layout-break-inside-avoid",
+            "szInput": {
+                "breakInside": "avoid"
+            },
+            "expectedClass": "break-inside-avoid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Inside"
+        },
+        {
+            "id": "layout-break-inside-avoid-page",
+            "szInput": {
+                "breakInside": "avoid-page"
+            },
+            "expectedClass": "break-inside-avoid-page",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Inside"
+        },
+        {
+            "id": "layout-break-inside-avoid-column",
+            "szInput": {
+                "breakInside": "avoid-column"
+            },
+            "expectedClass": "break-inside-avoid-column",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Break Inside"
+        },
+        {
+            "id": "layout-box-decoration-break-slice",
+            "szInput": {
+                "boxDecoration": "slice"
+            },
+            "expectedClass": "box-decoration-slice",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Box Decoration Break"
+        },
+        {
+            "id": "layout-box-decoration-break-clone",
+            "szInput": {
+                "boxDecoration": "clone"
+            },
+            "expectedClass": "box-decoration-clone",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Box Decoration Break"
+        },
+        {
+            "id": "layout-box-sizing-border-box",
+            "szInput": {
+                "boxSizing": "border"
+            },
+            "expectedClass": "box-border",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Box Sizing"
+        },
+        {
+            "id": "layout-box-sizing-content-box",
+            "szInput": {
+                "boxSizing": "content"
+            },
+            "expectedClass": "box-content",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Box Sizing"
+        },
+        {
+            "id": "layout-display-block-canonical",
+            "szInput": {
+                "display": "block"
+            },
+            "expectedClass": "block",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-block-boolean",
+            "szInput": {
+                "block": true
+            },
+            "expectedClass": "block",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-block-canonical",
+            "szInput": {
+                "display": "inline-block"
+            },
+            "expectedClass": "inline-block",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-block-boolean",
+            "szInput": {
+                "inlineBlock": true
+            },
+            "expectedClass": "inline-block",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-canonical",
+            "szInput": {
+                "display": "inline"
+            },
+            "expectedClass": "inline",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-boolean",
+            "szInput": {
+                "inline": true
+            },
+            "expectedClass": "inline",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-flex-canonical",
+            "szInput": {
+                "display": "flex"
+            },
+            "expectedClass": "flex",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-flex-boolean",
+            "szInput": {
+                "flex": true
+            },
+            "expectedClass": "flex",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-flex-canonical",
+            "szInput": {
+                "display": "inline-flex"
+            },
+            "expectedClass": "inline-flex",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-flex-boolean",
+            "szInput": {
+                "inlineFlex": true
+            },
+            "expectedClass": "inline-flex",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-grid-canonical",
+            "szInput": {
+                "display": "grid"
+            },
+            "expectedClass": "grid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-grid-boolean",
+            "szInput": {
+                "grid": true
+            },
+            "expectedClass": "grid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-grid-canonical",
+            "szInput": {
+                "display": "inline-grid"
+            },
+            "expectedClass": "inline-grid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-grid-boolean",
+            "szInput": {
+                "inlineGrid": true
+            },
+            "expectedClass": "inline-grid",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-contents-canonical",
+            "szInput": {
+                "display": "contents"
+            },
+            "expectedClass": "contents",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-contents-boolean",
+            "szInput": {
+                "contents": true
+            },
+            "expectedClass": "contents",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-canonical",
+            "szInput": {
+                "display": "table"
+            },
+            "expectedClass": "table",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-boolean",
+            "szInput": {
+                "table": true
+            },
+            "expectedClass": "table",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-table-canonical",
+            "szInput": {
+                "display": "inline-table"
+            },
+            "expectedClass": "inline-table",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-inline-table-boolean",
+            "szInput": {
+                "inlineTable": true
+            },
+            "expectedClass": "inline-table",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-caption-canonical",
+            "szInput": {
+                "display": "table-caption"
+            },
+            "expectedClass": "table-caption",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-caption-boolean",
+            "szInput": {
+                "tableCaption": true
+            },
+            "expectedClass": "table-caption",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-cell-canonical",
+            "szInput": {
+                "display": "table-cell"
+            },
+            "expectedClass": "table-cell",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-cell-boolean",
+            "szInput": {
+                "tableCell": true
+            },
+            "expectedClass": "table-cell",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-column-canonical",
+            "szInput": {
+                "display": "table-column"
+            },
+            "expectedClass": "table-column",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-column-boolean",
+            "szInput": {
+                "tableColumn": true
+            },
+            "expectedClass": "table-column",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-column-group-canonical",
+            "szInput": {
+                "display": "table-column-group"
+            },
+            "expectedClass": "table-column-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-column-group-boolean",
+            "szInput": {
+                "tableColumnGroup": true
+            },
+            "expectedClass": "table-column-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-footer-group-canonical",
+            "szInput": {
+                "display": "table-footer-group"
+            },
+            "expectedClass": "table-footer-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-footer-group-boolean",
+            "szInput": {
+                "tableFooterGroup": true
+            },
+            "expectedClass": "table-footer-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-header-group-canonical",
+            "szInput": {
+                "display": "table-header-group"
+            },
+            "expectedClass": "table-header-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-header-group-boolean",
+            "szInput": {
+                "tableHeaderGroup": true
+            },
+            "expectedClass": "table-header-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-row-group-canonical",
+            "szInput": {
+                "display": "table-row-group"
+            },
+            "expectedClass": "table-row-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-row-group-boolean",
+            "szInput": {
+                "tableRowGroup": true
+            },
+            "expectedClass": "table-row-group",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-row-canonical",
+            "szInput": {
+                "display": "table-row"
+            },
+            "expectedClass": "table-row",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-table-row-boolean",
+            "szInput": {
+                "tableRow": true
+            },
+            "expectedClass": "table-row",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-flow-root-canonical",
+            "szInput": {
+                "display": "flow-root"
+            },
+            "expectedClass": "flow-root",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-flow-root-boolean",
+            "szInput": {
+                "flowRoot": true
+            },
+            "expectedClass": "flow-root",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-list-item-canonical",
+            "szInput": {
+                "display": "list-item"
+            },
+            "expectedClass": "list-item",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-list-item-boolean",
+            "szInput": {
+                "listItem": true
+            },
+            "expectedClass": "list-item",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-hidden-canonical",
+            "szInput": {
+                "display": "none"
+            },
+            "expectedClass": "hidden",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-hidden-boolean",
+            "szInput": {
+                "hidden": true
+            },
+            "expectedClass": "hidden",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-screen-reader-only-boolean",
+            "szInput": {
+                "srOnly": true
+            },
+            "expectedClass": "sr-only",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-display-not-screen-reader-boolean",
+            "szInput": {
+                "notSrOnly": true
+            },
+            "expectedClass": "not-sr-only",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Display"
+        },
+        {
+            "id": "layout-floats-right",
+            "szInput": {
+                "float": "right"
+            },
+            "expectedClass": "float-right",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Floats"
+        },
+        {
+            "id": "layout-floats-left",
+            "szInput": {
+                "float": "left"
+            },
+            "expectedClass": "float-left",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Floats"
+        },
+        {
+            "id": "layout-floats-start",
+            "szInput": {
+                "float": "start"
+            },
+            "expectedClass": "float-start",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Floats"
+        },
+        {
+            "id": "layout-floats-end",
+            "szInput": {
+                "float": "end"
+            },
+            "expectedClass": "float-end",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Floats"
+        },
+        {
+            "id": "layout-floats-none",
+            "szInput": {
+                "float": "none"
+            },
+            "expectedClass": "float-none",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Floats"
+        },
+        {
+            "id": "layout-clear-left",
+            "szInput": {
+                "clear": "left"
+            },
+            "expectedClass": "clear-left",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Clear"
+        },
+        {
+            "id": "layout-clear-right",
+            "szInput": {
+                "clear": "right"
+            },
+            "expectedClass": "clear-right",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Clear"
+        },
+        {
+            "id": "layout-clear-both",
+            "szInput": {
+                "clear": "both"
+            },
+            "expectedClass": "clear-both",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Clear"
+        },
+        {
+            "id": "layout-clear-none",
+            "szInput": {
+                "clear": "none"
+            },
+            "expectedClass": "clear-none",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Clear"
+        },
+        {
+            "id": "layout-clear-start",
+            "szInput": {
+                "clear": "start"
+            },
+            "expectedClass": "clear-start",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Clear"
+        },
+        {
+            "id": "layout-clear-end",
+            "szInput": {
+                "clear": "end"
+            },
+            "expectedClass": "clear-end",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Clear"
+        },
+        {
+            "id": "layout-isolation-isolate",
+            "szInput": {
+                "isolation": "isolate"
+            },
+            "expectedClass": "isolate",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Isolation"
+        },
+        {
+            "id": "layout-isolation-auto",
+            "szInput": {
+                "isolation": "auto"
+            },
+            "expectedClass": "isolation-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Isolation"
+        },
+        {
+            "id": "layout-object-fit-contain",
+            "szInput": {
+                "objectFit": "contain"
+            },
+            "expectedClass": "object-contain",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Fit"
+        },
+        {
+            "id": "layout-object-fit-cover",
+            "szInput": {
+                "objectFit": "cover"
+            },
+            "expectedClass": "object-cover",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Fit"
+        },
+        {
+            "id": "layout-object-fit-fill",
+            "szInput": {
+                "objectFit": "fill"
+            },
+            "expectedClass": "object-fill",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Fit"
+        },
+        {
+            "id": "layout-object-fit-none",
+            "szInput": {
+                "objectFit": "none"
+            },
+            "expectedClass": "object-none",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Fit"
+        },
+        {
+            "id": "layout-object-fit-scale-down",
+            "szInput": {
+                "objectFit": "scale-down"
+            },
+            "expectedClass": "object-scale-down",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Fit"
+        },
+        {
+            "id": "layout-object-position-bottom",
+            "szInput": {
+                "objectPos": "bottom"
+            },
+            "expectedClass": "object-bottom",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-center",
+            "szInput": {
+                "objectPos": "center"
+            },
+            "expectedClass": "object-center",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-left",
+            "szInput": {
+                "objectPos": "left"
+            },
+            "expectedClass": "object-left",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-left-bottom",
+            "szInput": {
+                "objectPos": "left-bottom"
+            },
+            "expectedClass": "object-left-bottom",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-left-top",
+            "szInput": {
+                "objectPos": "left-top"
+            },
+            "expectedClass": "object-left-top",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-right",
+            "szInput": {
+                "objectPos": "right"
+            },
+            "expectedClass": "object-right",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-right-bottom",
+            "szInput": {
+                "objectPos": "right-bottom"
+            },
+            "expectedClass": "object-right-bottom",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-right-top",
+            "szInput": {
+                "objectPos": "right-top"
+            },
+            "expectedClass": "object-right-top",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-top",
+            "szInput": {
+                "objectPos": "top"
+            },
+            "expectedClass": "object-top",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-arbitrary",
+            "szInput": {
+                "objectPos": "50% 50%"
+            },
+            "expectedClass": "object-[50%_50%]",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-object-position-css-variable",
+            "szInput": {
+                "objectPos": "--pos"
+            },
+            "expectedClass": "object-(--pos)",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Object Position"
+        },
+        {
+            "id": "layout-overflow-auto",
+            "szInput": {
+                "overflow": "auto"
+            },
+            "expectedClass": "overflow-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-hidden",
+            "szInput": {
+                "overflow": "hidden"
+            },
+            "expectedClass": "overflow-hidden",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-clip",
+            "szInput": {
+                "overflow": "clip"
+            },
+            "expectedClass": "overflow-clip",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-visible",
+            "szInput": {
+                "overflow": "visible"
+            },
+            "expectedClass": "overflow-visible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-scroll",
+            "szInput": {
+                "overflow": "scroll"
+            },
+            "expectedClass": "overflow-scroll",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-x-auto",
+            "szInput": {
+                "overflowX": "auto"
+            },
+            "expectedClass": "overflow-x-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-x-hidden",
+            "szInput": {
+                "overflowX": "hidden"
+            },
+            "expectedClass": "overflow-x-hidden",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-x-clip",
+            "szInput": {
+                "overflowX": "clip"
+            },
+            "expectedClass": "overflow-x-clip",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-x-visible",
+            "szInput": {
+                "overflowX": "visible"
+            },
+            "expectedClass": "overflow-x-visible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-x-scroll",
+            "szInput": {
+                "overflowX": "scroll"
+            },
+            "expectedClass": "overflow-x-scroll",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-y-auto",
+            "szInput": {
+                "overflowY": "auto"
+            },
+            "expectedClass": "overflow-y-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-y-hidden",
+            "szInput": {
+                "overflowY": "hidden"
+            },
+            "expectedClass": "overflow-y-hidden",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-y-clip",
+            "szInput": {
+                "overflowY": "clip"
+            },
+            "expectedClass": "overflow-y-clip",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-y-visible",
+            "szInput": {
+                "overflowY": "visible"
+            },
+            "expectedClass": "overflow-y-visible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overflow-y-scroll",
+            "szInput": {
+                "overflowY": "scroll"
+            },
+            "expectedClass": "overflow-y-scroll",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overflow"
+        },
+        {
+            "id": "layout-overscroll-behavior-auto",
+            "szInput": {
+                "overscroll": "auto"
+            },
+            "expectedClass": "overscroll-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-contain",
+            "szInput": {
+                "overscroll": "contain"
+            },
+            "expectedClass": "overscroll-contain",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-none",
+            "szInput": {
+                "overscroll": "none"
+            },
+            "expectedClass": "overscroll-none",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-x-auto",
+            "szInput": {
+                "overscrollX": "auto"
+            },
+            "expectedClass": "overscroll-x-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-x-contain",
+            "szInput": {
+                "overscrollX": "contain"
+            },
+            "expectedClass": "overscroll-x-contain",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-x-none",
+            "szInput": {
+                "overscrollX": "none"
+            },
+            "expectedClass": "overscroll-x-none",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-y-auto",
+            "szInput": {
+                "overscrollY": "auto"
+            },
+            "expectedClass": "overscroll-y-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-y-contain",
+            "szInput": {
+                "overscrollY": "contain"
+            },
+            "expectedClass": "overscroll-y-contain",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-overscroll-behavior-y-none",
+            "szInput": {
+                "overscrollY": "none"
+            },
+            "expectedClass": "overscroll-y-none",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Overscroll Behavior"
+        },
+        {
+            "id": "layout-position-static-canonical",
+            "szInput": {
+                "position": "static"
+            },
+            "expectedClass": "static",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-static-boolean",
+            "szInput": {
+                "static": true
+            },
+            "expectedClass": "static",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-fixed-canonical",
+            "szInput": {
+                "position": "fixed"
+            },
+            "expectedClass": "fixed",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-fixed-boolean",
+            "szInput": {
+                "fixed": true
+            },
+            "expectedClass": "fixed",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-absolute-canonical",
+            "szInput": {
+                "position": "absolute"
+            },
+            "expectedClass": "absolute",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-absolute-boolean",
+            "szInput": {
+                "absolute": true
+            },
+            "expectedClass": "absolute",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-relative-canonical",
+            "szInput": {
+                "position": "relative"
+            },
+            "expectedClass": "relative",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-relative-boolean",
+            "szInput": {
+                "relative": true
+            },
+            "expectedClass": "relative",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-sticky-canonical",
+            "szInput": {
+                "position": "sticky"
+            },
+            "expectedClass": "sticky",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-position-sticky-boolean",
+            "szInput": {
+                "sticky": true
+            },
+            "expectedClass": "sticky",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Position"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-inset",
+            "szInput": {
+                "inset": 0
+            },
+            "expectedClass": "inset-0",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-inset-x",
+            "szInput": {
+                "insetX": 0
+            },
+            "expectedClass": "inset-x-0",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-inset-y",
+            "szInput": {
+                "insetY": 0
+            },
+            "expectedClass": "inset-y-0",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-start-l",
+            "szInput": {
+                "start": 0
+            },
+            "expectedClass": "start-0",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-end-r",
+            "szInput": {
+                "end": 0
+            },
+            "expectedClass": "end-0",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-top",
+            "szInput": {
+                "top": 4
+            },
+            "expectedClass": "top-4",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-right",
+            "szInput": {
+                "right": "px"
+            },
+            "expectedClass": "right-px",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-bottom",
+            "szInput": {
+                "bottom": "1/2"
+            },
+            "expectedClass": "bottom-1/2",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-left",
+            "szInput": {
+                "left": "auto"
+            },
+            "expectedClass": "left-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-full",
+            "szInput": {
+                "top": "full"
+            },
+            "expectedClass": "top-full",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-variable",
+            "szInput": {
+                "top": "--gutter"
+            },
+            "expectedClass": "top-(--gutter)",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-top-right-bottom-left-placement-arbitrary",
+            "szInput": {
+                "top": "33vh"
+            },
+            "expectedClass": "top-[33vh]",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Top / Right / Bottom / Left (Placement)"
+        },
+        {
+            "id": "layout-visibility-visible-canonical",
+            "szInput": {
+                "visibility": "visible"
+            },
+            "expectedClass": "visible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Visibility"
+        },
+        {
+            "id": "layout-visibility-visible-boolean",
+            "szInput": {
+                "visible": true
+            },
+            "expectedClass": "visible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Visibility"
+        },
+        {
+            "id": "layout-visibility-invisible-canonical",
+            "szInput": {
+                "visibility": "hidden"
+            },
+            "expectedClass": "invisible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Visibility"
+        },
+        {
+            "id": "layout-visibility-invisible-boolean",
+            "szInput": {
+                "invisible": true
+            },
+            "expectedClass": "invisible",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Visibility"
+        },
+        {
+            "id": "layout-visibility-collapse-canonical",
+            "szInput": {
+                "visibility": "collapse"
+            },
+            "expectedClass": "collapse",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Visibility"
+        },
+        {
+            "id": "layout-visibility-collapse-boolean",
+            "szInput": {
+                "collapse": true
+            },
+            "expectedClass": "collapse",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Visibility"
+        },
+        {
+            "id": "layout-z-index-auto",
+            "szInput": {
+                "z": "auto"
+            },
+            "expectedClass": "z-auto",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Z-Index"
+        },
+        {
+            "id": "layout-z-index-index",
+            "szInput": {
+                "z": 10
+            },
+            "expectedClass": "z-10",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Z-Index"
+        },
+        {
+            "id": "layout-z-index-negative",
+            "szInput": {
+                "z": -10
+            },
+            "expectedClass": "-z-10",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Z-Index"
+        },
+        {
+            "id": "layout-z-index-arbitrary",
+            "szInput": {
+                "z": 100
+            },
+            "expectedClass": "z-[100]",
+            "tailwindVersion": "4",
+            "category": "Layout",
+            "subcategory": "Z-Index"
+        }
+    ],
+    "totalTests": 186
+}

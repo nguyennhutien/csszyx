@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "target": "ESNext",
+        "strict": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "baseUrl": ".",
+        "paths": {
+            "@csszyx/core": ["packages/core/pkg"],
+            "@csszyx/compiler": ["packages/compiler/src"],
+            "@csszyx/types": ["packages/types/src"],
+            "@csszyx/runtime": ["packages/runtime/src"],
+            "@csszyx/cli": ["packages/cli/src"],
+            "@csszyx/unplugin": ["packages/unplugin/src"]
+        }
+    },
+    "include": ["packages/**/*", "scripts/**/*", "tests/**/*", "playwright.config.ts"],
+    "exclude": ["node_modules", "**/dist", "**/target", "**/pkg"]
+}

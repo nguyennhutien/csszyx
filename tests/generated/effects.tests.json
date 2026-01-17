@@ -1,0 +1,755 @@
+{
+    "tests": [
+        {
+            "id": "effects-opacity-edge-case-999",
+            "szInput": {
+                "opacity": 999
+            },
+            "expectedClass": "opacity-999",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-box-shadow-shadow-1",
+            "szInput": {
+                "shadow": "2xs"
+            },
+            "expectedClass": "shadow-2xs",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-shadow-2",
+            "szInput": {
+                "shadow": "xs"
+            },
+            "expectedClass": "shadow-xs",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-inset-shadow-1",
+            "szInput": {
+                "insetShadow": "2xs"
+            },
+            "expectedClass": "inset-shadow-2xs",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-ring-1",
+            "szInput": {
+                "ring": 1
+            },
+            "expectedClass": "ring-1",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-inset-ring-1",
+            "szInput": {
+                "insetRing": 1
+            },
+            "expectedClass": "inset-ring-1",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-none",
+            "szInput": {
+                "shadow": "none"
+            },
+            "expectedClass": "shadow-none",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-inset-none",
+            "szInput": {
+                "insetShadow": "none"
+            },
+            "expectedClass": "inset-shadow-none",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-ring-none",
+            "szInput": {
+                "ring": "none"
+            },
+            "expectedClass": "ring-none",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-color-1",
+            "szInput": {
+                "shadowColor": "blue-500"
+            },
+            "expectedClass": "shadow-blue-500",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-inherit-custom-1",
+            "szInput": {
+                "shadowColor": "inherit"
+            },
+            "expectedClass": "shadow-inherit",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-custom-var",
+            "szInput": {
+                "shadowColor": "--my-color"
+            },
+            "expectedClass": "shadow-(color:--my-color)",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-arbitrary-1",
+            "szInput": {
+                "shadow": "0 35px 60px -15px rgba(0,0,0,0.3)"
+            },
+            "expectedClass": "shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-box-shadow-var",
+            "szInput": {
+                "shadow": "--s"
+            },
+            "expectedClass": "shadow-(--s)",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Box Shadow"
+        },
+        {
+            "id": "effects-text-shadow-shadow-1",
+            "szInput": {
+                "textShadow": "sm"
+            },
+            "expectedClass": "text-shadow-sm",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Text Shadow"
+        },
+        {
+            "id": "effects-text-shadow-none",
+            "szInput": {
+                "textShadow": "none"
+            },
+            "expectedClass": "text-shadow-none",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Text Shadow"
+        },
+        {
+            "id": "effects-text-shadow-color",
+            "szInput": {
+                "textShadowColor": "blue-500"
+            },
+            "expectedClass": "text-shadow-blue-500",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Text Shadow"
+        },
+        {
+            "id": "effects-text-shadow-arbitrary",
+            "szInput": {
+                "textShadow": "2px 2px 4px var(--tw-shadow-color)"
+            },
+            "expectedClass": "text-shadow-[2px_2px_4px_var(--tw-shadow-color)]",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Text Shadow"
+        },
+        {
+            "id": "effects-opacity-scale-0",
+            "szInput": {
+                "opacity": 0
+            },
+            "expectedClass": "opacity-0",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-5",
+            "szInput": {
+                "opacity": 5
+            },
+            "expectedClass": "opacity-5",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-10",
+            "szInput": {
+                "opacity": 10
+            },
+            "expectedClass": "opacity-10",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-15",
+            "szInput": {
+                "opacity": 15
+            },
+            "expectedClass": "opacity-15",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-20",
+            "szInput": {
+                "opacity": 20
+            },
+            "expectedClass": "opacity-20",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-25",
+            "szInput": {
+                "opacity": 25
+            },
+            "expectedClass": "opacity-25",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-30",
+            "szInput": {
+                "opacity": 30
+            },
+            "expectedClass": "opacity-30",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-35",
+            "szInput": {
+                "opacity": 35
+            },
+            "expectedClass": "opacity-35",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-40",
+            "szInput": {
+                "opacity": 40
+            },
+            "expectedClass": "opacity-40",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-45",
+            "szInput": {
+                "opacity": 45
+            },
+            "expectedClass": "opacity-45",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-50",
+            "szInput": {
+                "opacity": 50
+            },
+            "expectedClass": "opacity-50",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-55",
+            "szInput": {
+                "opacity": 55
+            },
+            "expectedClass": "opacity-55",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-60",
+            "szInput": {
+                "opacity": 60
+            },
+            "expectedClass": "opacity-60",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-65",
+            "szInput": {
+                "opacity": 65
+            },
+            "expectedClass": "opacity-65",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-70",
+            "szInput": {
+                "opacity": 70
+            },
+            "expectedClass": "opacity-70",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-75",
+            "szInput": {
+                "opacity": 75
+            },
+            "expectedClass": "opacity-75",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-80",
+            "szInput": {
+                "opacity": 80
+            },
+            "expectedClass": "opacity-80",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-85",
+            "szInput": {
+                "opacity": 85
+            },
+            "expectedClass": "opacity-85",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-90",
+            "szInput": {
+                "opacity": 90
+            },
+            "expectedClass": "opacity-90",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-95",
+            "szInput": {
+                "opacity": 95
+            },
+            "expectedClass": "opacity-95",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-scale-100",
+            "szInput": {
+                "opacity": 100
+            },
+            "expectedClass": "opacity-100",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-arbitrary",
+            "szInput": {
+                "opacity": ".33"
+            },
+            "expectedClass": "opacity-[.33]",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-opacity-var",
+            "szInput": {
+                "opacity": "--o"
+            },
+            "expectedClass": "opacity-(--o)",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Opacity"
+        },
+        {
+            "id": "effects-mix-blend-mode-normal",
+            "szInput": {
+                "mixBlend": "normal"
+            },
+            "expectedClass": "mix-blend-normal",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-multiply",
+            "szInput": {
+                "mixBlend": "multiply"
+            },
+            "expectedClass": "mix-blend-multiply",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-screen",
+            "szInput": {
+                "mixBlend": "screen"
+            },
+            "expectedClass": "mix-blend-screen",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-overlay",
+            "szInput": {
+                "mixBlend": "overlay"
+            },
+            "expectedClass": "mix-blend-overlay",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-darken",
+            "szInput": {
+                "mixBlend": "darken"
+            },
+            "expectedClass": "mix-blend-darken",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-lighten",
+            "szInput": {
+                "mixBlend": "lighten"
+            },
+            "expectedClass": "mix-blend-lighten",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-color-dodge",
+            "szInput": {
+                "mixBlend": "color-dodge"
+            },
+            "expectedClass": "mix-blend-color-dodge",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-color-burn",
+            "szInput": {
+                "mixBlend": "color-burn"
+            },
+            "expectedClass": "mix-blend-color-burn",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-hard-light",
+            "szInput": {
+                "mixBlend": "hard-light"
+            },
+            "expectedClass": "mix-blend-hard-light",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-soft-light",
+            "szInput": {
+                "mixBlend": "soft-light"
+            },
+            "expectedClass": "mix-blend-soft-light",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-difference",
+            "szInput": {
+                "mixBlend": "difference"
+            },
+            "expectedClass": "mix-blend-difference",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-exclusion",
+            "szInput": {
+                "mixBlend": "exclusion"
+            },
+            "expectedClass": "mix-blend-exclusion",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-hue",
+            "szInput": {
+                "mixBlend": "hue"
+            },
+            "expectedClass": "mix-blend-hue",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-saturation",
+            "szInput": {
+                "mixBlend": "saturation"
+            },
+            "expectedClass": "mix-blend-saturation",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-color",
+            "szInput": {
+                "mixBlend": "color"
+            },
+            "expectedClass": "mix-blend-color",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-luminosity",
+            "szInput": {
+                "mixBlend": "luminosity"
+            },
+            "expectedClass": "mix-blend-luminosity",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-plus-lighter",
+            "szInput": {
+                "mixBlend": "plus-lighter"
+            },
+            "expectedClass": "mix-blend-plus-lighter",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-mix-blend-mode-plus-darker",
+            "szInput": {
+                "mixBlend": "plus-darker"
+            },
+            "expectedClass": "mix-blend-plus-darker",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Mix Blend Mode"
+        },
+        {
+            "id": "effects-background-blend-mode-modes-1",
+            "szInput": {
+                "bgBlend": "multiply"
+            },
+            "expectedClass": "bg-blend-multiply",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Background Blend Mode"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-image-1",
+            "szInput": {
+                "mask": "linear"
+            },
+            "expectedClass": "mask-linear",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-image-2",
+            "szInput": {
+                "mask": "radial"
+            },
+            "expectedClass": "mask-radial",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-clip-1",
+            "szInput": {
+                "maskClip": "border"
+            },
+            "expectedClass": "mask-clip-border",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-composite-1",
+            "szInput": {
+                "maskComposite": "add"
+            },
+            "expectedClass": "mask-add",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-mode-1",
+            "szInput": {
+                "maskMode": "alpha"
+            },
+            "expectedClass": "mask-alpha",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-origin-1",
+            "szInput": {
+                "maskOrigin": "border"
+            },
+            "expectedClass": "mask-origin-border",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-position-1",
+            "szInput": {
+                "maskPos": "center"
+            },
+            "expectedClass": "mask-center",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-repeat-1",
+            "szInput": {
+                "maskRepeat": "repeat"
+            },
+            "expectedClass": "mask-repeat",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-size-1",
+            "szInput": {
+                "maskSize": "cover"
+            },
+            "expectedClass": "mask-cover",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-type-1",
+            "szInput": {
+                "maskType": "alpha"
+            },
+            "expectedClass": "mask-type-alpha",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-mask-shape-1",
+            "szInput": {
+                "maskShape": "circle"
+            },
+            "expectedClass": "mask-circle",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-image-url",
+            "szInput": {
+                "mask": "url('/img.png')"
+            },
+            "expectedClass": "mask-[url('/img.png')]",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-linear-1",
+            "szInput": {
+                "mask": "linear-to-t"
+            },
+            "expectedClass": "mask-linear-to-t",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-radial-1",
+            "szInput": {
+                "mask": "radial"
+            },
+            "expectedClass": "mask-radial",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        },
+        {
+            "id": "effects-masking-v4-1-arbitrary-1",
+            "szInput": {
+                "mask": "linear-gradient(to bottom, transparent, black)"
+            },
+            "expectedClass": "mask-[linear-gradient(to_bottom,transparent,black)]",
+            "tailwindVersion": "4",
+            "category": "Effects",
+            "subcategory": "Masking (v4.1+)"
+        }
+    ],
+    "totalTests": 74
+}

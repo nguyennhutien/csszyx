@@ -1,0 +1,37 @@
+# markdownlint configuration
+# Documentation: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# Default state for all rules
+default: true
+
+# MD013/line-length: Line length
+# Disabled because Prettier handles line wrapping, and we want to allow long lines (e.g., URLs)
+MD013: false
+
+# MD033/no-inline-html: Inline HTML
+# Disabled to allow usage of HTML tags like <br>, <img>, or <details> for advanced formatting
+MD033: false
+
+# MD041/first-line-h1: First line in file should be a top-level heading
+# Disabled because some of our files (like templates or snippets) don't strictly follow this
+MD041: false
+
+# MD024/no-duplicate-heading: Multiple headings with the same content
+# Disabled to allow identical headings in complex documents (e.g., repeating "Usage" sections)
+MD024: false
+
+# MD060/table-column-style: Table column style
+# Disabled because we use a compact style for some large technical tables
+MD060: false
+
+# MD007/ul-indent: Unordered list indentation
+# Disabled to accommodate varying indentation styles across different playgrounds and docs
+MD007: false
+
+# MD040/fenced-code-language: Fenced code blocks should have a language specified
+# Disabled to allow flexibility in playground docs where language is obvious or mixed
+MD040: false
+
+# MD029/ol-prefix: Ordered list item prefix
+# Disabled to allow non-sequential prefixes (e.g., always using 1. for lists)
+MD029: false

@@ -1,0 +1,73 @@
+{
+    "name": "csszyx",
+    "version": "0.0.0",
+    "type": "module",
+    "private": true,
+    "description": "CSS-in-JS framework with Tailwind object syntax, automatic minification, and SSR safety. Class names encode in reversed order z→y→x.",
+    "keywords": [
+        "css-in-js",
+        "tailwind",
+        "typescript",
+        "react",
+        "ssr",
+        "hydration",
+        "minification"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/nguyennhutien/csszyx.git"
+    },
+    "author": "Tien Nguyen",
+    "license": "MIT",
+    "workspaces": [
+        "packages/*"
+    ],
+    "scripts": {
+        "prepare": "husky",
+        "build": "turbo run build",
+        "dev": "turbo run dev --parallel",
+        "test": "turbo run test",
+        "test:watch": "turbo run test:watch",
+        "test:e2e": "playwright test",
+        "serve:vanilla": "npx vite playground/vanilla-html --port 5176",
+        "lint": "eslint . --fix",
+        "lint:check": "eslint .",
+        "type-check": "turbo run type-check",
+        "clean": "rm -rf node_modules .turbo packages/*/node_modules packages/*/dist playground/*/node_modules playground/*/dist playground/*/.next playground/*/out",
+        "reset": "pnpm clean && pnpm install && turbo run build --filter='./packages/*'",
+        "changeset": "changeset",
+        "version": "changeset version",
+        "release": "turbo run build && changeset publish"
+    },
+    "devDependencies": {
+        "@changesets/cli": "^2.27.1",
+        "@commitlint/cli": "^18.6.0",
+        "@commitlint/config-conventional": "^18.6.0",
+        "@eslint/js": "^9.39.2",
+        "@playwright/test": "^1.42.1",
+        "@typescript-eslint/eslint-plugin": "^8.53.0",
+        "@typescript-eslint/parser": "^8.53.0",
+        "eslint": "^9.39.2",
+        "eslint-plugin-jsdoc": "^62.1.0",
+        "eslint-plugin-jsonc": "^2.21.0",
+        "eslint-plugin-react": "^7.37.5",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "eslint-plugin-simple-import-sort": "^12.0.0",
+        "husky": "^9.0.10",
+        "jsonc-eslint-parser": "^2.4.2",
+        "lint-staged": "^15.2.0",
+        "markdownlint-cli": "^0.47.0",
+        "prettier": "^3.8.0",
+        "turbo": "^1.12.0",
+        "typescript": "^5.3.3",
+        "typescript-eslint": "^8.53.0",
+        "vite": "^5.0.8",
+        "@rollup/rollup-linux-arm64-gnu": "*",
+        "wasm-pack": "^0.14.0"
+    },
+    "engines": {
+        "node": ">=20.0.0",
+        "pnpm": ">=8.0.0"
+    },
+    "packageManager": "pnpm@8.15.0"
+}

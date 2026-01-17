@@ -1,0 +1,345 @@
+{
+    "tests": [
+        {
+            "id": "transitions-animation-transition-property-none",
+            "szInput": {
+                "transition": "none"
+            },
+            "expectedClass": "transition-none",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Property"
+        },
+        {
+            "id": "transitions-animation-transition-property-common",
+            "szInput": {
+                "transition": true
+            },
+            "expectedClass": "transition",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Property"
+        },
+        {
+            "id": "transitions-animation-transition-property-scale-1",
+            "szInput": {
+                "transition": "colors"
+            },
+            "expectedClass": "transition-colors",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Property"
+        },
+        {
+            "id": "transitions-animation-transition-property-arbitrary",
+            "szInput": {
+                "transition": "opacity"
+            },
+            "expectedClass": "transition-opacity",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Property"
+        },
+        {
+            "id": "transitions-animation-transition-behavior-discrete",
+            "szInput": {
+                "transitionBehavior": "discrete"
+            },
+            "expectedClass": "transition-discrete",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Behavior"
+        },
+        {
+            "id": "transitions-animation-transition-behavior-normal",
+            "szInput": {
+                "transitionBehavior": "normal"
+            },
+            "expectedClass": "transition-normal",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Behavior"
+        },
+        {
+            "id": "transitions-animation-transition-duration-0",
+            "szInput": {
+                "duration": 0
+            },
+            "expectedClass": "duration-0",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-75",
+            "szInput": {
+                "duration": 75
+            },
+            "expectedClass": "duration-75",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-100",
+            "szInput": {
+                "duration": 100
+            },
+            "expectedClass": "duration-100",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-150",
+            "szInput": {
+                "duration": 150
+            },
+            "expectedClass": "duration-150",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-200",
+            "szInput": {
+                "duration": 200
+            },
+            "expectedClass": "duration-200",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-300",
+            "szInput": {
+                "duration": 300
+            },
+            "expectedClass": "duration-300",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-500",
+            "szInput": {
+                "duration": 500
+            },
+            "expectedClass": "duration-500",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-700",
+            "szInput": {
+                "duration": 700
+            },
+            "expectedClass": "duration-700",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-1000",
+            "szInput": {
+                "duration": 1000
+            },
+            "expectedClass": "duration-1000",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-arbitrary",
+            "szInput": {
+                "duration": "2s"
+            },
+            "expectedClass": "duration-[2s]",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-duration-variable",
+            "szInput": {
+                "duration": "--d"
+            },
+            "expectedClass": "duration-(--d)",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Duration"
+        },
+        {
+            "id": "transitions-animation-transition-timing-function-keywords-1",
+            "szInput": {
+                "ease": "in"
+            },
+            "expectedClass": "ease-in",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Timing Function"
+        },
+        {
+            "id": "transitions-animation-transition-timing-function-arbitrary",
+            "szInput": {
+                "ease": "cubic-bezier(0.4,0,0.2,1)"
+            },
+            "expectedClass": "ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Timing Function"
+        },
+        {
+            "id": "transitions-animation-transition-timing-function-variable",
+            "szInput": {
+                "ease": "--e"
+            },
+            "expectedClass": "ease-(--e)",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Timing Function"
+        },
+        {
+            "id": "transitions-animation-transition-delay-0",
+            "szInput": {
+                "delay": 0
+            },
+            "expectedClass": "delay-0",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-75",
+            "szInput": {
+                "delay": 75
+            },
+            "expectedClass": "delay-75",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-100",
+            "szInput": {
+                "delay": 100
+            },
+            "expectedClass": "delay-100",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-150",
+            "szInput": {
+                "delay": 150
+            },
+            "expectedClass": "delay-150",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-200",
+            "szInput": {
+                "delay": 200
+            },
+            "expectedClass": "delay-200",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-300",
+            "szInput": {
+                "delay": 300
+            },
+            "expectedClass": "delay-300",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-500",
+            "szInput": {
+                "delay": 500
+            },
+            "expectedClass": "delay-500",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-700",
+            "szInput": {
+                "delay": 700
+            },
+            "expectedClass": "delay-700",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-1000",
+            "szInput": {
+                "delay": 1000
+            },
+            "expectedClass": "delay-1000",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-arbitrary",
+            "szInput": {
+                "delay": "2s"
+            },
+            "expectedClass": "delay-[2s]",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-transition-delay-variable",
+            "szInput": {
+                "delay": "--d"
+            },
+            "expectedClass": "delay-(--d)",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Transition Delay"
+        },
+        {
+            "id": "transitions-animation-animation-none",
+            "szInput": {
+                "animate": "none"
+            },
+            "expectedClass": "animate-none",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Animation"
+        },
+        {
+            "id": "transitions-animation-animation-keywords-1",
+            "szInput": {
+                "animate": "spin"
+            },
+            "expectedClass": "animate-spin",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Animation"
+        },
+        {
+            "id": "transitions-animation-animation-arbitrary",
+            "szInput": {
+                "animate": "spin_1s_linear_infinite"
+            },
+            "expectedClass": "animate-[spin_1s_linear_infinite]",
+            "tailwindVersion": "4",
+            "category": "Transitions & Animation",
+            "subcategory": "Animation"
+        }
+    ],
+    "totalTests": 34
+}

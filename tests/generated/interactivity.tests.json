@@ -1,0 +1,575 @@
+{
+    "tests": [
+        {
+            "id": "interactivity-accent-color-color",
+            "szInput": {
+                "accent": "red-500"
+            },
+            "expectedClass": "accent-red-500",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Accent Color"
+        },
+        {
+            "id": "interactivity-accent-color-arbitrary",
+            "szInput": {
+                "accent": "#50d71e"
+            },
+            "expectedClass": "accent-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Accent Color"
+        },
+        {
+            "id": "interactivity-accent-color-variable",
+            "szInput": {
+                "accent": "--c"
+            },
+            "expectedClass": "accent-(--c)",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Accent Color"
+        },
+        {
+            "id": "interactivity-appearance-none",
+            "szInput": {
+                "appearance": "none"
+            },
+            "expectedClass": "appearance-none",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Appearance"
+        },
+        {
+            "id": "interactivity-appearance-auto",
+            "szInput": {
+                "appearance": "auto"
+            },
+            "expectedClass": "appearance-auto",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Appearance"
+        },
+        {
+            "id": "interactivity-caret-color-color",
+            "szInput": {
+                "caret": "red-500"
+            },
+            "expectedClass": "caret-red-500",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Caret Color"
+        },
+        {
+            "id": "interactivity-caret-color-arbitrary",
+            "szInput": {
+                "caret": "#50d71e"
+            },
+            "expectedClass": "caret-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Caret Color"
+        },
+        {
+            "id": "interactivity-caret-color-variable",
+            "szInput": {
+                "caret": "--c"
+            },
+            "expectedClass": "caret-(--c)",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Caret Color"
+        },
+        {
+            "id": "interactivity-color-scheme-dark",
+            "szInput": {
+                "colorScheme": "dark"
+            },
+            "expectedClass": "color-scheme-dark",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Color Scheme"
+        },
+        {
+            "id": "interactivity-color-scheme-light",
+            "szInput": {
+                "colorScheme": "light"
+            },
+            "expectedClass": "color-scheme-light",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Color Scheme"
+        },
+        {
+            "id": "interactivity-color-scheme-normal",
+            "szInput": {
+                "colorScheme": "normal"
+            },
+            "expectedClass": "color-scheme-normal",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Color Scheme"
+        },
+        {
+            "id": "interactivity-color-scheme-only",
+            "szInput": {
+                "colorScheme": "only-dark"
+            },
+            "expectedClass": "color-scheme-only-dark",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Color Scheme"
+        },
+        {
+            "id": "interactivity-cursor-keywords-1",
+            "szInput": {
+                "cursor": "pointer"
+            },
+            "expectedClass": "cursor-pointer",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Cursor"
+        },
+        {
+            "id": "interactivity-cursor-arbitrary-1",
+            "szInput": {
+                "cursor": "url(h.cur),_pointer"
+            },
+            "expectedClass": "cursor-[url(h.cur),_pointer]",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Cursor"
+        },
+        {
+            "id": "interactivity-cursor-variable",
+            "szInput": {
+                "cursor": "--c"
+            },
+            "expectedClass": "cursor-(--c)",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Cursor"
+        },
+        {
+            "id": "interactivity-field-sizing-fixed",
+            "szInput": {
+                "fieldSizing": "fixed"
+            },
+            "expectedClass": "field-sizing-fixed",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Field Sizing"
+        },
+        {
+            "id": "interactivity-field-sizing-content",
+            "szInput": {
+                "fieldSizing": "content"
+            },
+            "expectedClass": "field-sizing-content",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Field Sizing"
+        },
+        {
+            "id": "interactivity-pointer-events-none",
+            "szInput": {
+                "pointerEvents": "none"
+            },
+            "expectedClass": "pointer-events-none",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Pointer Events"
+        },
+        {
+            "id": "interactivity-pointer-events-auto",
+            "szInput": {
+                "pointerEvents": "auto"
+            },
+            "expectedClass": "pointer-events-auto",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Pointer Events"
+        },
+        {
+            "id": "interactivity-resize-none",
+            "szInput": {
+                "resize": "none"
+            },
+            "expectedClass": "resize-none",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Resize"
+        },
+        {
+            "id": "interactivity-resize-both",
+            "szInput": {
+                "resize": true
+            },
+            "expectedClass": "resize",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Resize"
+        },
+        {
+            "id": "interactivity-resize-vertical",
+            "szInput": {
+                "resize": "y"
+            },
+            "expectedClass": "resize-y",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Resize"
+        },
+        {
+            "id": "interactivity-resize-horizontal",
+            "szInput": {
+                "resize": "x"
+            },
+            "expectedClass": "resize-x",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Resize"
+        },
+        {
+            "id": "interactivity-scroll-behavior-auto",
+            "szInput": {
+                "scroll": "auto"
+            },
+            "expectedClass": "scroll-auto",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Behavior"
+        },
+        {
+            "id": "interactivity-scroll-behavior-smooth",
+            "szInput": {
+                "scroll": "smooth"
+            },
+            "expectedClass": "scroll-smooth",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Behavior"
+        },
+        {
+            "id": "interactivity-scroll-margin-4",
+            "szInput": {
+                "scrollM": 4
+            },
+            "expectedClass": "scroll-m-4",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Margin"
+        },
+        {
+            "id": "interactivity-scroll-margin-x-y-t-r-b-l",
+            "szInput": {
+                "scrollMt": 4
+            },
+            "expectedClass": "scroll-mt-4",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Margin"
+        },
+        {
+            "id": "interactivity-scroll-margin-negative",
+            "szInput": {
+                "scrollM": -4
+            },
+            "expectedClass": "-scroll-m-4",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Margin"
+        },
+        {
+            "id": "interactivity-scroll-margin-arbitrary",
+            "szInput": {
+                "scrollM": "5px"
+            },
+            "expectedClass": "scroll-m-[5px]",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Margin"
+        },
+        {
+            "id": "interactivity-scroll-margin-variable",
+            "szInput": {
+                "scrollM": "--m"
+            },
+            "expectedClass": "scroll-m-(--m)",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Margin"
+        },
+        {
+            "id": "interactivity-scroll-padding-4",
+            "szInput": {
+                "scrollP": 4
+            },
+            "expectedClass": "scroll-p-4",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Padding"
+        },
+        {
+            "id": "interactivity-scroll-padding-x-y-t-r-b-l",
+            "szInput": {
+                "scrollPt": 4
+            },
+            "expectedClass": "scroll-pt-4",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Padding"
+        },
+        {
+            "id": "interactivity-scroll-padding-arbitrary",
+            "szInput": {
+                "scrollP": "5px"
+            },
+            "expectedClass": "scroll-p-[5px]",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Padding"
+        },
+        {
+            "id": "interactivity-scroll-padding-variable",
+            "szInput": {
+                "scrollP": "--p"
+            },
+            "expectedClass": "scroll-p-(--p)",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Padding"
+        },
+        {
+            "id": "interactivity-scroll-snap-align-start",
+            "szInput": {
+                "snapAlign": "start"
+            },
+            "expectedClass": "snap-start",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Align"
+        },
+        {
+            "id": "interactivity-scroll-snap-align-end",
+            "szInput": {
+                "snapAlign": "end"
+            },
+            "expectedClass": "snap-end",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Align"
+        },
+        {
+            "id": "interactivity-scroll-snap-align-center",
+            "szInput": {
+                "snapAlign": "center"
+            },
+            "expectedClass": "snap-center",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Align"
+        },
+        {
+            "id": "interactivity-scroll-snap-align-align-none",
+            "szInput": {
+                "snapAlign": "none"
+            },
+            "expectedClass": "snap-align-none",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Align"
+        },
+        {
+            "id": "interactivity-scroll-snap-stop-normal",
+            "szInput": {
+                "snapStop": "normal"
+            },
+            "expectedClass": "snap-normal",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Stop"
+        },
+        {
+            "id": "interactivity-scroll-snap-stop-always",
+            "szInput": {
+                "snapStop": "always"
+            },
+            "expectedClass": "snap-always",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Stop"
+        },
+        {
+            "id": "interactivity-scroll-snap-type-none",
+            "szInput": {
+                "snapType": "none"
+            },
+            "expectedClass": "snap-none",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Type"
+        },
+        {
+            "id": "interactivity-scroll-snap-type-x",
+            "szInput": {
+                "snapType": "x"
+            },
+            "expectedClass": "snap-x",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Type"
+        },
+        {
+            "id": "interactivity-scroll-snap-type-y",
+            "szInput": {
+                "snapType": "y"
+            },
+            "expectedClass": "snap-y",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Type"
+        },
+        {
+            "id": "interactivity-scroll-snap-type-both",
+            "szInput": {
+                "snapType": "both"
+            },
+            "expectedClass": "snap-both",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Type"
+        },
+        {
+            "id": "interactivity-scroll-snap-type-mandatory",
+            "szInput": {
+                "snapStrictness": "mandatory"
+            },
+            "expectedClass": "snap-mandatory",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Type"
+        },
+        {
+            "id": "interactivity-scroll-snap-type-proximity",
+            "szInput": {
+                "snapStrictness": "proximity"
+            },
+            "expectedClass": "snap-proximity",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Scroll Snap Type"
+        },
+        {
+            "id": "interactivity-touch-action-keywords-1",
+            "szInput": {
+                "touch": "auto"
+            },
+            "expectedClass": "touch-auto",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Touch Action"
+        },
+        {
+            "id": "interactivity-user-select-none",
+            "szInput": {
+                "select": "none"
+            },
+            "expectedClass": "select-none",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "User Select"
+        },
+        {
+            "id": "interactivity-user-select-auto",
+            "szInput": {
+                "select": "auto"
+            },
+            "expectedClass": "select-auto",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "User Select"
+        },
+        {
+            "id": "interactivity-user-select-text",
+            "szInput": {
+                "select": "text"
+            },
+            "expectedClass": "select-text",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "User Select"
+        },
+        {
+            "id": "interactivity-user-select-all",
+            "szInput": {
+                "select": "all"
+            },
+            "expectedClass": "select-all",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "User Select"
+        },
+        {
+            "id": "interactivity-will-change-auto",
+            "szInput": {
+                "willChange": "auto"
+            },
+            "expectedClass": "will-change-auto",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Will Change"
+        },
+        {
+            "id": "interactivity-will-change-scroll",
+            "szInput": {
+                "willChange": "scroll"
+            },
+            "expectedClass": "will-change-scroll-position",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Will Change"
+        },
+        {
+            "id": "interactivity-will-change-contents",
+            "szInput": {
+                "willChange": "contents"
+            },
+            "expectedClass": "will-change-contents",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Will Change"
+        },
+        {
+            "id": "interactivity-will-change-transform",
+            "szInput": {
+                "willChange": "transform"
+            },
+            "expectedClass": "will-change-transform",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Will Change"
+        },
+        {
+            "id": "interactivity-will-change-arbitrary",
+            "szInput": {
+                "willChange": "transform"
+            },
+            "expectedClass": "will-change-transform",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Will Change"
+        },
+        {
+            "id": "interactivity-will-change-variable",
+            "szInput": {
+                "willChange": "--c"
+            },
+            "expectedClass": "will-change-(--c)",
+            "tailwindVersion": "4",
+            "category": "Interactivity",
+            "subcategory": "Will Change"
+        }
+    ],
+    "totalTests": 57
+}

@@ -1,0 +1,2136 @@
+/**
+ * JSX Transform - Converts sz prop to className string.
+ *
+ * This module handles the transformation of csszyx object syntax into
+ * Tailwind CSS class strings. It processes nested objects for variants
+ * like hover, focus, etc.
+ */
+
+/**
+ * Represents a value in the sz object.
+ * Can be a string, number, boolean, or nested object for variants.
+ */
+export type SzValue = string | number | boolean | SzObject;
+
+/**
+ * Represents the sz object structure.
+ * Keys are CSS property abbreviations, values can be primitives or nested objects.
+ */
+export interface SzObject {
+  [key: string]: SzValue;
+}
+
+// ============================================================================
+// PROPERTY_MAP: Maps sz prop names to Tailwind utility prefixes
+// ============================================================================
+export const PROPERTY_MAP: Record<string, string> = {
+    // Background
+    bg: 'bg',
+    bgAttach: 'bg',
+    bgClip: 'bg-clip',
+    bgImg: 'bg',
+    bgOrigin: 'bg-origin',
+    bgPos: 'bg',
+    bgRepeat: 'bg',
+    bgSize: 'bg',
+
+    // Gradient color stops
+    from: 'from',
+    via: 'via',
+    to: 'to',
+
+    // Border Radius
+    rounded: 'rounded',
+    roundedT: 'rounded-t',
+    roundedR: 'rounded-r',
+    roundedB: 'rounded-b',
+    roundedL: 'rounded-l',
+    roundedTl: 'rounded-tl',
+    roundedTr: 'rounded-tr',
+    roundedBl: 'rounded-bl',
+    roundedBr: 'rounded-br',
+    roundedS: 'rounded-s',
+    roundedE: 'rounded-e',
+    roundedSs: 'rounded-ss',
+    roundedSe: 'rounded-se',
+    roundedEs: 'rounded-es',
+    roundedEe: 'rounded-ee',
+
+    // Border
+    border: 'border',
+    borderColor: 'border',
+    borderStyle: 'border',
+    borderT: 'border-t',
+    borderR: 'border-r',
+    borderB: 'border-b',
+    borderL: 'border-l',
+    borderX: 'border-x',
+    borderY: 'border-y',
+    borderS: 'border-s',
+    borderE: 'border-e',
+
+    // Divide
+    divideX: 'divide-x',
+    divideY: 'divide-y',
+    divideColor: 'divide',
+    divideStyle: 'divide',
+
+    // Outline
+    outline: 'outline',
+    outlineColor: 'outline',
+    outlineOffset: 'outline-offset',
+    outlineStyle: 'outline',
+
+    // Ring (v3 — keep for future v3 support)
+    ring: 'ring',
+    ringColor: 'ring',
+    ringOffset: 'ring-offset',
+    ringOffsetColor: 'ring-offset',
+
+    // Spacing (canonical shorthand only)
+    p: 'p',
+    pt: 'pt',
+    pr: 'pr',
+    pb: 'pb',
+    pl: 'pl',
+    px: 'px',
+    py: 'py',
+    ps: 'ps',
+    pe: 'pe',
+
+    m: 'm',
+    mt: 'mt',
+    mr: 'mr',
+    mb: 'mb',
+    ml: 'ml',
+    mx: 'mx',
+    my: 'my',
+    ms: 'ms',
+    me: 'me',
+
+    // Space between
+    spaceX: 'space-x',
+    spaceY: 'space-y',
+
+    // Sizing (canonical shorthand only)
+    w: 'w',
+    minW: 'min-w',
+    maxW: 'max-w',
+    h: 'h',
+    minH: 'min-h',
+    maxH: 'max-h',
+    size: 'size',
+
+    // Layout
+    aspect: 'aspect',
+    columns: 'columns',
+    breakAfter: 'break-after',
+    breakBefore: 'break-before',
+    breakInside: 'break-inside',
+    boxDecoration: 'box-decoration',
+    box: 'box',
+    float: 'float',
+    clear: 'clear',
+    isolation: 'isolation',
+    objectFit: 'object',
+    objectPos: 'object',
+    overflowX: 'overflow-x',
+    overflowY: 'overflow-y',
+    overscroll: 'overscroll',
+    overscrollX: 'overscroll-x',
+    overscrollY: 'overscroll-y',
+    z: 'z',
+    position: 'position',
+    display: 'display',
+
+    // Inset
+    inset: 'inset',
+    insetX: 'inset-x',
+    insetY: 'inset-y',
+    top: 'top',
+    right: 'right',
+    bottom: 'bottom',
+    left: 'left',
+    start: 'start',
+    end: 'end',
+
+    // Visibility
+    visibility: 'visibility',
+
+    // Typography
+    color: 'text',
+    text: 'text',
+    fontWeight: 'font',
+    font: 'font',
+    fontFamily: 'font',
+    fontStretch: 'font-stretch',
+    textAlign: 'text',
+    decoration: 'decoration',
+    decorationColor: 'decoration',
+    decorationStyle: 'decoration',
+    decorationThickness: 'decoration',
+    underlineOffset: 'underline-offset',
+    textTransform: 'text',
+    textOverflow: 'text',
+    textWrap: 'text',
+    wrap: 'wrap',
+    indent: 'indent',
+    align: 'align',
+    whitespace: 'whitespace',
+    break: 'break',
+    hyphens: 'hyphens',
+    content: 'content',
+    leading: 'leading',
+    tracking: 'tracking',
+    lineClamp: 'line-clamp',
+    list: 'list',
+    listPos: 'list',
+    listImg: 'list-image',
+
+    // Flex & Grid
+    basis: 'basis',
+    flexDir: 'flex',
+    flexWrap: 'flex',
+    grow: 'grow',
+    shrink: 'shrink',
+    order: 'order',
+    items: 'items',
+    self: 'self',
+    justify: 'justify',
+    justifyItems: 'justify-items',
+    justifySelf: 'justify-self',
+    placeContent: 'place-content',
+    placeItems: 'place-items',
+    placeSelf: 'place-self',
+    gap: 'gap',
+    gapX: 'gap-x',
+    gapY: 'gap-y',
+
+    // Grid
+    gridCols: 'grid-cols',
+    gridRows: 'grid-rows',
+    col: 'col',
+    colSpan: 'col-span',
+    colStart: 'col-start',
+    colEnd: 'col-end',
+    row: 'row',
+    rowSpan: 'row-span',
+    rowStart: 'row-start',
+    rowEnd: 'row-end',
+    gridFlow: 'grid-flow',
+    autoCols: 'auto-cols',
+    autoRows: 'auto-rows',
+
+    // Effects
+    shadow: 'shadow',
+    shadowColor: 'shadow',
+    insetShadow: 'inset-shadow',
+    textShadow: 'text-shadow',
+    textShadowColor: 'text-shadow',
+    opacity: 'opacity',
+    mixBlend: 'mix-blend',
+    bgBlend: 'bg-blend',
+
+    // Filters
+    blur: 'blur',
+    brightness: 'brightness',
+    contrast: 'contrast',
+    dropShadow: 'drop-shadow',
+    dropShadowColor: 'drop-shadow',
+    grayscale: 'grayscale',
+    hueRotate: 'hue-rotate',
+    invert: 'invert',
+    saturate: 'saturate',
+    sepia: 'sepia',
+    backdropBlur: 'backdrop-blur',
+    backdropBrightness: 'backdrop-brightness',
+    backdropContrast: 'backdrop-contrast',
+    backdropGrayscale: 'backdrop-grayscale',
+    backdropHueRotate: 'backdrop-hue-rotate',
+    backdropInvert: 'backdrop-invert',
+    backdropOpacity: 'backdrop-opacity',
+    backdropSaturate: 'backdrop-saturate',
+    backdropSepia: 'backdrop-sepia',
+
+    // Transforms
+    scale: 'scale',
+    scaleX: 'scale-x',
+    scaleY: 'scale-y',
+    rotate: 'rotate',
+    translateX: 'translate-x',
+    translateY: 'translate-y',
+    skewX: 'skew-x',
+    skewY: 'skew-y',
+    origin: 'origin',
+    backface: 'backface',
+    perspective: 'perspective',
+    perspectiveOrigin: 'perspective-origin',
+    transformStyle: 'transform',
+
+    // Transitions & Animation
+    transition: 'transition',
+    transitionBehavior: 'transition',
+    duration: 'duration',
+    ease: 'ease',
+    delay: 'delay',
+    animate: 'animate',
+
+    // Masks
+    mask: 'mask',
+    maskSize: 'mask-size',
+    maskPos: 'mask-position',
+    maskRepeat: 'mask-repeat',
+    maskShape: 'mask',
+
+    // Interactivity
+    cursor: 'cursor',
+    caret: 'caret',
+    pointerEvents: 'pointer-events',
+    resize: 'resize',
+    scroll: 'scroll',
+    scrollM: 'scroll-m',
+    scrollMt: 'scroll-mt',
+    scrollMr: 'scroll-mr',
+    scrollMb: 'scroll-mb',
+    scrollMl: 'scroll-ml',
+    scrollMs: 'scroll-ms',
+    scrollMe: 'scroll-me',
+    scrollMx: 'scroll-mx',
+    scrollMy: 'scroll-my',
+    scrollP: 'scroll-p',
+    scrollPt: 'scroll-pt',
+    scrollPr: 'scroll-pr',
+    scrollPb: 'scroll-pb',
+    scrollPl: 'scroll-pl',
+    scrollPs: 'scroll-ps',
+    scrollPe: 'scroll-pe',
+    scrollPx: 'scroll-px',
+    scrollPy: 'scroll-py',
+    snapAlign: 'snap',
+    snapStop: 'snap',
+    snapType: 'snap',
+    touch: 'touch',
+    select: 'select',
+    willChange: 'will-change',
+    appearance: 'appearance',
+    accent: 'accent',
+    forcedColorAdjust: 'forced-color-adjust',
+
+    // SVG
+    fill: 'fill',
+    stroke: 'stroke',
+    strokeWidth: 'stroke',
+
+    // Tables
+    borderCollapse: 'border',
+    borderSpacing: 'border-spacing',
+    borderSpacingX: 'border-spacing-x',
+    borderSpacingY: 'border-spacing-y',
+    tableLayout: 'table',
+    caption: 'caption',
+
+    // Overflow
+    overflow: 'overflow',
+};
+
+// ============================================================================
+// SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
+// ============================================================================
+const SUGGESTION_MAP: Record<string, string> = {
+    // Background
+    backgroundColor: 'bg',
+    backgroundImage: 'bgImg',
+    backgroundSize: 'bgSize',
+    backgroundPosition: 'bgPos',
+    backgroundRepeat: 'bgRepeat',
+    bgAttachment: 'bgAttach',
+    bgImage: 'bgImg',
+    // Border Radius
+    borderRadius: 'rounded',
+    borderTopLeftRadius: 'roundedTl',
+    borderTopRightRadius: 'roundedTr',
+    borderBottomLeftRadius: 'roundedBl',
+    borderBottomRightRadius: 'roundedBr',
+    // Border
+    borderWidth: 'border',
+    // Spacing
+    padding: 'p', paddingTop: 'pt', paddingRight: 'pr',
+    paddingBottom: 'pb', paddingLeft: 'pl', paddingX: 'px', paddingY: 'py',
+    margin: 'm', marginTop: 'mt', marginRight: 'mr',
+    marginBottom: 'mb', marginLeft: 'ml', marginX: 'mx', marginY: 'my',
+    // Sizing
+    width: 'w', height: 'h',
+    minWidth: 'minW', maxWidth: 'maxW',
+    minHeight: 'minH', maxHeight: 'maxH',
+    // Layout
+    aspectRatio: 'aspect',
+    boxSizing: 'box',
+    boxDecorationBreak: 'boxDecoration',
+    objectPosition: 'objectPos',
+    zIndex: 'z',
+    // Typography
+    fontStyle: 'italic/notItalic (boolean)',
+    weight: 'fontWeight',
+    textDecoration: 'decoration or underline/lineThrough/noUnderline (boolean)',
+    textDecorationColor: 'decorationColor',
+    textDecorationStyle: 'decorationStyle',
+    textDecorationThickness: 'decorationThickness',
+    textUnderlineOffset: 'underlineOffset',
+    lineHeight: 'leading',
+    letterSpacing: 'tracking',
+    textIndent: 'indent',
+    verticalAlign: 'align',
+    wordBreak: 'break',
+    overflowWrap: 'wrap',
+    textWrap: 'textWrap',
+    listStyleType: 'list',
+    listStylePosition: 'listPos',
+    listStyleImage: 'listImg',
+    listStyle: 'list',
+    listPosition: 'listPos',
+    listImage: 'listImg',
+    // Flex & Grid
+    flexBasis: 'basis',
+    flexDirection: 'flexDir',
+    flexGrow: 'grow',
+    flexShrink: 'shrink',
+    alignItems: 'items',
+    alignContent: 'content',
+    alignSelf: 'self',
+    justifyContent: 'justify',
+    gridTemplateColumns: 'gridCols',
+    gridTemplateRows: 'gridRows',
+    gridColumn: 'col',
+    gridRow: 'row',
+    gridAutoFlow: 'gridFlow',
+    gridAutoColumns: 'autoCols',
+    gridAutoRows: 'autoRows',
+    // Effects
+    boxShadow: 'shadow',
+    mixBlendMode: 'mixBlend',
+    backgroundBlendMode: 'bgBlend',
+    // Transitions
+    transitionProperty: 'transition',
+    transitionDuration: 'duration',
+    transitionTimingFunction: 'ease',
+    transitionDelay: 'delay',
+    animation: 'animate',
+    transformOrigin: 'origin',
+    // Interactivity
+    caretColor: 'caret',
+    accentColor: 'accent',
+    scrollBehavior: 'scroll',
+    scrollMargin: 'scrollM',
+    scrollPadding: 'scrollP',
+    scrollSnapAlign: 'snapAlign',
+    scrollSnapStop: 'snapStop',
+    scrollSnapType: 'snapType',
+    touchAction: 'touch',
+    userSelect: 'select',
+    captionSide: 'caption',
+    // Boolean remaps
+    flexWrapReverse: "flexWrap: 'wrap-reverse'",
+    flexNowrap: "flexWrap: 'nowrap'",
+};
+
+// ============================================================================
+// VARIANT_MAP: Maps camelCase variant names to kebab-case
+// ============================================================================
+export const VARIANT_MAP: Record<string, string> = {
+    // Focus variants
+    focusWithin: 'focus-within',
+    focusVisible: 'focus-visible',
+
+    // Structural variants
+    firstOfType: 'first-of-type',
+    lastOfType: 'last-of-type',
+    onlyOfType: 'only-of-type',
+    onlyChild: 'only',
+    firstChild: 'first',
+    lastChild: 'last',
+
+    // Motion variants
+    motionReduce: 'motion-reduce',
+    motionSafe: 'motion-safe',
+
+    // Contrast variants
+    contrastMore: 'contrast-more',
+    contrastLess: 'contrast-less',
+
+    // Pseudo-element variants
+    firstLine: 'first-line',
+    firstLetter: 'first-letter',
+
+    // Form variants
+    placeholderShown: 'placeholder-shown',
+    inRange: 'in-range',
+    outOfRange: 'out-of-range',
+    readOnly: 'read-only',
+
+    // Pointer variants
+    pointerFine: 'pointer-fine',
+    pointerCoarse: 'pointer-coarse',
+    pointerNone: 'pointer-none',
+
+    // Screen orientation
+    screenPortrait: 'portrait',
+    screenLandscape: 'landscape',
+
+    // Container query max variants
+    '@maxSm': '@max-sm',
+    '@maxMd': '@max-md',
+    '@maxLg': '@max-lg',
+    '@maxXl': '@max-xl',
+    '@max2xl': '@max-2xl',
+};
+
+// ============================================================================
+// SPECIAL_VARIANTS: Variants that use `-` separator instead of `:`
+// ============================================================================
+// const SPECIAL_VARIANTS = new Set(['group', 'peer', 'has', 'not', 'data', 'aria', 'supports']);
+
+// ============================================================================
+// KNOWN_VARIANTS: All known variant names for disambiguation
+// ============================================================================
+export const KNOWN_VARIANTS = new Set([
+    // Responsive
+    'sm', 'md', 'lg', 'xl', '2xl',
+    // Container queries
+    '@sm', '@md', '@lg', '@xl', '@2xl',
+    // Dark mode
+    'dark', 'light',
+    // Print/Media
+    'print', 'portrait', 'landscape',
+    // Motion
+    'motion-reduce', 'motion-safe', 'motionReduce', 'motionSafe',
+    // Contrast
+    'contrast-more', 'contrast-less', 'contrastMore', 'contrastLess',
+    // States
+    'hover', 'focus', 'focus-within', 'focus-visible', 'focusWithin', 'focusVisible',
+    'active', 'visited', 'target', 'disabled', 'enabled',
+    'checked', 'indeterminate', 'default', 'required', 'valid', 'invalid',
+    'in-range', 'out-of-range', 'inRange', 'outOfRange',
+    'placeholder-shown', 'placeholderShown', 'autofill', 'read-only', 'readOnly',
+    // Structure
+    'first', 'last', 'only', 'odd', 'even', 'empty',
+    'first-of-type', 'last-of-type', 'only-of-type',
+    'firstOfType', 'lastOfType', 'onlyOfType',
+    'first-child', 'last-child', 'only-child',
+    'firstChild', 'lastChild', 'onlyChild',
+    // Pseudo-elements
+    'before', 'after', 'placeholder', 'file', 'marker', 'selection',
+    'first-line', 'first-letter', 'firstLine', 'firstLetter', 'backdrop',
+    // Pointer
+    'pointer-fine', 'pointer-coarse', 'pointer-none',
+    'pointerFine', 'pointerCoarse', 'pointerNone',
+    // Open
+    'open',
+    // RTL/LTR
+    'ltr', 'rtl',
+]);
+
+// ============================================================================
+// ARIA_STATES: Standard aria boolean states (vs arbitrary aria-[*] syntax)
+// ============================================================================
+const ARIA_STATES = new Set([
+    'checked', 'disabled', 'expanded', 'hidden', 'pressed',
+    'readonly', 'required', 'selected', 'busy', 'current',
+    'invalid', 'live', 'atomic', 'modal',
+]);
+
+// ============================================================================
+// BOOLEAN_SHORTHANDS: Properties that map directly when value is true
+// ============================================================================
+const BOOLEAN_SHORTHANDS = new Set([
+    // Display
+    'block', 'inline', 'inlineBlock', 'flex', 'inlineFlex', 'grid', 'inlineGrid',
+    'hidden', 'contents', 'table', 'tableRow', 'tableCell', 'flowRoot', 'listItem',
+    // Position
+    'static', 'fixed', 'absolute', 'relative', 'sticky',
+    // Visibility
+    'visible', 'invisible', 'collapse',
+    // Typography
+    'truncate', 'uppercase', 'lowercase', 'capitalize', 'normalCase',
+    'underline', 'overline', 'lineThrough', 'noUnderline',
+    'italic', 'notItalic', 'antialiased', 'subpixelAntialiased',
+    // Flexbox (grow/shrink only — flexWrap uses string values)
+    'grow', 'shrink',
+    // Filters (default values)
+    'blur', 'grayscale', 'invert', 'sepia',
+    'backdropBlur', 'backdropGrayscale', 'backdropInvert', 'backdropSepia',
+    // Misc
+    'container', 'prose', 'srOnly', 'notSrOnly', 'isolate', 'ordinal', 'slashedZero',
+    // Font variant numeric
+    'liningNums', 'oldstyleNums', 'proportionalNums', 'tabularNums',
+    'diagonalFractions', 'stackedFractions',
+    // Divide/Space reverse
+    'divideXReverse', 'divideYReverse', 'spaceXReverse', 'spaceYReverse',
+    // Ring (v3 future)
+    'ring',
+    // Outline
+    'outline',
+    // Transforms
+    'scale3d', 'rotate3d', 'translate3d', 'transformGpu', 'transformCpu', 'transformNone',
+]);
+
+// ============================================================================
+// BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
+// ============================================================================
+const BOOLEAN_TO_CLASS: Record<string, string> = {
+    inlineBlock: 'inline-block',
+    inlineFlex: 'inline-flex',
+    inlineGrid: 'inline-grid',
+    tableRow: 'table-row',
+    tableCell: 'table-cell',
+    flowRoot: 'flow-root',
+    listItem: 'list-item',
+    normalCase: 'normal-case',
+    lineThrough: 'line-through',
+    noUnderline: 'no-underline',
+    notItalic: 'not-italic',
+    subpixelAntialiased: 'subpixel-antialiased',
+    backdropBlur: 'backdrop-blur',
+    backdropGrayscale: 'backdrop-grayscale',
+    backdropInvert: 'backdrop-invert',
+    backdropSepia: 'backdrop-sepia',
+    srOnly: 'sr-only',
+    notSrOnly: 'not-sr-only',
+    divideXReverse: 'divide-x-reverse',
+    divideYReverse: 'divide-y-reverse',
+    spaceXReverse: 'space-x-reverse',
+    spaceYReverse: 'space-y-reverse',
+    // Font variant numeric
+    liningNums: 'lining-nums',
+    oldstyleNums: 'oldstyle-nums',
+    proportionalNums: 'proportional-nums',
+    tabularNums: 'tabular-nums',
+    diagonalFractions: 'diagonal-fractions',
+    stackedFractions: 'stacked-fractions',
+    // Transforms
+    scale3d: 'scale-3d',
+    rotate3d: 'rotate-3d',
+    translate3d: 'translate-3d',
+    transformGpu: 'transform-gpu',
+    transformCpu: 'transform-cpu',
+    transformNone: 'transform-none',
+};
+
+// ============================================================================
+// SNAP_DIRECT_MAP: Snap property direct mappings (no prefix-value pattern)
+// ============================================================================
+const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
+    snapAlign: {
+        start: 'snap-start',
+        end: 'snap-end',
+        center: 'snap-center',
+        none: 'snap-align-none',
+    },
+    snapStop: {
+        normal: 'snap-normal',
+        always: 'snap-always',
+    },
+    snapType: {
+        none: 'snap-none',
+        x: 'snap-x',
+        y: 'snap-y',
+        both: 'snap-both',
+    },
+    snapStrictness: {
+        mandatory: 'snap-mandatory',
+        proximity: 'snap-proximity',
+    },
+};
+
+// ============================================================================
+// NEGATIVE_ALLOWED: Properties that support negative values
+// ============================================================================
+const NEGATIVE_ALLOWED = new Set([
+    'm', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me',
+    'top', 'right', 'bottom', 'left', 'inset', 'inset-x', 'inset-y', 'start', 'end',
+    'z', 'order', 'col', 'col-start', 'col-end', 'row', 'row-start', 'row-end',
+    'rotate', 'skew-x', 'skew-y', 'translate-x', 'translate-y',
+    'space-x', 'space-y', 'tracking', 'indent',
+    'scroll-m', 'scroll-mx', 'scroll-my', 'scroll-mt', 'scroll-mr', 'scroll-mb', 'scroll-ml',
+    'hue-rotate', 'backdrop-hue-rotate',
+]);
+
+// ============================================================================
+// COLOR_KEYWORDS & COLOR_SCALE_PATTERN: For color value detection
+// ============================================================================
+/*
+const COLOR_KEYWORDS = new Set(['inherit', 'current', 'transparent', 'black', 'white']);
+const COLOR_SCALE_PATTERN = /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+/;
+
+// function isColorValue(value: string): boolean {
+//     return COLOR_KEYWORDS.has(value) ||
+//            COLOR_SCALE_PATTERN.test(value) ||
+//            value.startsWith('#') ||
+//            value.includes('/');
+// }
+*/
+
+// Tailwind v4: opacity modifiers after / accept any integer or 0.5-step decimal bare.
+// Everything else (%, leading dot, non-0.5 decimals) goes in brackets.
+
+/**
+ * Represents the result of a transformation.
+ */
+export interface TransformResult {
+    className: string;
+    attributes: Record<string, string>;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Handles the important modifier (!)
+ * @param value - the value to check for trailing !
+ * @returns parsed value and whether it was marked important
+ */
+function handleImportant(value: string): { value: string; important: boolean } {
+    if (typeof value === 'string' && value.endsWith('!')) {
+        return { value: value.slice(0, -1), important: true };
+    }
+    return { value, important: false };
+}
+
+/**
+ * Formats an opacity value for Tailwind class output.
+ * Handles numbers, CSS variables, and arbitrary values.
+ * @param op - the opacity value (number or string)
+ * @returns formatted opacity string for Tailwind class
+ */
+function formatOpacity(op: number | string): string {
+    if (typeof op === 'number') {return String(op);}
+    if (typeof op === 'string') {
+        if (op.startsWith('--')) {return `(${op})`;}
+        return `[${op}]`;
+    }
+    return String(op);
+}
+
+/**
+ * Checks if a key is an arbitrary variant (e.g., "[&>span]")
+ * @param key - the key to check
+ * @returns whether the key is an arbitrary variant
+ */
+function isArbitraryVariant(key: string): boolean {
+    return key.startsWith('[') && key.endsWith(']');
+}
+
+/**
+ * Normalizes arbitrary variant selectors (removes extra whitespace)
+ * @param key - the arbitrary variant key to normalize
+ * @returns normalized variant string with whitespace removed
+ */
+export function normalizeArbitraryVariant(key: string): string {
+    // "[& > span]" → "[&>span]"
+    return key.replace(/\s+/g, '');
+}
+
+/**
+ * Normalizes arbitrary values for Tailwind
+ * @param value - the arbitrary value to normalize
+ * @returns normalized value with spaces replaced by underscores
+ */
+export function normalizeArbitraryValue(value: string): string {
+    return value.trim().replace(/\s*([+*/(),:])\s*/g, '$1').replace(/\s+/g, '_');
+}
+
+// Properties that support native fraction values (e.g. w-1/2) without brackets
+const FRACTION_SUPPORTED_PROPS = new Set([
+    // Sizing (both rawKey and resolved key forms)
+    'w', 'width', 'min-w', 'minW', 'minWidth', 'max-w', 'maxW', 'maxWidth',
+    'h', 'height', 'min-h', 'minH', 'minHeight', 'max-h', 'maxH', 'maxHeight', 'size',
+    // Flex
+    'basis', 'flexBasis', 'flex',
+    // Inset
+    'inset', 'inset-x', 'insetX', 'inset-y', 'insetY',
+    'top', 'right', 'bottom', 'left', 'start', 'end',
+    // Translate
+    'translate-x', 'translateX', 'translate-y', 'translateY',
+]);
+
+/**
+ * Checks if a value needs arbitrary brackets
+ * @param value - the CSS value to check
+ * @returns whether the value requires wrapping in brackets
+ */
+function needsArbitraryBrackets(value: string): boolean {
+    return (
+        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(value) || // Units
+        /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(value) || // Values starting with . like .25em
+        value.startsWith('#') || // Hex colors
+        value.startsWith('rgb') || // RGB colors
+        value.startsWith('hsl') || // HSL colors
+        value.includes('calc(') || // Calculations
+        value.includes('var(') || // CSS variables (old syntax)
+        value.includes('attr(') || // attr() function
+        value.includes('url(') || // URLs
+        value.includes('clamp(') || // Clamp
+        value.includes('min(') || // Min
+        value.includes('max(') || // Max
+        value.includes(' ') // Values with spaces need brackets
+    );
+}
+
+// Tailwind v4: <number> values are fully dynamic (no static limits)
+// z-index, font-weight, order, grid-span, grid-start/end, line-clamp all accept ANY integer
+const LIST_STYLE_STANDARD = new Set(['none', 'disc', 'decimal']);
+// Tailwind v4: gradient positions are fully dynamic for integer %, no static scale needed
+const FONT_STRETCH_KEYWORDS = new Set([
+    'ultra-condensed', 'extra-condensed', 'condensed', 'semi-condensed',
+    'normal', 'semi-expanded', 'expanded', 'extra-expanded', 'ultra-expanded',
+]);
+
+// Known Tailwind utility properties - these should use standard utility syntax
+/*
+// const KNOWN_UTILITY_PROPS = new Set([
+    // All keys from PROPERTY_MAP values
+    'bg', 'rounded', 'border', 'divide', 'outline', 'ring', 'ring-offset',
+    'p', 'pt', 'pr', 'pb', 'pl', 'px', 'py', 'ps', 'pe',
+    'm', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me',
+    'space-x', 'space-y', 'w', 'min-w', 'max-w', 'h', 'min-h', 'max-h', 'size',
+    'aspect', 'columns', 'break-after', 'break-before', 'break-inside',
+    'box-decoration', 'box', 'float', 'clear', 'isolation', 'object',
+    'overflow', 'overflow-x', 'overflow-y', 'overscroll', 'overscroll-x', 'overscroll-y',
+    'z', 'position', 'display', 'visibility', 'inset', 'inset-x', 'inset-y',
+    'top', 'right', 'bottom', 'left', 'start', 'end',
+    'text', 'font', 'decoration', 'underline-offset', 'indent', 'align', 'whitespace',
+    'break', 'hyphens', 'content', 'leading', 'tracking', 'list', 'list-image',
+    'basis', 'flex', 'grow', 'shrink', 'order', 'items', 'content', 'self',
+    'justify', 'justify-items', 'justify-self', 'place-content', 'place-items', 'place-self',
+    'gap', 'gap-x', 'gap-y', 'grid-cols', 'grid-rows', 'col', 'col-span', 'col-start', 'col-end',
+    'row', 'row-span', 'row-start', 'row-end', 'grid-flow', 'auto-cols', 'auto-rows',
+    'shadow', 'opacity', 'mix-blend', 'bg-blend',
+    'blur', 'brightness', 'contrast', 'drop-shadow', 'grayscale', 'hue-rotate', 'invert', 'saturate', 'sepia',
+    'backdrop-blur', 'backdrop-brightness', 'backdrop-contrast', 'backdrop-grayscale',
+    'backdrop-hue-rotate', 'backdrop-invert', 'backdrop-opacity', 'backdrop-saturate', 'backdrop-sepia',
+    'scale', 'scale-x', 'scale-y', 'rotate', 'translate-x', 'translate-y', 'skew-x', 'skew-y', 'origin',
+    'transition', 'duration', 'ease', 'delay', 'animate',
+    'cursor', 'caret', 'pointer-events', 'resize', 'scroll', 'scroll-m', 'scroll-mt', 'scroll-mr',
+    'scroll-mb', 'scroll-ml', 'scroll-ms', 'scroll-me', 'scroll-mx', 'scroll-my',
+    'scroll-p', 'scroll-pt', 'scroll-pr', 'scroll-pb', 'scroll-pl', 'scroll-ps', 'scroll-pe',
+    'scroll-px', 'scroll-py', 'snap', 'touch', 'select', 'will-change', 'appearance', 'accent',
+    'fill', 'stroke', 'border-spacing', 'table', 'caption',
+    // Additional common utilities
+    'bg-linear-to', 'from', 'via', 'to', 'rounded-t', 'rounded-r', 'rounded-b', 'rounded-l',
+    'rounded-tl', 'rounded-tr', 'rounded-bl', 'rounded-br', 'rounded-s', 'rounded-e',
+    'rounded-ss', 'rounded-se', 'rounded-es', 'rounded-ee',
+    'border-t', 'border-r', 'border-b', 'border-l', 'border-x', 'border-y', 'border-s', 'border-e',
+    // Masks
+    'mask', 'mask-image', 'mask-size', 'mask-position', 'mask-repeat',
+    // Accessibility
+    'forced-color-adjust',
+    // Transforms
+    'perspective', 'perspective-origin', 'transform', 'transform-style', 'backface',
+    // Gradients
+    'gradient',
+]);
+*/
+
+// Properties that need [prop:value] arbitrary property syntax (truly unknown CSS properties)
+const NEEDS_ARBITRARY_PROPERTY = new Set([
+    'mask-type', 'mask-composite', 'mask-mode',
+]);
+
+/**
+ * Gets the variant prefix from a camelCase key
+ * @param key - the camelCase variant key
+ * @returns the mapped or kebab-cased variant prefix
+ */
+export function getVariantPrefix(key: string): string {
+    // Check VARIANT_MAP first
+    if (VARIANT_MAP[key]) {
+        return VARIANT_MAP[key];
+    }
+    // Fallback: convert camelCase to kebab-case
+    return key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+/**
+ * Handles group/peer variants with special syntax
+ * { group: { hover: { ... }}} → group-hover:
+ * { group: { name: { hover: { ... }}}} → group-hover/name:
+ * { group: { has: { a: { ... }}}} → group-has-[a]:
+ * @param type - either 'group' or 'peer'
+ * @param nestedObj - the nested sz object with variant definitions
+ * @param prefix - the current class name prefix
+ * @returns array of generated class names
+ */
+function handleGroupPeer(
+    type: 'group' | 'peer',
+    nestedObj: SzObject,
+    prefix: string,
+): string[] {
+    const classes: string[] = [];
+
+    // Helper to standardise arbitrary values (space to underscore)
+    // Fix 11: Space → Underscore Conversion for Arbitrary Values
+    // const toArbitraryValue = (val: string | number): string => {
+    //     return String(val).replace(/ /g, '_');
+    // };
+
+    for (const [nestedKey, nestedValue] of Object.entries(nestedObj)) {
+        if (nestedValue === null || nestedValue === undefined || nestedValue === false) {
+            continue;
+        }
+
+        // Special case: group/peer with has selector
+        // { group: { has: { a: { block: true }}}} → group-has-[a]:block
+        if (nestedKey === 'has' && typeof nestedValue === 'object') {
+            for (const [selector, selectorValue] of Object.entries(nestedValue as SzObject)) {
+                if (selectorValue === null || selectorValue === undefined || selectorValue === false) {
+                    continue;
+                }
+                const variantPrefix = `${prefix}${type}-has-[${selector}]:`;
+                const result = transform(selectorValue as SzObject, variantPrefix);
+                if (result.className) {classes.push(result.className);}
+            }
+            continue;
+        }
+
+        // Check if nestedKey is a known variant
+        const isVariant = KNOWN_VARIANTS.has(nestedKey) || KNOWN_VARIANTS.has(getVariantPrefix(nestedKey));
+        // Check if it starts with arbitrary selector syntax
+        const isArbitrary = nestedKey.startsWith('.') || nestedKey.startsWith('#') ||
+                          nestedKey.startsWith('[') || nestedKey.startsWith(':');
+
+        if (isArbitrary) {
+            // { group: { ".is-published": { block: true }}} → group-[.is-published]:block
+            const variantPrefix = `${prefix}${type}-[${nestedKey}]:`;
+            const result = transform(nestedValue as SzObject, variantPrefix);
+            if (result.className) {classes.push(result.className);}
+        } else if (isVariant) {
+            // { group: { hover: { ... }}} → group-hover:
+            const mappedVariant = getVariantPrefix(nestedKey);
+            const variantPrefix = `${prefix}${type}-${mappedVariant}:`;
+            const result = transform(nestedValue as SzObject, variantPrefix);
+            if (result.className) {classes.push(result.className);}
+        } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+            // { group: { name: { hover: { ... }}}} → group-hover/name:
+            for (const [state, stateValue] of Object.entries(nestedValue as SzObject)) {
+                if (stateValue === null || stateValue === undefined || stateValue === false) {
+                    continue;
+                }
+                const mappedState = getVariantPrefix(state);
+                const variantPrefix = `${prefix}${type}-${mappedState}/${nestedKey}:`;
+                const result = transform(stateValue as SzObject, variantPrefix);
+                if (result.className) {classes.push(result.className);}
+            }
+        }
+    }
+
+    return classes;
+}
+
+/**
+ * Handles has variant with special syntax
+ * { has: { img: { bg: "blue" }}} → has-[img]:bg-blue
+ * { has: { checked: { bg: "blue" }}} → has-[:checked]:bg-blue
+ * @param hasObj - the has variant object with selector-value pairs
+ * @param prefix - the current class name prefix
+ * @returns array of generated class names
+ */
+function handleHas(hasObj: SzObject, prefix: string): string[] {
+    const classes: string[] = [];
+
+    for (const [selector, value] of Object.entries(hasObj)) {
+        if (value === null || value === undefined || value === false) {
+            continue;
+        }
+
+        // Determine the selector format
+        let selectorStr: string;
+        // Check if it's a state (needs colon prefix)
+        if (KNOWN_VARIANTS.has(selector) || selector.startsWith(':')) {
+            selectorStr = selector.startsWith(':') ? selector : `:${selector}`;
+        } else {
+            selectorStr = selector;
+        }
+
+        const variantPrefix = `${prefix}has-[${selectorStr}]:`;
+        const result = transform(value as SzObject, variantPrefix);
+        if (result.className) {classes.push(result.className);}
+    }
+
+    return classes;
+}
+
+/**
+ * Handles not variant with special syntax
+ * { not: { hover: { opacity: 75 }}} → not-hover:opacity-75
+ * { not: { supports: { "display:grid": { block: true }}}} → not-supports-[display:grid]:block
+ * @param notObj - the not variant object with condition-value pairs
+ * @param prefix - the current class name prefix
+ * @returns array of generated class names
+ */
+function handleNot(notObj: SzObject, prefix: string): string[] {
+    const classes: string[] = [];
+
+    for (const [key, value] of Object.entries(notObj)) {
+        if (value === null || value === undefined || value === false) {
+            continue;
+        }
+
+        // Handle nested supports/has
+        if (key === 'supports' && typeof value === 'object') {
+            for (const [condition, condValue] of Object.entries(value as SzObject)) {
+                const variantPrefix = `${prefix}not-supports-[${condition}]:`;
+                const result = transform(condValue as SzObject, variantPrefix);
+                if (result.className) {classes.push(result.className);}
+            }
+        } else {
+            // Simple not variant
+            const mappedVariant = getVariantPrefix(key);
+            const variantPrefix = `${prefix}not-${mappedVariant}:`;
+            const result = transform(value as SzObject, variantPrefix);
+            if (result.className) {classes.push(result.className);}
+        }
+    }
+
+    return classes;
+}
+
+/**
+ * Handles data attribute variant
+ * { data: { active: { text: "blue" }}} → data-[active]:text-blue
+ * @param dataObj - the data variant object with attribute-value pairs
+ * @param prefix - the current class name prefix
+ * @returns array of generated class names
+ */
+function handleData(dataObj: SzObject, prefix: string): string[] {
+    const classes: string[] = [];
+
+    for (const [key, value] of Object.entries(dataObj)) {
+        if (value === null || value === undefined || value === false) {
+            continue;
+        }
+
+        const variantPrefix = `${prefix}data-[${key}]:`;
+        const result = transform(value as SzObject, variantPrefix);
+        if (result.className) {classes.push(result.className);}
+    }
+
+    return classes;
+}
+
+/**
+ * Handles aria attribute variant
+ * { aria: { expanded: { text: "blue" }}} → aria-expanded:text-blue
+ * { aria: { "busy=true": { text: "blue" }}} → aria-[busy=true]:text-blue
+ * @param ariaObj - the aria variant object with attribute-value pairs
+ * @param prefix - the current class name prefix
+ * @returns array of generated class names
+ */
+function handleAria(ariaObj: SzObject, prefix: string): string[] {
+    const classes: string[] = [];
+
+    for (const [key, value] of Object.entries(ariaObj)) {
+        if (value === null || value === undefined || value === false) {
+            continue;
+        }
+
+        let variantPrefix: string;
+        if (ARIA_STATES.has(key)) {
+            // Standard aria state
+            variantPrefix = `${prefix}aria-${key}:`;
+        } else {
+            // Arbitrary aria attribute
+            variantPrefix = `${prefix}aria-[${key}]:`;
+        }
+
+        const result = transform(value as SzObject, variantPrefix);
+        if (result.className) {classes.push(result.className);}
+    }
+
+    return classes;
+}
+
+/**
+ * Handles supports variant
+ * { supports: { "display:grid": { grid: true }}} → supports-[display:grid]:grid
+ * @param supportsObj - the supports variant object with condition-value pairs
+ * @param prefix - the current class name prefix
+ * @returns array of generated class names
+ */
+function handleSupports(supportsObj: SzObject, prefix: string): string[] {
+    const classes: string[] = [];
+
+    for (const [condition, value] of Object.entries(supportsObj)) {
+        if (value === null || value === undefined || value === false) {
+            continue;
+        }
+
+        const variantPrefix = `${prefix}supports-[${condition}]:`;
+        const result = transform(value as SzObject, variantPrefix);
+        if (result.className) {classes.push(result.className);}
+    }
+
+    return classes;
+}
+
+// ============================================================================
+// MAIN TRANSFORM FUNCTION
+// ============================================================================
+
+/**
+ * Transforms a csszyx sz object into a Tailwind CSS className string and extracted attributes.
+ *
+ * @param {SzObject} szProp - The sz object from JSX
+ * @param {string} prefix - Variant prefix for nested properties
+ * @param {Record<string, string>} [mangleMap] - Optional map for property name mangling
+ * @returns {TransformResult} The transformation result
+ */
+export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<string, string>): TransformResult {
+    // Input validation
+    if (!szProp || typeof szProp !== 'object') {
+        return { className: '', attributes: {} };
+    }
+
+    const classes: string[] = [];
+    const attributes: Record<string, string> = {};
+
+    for (const [rawKey, value] of Object.entries(szProp)) {
+        // Special handling for boolean false that maps to specific classes
+        // { italic: false } → not-italic
+        // { antialiased: false } → subpixel-antialiased
+        if (value === false) {
+            if (rawKey === 'italic') {
+                classes.push(`${prefix}not-italic`);
+            } else if (rawKey === 'antialiased') {
+                classes.push(`${prefix}subpixel-antialiased`);
+            }
+            // Skip other false values
+            continue;
+        }
+
+        // Skip null/undefined values
+        if (value === null || value === undefined) {
+            continue;
+        }
+
+        // { @container: "sidebar" } → @container/sidebar (string value with @ prefix)
+        if (rawKey.startsWith('@') && typeof value === 'string') {
+            const mappedKey = VARIANT_MAP[rawKey] || rawKey;
+            classes.push(`${prefix}${mappedKey}/${value}`);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE bgImg OBJECT SYNTAX (before variant nesting)
+        // { bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } } → bg-linear-to-r/hsl
+        // ================================================================
+        if (rawKey === 'bgImg' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            const grad = value as { gradient?: string; dir?: string | number; in?: string };
+            const gradType = grad.gradient;
+            if (!gradType) {continue;}
+
+            let cls = '';
+            if (gradType === 'linear') {
+                const dir = grad.dir ?? 'to-r'; // default direction
+                if (typeof dir === 'number') {
+                    if (dir < 0) {
+                        cls = `-bg-linear-${Math.abs(dir)}`;
+                    } else {
+                        cls = `bg-linear-${dir}`;
+                    }
+                } else if (typeof dir === 'string') {
+                    if (dir.startsWith('--')) {
+                        cls = `bg-linear-(${dir})`;
+                    } else if (dir.startsWith('to-')) {
+                        cls = `bg-linear-${dir}`;
+                    } else {
+                        // Arbitrary: contains commas, spaces, etc.
+                        cls = `bg-linear-[${normalizeArbitraryValue(dir)}]`;
+                    }
+                }
+            } else if (gradType === 'radial') {
+                const dir = grad.dir;
+                if (dir === undefined || dir === null) {
+                    cls = 'bg-radial';
+                } else if (typeof dir === 'string') {
+                    if (dir.startsWith('--')) {
+                        cls = `bg-radial-(${dir})`;
+                    } else {
+                        cls = `bg-radial-[${normalizeArbitraryValue(dir)}]`;
+                    }
+                }
+            } else if (gradType === 'conic') {
+                const dir = grad.dir;
+                if (dir === undefined || dir === null) {
+                    cls = 'bg-conic';
+                } else if (typeof dir === 'number') {
+                    if (dir < 0) {
+                        cls = `-bg-conic-${Math.abs(dir)}`;
+                    } else {
+                        cls = `bg-conic-${dir}`;
+                    }
+                } else if (typeof dir === 'string') {
+                    if (dir.startsWith('--')) {
+                        cls = `bg-conic-(${dir})`;
+                    } else {
+                        cls = `bg-conic-[${normalizeArbitraryValue(dir)}]`;
+                    }
+                }
+            }
+
+            // Append color interpolation suffix
+            if (grad.in) {
+                cls += `/${grad.in}`;
+            }
+
+            if (cls) {
+                classes.push(`${prefix}${cls}`);
+            }
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE NAMED GROUP/PEER (string value → group/name, peer/name)
+        // ================================================================
+        if ((rawKey === 'group' || rawKey === 'peer') && typeof value === 'string') {
+            classes.push(`${prefix}${rawKey}/${value}`);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE COLOR OBJECT SYNTAX (before variant nesting)
+        // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
+        // ================================================================
+        if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'color' in (value as Record<string, unknown>)) {
+            const colorObj = value as { color: string; op?: number | string };
+            const twPrefix = PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+            const colorBase = String(colorObj.color);
+
+            if (colorObj.op !== undefined) {
+                const opStr = formatOpacity(colorObj.op);
+                classes.push(`${prefix}${twPrefix}-${colorBase}/${opStr}`);
+            } else {
+                classes.push(`${prefix}${twPrefix}-${colorBase}`);
+            }
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE NESTED OBJECTS (VARIANTS)
+        // ================================================================
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            // Handle special variants with custom syntax
+            if (rawKey === 'group') {
+                const groupClasses = handleGroupPeer('group', value as SzObject, prefix);
+                classes.push(...groupClasses);
+                continue;
+            }
+
+            if (rawKey === 'peer') {
+                const peerClasses = handleGroupPeer('peer', value as SzObject, prefix);
+                classes.push(...peerClasses);
+                continue;
+            }
+
+            if (rawKey === 'has') {
+                const hasClasses = handleHas(value as SzObject, prefix);
+                classes.push(...hasClasses);
+                continue;
+            }
+
+            if (rawKey === 'not') {
+                const notClasses = handleNot(value as SzObject, prefix);
+                classes.push(...notClasses);
+                continue;
+            }
+
+            if (rawKey === 'data') {
+                const dataClasses = handleData(value as SzObject, prefix);
+                classes.push(...dataClasses);
+                continue;
+            }
+
+            if (rawKey === 'aria') {
+                const ariaClasses = handleAria(value as SzObject, prefix);
+                classes.push(...ariaClasses);
+                continue;
+            }
+
+            if (rawKey === 'supports') {
+                const supportsClasses = handleSupports(value as SzObject, prefix);
+                classes.push(...supportsClasses);
+                continue;
+            }
+
+            // Handle min/max breakpoints with arbitrary values
+            // { min: { '320px': { ... }}} → min-[320px]:...
+            // { min: { md: { ... }}} → min-md:...
+            // { min: { '[320px]': { ... }}} → min-[320px]:... (legacy bracket keys still work)
+            if (rawKey === 'min' || rawKey === 'max') {
+                const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+                for (const [breakpoint, breakpointValue] of Object.entries(value as SzObject)) {
+                    if (breakpointValue === null || breakpointValue === undefined || breakpointValue === false) {
+                        continue;
+                    }
+                    let bpStr: string;
+                    if (isArbitraryVariant(breakpoint)) {
+                        // Already has brackets: [320px] → min-[320px]
+                        bpStr = `${rawKey}-${breakpoint}`;
+                    } else if (KNOWN_BP.has(breakpoint)) {
+                        // Named breakpoint: md → min-md
+                        bpStr = `${rawKey}-${breakpoint}`;
+                    } else {
+                        // Arbitrary value without brackets: 320px → min-[320px]
+                        bpStr = `${rawKey}-[${breakpoint}]`;
+                    }
+                    const nestedPrefix = `${prefix}${bpStr}:`;
+                    const result = transform(breakpointValue as SzObject, nestedPrefix);
+                    if (result.className) {classes.push(result.className);}
+                }
+                continue;
+            }
+
+            // Handle container queries with @ prefix
+            // { @md: { flex: true }} → @md:flex (direct property)
+            // { @md: { sidebar: { ... }}} → @md/sidebar:... (named container)
+            // { @min: { "[475px]": { ... }}} → @min-[475px]:...
+            if (rawKey.startsWith('@')) {
+                // Map the @ query key through VARIANT_MAP if needed
+                const mappedKey = VARIANT_MAP[rawKey] || rawKey;
+
+                // { @container: "sidebar" } → @container/sidebar
+                if (typeof value === 'string') {
+                    classes.push(`${prefix}${mappedKey}/${value}`);
+                    continue;
+                }
+
+                const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+                for (const [nestedKey, nestedValue] of Object.entries(value as SzObject)) {
+                    if (nestedValue === null || nestedValue === undefined || nestedValue === false) {
+                        continue;
+                    }
+                    // Check if it's an arbitrary value like [475px] (legacy bracket keys)
+                    if (isArbitraryVariant(nestedKey)) {
+                        const nestedPrefix = `${prefix}${mappedKey}-${nestedKey}:`;
+                        const result = transform(nestedValue as SzObject, nestedPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    } else if ((mappedKey === '@min' || mappedKey === '@max') &&
+                             typeof nestedValue === 'object' && nestedValue !== null &&
+                             !KNOWN_BP.has(nestedKey) &&
+                             !PROPERTY_MAP[nestedKey] && !BOOLEAN_SHORTHANDS.has(nestedKey)) {
+                        // Auto-wrap arbitrary breakpoint values in brackets
+                        // { '@min': { '475px': { ... }}} → @min-[475px]:...
+                        const nestedPrefix = `${prefix}${mappedKey}-[${nestedKey}]:`;
+                        const result = transform(nestedValue as SzObject, nestedPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    } else if (PROPERTY_MAP[nestedKey] || BOOLEAN_SHORTHANDS.has(nestedKey) ||
+                             nestedKey.startsWith('@')) {
+                        // Check if nestedKey is a property (not a container name)
+                        // Properties are in PROPERTY_MAP or BOOLEAN_SHORTHANDS
+                        // It's a direct property or another @ query
+                        const nestedPrefix = `${prefix}${mappedKey}:`;
+                        const result = transform({ [nestedKey]: nestedValue } as SzObject, nestedPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+                        // It's a named container: @md/sidebar
+                        const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
+                        const result = transform(nestedValue as SzObject, nestedPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    } else {
+                        // Fallback: treat as property
+                        const nestedPrefix = `${prefix}${mappedKey}:`;
+                        const result = transform({ [nestedKey]: nestedValue } as SzObject, nestedPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    }
+                }
+                continue;
+            }
+
+            // Handle arbitrary variants (Fix #5)
+            if (isArbitraryVariant(rawKey)) {
+                const normalizedKey = normalizeArbitraryVariant(rawKey);
+                const nestedPrefix = `${prefix}${normalizedKey}:`;
+                const nestedResult = transform(value as SzObject, nestedPrefix);
+                if (nestedResult.className) {
+                    classes.push(nestedResult.className);
+                }
+                continue;
+            }
+
+            // Standard variant handling
+            const variantName = getVariantPrefix(rawKey);
+            const nestedPrefix = `${prefix}${variantName}:`;
+            const nestedResult = transform(value as SzObject, nestedPrefix);
+            if (nestedResult.className) {
+                classes.push(nestedResult.className);
+            }
+            continue;
+        }
+
+        // Check snap direct mappings
+        if (SNAP_DIRECT_MAP[rawKey] && typeof value === 'string') {
+            const mapped = SNAP_DIRECT_MAP[rawKey][value as string];
+            if (mapped) {
+                classes.push(`${prefix}${mapped}`);
+                continue;
+            }
+        }
+
+        // ================================================================
+        // HANDLE STRING VALUES THAT ARE ACTUALLY VARIANT SHORTCUTS
+        // ================================================================
+        // e.g., { hover: "bg-sky-700" } → hover:bg-sky-700
+        if (typeof value === 'string' && KNOWN_VARIANTS.has(rawKey)) {
+            const variantName = getVariantPrefix(rawKey);
+            classes.push(`${prefix}${variantName}:${value}`);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE CSS CUSTOM PROPERTY DECLARATIONS
+        // ================================================================
+        // { "--my-var": "10px" } → [--my-var:10px]
+        if (rawKey.startsWith('--')) {
+            classes.push(`${prefix}[${rawKey}:${value}]`);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE CONTAINER PROPERTY
+        // ================================================================
+        // { container: true } → container (the utility class)
+        // { container: "sidebar" } → @container/sidebar (named container)
+        if (rawKey === 'container') {
+            if (value === true) {
+                classes.push(`${prefix}container`);
+            } else if (typeof value === 'string') {
+                classes.push(`${prefix}@container/${value}`);
+            }
+            continue;
+        }
+
+        // ================================================================
+        // RESOLVE PROPERTY NAME
+        // ================================================================
+        let key = rawKey;
+        if (PROPERTY_MAP[key]) {
+            key = PROPERTY_MAP[key];
+        } else {
+            // Fallback: Convert camelCase to kebab-case
+            key = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        }
+
+        let className = prefix;
+
+        // ================================================================
+        // HANDLE SPECIAL PROPERTIES
+        // ================================================================
+
+        // Handle will-change (opt-in mapping)
+        if (rawKey === 'willChange' && typeof value === 'string') {
+            if (value === 'scroll') {
+                classes.push(`${prefix}will-change-scroll-position`);
+            } else if (value.startsWith('--')) {
+                classes.push(`${prefix}will-change-(${value})`);
+            } else {
+                classes.push(`${prefix}will-change-${value}`);
+            }
+            continue;
+        }
+
+        // Handle display property (special mapping)
+        if (key === 'display') {
+            if (typeof value === 'string') {
+                if (value === 'none') {
+                    className += 'hidden';
+                } else {
+                    className += value;
+                }
+                classes.push(className);
+                continue;
+            }
+        }
+
+        // Handle position property (direct value)
+        if (key === 'position') {
+            if (typeof value === 'string') {
+                className += value;
+                classes.push(className);
+                continue;
+            }
+        }
+
+        // Handle visibility property (direct value mapping)
+        // { visibility: "visible" } → visible
+        // { visibility: "hidden" } → invisible
+        // { visibility: "collapse" } → collapse
+        if (key === 'visibility') {
+            if (typeof value === 'string') {
+                if (value === 'hidden') {
+                    className += 'invisible';
+                } else {
+                    className += value; // visible, collapse
+                }
+                classes.push(className);
+                continue;
+            }
+        }
+
+        // Handle isolation property (direct value only for "isolate")
+        // { isolation: "isolate" } → isolate
+        // { isolation: "auto" } → isolation-auto
+        if (key === 'isolation') {
+            if (typeof value === 'string') {
+                if (value === 'isolate') {
+                    className += 'isolate';
+                } else {
+                    className += `isolation-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+        }
+
+        // ================================================================
+        // HANDLE fromPos/viaPos/toPos NUMBER VALUES
+        // { fromPos: 50 } → from-50%, { viaPos: 30 } → via-30%, { toPos: 100 } → to-100%
+        // ================================================================
+        if ((rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') && typeof value === 'number') {
+            const gradPrefix = rawKey.replace('Pos', '');
+            classes.push(`${prefix}${gradPrefix}-${value}%`);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE DIRECT OUTPUT PROPERTIES (shorthands)
+        // ================================================================
+        if (typeof value === 'string') {
+            // decoration: 'underline' | 'overline' | 'line-through' | 'no-underline' → direct output
+            if (rawKey === 'decoration') {
+                if (['underline', 'overline', 'line-through', 'no-underline', 'none'].includes(value)) {
+                    className += value === 'none' ? 'no-underline' : value;
+                    classes.push(className);
+                    continue;
+                }
+            }
+
+            // textTransform: 'uppercase' | 'lowercase' | 'capitalize' | 'normal-case' → direct output
+            if (rawKey === 'textTransform') {
+                if (['uppercase', 'lowercase', 'capitalize', 'normal-case'].includes(value)) {
+                    className += value;
+                    classes.push(className);
+                    continue;
+                }
+            }
+
+            // fontVariant: 'normal-nums' | 'ordinal' | etc → direct output
+            if (rawKey === 'fontVariant') {
+                const FONT_VARIANT_CLASSES = new Set([
+                    'normal-nums', 'ordinal', 'slashed-zero', 'lining-nums', 'oldstyle-nums',
+                    'proportional-nums', 'tabular-nums', 'diagonal-fractions', 'stacked-fractions',
+                ]);
+                if (FONT_VARIANT_CLASSES.has(value)) {
+                    className += value;
+                    classes.push(className);
+                    continue;
+                }
+            }
+
+            // textWrap: 'wrap' | 'nowrap' | 'balance' | 'pretty' → text-wrap, text-nowrap, etc.
+            if (rawKey === 'textWrap') {
+                className += `text-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // break: 'normal' | 'all' | 'keep' → break-normal, break-all, break-keep
+            if (rawKey === 'break') {
+                const wbMap: Record<string, string> = {
+                    'normal': 'break-normal',
+                    'all': 'break-all', 'keep': 'break-keep',
+                    'break-normal': 'break-normal',
+                    'break-all': 'break-all', 'break-keep': 'break-keep',
+                };
+                className += wbMap[value] || `break-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // wrap: 'normal' | 'break-word' | 'anywhere' → wrap-normal, wrap-break-word, wrap-anywhere
+            if (rawKey === 'wrap') {
+                const owMap: Record<string, string> = {
+                    'normal': 'wrap-normal',
+                    'break-word': 'wrap-break-word',
+                    'anywhere': 'wrap-anywhere',
+                    'wrap-normal': 'wrap-normal',
+                    'wrap-break-word': 'wrap-break-word',
+                    'wrap-anywhere': 'wrap-anywhere',
+                };
+                className += owMap[value] || `wrap-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // textOverflow: 'ellipsis' → truncate, 'clip' → text-clip
+            if (rawKey === 'textOverflow') {
+                if (value === 'ellipsis') {
+                    classes.push(`${prefix}truncate`);
+                } else {
+                    classes.push(`${prefix}text-${value}`);
+                }
+                continue;
+            }
+
+            // Fix 4: Line Clamp 7+ Arbitrary
+            if (rawKey === 'lineClamp') {
+                const sValue = String(value);
+                if (sValue.startsWith('--')) {
+                    className += `line-clamp-(${sValue})`;
+                } else {
+                    // Tailwind v4: line-clamp accepts any number dynamically
+                    const numVal = Number(sValue);
+                    if (!isNaN(numVal) && Number.isInteger(numVal)) {
+                        className += `line-clamp-${sValue}`;
+                    } else {
+                        className += `line-clamp-[${sValue}]`;
+                    }
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // Fix 5: List Style Arbitrary
+            if (rawKey === 'list' || rawKey === 'listStyle') {
+                const sValue = String(value);
+                if (sValue.startsWith('--')) {
+                    className += `list-(${sValue})`;
+                } else if (LIST_STYLE_STANDARD.has(sValue)) {
+                    className += `list-${sValue}`;
+                } else {
+                    className += `list-[${sValue}]`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // listPosition: 'inside' | 'outside' → list-inside, list-outside
+            if (rawKey === 'listPos') {
+                className += `list-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // divideStyle: 'solid' | 'dashed' | etc → divide-solid, divide-dashed
+            if (rawKey === 'divideStyle') {
+                className += `divide-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // decorationStyle: 'solid' | 'dashed' | etc → decoration-solid, decoration-dashed
+            if (rawKey === 'decorationStyle' || rawKey === 'textDecorationStyle') {
+                className += `decoration-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // decorationColor: 'red-500' → decoration-red-500
+            if (rawKey === 'decorationColor' || rawKey === 'textDecorationColor') {
+                className += `decoration-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // decorationThickness: '2' | '3px' → decoration-2, decoration-[3px]
+            if (rawKey === 'decorationThickness' || rawKey === 'textDecorationThickness') {
+                if (needsArbitraryBrackets(value)) {
+                    className += `decoration-[${value}]`;
+                } else if (value.startsWith('--')) {
+                    className += `decoration-(${value})`;
+                } else {
+                    className += `decoration-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // fontStretch: '50%' | '125%' → font-stretch-50%, font-stretch-[125%]
+            // fontStretch: '50%' | '125%' → font-stretch-50%, font-stretch-[125%]
+            // Fix 6: Font Stretch Keywords
+            if (rawKey === 'fontStretch') {
+                const sValue = String(value);
+                if (FONT_STRETCH_KEYWORDS.has(sValue)) {
+                    // Keywords use font- prefix: font-ultra-condensed
+                    className += `font-${sValue}`;
+                } else if (sValue.startsWith('--')) {
+                    className += `font-stretch-(${sValue})`;
+                } else if (/^\d+%$/.test(sValue)) {
+                    // Percentage values: font-stretch-50%, font-stretch-125%
+                    className += `font-stretch-${sValue}`;
+                } else {
+                    className += `font-stretch-[${sValue}]`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // Fix 12: maxW: 'container' Sugar
+            if (rawKey === 'maxW' && value === 'container') {
+                classes.push('container');
+                continue;
+            }
+
+            // Fix 8: Shadow Color
+            if (rawKey === 'shadowColor') {
+                if (String(value).startsWith('--')) {
+                    classes.push(`shadow-(color:${value})`);
+                } else {
+                    classes.push(`shadow-${value}`);
+                }
+                continue;
+            }
+
+            // Fix 2: Brightness/Contrast/Saturate/Scale — strings are NEVER parsed as numbers
+            if (rawKey === 'brightness' || rawKey === 'contrast' || rawKey === 'saturate' || rawKey === 'scale' ||
+                rawKey === 'backdropBrightness' || rawKey === 'backdropContrast' || rawKey === 'backdropSaturate') {
+                const prop = rawKey.startsWith('backdrop')
+                    ? `backdrop-${rawKey.slice(8).toLowerCase()}`
+                    : rawKey;
+                const sValue = String(value);
+                if (sValue.startsWith('--')) {
+                    classes.push(`${prop}-(${sValue})`);
+                } else {
+                    // String values always go to arbitrary []
+                    classes.push(`${prop}-[${sValue}]`);
+                }
+                continue;
+            }
+            // textShadow: 'sm' | 'md' → text-shadow (default), text-shadow-sm, etc.
+            if (rawKey === 'textShadow') {
+                if (value === 'none') {
+                    className += 'text-shadow-none';
+                } else if (value === '') {
+                    className += 'text-shadow';
+                } else if (needsArbitraryBrackets(value)) {
+                    className += `text-shadow-[${normalizeArbitraryValue(value)}]`;
+                } else {
+                    className += `text-shadow-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // textShadowColor: 'blue-500' → text-shadow-blue-500
+            if (rawKey === 'textShadowColor') {
+                className += `text-shadow-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // fromPos/viaPos/toPos: '10%' → from-10%, to-50%, etc.
+            // Tailwind v4: any integer % is dynamic (bare), decimals need brackets
+            if (rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') {
+                const gradPrefix = rawKey.replace('Pos', '');
+                const sValue = String(value);
+                if (value.startsWith('--')) {
+                    classes.push(`${gradPrefix}-(${value})`);
+                } else if (/^\d+%$/.test(sValue)) {
+                    // Integer percentage: bare (e.g. from-15%, to-88%)
+                    classes.push(`${gradPrefix}-${sValue}`);
+                } else {
+                    // Decimal percentage or other: brackets (e.g. from-[13.5%])
+                    classes.push(`${gradPrefix}-[${sValue}]`);
+                }
+                continue;
+            }
+
+            // bgImg handler
+            if (rawKey === 'bgImg') {
+                const v = String(value).trim();
+                // Keywords
+                if (v === 'none') {
+                    classes.push('bg-none');
+                    continue;
+                }
+                // Gradient prefixes: linear-*, radial*, conic* (with optional negative)
+                // v3 compat: gradient-to-* → linear-to-* (v4 renamed bg-gradient-to-* to bg-linear-to-*)
+                const vNorm = v.startsWith('-') ? v.slice(1) : v;
+                if (vNorm.startsWith('linear-') || vNorm.startsWith('radial') || vNorm.startsWith('conic') || vNorm.startsWith('gradient-to-')) {
+                    const vMapped = vNorm.startsWith('gradient-to-') ? vNorm.replace('gradient-to-', 'linear-to-') : vNorm;
+                    if (v.startsWith('-')) {
+                        classes.push(`-bg-${vMapped}`);
+                    } else {
+                        classes.push(`bg-${vMapped}`);
+                    }
+                    continue;
+                }
+                // CSS variable
+                if (v.startsWith('--')) {
+                    classes.push(`bg-(image:${v})`);
+                    continue;
+                }
+                // Already has url()
+                if (v.startsWith('url(')) {
+                    classes.push(`bg-[${v}]`);
+                    continue;
+                }
+                // Arbitrary URL
+                classes.push(`bg-[url(${v})]`);
+                continue;
+            }
+
+            // bgPos: 'center' → bg-center, 'center_top_1rem' → bg-[center_top_1rem]
+            if (rawKey === 'bgPos') {
+                const sVal = String(value);
+                if (sVal.startsWith('--')) {
+                    classes.push(`bg-(${sVal})`);
+                } else if (sVal.includes('_') || needsArbitraryBrackets(sVal)) {
+                    classes.push(`bg-[${normalizeArbitraryValue(sVal)}]`);
+                } else {
+                    classes.push(`bg-${sVal}`);
+                }
+                continue;
+            }
+
+            // maskPos: 'center' → mask-center
+            if (rawKey === 'maskPos') {
+                className += `mask-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // maskRepeat: 'repeat' → mask-repeat (not mask-repeat-repeat)
+            if (rawKey === 'maskRepeat') {
+                if (value === 'repeat') {
+                    className += 'mask-repeat';
+                } else if (value === 'no-repeat') {
+                    className += 'mask-no-repeat';
+                } else {
+                    className += `mask-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // maskSize: 'cover' | 'contain' | 'auto' → mask-auto, mask-cover, mask-contain
+            if (rawKey === 'maskSize') {
+                className += `mask-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // maskShape: 'circle' | 'ellipse' → mask-circle, mask-ellipse
+            if (rawKey === 'maskShape') {
+                className += `mask-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // maskComposite: 'add' | 'subtract' | etc → mask-add, mask-subtract
+            if (rawKey === 'maskComposite') {
+                className += `mask-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // maskMode: 'alpha' | 'luminance' | 'match-source' → mask-alpha, mask-luminance
+            if (rawKey === 'maskMode') {
+                className += `mask-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // maskType: 'alpha' | 'luminance' → mask-type-alpha, mask-type-luminance
+            if (rawKey === 'maskType') {
+                className += `mask-type-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // content: "'hello'" → content-['hello'], '--c' → content-(--c)
+            if (rawKey === 'content') {
+                if (value.startsWith('--')) {
+                    className += `content-(${value})`;
+                } else if (!['none', 'empty'].includes(value)) {
+                    className += `content-[${value}]`;
+                } else {
+                    className += `content-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // Border side colors: borderTColor → border-t-{color}
+            if (rawKey === 'borderTColor') {
+                className += `border-t-${value}`;
+                classes.push(className);
+                continue;
+            }
+            if (rawKey === 'borderRColor') {
+                className += `border-r-${value}`;
+                classes.push(className);
+                continue;
+            }
+            if (rawKey === 'borderBColor') {
+                className += `border-b-${value}`;
+                classes.push(className);
+                continue;
+            }
+            if (rawKey === 'borderLColor') {
+                className += `border-l-${value}`;
+                classes.push(className);
+                continue;
+            }
+            if (rawKey === 'borderXColor') {
+                className += `border-x-${value}`;
+                classes.push(className);
+                continue;
+            }
+            if (rawKey === 'borderYColor') {
+                className += `border-y-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // transitionBehavior: 'discrete' | 'normal' → transition-discrete, transition-normal
+            if (rawKey === 'transitionBehavior') {
+                className += `transition-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // dropShadowColor: 'red-500' → drop-shadow-red-500
+            if (rawKey === 'dropShadowColor') {
+                if (value.startsWith('--')) {
+                    className += `drop-shadow-(color:${value})`;
+                } else {
+                    className += `drop-shadow-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // Fix 10: Properties that need arbitrary brackets for complex values
+            // (contains parens, underscores, % in multi-part values, etc.)
+            if (rawKey === 'origin' || rawKey === 'ease' || rawKey === 'animate' ||
+                rawKey === 'filter' || rawKey === 'backdropFilter' || rawKey === 'dropShadow') {
+                const sVal = String(value);
+                const prop = PROPERTY_MAP[rawKey] || rawKey;
+                if (needsArbitraryBrackets(sVal) || sVal.includes('(') || sVal.includes('_') || sVal.includes('%')) {
+                    classes.push(`${prop}-[${normalizeArbitraryValue(sVal)}]`);
+                    continue;
+                }
+            }
+
+            // transformStyle: 'flat' | 'preserve-3d' → transform-flat, transform-3d
+            if (rawKey === 'transformStyle') {
+                if (value === 'preserve-3d' || value === '3d') {
+                    className += 'transform-3d';
+                } else {
+                    className += `transform-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // perspective: keywords → perspective-*, values → perspective-[value]
+            if (rawKey === 'perspective') {
+                const STANDARD_PERSPECTIVE = new Set(['none', 'normal', 'dramatic', 'midrange']);
+                if (STANDARD_PERSPECTIVE.has(value)) {
+                    className += `perspective-${value}`;
+                } else if (value.startsWith('--')) {
+                    className += `perspective-(${value})`;
+                } else if (needsArbitraryBrackets(value)) {
+                    className += `perspective-[${value}]`;
+                } else {
+                    className += `perspective-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // perspectiveOrigin: 'center' | '33%_75%' → perspective-origin-center, perspective-origin-[33%_75%]
+            if (rawKey === 'perspectiveOrigin') {
+                const STANDARD_ORIGINS = new Set(['center', 'top', 'right', 'bottom', 'left', 'top-left', 'top-right', 'bottom-left', 'bottom-right']);
+                if (STANDARD_ORIGINS.has(value)) {
+                    className += `perspective-origin-${value}`;
+                } else {
+                    className += `perspective-origin-[${value}]`;
+                }
+                classes.push(className);
+                continue;
+            }
+
+            // backfaceVisibility: 'hidden' | 'visible' → backface-hidden, backface-visible
+            if (rawKey === 'backface') {
+                className += `backface-${value}`;
+                classes.push(className);
+                continue;
+            }
+        }
+
+        // ================================================================
+        // GENERIC / FALLBACK HANDLERS
+        // ================================================================
+
+        // Dev-mode warning for unknown properties
+        if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+            // Check if key is known
+            // We use 'key' (resolved kebab-case) for some checks, 'rawKey' for others
+            const isKnown =
+                PROPERTY_MAP[rawKey] ||
+                BOOLEAN_SHORTHANDS.has(rawKey) ||
+                SNAP_DIRECT_MAP[rawKey] ||
+                NEEDS_ARBITRARY_PROPERTY.has(key) ||
+                rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos' ||
+                rawKey.startsWith('--') ||
+                rawKey.startsWith('[') ||
+                rawKey.startsWith('@') ||
+                // Variants that fell through (e.g. empty object)
+                KNOWN_VARIANTS.has(rawKey) ||
+                // Groups/Peers
+                rawKey === 'group' || rawKey === 'peer' ||
+                // Special variant objects
+                rawKey === 'has' || rawKey === 'not' || rawKey === 'data' || rawKey === 'aria' || rawKey === 'supports' ||
+                rawKey === 'min' || rawKey === 'max';
+
+            if (!isKnown) {
+                const suggestion = SUGGESTION_MAP[rawKey];
+                if (suggestion) {
+                    console.warn(
+                        `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}".`,
+                    );
+                } else {
+                    // Object.entries guarantees unique keys, so each rawKey is visited once per call.
+                    console.warn(
+                        `[csszyx] Unknown property "${rawKey}" in sz prop. ` +
+                        'This will be ignored. Check for typos.',
+                    );
+                }
+            }
+        }
+
+        // ================================================================
+        // HANDLE BOOLEAN TRUE VALUES
+        // ================================================================
+        if (value === true) {
+            // Check if it's a known boolean shorthand
+            if (BOOLEAN_SHORTHANDS.has(rawKey)) {
+                // Use the mapped class name if available
+                const mappedClass = BOOLEAN_TO_CLASS[rawKey] || key;
+                className += mappedClass;
+            } else {
+                className += key;
+            }
+            classes.push(className);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE NUMERIC VALUES
+        // ================================================================
+        if (typeof value === 'number') {
+            // Handle negative values
+            if (value < 0 && NEGATIVE_ALLOWED.has(key)) {
+                className += `-${key}-${Math.abs(value)}`;
+            } else {
+                // Tailwind v4: all <number> values are dynamic — no brackets needed
+                className += `${key}-${value}`;
+            }
+            classes.push(className);
+            continue;
+        }
+
+        // ================================================================
+        // HANDLE STRING VALUES
+        // ================================================================
+        if (typeof value === 'string') {
+            // Check for important modifier (Fix #4)
+            const { value: cleanValue, important } = handleImportant(value);
+            let finalValue = cleanValue;
+
+            // Check if this property needs arbitrary property syntax [prop:value]
+            // Only use for truly unknown CSS properties like mask-type
+            // { maskType: "luminance" } → [mask-type:luminance]
+            if (NEEDS_ARBITRARY_PROPERTY.has(key)) {
+                const arbitraryProp = `[${key}:${finalValue}]`;
+                className += arbitraryProp;
+                if (important) {
+                    className += '!';
+                }
+                classes.push(className);
+                continue;
+            }
+
+            const isAspectRatio = key === 'aspect' && /^\d+\/\d+$/.test(finalValue);
+
+            // v4 Variable Syntax: '--color' → '(--color)'
+            if (finalValue.startsWith('--')) {
+                finalValue = `(${finalValue})`;
+            } else if (finalValue.startsWith('var(')) {
+                // var(--x) should be wrapped in brackets for arbitrary value syntax
+                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
+            } else if (/^\d+\/\d+$/.test(finalValue)) {
+                // Check if it's a bare fraction (e.g. 3/4, 1/2)
+                if (!FRACTION_SUPPORTED_PROPS.has(rawKey)) {
+                    // Not in whitelist — wrap in brackets (col-[3/4])
+                    finalValue = `[${finalValue}]`;
+                }
+                // else: allowed bare fraction (w-1/2, basis-1/3)
+            } else if (needsArbitraryBrackets(finalValue) || isAspectRatio || /^\d+\.\d+%$/.test(finalValue)) {
+                // Check if needs arbitrary brackets (aspect ratio, percentages with decimals, etc.)
+                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
+            }
+
+            // Build final class name
+            className += `${key}-${finalValue}`;
+
+            // Add important modifier
+            if (important) {
+                className += '!';
+            }
+
+            classes.push(className);
+        }
+    }
+
+    const finalClasses = classes.filter(Boolean);
+
+    // Apply mangling if map is provided
+    if (mangleMap) {
+        const mangledClasses = finalClasses.map(cls => mangleMap[cls] || cls);
+        return {
+            className: mangledClasses.join(' '),
+            attributes,
+        };
+    }
+
+    return {
+        className: finalClasses.join(' '),
+        attributes,
+    };
+}
+
+/**
+ * Validates that an sz prop object is valid.
+ *
+ * @param {unknown} szProp - The value to validate
+ * @returns {boolean} True if valid, false otherwise
+ */
+export function isValidSzProp(szProp: unknown): szProp is SzObject {
+    return (
+        szProp !== null &&
+    szProp !== undefined &&
+    typeof szProp === 'object' &&
+    !Array.isArray(szProp)
+    );
+}
+
+/**
+ * Normalizes a className string by removing extra whitespace.
+ *
+ * @param {string} className - The className string to normalize
+ * @returns {string} The normalized className string
+ */
+export function normalizeClassName(className: string): string {
+    return className.split(/\s+/).filter(Boolean).join(' ');
+}

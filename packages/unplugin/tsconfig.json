@@ -1,0 +1,15 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": "src",
+        "types": ["node"]
+    },
+    "include": [
+        "src/index.ts",
+        "src/unplugin.ts",
+        "src/vite.ts",
+        "src/webpack.ts"
+    ],
+    "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,21 @@
+{
+    "*.{js,jsx,ts,tsx}": [
+        "eslint --fix",
+        "bash -c 'tsc --noEmit'"
+    ],
+    "*.{json,jsonc,json5}": [
+        "eslint --fix"
+    ],
+    "*.rs": [
+        "rustfmt --edition 2021",
+        "bash -c 'cargo clippy --fix --allow-dirty --allow-staged -- -D warnings'"
+    ],
+
+    "*.md": [
+        "markdownlint --fix",
+        "prettier --write"
+    ],
+    "*.css": [
+        "prettier --write"
+    ]
+}

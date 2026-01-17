@@ -1,0 +1,44 @@
+{
+    "tests": [
+        {
+            "id": "dynamic-width-integer",
+            "szInput": { "w": 999 },
+            "expectedClass": "w-999",
+            "tailwindVersion": 4,
+            "category": "sizing",
+            "subcategory": "width"
+        },
+        {
+            "id": "dynamic-width-fraction",
+            "szInput": { "w": "99/100" },
+            "expectedClass": "w-99/100",
+            "tailwindVersion": 4,
+            "category": "sizing",
+            "subcategory": "width"
+        },
+        {
+            "id": "dynamic-padding-integer",
+            "szInput": { "p": 123 },
+            "expectedClass": "p-123",
+            "tailwindVersion": 4,
+            "category": "spacing",
+            "subcategory": "padding"
+        },
+        {
+            "id": "dynamic-opacity-fraction",
+            "szInput": { "opacity": "1/3" },
+            "expectedClass": "opacity-[1/3]",
+            "tailwindVersion": 4,
+            "category": "effects",
+            "subcategory": "opacity"
+        },
+        {
+            "id": "dynamic-grid-cols",
+            "szInput": { "gridCols": 15 },
+            "expectedClass": "grid-cols-15",
+            "tailwindVersion": 4,
+            "category": "grid",
+            "subcategory": "grid-cols"
+        }
+    ]
+}

@@ -1,0 +1,62 @@
+{
+    "name": "@csszyx/types",
+    "version": "0.0.0",
+    "description": "TypeScript definitions for csszyx",
+    "keywords": [
+        "csszyx",
+        "types",
+        "typescript"
+    ],
+    "author": "csszyx contributors",
+    "license": "MIT",
+    "homepage": "https://github.com/nguyennhutien/csszyx/tree/main/packages/types#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nguyennhutien/csszyx.git",
+        "directory": "packages/types"
+    },
+    "bugs": {
+        "url": "https://github.com/nguyennhutien/csszyx/issues"
+    },
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./config": {
+            "types": "./dist/config.d.ts",
+            "import": "./dist/config.js"
+        },
+        "./runtime": {
+            "types": "./dist/runtime.d.ts",
+            "import": "./dist/runtime.js"
+        },
+        "./compiler": {
+            "types": "./dist/compiler.d.ts",
+            "import": "./dist/compiler.js"
+        },
+        "./jsx": {
+            "types": "./dist/jsx.d.ts"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup src/index.ts src/config.ts src/runtime.ts src/compiler.ts --format esm --dts && cp src/jsx.d.ts dist/jsx.d.ts",
+        "dev": "tsup src/index.ts src/config.ts src/runtime.ts src/compiler.ts --format esm --dts --watch",
+        "type-check": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.3"
+    },
+    "peerDependencies": {
+        "@csszyx/compiler": ">=0.0.0"
+    }
+}

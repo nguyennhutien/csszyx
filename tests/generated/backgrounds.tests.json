@@ -1,0 +1,525 @@
+{
+    "tests": [
+        {
+            "id": "backgrounds-background-attachment-keywords-1",
+            "szInput": {
+                "bgAttach": "fixed"
+            },
+            "expectedClass": "bg-fixed",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Attachment"
+        },
+        {
+            "id": "backgrounds-background-attachment-arbitrary",
+            "szInput": {
+                "bgAttach": "fixed"
+            },
+            "expectedClass": "bg-fixed",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Attachment"
+        },
+        {
+            "id": "backgrounds-background-attachment-var",
+            "szInput": {
+                "bgAttach": "--a"
+            },
+            "expectedClass": "bg-(--a)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Attachment"
+        },
+        {
+            "id": "backgrounds-background-clip-keywords-1",
+            "szInput": {
+                "bgClip": "border"
+            },
+            "expectedClass": "bg-clip-border",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Clip"
+        },
+        {
+            "id": "backgrounds-background-clip-arbitrary",
+            "szInput": {
+                "bgClip": "text"
+            },
+            "expectedClass": "bg-clip-text",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Clip"
+        },
+        {
+            "id": "backgrounds-background-clip-var",
+            "szInput": {
+                "bgClip": "--c"
+            },
+            "expectedClass": "bg-clip-(--c)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Clip"
+        },
+        {
+            "id": "backgrounds-background-color-keywords-1",
+            "szInput": {
+                "bg": "inherit"
+            },
+            "expectedClass": "bg-inherit",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Color"
+        },
+        {
+            "id": "backgrounds-background-color-color",
+            "szInput": {
+                "bg": "slate-50"
+            },
+            "expectedClass": "bg-slate-50",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Color"
+        },
+        {
+            "id": "backgrounds-background-color-opacity",
+            "szInput": {
+                "bg": { "color": "blue-500", "op": 50 }
+            },
+            "expectedClass": "bg-blue-500/50",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Color"
+        },
+        {
+            "id": "backgrounds-background-color-arbitrary",
+            "szInput": {
+                "bg": "#50d71e"
+            },
+            "expectedClass": "bg-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Color"
+        },
+        {
+            "id": "backgrounds-background-color-css-variable",
+            "szInput": {
+                "bg": "--c"
+            },
+            "expectedClass": "bg-(--c)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Color"
+        },
+        {
+            "id": "backgrounds-background-image-none",
+            "szInput": {
+                "bgImg": "none"
+            },
+            "expectedClass": "bg-none",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-linear",
+            "szInput": {
+                "bgImg": "linear-to-t"
+            },
+            "expectedClass": "bg-linear-to-t",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-linear-angle",
+            "szInput": {
+                "bgImg": "linear-45"
+            },
+            "expectedClass": "bg-linear-45",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-linear-neg",
+            "szInput": {
+                "bgImg": "-linear-45"
+            },
+            "expectedClass": "-bg-linear-45",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-linear-arb",
+            "szInput": {
+                "bgImg": "linear-[1.5rad]"
+            },
+            "expectedClass": "bg-linear-[1.5rad]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-radial",
+            "szInput": {
+                "bgImg": "radial"
+            },
+            "expectedClass": "bg-radial",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-conic",
+            "szInput": {
+                "bgImg": "conic"
+            },
+            "expectedClass": "bg-conic",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-conic-angle",
+            "szInput": {
+                "bgImg": "conic-45"
+            },
+            "expectedClass": "bg-conic-45",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-conic-neg",
+            "szInput": {
+                "bgImg": "-conic-45"
+            },
+            "expectedClass": "-bg-conic-45",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-arbitrary",
+            "szInput": {
+                "bgImg": "url('/img.png')"
+            },
+            "expectedClass": "bg-[url('/img.png')]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-background-image-var",
+            "szInput": {
+                "bgImg": "--i"
+            },
+            "expectedClass": "bg-(image:--i)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Image"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-from-color",
+            "szInput": {
+                "from": "red-500"
+            },
+            "expectedClass": "from-red-500",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-from-arb",
+            "szInput": {
+                "from": "#123"
+            },
+            "expectedClass": "from-[#123]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-from-var",
+            "szInput": {
+                "from": "--c"
+            },
+            "expectedClass": "from-(--c)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-from-pos",
+            "szInput": {
+                "fromPos": "10%"
+            },
+            "expectedClass": "from-10%",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-from-pos-arb",
+            "szInput": {
+                "fromPos": "15%"
+            },
+            "expectedClass": "from-[15%]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-from-pos-var",
+            "szInput": {
+                "fromPos": "--p"
+            },
+            "expectedClass": "from-(--p)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-via-color",
+            "szInput": {
+                "via": "blue-500"
+            },
+            "expectedClass": "via-blue-500",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-via-arb",
+            "szInput": {
+                "via": "#456"
+            },
+            "expectedClass": "via-[#456]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-via-var",
+            "szInput": {
+                "via": "--c"
+            },
+            "expectedClass": "via-(--c)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-via-pos",
+            "szInput": {
+                "viaPos": "30%"
+            },
+            "expectedClass": "via-30%",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-via-pos-arb",
+            "szInput": {
+                "viaPos": "35%"
+            },
+            "expectedClass": "via-[35%]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-via-pos-var",
+            "szInput": {
+                "viaPos": "--p"
+            },
+            "expectedClass": "via-(--p)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-to-color",
+            "szInput": {
+                "to": "green-500"
+            },
+            "expectedClass": "to-green-500",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-to-arb",
+            "szInput": {
+                "to": "#789"
+            },
+            "expectedClass": "to-[#789]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-to-var",
+            "szInput": {
+                "to": "--c"
+            },
+            "expectedClass": "to-(--c)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-to-pos",
+            "szInput": {
+                "toPos": "90%"
+            },
+            "expectedClass": "to-90%",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-to-pos-arb",
+            "szInput": {
+                "toPos": "95%"
+            },
+            "expectedClass": "to-[95%]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-gradient-color-stops-to-pos-var",
+            "szInput": {
+                "toPos": "--p"
+            },
+            "expectedClass": "to-(--p)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Gradient Color Stops"
+        },
+        {
+            "id": "backgrounds-background-origin-keywords-1",
+            "szInput": {
+                "bgOrigin": "border"
+            },
+            "expectedClass": "bg-origin-border",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Origin"
+        },
+        {
+            "id": "backgrounds-background-origin-arbitrary",
+            "szInput": {
+                "bgOrigin": "border-box"
+            },
+            "expectedClass": "bg-origin-border-box",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Origin"
+        },
+        {
+            "id": "backgrounds-background-origin-var",
+            "szInput": {
+                "bgOrigin": "--o"
+            },
+            "expectedClass": "bg-origin-(--o)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Origin"
+        },
+        {
+            "id": "backgrounds-background-position-keywords-1",
+            "szInput": {
+                "bgPos": "bottom"
+            },
+            "expectedClass": "bg-bottom",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Position"
+        },
+        {
+            "id": "backgrounds-background-position-arbitrary",
+            "szInput": {
+                "bgPos": "center_top_1rem"
+            },
+            "expectedClass": "bg-[center_top_1rem]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Position"
+        },
+        {
+            "id": "backgrounds-background-position-var",
+            "szInput": {
+                "bgPos": "--p"
+            },
+            "expectedClass": "bg-(--p)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Position"
+        },
+        {
+            "id": "backgrounds-background-repeat-keywords-1",
+            "szInput": {
+                "bgRepeat": "repeat"
+            },
+            "expectedClass": "bg-repeat",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Repeat"
+        },
+        {
+            "id": "backgrounds-background-repeat-arbitrary",
+            "szInput": {
+                "bgRepeat": "repeat-x"
+            },
+            "expectedClass": "bg-repeat-x",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Repeat"
+        },
+        {
+            "id": "backgrounds-background-repeat-var",
+            "szInput": {
+                "bgRepeat": "--r"
+            },
+            "expectedClass": "bg-(--r)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Repeat"
+        },
+        {
+            "id": "backgrounds-background-size-keywords-1",
+            "szInput": {
+                "bgSize": "auto"
+            },
+            "expectedClass": "bg-auto",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Size"
+        },
+        {
+            "id": "backgrounds-background-size-arbitrary",
+            "szInput": {
+                "bgSize": "50%"
+            },
+            "expectedClass": "bg-[50%]",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Size"
+        },
+        {
+            "id": "backgrounds-background-size-var",
+            "szInput": {
+                "bgSize": "--s"
+            },
+            "expectedClass": "bg-(--s)",
+            "tailwindVersion": "4",
+            "category": "Backgrounds",
+            "subcategory": "Background Size"
+        }
+    ],
+    "totalTests": 52
+}

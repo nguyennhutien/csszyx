@@ -1,0 +1,1422 @@
+{
+    "tests": [
+        {
+            "id": "core-concepts-styling-with-utility-classes-padding-canonical",
+            "szInput": {
+                "padding": 6
+            },
+            "expectedClass": "p-6",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-padding-alias",
+            "szInput": {
+                "p": 6
+            },
+            "expectedClass": "p-6",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-background-color-canonical",
+            "szInput": {
+                "backgroundColor": "sky-500"
+            },
+            "expectedClass": "bg-sky-500",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-background-color-alias",
+            "szInput": {
+                "bg": "sky-500"
+            },
+            "expectedClass": "bg-sky-500",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-text-color-canonical",
+            "szInput": {
+                "color": "white"
+            },
+            "expectedClass": "text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-text-color-alias",
+            "szInput": {
+                "text": "white"
+            },
+            "expectedClass": "text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-border-radius-canonical",
+            "szInput": {
+                "borderRadius": "lg"
+            },
+            "expectedClass": "rounded-lg",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-border-radius-alias",
+            "szInput": {
+                "rounded": "lg"
+            },
+            "expectedClass": "rounded-lg",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-box-shadow-canonical",
+            "szInput": {
+                "boxShadow": "xl"
+            },
+            "expectedClass": "shadow-xl",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-box-shadow-alias",
+            "szInput": {
+                "shadow": "xl"
+            },
+            "expectedClass": "shadow-xl",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-flex-container-canonical",
+            "szInput": {
+                "display": "flex"
+            },
+            "expectedClass": "flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-flex-container-alias",
+            "szInput": {
+                "flex": true
+            },
+            "expectedClass": "flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-hover-state-canonical",
+            "szInput": {
+                "hover": "bg-sky-700"
+            },
+            "expectedClass": "hover:bg-sky-700",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-hover-state",
+            "szInput": {
+                "hover": {
+                    "bg": "sky-700"
+                }
+            },
+            "expectedClass": "hover:bg-sky-700",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-focus-state-canonical",
+            "szInput": {
+                "focus": "outline-none"
+            },
+            "expectedClass": "focus:outline-none",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-focus-state",
+            "szInput": {
+                "focus": {
+                    "outline": "none"
+                }
+            },
+            "expectedClass": "focus:outline-none",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-active-state-canonical",
+            "szInput": {
+                "active": "opacity-80"
+            },
+            "expectedClass": "active:opacity-80",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-active-state",
+            "szInput": {
+                "active": {
+                    "opacity": 80
+                }
+            },
+            "expectedClass": "active:opacity-80",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-disabled-hover",
+            "szInput": {
+                "disabled": {
+                    "hover": {
+                        "bg": "sky-500"
+                    }
+                }
+            },
+            "expectedClass": "disabled:hover:bg-sky-500",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-small-breakpoint",
+            "szInput": {
+                "sm": {
+                    "gridCols": 3
+                }
+            },
+            "expectedClass": "sm:grid-cols-3",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-medium-layout",
+            "szInput": {
+                "md": {
+                    "flex": true
+                }
+            },
+            "expectedClass": "md:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-large-spacing",
+            "szInput": {
+                "lg": {
+                    "px": 8
+                }
+            },
+            "expectedClass": "lg:px-8",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-dark-background",
+            "szInput": {
+                "dark": {
+                    "bg": "gray-800"
+                }
+            },
+            "expectedClass": "dark:bg-gray-800",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-dark-text",
+            "szInput": {
+                "dark": {
+                    "text": "white"
+                }
+            },
+            "expectedClass": "dark:text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-filter-blur",
+            "szInput": {
+                "blur": "sm"
+            },
+            "expectedClass": "blur-sm",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-filter-grayscale",
+            "szInput": {
+                "grayscale": true
+            },
+            "expectedClass": "grayscale",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-combined",
+            "szInput": {
+                "blur": "sm",
+                "grayscale": true
+            },
+            "expectedClass": "blur-sm grayscale",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-arbitrary-color",
+            "szInput": {
+                "bg": "#316ff6"
+            },
+            "expectedClass": "bg-[#316ff6]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-arbitrary-size",
+            "szInput": {
+                "w": "333px"
+            },
+            "expectedClass": "w-[333px]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-data-prop",
+            "szInput": {
+                "content": "attr(data-content)"
+            },
+            "expectedClass": "content-[attr(data-content)]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-group-hover",
+            "szInput": {
+                "group": {
+                    "hover": {
+                        "text": "blue"
+                    }
+                }
+            },
+            "expectedClass": "group-hover:text-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-peer-focus",
+            "szInput": {
+                "peer": {
+                    "focus": {
+                        "text": "blue"
+                    }
+                }
+            },
+            "expectedClass": "peer-focus:text-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-data-attribute",
+            "szInput": {
+                "data": {
+                    "active": {
+                        "text": "blue"
+                    }
+                }
+            },
+            "expectedClass": "data-[active]:text-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-aria-attribute",
+            "szInput": {
+                "aria": {
+                    "expanded": {
+                        "text": "blue"
+                    }
+                }
+            },
+            "expectedClass": "aria-expanded:text-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-arbitrary-variant",
+            "szInput": {
+                "[& > span]": {
+                    "text": "blue"
+                }
+            },
+            "expectedClass": "[&>span]:text-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-styling-with-utility-classes-important-modifier",
+            "szInput": {
+                "text": "red-500!"
+            },
+            "expectedClass": "text-red-500!",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Styling with Utility Classes"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-hover-focus-active",
+            "szInput": {
+                "hover": {
+                    "bg": "red"
+                },
+                "focus": {
+                    "bg": "blue"
+                },
+                "active": {
+                    "bg": "green"
+                }
+            },
+            "expectedClass": "hover:bg-red focus:bg-blue active:bg-green",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-first-last-child",
+            "szInput": {
+                "first": {
+                    "pt": 0
+                },
+                "last": {
+                    "pb": 0
+                }
+            },
+            "expectedClass": "first:pt-0 last:pb-0",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-odd-even-child",
+            "szInput": {
+                "odd": {
+                    "bg": "white"
+                },
+                "even": {
+                    "bg": "gray"
+                }
+            },
+            "expectedClass": "odd:bg-white even:bg-gray",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-first-of-type",
+            "szInput": {
+                "firstOfType": {
+                    "block": true
+                }
+            },
+            "expectedClass": "first-of-type:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-visited",
+            "szInput": {
+                "visited": {
+                    "text": "purple"
+                }
+            },
+            "expectedClass": "visited:text-purple",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-focus-within",
+            "szInput": {
+                "focusWithin": {
+                    "ring": true
+                }
+            },
+            "expectedClass": "focus-within:ring",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-focus-visible",
+            "szInput": {
+                "focusVisible": {
+                    "ring": true
+                }
+            },
+            "expectedClass": "focus-visible:ring",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-target",
+            "szInput": {
+                "target": {
+                    "shadow": true
+                }
+            },
+            "expectedClass": "target:shadow",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-has-descendant",
+            "szInput": {
+                "has": {
+                    "img": {
+                        "bg": "blue"
+                    }
+                }
+            },
+            "expectedClass": "has-[img]:bg-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-has-state",
+            "szInput": {
+                "has": {
+                    "checked": {
+                        "bg": "blue"
+                    }
+                }
+            },
+            "expectedClass": "has-[:checked]:bg-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-arbitrary-has",
+            "szInput": {
+                "has": {
+                    ".custom-class": {
+                        "block": true
+                    }
+                }
+            },
+            "expectedClass": "has-[.custom-class]:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-group-hover",
+            "szInput": {
+                "group": {
+                    "hover": {
+                        "text": "white"
+                    }
+                }
+            },
+            "expectedClass": "group-hover:text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-group-focus",
+            "szInput": {
+                "group": {
+                    "focus": {
+                        "text": "white"
+                    }
+                }
+            },
+            "expectedClass": "group-focus:text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-group-active",
+            "szInput": {
+                "group": {
+                    "active": {
+                        "text": "white"
+                    }
+                }
+            },
+            "expectedClass": "group-active:text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-nested-groups",
+            "szInput": {
+                "group": {
+                    "name": {
+                        "hover": {
+                            "text": "white"
+                        }
+                    }
+                }
+            },
+            "expectedClass": "group-hover/name:text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-arbitrary-groups",
+            "szInput": {
+                "group": {
+                    ".is-published": {
+                        "block": true
+                    }
+                }
+            },
+            "expectedClass": "group-[.is-published]:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-group-has",
+            "szInput": {
+                "group": {
+                    "has": {
+                        "a": {
+                            "block": true
+                        }
+                    }
+                }
+            },
+            "expectedClass": "group-has-[a]:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-peer-hover",
+            "szInput": {
+                "peer": {
+                    "hover": {
+                        "text": "white"
+                    }
+                }
+            },
+            "expectedClass": "peer-hover:text-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-peer-checked",
+            "szInput": {
+                "peer": {
+                    "checked": {
+                        "bg": "blue"
+                    }
+                }
+            },
+            "expectedClass": "peer-checked:bg-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-differentiating-peers",
+            "szInput": {
+                "peer": {
+                    "name": {
+                        "checked": {
+                            "bg": "blue"
+                        }
+                    }
+                }
+            },
+            "expectedClass": "peer-checked/name:bg-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-arbitrary-peers",
+            "szInput": {
+                "peer": {
+                    ".is-dirty": {
+                        "block": true
+                    }
+                }
+            },
+            "expectedClass": "peer-[.is-dirty]:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-not-hover",
+            "szInput": {
+                "not": {
+                    "hover": {
+                        "opacity": 75
+                    }
+                }
+            },
+            "expectedClass": "not-hover:opacity-75",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-not-first",
+            "szInput": {
+                "not": {
+                    "first": {
+                        "mt": 4
+                    }
+                }
+            },
+            "expectedClass": "not-first:mt-4",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-not-supports",
+            "szInput": {
+                "not": {
+                    "supports": {
+                        "display:grid": {
+                            "block": true
+                        }
+                    }
+                }
+            },
+            "expectedClass": "not-supports-[display:grid]:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-placeholder",
+            "szInput": {
+                "placeholder": {
+                    "text": "gray"
+                }
+            },
+            "expectedClass": "placeholder:text-gray",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-file",
+            "szInput": {
+                "file": {
+                    "border": true
+                }
+            },
+            "expectedClass": "file:border",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-marker",
+            "szInput": {
+                "marker": {
+                    "text": "blue"
+                }
+            },
+            "expectedClass": "marker:text-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-selection",
+            "szInput": {
+                "selection": {
+                    "bg": "pink"
+                }
+            },
+            "expectedClass": "selection:bg-pink",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-first-line",
+            "szInput": {
+                "firstLine": {
+                    "uppercase": true
+                }
+            },
+            "expectedClass": "first-line:uppercase",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-first-letter",
+            "szInput": {
+                "firstLetter": {
+                    "text": "7xl"
+                }
+            },
+            "expectedClass": "first-letter:text-7xl",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-backdrop",
+            "szInput": {
+                "backdrop": {
+                    "blur": true
+                }
+            },
+            "expectedClass": "backdrop:blur",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-breakpoints",
+            "szInput": {
+                "md": {
+                    "block": true
+                },
+                "lg": {
+                    "flex": true
+                }
+            },
+            "expectedClass": "md:block lg:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-container-queries",
+            "szInput": {
+                "@md": {
+                    "block": true
+                },
+                "@lg": {
+                    "flex": true
+                }
+            },
+            "expectedClass": "@md:block @lg:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-reduced-motion",
+            "szInput": {
+                "motionReduce": {
+                    "hidden": true
+                }
+            },
+            "expectedClass": "motion-reduce:hidden",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-prefers-contrast",
+            "szInput": {
+                "contrastMore": {
+                    "border": true
+                }
+            },
+            "expectedClass": "contrast-more:border",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-forced-colors",
+            "szInput": {
+                "forcedColors": {
+                    "border": "gray"
+                }
+            },
+            "expectedClass": "forced-colors:border-gray",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-inverted-colors",
+            "szInput": {
+                "invertedColors": {
+                    "invert": true
+                }
+            },
+            "expectedClass": "inverted-colors:invert",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-pointer",
+            "szInput": {
+                "pointerCoarse": {
+                    "p": 4
+                }
+            },
+            "expectedClass": "pointer-coarse:p-4",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-print",
+            "szInput": {
+                "print": {
+                    "hidden": true
+                }
+            },
+            "expectedClass": "print:hidden",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-orientation",
+            "szInput": {
+                "portrait": {
+                    "hidden": true
+                }
+            },
+            "expectedClass": "portrait:hidden",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-scripting",
+            "szInput": {
+                "noscript": {
+                    "block": true
+                }
+            },
+            "expectedClass": "noscript:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-supports",
+            "szInput": {
+                "supports": {
+                    "display:grid": {
+                        "grid": true
+                    }
+                }
+            },
+            "expectedClass": "supports-[display:grid]:grid",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-starting-style",
+            "szInput": {
+                "starting": {
+                    "opacity": 0
+                }
+            },
+            "expectedClass": "starting:opacity-0",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-data-attributes",
+            "szInput": {
+                "data": {
+                    "active": {
+                        "bg": "blue"
+                    }
+                }
+            },
+            "expectedClass": "data-[active]:bg-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-aria-states",
+            "szInput": {
+                "aria": {
+                    "checked": {
+                        "bg": "blue"
+                    }
+                }
+            },
+            "expectedClass": "aria-checked:bg-blue",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-rtl-ltr",
+            "szInput": {
+                "rtl": {
+                    "mr": 2
+                }
+            },
+            "expectedClass": "rtl:mr-2",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-open",
+            "szInput": {
+                "open": {
+                    "bg": "white"
+                }
+            },
+            "expectedClass": "open:bg-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-inert",
+            "szInput": {
+                "inert": {
+                    "opacity": 50
+                }
+            },
+            "expectedClass": "inert:opacity-50",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-direct-children",
+            "szInput": {
+                "": {
+                    "p": 4
+                }
+            },
+            "expectedClass": ":p-4",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-descendants",
+            "szInput": {
+                "[&_]": {
+                    "p": 4
+                }
+            },
+            "expectedClass": "[&_]:p-4",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-hover-focus-and-other-states-custom-name",
+            "szInput": {
+                "myVariant": {
+                    "p": 4
+                }
+            },
+            "expectedClass": "my-variant:p-4",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Hover, Focus, and Other States"
+        },
+        {
+            "id": "core-concepts-responsive-design-mobile-first",
+            "szInput": {
+                "w": "full",
+                "md": {
+                    "w": "1/2"
+                }
+            },
+            "expectedClass": "w-full md:w-1/2",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-breakpoint-range",
+            "szInput": {
+                "md": {
+                    "maxXl": {
+                        "flex": true
+                    }
+                }
+            },
+            "expectedClass": "md:max-xl:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-single-breakpoint",
+            "szInput": {
+                "md": {
+                    "maxLg": {
+                        "flex": true
+                    }
+                }
+            },
+            "expectedClass": "md:max-lg:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-custom-breakpoint",
+            "szInput": {
+                "min": {
+                    "[320px]": {
+                        "text": "center"
+                    }
+                }
+            },
+            "expectedClass": "min-[320px]:text-center",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-max-width-breakpoint",
+            "szInput": {
+                "max": {
+                    "[600px]": {
+                        "bg": "sky-300"
+                    }
+                }
+            },
+            "expectedClass": "max-[600px]:bg-sky-300",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-mark-container",
+            "szInput": {
+                "container": true
+            },
+            "expectedClass": "container",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-container-query",
+            "szInput": {
+                "@container": true
+            },
+            "expectedClass": "@container",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-container-named",
+            "szInput": {
+                "@container": "sidebar"
+            },
+            "expectedClass": "@container/sidebar",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-container-breakpoint",
+            "szInput": {
+                "@md": {
+                    "flex": true
+                }
+            },
+            "expectedClass": "@md:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-named-query",
+            "szInput": {
+                "@md": {
+                    "sidebar": {
+                        "block": true
+                    }
+                }
+            },
+            "expectedClass": "@md/sidebar:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-container-range",
+            "szInput": {
+                "@sm": {
+                    "@maxMd": {
+                        "block": true
+                    }
+                }
+            },
+            "expectedClass": "@sm:@max-md:block",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-arbitrary-query",
+            "szInput": {
+                "@min": {
+                    "[475px]": {
+                        "flex": true
+                    }
+                }
+            },
+            "expectedClass": "@min-[475px]:flex",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-responsive-design-container-units",
+            "szInput": {
+                "w": "50cqw"
+            },
+            "expectedClass": "w-[50cqw]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Responsive design"
+        },
+        {
+            "id": "core-concepts-dark-mode-media-strategy",
+            "szInput": {
+                "dark": {
+                    "bg": "black"
+                }
+            },
+            "expectedClass": "dark:bg-black",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Dark mode"
+        },
+        {
+            "id": "core-concepts-dark-mode-selector-strategy",
+            "szInput": {
+                "dark": {
+                    "bg": "black"
+                }
+            },
+            "expectedClass": "dark:bg-black",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Dark mode"
+        },
+        {
+            "id": "core-concepts-dark-mode-variant",
+            "szInput": {
+                "dark": {
+                    "bg": "black"
+                }
+            },
+            "expectedClass": "dark:bg-black",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Dark mode"
+        },
+        {
+            "id": "core-concepts-dark-mode-force-light",
+            "szInput": {
+                "light": {
+                    "bg": "white"
+                }
+            },
+            "expectedClass": "light:bg-white",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Dark mode"
+        },
+        {
+            "id": "core-concepts-theme-variables-using-theme-var",
+            "szInput": {
+                "text": "mint-500"
+            },
+            "expectedClass": "text-mint-500",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Theme variables"
+        },
+        {
+            "id": "core-concepts-theme-variables-arbitrary-var",
+            "szInput": {
+                "w": "--spacing-4"
+            },
+            "expectedClass": "w-(--spacing-4)",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Theme variables"
+        },
+        {
+            "id": "core-concepts-theme-variables-var-in-arbitrary",
+            "szInput": {
+                "p": "var(--my-pad)"
+            },
+            "expectedClass": "p-[var(--my-pad)]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Theme variables"
+        },
+        {
+            "id": "core-concepts-colors-standard-color",
+            "szInput": {
+                "bg": "blue-500"
+            },
+            "expectedClass": "bg-blue-500",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Colors"
+        },
+        {
+            "id": "core-concepts-colors-opacity-modifier",
+            "szInput": {
+                "bg": { "color": "blue-500", "op": 50 }
+            },
+            "expectedClass": "bg-blue-500/50",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Colors"
+        },
+        {
+            "id": "core-concepts-colors-arbitrary-opacity",
+            "szInput": {
+                "bg": { "color": "blue-500", "op": "73%" }
+            },
+            "expectedClass": "bg-blue-500/[73%]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Colors"
+        },
+        {
+            "id": "core-concepts-colors-variable-opacity",
+            "szInput": {
+                "bg": { "color": "blue-500", "op": "--alpha" }
+            },
+            "expectedClass": "bg-blue-500/(--alpha)",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Colors"
+        },
+        {
+            "id": "core-concepts-colors-inherited-opacity",
+            "szInput": {
+                "text": { "color": "current", "op": 50 }
+            },
+            "expectedClass": "text-current/50",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Colors"
+        },
+
+        {
+            "id": "core-concepts-adding-custom-styles-arbitrary-prop",
+            "szInput": {
+                "maskType": "luminance"
+            },
+            "expectedClass": "mask-type-luminance",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Adding custom styles"
+        },
+        {
+            "id": "core-concepts-adding-custom-styles-css-variable",
+            "szInput": {
+                "--my-var": "10px"
+            },
+            "expectedClass": "[--my-var:10px]",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Adding custom styles"
+        },
+        {
+            "id": "core-concepts-functions-directives-utility-prefix",
+            "szInput": {
+                "text": "center"
+            },
+            "expectedClass": "text-center",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Functions & directives"
+        },
+        {
+            "id": "core-concepts-functions-directives-theme",
+            "szInput": {
+                "w": "--spacing-4"
+            },
+            "expectedClass": "w-(--spacing-4)",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Functions & directives"
+        },
+        {
+            "id": "core-concepts-functions-directives-utility",
+            "szInput": {
+                "tabActive": true
+            },
+            "expectedClass": "tab-active",
+            "tailwindVersion": "4",
+            "category": "Core Concepts",
+            "subcategory": "Functions & directives"
+        }
+    ],
+    "totalTests": 117
+}

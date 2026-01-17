@@ -1,0 +1,25 @@
+{
+    "name": "Antigravity Sandbox (csszyx)",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "mounts": [
+        "source=${localEnv:HOME}/.gemini,target=/root/.gemini,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "henrikdev.ag-quota"
+            ],
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+        }
+    },
+    "remoteUser": "root",
+    "workspaceFolder": "/workspaces/csszyx"
+}

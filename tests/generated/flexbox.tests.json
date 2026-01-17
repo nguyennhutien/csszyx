@@ -1,0 +1,3525 @@
+{
+    "tests": [
+        {
+            "id": "flexbox-grid-flex-grow-edge-case-999",
+            "szInput": {
+                "grow": 999
+            },
+            "expectedClass": "grow-999",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Grow"
+        },
+        {
+            "id": "flexbox-grid-grid-column-edge-case-fraction-3-4",
+            "szInput": {
+                "col": "3/4"
+            },
+            "expectedClass": "col-3/4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-auto",
+            "szInput": {
+                "basis": "auto"
+            },
+            "expectedClass": "basis-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-full",
+            "szInput": {
+                "basis": "full"
+            },
+            "expectedClass": "basis-full",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-0",
+            "szInput": {
+                "basis": 0
+            },
+            "expectedClass": "basis-0",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-px",
+            "szInput": {
+                "basis": "px"
+            },
+            "expectedClass": "basis-px",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-0-5",
+            "szInput": {
+                "basis": 0.5
+            },
+            "expectedClass": "basis-0.5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-1",
+            "szInput": {
+                "basis": 1
+            },
+            "expectedClass": "basis-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-1-5",
+            "szInput": {
+                "basis": 1.5
+            },
+            "expectedClass": "basis-1.5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-2",
+            "szInput": {
+                "basis": 2
+            },
+            "expectedClass": "basis-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-2-5",
+            "szInput": {
+                "basis": 2.5
+            },
+            "expectedClass": "basis-2.5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-3",
+            "szInput": {
+                "basis": 3
+            },
+            "expectedClass": "basis-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-3-5",
+            "szInput": {
+                "basis": 3.5
+            },
+            "expectedClass": "basis-3.5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-4",
+            "szInput": {
+                "basis": 4
+            },
+            "expectedClass": "basis-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-5",
+            "szInput": {
+                "basis": 5
+            },
+            "expectedClass": "basis-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-6",
+            "szInput": {
+                "basis": 6
+            },
+            "expectedClass": "basis-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-7",
+            "szInput": {
+                "basis": 7
+            },
+            "expectedClass": "basis-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-8",
+            "szInput": {
+                "basis": 8
+            },
+            "expectedClass": "basis-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-9",
+            "szInput": {
+                "basis": 9
+            },
+            "expectedClass": "basis-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-10",
+            "szInput": {
+                "basis": 10
+            },
+            "expectedClass": "basis-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-11",
+            "szInput": {
+                "basis": 11
+            },
+            "expectedClass": "basis-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-12",
+            "szInput": {
+                "basis": 12
+            },
+            "expectedClass": "basis-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-14",
+            "szInput": {
+                "basis": 14
+            },
+            "expectedClass": "basis-14",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-16",
+            "szInput": {
+                "basis": 16
+            },
+            "expectedClass": "basis-16",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-20",
+            "szInput": {
+                "basis": 20
+            },
+            "expectedClass": "basis-20",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-24",
+            "szInput": {
+                "basis": 24
+            },
+            "expectedClass": "basis-24",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-28",
+            "szInput": {
+                "basis": 28
+            },
+            "expectedClass": "basis-28",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-32",
+            "szInput": {
+                "basis": 32
+            },
+            "expectedClass": "basis-32",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-36",
+            "szInput": {
+                "basis": 36
+            },
+            "expectedClass": "basis-36",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-40",
+            "szInput": {
+                "basis": 40
+            },
+            "expectedClass": "basis-40",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-44",
+            "szInput": {
+                "basis": 44
+            },
+            "expectedClass": "basis-44",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-48",
+            "szInput": {
+                "basis": 48
+            },
+            "expectedClass": "basis-48",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-52",
+            "szInput": {
+                "basis": 52
+            },
+            "expectedClass": "basis-52",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-56",
+            "szInput": {
+                "basis": 56
+            },
+            "expectedClass": "basis-56",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-60",
+            "szInput": {
+                "basis": 60
+            },
+            "expectedClass": "basis-60",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-64",
+            "szInput": {
+                "basis": 64
+            },
+            "expectedClass": "basis-64",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-72",
+            "szInput": {
+                "basis": 72
+            },
+            "expectedClass": "basis-72",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-80",
+            "szInput": {
+                "basis": 80
+            },
+            "expectedClass": "basis-80",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-spacing-scale-96",
+            "szInput": {
+                "basis": 96
+            },
+            "expectedClass": "basis-96",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-1-2",
+            "szInput": {
+                "basis": "1/2"
+            },
+            "expectedClass": "basis-1/2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-1-3",
+            "szInput": {
+                "basis": "1/3"
+            },
+            "expectedClass": "basis-1/3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-2-3",
+            "szInput": {
+                "basis": "2/3"
+            },
+            "expectedClass": "basis-2/3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-1-4",
+            "szInput": {
+                "basis": "1/4"
+            },
+            "expectedClass": "basis-1/4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-2-4",
+            "szInput": {
+                "basis": "2/4"
+            },
+            "expectedClass": "basis-2/4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-3-4",
+            "szInput": {
+                "basis": "3/4"
+            },
+            "expectedClass": "basis-3/4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-1-5",
+            "szInput": {
+                "basis": "1/5"
+            },
+            "expectedClass": "basis-1/5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-2-5",
+            "szInput": {
+                "basis": "2/5"
+            },
+            "expectedClass": "basis-2/5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-3-5",
+            "szInput": {
+                "basis": "3/5"
+            },
+            "expectedClass": "basis-3/5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-4-5",
+            "szInput": {
+                "basis": "4/5"
+            },
+            "expectedClass": "basis-4/5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-1-6",
+            "szInput": {
+                "basis": "1/6"
+            },
+            "expectedClass": "basis-1/6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-fraction-1-12",
+            "szInput": {
+                "basis": "1/12"
+            },
+            "expectedClass": "basis-1/12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-3xs",
+            "szInput": {
+                "basis": "3xs"
+            },
+            "expectedClass": "basis-3xs",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-2xs",
+            "szInput": {
+                "basis": "2xs"
+            },
+            "expectedClass": "basis-2xs",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-xs",
+            "szInput": {
+                "basis": "xs"
+            },
+            "expectedClass": "basis-xs",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-sm",
+            "szInput": {
+                "basis": "sm"
+            },
+            "expectedClass": "basis-sm",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-md",
+            "szInput": {
+                "basis": "md"
+            },
+            "expectedClass": "basis-md",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-lg",
+            "szInput": {
+                "basis": "lg"
+            },
+            "expectedClass": "basis-lg",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-xl",
+            "szInput": {
+                "basis": "xl"
+            },
+            "expectedClass": "basis-xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-2xl",
+            "szInput": {
+                "basis": "2xl"
+            },
+            "expectedClass": "basis-2xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-3xl",
+            "szInput": {
+                "basis": "3xl"
+            },
+            "expectedClass": "basis-3xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-4xl",
+            "szInput": {
+                "basis": "4xl"
+            },
+            "expectedClass": "basis-4xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-5xl",
+            "szInput": {
+                "basis": "5xl"
+            },
+            "expectedClass": "basis-5xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-6xl",
+            "szInput": {
+                "basis": "6xl"
+            },
+            "expectedClass": "basis-6xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-container-7xl",
+            "szInput": {
+                "basis": "7xl"
+            },
+            "expectedClass": "basis-7xl",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-zero",
+            "szInput": {
+                "basis": 0
+            },
+            "expectedClass": "basis-0",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-px",
+            "szInput": {
+                "basis": "px"
+            },
+            "expectedClass": "basis-px",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-arbitrary",
+            "szInput": {
+                "basis": "14.28%"
+            },
+            "expectedClass": "basis-[14.28%]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-basis-css-variable",
+            "szInput": {
+                "basis": "--size"
+            },
+            "expectedClass": "basis-(--size)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Basis"
+        },
+        {
+            "id": "flexbox-grid-flex-direction-row",
+            "szInput": {
+                "flexDir": "row"
+            },
+            "expectedClass": "flex-row",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Direction"
+        },
+        {
+            "id": "flexbox-grid-flex-direction-row-reverse",
+            "szInput": {
+                "flexDir": "row-reverse"
+            },
+            "expectedClass": "flex-row-reverse",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Direction"
+        },
+        {
+            "id": "flexbox-grid-flex-direction-col",
+            "szInput": {
+                "flexDir": "col"
+            },
+            "expectedClass": "flex-col",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Direction"
+        },
+        {
+            "id": "flexbox-grid-flex-direction-col-reverse",
+            "szInput": {
+                "flexDir": "col-reverse"
+            },
+            "expectedClass": "flex-col-reverse",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Direction"
+        },
+        {
+            "id": "flexbox-grid-flex-wrap-wrap",
+            "szInput": {
+                "flex": "wrap"
+            },
+            "expectedClass": "flex-wrap",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Wrap"
+        },
+        {
+            "id": "flexbox-grid-flex-wrap-wrap-reverse",
+            "szInput": {
+                "flex": "wrap-reverse"
+            },
+            "expectedClass": "flex-wrap-reverse",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Wrap"
+        },
+        {
+            "id": "flexbox-grid-flex-wrap-no-wrap",
+            "szInput": {
+                "flex": "nowrap"
+            },
+            "expectedClass": "flex-nowrap",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Wrap"
+        },
+        {
+            "id": "flexbox-grid-flex-1",
+            "szInput": {
+                "flex": 1
+            },
+            "expectedClass": "flex-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-auto",
+            "szInput": {
+                "flex": "auto"
+            },
+            "expectedClass": "flex-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-initial",
+            "szInput": {
+                "flex": "initial"
+            },
+            "expectedClass": "flex-initial",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-none",
+            "szInput": {
+                "flex": "none"
+            },
+            "expectedClass": "flex-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-custom",
+            "szInput": {
+                "flex": "2 2 0%"
+            },
+            "expectedClass": "flex-[2_2_0%]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-fraction",
+            "szInput": {
+                "flex": "1/2"
+            },
+            "expectedClass": "flex-1/2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-css-variable",
+            "szInput": {
+                "flex": "--flex"
+            },
+            "expectedClass": "flex-(--flex)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex"
+        },
+        {
+            "id": "flexbox-grid-flex-grow-grow",
+            "szInput": {
+                "grow": true
+            },
+            "expectedClass": "grow",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Grow"
+        },
+        {
+            "id": "flexbox-grid-flex-grow-grow-0",
+            "szInput": {
+                "grow": 0
+            },
+            "expectedClass": "grow-0",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Grow"
+        },
+        {
+            "id": "flexbox-grid-flex-grow-arbitrary",
+            "szInput": {
+                "grow": 2
+            },
+            "expectedClass": "grow-[2]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Grow"
+        },
+        {
+            "id": "flexbox-grid-flex-grow-css-variable",
+            "szInput": {
+                "grow": "--grow"
+            },
+            "expectedClass": "grow-(--grow)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Grow"
+        },
+        {
+            "id": "flexbox-grid-flex-shrink-shrink",
+            "szInput": {
+                "shrink": true
+            },
+            "expectedClass": "shrink",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Shrink"
+        },
+        {
+            "id": "flexbox-grid-flex-shrink-shrink-0",
+            "szInput": {
+                "shrink": 0
+            },
+            "expectedClass": "shrink-0",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Shrink"
+        },
+        {
+            "id": "flexbox-grid-flex-shrink-arbitrary",
+            "szInput": {
+                "shrink": 2
+            },
+            "expectedClass": "shrink-[2]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Shrink"
+        },
+        {
+            "id": "flexbox-grid-flex-shrink-css-variable",
+            "szInput": {
+                "shrink": "--shrink"
+            },
+            "expectedClass": "shrink-(--shrink)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Flex Shrink"
+        },
+        {
+            "id": "flexbox-grid-order-first",
+            "szInput": {
+                "order": "first"
+            },
+            "expectedClass": "order-first",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-last",
+            "szInput": {
+                "order": "last"
+            },
+            "expectedClass": "order-last",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-none",
+            "szInput": {
+                "order": "none"
+            },
+            "expectedClass": "order-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-1",
+            "szInput": {
+                "order": 1
+            },
+            "expectedClass": "order-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-2",
+            "szInput": {
+                "order": 2
+            },
+            "expectedClass": "order-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-3",
+            "szInput": {
+                "order": 3
+            },
+            "expectedClass": "order-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-4",
+            "szInput": {
+                "order": 4
+            },
+            "expectedClass": "order-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-5",
+            "szInput": {
+                "order": 5
+            },
+            "expectedClass": "order-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-6",
+            "szInput": {
+                "order": 6
+            },
+            "expectedClass": "order-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-7",
+            "szInput": {
+                "order": 7
+            },
+            "expectedClass": "order-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-8",
+            "szInput": {
+                "order": 8
+            },
+            "expectedClass": "order-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-9",
+            "szInput": {
+                "order": 9
+            },
+            "expectedClass": "order-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-10",
+            "szInput": {
+                "order": 10
+            },
+            "expectedClass": "order-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-11",
+            "szInput": {
+                "order": 11
+            },
+            "expectedClass": "order-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-12",
+            "szInput": {
+                "order": 12
+            },
+            "expectedClass": "order-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-first",
+            "szInput": {
+                "order": "first"
+            },
+            "expectedClass": "order-first",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-last",
+            "szInput": {
+                "order": "last"
+            },
+            "expectedClass": "order-last",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-1-12-none",
+            "szInput": {
+                "order": "none"
+            },
+            "expectedClass": "order-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-arbitrary",
+            "szInput": {
+                "order": 13
+            },
+            "expectedClass": "order-[13]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-negative",
+            "szInput": {
+                "order": -1
+            },
+            "expectedClass": "-order-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-order-css-variable",
+            "szInput": {
+                "order": "--order"
+            },
+            "expectedClass": "order-(--order)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Order"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-1",
+            "szInput": {
+                "gridCols": 1
+            },
+            "expectedClass": "grid-cols-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-2",
+            "szInput": {
+                "gridCols": 2
+            },
+            "expectedClass": "grid-cols-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-3",
+            "szInput": {
+                "gridCols": 3
+            },
+            "expectedClass": "grid-cols-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-4",
+            "szInput": {
+                "gridCols": 4
+            },
+            "expectedClass": "grid-cols-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-5",
+            "szInput": {
+                "gridCols": 5
+            },
+            "expectedClass": "grid-cols-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-6",
+            "szInput": {
+                "gridCols": 6
+            },
+            "expectedClass": "grid-cols-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-7",
+            "szInput": {
+                "gridCols": 7
+            },
+            "expectedClass": "grid-cols-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-8",
+            "szInput": {
+                "gridCols": 8
+            },
+            "expectedClass": "grid-cols-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-9",
+            "szInput": {
+                "gridCols": 9
+            },
+            "expectedClass": "grid-cols-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-10",
+            "szInput": {
+                "gridCols": 10
+            },
+            "expectedClass": "grid-cols-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-11",
+            "szInput": {
+                "gridCols": 11
+            },
+            "expectedClass": "grid-cols-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-12",
+            "szInput": {
+                "gridCols": 12
+            },
+            "expectedClass": "grid-cols-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-none",
+            "szInput": {
+                "gridCols": "none"
+            },
+            "expectedClass": "grid-cols-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-1-12-subgrid",
+            "szInput": {
+                "gridCols": "subgrid"
+            },
+            "expectedClass": "grid-cols-subgrid",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-none",
+            "szInput": {
+                "gridCols": "none"
+            },
+            "expectedClass": "grid-cols-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-subgrid",
+            "szInput": {
+                "gridCols": "subgrid"
+            },
+            "expectedClass": "grid-cols-subgrid",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-arbitrary",
+            "szInput": {
+                "gridCols": "200px 1fr"
+            },
+            "expectedClass": "grid-cols-[200px_1fr]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-template-columns-css-variable",
+            "szInput": {
+                "gridCols": "--cols"
+            },
+            "expectedClass": "grid-cols-(--cols)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-auto",
+            "szInput": {
+                "col": "auto"
+            },
+            "expectedClass": "col-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-column-number",
+            "szInput": {
+                "col": 1
+            },
+            "expectedClass": "col-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-column-negative",
+            "szInput": {
+                "col": -1
+            },
+            "expectedClass": "-col-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-1",
+            "szInput": {
+                "colSpan": 1
+            },
+            "expectedClass": "col-span-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-2",
+            "szInput": {
+                "colSpan": 2
+            },
+            "expectedClass": "col-span-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-3",
+            "szInput": {
+                "colSpan": 3
+            },
+            "expectedClass": "col-span-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-4",
+            "szInput": {
+                "colSpan": 4
+            },
+            "expectedClass": "col-span-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-5",
+            "szInput": {
+                "colSpan": 5
+            },
+            "expectedClass": "col-span-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-6",
+            "szInput": {
+                "colSpan": 6
+            },
+            "expectedClass": "col-span-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-7",
+            "szInput": {
+                "colSpan": 7
+            },
+            "expectedClass": "col-span-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-8",
+            "szInput": {
+                "colSpan": 8
+            },
+            "expectedClass": "col-span-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-9",
+            "szInput": {
+                "colSpan": 9
+            },
+            "expectedClass": "col-span-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-10",
+            "szInput": {
+                "colSpan": 10
+            },
+            "expectedClass": "col-span-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-11",
+            "szInput": {
+                "colSpan": 11
+            },
+            "expectedClass": "col-span-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-1-12-12",
+            "szInput": {
+                "colSpan": 12
+            },
+            "expectedClass": "col-span-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-full",
+            "szInput": {
+                "colSpan": "full"
+            },
+            "expectedClass": "col-span-full",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-arbitrary",
+            "szInput": {
+                "colSpan": 16
+            },
+            "expectedClass": "col-span-[16]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-span-var",
+            "szInput": {
+                "colSpan": "--n"
+            },
+            "expectedClass": "col-span-(--n)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-1",
+            "szInput": {
+                "colStart": 1
+            },
+            "expectedClass": "col-start-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-2",
+            "szInput": {
+                "colStart": 2
+            },
+            "expectedClass": "col-start-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-3",
+            "szInput": {
+                "colStart": 3
+            },
+            "expectedClass": "col-start-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-4",
+            "szInput": {
+                "colStart": 4
+            },
+            "expectedClass": "col-start-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-5",
+            "szInput": {
+                "colStart": 5
+            },
+            "expectedClass": "col-start-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-6",
+            "szInput": {
+                "colStart": 6
+            },
+            "expectedClass": "col-start-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-7",
+            "szInput": {
+                "colStart": 7
+            },
+            "expectedClass": "col-start-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-8",
+            "szInput": {
+                "colStart": 8
+            },
+            "expectedClass": "col-start-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-9",
+            "szInput": {
+                "colStart": 9
+            },
+            "expectedClass": "col-start-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-10",
+            "szInput": {
+                "colStart": 10
+            },
+            "expectedClass": "col-start-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-11",
+            "szInput": {
+                "colStart": 11
+            },
+            "expectedClass": "col-start-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-12",
+            "szInput": {
+                "colStart": 12
+            },
+            "expectedClass": "col-start-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-1-13-13",
+            "szInput": {
+                "colStart": 13
+            },
+            "expectedClass": "col-start-13",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-auto",
+            "szInput": {
+                "colStart": "auto"
+            },
+            "expectedClass": "col-start-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-negative",
+            "szInput": {
+                "colStart": -1
+            },
+            "expectedClass": "-col-start-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-arbitrary",
+            "szInput": {
+                "colStart": 13
+            },
+            "expectedClass": "col-start-[13]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-start-var",
+            "szInput": {
+                "colStart": "--s"
+            },
+            "expectedClass": "col-start-(--s)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-1",
+            "szInput": {
+                "colEnd": 1
+            },
+            "expectedClass": "col-end-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-2",
+            "szInput": {
+                "colEnd": 2
+            },
+            "expectedClass": "col-end-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-3",
+            "szInput": {
+                "colEnd": 3
+            },
+            "expectedClass": "col-end-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-4",
+            "szInput": {
+                "colEnd": 4
+            },
+            "expectedClass": "col-end-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-5",
+            "szInput": {
+                "colEnd": 5
+            },
+            "expectedClass": "col-end-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-6",
+            "szInput": {
+                "colEnd": 6
+            },
+            "expectedClass": "col-end-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-7",
+            "szInput": {
+                "colEnd": 7
+            },
+            "expectedClass": "col-end-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-8",
+            "szInput": {
+                "colEnd": 8
+            },
+            "expectedClass": "col-end-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-9",
+            "szInput": {
+                "colEnd": 9
+            },
+            "expectedClass": "col-end-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-10",
+            "szInput": {
+                "colEnd": 10
+            },
+            "expectedClass": "col-end-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-11",
+            "szInput": {
+                "colEnd": 11
+            },
+            "expectedClass": "col-end-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-12",
+            "szInput": {
+                "colEnd": 12
+            },
+            "expectedClass": "col-end-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-1-13-13",
+            "szInput": {
+                "colEnd": 13
+            },
+            "expectedClass": "col-end-13",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-auto",
+            "szInput": {
+                "colEnd": "auto"
+            },
+            "expectedClass": "col-end-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-negative",
+            "szInput": {
+                "colEnd": -1
+            },
+            "expectedClass": "-col-end-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-arbitrary",
+            "szInput": {
+                "colEnd": 13
+            },
+            "expectedClass": "col-end-[13]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-end-var",
+            "szInput": {
+                "colEnd": "--e"
+            },
+            "expectedClass": "col-end-(--e)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-arbitrary",
+            "szInput": {
+                "col": "span 16"
+            },
+            "expectedClass": "col-[span_16]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-column-start-end-span-css-variable",
+            "szInput": {
+                "col": "--col"
+            },
+            "expectedClass": "col-(--col)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Column Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-1",
+            "szInput": {
+                "gridRows": 1
+            },
+            "expectedClass": "grid-rows-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-2",
+            "szInput": {
+                "gridRows": 2
+            },
+            "expectedClass": "grid-rows-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-3",
+            "szInput": {
+                "gridRows": 3
+            },
+            "expectedClass": "grid-rows-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-4",
+            "szInput": {
+                "gridRows": 4
+            },
+            "expectedClass": "grid-rows-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-5",
+            "szInput": {
+                "gridRows": 5
+            },
+            "expectedClass": "grid-rows-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-6",
+            "szInput": {
+                "gridRows": 6
+            },
+            "expectedClass": "grid-rows-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-7",
+            "szInput": {
+                "gridRows": 7
+            },
+            "expectedClass": "grid-rows-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-8",
+            "szInput": {
+                "gridRows": 8
+            },
+            "expectedClass": "grid-rows-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-9",
+            "szInput": {
+                "gridRows": 9
+            },
+            "expectedClass": "grid-rows-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-10",
+            "szInput": {
+                "gridRows": 10
+            },
+            "expectedClass": "grid-rows-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-11",
+            "szInput": {
+                "gridRows": 11
+            },
+            "expectedClass": "grid-rows-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-12",
+            "szInput": {
+                "gridRows": 12
+            },
+            "expectedClass": "grid-rows-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-none",
+            "szInput": {
+                "gridRows": "none"
+            },
+            "expectedClass": "grid-rows-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-1-12-subgrid",
+            "szInput": {
+                "gridRows": "subgrid"
+            },
+            "expectedClass": "grid-rows-subgrid",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-none",
+            "szInput": {
+                "gridRows": "none"
+            },
+            "expectedClass": "grid-rows-none",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-subgrid",
+            "szInput": {
+                "gridRows": "subgrid"
+            },
+            "expectedClass": "grid-rows-subgrid",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-arbitrary",
+            "szInput": {
+                "gridRows": "200px 1fr"
+            },
+            "expectedClass": "grid-rows-[200px_1fr]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-template-rows-css-variable",
+            "szInput": {
+                "gridRows": "--rows"
+            },
+            "expectedClass": "grid-rows-(--rows)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Template Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-auto",
+            "szInput": {
+                "row": "auto"
+            },
+            "expectedClass": "row-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-row-number",
+            "szInput": {
+                "row": 1
+            },
+            "expectedClass": "row-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-row-negative",
+            "szInput": {
+                "row": -1
+            },
+            "expectedClass": "-row-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-1",
+            "szInput": {
+                "rowSpan": 1
+            },
+            "expectedClass": "row-span-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-2",
+            "szInput": {
+                "rowSpan": 2
+            },
+            "expectedClass": "row-span-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-3",
+            "szInput": {
+                "rowSpan": 3
+            },
+            "expectedClass": "row-span-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-4",
+            "szInput": {
+                "rowSpan": 4
+            },
+            "expectedClass": "row-span-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-5",
+            "szInput": {
+                "rowSpan": 5
+            },
+            "expectedClass": "row-span-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-6",
+            "szInput": {
+                "rowSpan": 6
+            },
+            "expectedClass": "row-span-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-7",
+            "szInput": {
+                "rowSpan": 7
+            },
+            "expectedClass": "row-span-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-8",
+            "szInput": {
+                "rowSpan": 8
+            },
+            "expectedClass": "row-span-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-9",
+            "szInput": {
+                "rowSpan": 9
+            },
+            "expectedClass": "row-span-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-10",
+            "szInput": {
+                "rowSpan": 10
+            },
+            "expectedClass": "row-span-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-11",
+            "szInput": {
+                "rowSpan": 11
+            },
+            "expectedClass": "row-span-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-1-12-12",
+            "szInput": {
+                "rowSpan": 12
+            },
+            "expectedClass": "row-span-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-full",
+            "szInput": {
+                "rowSpan": "full"
+            },
+            "expectedClass": "row-span-full",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-arbitrary",
+            "szInput": {
+                "rowSpan": 16
+            },
+            "expectedClass": "row-span-[16]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-span-var",
+            "szInput": {
+                "rowSpan": "--n"
+            },
+            "expectedClass": "row-span-(--n)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-1",
+            "szInput": {
+                "rowStart": 1
+            },
+            "expectedClass": "row-start-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-2",
+            "szInput": {
+                "rowStart": 2
+            },
+            "expectedClass": "row-start-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-3",
+            "szInput": {
+                "rowStart": 3
+            },
+            "expectedClass": "row-start-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-4",
+            "szInput": {
+                "rowStart": 4
+            },
+            "expectedClass": "row-start-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-5",
+            "szInput": {
+                "rowStart": 5
+            },
+            "expectedClass": "row-start-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-6",
+            "szInput": {
+                "rowStart": 6
+            },
+            "expectedClass": "row-start-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-7",
+            "szInput": {
+                "rowStart": 7
+            },
+            "expectedClass": "row-start-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-8",
+            "szInput": {
+                "rowStart": 8
+            },
+            "expectedClass": "row-start-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-9",
+            "szInput": {
+                "rowStart": 9
+            },
+            "expectedClass": "row-start-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-10",
+            "szInput": {
+                "rowStart": 10
+            },
+            "expectedClass": "row-start-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-11",
+            "szInput": {
+                "rowStart": 11
+            },
+            "expectedClass": "row-start-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-12",
+            "szInput": {
+                "rowStart": 12
+            },
+            "expectedClass": "row-start-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-1-13-13",
+            "szInput": {
+                "rowStart": 13
+            },
+            "expectedClass": "row-start-13",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-auto",
+            "szInput": {
+                "rowStart": "auto"
+            },
+            "expectedClass": "row-start-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-negative",
+            "szInput": {
+                "rowStart": -1
+            },
+            "expectedClass": "-row-start-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-arbitrary",
+            "szInput": {
+                "rowStart": 13
+            },
+            "expectedClass": "row-start-[13]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-start-var",
+            "szInput": {
+                "rowStart": "--s"
+            },
+            "expectedClass": "row-start-(--s)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-1",
+            "szInput": {
+                "rowEnd": 1
+            },
+            "expectedClass": "row-end-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-2",
+            "szInput": {
+                "rowEnd": 2
+            },
+            "expectedClass": "row-end-2",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-3",
+            "szInput": {
+                "rowEnd": 3
+            },
+            "expectedClass": "row-end-3",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-4",
+            "szInput": {
+                "rowEnd": 4
+            },
+            "expectedClass": "row-end-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-5",
+            "szInput": {
+                "rowEnd": 5
+            },
+            "expectedClass": "row-end-5",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-6",
+            "szInput": {
+                "rowEnd": 6
+            },
+            "expectedClass": "row-end-6",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-7",
+            "szInput": {
+                "rowEnd": 7
+            },
+            "expectedClass": "row-end-7",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-8",
+            "szInput": {
+                "rowEnd": 8
+            },
+            "expectedClass": "row-end-8",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-9",
+            "szInput": {
+                "rowEnd": 9
+            },
+            "expectedClass": "row-end-9",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-10",
+            "szInput": {
+                "rowEnd": 10
+            },
+            "expectedClass": "row-end-10",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-11",
+            "szInput": {
+                "rowEnd": 11
+            },
+            "expectedClass": "row-end-11",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-12",
+            "szInput": {
+                "rowEnd": 12
+            },
+            "expectedClass": "row-end-12",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-1-13-13",
+            "szInput": {
+                "rowEnd": 13
+            },
+            "expectedClass": "row-end-13",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-auto",
+            "szInput": {
+                "rowEnd": "auto"
+            },
+            "expectedClass": "row-end-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-negative",
+            "szInput": {
+                "rowEnd": -1
+            },
+            "expectedClass": "-row-end-1",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-arbitrary",
+            "szInput": {
+                "rowEnd": 13
+            },
+            "expectedClass": "row-end-[13]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-end-var",
+            "szInput": {
+                "rowEnd": "--e"
+            },
+            "expectedClass": "row-end-(--e)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-arbitrary",
+            "szInput": {
+                "row": "span 16"
+            },
+            "expectedClass": "row-[span_16]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-row-start-end-span-css-variable",
+            "szInput": {
+                "row": "--row"
+            },
+            "expectedClass": "row-(--row)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Row Start / End / Span"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-flow-row",
+            "szInput": {
+                "gridFlow": "row"
+            },
+            "expectedClass": "grid-flow-row",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Flow"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-flow-col",
+            "szInput": {
+                "gridFlow": "col"
+            },
+            "expectedClass": "grid-flow-col",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Flow"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-flow-dense",
+            "szInput": {
+                "gridFlow": "dense"
+            },
+            "expectedClass": "grid-flow-dense",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Flow"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-flow-row-dense",
+            "szInput": {
+                "gridFlow": "row-dense"
+            },
+            "expectedClass": "grid-flow-row-dense",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Flow"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-flow-col-dense",
+            "szInput": {
+                "gridFlow": "col-dense"
+            },
+            "expectedClass": "grid-flow-col-dense",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Flow"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-columns-auto",
+            "szInput": {
+                "autoCols": "auto"
+            },
+            "expectedClass": "auto-cols-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-columns-min",
+            "szInput": {
+                "autoCols": "min"
+            },
+            "expectedClass": "auto-cols-min",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-columns-max",
+            "szInput": {
+                "autoCols": "max"
+            },
+            "expectedClass": "auto-cols-max",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-columns-fr",
+            "szInput": {
+                "autoCols": "fr"
+            },
+            "expectedClass": "auto-cols-fr",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-columns-arbitrary-1",
+            "szInput": {
+                "autoCols": "minmax(0,2fr)"
+            },
+            "expectedClass": "auto-cols-[minmax(0,2fr)]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-columns-css-variable",
+            "szInput": {
+                "autoCols": "--cols"
+            },
+            "expectedClass": "auto-cols-(--cols)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Columns"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-rows-auto",
+            "szInput": {
+                "autoRows": "auto"
+            },
+            "expectedClass": "auto-rows-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-rows-min",
+            "szInput": {
+                "autoRows": "min"
+            },
+            "expectedClass": "auto-rows-min",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-rows-max",
+            "szInput": {
+                "autoRows": "max"
+            },
+            "expectedClass": "auto-rows-max",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-rows-fr",
+            "szInput": {
+                "autoRows": "fr"
+            },
+            "expectedClass": "auto-rows-fr",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-rows-arbitrary-1",
+            "szInput": {
+                "autoRows": "minmax(0,2fr)"
+            },
+            "expectedClass": "auto-rows-[minmax(0,2fr)]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Rows"
+        },
+        {
+            "id": "flexbox-grid-grid-auto-rows-css-variable",
+            "szInput": {
+                "autoRows": "--rows"
+            },
+            "expectedClass": "auto-rows-(--rows)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Grid Auto Rows"
+        },
+        {
+            "id": "flexbox-grid-gap-gap",
+            "szInput": {
+                "gap": 4
+            },
+            "expectedClass": "gap-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Gap"
+        },
+        {
+            "id": "flexbox-grid-gap-gap-x",
+            "szInput": {
+                "gapX": 4
+            },
+            "expectedClass": "gap-x-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Gap"
+        },
+        {
+            "id": "flexbox-grid-gap-gap-y",
+            "szInput": {
+                "gapY": 4
+            },
+            "expectedClass": "gap-y-4",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Gap"
+        },
+        {
+            "id": "flexbox-grid-gap-arbitrary",
+            "szInput": {
+                "gap": "3px"
+            },
+            "expectedClass": "gap-[3px]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Gap"
+        },
+        {
+            "id": "flexbox-grid-gap-css-variable",
+            "szInput": {
+                "gap": "--gap"
+            },
+            "expectedClass": "gap-(--gap)",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Gap"
+        },
+        {
+            "id": "flexbox-grid-justify-content-normal",
+            "szInput": {
+                "justify": "normal"
+            },
+            "expectedClass": "justify-normal",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-start",
+            "szInput": {
+                "justify": "start"
+            },
+            "expectedClass": "justify-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-end",
+            "szInput": {
+                "justify": "end"
+            },
+            "expectedClass": "justify-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-center",
+            "szInput": {
+                "justify": "center"
+            },
+            "expectedClass": "justify-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-between",
+            "szInput": {
+                "justify": "between"
+            },
+            "expectedClass": "justify-between",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-around",
+            "szInput": {
+                "justify": "around"
+            },
+            "expectedClass": "justify-around",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-evenly",
+            "szInput": {
+                "justify": "evenly"
+            },
+            "expectedClass": "justify-evenly",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-stretch",
+            "szInput": {
+                "justify": "stretch"
+            },
+            "expectedClass": "justify-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-baseline",
+            "szInput": {
+                "justify": "baseline"
+            },
+            "expectedClass": "justify-baseline",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-safe-center",
+            "szInput": {
+                "justify": "safe-center"
+            },
+            "expectedClass": "justify-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-content-safe-end",
+            "szInput": {
+                "justify": "safe-end"
+            },
+            "expectedClass": "justify-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Content"
+        },
+        {
+            "id": "flexbox-grid-justify-items-start",
+            "szInput": {
+                "justifyItems": "start"
+            },
+            "expectedClass": "justify-items-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-items-end",
+            "szInput": {
+                "justifyItems": "end"
+            },
+            "expectedClass": "justify-items-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-items-center",
+            "szInput": {
+                "justifyItems": "center"
+            },
+            "expectedClass": "justify-items-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-items-stretch",
+            "szInput": {
+                "justifyItems": "stretch"
+            },
+            "expectedClass": "justify-items-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-items-normal",
+            "szInput": {
+                "justifyItems": "normal"
+            },
+            "expectedClass": "justify-items-normal",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-items-safe-center",
+            "szInput": {
+                "justifyItems": "safe-center"
+            },
+            "expectedClass": "justify-items-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-items-safe-end",
+            "szInput": {
+                "justifyItems": "safe-end"
+            },
+            "expectedClass": "justify-items-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Items"
+        },
+        {
+            "id": "flexbox-grid-justify-self-auto",
+            "szInput": {
+                "justifySelf": "auto"
+            },
+            "expectedClass": "justify-self-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-justify-self-start",
+            "szInput": {
+                "justifySelf": "start"
+            },
+            "expectedClass": "justify-self-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-justify-self-end",
+            "szInput": {
+                "justifySelf": "end"
+            },
+            "expectedClass": "justify-self-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-justify-self-center",
+            "szInput": {
+                "justifySelf": "center"
+            },
+            "expectedClass": "justify-self-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-justify-self-stretch",
+            "szInput": {
+                "justifySelf": "stretch"
+            },
+            "expectedClass": "justify-self-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-justify-self-safe-center",
+            "szInput": {
+                "justifySelf": "safe-center"
+            },
+            "expectedClass": "justify-self-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-justify-self-safe-end",
+            "szInput": {
+                "justifySelf": "safe-end"
+            },
+            "expectedClass": "justify-self-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Justify Self"
+        },
+        {
+            "id": "flexbox-grid-align-content-normal",
+            "szInput": {
+                "alignContent": "normal"
+            },
+            "expectedClass": "content-normal",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-start",
+            "szInput": {
+                "alignContent": "start"
+            },
+            "expectedClass": "content-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-end",
+            "szInput": {
+                "alignContent": "end"
+            },
+            "expectedClass": "content-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-center",
+            "szInput": {
+                "alignContent": "center"
+            },
+            "expectedClass": "content-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-between",
+            "szInput": {
+                "alignContent": "between"
+            },
+            "expectedClass": "content-between",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-around",
+            "szInput": {
+                "alignContent": "around"
+            },
+            "expectedClass": "content-around",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-evenly",
+            "szInput": {
+                "alignContent": "evenly"
+            },
+            "expectedClass": "content-evenly",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-baseline",
+            "szInput": {
+                "alignContent": "baseline"
+            },
+            "expectedClass": "content-baseline",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-content-stretch",
+            "szInput": {
+                "alignContent": "stretch"
+            },
+            "expectedClass": "content-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Content"
+        },
+        {
+            "id": "flexbox-grid-align-items-start",
+            "szInput": {
+                "items": "start"
+            },
+            "expectedClass": "items-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-end",
+            "szInput": {
+                "items": "end"
+            },
+            "expectedClass": "items-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-center",
+            "szInput": {
+                "items": "center"
+            },
+            "expectedClass": "items-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-baseline",
+            "szInput": {
+                "items": "baseline"
+            },
+            "expectedClass": "items-baseline",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-stretch",
+            "szInput": {
+                "items": "stretch"
+            },
+            "expectedClass": "items-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-safe-center",
+            "szInput": {
+                "items": "safe-center"
+            },
+            "expectedClass": "items-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-safe-end",
+            "szInput": {
+                "items": "safe-end"
+            },
+            "expectedClass": "items-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-items-last-baseline",
+            "szInput": {
+                "items": "last baseline"
+            },
+            "expectedClass": "items-[last_baseline]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Items"
+        },
+        {
+            "id": "flexbox-grid-align-self-auto",
+            "szInput": {
+                "self": "auto"
+            },
+            "expectedClass": "self-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-start",
+            "szInput": {
+                "self": "start"
+            },
+            "expectedClass": "self-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-end",
+            "szInput": {
+                "self": "end"
+            },
+            "expectedClass": "self-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-center",
+            "szInput": {
+                "self": "center"
+            },
+            "expectedClass": "self-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-stretch",
+            "szInput": {
+                "self": "stretch"
+            },
+            "expectedClass": "self-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-baseline",
+            "szInput": {
+                "self": "baseline"
+            },
+            "expectedClass": "self-baseline",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-safe-center",
+            "szInput": {
+                "self": "safe-center"
+            },
+            "expectedClass": "self-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-safe-end",
+            "szInput": {
+                "self": "safe-end"
+            },
+            "expectedClass": "self-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-align-self-last-baseline",
+            "szInput": {
+                "self": "last baseline"
+            },
+            "expectedClass": "self-[last_baseline]",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Align Self"
+        },
+        {
+            "id": "flexbox-grid-place-content-center",
+            "szInput": {
+                "placeContent": "center"
+            },
+            "expectedClass": "place-content-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-start",
+            "szInput": {
+                "placeContent": "start"
+            },
+            "expectedClass": "place-content-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-end",
+            "szInput": {
+                "placeContent": "end"
+            },
+            "expectedClass": "place-content-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-between",
+            "szInput": {
+                "placeContent": "between"
+            },
+            "expectedClass": "place-content-between",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-around",
+            "szInput": {
+                "placeContent": "around"
+            },
+            "expectedClass": "place-content-around",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-evenly",
+            "szInput": {
+                "placeContent": "evenly"
+            },
+            "expectedClass": "place-content-evenly",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-baseline",
+            "szInput": {
+                "placeContent": "baseline"
+            },
+            "expectedClass": "place-content-baseline",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-stretch",
+            "szInput": {
+                "placeContent": "stretch"
+            },
+            "expectedClass": "place-content-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-safe-center",
+            "szInput": {
+                "placeContent": "safe-center"
+            },
+            "expectedClass": "place-content-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-content-safe-end",
+            "szInput": {
+                "placeContent": "safe-end"
+            },
+            "expectedClass": "place-content-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Content"
+        },
+        {
+            "id": "flexbox-grid-place-items-start",
+            "szInput": {
+                "placeItems": "start"
+            },
+            "expectedClass": "place-items-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-items-end",
+            "szInput": {
+                "placeItems": "end"
+            },
+            "expectedClass": "place-items-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-items-center",
+            "szInput": {
+                "placeItems": "center"
+            },
+            "expectedClass": "place-items-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-items-baseline",
+            "szInput": {
+                "placeItems": "baseline"
+            },
+            "expectedClass": "place-items-baseline",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-items-stretch",
+            "szInput": {
+                "placeItems": "stretch"
+            },
+            "expectedClass": "place-items-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-items-safe-center",
+            "szInput": {
+                "placeItems": "safe-center"
+            },
+            "expectedClass": "place-items-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-items-safe-end",
+            "szInput": {
+                "placeItems": "safe-end"
+            },
+            "expectedClass": "place-items-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Items"
+        },
+        {
+            "id": "flexbox-grid-place-self-auto",
+            "szInput": {
+                "placeSelf": "auto"
+            },
+            "expectedClass": "place-self-auto",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        },
+        {
+            "id": "flexbox-grid-place-self-start",
+            "szInput": {
+                "placeSelf": "start"
+            },
+            "expectedClass": "place-self-start",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        },
+        {
+            "id": "flexbox-grid-place-self-end",
+            "szInput": {
+                "placeSelf": "end"
+            },
+            "expectedClass": "place-self-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        },
+        {
+            "id": "flexbox-grid-place-self-center",
+            "szInput": {
+                "placeSelf": "center"
+            },
+            "expectedClass": "place-self-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        },
+        {
+            "id": "flexbox-grid-place-self-stretch",
+            "szInput": {
+                "placeSelf": "stretch"
+            },
+            "expectedClass": "place-self-stretch",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        },
+        {
+            "id": "flexbox-grid-place-self-safe-center",
+            "szInput": {
+                "placeSelf": "safe-center"
+            },
+            "expectedClass": "place-self-safe-center",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        },
+        {
+            "id": "flexbox-grid-place-self-safe-end",
+            "szInput": {
+                "placeSelf": "safe-end"
+            },
+            "expectedClass": "place-self-safe-end",
+            "tailwindVersion": "4",
+            "category": "Flexbox & Grid",
+            "subcategory": "Place Self"
+        }
+    ],
+    "totalTests": 350
+}

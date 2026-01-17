@@ -1,0 +1,385 @@
+{
+    "tests": [
+        {
+            "id": "transforms-rotate-angle",
+            "szInput": {
+                "rotate": 45
+            },
+            "expectedClass": "rotate-45",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Rotate"
+        },
+        {
+            "id": "transforms-rotate-neg-angle",
+            "szInput": {
+                "rotate": -45
+            },
+            "expectedClass": "-rotate-45",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Rotate"
+        },
+        {
+            "id": "transforms-rotate-x-y-z-axis-1",
+            "szInput": {
+                "rotateX": 45
+            },
+            "expectedClass": "rotate-x-45",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Rotate"
+        },
+        {
+            "id": "transforms-rotate-arbitrary",
+            "szInput": {
+                "rotate": "1.2rad"
+            },
+            "expectedClass": "rotate-[1.2rad]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Rotate"
+        },
+        {
+            "id": "transforms-rotate-variable",
+            "szInput": {
+                "rotate": "--r"
+            },
+            "expectedClass": "rotate-(--r)",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Rotate"
+        },
+        {
+            "id": "transforms-scale-scale",
+            "szInput": {
+                "scale": 50
+            },
+            "expectedClass": "scale-50",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-scale-x-axis",
+            "szInput": {
+                "scaleX": 50
+            },
+            "expectedClass": "scale-x-50",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-scale-y-axis",
+            "szInput": {
+                "scaleY": 50
+            },
+            "expectedClass": "scale-y-50",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-scale-z-axis",
+            "szInput": {
+                "scaleZ": 50
+            },
+            "expectedClass": "scale-z-50",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-scale-3d",
+            "szInput": {
+                "scale3d": true
+            },
+            "expectedClass": "scale-3d",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-scale-arbitrary",
+            "szInput": {
+                "scale": "1.5"
+            },
+            "expectedClass": "scale-[1.5]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-scale-variable",
+            "szInput": {
+                "scale": "--s"
+            },
+            "expectedClass": "scale-(--s)",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Scale"
+        },
+        {
+            "id": "transforms-skew-x-axis",
+            "szInput": {
+                "skewX": 6
+            },
+            "expectedClass": "skew-x-6",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Skew"
+        },
+        {
+            "id": "transforms-skew-neg-x-axis",
+            "szInput": {
+                "skewX": -6
+            },
+            "expectedClass": "-skew-x-6",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Skew"
+        },
+        {
+            "id": "transforms-skew-y-axis",
+            "szInput": {
+                "skewY": 6
+            },
+            "expectedClass": "skew-y-6",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Skew"
+        },
+        {
+            "id": "transforms-skew-neg-y-axis",
+            "szInput": {
+                "skewY": -6
+            },
+            "expectedClass": "-skew-y-6",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Skew"
+        },
+        {
+            "id": "transforms-skew-arbitrary",
+            "szInput": {
+                "skewX": "5deg"
+            },
+            "expectedClass": "skew-x-[5deg]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Skew"
+        },
+        {
+            "id": "transforms-translate-x-axis",
+            "szInput": {
+                "translateX": 4
+            },
+            "expectedClass": "translate-x-4",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-neg-x-axis",
+            "szInput": {
+                "translateX": -4
+            },
+            "expectedClass": "-translate-x-4",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-y-axis",
+            "szInput": {
+                "translateY": 4
+            },
+            "expectedClass": "translate-y-4",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-z-axis",
+            "szInput": {
+                "translateZ": 4
+            },
+            "expectedClass": "translate-z-4",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-full-x-y-1",
+            "szInput": {
+                "translateX": "1/2"
+            },
+            "expectedClass": "translate-x-1/2",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-3d",
+            "szInput": {
+                "translate3d": true
+            },
+            "expectedClass": "translate-3d",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-arbitrary",
+            "szInput": {
+                "translateX": "5px"
+            },
+            "expectedClass": "translate-x-[5px]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-translate-variable",
+            "szInput": {
+                "translateX": "--t"
+            },
+            "expectedClass": "translate-x-(--t)",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Translate"
+        },
+        {
+            "id": "transforms-transform-origin-keywords-1",
+            "szInput": {
+                "origin": "top"
+            },
+            "expectedClass": "origin-top",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Transform Origin"
+        },
+        {
+            "id": "transforms-transform-origin-arbitrary",
+            "szInput": {
+                "origin": "33%_75%"
+            },
+            "expectedClass": "origin-[33%_75%]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Transform Origin"
+        },
+        {
+            "id": "transforms-transform-origin-variable",
+            "szInput": {
+                "origin": "--o"
+            },
+            "expectedClass": "origin-(--o)",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Transform Origin"
+        },
+        {
+            "id": "transforms-transform-style-flat",
+            "szInput": {
+                "transformStyle": "flat"
+            },
+            "expectedClass": "transform-flat",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Transform Style"
+        },
+        {
+            "id": "transforms-transform-style-3d",
+            "szInput": {
+                "transformStyle": "3d"
+            },
+            "expectedClass": "transform-3d",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Transform Style"
+        },
+        {
+            "id": "transforms-backface-visibility-visible",
+            "szInput": {
+                "backface": "visible"
+            },
+            "expectedClass": "backface-visible",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Backface Visibility"
+        },
+        {
+            "id": "transforms-backface-visibility-hidden",
+            "szInput": {
+                "backface": "hidden"
+            },
+            "expectedClass": "backface-hidden",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Backface Visibility"
+        },
+        {
+            "id": "transforms-perspective-scale-1",
+            "szInput": {
+                "perspective": "xs"
+            },
+            "expectedClass": "perspective-xs",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Perspective"
+        },
+        {
+            "id": "transforms-perspective-arbitrary",
+            "szInput": {
+                "perspective": "500px"
+            },
+            "expectedClass": "perspective-[500px]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Perspective"
+        },
+        {
+            "id": "transforms-perspective-variable",
+            "szInput": {
+                "perspective": "--p"
+            },
+            "expectedClass": "perspective-(--p)",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Perspective"
+        },
+        {
+            "id": "transforms-perspective-origin-keywords-1",
+            "szInput": {
+                "perspectiveOrigin": "top"
+            },
+            "expectedClass": "perspective-origin-top",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Perspective Origin"
+        },
+        {
+            "id": "transforms-perspective-origin-arbitrary",
+            "szInput": {
+                "perspectiveOrigin": "25%_25%"
+            },
+            "expectedClass": "perspective-origin-[25%_25%]",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Perspective Origin"
+        },
+        {
+            "id": "transforms-transform-none",
+            "szInput": {
+                "transform": "none"
+            },
+            "expectedClass": "transform-none",
+            "tailwindVersion": "4",
+            "category": "Transforms",
+            "subcategory": "Transform"
+        }
+    ],
+    "totalTests": 38
+}

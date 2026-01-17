@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>csszyx Vanilla Playground</title>
+    <!-- Tailwind v4 CDN (Experimental) -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @theme {
+            --color-brand: #3b82f6;
+        }
+    </style>
+    <style>
+        [sz]:not(.sz-ready) { visibility: hidden; } /* Prevents FOUC before script runs */
+        .sz-ready, .sz-ready [sz] { visibility: visible; }
+    </style>
+</head>
+<body sz="{ bg: 'slate-950', text: 'slate-200', minH: 'screen', font: 'sans', p: 8 }">
+
+    <div sz="{ maxW: '3xl', mx: 'auto' }">
+        <header sz="{ mb: 12, textAlign: 'center' }">
+            <h1 sz="{ text: '5xl', font: 'extrabold', color: 'blue-500', mb: 4, tracking: 'tight' }">
+                csszyx <span sz="{ opacity: 50, font: 'light' }">Vanilla</span>
+            </h1>
+            <p sz="{ text: 'lg', color: 'slate-400' }">
+                Pure HTML experience using the <code>sz</code> attribute. No bundler, no JSX.
+            </p>
+        </header>
+
+        <main sz="{ grid: true, gridCols: 1, gap: 8 }">
+            <!-- Feature Card 1 -->
+            <section sz="{ p: 8, bg: 'slate-900', rounded: '2xl', border: true, borderColor: 'slate-800', shadow: '2xl', hover: { borderColor: 'blue-500' }, transition: 'all' }">
+                <h2 sz="{ text: '2xl', font: 'bold', color: 'white', mb: 4 }">Object Syntax Support</h2>
+                <p sz="{ color: 'slate-400', mb: 6 }">
+                    Write styles as a JSON-like object directly in the <code>sz</code> attribute.
+                    The CDN runtime processes it and applies standard Tailwind classes.
+                </p>
+                <div sz="{ flex: true, gap: 3 }">
+                    <span sz="{ px: 3, py: 1, bg: 'blue-500', rounded: 'full', text: 'xs', font: 'bold', color: 'white' }">WASM Core</span>
+                    <span sz="{ px: 3, py: 1, bg: 'purple-500', rounded: 'full', text: 'xs', font: 'bold', color: 'white' }">Zero Build</span>
+                </div>
+            </section>
+
+            <!-- Feature Card 2 -->
+            <section sz="{ p: 8, bg: 'slate-900', rounded: '2xl', border: true, borderColor: 'slate-800', shadow: '2xl', hover: { borderColor: 'purple-500' }, transition: 'all' }">
+                <h2 sz="{ text: '2xl', font: 'bold', color: 'white', mb: 4 }">Interactive Elements</h2>
+                <div sz="{ flex: true, items: 'center', gap: 6 }">
+                    <button id="demo-btn" sz="{ px: 6, py: 3, bg: 'indigo-600', hover: { bg: 'indigo-500' }, rounded: 'lg', font: 'medium', shadow: 'lg', transition: 'colors' }">
+                        Interactive Button
+                    </button>
+                    <div sz="{ w: 12, h: 12, bg: 'pink-500', rounded: 'full', animate: 'pulse' }"></div>
+                </div>
+            </section>
+
+            <!-- Code Block -->
+            <div sz="{ bg: 'black', p: 6, rounded: 'xl', font: 'mono', text: 'sm' }">
+                <pre sz="{ color: 'green-400' }"><code>&lt;div sz="{ bg: 'slate-900', p: 8 }"&gt;
+  &lt;h1 sz="{ text: '4xl' }"&gt;Hello&lt;/h1&gt;
+&lt;/div&gt;</code></pre>
+            </div>
+        </main>
+
+        <footer sz="{ mt: 16, pt: 8, borderT: true, borderColor: 'slate-800', textAlign: 'center', color: 'slate-500', text: 'sm' }">
+            Built with csszyx CDN Runtime &bull; 2026
+        </footer>
+    </div>
+
+    <script src="./csszyx.js"></script>
+</body>
+</html>

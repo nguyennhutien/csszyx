@@ -1,0 +1,1915 @@
+{
+    "tests": [
+        {
+            "id": "filters-filter-filter-none",
+            "szInput": {
+                "filter": "none"
+            },
+            "expectedClass": "filter-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-filter-var",
+            "szInput": {
+                "filter": "--c"
+            },
+            "expectedClass": "filter-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-filter-arb",
+            "szInput": {
+                "filter": "blur(5px)"
+            },
+            "expectedClass": "filter-[blur(5px)]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-backdrop-none",
+            "szInput": {
+                "backdropFilter": "none"
+            },
+            "expectedClass": "backdrop-filter-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-defaults",
+            "szInput": {
+                "blur": true
+            },
+            "expectedClass": "blur",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-none",
+            "szInput": {
+                "blur": "none"
+            },
+            "expectedClass": "blur-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-sm",
+            "szInput": {
+                "blur": "sm"
+            },
+            "expectedClass": "blur-sm",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-default",
+            "szInput": {
+                "blur": true
+            },
+            "expectedClass": "blur",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-md",
+            "szInput": {
+                "blur": "md"
+            },
+            "expectedClass": "blur-md",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-lg",
+            "szInput": {
+                "blur": "lg"
+            },
+            "expectedClass": "blur-lg",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-xl",
+            "szInput": {
+                "blur": "xl"
+            },
+            "expectedClass": "blur-xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-2xl",
+            "szInput": {
+                "blur": "2xl"
+            },
+            "expectedClass": "blur-2xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-scale-3xl",
+            "szInput": {
+                "blur": "3xl"
+            },
+            "expectedClass": "blur-3xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-none",
+            "szInput": {
+                "blur": "none"
+            },
+            "expectedClass": "blur-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-var",
+            "szInput": {
+                "blur": "--c"
+            },
+            "expectedClass": "blur-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-blur-arb",
+            "szInput": {
+                "blur": "4px"
+            },
+            "expectedClass": "blur-[4px]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-0",
+            "szInput": {
+                "brightness": 0
+            },
+            "expectedClass": "brightness-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-50",
+            "szInput": {
+                "brightness": 50
+            },
+            "expectedClass": "brightness-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-75",
+            "szInput": {
+                "brightness": 75
+            },
+            "expectedClass": "brightness-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-90",
+            "szInput": {
+                "brightness": 90
+            },
+            "expectedClass": "brightness-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-95",
+            "szInput": {
+                "brightness": 95
+            },
+            "expectedClass": "brightness-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-100",
+            "szInput": {
+                "brightness": 100
+            },
+            "expectedClass": "brightness-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-105",
+            "szInput": {
+                "brightness": 105
+            },
+            "expectedClass": "brightness-105",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-110",
+            "szInput": {
+                "brightness": 110
+            },
+            "expectedClass": "brightness-110",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-125",
+            "szInput": {
+                "brightness": 125
+            },
+            "expectedClass": "brightness-125",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-150",
+            "szInput": {
+                "brightness": 150
+            },
+            "expectedClass": "brightness-150",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-200",
+            "szInput": {
+                "brightness": 200
+            },
+            "expectedClass": "brightness-200",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-var",
+            "szInput": {
+                "brightness": "--c"
+            },
+            "expectedClass": "brightness-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-brightness-arb",
+            "szInput": {
+                "brightness": "1.25"
+            },
+            "expectedClass": "brightness-[1.25]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-0",
+            "szInput": {
+                "contrast": 0
+            },
+            "expectedClass": "contrast-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-50",
+            "szInput": {
+                "contrast": 50
+            },
+            "expectedClass": "contrast-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-75",
+            "szInput": {
+                "contrast": 75
+            },
+            "expectedClass": "contrast-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-90",
+            "szInput": {
+                "contrast": 90
+            },
+            "expectedClass": "contrast-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-95",
+            "szInput": {
+                "contrast": 95
+            },
+            "expectedClass": "contrast-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-100",
+            "szInput": {
+                "contrast": 100
+            },
+            "expectedClass": "contrast-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-105",
+            "szInput": {
+                "contrast": 105
+            },
+            "expectedClass": "contrast-105",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-110",
+            "szInput": {
+                "contrast": 110
+            },
+            "expectedClass": "contrast-110",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-125",
+            "szInput": {
+                "contrast": 125
+            },
+            "expectedClass": "contrast-125",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-150",
+            "szInput": {
+                "contrast": 150
+            },
+            "expectedClass": "contrast-150",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-200",
+            "szInput": {
+                "contrast": 200
+            },
+            "expectedClass": "contrast-200",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-var",
+            "szInput": {
+                "contrast": "--c"
+            },
+            "expectedClass": "contrast-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-contrast-arb",
+            "szInput": {
+                "contrast": "1.5"
+            },
+            "expectedClass": "contrast-[1.5]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-sm",
+            "szInput": {
+                "dropShadow": "sm"
+            },
+            "expectedClass": "drop-shadow-sm",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-default",
+            "szInput": {
+                "dropShadow": true
+            },
+            "expectedClass": "drop-shadow",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-md",
+            "szInput": {
+                "dropShadow": "md"
+            },
+            "expectedClass": "drop-shadow-md",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-lg",
+            "szInput": {
+                "dropShadow": "lg"
+            },
+            "expectedClass": "drop-shadow-lg",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-xl",
+            "szInput": {
+                "dropShadow": "xl"
+            },
+            "expectedClass": "drop-shadow-xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-2xl",
+            "szInput": {
+                "dropShadow": "2xl"
+            },
+            "expectedClass": "drop-shadow-2xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-none",
+            "szInput": {
+                "dropShadow": "none"
+            },
+            "expectedClass": "drop-shadow-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-none-2",
+            "szInput": {
+                "dropShadow": "none"
+            },
+            "expectedClass": "drop-shadow-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-var",
+            "szInput": {
+                "dropShadow": "--c"
+            },
+            "expectedClass": "drop-shadow-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-arb",
+            "szInput": {
+                "dropShadow": "0_25px_25px_rgb(0_0_0/0.15)"
+            },
+            "expectedClass": "drop-shadow-[0_25px_25px_rgb(0_0_0/0.15)]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-color",
+            "szInput": {
+                "dropShadowColor": "red-500"
+            },
+            "expectedClass": "drop-shadow-red-500",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-drop-shadow-var-col",
+            "szInput": {
+                "dropShadowColor": "--c"
+            },
+            "expectedClass": "drop-shadow-(color:--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-grayscale",
+            "szInput": {
+                "grayscale": true
+            },
+            "expectedClass": "grayscale",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-grayscale-scale-0",
+            "szInput": {
+                "grayscale": 0
+            },
+            "expectedClass": "grayscale-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-grayscale-scale-default",
+            "szInput": {
+                "grayscale": true
+            },
+            "expectedClass": "grayscale",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-grayscale-var",
+            "szInput": {
+                "grayscale": "--c"
+            },
+            "expectedClass": "grayscale-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-grayscale-arb",
+            "szInput": {
+                "grayscale": "50%"
+            },
+            "expectedClass": "grayscale-[50%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-0",
+            "szInput": {
+                "hueRotate": 0
+            },
+            "expectedClass": "hue-rotate-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-15",
+            "szInput": {
+                "hueRotate": 15
+            },
+            "expectedClass": "hue-rotate-15",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-30",
+            "szInput": {
+                "hueRotate": 30
+            },
+            "expectedClass": "hue-rotate-30",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-60",
+            "szInput": {
+                "hueRotate": 60
+            },
+            "expectedClass": "hue-rotate-60",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-90",
+            "szInput": {
+                "hueRotate": 90
+            },
+            "expectedClass": "hue-rotate-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-180",
+            "szInput": {
+                "hueRotate": 180
+            },
+            "expectedClass": "hue-rotate-180",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-neg",
+            "szInput": {
+                "hueRotate": -15
+            },
+            "expectedClass": "-hue-rotate-15",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-var",
+            "szInput": {
+                "hueRotate": "--c"
+            },
+            "expectedClass": "hue-rotate-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-hue-rotate-arb",
+            "szInput": {
+                "hueRotate": "90deg"
+            },
+            "expectedClass": "hue-rotate-[90deg]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-invert",
+            "szInput": {
+                "invert": true
+            },
+            "expectedClass": "invert",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-invert-scale-0",
+            "szInput": {
+                "invert": 0
+            },
+            "expectedClass": "invert-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-invert-scale-default",
+            "szInput": {
+                "invert": true
+            },
+            "expectedClass": "invert",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-invert-var",
+            "szInput": {
+                "invert": "--c"
+            },
+            "expectedClass": "invert-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-invert-arb",
+            "szInput": {
+                "invert": "25%"
+            },
+            "expectedClass": "invert-[25%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-0",
+            "szInput": {
+                "saturate": 0
+            },
+            "expectedClass": "saturate-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-50",
+            "szInput": {
+                "saturate": 50
+            },
+            "expectedClass": "saturate-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-75",
+            "szInput": {
+                "saturate": 75
+            },
+            "expectedClass": "saturate-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-90",
+            "szInput": {
+                "saturate": 90
+            },
+            "expectedClass": "saturate-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-95",
+            "szInput": {
+                "saturate": 95
+            },
+            "expectedClass": "saturate-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-100",
+            "szInput": {
+                "saturate": 100
+            },
+            "expectedClass": "saturate-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-105",
+            "szInput": {
+                "saturate": 105
+            },
+            "expectedClass": "saturate-105",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-110",
+            "szInput": {
+                "saturate": 110
+            },
+            "expectedClass": "saturate-110",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-125",
+            "szInput": {
+                "saturate": 125
+            },
+            "expectedClass": "saturate-125",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-150",
+            "szInput": {
+                "saturate": 150
+            },
+            "expectedClass": "saturate-150",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-200",
+            "szInput": {
+                "saturate": 200
+            },
+            "expectedClass": "saturate-200",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-var",
+            "szInput": {
+                "saturate": "--c"
+            },
+            "expectedClass": "saturate-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-saturate-arb",
+            "szInput": {
+                "saturate": "1.5"
+            },
+            "expectedClass": "saturate-[1.5]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-sepia",
+            "szInput": {
+                "sepia": true
+            },
+            "expectedClass": "sepia",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-sepia-scale-0",
+            "szInput": {
+                "sepia": 0
+            },
+            "expectedClass": "sepia-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-sepia-scale-default",
+            "szInput": {
+                "sepia": true
+            },
+            "expectedClass": "sepia",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-sepia-var",
+            "szInput": {
+                "sepia": "--c"
+            },
+            "expectedClass": "sepia-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-filter-sepia-arb",
+            "szInput": {
+                "sepia": "50%"
+            },
+            "expectedClass": "sepia-[50%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-none",
+            "szInput": {
+                "backdropFilter": "none"
+            },
+            "expectedClass": "backdrop-filter-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-variable",
+            "szInput": {
+                "backdropFilter": "--c"
+            },
+            "expectedClass": "backdrop-filter-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-arbitrary",
+            "szInput": {
+                "backdropFilter": "blur(5px)"
+            },
+            "expectedClass": "backdrop-filter-[blur(5px)]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-none",
+            "szInput": {
+                "backdropBlur": "none"
+            },
+            "expectedClass": "backdrop-blur-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-sm",
+            "szInput": {
+                "backdropBlur": "sm"
+            },
+            "expectedClass": "backdrop-blur-sm",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-default",
+            "szInput": {
+                "backdropBlur": true
+            },
+            "expectedClass": "backdrop-blur",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-md",
+            "szInput": {
+                "backdropBlur": "md"
+            },
+            "expectedClass": "backdrop-blur-md",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-lg",
+            "szInput": {
+                "backdropBlur": "lg"
+            },
+            "expectedClass": "backdrop-blur-lg",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-xl",
+            "szInput": {
+                "backdropBlur": "xl"
+            },
+            "expectedClass": "backdrop-blur-xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-2xl",
+            "szInput": {
+                "backdropBlur": "2xl"
+            },
+            "expectedClass": "backdrop-blur-2xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-scale-3xl",
+            "szInput": {
+                "backdropBlur": "3xl"
+            },
+            "expectedClass": "backdrop-blur-3xl",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-none",
+            "szInput": {
+                "backdropBlur": "none"
+            },
+            "expectedClass": "backdrop-blur-none",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-var",
+            "szInput": {
+                "backdropBlur": "--c"
+            },
+            "expectedClass": "backdrop-blur-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-blur-arb",
+            "szInput": {
+                "backdropBlur": "4px"
+            },
+            "expectedClass": "backdrop-blur-[4px]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-0",
+            "szInput": {
+                "backdropBrightness": 0
+            },
+            "expectedClass": "backdrop-brightness-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-50",
+            "szInput": {
+                "backdropBrightness": 50
+            },
+            "expectedClass": "backdrop-brightness-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-75",
+            "szInput": {
+                "backdropBrightness": 75
+            },
+            "expectedClass": "backdrop-brightness-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-90",
+            "szInput": {
+                "backdropBrightness": 90
+            },
+            "expectedClass": "backdrop-brightness-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-95",
+            "szInput": {
+                "backdropBrightness": 95
+            },
+            "expectedClass": "backdrop-brightness-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-100",
+            "szInput": {
+                "backdropBrightness": 100
+            },
+            "expectedClass": "backdrop-brightness-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-105",
+            "szInput": {
+                "backdropBrightness": 105
+            },
+            "expectedClass": "backdrop-brightness-105",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-110",
+            "szInput": {
+                "backdropBrightness": 110
+            },
+            "expectedClass": "backdrop-brightness-110",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-125",
+            "szInput": {
+                "backdropBrightness": 125
+            },
+            "expectedClass": "backdrop-brightness-125",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-150",
+            "szInput": {
+                "backdropBrightness": 150
+            },
+            "expectedClass": "backdrop-brightness-150",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-200",
+            "szInput": {
+                "backdropBrightness": 200
+            },
+            "expectedClass": "backdrop-brightness-200",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-var",
+            "szInput": {
+                "backdropBrightness": "--c"
+            },
+            "expectedClass": "backdrop-brightness-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-brightness-arb",
+            "szInput": {
+                "backdropBrightness": "1.25"
+            },
+            "expectedClass": "backdrop-brightness-[1.25]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-0",
+            "szInput": {
+                "backdropContrast": 0
+            },
+            "expectedClass": "backdrop-contrast-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-50",
+            "szInput": {
+                "backdropContrast": 50
+            },
+            "expectedClass": "backdrop-contrast-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-75",
+            "szInput": {
+                "backdropContrast": 75
+            },
+            "expectedClass": "backdrop-contrast-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-90",
+            "szInput": {
+                "backdropContrast": 90
+            },
+            "expectedClass": "backdrop-contrast-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-95",
+            "szInput": {
+                "backdropContrast": 95
+            },
+            "expectedClass": "backdrop-contrast-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-100",
+            "szInput": {
+                "backdropContrast": 100
+            },
+            "expectedClass": "backdrop-contrast-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-105",
+            "szInput": {
+                "backdropContrast": 105
+            },
+            "expectedClass": "backdrop-contrast-105",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-110",
+            "szInput": {
+                "backdropContrast": 110
+            },
+            "expectedClass": "backdrop-contrast-110",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-125",
+            "szInput": {
+                "backdropContrast": 125
+            },
+            "expectedClass": "backdrop-contrast-125",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-150",
+            "szInput": {
+                "backdropContrast": 150
+            },
+            "expectedClass": "backdrop-contrast-150",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-200",
+            "szInput": {
+                "backdropContrast": 200
+            },
+            "expectedClass": "backdrop-contrast-200",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-var",
+            "szInput": {
+                "backdropContrast": "--c"
+            },
+            "expectedClass": "backdrop-contrast-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-contrast-arb",
+            "szInput": {
+                "backdropContrast": "1.5"
+            },
+            "expectedClass": "backdrop-contrast-[1.5]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-grayscale",
+            "szInput": {
+                "backdropGrayscale": true
+            },
+            "expectedClass": "backdrop-grayscale",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-grayscale-scale-0",
+            "szInput": {
+                "backdropGrayscale": 0
+            },
+            "expectedClass": "backdrop-grayscale-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-grayscale-scale-default",
+            "szInput": {
+                "backdropGrayscale": true
+            },
+            "expectedClass": "backdrop-grayscale",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-grayscale-var",
+            "szInput": {
+                "backdropGrayscale": "--c"
+            },
+            "expectedClass": "backdrop-grayscale-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-grayscale-arb",
+            "szInput": {
+                "backdropGrayscale": "50%"
+            },
+            "expectedClass": "backdrop-grayscale-[50%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-0",
+            "szInput": {
+                "backdropHueRotate": 0
+            },
+            "expectedClass": "backdrop-hue-rotate-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-15",
+            "szInput": {
+                "backdropHueRotate": 15
+            },
+            "expectedClass": "backdrop-hue-rotate-15",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-30",
+            "szInput": {
+                "backdropHueRotate": 30
+            },
+            "expectedClass": "backdrop-hue-rotate-30",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-60",
+            "szInput": {
+                "backdropHueRotate": 60
+            },
+            "expectedClass": "backdrop-hue-rotate-60",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-90",
+            "szInput": {
+                "backdropHueRotate": 90
+            },
+            "expectedClass": "backdrop-hue-rotate-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-180",
+            "szInput": {
+                "backdropHueRotate": 180
+            },
+            "expectedClass": "backdrop-hue-rotate-180",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-neg",
+            "szInput": {
+                "backdropHueRotate": -15
+            },
+            "expectedClass": "-backdrop-hue-rotate-15",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-var",
+            "szInput": {
+                "backdropHueRotate": "--c"
+            },
+            "expectedClass": "backdrop-hue-rotate-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-hue-rotate-arb",
+            "szInput": {
+                "backdropHueRotate": "90deg"
+            },
+            "expectedClass": "backdrop-hue-rotate-[90deg]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-invert",
+            "szInput": {
+                "backdropInvert": true
+            },
+            "expectedClass": "backdrop-invert",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-invert-scale-0",
+            "szInput": {
+                "backdropInvert": 0
+            },
+            "expectedClass": "backdrop-invert-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-invert-scale-default",
+            "szInput": {
+                "backdropInvert": true
+            },
+            "expectedClass": "backdrop-invert",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-invert-var",
+            "szInput": {
+                "backdropInvert": "--c"
+            },
+            "expectedClass": "backdrop-invert-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-invert-arb",
+            "szInput": {
+                "backdropInvert": "25%"
+            },
+            "expectedClass": "backdrop-invert-[25%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-0",
+            "szInput": {
+                "backdropOpacity": 0
+            },
+            "expectedClass": "backdrop-opacity-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-5",
+            "szInput": {
+                "backdropOpacity": 5
+            },
+            "expectedClass": "backdrop-opacity-5",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-10",
+            "szInput": {
+                "backdropOpacity": 10
+            },
+            "expectedClass": "backdrop-opacity-10",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-15",
+            "szInput": {
+                "backdropOpacity": 15
+            },
+            "expectedClass": "backdrop-opacity-15",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-20",
+            "szInput": {
+                "backdropOpacity": 20
+            },
+            "expectedClass": "backdrop-opacity-20",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-25",
+            "szInput": {
+                "backdropOpacity": 25
+            },
+            "expectedClass": "backdrop-opacity-25",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-30",
+            "szInput": {
+                "backdropOpacity": 30
+            },
+            "expectedClass": "backdrop-opacity-30",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-35",
+            "szInput": {
+                "backdropOpacity": 35
+            },
+            "expectedClass": "backdrop-opacity-35",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-40",
+            "szInput": {
+                "backdropOpacity": 40
+            },
+            "expectedClass": "backdrop-opacity-40",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-45",
+            "szInput": {
+                "backdropOpacity": 45
+            },
+            "expectedClass": "backdrop-opacity-45",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-50",
+            "szInput": {
+                "backdropOpacity": 50
+            },
+            "expectedClass": "backdrop-opacity-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-55",
+            "szInput": {
+                "backdropOpacity": 55
+            },
+            "expectedClass": "backdrop-opacity-55",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-60",
+            "szInput": {
+                "backdropOpacity": 60
+            },
+            "expectedClass": "backdrop-opacity-60",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-65",
+            "szInput": {
+                "backdropOpacity": 65
+            },
+            "expectedClass": "backdrop-opacity-65",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-70",
+            "szInput": {
+                "backdropOpacity": 70
+            },
+            "expectedClass": "backdrop-opacity-70",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-75",
+            "szInput": {
+                "backdropOpacity": 75
+            },
+            "expectedClass": "backdrop-opacity-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-80",
+            "szInput": {
+                "backdropOpacity": 80
+            },
+            "expectedClass": "backdrop-opacity-80",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-85",
+            "szInput": {
+                "backdropOpacity": 85
+            },
+            "expectedClass": "backdrop-opacity-85",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-90",
+            "szInput": {
+                "backdropOpacity": 90
+            },
+            "expectedClass": "backdrop-opacity-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-95",
+            "szInput": {
+                "backdropOpacity": 95
+            },
+            "expectedClass": "backdrop-opacity-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-100",
+            "szInput": {
+                "backdropOpacity": 100
+            },
+            "expectedClass": "backdrop-opacity-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-var",
+            "szInput": {
+                "backdropOpacity": "--c"
+            },
+            "expectedClass": "backdrop-opacity-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-opacity-arb",
+            "szInput": {
+                "backdropOpacity": "75%"
+            },
+            "expectedClass": "backdrop-opacity-[75%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-0",
+            "szInput": {
+                "backdropSaturate": 0
+            },
+            "expectedClass": "backdrop-saturate-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-50",
+            "szInput": {
+                "backdropSaturate": 50
+            },
+            "expectedClass": "backdrop-saturate-50",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-75",
+            "szInput": {
+                "backdropSaturate": 75
+            },
+            "expectedClass": "backdrop-saturate-75",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-90",
+            "szInput": {
+                "backdropSaturate": 90
+            },
+            "expectedClass": "backdrop-saturate-90",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-95",
+            "szInput": {
+                "backdropSaturate": 95
+            },
+            "expectedClass": "backdrop-saturate-95",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-100",
+            "szInput": {
+                "backdropSaturate": 100
+            },
+            "expectedClass": "backdrop-saturate-100",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-105",
+            "szInput": {
+                "backdropSaturate": 105
+            },
+            "expectedClass": "backdrop-saturate-105",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-110",
+            "szInput": {
+                "backdropSaturate": 110
+            },
+            "expectedClass": "backdrop-saturate-110",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-125",
+            "szInput": {
+                "backdropSaturate": 125
+            },
+            "expectedClass": "backdrop-saturate-125",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-150",
+            "szInput": {
+                "backdropSaturate": 150
+            },
+            "expectedClass": "backdrop-saturate-150",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-200",
+            "szInput": {
+                "backdropSaturate": 200
+            },
+            "expectedClass": "backdrop-saturate-200",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-var",
+            "szInput": {
+                "backdropSaturate": "--c"
+            },
+            "expectedClass": "backdrop-saturate-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-saturate-arb",
+            "szInput": {
+                "backdropSaturate": "1.5"
+            },
+            "expectedClass": "backdrop-saturate-[1.5]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-sepia",
+            "szInput": {
+                "backdropSepia": true
+            },
+            "expectedClass": "backdrop-sepia",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-sepia-scale-0",
+            "szInput": {
+                "backdropSepia": 0
+            },
+            "expectedClass": "backdrop-sepia-0",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-sepia-scale-default",
+            "szInput": {
+                "backdropSepia": true
+            },
+            "expectedClass": "backdrop-sepia",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-sepia-var",
+            "szInput": {
+                "backdropSepia": "--c"
+            },
+            "expectedClass": "backdrop-sepia-(--c)",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        },
+        {
+            "id": "filters-backdrop-filter-sepia-arb",
+            "szInput": {
+                "backdropSepia": "50%"
+            },
+            "expectedClass": "backdrop-sepia-[50%]",
+            "tailwindVersion": "4",
+            "category": "Filters",
+            "subcategory": "Backdrop Filter"
+        }
+    ],
+    "totalTests": 191
+}

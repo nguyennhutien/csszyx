@@ -1,0 +1,230 @@
+/**
+ * CSS Variable Hoisting — deduplicates identical CSS variables across sibling elements.
+ *
+ * When multiple JSX elements in the same component share the same CSS variable
+ * name and value, the variable is hoisted to the nearest common ancestor JSX element.
+ *
+ * Hoisting rule: ALWAYS safe within the same Babel transform scope.
+ * Inner inline styles override inherited CSS variable values due to CSS cascade.
+ *
+ * @module @csszyx/compiler/hoisting
+ */
+
+import * as t from '@babel/types';
+
+/**
+ * Tracks a CSS variable usage on a specific JSX element.
+ */
+export interface CSSVarUsage {
+    /** The JSX element AST node */
+    element: t.JSXOpeningElement;
+    /** CSS variable name, e.g., --_sz-p */
+    varName: string;
+    /** The style value AST expression */
+    valueExpr: t.Expression;
+    /** Serialized value for comparison (null if dynamic/non-comparable) */
+    serializedValue: string | null;
+}
+
+/**
+ * Finds the lowest common ancestor JSX opening element between two nodes.
+ *
+ * @param nodeA - First JSX opening element
+ * @param nodeB - Second JSX opening element
+ * @param parentMap - Map of child-to-parent relationships in the AST
+ * @returns The lowest common JSX ancestor, or null if none exists (e.g., Fragment)
+ */
+function findLCA(
+    nodeA: t.JSXOpeningElement,
+    nodeB: t.JSXOpeningElement,
+    parentMap: Map<t.Node, t.Node>,
+): t.JSXOpeningElement | null {
+    const ancestorsA = new Set<t.Node>();
+    let current: t.Node | undefined = nodeA;
+    while (current) {
+        ancestorsA.add(current);
+        current = parentMap.get(current);
+    }
+
+    current = nodeB;
+    while (current) {
+        if (ancestorsA.has(current) && t.isJSXOpeningElement(current) && current !== nodeA && current !== nodeB) {
+            return current;
+        }
+        current = parentMap.get(current);
+    }
+    return null;
+}
+
+/**
+ * Checks if a JSX element is a Fragment (can't have style attributes).
+ *
+ * @param node - The JSX opening element to check
+ * @returns True if the element is a React Fragment
+ */
+function isFragment(node: t.JSXOpeningElement): boolean {
+    if (t.isJSXIdentifier(node.name)) {
+        return node.name.name === 'Fragment';
+    }
+    if (t.isJSXMemberExpression(node.name)) {
+        return t.isJSXIdentifier(node.name.property) && node.name.property.name === 'Fragment';
+    }
+    return false;
+}
+
+/**
+ * Removes a CSS variable property from a JSX element's style attribute.
+ *
+ * @param element - The JSX opening element to modify
+ * @param varName - The CSS variable name to remove
+ */
+function removeStyleVar(element: t.JSXOpeningElement, varName: string): void {
+    for (const attr of element.attributes) {
+        if (!t.isJSXAttribute(attr)) {continue;}
+        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {continue;}
+        if (!t.isJSXExpressionContainer(attr.value)) {continue;}
+        const styleObj = attr.value.expression;
+        if (!t.isObjectExpression(styleObj)) {continue;}
+
+        styleObj.properties = styleObj.properties.filter(prop => {
+            if (!t.isObjectProperty(prop)) {return true;}
+            if (t.isStringLiteral(prop.key)) {return prop.key.value !== varName;}
+            return true;
+        });
+
+        // If style object is empty, remove the entire style attribute
+        if (styleObj.properties.length === 0) {
+            const idx = element.attributes.indexOf(attr);
+            if (idx !== -1) {element.attributes.splice(idx, 1);}
+        }
+        break;
+    }
+}
+
+/**
+ * Adds a CSS variable property to a JSX element's style attribute.
+ * Creates the style attribute if it doesn't exist.
+ *
+ * @param element - The JSX opening element to modify
+ * @param varName - The CSS variable name to add
+ * @param valueExpr - The AST expression for the variable value
+ */
+function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t.Expression): void {
+    // Find existing style attribute
+    for (const attr of element.attributes) {
+        if (!t.isJSXAttribute(attr)) {continue;}
+        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {continue;}
+        if (!t.isJSXExpressionContainer(attr.value)) {continue;}
+        const styleObj = attr.value.expression;
+        if (!t.isObjectExpression(styleObj)) {continue;}
+
+        // Check if variable already exists
+        const existing = styleObj.properties.find(prop =>
+            t.isObjectProperty(prop) &&
+            t.isStringLiteral(prop.key) &&
+            prop.key.value === varName,
+        );
+        if (!existing) {
+            styleObj.properties.push(
+                t.objectProperty(t.stringLiteral(varName), valueExpr),
+            );
+        }
+        return;
+    }
+
+    // No style attribute — create one
+    element.attributes.push(
+        t.jsxAttribute(
+            t.jsxIdentifier('style'),
+            t.jsxExpressionContainer(
+                t.objectExpression([
+                    t.objectProperty(t.stringLiteral(varName), valueExpr),
+                ]),
+            ),
+        ),
+    );
+}
+
+/**
+ * Hoists CSS variables to common ancestor elements when multiple siblings
+ * share the same variable name and value.
+ *
+ * @param usages - All CSS variable usages collected during transform
+ * @param parentMap - Map of child-to-parent relationships in the AST
+ */
+export function hoistCSSVariables(
+    usages: CSSVarUsage[],
+    parentMap: Map<t.Node, t.Node>,
+): void {
+    if (usages.length < 2) {return;}
+
+    // Group by varName + serializedValue (identical pairs)
+    const groups = new Map<string, CSSVarUsage[]>();
+    for (const usage of usages) {
+        if (usage.serializedValue === null) {continue;} // Can't hoist dynamic values
+        const groupKey = `${usage.varName}::${usage.serializedValue}`;
+        const group = groups.get(groupKey) || [];
+        group.push(usage);
+        groups.set(groupKey, group);
+    }
+
+    // For each group with 2+ elements, find LCA and hoist
+    for (const [, group] of groups) {
+        if (group.length < 2) {continue;}
+
+        // Find LCA of all elements in the group
+        let lca = group[0].element;
+        for (let i = 1; i < group.length; i++) {
+            const newLca = findLCA(lca, group[i].element, parentMap);
+            if (newLca === null || isFragment(newLca)) {
+                lca = null as unknown as t.JSXOpeningElement;
+                break;
+            }
+            lca = newLca;
+        }
+
+        if (!lca) {continue;} // No valid LCA (Fragment or no common ancestor)
+
+        // Hoist: add variable to LCA, remove from each child
+        addStyleVar(lca, group[0].varName, group[0].valueExpr);
+        for (const usage of group) {
+            removeStyleVar(usage.element, usage.varName);
+        }
+    }
+}
+
+/**
+ * Builds a parent map for AST nodes (child-to-parent relationship).
+ * Used by hoistCSSVariables to find LCA.
+ *
+ * @param ast - The root AST node to traverse
+ * @returns A map of child-to-parent node relationships
+ */
+export function buildParentMap(ast: t.Node): Map<t.Node, t.Node> {
+    const map = new Map<t.Node, t.Node>();
+
+    /** @param node - The current AST node being visited
+     *  @param parent - The parent of the current node */
+    function traverse(node: t.Node, parent?: t.Node): void {
+        if (parent) {
+            map.set(node, parent);
+        }
+        for (const key of Object.keys(node) as (keyof t.Node)[]) {
+            const value = (node as unknown as Record<string, unknown>)[key];
+            if (value && typeof value === 'object') {
+                if (Array.isArray(value)) {
+                    for (const item of value) {
+                        if (item && typeof item === 'object' && 'type' in item) {
+                            traverse(item as t.Node, node);
+                        }
+                    }
+                } else if ('type' in (value as Record<string, unknown>)) {
+                    traverse(value as t.Node, node);
+                }
+            }
+        }
+    }
+
+    traverse(ast);
+    return map;
+}

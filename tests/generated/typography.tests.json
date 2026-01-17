@@ -1,0 +1,779 @@
+{
+    "tests": [
+        {
+            "id": "typography-font-family-sans",
+            "szInput": {
+                "fontFamily": "sans"
+            },
+            "expectedClass": "font-sans",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Family"
+        },
+        {
+            "id": "typography-font-family-serif",
+            "szInput": {
+                "fontFamily": "serif"
+            },
+            "expectedClass": "font-serif",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Family"
+        },
+        {
+            "id": "typography-font-family-mono",
+            "szInput": {
+                "fontFamily": "mono"
+            },
+            "expectedClass": "font-mono",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Family"
+        },
+        {
+            "id": "typography-font-family-legacy",
+            "szInput": {
+                "font": "sans"
+            },
+            "expectedClass": "font-sans",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Family"
+        },
+        {
+            "id": "typography-font-family-arbitrary",
+            "szInput": {
+                "fontFamily": "'My Font'"
+            },
+            "expectedClass": "font-['My_Font']",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Family"
+        },
+        {
+            "id": "typography-font-family-css-variable",
+            "szInput": {
+                "fontFamily": "--f"
+            },
+            "expectedClass": "font-(--f)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Family"
+        },
+        {
+            "id": "typography-font-size-scale-1",
+            "szInput": {
+                "text": "xs"
+            },
+            "expectedClass": "text-xs",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Size"
+        },
+        {
+            "id": "typography-font-size-scale-2",
+            "szInput": {
+                "text": "sm"
+            },
+            "expectedClass": "text-sm",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Size"
+        },
+        {
+            "id": "typography-font-size-number",
+            "szInput": {
+                "text": "16px"
+            },
+            "expectedClass": "text-[16px]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Size"
+        },
+        {
+            "id": "typography-font-size-arbitrary",
+            "szInput": {
+                "text": "1.5rem"
+            },
+            "expectedClass": "text-[1.5rem]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Size"
+        },
+        {
+            "id": "typography-font-size-css-variable",
+            "szInput": {
+                "text": "--size"
+            },
+            "expectedClass": "text-(--size)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Size"
+        },
+        {
+            "id": "typography-font-weight-keywords-1",
+            "szInput": {
+                "fontWeight": "thin"
+            },
+            "expectedClass": "font-thin",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-weight-keywords-2",
+            "szInput": {
+                "fontWeight": "extralight"
+            },
+            "expectedClass": "font-extralight",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-weight-number-1",
+            "szInput": {
+                "fontWeight": 100
+            },
+            "expectedClass": "font-100",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-weight-number-2",
+            "szInput": {
+                "fontWeight": 200
+            },
+            "expectedClass": "font-200",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-weight-alias",
+            "szInput": {
+                "weight": "bold"
+            },
+            "expectedClass": "font-bold",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-weight-arbitrary",
+            "szInput": {
+                "fontWeight": 550
+            },
+            "expectedClass": "font-[550]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-weight-css-variable",
+            "szInput": {
+                "fontWeight": "--w"
+            },
+            "expectedClass": "font-(--w)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Weight"
+        },
+        {
+            "id": "typography-font-stretch-keywords-1",
+            "szInput": {
+                "fontStretch": "ultra-condensed"
+            },
+            "expectedClass": "font-ultra-condensed",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Stretch"
+        },
+        {
+            "id": "typography-font-stretch-percentage",
+            "szInput": {
+                "fontStretch": "50%"
+            },
+            "expectedClass": "font-stretch-50%",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Stretch"
+        },
+        {
+            "id": "typography-font-stretch-arbitrary",
+            "szInput": {
+                "fontStretch": "125%"
+            },
+            "expectedClass": "font-stretch-125%",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Stretch"
+        },
+        {
+            "id": "typography-font-stretch-css-variable",
+            "szInput": {
+                "fontStretch": "--s"
+            },
+            "expectedClass": "font-stretch-(--s)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Stretch"
+        },
+        {
+            "id": "typography-font-variant-numeric-variant-1",
+            "szInput": {
+                "fontVariant": "normal-nums"
+            },
+            "expectedClass": "normal-nums",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Variant Numeric"
+        },
+        {
+            "id": "typography-font-variant-numeric-boolean",
+            "szInput": {
+                "slashedZero": true
+            },
+            "expectedClass": "slashed-zero",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Variant Numeric"
+        },
+        {
+            "id": "typography-font-variant-numeric-boolean-2",
+            "szInput": {
+                "ordinal": true
+            },
+            "expectedClass": "ordinal",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Variant Numeric"
+        },
+        {
+            "id": "typography-font-style-smoothing-italic",
+            "szInput": {
+                "italic": true
+            },
+            "expectedClass": "italic",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Style & Smoothing"
+        },
+        {
+            "id": "typography-font-style-smoothing-not-italic",
+            "szInput": {
+                "italic": false
+            },
+            "expectedClass": "not-italic",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Style & Smoothing"
+        },
+        {
+            "id": "typography-font-style-smoothing-antialiased",
+            "szInput": {
+                "antialiased": true
+            },
+            "expectedClass": "antialiased",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Style & Smoothing"
+        },
+        {
+            "id": "typography-font-style-smoothing-subpixel",
+            "szInput": {
+                "antialiased": false
+            },
+            "expectedClass": "subpixel-antialiased",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Font Style & Smoothing"
+        },
+        {
+            "id": "typography-letter-spacing-tracking-keywords-1",
+            "szInput": {
+                "tracking": "tighter"
+            },
+            "expectedClass": "tracking-tighter",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Letter Spacing (Tracking)"
+        },
+
+        {
+            "id": "typography-letter-spacing-tracking-arbitrary",
+            "szInput": {
+                "tracking": ".25em"
+            },
+            "expectedClass": "tracking-[.25em]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Letter Spacing (Tracking)"
+        },
+        {
+            "id": "typography-letter-spacing-tracking-css-variable",
+            "szInput": {
+                "tracking": "--t"
+            },
+            "expectedClass": "tracking-(--t)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Letter Spacing (Tracking)"
+        },
+        {
+            "id": "typography-line-height-leading-keywords-1",
+            "szInput": {
+                "leading": "none"
+            },
+            "expectedClass": "leading-none",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Line Height (Leading)"
+        },
+        {
+            "id": "typography-line-height-leading-fixed-1",
+            "szInput": {
+                "leading": 3
+            },
+            "expectedClass": "leading-3",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Line Height (Leading)"
+        },
+        {
+            "id": "typography-line-height-leading-arbitrary",
+            "szInput": {
+                "leading": "3rem"
+            },
+            "expectedClass": "leading-[3rem]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Line Height (Leading)"
+        },
+        {
+            "id": "typography-line-height-leading-css-variable",
+            "szInput": {
+                "leading": "--l"
+            },
+            "expectedClass": "leading-(--l)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Line Height (Leading)"
+        },
+        {
+            "id": "typography-text-align-align-1",
+            "szInput": {
+                "textAlign": "left"
+            },
+            "expectedClass": "text-left",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Align"
+        },
+        {
+            "id": "typography-text-color-keywords-1",
+            "szInput": {
+                "color": "inherit"
+            },
+            "expectedClass": "text-inherit",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Color"
+        },
+
+        {
+            "id": "typography-text-color-opacity",
+            "szInput": {
+                "color": { "color": "blue-500", "op": 50 }
+            },
+            "expectedClass": "text-blue-500/50",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Color"
+        },
+        {
+            "id": "typography-text-color-arbitrary",
+            "szInput": {
+                "color": "#50d71e"
+            },
+            "expectedClass": "text-[#50d71e]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Color"
+        },
+        {
+            "id": "typography-text-color-css-variable",
+            "szInput": {
+                "color": "--c"
+            },
+            "expectedClass": "text-(--c)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Color"
+        },
+        {
+            "id": "typography-text-decoration-line-type-1",
+            "szInput": {
+                "decoration": "underline"
+            },
+            "expectedClass": "underline",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-style-1",
+            "szInput": {
+                "decorationStyle": "solid"
+            },
+            "expectedClass": "decoration-solid",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-thickness-1",
+            "szInput": {
+                "decorationThickness": 1
+            },
+            "expectedClass": "decoration-1",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-offset-1",
+            "szInput": {
+                "underlineOffset": 1
+            },
+            "expectedClass": "underline-offset-1",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-color",
+            "szInput": {
+                "decorationColor": "blue-500"
+            },
+            "expectedClass": "decoration-blue-500",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-arbitrary",
+            "szInput": {
+                "decorationThickness": "3px"
+            },
+            "expectedClass": "decoration-[3px]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-var",
+            "szInput": {
+                "decorationThickness": "--v"
+            },
+            "expectedClass": "decoration-(--v)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-decoration-boolean",
+            "szInput": {
+                "underline": true
+            },
+            "expectedClass": "underline",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Decoration"
+        },
+        {
+            "id": "typography-text-transform-transform-1",
+            "szInput": {
+                "textTransform": "uppercase"
+            },
+            "expectedClass": "uppercase",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Transform"
+        },
+        {
+            "id": "typography-text-transform-boolean-sugar",
+            "szInput": {
+                "uppercase": true
+            },
+            "expectedClass": "uppercase",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Transform"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-overflow-1",
+            "szInput": {
+                "textOverflow": "ellipsis"
+            },
+            "expectedClass": "truncate",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-wrap-1",
+            "szInput": {
+                "textWrap": "wrap"
+            },
+            "expectedClass": "text-wrap",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+
+        {
+            "id": "typography-text-overflow-whitespace-arbitrary-indent",
+            "szInput": {
+                "indent": "50%"
+            },
+            "expectedClass": "indent-[50%]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-var-indent",
+            "szInput": {
+                "indent": "--i"
+            },
+            "expectedClass": "indent-(--i)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-vertical-1",
+            "szInput": {
+                "verticalAlign": "middle"
+            },
+            "expectedClass": "align-middle",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-arbitrary-vertical",
+            "szInput": {
+                "verticalAlign": "4px"
+            },
+            "expectedClass": "align-[4px]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-var-vertical",
+            "szInput": {
+                "verticalAlign": "--v"
+            },
+            "expectedClass": "align-(--v)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-whitespace-1",
+            "szInput": {
+                "whitespace": "normal"
+            },
+            "expectedClass": "whitespace-normal",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-word-break-1",
+            "szInput": {
+                "wordBreak": "break-all"
+            },
+            "expectedClass": "break-all",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-overflow-wrap-1",
+            "szInput": {
+                "overflowWrap": "break-words"
+            },
+            "expectedClass": "break-words",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-hyphens-1",
+            "szInput": {
+                "hyphens": "auto"
+            },
+            "expectedClass": "hyphens-auto",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-content",
+            "szInput": {
+                "content": "none"
+            },
+            "expectedClass": "content-none",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-arbitrary-content",
+            "szInput": {
+                "content": "'hello'"
+            },
+            "expectedClass": "content-['hello']",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-var-content",
+            "szInput": {
+                "content": "--c"
+            },
+            "expectedClass": "content-(--c)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-line-clamp-1",
+            "szInput": {
+                "lineClamp": 1
+            },
+            "expectedClass": "line-clamp-1",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-arbitrary-clamp",
+            "szInput": {
+                "lineClamp": 7
+            },
+            "expectedClass": "line-clamp-[7]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-text-overflow-whitespace-var-clamp",
+            "szInput": {
+                "lineClamp": "--c"
+            },
+            "expectedClass": "line-clamp-(--c)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "Text Overflow & Whitespace"
+        },
+        {
+            "id": "typography-list-style-type-1",
+            "szInput": {
+                "list": "none"
+            },
+            "expectedClass": "list-none",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-type-2",
+            "szInput": {
+                "list": "disc"
+            },
+            "expectedClass": "list-disc",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-type-3",
+            "szInput": {
+                "list": "decimal"
+            },
+            "expectedClass": "list-decimal",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-arbitrary-type",
+            "szInput": {
+                "list": "upper-roman"
+            },
+            "expectedClass": "list-[upper-roman]",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-var-type",
+            "szInput": {
+                "list": "--t"
+            },
+            "expectedClass": "list-(--t)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-position-1",
+            "szInput": {
+                "listPosition": "inside"
+            },
+            "expectedClass": "list-inside",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-position-2",
+            "szInput": {
+                "listPosition": "outside"
+            },
+            "expectedClass": "list-outside",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+        {
+            "id": "typography-list-style-image",
+            "szInput": {
+                "listImage": "none"
+            },
+            "expectedClass": "list-image-none",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        },
+
+        {
+            "id": "typography-list-style-var-image",
+            "szInput": {
+                "listImage": "--i"
+            },
+            "expectedClass": "list-image-(--i)",
+            "tailwindVersion": "4",
+            "category": "Typography",
+            "subcategory": "List Style"
+        }
+    ],
+    "totalTests": 81
+}

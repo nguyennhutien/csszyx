@@ -1,0 +1,335 @@
+{
+    "tests": [
+        {
+            "id": "spacing-padding-edge-case-999",
+            "szInput": {
+                "p": 999
+            },
+            "expectedClass": "p-999",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-all-sides",
+            "szInput": {
+                "p": 4
+            },
+            "expectedClass": "p-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-x-axis",
+            "szInput": {
+                "px": 4
+            },
+            "expectedClass": "px-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-y-axis",
+            "szInput": {
+                "py": 4
+            },
+            "expectedClass": "py-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-top",
+            "szInput": {
+                "pt": 4
+            },
+            "expectedClass": "pt-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-right",
+            "szInput": {
+                "pr": 4
+            },
+            "expectedClass": "pr-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-bottom",
+            "szInput": {
+                "pb": 4
+            },
+            "expectedClass": "pb-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-left",
+            "szInput": {
+                "pl": 4
+            },
+            "expectedClass": "pl-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-start-logical",
+            "szInput": {
+                "ps": 4
+            },
+            "expectedClass": "ps-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-end-logical",
+            "szInput": {
+                "pe": 4
+            },
+            "expectedClass": "pe-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-arbitrary",
+            "szInput": {
+                "p": "5px"
+            },
+            "expectedClass": "p-[5px]",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-padding-css-variable",
+            "szInput": {
+                "p": "--p"
+            },
+            "expectedClass": "p-(--p)",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Padding"
+        },
+        {
+            "id": "spacing-margin-all-sides",
+            "szInput": {
+                "m": 4
+            },
+            "expectedClass": "m-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-x-axis",
+            "szInput": {
+                "mx": 4
+            },
+            "expectedClass": "mx-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-y-axis",
+            "szInput": {
+                "my": 4
+            },
+            "expectedClass": "my-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-top",
+            "szInput": {
+                "mt": 4
+            },
+            "expectedClass": "mt-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-right",
+            "szInput": {
+                "mr": 4
+            },
+            "expectedClass": "mr-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-bottom",
+            "szInput": {
+                "mb": 4
+            },
+            "expectedClass": "mb-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-left",
+            "szInput": {
+                "ml": 4
+            },
+            "expectedClass": "ml-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-start-logical",
+            "szInput": {
+                "ms": 4
+            },
+            "expectedClass": "ms-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-end-logical",
+            "szInput": {
+                "me": 4
+            },
+            "expectedClass": "me-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-negative",
+            "szInput": {
+                "mt": -4
+            },
+            "expectedClass": "-mt-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-auto",
+            "szInput": {
+                "m": "auto"
+            },
+            "expectedClass": "m-auto",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-arbitrary",
+            "szInput": {
+                "m": "5px"
+            },
+            "expectedClass": "m-[5px]",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-margin-css-variable",
+            "szInput": {
+                "m": "--m"
+            },
+            "expectedClass": "m-(--m)",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Margin"
+        },
+        {
+            "id": "spacing-space-between-space-x",
+            "szInput": {
+                "spaceX": 4
+            },
+            "expectedClass": "space-x-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-space-y",
+            "szInput": {
+                "spaceY": 4
+            },
+            "expectedClass": "space-y-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-reverse-x",
+            "szInput": {
+                "spaceXReverse": true
+            },
+            "expectedClass": "space-x-reverse",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-reverse-y",
+            "szInput": {
+                "spaceYReverse": true
+            },
+            "expectedClass": "space-y-reverse",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-negative",
+            "szInput": {
+                "spaceX": -4
+            },
+            "expectedClass": "-space-x-4",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-px",
+            "szInput": {
+                "spaceX": "px"
+            },
+            "expectedClass": "space-x-px",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-arbitrary",
+            "szInput": {
+                "spaceX": "5px"
+            },
+            "expectedClass": "space-x-[5px]",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        },
+        {
+            "id": "spacing-space-between-css-variable",
+            "szInput": {
+                "spaceX": "--space"
+            },
+            "expectedClass": "space-x-(--space)",
+            "tailwindVersion": "4",
+            "category": "Spacing",
+            "subcategory": "Space Between"
+        }
+    ],
+    "totalTests": 32
+}
