@@ -213,15 +213,6 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
-  packages/dev-tools:
-    devDependencies:
-      typescript:
-        specifier: ^5.4.5
-        version: 5.9.3
-      vite:
-        specifier: ^5.0.0
-        version: 5.4.21(@types/node@20.19.30)
-
   packages/e2e:
     devDependencies:
       '@playwright/test':
@@ -307,7 +298,7 @@ importers:
   packages/types:
     dependencies:
       '@csszyx/compiler':
-        specifier: workspace:*
+        specifier: '>=0.0.0'
         version: link:../compiler
     devDependencies:
       '@types/node':

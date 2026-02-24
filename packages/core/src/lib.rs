@@ -1,4 +1,24 @@
 #![doc = "csszyx-core: Performance-critical core for csszyx CSS-in-JS framework"]
+#![allow(
+    clippy::must_use_candidate,
+    clippy::missing_panics_doc,
+    clippy::missing_errors_doc,
+    clippy::missing_docs_in_private_items,
+    clippy::doc_markdown,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::uninlined_format_args,
+    clippy::redundant_clone,
+    clippy::redundant_closure,
+    clippy::redundant_closure_for_method_calls,
+    clippy::missing_fields_in_debug,
+    clippy::cargo_common_metadata,
+    clippy::empty_line_after_doc_comments,
+    clippy::missing_const_for_fn,
+    clippy::manual_range_contains,
+    clippy::use_self,
+    clippy::new_without_default
+)]
 
 /// csszyx-core: Performance-critical core for csszyx CSS-in-JS framework.
 ///

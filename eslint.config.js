@@ -241,9 +241,10 @@ export default [
         },
     },
 
-    // JSON files
+    // JSON files (exclude package.json — npm/pnpm enforce 2-space indent)
     {
         files: ['**/*.json', '**/*.jsonc', '**/*.json5'],
+        ignores: ['**/package.json', '**/test-results/**', '.claude/**'],
         plugins: {
             jsonc: jsonc,
         },

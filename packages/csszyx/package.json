@@ -1,67 +1,67 @@
 {
-    "name": "csszyx",
-    "version": "0.0.0",
-    "description": "Universal CSS-in-JS for Tailwind CSS with WASM core",
-    "keywords": [
-        "css",
-        "tailwind",
-        "css-in-js",
-        "utility-first",
-        "ssr",
-        "react",
-        "vue",
-        "svelte",
-        "wasm"
-    ],
-    "author": "csszyx contributors",
-    "license": "MIT",
-    "homepage": "https://github.com/nguyennhutien/csszyx#readme",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/nguyennhutien/csszyx.git"
+  "name": "csszyx",
+  "version": "0.1.0",
+  "description": "Universal CSS-in-JS for Tailwind CSS with WASM core",
+  "keywords": [
+    "css",
+    "tailwind",
+    "css-in-js",
+    "utility-first",
+    "ssr",
+    "react",
+    "vue",
+    "svelte",
+    "wasm"
+  ],
+  "author": "csszyx contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/nguyennhutien/csszyx#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nguyennhutien/csszyx/issues"
+  },
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
-    "bugs": {
-        "url": "https://github.com/nguyennhutien/csszyx/issues"
+    "./lite": {
+      "types": "./dist/lite.d.ts",
+      "import": "./dist/lite.js"
     },
-    "private": false,
-    "type": "module",
-    "main": "./dist/index.js",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
-        },
-        "./lite": {
-            "types": "./dist/lite.d.ts",
-            "import": "./dist/lite.js"
-        },
-        "./vite": {
-            "types": "./dist/vite.d.ts",
-            "import": "./dist/vite.js"
-        },
-        "./webpack": {
-            "types": "./dist/webpack.d.ts",
-            "import": "./dist/webpack.js"
-        }
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
     },
-    "files": [
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts --format esm --dts && echo '/// <reference types=\"@csszyx/types/jsx\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
-        "dev": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts --format esm --dts --watch"
-    },
-    "dependencies": {
-        "@csszyx/core": "workspace:*",
-        "@csszyx/runtime": "workspace:*",
-        "@csszyx/compiler": "workspace:*",
-        "@csszyx/unplugin": "workspace:*",
-        "@csszyx/types": "workspace:*"
-    },
-    "devDependencies": {
-        "tsup": "^8.0.2",
-        "typescript": "^5.4.5"
+    "./webpack": {
+      "types": "./dist/webpack.d.ts",
+      "import": "./dist/webpack.js"
     }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts --format esm --dts && echo '/// <reference types=\"@csszyx/types/jsx\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
+    "dev": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts --format esm --dts --watch"
+  },
+  "dependencies": {
+    "@csszyx/core": "workspace:*",
+    "@csszyx/runtime": "workspace:*",
+    "@csszyx/compiler": "workspace:*",
+    "@csszyx/unplugin": "workspace:*",
+    "@csszyx/types": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2",
+    "typescript": "^5.4.5"
+  }
 }

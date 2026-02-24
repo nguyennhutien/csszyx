@@ -1,64 +1,64 @@
 {
-    "name": "@csszyx/runtime",
-    "version": "0.0.0",
-    "description": "Runtime helpers and hydration guards for csszyx",
-    "keywords": [
-        "csszyx",
-        "runtime",
-        "css-in-js",
-        "hydration"
-    ],
-    "author": "csszyx contributors",
-    "license": "MIT",
-    "homepage": "https://github.com/nguyennhutien/csszyx/tree/main/packages/runtime#readme",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/nguyennhutien/csszyx.git",
-        "directory": "packages/runtime"
+  "name": "@csszyx/runtime",
+  "version": "0.1.0",
+  "description": "Runtime helpers and hydration guards for csszyx",
+  "keywords": [
+    "csszyx",
+    "runtime",
+    "css-in-js",
+    "hydration"
+  ],
+  "author": "csszyx contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/nguyennhutien/csszyx/tree/main/packages/runtime#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/nguyennhutien/csszyx/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
-    "bugs": {
-        "url": "https://github.com/nguyennhutien/csszyx/issues"
-    },
-    "type": "module",
-    "main": "./dist/index.js",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "require": "./dist/index.cjs"
-        },
-        "./lite": {
-            "types": "./dist/lite.d.ts",
-            "import": "./dist/lite.js",
-            "require": "./dist/lite.cjs"
-        }
-    },
-    "files": [
-        "dist"
-    ],
-    "scripts": {
-        "build": "tsup src/index.ts src/lite.ts --format esm,cjs --dts --clean",
-        "dev": "tsup src/index.ts src/lite.ts --format esm --dts --watch",
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "type-check": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@csszyx/compiler": "workspace:*",
-        "@csszyx/core": "workspace:*"
-    },
-    "devDependencies": {
-        "@types/node": "^20.11.0",
-        "jsdom": "^23.0.0",
-        "tsup": "^8.0.0",
-        "typescript": "^5.3.3",
-        "vite-plugin-wasm": "^3.3.0",
-        "vitest": "^1.2.0"
-    },
-    "optionalDependencies": {
-        "@esbuild/linux-arm64": "^0.19.0"
-    },
-    "sideEffects": false
+    "./lite": {
+      "types": "./dist/lite.d.ts",
+      "import": "./dist/lite.js",
+      "require": "./dist/lite.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/lite.ts --format esm,cjs --dts --clean",
+    "dev": "tsup src/index.ts src/lite.ts --format esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@csszyx/compiler": "workspace:*",
+    "@csszyx/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "jsdom": "^23.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.3",
+    "vite-plugin-wasm": "^3.3.0",
+    "vitest": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@esbuild/linux-arm64": "^0.19.0"
+  },
+  "sideEffects": false
 }

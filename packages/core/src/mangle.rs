@@ -47,20 +47,10 @@ pub type MangleMap = HashMap<String, String>;
 ///
 /// # Examples
 ///
-/// ```
-/// use csszyx_core::mangle::{compute_mangle_checksum, MangleMap};
-/// use std::collections::HashMap;
-///
-/// let mut map = HashMap::new();
-/// map.insert("p-4".to_string(), "a".to_string());
-/// map.insert("bg-red-500".to_string(), "b".to_string());
-///
-/// let checksum = compute_mangle_checksum(&map);
-/// assert_eq!(checksum.len(), 16);
-///
-/// // Same map produces same checksum
-/// let checksum2 = compute_mangle_checksum(&map);
-/// assert_eq!(checksum, checksum2);
+/// ```ignore
+/// // This function is wasm_bindgen — call from JS, not Rust directly.
+/// // Use compute_checksum_internal() for pure-Rust usage.
+/// let checksum = compute_mangle_checksum(js_map);
 /// ```
 #[wasm_bindgen]
 pub fn compute_mangle_checksum(map: JsValue) -> Result<String, JsValue> {
