@@ -99,7 +99,7 @@ Handling global configuration prefixes.
 
 | Concept            | Config          | Tailwind v4 Output | `sz` Prop Input                                                         |
 | :----------------- | :-------------- | :----------------- | :---------------------------------------------------------------------- |
-| **Utility Prefix** | `prefix: 'tw-'` | `tw-text-center`   | `{ text: 'center' }`                                                    |
+| **Utility Prefix** | `prefix: 'tw-'` | `tw-text-center`   | `{ textAlign: 'center' }`                                               |
 | **Result**         |                 |                    | Compiler prepends `tw-` to all generated utility classes if configured. |
 
 ## Hover, Focus, and Other States
@@ -190,7 +190,7 @@ Environment-based styling.
 | **Container Queries** | `@md:block @lg:flex`           | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
 | **Reduced Motion**    | `motion-reduce:hidden`         | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
 | **Prefers Contrast**  | `contrast-more:border`         | `{ contrastMore: { border: true } }`                |                               |
-| **Forced Colors**     | `forced-colors:border-gray`    | `{ forcedColors: { border: 'gray' } }`              | **Sugar**: CamelCase.         |
+| **Forced Colors**     | `forced-colors:border-gray`    | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
 | **Inverted Colors**   | `inverted-colors:invert`       | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
 | **Pointer**           | `pointer-coarse:p-4`           | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
 | **Print**             | `print:hidden`                 | `{ print: { hidden: true } }`                       |                               |
@@ -232,13 +232,13 @@ Extensibility.
 
 Targeting specific screen sizes and container states.
 
-| Concept                  | CSS Rule                    | Tailwind v4 Class         | `sz` Prop (Object Syntax)                    | Note                                |
-| :----------------------- | :-------------------------- | :------------------------ | :------------------------------------------- | :---------------------------------- |
-| **Mobile First**         | `min-width: (etc)`          | `w-full md:w-1/2`         | `{ w: 'full', md: { w: '1/2' } }`            | Unprefixed utilities target mobile. |
-| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { flex: true } } }`          | **Sugar**: CamelCase for `max-xl`.  |
-| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { flex: true } } }`          | Target specific range.              |
-| **Custom Breakpoint**    | `@media (min-width: 320px)` | `min-[320px]:text-center` | `{ min: { '[320px]': { text: 'center' } } }` | Arbitrary one-off breakpoint.       |
-| **Max-Width Breakpoint** | `@media (max-width: 600px)` | `max-[600px]:bg-sky-300`  | `{ max: { '[600px]': { bg: 'sky-300' } } }`  |                                     |
+| Concept                  | CSS Rule                    | Tailwind v4 Class         | `sz` Prop (Object Syntax)                         | Note                                |
+| :----------------------- | :-------------------------- | :------------------------ | :------------------------------------------------ | :---------------------------------- |
+| **Mobile First**         | `min-width: (etc)`          | `w-full md:w-1/2`         | `{ w: 'full', md: { w: '1/2' } }`                 | Unprefixed utilities target mobile. |
+| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { flex: true } } }`               | **Sugar**: CamelCase for `max-xl`.  |
+| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { flex: true } } }`               | Target specific range.              |
+| **Custom Breakpoint**    | `@media (min-width: 320px)` | `min-[320px]:text-center` | `{ min: { '[320px]': { textAlign: 'center' } } }` | Arbitrary one-off breakpoint.       |
+| **Max-Width Breakpoint** | `@media (max-width: 600px)` | `max-[600px]:bg-sky-300`  | `{ max: { '[600px]': { bg: 'sky-300' } } }`       |                                     |
 
 ## Container Query Disambiguation
 
@@ -327,13 +327,13 @@ Integrating external styles.
 
 Configuration and logic.
 
-| Concept            | Config                | Tailwind v4 Output | `sz` Prop Input        | Note                                            |
-| :----------------- | :-------------------- | :----------------- | :--------------------- | :---------------------------------------------- |
-| **Utility Prefix** | `prefix: 'tw-'`       | `tw-text-center`   | `{ text: 'center' }`   |                                                 |
-| **@apply**         | `@apply items-center` | N/A                | `{ (etc)commonOps }`   | **Discouraged**: Use JS Object Spread.          |
-| **theme()**        | `theme('spacing.4')`  | `w-(--spacing-4)`  | `{ w: '--spacing-4' }` | **Rule**: Use CSS Variable sugar (no parens).   |
-| **@utility**       | `@utility tab-active` | `tab-active`       | `{ tabActive: true }`  | **Blind Support**: CamelCase maps to ClassName. |
-| **@theme**         | `@theme { (etc) }`    | N/A                | N/A                    | Configured in CSS, used via Vars/Classes.       |
+| Concept            | Config                | Tailwind v4 Output | `sz` Prop Input           | Note                                            |
+| :----------------- | :-------------------- | :----------------- | :------------------------ | :---------------------------------------------- |
+| **Utility Prefix** | `prefix: 'tw-'`       | `tw-text-center`   | `{ textAlign: 'center' }` |                                                 |
+| **@apply**         | `@apply items-center` | N/A                | `{ (etc)commonOps }`      | **Discouraged**: Use JS Object Spread.          |
+| **theme()**        | `theme('spacing.4')`  | `w-(--spacing-4)`  | `{ w: '--spacing-4' }`    | **Rule**: Use CSS Variable sugar (no parens).   |
+| **@utility**       | `@utility tab-active` | `tab-active`       | `{ tabActive: true }`     | **Blind Support**: CamelCase maps to ClassName. |
+| **@theme**         | `@theme { (etc) }`    | N/A                | N/A                       | Configured in CSS, used via Vars/Classes.       |
 
 ## Detecting classes in source files
 

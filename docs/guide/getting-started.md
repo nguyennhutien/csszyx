@@ -4,176 +4,143 @@ Get up and running with csszyx in minutes.
 
 ## Installation
 
-Install the csszyx umbrella package (includes compiler, runtime, types, and unplugin):
-
-```bash
-pnpm add csszyx
-```
-
-Or with npm:
-
 ```bash
 npm install csszyx
 ```
 
-## Setup
+This installs the umbrella package which includes compiler, runtime, types, and unplugin.
 
-### 1. Configure Tailwind CSS v4
+## Setup by Platform
 
-Create a CSS entry point with Tailwind v4 import:
+### Vite + React
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import csszyx from "csszyx/vite";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [
+    // Order matters: csszyx → tailwindcss → react
+    ...csszyx(),
+    tailwindcss(),
+    react(),
+  ],
+});
+```
+
+**Why this order?** csszyx transforms `sz` props into `className` strings first. Then Tailwind scans those strings to generate CSS. Finally React handles JSX.
+
+### Next.js
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactStrictMode: true,
+  webpack: (config) => {
+    const csszyxWebpack = require("@csszyx/unplugin/webpack").default;
+    config.plugins.push(csszyxWebpack());
+    return config;
+  },
+};
+
+export default nextConfig;
+```
+
+### Webpack + React
+
+```js
+// webpack.config.js
+import csszyx from "csszyx/webpack";
+
+export default {
+  // ... your config
+  plugins: [
+    csszyx(),
+    // ... other plugins
+  ],
+};
+```
+
+Make sure you have `postcss-loader` with Tailwind CSS configured in your module rules.
+
+## Tailwind CSS v4
+
+csszyx requires Tailwind CSS v4. Create a CSS entry point:
 
 ```css
 /* src/index.css */
 @import "tailwindcss";
 ```
 
-### 2. Add the csszyx Plugin
+Import this file in your app entry point.
 
-#### Vite + React
+## Usage
 
-```ts
-// vite.config.ts
-import react from "@vitejs/plugin-react";
-import csszyx from "csszyx/vite";
-import { defineConfig } from "vite";
+### The `sz` Prop
 
-export default defineConfig({
-  plugins: [...csszyx(), react()],
-});
-```
-
-#### Next.js (Webpack)
-
-```js
-// next.config.js
-const withCsszyx = require("csszyx/webpack");
-
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-};
-
-module.exports = withCsszyx(nextConfig);
-```
-
-### 3. Initialize Runtime
-
-In your app entry point:
+Use the `sz` prop for type-safe, object-based styling:
 
 ```tsx
-// main.tsx or app/layout.tsx
-import { initRuntime } from "@csszyx/runtime";
-
-initRuntime({
-  development: process.env.NODE_ENV === "development",
-  allowCSRRecovery: true,
-  strictHydration: true,
-  debug: false,
-});
+<div
+  sz={{
+    p: 4,
+    bg: "blue-500",
+    color: "white",
+    rounded: "lg",
+    hover: { bg: "blue-600" },
+  }}
+>
+  Hello World
+</div>
 ```
 
-### 4. Start Using csszyx
+At build time, csszyx transforms this into:
 
-Use the `sz` prop for type-safe styling:
-
-```tsx
-function Button({ isActive }) {
-  return (
-    <button
-      sz={{
-        px: 4,
-        py: 2,
-        rounded: "lg",
-        fontWeight: "medium",
-        bg: isActive ? "blue-600" : "gray-200",
-        color: isActive ? "white" : "gray-900",
-        hover: { bg: isActive ? "blue-700" : "gray-300" },
-      }}
-    >
-      Click me
-    </button>
-  );
-}
+```html
+<div class="p-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+  Hello World
+</div>
 ```
 
-Or use runtime helpers for className composition:
+### Runtime Helpers
+
+For className-based composition, use runtime helpers:
 
 ```tsx
-import { _sz, _szIf } from "@csszyx/runtime";
+import { _sz, _szIf, _szSwitch } from "csszyx";
 
-function Button({ isActive }) {
-  return (
-    <button
-      className={_sz(
-        "px-4 py-2 rounded-lg font-medium",
-        _szIf(isActive, "bg-blue-600 text-white", "bg-gray-200 text-gray-900"),
-      )}
-    >
-      Click me
-    </button>
-  );
-}
-```
+// Concatenate classes
+<div className={_sz("p-4", "bg-red-500", "text-white")} />
 
-## Framework-Specific Setup
+// Conditional classes
+<div className={_szIf(isActive, "bg-blue-600", "bg-gray-200")} />
 
-See setup instructions above for both Vite + React and Next.js configurations.
-
-## Basic Usage
-
-### Concatenating Classes
-
-Use `_sz()` to combine multiple class names:
-
-```tsx
-import { _sz } from "@csszyx/runtime";
-
-<div className={_sz("p-4", "bg-red-500", "text-white")} />;
-// Output: "p-4 bg-red-500 text-white"
-```
-
-### Conditional Classes
-
-Use `_szIf()` for conditional styling:
-
-```tsx
-import { _szIf } from "@csszyx/runtime";
-
-<div className={_szIf(isActive, "bg-blue-600", "bg-gray-200")} />;
-// If isActive: "bg-blue-600"
-// If not: "bg-gray-200"
-```
-
-### Switch-like Selection
-
-Use `_szSwitch()` for multiple conditions:
-
-```tsx
-import { _szSwitch } from "@csszyx/runtime";
-
-const variant = "primary";
+// Switch-like selection
 const className = _szSwitch(
   [
-    [variant === "primary", "bg-blue-600"],
-    [variant === "secondary", "bg-gray-200"],
-    [variant === "danger", "bg-red-600"],
+    [variant === "primary", "bg-blue-600 text-white"],
+    [variant === "secondary", "bg-gray-200 text-gray-900"],
+    [variant === "danger", "bg-red-600 text-white"],
   ],
-  "bg-gray-500",
-); // default
+  "bg-gray-500", // default
+);
 ```
 
 ### Combining Helpers
 
-Mix and match for complex scenarios:
-
 ```tsx
-import { _sz, _szIf, _szSwitch } from "@csszyx/runtime";
+import { _sz, _szIf, _szSwitch } from "csszyx";
 
 function Button({ variant, isActive, fullWidth }) {
   return (
     <button
       className={_sz(
-        "px-4 py-2 rounded-lg font-medium",
+        "px-4 py-2 rounded-lg",
         _szSwitch([
           [variant === "primary", "bg-blue-600 text-white"],
           [variant === "secondary", "bg-gray-200 text-gray-900"],
@@ -188,63 +155,38 @@ function Button({ variant, isActive, fullWidth }) {
 }
 ```
 
-## Complete Example
+## Plugin Options
 
-Here's a complete button component:
+Pass options to customize behavior:
 
-```tsx
-import { type ReactNode } from "react";
-import { _sz, _szSwitch, _szIf } from "@csszyx/runtime";
-
-type ButtonVariant = "primary" | "secondary" | "danger";
-
-interface ButtonProps {
-  children: ReactNode;
-  variant?: ButtonVariant;
-  onClick?: () => void;
-  disabled?: boolean;
-  fullWidth?: boolean;
-}
-
-export function Button({
-  children,
-  variant = "primary",
-  onClick,
-  disabled = false,
-  fullWidth = false,
-}: ButtonProps) {
-  const baseClasses = "px-4 py-2 rounded-lg font-medium transition-all";
-
-  const variantClasses = _szSwitch([
-    [variant === "primary", "bg-blue-600 text-white hover:bg-blue-700"],
-    [variant === "secondary", "bg-gray-200 text-gray-900 hover:bg-gray-300"],
-    [variant === "danger", "bg-red-600 text-white hover:bg-red-700"],
-  ]);
-
-  return (
-    <button
-      className={_sz(
-        baseClasses,
-        variantClasses,
-        _szIf(disabled, "opacity-50 cursor-not-allowed", "cursor-pointer"),
-        _szIf(fullWidth, "w-full"),
-      )}
-      onClick={onClick}
-      disabled={disabled}
-      type="button"
-    >
-      {children}
-    </button>
-  );
-}
+```ts
+csszyx({
+  development: {
+    debug: true, // Enable debug logging
+    autoInjectRecovery: true, // Auto-inject CSR recovery script
+    allowCSRRecovery: true, // Allow client-side recovery on mismatch
+  },
+  production: {
+    injectChecksum: true, // Inject SSR hydration checksum
+  },
+});
 ```
 
-## Next Steps
+## Optional: Initialize Runtime
 
-- [Runtime Helpers](/guide/runtime-helpers) - Learn all helper functions
-- [SSR Safety](/guide/ssr-safety) - Understand hydration guards
-- [API Reference](/api/runtime) - Complete API documentation
-- [Examples](/examples/vite-react) - See real-world examples
+For SSR hydration safety features, initialize the runtime in your app entry:
+
+```tsx
+import { initRuntime } from "@csszyx/runtime";
+
+initRuntime({
+  development: process.env.NODE_ENV === "development",
+  allowCSRRecovery: true,
+  debug: false,
+});
+```
+
+This is optional — csszyx works without it, but SSR hydration guards require initialization.
 
 ## Troubleshooting
 
@@ -253,33 +195,28 @@ export function Button({
 Make sure your CSS entry point imports Tailwind v4:
 
 ```css
-/* src/index.css */
 @import "tailwindcss";
 ```
 
-### TypeScript errors
+### Plugin order matters
 
-Ensure you're importing from the correct packages:
+csszyx must be **before** Tailwind and React plugins. If classes aren't being generated, check your plugin order.
 
-```tsx
-import { _sz } from "@csszyx/runtime"; // ✅ Correct
-import { _sz } from "@csszyx/compiler"; // ❌ Wrong package
-```
+### TypeScript errors with `sz` prop
+
+The `sz` prop types come from `@csszyx/types`. If you get type errors, make sure `csszyx` is installed (it re-exports the types).
 
 ### Hydration warnings in Next.js
 
-Initialize the runtime in your root layout:
+Initialize the runtime in your root layout with `allowCSRRecovery: true`.
 
-```tsx
-// app/layout.tsx
-import { initRuntime } from "@csszyx/runtime";
+## Next Steps
 
-initRuntime({
-  development: process.env.NODE_ENV === "development",
-});
-```
+- [Runtime Helpers](/guide/runtime-helpers) - All helper functions
+- [SSR Safety](/guide/ssr-safety) - Hydration guards
+- [API Reference](/api/runtime) - Complete API docs
+- [Examples](/examples/vite-react) - Real-world examples
 
 ## Get Help
 
 - [GitHub Issues](https://github.com/nguyennhutien/csszyx/issues)
-- [Discussions](https://github.com/nguyennhutien/csszyx/discussions)

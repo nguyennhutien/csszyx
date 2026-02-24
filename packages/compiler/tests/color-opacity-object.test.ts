@@ -126,6 +126,38 @@ describe('Color Opacity Object Form', () => {
         });
     });
 
+    describe('shadow/ring color opacity objects', () => {
+        it('should transform insetShadowColor with opacity', () => {
+            const result = transform({ insetShadowColor: { color: 'blue-500', op: 30 } } as SzObject);
+            expect(result.className).toBe('inset-shadow-blue-500/30');
+        });
+
+        it('should transform insetShadowColor with CSS variable opacity', () => {
+            const result = transform({ insetShadowColor: { color: 'black', op: '--alpha' } } as SzObject);
+            expect(result.className).toBe('inset-shadow-black/(--alpha)');
+        });
+
+        it('should transform ringColor with opacity', () => {
+            const result = transform({ ringColor: { color: 'indigo-600', op: 50 } } as SzObject);
+            expect(result.className).toBe('ring-indigo-600/50');
+        });
+
+        it('should transform ringOffsetColor with opacity', () => {
+            const result = transform({ ringOffsetColor: { color: 'white', op: 80 } } as SzObject);
+            expect(result.className).toBe('ring-offset-white/80');
+        });
+
+        it('should transform textShadowColor with opacity', () => {
+            const result = transform({ textShadowColor: { color: 'gray-900', op: 60 } } as SzObject);
+            expect(result.className).toBe('text-shadow-gray-900/60');
+        });
+
+        it('should transform dropShadowColor with opacity', () => {
+            const result = transform({ dropShadowColor: { color: 'red-500', op: 25 } } as SzObject);
+            expect(result.className).toBe('drop-shadow-red-500/25');
+        });
+    });
+
     describe('special color values', () => {
         it('should handle inherit', () => {
             const result = transform({ bg: { color: 'inherit' } } as SzObject);

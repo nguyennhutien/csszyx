@@ -404,12 +404,11 @@ export interface SizingProps {
  */
 export interface TypographyProps {
 
-  /** @see https://tailwindcss.com/docs/font-size */
+  /** @see https://tailwindcss.com/docs/font-size — use `color` for text color, `textAlign` for alignment */
   text?:
     | 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl'
     | '6xl' | '7xl' | '8xl' | '9xl'
-    | 'left' | 'center' | 'right' | 'justify' | 'start' | 'end'
-    | ColorPropValue | (string & {});
+    | (string & {});
 
   /** @see https://tailwindcss.com/docs/font-smoothing */
   antialiased?: boolean;
@@ -419,13 +418,7 @@ export interface TypographyProps {
   italic?: boolean;
   notItalic?: boolean;
 
-  /** @see https://tailwindcss.com/docs/font-weight — also accepts font-family keywords */
-  font?:
-    | 'thin' | 'extralight' | 'light' | 'normal' | 'medium'
-    | 'semibold' | 'bold' | 'extrabold' | 'black'
-    | 'sans' | 'serif' | 'mono'
-    | (string & {});
-  /** Explicit font-weight key. Use `font` for the short form */
+  /** @see https://tailwindcss.com/docs/font-weight */
   fontWeight?:
     | 'thin' | 'extralight' | 'light' | 'normal' | 'medium'
     | 'semibold' | 'bold' | 'extrabold' | 'black'
@@ -622,8 +615,8 @@ export interface BorderProps {
   roundedEs?: BorderRadiusValue;
   roundedEe?: BorderRadiusValue;
 
-  /** @see https://tailwindcss.com/docs/border-width */
-  border?: boolean | 0 | 2 | 4 | 8 | ColorValue | (string & {});
+  /** @see https://tailwindcss.com/docs/border-width — use `borderColor` for border color */
+  border?: boolean | 0 | 2 | 4 | 8 | (string & {});
   borderX?: boolean | 0 | 2 | 4 | 8 | (string & {});
   borderY?: boolean | 0 | 2 | 4 | 8 | (string & {});
   borderT?: boolean | 0 | 2 | 4 | 8 | (string & {});

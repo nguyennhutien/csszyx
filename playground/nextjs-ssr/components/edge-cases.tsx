@@ -8,21 +8,21 @@ export function EdgeCaseTests() {
 
     return (
         <section sz={{ p: 4, bg: 'slate-900', rounded: 'lg' }}>
-            <h2 sz={{ text: '2xl', font: 'bold', mb: 4, color: 'white' }}>Edge Case Tests</h2>
+            <h2 sz={{ text: '2xl', fontWeight: 'bold', mb: 4, color: 'white' }}>Edge Case Tests</h2>
 
             {/* Dynamic value control */}
             <div sz={{ mb: 4, flex: true, gap: 2 }}>
                 <button
                     data-testid="edge-increase"
                     onClick={() => setDynamicValue(v => v + 1)}
-                    sz={{ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', font: 'medium' }}
+                    sz={{ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', fontWeight: 'medium' }}
                 >
                     Increase ({dynamicValue})
                 </button>
                 <button
                     data-testid="edge-toggle"
                     onClick={() => setIsActive(!isActive)}
-                    sz={{ px: 4, py: 2, bg: 'purple-600', color: 'white', rounded: 'md', font: 'medium' }}
+                    sz={{ px: 4, py: 2, bg: 'purple-600', color: 'white', rounded: 'md', fontWeight: 'medium' }}
                 >
                     Toggle ({isActive ? 'ON' : 'OFF'})
                 </button>
@@ -99,7 +99,7 @@ export function EdgeCaseTests() {
             </div>
 
             {/* Background Image / Gradient cases */}
-            <h3 sz={{ text: 'lg', font: 'semibold', mt: 6, mb: 3, color: 'white' }}>Background Image Tests</h3>
+            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>Background Image Tests</h3>
             <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
                 {/* Case 9: Linear gradient to-r (object syntax per spec) */}
                 <div
@@ -171,7 +171,7 @@ export function EdgeCaseTests() {
                 {/* Case 16: bgClip text + gradient */}
                 <div
                     data-case="16-bg-clip"
-                    sz={{ bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'pink-500', to: 'violet-500', text: '2xl', font: 'bold', color: 'transparent', p: 4 }}
+                    sz={{ bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'pink-500', to: 'violet-500', text: '2xl', fontWeight: 'bold', color: 'transparent', p: 4 }}
                 >
                     bg-clip-text
                 </div>
@@ -187,7 +187,7 @@ export function EdgeCaseTests() {
                 {/* Case 18: bgImg none — removes gradient, keeps color */}
                 <div
                     data-case="18-bg-none"
-                    sz={{ bgImg: 'none', p: 4, rounded: 'md', color: 'slate-400', text: 'sm', border: 'slate-600' }}
+                    sz={{ bgImg: 'none', p: 4, rounded: 'md', color: 'slate-400', text: 'sm', borderColor: 'slate-600', border: true }}
                 >
                     bg-none (no bg)
                 </div>
@@ -210,7 +210,7 @@ export function EdgeCaseTests() {
             </div>
 
             {/* CSS Variable Auto-Compile Tests */}
-            <h3 sz={{ text: 'lg', font: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Auto-Compile Tests</h3>
+            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Auto-Compile Tests</h3>
             <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
                 {/* Case 21: Dynamic spacing */}
                 <div
@@ -274,6 +274,195 @@ export function EdgeCaseTests() {
                     sz={{ p: 4, bg: 'amber-600', willChange: 'scroll', rounded: 'md', color: 'white', text: 'sm' }}
                 >
                     will-change-scroll-position
+                </div>
+            </div>
+
+            {/* New Features: Collision fixes + New capabilities */}
+            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>New Features (Collision Fixes)</h3>
+            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
+                {/* Case 29: Text/Leading shorthand merge */}
+                <div
+                    data-case="29-text-leading"
+                    sz={{ text: 'lg', leading: 7, p: 4, bg: 'emerald-600', rounded: 'md', color: 'white' }}
+                >
+                    text-lg/7
+                </div>
+
+                {/* Case 30: Text/Leading with keyword */}
+                <div
+                    data-case="30-text-leading-keyword"
+                    sz={{ text: 'sm', leading: 'tight', p: 4, bg: 'emerald-700', rounded: 'md', color: 'white' }}
+                >
+                    text-sm/tight
+                </div>
+
+                {/* Case 31: Explicit fontWeight (no catch-all) */}
+                <div
+                    data-case="31-font-weight"
+                    sz={{ fontWeight: 'bold', p: 4, bg: 'blue-600', rounded: 'md', color: 'white', text: 'sm' }}
+                >
+                    fontWeight: bold
+                </div>
+
+                {/* Case 32: Explicit fontFamily (no catch-all) */}
+                <div
+                    data-case="32-font-family"
+                    sz={{ fontFamily: 'mono', p: 4, bg: 'blue-700', rounded: 'md', color: 'white', text: 'sm' }}
+                >
+                    fontFamily: mono
+                </div>
+
+                {/* Case 33: Separate text (size) + color */}
+                <div
+                    data-case="33-text-color-split"
+                    sz={{ text: 'xl', color: 'yellow-400', p: 4, bg: 'gray-800', rounded: 'md' }}
+                >
+                    text=xl + color=yellow
+                </div>
+
+                {/* Case 34: Separate border (width) + borderColor */}
+                <div
+                    data-case="34-border-split"
+                    sz={{ border: 4, borderColor: 'red-500', p: 4, bg: 'gray-800', rounded: 'md', color: 'white', text: 'sm' }}
+                >
+                    border=4 + borderColor=red
+                </div>
+
+                {/* Case 35: insetShadowColor with opacity object */}
+                <div
+                    data-case="35-inset-shadow-color"
+                    sz={{ p: 4, bg: 'white', rounded: 'md', insetShadow: 'sm', insetShadowColor: { color: 'blue-500', op: 40 }, color: 'gray-800', text: 'sm' }}
+                >
+                    inset-shadow blue/40
+                </div>
+
+                {/* Case 36: shadowColor with opacity */}
+                <div
+                    data-case="36-shadow-color-opacity"
+                    sz={{ p: 4, bg: 'white', rounded: 'md', shadow: 'lg', shadowColor: { color: 'purple-500', op: 50 }, color: 'gray-800', text: 'sm' }}
+                >
+                    shadow purple/50
+                </div>
+            </div>
+
+            {/* CSS Variable Type Hints */}
+            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Type Hints</h3>
+            <p sz={{ color: 'slate-400', mb: 4, text: 'xs' }}>
+                Ambiguous properties (fontFamily, fontWeight, text) get type hints when using CSS variables.
+                Unambiguous properties (color, bg) keep the simple syntax.
+            </p>
+            <style>{`
+                :root {
+                    --demo-font: 'Georgia', serif;
+                    --demo-weight: 700;
+                    --demo-size: 1.25rem;
+                    --demo-color: #60a5fa;
+                    --demo-bg: #1e293b;
+                    --demo-spacing: 1.5rem;
+                    --demo-shadow-color: #a855f7;
+                    --demo-shadow: 2px 2px 4px green;
+                    --demo-inset-shadow: 2px 2px 4px red;
+                    --demo-inset-shadow-color: #22d3ee;
+                }
+            `}</style>
+            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 3 }, gap: 4 }}>
+                {/* Case 37: fontFamily with CSS variable → font-(family-name:--var) */}
+                <div
+                    data-case="37-css-var-font-family"
+                    sz={{ fontFamily: '--demo-font', p: 4, bg: 'slate-800', rounded: 'md', color: 'white', text: 'sm' }}
+                >
+                    fontFamily: --demo-font<br />
+                    <span sz={{ color: 'cyan-400', text: 'xs' }}>→ font-(family-name:--demo-font)</span>
+                </div>
+
+                {/* Case 38: fontWeight with CSS variable → font-(weight:--var) */}
+                <div
+                    data-case="38-css-var-font-weight"
+                    sz={{ fontWeight: '--demo-weight', p: 4, bg: 'slate-800', rounded: 'md', color: 'white', text: 'sm' }}
+                >
+                    fontWeight: --demo-weight<br />
+                    <span sz={{ color: 'cyan-400', text: 'xs' }}>→ font-(weight:--demo-weight)</span>
+                </div>
+
+                {/* Case 39: text (font-size) with CSS variable → text-(length:--var) */}
+                <div
+                    data-case="39-css-var-text-size"
+                    sz={{ text: '--demo-size', p: 4, bg: 'slate-800', rounded: 'md', color: 'white' }}
+                >
+                    text: --demo-size<br />
+                    <span sz={{ color: 'cyan-400', text: 'xs' }}>→ text-(length:--demo-size)</span>
+                </div>
+
+                {/* Case 40: color with CSS variable → text-(--var) (NO type hint) */}
+                <div
+                    data-case="40-css-var-color"
+                    sz={{ color: '--demo-color', p: 4, bg: 'slate-800', rounded: 'md', text: 'sm' }}
+                >
+                    color: --demo-color<br />
+                    <span sz={{ text: 'xs', opacity: 70 }}>→ text-(--demo-color) [no hint]</span>
+                </div>
+
+                {/* Case 41: bg with CSS variable → bg-(--var) (NO type hint) */}
+                <div
+                    data-case="41-css-var-bg"
+                    sz={{ bg: '--demo-bg', p: 4, rounded: 'md', color: 'white', text: 'sm' }}
+                >
+                    bg: --demo-bg<br />
+                    <span sz={{ color: 'cyan-400', text: 'xs' }}>→ bg-(--demo-bg) [no hint]</span>
+                </div>
+
+                {/* Case 42: shadowColor with CSS variable → shadow-(color:--var) */}
+                <div
+                    data-case="42-css-var-shadow-color"
+                    sz={{ shadow: 'lg', shadowColor: '--demo-shadow-color', p: 4, bg: 'white', rounded: 'md', color: 'gray-800', text: 'sm' }}
+                >
+                    shadowColor: --var<br />
+                    <span sz={{ color: 'purple-500', text: 'xs' }}>→ shadow-(color:--demo-shadow-color)</span>
+                </div>
+
+                {/* Case 42b: shadow (size) with CSS variable → shadow-(--var) — compare with 42 shadowColor */}
+                <div
+                    data-case="42b-css-var-shadow"
+                    sz={{ shadow: '--demo-shadow', p: 4, bg: 'white', rounded: 'md', color: 'gray-800', text: 'sm' }}
+                >
+                    shadow: --var<br />
+                    <span sz={{ color: 'purple-400', text: 'xs' }}>→ shadow-(--demo-shadow) [no color: hint]</span>
+                </div>
+
+                {/* Case 43: insetShadowColor with CSS variable → inset-shadow-(color:--var) */}
+                <div
+                    data-case="43-css-var-inset-shadow"
+                    sz={{ insetShadow: 'sm', insetShadowColor: '--demo-inset-shadow-color', p: 4, bg: 'white', rounded: 'md', color: 'gray-800', text: 'sm' }}
+                >
+                    insetShadowColor: --var<br />
+                    <span sz={{ color: 'cyan-500', text: 'xs' }}>→ inset-shadow-(color:--demo-inset-shadow-color)</span>
+                </div>
+
+                {/* Case 43b: insetShadow (size) with CSS variable → inset-shadow-(--var) — compare with 43 insetShadowColor */}
+                <div
+                    data-case="43b-css-var-inset-shadow-size"
+                    sz={{ insetShadow: '--demo-inset-shadow', p: 4, bg: 'white', rounded: 'md', color: 'gray-800', text: 'sm' }}
+                >
+                    insetShadow: --var<br />
+                    <span sz={{ color: 'cyan-400', text: 'xs' }}>→ inset-shadow-(--demo-inset-shadow) [no color: hint]</span>
+                </div>
+
+                {/* Case 44: text/leading shorthand with CSS variable text size */}
+                <div
+                    data-case="44-css-var-text-leading"
+                    sz={{ text: 'lg', leading: '--demo-spacing', p: 4, bg: 'slate-800', rounded: 'md', color: 'white' }}
+                >
+                    text: lg + leading: --var<br />
+                    <span sz={{ color: 'emerald-400', text: 'xs' }}>Shorthand with CSS var leading</span>
+                </div>
+
+                {/* Case 45: Multiple CSS vars in one element */}
+                <div
+                    data-case="45-multi-css-var"
+                    sz={{ fontFamily: '--demo-font', fontWeight: '--demo-weight', text: '--demo-size', color: '--demo-color', p: 4, bg: 'slate-800', rounded: 'md' }}
+                >
+                    All CSS vars combined<br />
+                    <span sz={{ text: 'xs', opacity: 70 }}>font + weight + size + color</span>
                 </div>
             </div>
         </section>

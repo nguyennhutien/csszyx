@@ -161,7 +161,6 @@ export const PROPERTY_MAP: Record<string, string> = {
     color: 'text',
     text: 'text',
     fontWeight: 'font',
-    font: 'font',
     fontFamily: 'font',
     fontStretch: 'font-stretch',
     textAlign: 'text',
@@ -225,6 +224,7 @@ export const PROPERTY_MAP: Record<string, string> = {
     shadow: 'shadow',
     shadowColor: 'shadow',
     insetShadow: 'inset-shadow',
+    insetShadowColor: 'inset-shadow',
     textShadow: 'text-shadow',
     textShadowColor: 'text-shadow',
     opacity: 'opacity',
@@ -334,6 +334,16 @@ export const PROPERTY_MAP: Record<string, string> = {
 };
 
 // ============================================================================
+// CSS_VAR_TYPE_HINTS: Type hints for ambiguous properties when using CSS vars
+// Tailwind v4: `font-(family-name:--var)` disambiguates from `font-(--var)`
+// ============================================================================
+const CSS_VAR_TYPE_HINTS: Record<string, string> = {
+    fontFamily: 'family-name',
+    fontWeight: 'weight',
+    text: 'length',
+};
+
+// ============================================================================
 // SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
 // ============================================================================
 const SUGGESTION_MAP: Record<string, string> = {
@@ -369,6 +379,7 @@ const SUGGESTION_MAP: Record<string, string> = {
     objectPosition: 'objectPos',
     zIndex: 'z',
     // Typography
+    font: 'fontWeight (for weight) or fontFamily (for family)',
     fontStyle: 'italic/notItalic (boolean)',
     weight: 'fontWeight',
     textDecoration: 'decoration or underline/lineThrough/noUnderline (boolean)',
@@ -1689,6 +1700,16 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 continue;
             }
 
+            // insetShadowColor: 'red-500' → inset-shadow-red-500
+            if (rawKey === 'insetShadowColor') {
+                if (String(value).startsWith('--')) {
+                    classes.push(`${prefix}inset-shadow-(color:${value})`);
+                } else {
+                    classes.push(`${prefix}inset-shadow-${value}`);
+                }
+                continue;
+            }
+
             // Fix 2: Brightness/Contrast/Saturate/Scale — strings are NEVER parsed as numbers
             if (rawKey === 'brightness' || rawKey === 'contrast' || rawKey === 'saturate' || rawKey === 'scale' ||
                 rawKey === 'backdropBrightness' || rawKey === 'backdropContrast' || rawKey === 'backdropSaturate') {
@@ -2064,8 +2085,14 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             const isAspectRatio = key === 'aspect' && /^\d+\/\d+$/.test(finalValue);
 
             // v4 Variable Syntax: '--color' → '(--color)'
+            // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'
             if (finalValue.startsWith('--')) {
-                finalValue = `(${finalValue})`;
+                const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
+                if (typeHint) {
+                    finalValue = `(${typeHint}:${finalValue})`;
+                } else {
+                    finalValue = `(${finalValue})`;
+                }
             } else if (finalValue.startsWith('var(')) {
                 // var(--x) should be wrapped in brackets for arbitrary value syntax
                 finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
@@ -2093,7 +2120,35 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         }
     }
 
-    const finalClasses = classes.filter(Boolean);
+    // Post-processing: merge text-{size} + leading-{value} → text-{size}/{value}
+    let mergedClasses = classes;
+    const textSizePattern = /^((?:[a-z0-9\-[\]@/:]*:)*)text-(.+)$/;
+    const leadingPattern = /^((?:[a-z0-9\-[\]@/:]*:)*)leading-(.+)$/;
+    const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
+    const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
+    for (let i = 0; i < classes.length; i++) {
+        const cls = classes[i];
+        const tm = textSizePattern.exec(cls);
+        if (tm) {textEntries.push({ index: i, prefix: tm[1], size: tm[2] });}
+        const lm = leadingPattern.exec(cls);
+        if (lm) {leadingEntries.push({ index: i, prefix: lm[1], value: lm[2] });}
+    }
+    if (textEntries.length > 0 && leadingEntries.length > 0) {
+        const removeIndices = new Set<number>();
+        for (const te of textEntries) {
+            const matchingLeading = leadingEntries.find(le => le.prefix === te.prefix);
+            if (matchingLeading) {
+                // Merge: text-lg + leading-7 → text-lg/7
+                mergedClasses[te.index] = `${te.prefix}text-${te.size}/${matchingLeading.value}`;
+                removeIndices.add(matchingLeading.index);
+            }
+        }
+        if (removeIndices.size > 0) {
+            mergedClasses = mergedClasses.filter((_, i) => !removeIndices.has(i));
+        }
+    }
+
+    const finalClasses = mergedClasses.filter(Boolean);
 
     // Apply mangling if map is provided
     if (mangleMap) {

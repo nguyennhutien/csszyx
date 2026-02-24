@@ -64,7 +64,7 @@ Write Tailwind using JavaScript objects:
     p: 4,
     m: 2,
     bg: "red-500",
-    text: "white",
+    color: "white",
     hover: {
       bg: "blue-600",
     },

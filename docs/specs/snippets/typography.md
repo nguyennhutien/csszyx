@@ -6,37 +6,36 @@ Controlling the style, size, and layout of text.
 
 Controlling the font family.
 
-| Concept          | CSS Rule                                                                        | Tailwind v4 Class  | `sz` Prop (Object Syntax)     | Note                                                  |
-| :--------------- | :------------------------------------------------------------------------------ | :----------------- | :---------------------------- | :---------------------------------------------------- |
-| **Sans**         | `font-family: ui-sans-serif, system-ui, sans-serif`                             | `font-sans`        | `{ fontFamily: 'sans' }`      | **Preferred key**.                                    |
-| **Serif**        | `font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif`      | `font-serif`       | `{ fontFamily: 'serif' }`     |                                                       |
-| **Mono**         | `font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace` | `font-mono`        | `{ fontFamily: 'mono' }`      |                                                       |
-| **Legacy**       | (Alias)                                                                         | `font-sans`        | `{ font: 'sans' }`            | _Risk of collision with Weight. Prefer `fontFamily`._ |
-| **Arbitrary**    | `font-family: "My Font"`                                                        | `font-['My_Font']` | `{ fontFamily: "'My Font'" }` |                                                       |
-| **CSS Variable** | `font-family: var(--f)`                                                         | `font-(--f)`       | `{ fontFamily: '--f' }`       | **Sugar**: Auto-detects `--`.                         |
+| Concept          | CSS Rule                                                                        | Tailwind v4 Class        | `sz` Prop (Object Syntax)     | Note                                                               |
+| :--------------- | :------------------------------------------------------------------------------ | :----------------------- | :---------------------------- | :----------------------------------------------------------------- |
+| **Sans**         | `font-family: ui-sans-serif, system-ui, sans-serif`                             | `font-sans`              | `{ fontFamily: 'sans' }`      | **Preferred key**.                                                 |
+| **Serif**        | `font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif`      | `font-serif`             | `{ fontFamily: 'serif' }`     |                                                                    |
+| **Mono**         | `font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace` | `font-mono`              | `{ fontFamily: 'mono' }`      |                                                                    |
+| **Arbitrary**    | `font-family: "My Font"`                                                        | `font-['My_Font']`       | `{ fontFamily: "'My Font'" }` |                                                                    |
+| **CSS Variable** | `font-family: var(--f)`                                                         | `font-(family-name:--f)` | `{ fontFamily: '--f' }`       | **Sugar**: Auto-detects `--`. Type hint disambiguates from weight. |
 
 ## Font Size
 
 Controlling the font size.
 
-| Concept          | CSS Rule                                    | Tailwind v4 Class                                                                                                                                       | `sz` Prop (Object Syntax)               | Note                             |
-| :--------------- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------- | :------------------------------- |
-| **Scale**        | `font-size: (size); line-height: (leading)` | `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`, `text-4xl`, `text-5xl`, `text-6xl`, `text-7xl`, `text-8xl`, `text-9xl` | `{ text: 'xs' }`, `{ text: 'sm' }` etc. | Sets size & leading.             |
-| **Number**       | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | CamelCase `fontSize` also valid. |
-| **Arbitrary**    | `font-size: 1.5rem`                         | `text-[1.5rem]`                                                                                                                                         | `{ text: '1.5rem' }`                    |                                  |
-| **CSS Variable** | `font-size: var(--size)`                    | `text-(--size)`                                                                                                                                         | `{ text: '--size' }`                    | **Sugar**: Auto-detects `--`.    |
+| Concept          | CSS Rule                                    | Tailwind v4 Class                                                                                                                                       | `sz` Prop (Object Syntax)               | Note                                                              |
+| :--------------- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------- | :---------------------------------------------------------------- |
+| **Scale**        | `font-size: (size); line-height: (leading)` | `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`, `text-4xl`, `text-5xl`, `text-6xl`, `text-7xl`, `text-8xl`, `text-9xl` | `{ text: 'xs' }`, `{ text: 'sm' }` etc. | Sets size & leading.                                              |
+| **Number**       | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | CamelCase `fontSize` also valid.                                  |
+| **Arbitrary**    | `font-size: 1.5rem`                         | `text-[1.5rem]`                                                                                                                                         | `{ text: '1.5rem' }`                    |                                                                   |
+| **CSS Variable** | `font-size: var(--size)`                    | `text-(length:--size)`                                                                                                                                  | `{ text: '--size' }`                    | **Sugar**: Auto-detects `--`. Type hint disambiguates from color. |
 
 ## Font Weight
 
 Controlling the font weight.
 
-| Concept          | CSS Rule                | Tailwind v4 Class                                                                                                                        | `sz` Prop (Object Syntax)                                     | Note                          |
-| :--------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :---------------------------- |
-| **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ fontWeight: 'thin' }`, `{ fontWeight: 'extralight' }` etc. |                               |
-| **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ fontWeight: 100 }`, `{ fontWeight: 200 }` etc.             | v4 shorthand.                 |
-| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `fontWeight`.       |
-| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ fontWeight: 550 }`                                         |                               |
-| **CSS Variable** | `font-weight: var(--w)` | `font-(--w)`                                                                                                                             | `{ fontWeight: '--w' }`                                       | **Sugar**: Auto-detects `--`. |
+| Concept          | CSS Rule                | Tailwind v4 Class                                                                                                                        | `sz` Prop (Object Syntax)                                     | Note                                                               |
+| :--------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :----------------------------------------------------------------- |
+| **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ fontWeight: 'thin' }`, `{ fontWeight: 'extralight' }` etc. |                                                                    |
+| **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ fontWeight: 100 }`, `{ fontWeight: 200 }` etc.             | v4 shorthand.                                                      |
+| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `fontWeight`.                                            |
+| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ fontWeight: 550 }`                                         |                                                                    |
+| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ fontWeight: '--w' }`                                       | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
 
 ## Font Stretch
 
@@ -98,6 +97,18 @@ Controlling the leading (line height).
 | **Fixed**        | `line-height: .75rem`(etc) | `leading-3`, `leading-4`, `leading-5`, `leading-6`, `leading-7`, `leading-8`, `leading-9`, `leading-10` | `{ leading: 3 }` etc.      | Maps to spacing scale.        |
 | **Arbitrary**    | `line-height: 3rem`        | `leading-[3rem]`                                                                                        | `{ leading: '3rem' }`      |                               |
 | **CSS Variable** | `line-height: var(--l)`    | `leading-(--l)`                                                                                         | `{ leading: '--l' }`       | **Sugar**: Auto-detects `--`. |
+
+### Text/Leading Shorthand
+
+When both `text` (font-size) and `leading` (line-height) are specified together, they are automatically merged into a single Tailwind class using the `/` shorthand syntax.
+
+| Input                               | Output             | Note                                     |
+| :---------------------------------- | :----------------- | :--------------------------------------- |
+| `{ text: 'lg', leading: 7 }`        | `text-lg/7`        | Numeric leading merged with text size.   |
+| `{ text: 'sm', leading: 'tight' }`  | `text-sm/tight`    | Keyword leading merged with text size.   |
+| `{ text: 'xl', leading: '1.5rem' }` | `text-xl/[1.5rem]` | Arbitrary leading merged with text size. |
+| `{ text: 'lg' }`                    | `text-lg`          | No merge — `leading` not present.        |
+| `{ leading: 7 }`                    | `leading-7`        | No merge — `text` not present.           |
 
 ## Text Align
 

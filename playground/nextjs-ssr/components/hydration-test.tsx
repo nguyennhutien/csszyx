@@ -51,16 +51,16 @@ export function HydrationTest() {
     }, []);
 
     const statusSz = hydrationStatus === 'success'
-        ? { px: 3, py: 1, text: 'xs', rounded: 'full', font: 'semibold', bg: { color: 'green-500', op: 20 }, color: 'green-400' }
+        ? { px: 3, py: 1, text: 'xs', rounded: 'full', fontWeight: 'semibold', bg: { color: 'green-500', op: 20 }, color: 'green-400' }
         : hydrationStatus === 'mismatch'
-          ? { px: 3, py: 1, text: 'xs', rounded: 'full', font: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
-          : { px: 3, py: 1, text: 'xs', rounded: 'full', font: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
+          ? { px: 3, py: 1, text: 'xs', rounded: 'full', fontWeight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
+          : { px: 3, py: 1, text: 'xs', rounded: 'full', fontWeight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
 
     return (
-        <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, border: 'slate-700' }}>
+        <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>
             {/* Status Header */}
             <div sz={{ flex: true, items: 'center', justify: 'between', mb: 6 }}>
-                <h3 sz={{ text: 'lg', font: 'semibold', color: 'white' }}>Hydration Status</h3>
+                <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'white' }}>Hydration Status</h3>
                 <span
                     sz={statusSz}
                 >
@@ -74,7 +74,7 @@ export function HydrationTest() {
             <div
                 id="hydration-test-element"
                 data-server-classes="p-4 rounded-lg bg-indigo-500/20 border border-indigo-500"
-                sz={{ p: 4, rounded: 'lg', bg: { color: 'indigo-500', op: 20 }, border: 'indigo-500' }}
+                sz={{ p: 4, rounded: 'lg', bg: { color: 'indigo-500', op: 20 }, borderColor: 'indigo-500', border: true }}
             >
                 <p sz={{ color: 'indigo-300', text: 'sm' }}>
                     This element tests hydration consistency. The classes applied by sz
@@ -86,12 +86,12 @@ export function HydrationTest() {
             <div sz={{ mt: 6, spaceY: 3 }}>
                 <div sz={{ p: 3, rounded: 'lg', bg: { color: 'slate-900', op: 50 } }}>
                     <span sz={{ text: 'xs', color: 'slate-500', display: 'block', mb: 1 }}>Checksum:</span>
-                    <code sz={{ text: 'xs', color: 'cyan-400', font: 'mono' }}>{checksum}</code>
+                    <code sz={{ text: 'xs', color: 'cyan-400', fontFamily: 'mono' }}>{checksum}</code>
                 </div>
 
                 <div sz={{ p: 3, rounded: 'lg', bg: { color: 'slate-900', op: 50 } }}>
                     <span sz={{ text: 'xs', color: 'slate-500', display: 'block', mb: 1 }}>Client Classes:</span>
-                    <code sz={{ text: 'xs', color: 'green-400', font: 'mono', break: 'all' }}>
+                    <code sz={{ text: 'xs', color: 'green-400', fontFamily: 'mono', break: 'all' }}>
                         {clientClasses || 'Loading...'}
                     </code>
                 </div>
@@ -99,7 +99,7 @@ export function HydrationTest() {
                 {serverClasses && (
                     <div sz={{ p: 3, rounded: 'lg', bg: { color: 'slate-900', op: 50 } }}>
                         <span sz={{ text: 'xs', color: 'slate-500', display: 'block', mb: 1 }}>Server Classes:</span>
-                        <code sz={{ text: 'xs', color: 'blue-400', font: 'mono', break: 'all' }}>
+                        <code sz={{ text: 'xs', color: 'blue-400', fontFamily: 'mono', break: 'all' }}>
                             {serverClasses}
                         </code>
                     </div>
@@ -107,8 +107,8 @@ export function HydrationTest() {
             </div>
 
             {/* Explanation */}
-            <div sz={{ mt: 6, p: 4, rounded: 'lg', bg: { color: 'slate-900', op: 30 }, border: 'slate-700' }}>
-                <h4 sz={{ text: 'sm', font: 'semibold', color: 'white', mb: 2 }}>How it works:</h4>
+            <div sz={{ mt: 6, p: 4, rounded: 'lg', bg: { color: 'slate-900', op: 30 }, borderColor: 'slate-700', border: true }}>
+                <h4 sz={{ text: 'sm', fontWeight: 'semibold', color: 'white', mb: 2 }}>How it works:</h4>
                 <ul sz={{ text: 'xs', color: 'slate-400', spaceY: 1 }}>
                     <li>1. Server renders HTML with mangled classes</li>
                     <li>2. Checksum is injected into HTML</li>

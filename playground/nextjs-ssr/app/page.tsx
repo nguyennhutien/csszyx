@@ -8,17 +8,17 @@ export default function Home() {
     return (
         <main sz={{ minH: 'screen', p: 8, bgImg: { gradient: 'linear', dir: 'to-b' }, from: 'slate-900', to: 'slate-800' }}>
             <div sz={{ maxW: '4xl', mx: 'auto' }}>
-                <h1 sz={{ text: '4xl', font: 'bold', color: 'white', mb: 8, textAlign: 'center' }}>
+                <h1 sz={{ text: '4xl', fontWeight: 'bold', color: 'white', mb: 8, textAlign: 'center' }}>
                     csszyx Next.js SSR Playground
                 </h1>
 
-                <p sz={{ color: 'slate-300', text: 'center', mb: 12 }}>
+                <p sz={{ color: 'slate-300', textAlign: 'center', mb: 12 }}>
                     Testing SSR Hydration Guard and Webpack integration with App Router
                 </p>
 
                 {/* Server Component Section */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', font: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
                         Server Components (RSC)
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
@@ -39,7 +39,7 @@ export default function Home() {
 
                 {/* Client Component Section */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', font: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
                         Client Components
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
@@ -51,7 +51,7 @@ export default function Home() {
 
                 {/* Hydration Test Section */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', font: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
                         Hydration Guard Test
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
@@ -72,24 +72,24 @@ export default function Home() {
 
                 {/* Conditional Styling Test */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', font: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
                         Conditional Styling (_szIf)
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
                         Testing conditional class application with sz prop.
                     </p>
                     <div sz={{ flex: true, gap: 4 }}>
-                        <div sz={{ p: 4, rounded: 'lg', bg: { color: 'green-500', op: 20 }, border: 'green-500' }}>
+                        <div sz={{ p: 4, rounded: 'lg', bg: { color: 'green-500', op: 20 }, borderColor: 'green-500', border: true }}>
                             <span sz={{ color: 'green-400' }}>Active State</span>
                         </div>
-                        <div sz={{ p: 4, rounded: 'lg', bg: { color: 'slate-500', op: 20 }, border: 'slate-500' }}>
+                        <div sz={{ p: 4, rounded: 'lg', bg: { color: 'slate-500', op: 20 }, borderColor: 'slate-500', border: true }}>
                             <span sz={{ color: 'slate-400' }}>Inactive State</span>
                         </div>
                     </div>
                 </section>
 
                 {/* Footer */}
-                <footer sz={{ textAlign: 'center', color: 'slate-500', text: 'sm', pt: 8, borderT: true, border: 'slate-700' }}>
+                <footer sz={{ textAlign: 'center', color: 'slate-500', text: 'sm', pt: 8, borderT: true, borderColor: 'slate-700' }}>
                     <p>csszyx SSR Playground - Webpack Integration Demo</p>
                 </footer>
             </div>
