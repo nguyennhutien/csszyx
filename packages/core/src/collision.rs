@@ -60,45 +60,40 @@ impl CollisionDetector {
     /// assert_eq!(var1, var2); // Same value = same variable
     /// ```
     pub fn add(&mut self, value: &str) -> String {
-        // Generate dual hash
         let (primary, secondary) = compute_dual_hash(value);
 
-        // Check for existing entry
         if let Some(entries) = self.entries.get(&primary) {
-            // Check for exact match
             for entry in entries {
                 if entry.value == value {
-                    // Same value = reuse variable
-                    return format!("--v-{}", entry.primary_hash);
+                    let hash = &entry.primary_hash;
+                    return format!("--v-{hash}");
                 }
             }
 
-            // Collision detected - use secondary hash
+            // Collision detected — use secondary hash
             let new_entry = VariableEntry {
                 primary_hash: primary.clone(),
                 _secondary_hash: secondary.clone(),
                 value: value.to_string(),
             };
 
-            self.entries
-                .get_mut(&primary)
-                .unwrap()
-                .push(new_entry.clone());
+            self.entries.get_mut(&primary).unwrap().push(new_entry);
             self.count += 1;
 
-            format!("--v-{}-{}", primary, secondary)
+            format!("--v-{primary}-{secondary}")
         } else {
-            // No collision - use primary hash only
+            let result = format!("--v-{primary}");
+
             let new_entry = VariableEntry {
                 primary_hash: primary.clone(),
                 _secondary_hash: secondary,
                 value: value.to_string(),
             };
 
-            self.entries.insert(primary.clone(), vec![new_entry]);
+            self.entries.insert(primary, vec![new_entry]);
             self.count += 1;
 
-            format!("--v-{}", primary)
+            result
         }
     }
 
@@ -107,7 +102,7 @@ impl CollisionDetector {
     /// # Returns
     ///
     /// Number of unique CSS values added
-    pub fn count(&self) -> usize {
+    pub const fn count(&self) -> usize {
         self.count
     }
 
@@ -143,6 +138,12 @@ impl CollisionDetector {
 }
 
 impl Default for CollisionDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for WasmCollisionDetector {
     fn default() -> Self {
         Self::new()
     }
@@ -213,6 +214,7 @@ impl WasmCollisionDetector {
     /// # Returns
     ///
     /// Number of unique CSS values
+    #[allow(clippy::missing_const_for_fn)] // wasm_bindgen doesn't support const
     pub fn count(&self) -> usize {
         self.detector.count()
     }
@@ -303,6 +305,6 @@ mod tests {
 
         let (total, _collisions, rate) = detector.stats();
         assert_eq!(total, 3);
-        assert!(rate >= 0.0 && rate <= 1.0);
+        assert!((0.0..=1.0).contains(&rate));
     }
 }

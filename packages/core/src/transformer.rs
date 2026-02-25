@@ -9,7 +9,7 @@ pub enum SzValue {
     /// A single primitive value (string, number, or boolean)
     Primitive(PrimitiveValue),
     /// A nested object for variants (hover, focus, etc.)
-    Nested(HashMap<String, SzValue>),
+    Nested(HashMap<String, Self>),
 }
 
 /// Primitive values supported by the sz prop.
@@ -51,9 +51,9 @@ fn process_sz_object(obj: &HashMap<String, SzValue>, prefix: &str, classes: &mut
             }
             SzValue::Nested(nested_obj) => {
                 let new_prefix = if prefix.is_empty() {
-                    format!("{}:", key)
+                    format!("{key}:")
                 } else {
-                    format!("{}{}:", prefix, key)
+                    format!("{prefix}{key}:")
                 };
                 process_sz_object(nested_obj, &new_prefix, classes);
             }
@@ -63,32 +63,32 @@ fn process_sz_object(obj: &HashMap<String, SzValue>, prefix: &str, classes: &mut
 
 fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> String {
     match value {
-        PrimitiveValue::Bool(true) => format!("{}{}", prefix, key),
+        PrimitiveValue::Bool(true) => format!("{prefix}{key}"),
         PrimitiveValue::Bool(false) => String::new(),
         PrimitiveValue::Number(n) => {
             // Correct negative value handling: m: -4 -> -m-4
             if *n < 0.0 {
                 let abs_val = n.abs();
-                // Check if it's a whole number to avoid .0
                 if abs_val.fract() == 0.0 {
-                    format!("{}-{}-{}", prefix, key, abs_val as i64)
+                    #[allow(clippy::cast_possible_truncation)]
+                    let int_val = abs_val as i64; // Safe: CSS values are small integers
+                    format!("{prefix}-{key}-{int_val}")
                 } else {
-                    format!("{}-{}-{}", prefix, key, abs_val)
+                    format!("{prefix}-{key}-{abs_val}")
                 }
+            } else if n.fract() == 0.0 {
+                #[allow(clippy::cast_possible_truncation)]
+                let int_val = *n as i64; // Safe: CSS values are small integers
+                format!("{prefix}{key}-{int_val}")
             } else {
-                // Positive: m: 4 -> m-4
-                if n.fract() == 0.0 {
-                    format!("{}{}-{}", prefix, key, *n as i64)
-                } else {
-                    format!("{}{}-{}", prefix, key, n)
-                }
+                format!("{prefix}{key}-{n}")
             }
         }
         PrimitiveValue::String(s) => {
             // Handle color opacity: bg-red-500/50 or text-blue-600/75
             if s.contains('/') {
                 // Color with opacity modifier
-                return format!("{}{}-{}", prefix, key, s);
+                return format!("{prefix}{key}-{s}");
             }
 
             let is_negative = s.starts_with('-');
@@ -96,17 +96,17 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
 
             // Auto-bracket for arbitrary values (contains units or special chars)
             let final_val = if needs_brackets(base_val) {
-                format!("[{}]", base_val)
+                format!("[{base_val}]")
             } else {
                 base_val.to_string()
             };
 
             if is_negative {
                 // Negative string: m: "-4" -> -m-4
-                format!("{}-{}-{}", prefix, key, final_val)
+                format!("{prefix}-{key}-{final_val}")
             } else {
                 // Positive string: bg: "red-500" -> bg-red-500
-                format!("{}{}-{}", prefix, key, final_val)
+                format!("{prefix}{key}-{final_val}")
             }
         }
     }

@@ -6,18 +6,9 @@
     clippy::missing_docs_in_private_items,
     clippy::doc_markdown,
     clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::uninlined_format_args,
-    clippy::redundant_clone,
-    clippy::redundant_closure,
-    clippy::redundant_closure_for_method_calls,
     clippy::missing_fields_in_debug,
     clippy::cargo_common_metadata,
-    clippy::empty_line_after_doc_comments,
-    clippy::missing_const_for_fn,
-    clippy::manual_range_contains,
-    clippy::use_self,
-    clippy::new_without_default
+    clippy::empty_line_after_doc_comments
 )]
 
 /// csszyx-core: Performance-critical core for csszyx CSS-in-JS framework.
@@ -100,6 +91,7 @@ use wasm_bindgen::prelude::*;
 /// await init();
 /// const id = encode(42);
 /// ```
+#[allow(clippy::missing_const_for_fn)] // wasm_bindgen(start) doesn't support const
 #[wasm_bindgen(start)]
 pub fn init() {
     // Initialization placeholder - can be extended with panic hooks if needed

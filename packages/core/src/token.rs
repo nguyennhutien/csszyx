@@ -175,7 +175,7 @@ mod tests {
         let token = generate_token("Component", "/src/Component.tsx", 42, 8, "csr", "build123");
 
         assert_eq!(token.len(), 12);
-        assert!(token.chars().all(|c| c.is_alphanumeric()));
+        assert!(token.chars().all(char::is_alphanumeric));
     }
 
     #[test]

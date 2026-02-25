@@ -56,7 +56,7 @@ pub type MangleMap = HashMap<String, String>;
 pub fn compute_mangle_checksum(map: JsValue) -> Result<String, JsValue> {
     // Deserialize JavaScript object to HashMap
     let mangle_map: MangleMap = serde_wasm_bindgen::from_value(map)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse mangle map: {}", e)))?;
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse mangle map: {e}")))?;
 
     Ok(compute_checksum_internal(&mangle_map))
 }
@@ -79,7 +79,7 @@ pub fn compute_checksum_internal(map: &MangleMap) -> String {
     // Format: "orig1:mangle1|orig2:mangle2|..."
     let canonical = entries
         .iter()
-        .map(|(orig, mangled)| format!("{}:{}", orig, mangled))
+        .map(|(orig, mangled)| format!("{orig}:{mangled}"))
         .collect::<Vec<_>>()
         .join("|");
 
@@ -135,7 +135,7 @@ pub fn verify_checksum_internal(map: &MangleMap, expected_checksum: &str) -> boo
 #[wasm_bindgen]
 pub fn verify_mangle_checksum(map: JsValue, expected_checksum: &str) -> Result<bool, JsValue> {
     let mangle_map: MangleMap = serde_wasm_bindgen::from_value(map)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse mangle map: {}", e)))?;
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse mangle map: {e}")))?;
 
     Ok(verify_checksum_internal(&mangle_map, expected_checksum))
 }
@@ -222,7 +222,7 @@ mod tests {
     fn test_large_map_performance() {
         let mut map = HashMap::new();
         for i in 0..1000 {
-            map.insert(format!("class-{}", i), format!("{}", i));
+            map.insert(format!("class-{i}"), format!("{i}"));
         }
 
         let start = std::time::Instant::now();
