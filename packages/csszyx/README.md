@@ -2,52 +2,105 @@
 
 > Universal CSS-in-JS for Tailwind CSS with WASM core.
 
-**csszyx** is a zero-runtime, framework-agnostic CSS-in-JS library that compiles your styles into atomic CSS classes at build time. It leverages a Rust-based WASM core for blisteringly fast performance and safety.
-
 ## Features
 
-- ⚡ **Zero-Runtime Overhead**: Styles are extracted to static CSS.
-- 🎨 **Tailwind Compatible**: Use your existing Tailwind config.
-- 🛡️ **Type Safe**: Full TypeScript support.
-- 🔒 **SSR Safe**: Built-in hydration mismatch protection.
-- 📦 **WASM Power**: Core logic runs in WebAssembly.
+- **Build-time transforms** -- `sz` prop compiles to atomic Tailwind classes
+- **Zero-runtime overhead** -- Styles extracted to static CSS at build time
+- **SSR hydration safety** -- SHA-256 checksum validation, abort on mismatch
+- **Tailwind CSS v4** -- Full compatibility with Tailwind's JIT engine
+- **Production minification** -- Class names mangled (`p-4` -> `z`) for smaller output
+- **TypeScript support** -- Fully typed `sz` prop with autocomplete
 
 ## Installation
 
 ```bash
-npm install csszyx
-# or
 pnpm add csszyx
-# or
-yarn add csszyx
 ```
 
 ## Quick Start
 
-1. **Initialize your project**:
+### 1. Configure your build tool
 
-   ```bash
-   npx csszyx init
-   ```
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import csszyx from "csszyx/vite";
 
-2. **Start coding**:
+export default defineConfig({
+  plugins: [...csszyx(), tailwindcss(), react()],
+});
+```
 
-   ```tsx
-   import { _sz } from "csszyx";
+### 2. Use the `sz` prop
 
-   function Button() {
-     return (
-       <button className={_sz("bg-blue-500 text-white p-4")}>Click me</button>
-     );
-   }
-   ```
+```tsx
+function Button() {
+  return (
+    <button sz={{ bg: "blue-500", color: "white", p: 4 }}>Click me</button>
+  );
+}
+```
+
+At build time, `sz={{ bg: 'blue-500', color: 'white', p: 4 }}` compiles to `className="bg-blue-500 text-white p-4"`.
+
+## Object Syntax
+
+The `sz` prop accepts an object where keys are Tailwind property names and values are their arguments.
+
+```tsx
+// Basic utilities
+<div sz={{ p: 4, m: 2, bg: "blue-500" }} />
+// -> className="p-4 m-2 bg-blue-500"
+
+// Text color uses `color`, not `text`
+<div sz={{ color: "white" }} />
+// -> className="text-white"
+
+// Font weight and family
+<div sz={{ fontWeight: "bold", fontFamily: "mono" }} />
+// -> className="font-bold font-mono"
+
+// Hover state
+<button sz={{ bg: "blue-500", hover: { bg: "blue-600" } }} />
+// -> className="bg-blue-500 hover:bg-blue-600"
+
+// Responsive breakpoints
+<div sz={{ p: 4, md: { p: 8 }, lg: { p: 12 } }} />
+// -> className="p-4 md:p-8 lg:p-12"
+
+// Negative values
+<div sz={{ m: -4 }} />
+// -> className="-m-4"
+
+// Opacity modifier
+<div sz={{ bg: "blue-500/20" }} />
+// -> className="bg-blue-500/20"
+```
+
+## Runtime Helpers
+
+For dynamic class composition, use the runtime helpers from `@csszyx/runtime` (re-exported by `csszyx`):
+
+```tsx
+import { _sz, _szIf, _szSwitch } from "@csszyx/runtime";
+
+<div className={_sz("p-4", _szIf(isActive, "bg-blue-500", "bg-gray-200"))} />;
+```
 
 ## Packages
 
-- **[@csszyx/unplugin](https://www.npmjs.com/package/@csszyx/unplugin)**: Integrations for Vite, Webpack, and more.
-- **[@csszyx/cli](https://www.npmjs.com/package/@csszyx/cli)**: Command-line tools.
-- **[@csszyx/core](https://www.npmjs.com/package/@csszyx/core)**: WASM core engine.
+| Package                                                              | Description                             |
+| -------------------------------------------------------------------- | --------------------------------------- |
+| [`csszyx`](https://www.npmjs.com/package/csszyx)                     | Umbrella package (re-exports all)       |
+| [`@csszyx/unplugin`](https://www.npmjs.com/package/@csszyx/unplugin) | Vite + Webpack + esbuild plugin         |
+| [`@csszyx/compiler`](https://www.npmjs.com/package/@csszyx/compiler) | sz object to Tailwind class transform   |
+| [`@csszyx/runtime`](https://www.npmjs.com/package/@csszyx/runtime)   | Runtime helpers + SSR hydration         |
+| [`@csszyx/core`](https://www.npmjs.com/package/@csszyx/core)         | Rust/WASM: encoder, checksum, collision |
+| [`@csszyx/cli`](https://www.npmjs.com/package/@csszyx/cli)           | Migration CLI + type generator          |
+| [`@csszyx/types`](https://www.npmjs.com/package/@csszyx/types)       | Shared TypeScript types                 |
 
 ## License
 
-MIT © [csszyx contributors](https://github.com/nguyennhutien/csszyx)
+MIT
