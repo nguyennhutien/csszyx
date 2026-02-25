@@ -48,5 +48,5 @@ jobs:
 
       - name: Build WASM
         run: |
-          cargo install wasm-pack
+          cargo install wasm-pack --locked || true
           wasm-pack build --target bundler

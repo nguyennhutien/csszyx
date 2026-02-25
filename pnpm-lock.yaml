@@ -215,12 +215,24 @@ importers:
 
   packages/e2e:
     devDependencies:
+      '@csszyx/compiler':
+        specifier: workspace:*
+        version: link:../compiler
+      '@csszyx/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@csszyx/unplugin':
+        specifier: workspace:*
+        version: link:../unplugin
       '@playwright/test':
         specifier: ^1.42.1
         version: 1.58.0
       '@types/node':
         specifier: ^20.11.24
         version: 20.19.30
+      csszyx:
+        specifier: workspace:*
+        version: link:../csszyx
 
   packages/mcp-server:
     dependencies:

@@ -10,6 +10,10 @@
     },
     "devDependencies": {
         "@playwright/test": "^1.42.1",
-        "@types/node": "^20.11.24"
+        "@types/node": "^20.11.24",
+        "csszyx": "workspace:*",
+        "@csszyx/compiler": "workspace:*",
+        "@csszyx/runtime": "workspace:*",
+        "@csszyx/unplugin": "workspace:*"
     }
 }

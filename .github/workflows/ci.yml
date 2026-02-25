@@ -54,8 +54,19 @@ jobs:
           node-version: "20"
           cache: "pnpm"
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked || true
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @csszyx/e2e exec playwright install --with-deps chromium
 
       - name: Run tests
         run: pnpm test
@@ -89,7 +100,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack
+        run: cargo install wasm-pack --locked || true
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
