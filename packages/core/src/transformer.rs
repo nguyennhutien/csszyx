@@ -85,10 +85,12 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
             }
         }
         PrimitiveValue::String(s) => {
-            // Handle color opacity: bg-red-500/50 or text-blue-600/75
-            if s.contains('/') {
-                // Color with opacity modifier
-                return format!("{prefix}{key}-{s}");
+            // String slash opacity ("blue-500/20") is not supported.
+            // Use { color, op } object form via the TypeScript compiler.
+            // Warning is emitted at the TypeScript boundary (compiler.ts)
+            // before transform_sz is called, so we only suppress here.
+            if has_slash_opacity(s) {
+                return String::new();
             }
 
             let is_negative = s.starts_with('-');
@@ -112,25 +114,72 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
     }
 }
 
+/// CSS units that require arbitrary brackets in Tailwind.
+/// Must stay in sync with TypeScript needsArbitraryBrackets() in transform-core.ts.
+const CSS_UNITS: &[&str] = &[
+    "px", "rem", "em", "%", "vh", "vw", "ch", "dvh", "dvw", "svh", "svw", "lvh", "lvw", "cqw",
+    "cqh", "deg", "rad", "turn", "grad", "ms", "s", "fr",
+];
+
+/// Detects slash opacity in string form: "blue-500/20", "brand-primary-500/50".
+/// Only matches color-scale/opacity patterns (digit before slash),
+/// not fractions like "1/2" or other slash usage.
+fn has_slash_opacity(s: &str) -> bool {
+    s.find('/')
+        .is_some_and(|pos| pos > 0 && s.as_bytes().get(pos - 1).is_some_and(u8::is_ascii_digit))
+}
+
+/// Checks if a value needs arbitrary Tailwind brackets (e.g. bg-[#ff0000]).
+///
+/// Must stay in sync with TypeScript needsArbitraryBrackets() in transform-core.ts.
 fn needs_brackets(val: &str) -> bool {
-    // Already bracketed
+    // Already user-bracketed: [#333] → pass through as-is
     if val.starts_with('[') && val.ends_with(']') {
         return false;
     }
 
-    // Contains CSS units or arbitrary value indicators
-    let units = ["px", "rem", "em", "vh", "vw", "%", "deg", "ms", "s"];
-    for unit in units {
-        if val.ends_with(unit) && val.len() > unit.len() {
-            let prefix = &val[..val.len() - unit.len()];
-            if prefix.chars().all(|c| c.is_numeric() || c == '.') {
+    // Color functions → must bracket for arbitrary value syntax
+    if val.starts_with('#')
+        || val.starts_with("rgb")
+        || val.starts_with("hsl")
+        || val.starts_with("oklch")
+        || val.starts_with("color(")
+        || val.starts_with("hwb(")
+        || val.starts_with("lab(")
+        || val.starts_with("lch(")
+        || val.starts_with("oklab(")
+    {
+        return true;
+    }
+
+    // CSS function calls that need brackets
+    if val.contains("calc(")
+        || val.contains("var(")
+        || val.contains("attr(")
+        || val.contains("url(")
+        || val.contains("clamp(")
+        || val.contains("min(")
+        || val.contains("max(")
+        || val.contains(' ')
+    {
+        return true;
+    }
+
+    // Values starting with . followed by digits (e.g. .25em)
+    if val.starts_with('.') && val.len() > 1 && val.as_bytes()[1].is_ascii_digit() {
+        return true;
+    }
+
+    // CSS units — must match TypeScript's unit list exactly
+    for unit in CSS_UNITS {
+        if let Some(prefix) = val.strip_suffix(unit) {
+            if !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit() || c == '.') {
                 return true;
             }
         }
     }
 
-    // Contains spaces, hex colors, or custom variables
-    val.contains(' ') || val.starts_with('#') || val.starts_with("var(")
+    false
 }
 
 #[cfg(test)]
@@ -190,7 +239,8 @@ mod tests {
     }
 
     #[test]
-    fn test_color_opacity() {
+    fn test_slash_opacity_suppressed() {
+        // String slash opacity must be suppressed — use object form via TS compiler
         let mut obj = HashMap::new();
         obj.insert(
             "bg".to_string(),
@@ -200,12 +250,60 @@ mod tests {
             "text".to_string(),
             SzValue::Primitive(PrimitiveValue::String("blue-600/75".to_string())),
         );
+        obj.insert(
+            "bg2".to_string(),
+            SzValue::Primitive(PrimitiveValue::String("brand-500/20".to_string())),
+        );
 
         let mut classes = Vec::new();
         process_sz_object(&obj, "", &mut classes);
 
-        assert!(classes.contains(&"bg-red-500/50".to_string()));
-        assert!(classes.contains(&"text-blue-600/75".to_string()));
+        // None of the slash-opacity strings should produce a class
+        assert!(!classes.iter().any(|c| c.contains('/')));
+    }
+
+    #[test]
+    fn test_has_slash_opacity() {
+        assert!(has_slash_opacity("blue-500/20"));
+        assert!(has_slash_opacity("brand-500/50"));
+        assert!(has_slash_opacity("w-1/2")); // digit before slash → true; color filter is upstream
+        assert!(!has_slash_opacity("blue-500")); // no slash
+    }
+
+    #[test]
+    fn test_needs_brackets_extended() {
+        // These were missing from old needs_brackets — must now bracket correctly
+        assert!(needs_brackets("rgb(255,0,0)"));
+        assert!(needs_brackets("hsl(200,50%,50%)"));
+        assert!(needs_brackets("oklch(50% 0.1 200)"));
+        assert!(needs_brackets("50dvh"));
+        assert!(needs_brackets("1fr"));
+        assert!(needs_brackets("1ch"));
+        assert!(needs_brackets("90rad"));
+        assert!(needs_brackets("180turn"));
+        // These must NOT bracket
+        assert!(!needs_brackets("red-500"));
+        assert!(!needs_brackets("[#333]"));
+        assert!(!needs_brackets("4"));
+    }
+
+    #[test]
+    fn test_valid_color_passthrough() {
+        let mut obj = HashMap::new();
+        obj.insert(
+            "bg".to_string(),
+            SzValue::Primitive(PrimitiveValue::String("brand-500".to_string())),
+        );
+        obj.insert(
+            "text".to_string(),
+            SzValue::Primitive(PrimitiveValue::String("red-500".to_string())),
+        );
+
+        let mut classes = Vec::new();
+        process_sz_object(&obj, "", &mut classes);
+
+        assert!(classes.contains(&"bg-brand-500".to_string()));
+        assert!(classes.contains(&"text-red-500".to_string()));
     }
 
     #[test]

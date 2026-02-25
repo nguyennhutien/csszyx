@@ -1,5 +1,6 @@
 import { init, transform_sz, version as getWasmVersion } from '@csszyx/core';
 
+import { stripInvalidColorStrings } from './color-validation.js';
 import type { SzObject } from './transform.js';
 import { transform as jsTransform } from './transform.js';
 
@@ -60,16 +61,22 @@ export class CsszyxCompiler {
      */
     public transform(sz: SzObject): string {
         if (this.wasmLoaded) {
+            // Pre-validate: Rust WASM cannot emit warnings, so we must warn here
+            // before handing off to transform_sz. stripInvalidColorStrings returns
+            // a clean object with invalid/slash-opacity color strings removed.
+            const cleaned = stripInvalidColorStrings(sz as Record<string, unknown>);
             try {
-                return transform_sz(sz);
+                return transform_sz(cleaned);
             } catch (error) {
                 console.warn(
                     '[csszyx] WASM transformation failed, using JS fallback',
                     error,
                 );
+                // JS path handles its own warnings internally
                 return jsTransform(sz).className;
             }
         }
+        // JS path: transform-core.ts handles validation and warnings internally
         return jsTransform(sz).className;
     }
 

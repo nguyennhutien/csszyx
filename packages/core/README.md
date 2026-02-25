@@ -39,12 +39,14 @@ Converts object-based Tailwind syntax into class strings.
 ```typescript
 import { transform_sz } from "@csszyx/core";
 
+// ❌ String slash opacity not supported: bg: 'blue-500/20'
+// ✅ Use @csszyx/compiler with object form: { bg: { color: 'blue-500', op: 20 } }
 transform_sz({
   m: -4,
-  bg: "blue-500/20",
+  bg: "blue-500",
   hover: { scale: 110 },
 });
-// "-m-4 bg-blue-500/20 hover:scale-110"
+// "-m-4 bg-blue-500 hover:scale-110"
 ```
 
 ### Tiered Encoder

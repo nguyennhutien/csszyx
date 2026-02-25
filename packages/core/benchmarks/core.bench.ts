@@ -58,7 +58,7 @@ describe('Core Performance Analysis', async () => {
     const complexObject = {
         p: 4,
         m: -2,
-        bg: 'blue-500/80',
+        bg: 'blue-500',
         hover: {
             scale: 110,
             text: 'white',

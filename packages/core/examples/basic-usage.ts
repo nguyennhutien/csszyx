@@ -15,7 +15,7 @@ async function runExamples() {
     const styles = {
         p: 4,
         m: -2,
-        bg: 'blue-500/80',
+        bg: 'blue-500',
         hover: {
             scale: 110,
             text: 'white'
@@ -23,7 +23,7 @@ async function runExamples() {
     };
     console.log('Input:', JSON.stringify(styles, null, 2));
     console.log('Output:', transform_sz(styles));
-    // Output: p-4 -m-2 bg-blue-500/80 hover:scale-110 hover:text-white
+    // Output: p-4 -m-2 bg-blue-500 hover:scale-110 hover:text-white
 
     // 3. Encoder Examples
     console.log('\n--- Encoder ---');
@@ -36,7 +36,7 @@ async function runExamples() {
     console.log('\n--- Mangle Checksum ---');
     const mangleMap = {
         'p-4': 'z',
-        'bg-blue-500/80': 'y'
+        'bg-blue-500': 'y'
     };
     const checksum = compute_mangle_checksum(mangleMap);
     console.log('Checksum:', checksum);

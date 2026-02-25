@@ -558,7 +558,7 @@ export interface BackgroundProps {
   bgClip?: 'border' | 'padding' | 'content' | 'text';
 
   /** @see https://tailwindcss.com/docs/background-color */
-  bg?: ColorPropValue | (string & {});
+  bg?: ColorPropValue;
 
   /** @see https://tailwindcss.com/docs/background-origin */
   bgOrigin?: 'border' | 'padding' | 'content';

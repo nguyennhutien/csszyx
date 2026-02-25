@@ -74,8 +74,8 @@ The `sz` prop accepts an object where keys are Tailwind property names and value
 <div sz={{ m: -4 }} />
 // -> className="-m-4"
 
-// Opacity modifier
-<div sz={{ bg: "blue-500/20" }} />
+// Opacity modifier (use object form)
+<div sz={{ bg: { color: "blue-500", op: 20 } }} />
 // -> className="bg-blue-500/20"
 ```
 

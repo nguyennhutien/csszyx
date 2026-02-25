@@ -66,11 +66,17 @@ describe('@csszyx/core Integration', () => {
             expect(transform_sz({ my: -2.5 })).toBe('-my-2.5');
         });
 
-        it('should support color opacity', () => {
-            // Note: Rust core still uses string-based opacity ('color/opacity').
-            // Object form { color, op } is handled by the TypeScript compiler.
-            expect(transform_sz({ bg: 'red-500/50' })).toBe('bg-red-500/50');
-            expect(transform_sz({ text: 'blue-600/75' })).toBe('text-blue-600/75');
+        it('should suppress string slash opacity (use { color, op } object form)', () => {
+            // String slash opacity is not supported — TypeScript compiler warns + suppresses,
+            // Rust suppresses at WASM level. Neither path should emit a class.
+            expect(transform_sz({ bg: 'red-500/50' })).toBe('');
+            expect(transform_sz({ text: 'blue-600/75' })).toBe('');
+            expect(transform_sz({ bg: 'brand-500/20' })).toBe('');
+        });
+
+        it('should pass through valid color strings without slash', () => {
+            expect(transform_sz({ bg: 'red-500' })).toBe('bg-red-500');
+            expect(transform_sz({ bg: 'brand-500' })).toBe('bg-brand-500');
         });
 
         it('should format whole numbers without decimals', () => {

@@ -6,6 +6,9 @@
  * like hover, focus, etc.
  */
 
+import { hasSlashOpacity, isValidColorString } from './color-validation.js';
+import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+
 /**
  * Represents a value in the sz object.
  * Can be a string, number, boolean, or nested object for variants.
@@ -1223,6 +1226,42 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 classes.push(`${prefix}${twPrefix}-${colorBase}`);
             }
             continue;
+        }
+
+        // ================================================================
+        // VALIDATE STRING VALUES FOR COLOR PROPERTIES
+        // Slash opacity → warn + suppress (use object form instead)
+        // Unrecognized pattern → warn + suppress
+        // This runs before all specific property handlers, covering all
+        // 18 COLOR-category properties uniformly via PROPERTY_CATEGORY_MAP.
+        // ================================================================
+        if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR) {
+            const strVal = (value as string).replace(/!$/, '');
+
+            if (hasSlashOpacity(strVal)) {
+                if (process.env['NODE_ENV'] !== 'production' && typeof window === 'undefined') {
+                    const slashIdx = strVal.indexOf('/');
+                    const colorPart = strVal.slice(0, slashIdx);
+                    const opPart = strVal.slice(slashIdx + 1);
+                    console.warn(
+                        `[csszyx] "${rawKey}: '${strVal}'" — string slash opacity is not supported. ` +
+                        `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
+                    );
+                }
+                continue;
+            }
+
+            if (!isValidColorString(strVal)) {
+                if (process.env['NODE_ENV'] !== 'production' && typeof window === 'undefined') {
+                    console.warn(
+                        `[csszyx] "${rawKey}: '${strVal}'" is not a recognized color value and will be ignored. ` +
+                        'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+                        'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+                    );
+                }
+                continue;
+            }
+            // Valid string → falls through to specific or generic handler
         }
 
         // ================================================================

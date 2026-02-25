@@ -4,14 +4,15 @@ Controlling the background of an element.
 
 ## Background Color
 
-| Concept          | CSS Rule                            | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                          |
-| :--------------- | :---------------------------------- | :---------------- | :------------------------ | :---------------------------- |
-| **Color**        | `background-color: ...`             | `bg-blue-500`     | `{ bg: 'blue-500' }`      |                               |
-| **Inherit**      | `background-color: inherit`         | `bg-inherit`      | `{ bg: 'inherit' }`       |                               |
-| **Current**      | `background-color: currentColor`    | `bg-current`      | `{ bg: 'current' }`       |                               |
-| **Transparent**  | `background-color: transparent`     | `bg-transparent`  | `{ bg: 'transparent' }`   |                               |
-| **Arbitrary**    | `background-color: #333`            | `bg-[#333]`       | `{ bg: '#333' }`          |                               |
-| **CSS Variable** | `background-color: var(--my-color)` | `bg-(--my-color)` | `{ bg: '--my-color' }`    | **Sugar**: Auto-detects `--`. |
+| Concept          | CSS Rule                                  | Tailwind v4 Class | `sz` Prop (Object Syntax)               | Note                                             |
+| :--------------- | :---------------------------------------- | :---------------- | :-------------------------------------- | :----------------------------------------------- |
+| **Color**        | `background-color: ...`                   | `bg-blue-500`     | `{ bg: 'blue-500' }`                    |                                                  |
+| **Inherit**      | `background-color: inherit`               | `bg-inherit`      | `{ bg: 'inherit' }`                     |                                                  |
+| **Current**      | `background-color: currentColor`          | `bg-current`      | `{ bg: 'current' }`                     |                                                  |
+| **Transparent**  | `background-color: transparent`           | `bg-transparent`  | `{ bg: 'transparent' }`                 |                                                  |
+| **Arbitrary**    | `background-color: #333`                  | `bg-[#333]`       | `{ bg: '#333' }`                        |                                                  |
+| **CSS Variable** | `background-color: var(--my-color)`       | `bg-(--my-color)` | `{ bg: '--my-color' }`                  | **Sugar**: Auto-detects `--`.                    |
+| **With Opacity** | `background-color: rgb(59 130 246 / 20%)` | `bg-blue-500/20`  | `{ bg: { color: 'blue-500', op: 20 } }` | String slash (`'blue-500/20'`) is not supported. |
 
 ## Background Image
 
