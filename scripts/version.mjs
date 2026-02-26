@@ -9,5 +9,5 @@ execSync('pnpm changeset version', { stdio: 'inherit' });
 
 for (const pkg of readdirSync('packages')) {
     if (pkg === 'csszyx') continue;
-    try { rmSync(join('packages', pkg, 'CHANGELOG.md')); } catch {}
+    rmSync(join('packages', pkg, 'CHANGELOG.md'), { force: true });
 }
