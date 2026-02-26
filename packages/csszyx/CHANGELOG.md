@@ -1,5 +1,23 @@
 # csszyx
 
+## 0.2.0
+
+### Minor Changes
+
+- Add 21 Tailwind v4.2 logical/block props: pbs/pbe, mbs/mbe, blockSize/inlineSize families,
+  insetS/E/Bs/Be, borderBs/Be, scrollPbs/Pbe/Mbs/Mbe, fontFeatures. New color names: mauve,
+  olive, mist, taupe. The `start`/`end` props now emit `inset-s-*`/`inset-e-*` (TW v4.2
+  deprecation; CSS output unchanged).
+
+### Patch Changes
+
+- Updated dependencies
+  - @csszyx/compiler@0.2.0
+  - @csszyx/runtime@0.2.0
+  - @csszyx/core@0.2.0
+  - @csszyx/types@0.2.0
+  - @csszyx/unplugin@0.2.0
+
 ## 0.1.3
 
 ### Patch Changes
