@@ -158,6 +158,41 @@ Utilities for setting both the width and height of an element.
 | **Arbitrary**    | `width: 3px; height: 3px`                         | `size-[3px]`       | `{ size: '3px' }`         |                                                                |
 | **CSS Variable** | `width: var(--s); height: var(--s)`               | `size-(--s)`       | `{ size: '--s' }`         | **Sugar**: Auto-detects `--`.                                  |
 
+## Block Size (Logical Height)
+
+Controlling block-size (logical equivalent of height). Added in Tailwind v4.2.
+
+| Concept            | CSS Rule                                      | Tailwind v4 Class    | `sz` Prop (Object Syntax)    | Note                          |
+| :----------------- | :-------------------------------------------- | :------------------- | :--------------------------- | :---------------------------- |
+| **Spacing**        | `block-size: calc(var(--spacing) * <number>)` | `block-<number>`     | `{ blockSize: <number> }`    |                               |
+| **Full**           | `block-size: 100%`                            | `block-full`         | `{ blockSize: 'full' }`      |                               |
+| **Screen**         | `block-size: 100vh`                           | `block-screen`       | `{ blockSize: 'screen' }`    |                               |
+| **Min Content**    | `block-size: min-content`                     | `block-min`          | `{ blockSize: 'min' }`       |                               |
+| **Max Content**    | `block-size: max-content`                     | `block-max`          | `{ blockSize: 'max' }`       |                               |
+| **Fit Content**    | `block-size: fit-content`                     | `block-fit`          | `{ blockSize: 'fit' }`       |                               |
+| **Auto**           | `block-size: auto`                            | `block-auto`         | `{ blockSize: 'auto' }`      |                               |
+| **Arbitrary**      | `block-size: 27px`                            | `block-[27px]`       | `{ blockSize: '27px' }`      |                               |
+| **Min Block Size** | `min-block-size: calc(var(--spacing) * N)`    | `min-block-<number>` | `{ minBlockSize: <number> }` |                               |
+| **Max Block Size** | `max-block-size: calc(var(--spacing) * N)`    | `max-block-<number>` | `{ maxBlockSize: <number> }` |                               |
+| **CSS Variable**   | `block-size: var(--bs)`                       | `block-(--bs)`       | `{ blockSize: '--bs' }`      | **Sugar**: Auto-detects `--`. |
+
+## Inline Size (Logical Width)
+
+Controlling inline-size (logical equivalent of width). Added in Tailwind v4.2.
+
+| Concept             | CSS Rule                                       | Tailwind v4 Class     | `sz` Prop (Object Syntax)     | Note                          |
+| :------------------ | :--------------------------------------------- | :-------------------- | :---------------------------- | :---------------------------- |
+| **Spacing**         | `inline-size: calc(var(--spacing) * <number>)` | `inline-<number>`     | `{ inlineSize: <number> }`    |                               |
+| **Full**            | `inline-size: 100%`                            | `inline-full`         | `{ inlineSize: 'full' }`      |                               |
+| **Min Content**     | `inline-size: min-content`                     | `inline-min`          | `{ inlineSize: 'min' }`       |                               |
+| **Max Content**     | `inline-size: max-content`                     | `inline-max`          | `{ inlineSize: 'max' }`       |                               |
+| **Fit Content**     | `inline-size: fit-content`                     | `inline-fit`          | `{ inlineSize: 'fit' }`       |                               |
+| **Auto**            | `inline-size: auto`                            | `inline-auto`         | `{ inlineSize: 'auto' }`      |                               |
+| **Arbitrary**       | `inline-size: 27px`                            | `inline-[27px]`       | `{ inlineSize: '27px' }`      |                               |
+| **Min Inline Size** | `min-inline-size: calc(var(--spacing) * N)`    | `min-inline-<number>` | `{ minInlineSize: <number> }` |                               |
+| **Max Inline Size** | `max-inline-size: calc(var(--spacing) * N)`    | `max-inline-<number>` | `{ maxInlineSize: <number> }` |                               |
+| **CSS Variable**    | `inline-size: var(--is)`                       | `inline-(--is)`       | `{ inlineSize: '--is' }`      | **Sugar**: Auto-detects `--`. |
+
 ## Container
 
 Component-like utility for fixing an element's width to the current breakpoint.

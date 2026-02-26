@@ -61,6 +61,15 @@ Controlling numeric glyphs.
 | **Boolean** | `font-variant-numeric: slashed-zero`          | `slashed-zero`                                                                                                                                           | `{ slashedZero: true }`               | **Overwrites** `fontVariant`. |
 | **Boolean** | `font-variant-numeric: ordinal`               | `ordinal`                                                                                                                                                | `{ ordinal: true }`                   | **Overwrites** `fontVariant`. |
 
+## Font Features
+
+Controlling font-feature-settings. Added in Tailwind v4.2.
+
+| Concept       | CSS Rule                          | Tailwind v4 Class          | `sz` Prop (Object Syntax)      | Note |
+| :------------ | :-------------------------------- | :------------------------- | :----------------------------- | :--- |
+| **Normal**    | `font-feature-settings: normal`   | `font-features-normal`     | `{ fontFeatures: 'normal' }`   |      |
+| **Arbitrary** | `font-feature-settings: "liga" 1` | `font-features-["liga"_1]` | `{ fontFeatures: '"liga" 1' }` |      |
+
 ## Font Style & Smoothing
 
 Controlling the font style and smoothing.

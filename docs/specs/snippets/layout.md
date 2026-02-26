@@ -265,9 +265,12 @@ Positioning mapped elements.
 
 | **Inset Y** | `inset-block: calc(var(--spacing) * <number>);` | `inset-y-<number>` | `{ insetY: <number> }` | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
 
-| **Start (L)** | `inset-inline-start: ...` | `start-<number>` | `{ start: <number> }` | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
-
-| **End (R)** | `inset-inline-end: ...` | `end-<number>` | `{ end: <number> }` | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
+| **Start (L)** | `inset-inline-start: ...` | `inset-s-<number>` | `{ start: <number> }` | v4.2: emits `inset-s-*` (was `start-*`, same CSS, deprecated in TW v4.2). |
+| **End (R)** | `inset-inline-end: ...` | `inset-e-<number>` | `{ end: <number> }` | v4.2: emits `inset-e-*` (was `end-*`, same CSS, deprecated in TW v4.2). |
+| **Inset S** | `inset-inline-start: ...` | `inset-s-<number>` | `{ insetS: <number> }` | v4.2: explicit camelCase alias for `start`. |
+| **Inset E** | `inset-inline-end: ...` | `inset-e-<number>` | `{ insetE: <number> }` | v4.2: explicit camelCase alias for `end`. |
+| **Inset Block Start** | `inset-block-start: ...` | `inset-bs-<number>` | `{ insetBs: <number> }` | v4.2: logical block-start inset. |
+| **Inset Block End** | `inset-block-end: ...` | `inset-be-<number>` | `{ insetBe: <number> }` | v4.2: logical block-end inset. |
 
 | **Top** | `top: calc(var(--spacing) * <number>)` | `top-<number>` | `{ top: <number> }` | |
 

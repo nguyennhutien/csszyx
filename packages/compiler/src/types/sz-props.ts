@@ -29,7 +29,8 @@ export type ColorName =
   | 'slate' | 'gray' | 'zinc' | 'neutral' | 'stone'
   | 'red' | 'orange' | 'amber' | 'yellow' | 'lime' | 'green'
   | 'emerald' | 'teal' | 'cyan' | 'sky' | 'blue' | 'indigo'
-  | 'violet' | 'purple' | 'fuchsia' | 'pink' | 'rose';
+  | 'violet' | 'purple' | 'fuchsia' | 'pink' | 'rose'
+  | 'mauve' | 'olive' | 'mist' | 'taupe';
 
 /** Tailwind color shades */
 export type ColorShade = 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950;
@@ -193,6 +194,14 @@ export interface LayoutProps {
   left?: NegativeSpacingValue;
   start?: SpacingValue;
   end?: SpacingValue;
+  /** inset-inline-start (camelCase alias for start, emits inset-s-*) */
+  insetS?: SpacingValue;
+  /** inset-inline-end (camelCase alias for end, emits inset-e-*) */
+  insetE?: SpacingValue;
+  /** inset-block-start */
+  insetBs?: SpacingValue;
+  /** inset-block-end */
+  insetBe?: SpacingValue;
 
   /** @see https://tailwindcss.com/docs/visibility */
   visibility?: 'visible' | 'hidden' | 'collapse';
@@ -323,6 +332,10 @@ export interface SpacingProps {
   ps?: SpacingValue;
   /** Padding - inline end (logical) */
   pe?: SpacingValue;
+  /** Padding - block-start (logical) */
+  pbs?: SpacingValue;
+  /** Padding - block-end (logical) */
+  pbe?: SpacingValue;
 
   /** Margin - all sides */
   m?: NegativeSpacingValue;
@@ -342,6 +355,10 @@ export interface SpacingProps {
   ms?: NegativeSpacingValue;
   /** Margin - inline end (logical) */
   me?: NegativeSpacingValue;
+  /** Margin - block-start (logical) */
+  mbs?: NegativeSpacingValue;
+  /** Margin - block-end (logical) */
+  mbe?: NegativeSpacingValue;
 
   /** Space between child elements - X axis */
   spaceX?: NegativeSpacingValue;
@@ -393,6 +410,34 @@ export interface SizingProps {
 
   /** @see https://tailwindcss.com/docs/size */
   size?: SpacingScale | 'px' | 'auto' | 'full' | 'min' | 'max' | 'fit' | (string & {});
+
+  /** @see https://tailwindcss.com/docs/block-size — block-size (logical height) */
+  blockSize?: SpacingScale | 'px' | 'auto' | 'full' | 'screen'
+    | 'svh' | 'lvh' | 'dvh' | 'min' | 'max' | 'fit'
+    | FractionValue | (string & {});
+
+  /** @see https://tailwindcss.com/docs/min-block-size */
+  minBlockSize?: SpacingScale | 'px' | 'full' | 'screen'
+    | 'svh' | 'lvh' | 'dvh' | 'min' | 'max' | 'fit'
+    | (string & {});
+
+  /** @see https://tailwindcss.com/docs/max-block-size */
+  maxBlockSize?: SpacingScale | 'px' | 'full' | 'screen'
+    | 'svh' | 'lvh' | 'dvh' | 'min' | 'max' | 'fit'
+    | (string & {});
+
+  /** @see https://tailwindcss.com/docs/inline-size — inline-size (logical width) */
+  inlineSize?: SpacingScale | 'px' | 'auto' | 'full' | 'screen'
+    | 'svw' | 'lvw' | 'dvw' | 'min' | 'max' | 'fit'
+    | FractionValue | (string & {});
+
+  /** @see https://tailwindcss.com/docs/min-inline-size */
+  minInlineSize?: SpacingScale | 'px' | 'full' | 'min' | 'max' | 'fit' | FractionValue | (string & {});
+
+  /** @see https://tailwindcss.com/docs/max-inline-size */
+  maxInlineSize?: SpacingScale | 'px' | 'full' | 'none' | 'prose'
+    | 'min' | 'max' | 'fit' | ContainerSize
+    | FractionValue | (string & {});
 }
 
 // ============================================================================
@@ -532,6 +577,9 @@ export interface TypographyProps {
     | 'around' | 'evenly' | 'baseline' | 'stretch'
     | (string & {});
 
+  /** @see https://tailwindcss.com/docs/font-feature-settings */
+  fontFeatures?: string & {};
+
   /** @see https://tailwindcss.com/docs/forced-color-adjust */
   forcedColorAdjust?: 'auto' | 'none';
 }
@@ -625,6 +673,10 @@ export interface BorderProps {
   borderL?: boolean | 0 | 2 | 4 | 8 | (string & {});
   borderS?: boolean | 0 | 2 | 4 | 8 | (string & {});
   borderE?: boolean | 0 | 2 | 4 | 8 | (string & {});
+  /** border-block-start width */
+  borderBs?: boolean | 0 | 2 | 4 | 8 | (string & {});
+  /** border-block-end width */
+  borderBe?: boolean | 0 | 2 | 4 | 8 | (string & {});
 
   /** @see https://tailwindcss.com/docs/border-color */
   borderColor?: ColorPropValue;
@@ -912,6 +964,14 @@ export interface InteractivityProps {
   scrollPl?: SpacingValue;
   scrollPs?: SpacingValue;
   scrollPe?: SpacingValue;
+  /** scroll-padding-block-start */
+  scrollPbs?: SpacingValue;
+  /** scroll-padding-block-end */
+  scrollPbe?: SpacingValue;
+  /** scroll-margin-block-start */
+  scrollMbs?: SpacingValue;
+  /** scroll-margin-block-end */
+  scrollMbe?: SpacingValue;
 
   /** @see https://tailwindcss.com/docs/scroll-snap-align */
   snapAlign?: 'start' | 'end' | 'center' | 'align-none';

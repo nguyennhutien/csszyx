@@ -31,20 +31,22 @@ Controlling the border radius of an element.
 
 Controlling the width of an element's borders.
 
-| Concept         | CSS Rule                    | Tailwind v4 Class                              | `sz` Prop (Object Syntax)        | Note              |
-| :-------------- | :-------------------------- | :--------------------------------------------- | :------------------------------- | :---------------- |
-| **All Sides**   | `border-width: 1px`         | `border`                                       | `{ border: true }`               | **Default**: 1px. |
-| **Width Scale** | `border-width: 2px`         | `border-0`, `border-2`, `border-4`, `border-8` | `{ border: 0 }`, `{ border: 2 }` |                   |
-| **X Axis**      | `border-inline-width: 2px`  | `border-x-2`                                   | `{ borderX: 2 }`                 |                   |
-| **Y Axis**      | `border-block-width: 2px`   | `border-y-2`                                   | `{ borderY: 2 }`                 |                   |
-| **Top**         | `border-top-width: 2px`     | `border-t-2`                                   | `{ borderT: 2 }`                 |                   |
-| **Right**       | `border-right-width: 2px`   | `border-r-2`                                   | `{ borderR: 2 }`                 |                   |
-| **Bottom**      | `border-bottom-width: 2px`  | `border-b-2`                                   | `{ borderB: 2 }`                 |                   |
-| **Left**        | `border-left-width: 2px`    | `border-l-2`                                   | `{ borderL: 2 }`                 |                   |
-| **Start**       | `border-inline-start-width` | `border-s-2`                                   | `{ borderS: 2 }`                 |                   |
-| **End**         | `border-inline-end-width`   | `border-e-2`                                   | `{ borderE: 2 }`                 |                   |
-| **Arbitrary**   | `border-width: 3px`         | `border-[3px]`                                 | `{ border: '3px' }`              |                   |
-| **Variable**    | `border-width: var(--w)`    | `border-(--w)`                                 | `{ border: '--w' }`              |                   |
+| Concept         | CSS Rule                    | Tailwind v4 Class                              | `sz` Prop (Object Syntax)        | Note                      |
+| :-------------- | :-------------------------- | :--------------------------------------------- | :------------------------------- | :------------------------ |
+| **All Sides**   | `border-width: 1px`         | `border`                                       | `{ border: true }`               | **Default**: 1px.         |
+| **Width Scale** | `border-width: 2px`         | `border-0`, `border-2`, `border-4`, `border-8` | `{ border: 0 }`, `{ border: 2 }` |                           |
+| **X Axis**      | `border-inline-width: 2px`  | `border-x-2`                                   | `{ borderX: 2 }`                 |                           |
+| **Y Axis**      | `border-block-width: 2px`   | `border-y-2`                                   | `{ borderY: 2 }`                 |                           |
+| **Top**         | `border-top-width: 2px`     | `border-t-2`                                   | `{ borderT: 2 }`                 |                           |
+| **Right**       | `border-right-width: 2px`   | `border-r-2`                                   | `{ borderR: 2 }`                 |                           |
+| **Bottom**      | `border-bottom-width: 2px`  | `border-b-2`                                   | `{ borderB: 2 }`                 |                           |
+| **Left**        | `border-left-width: 2px`    | `border-l-2`                                   | `{ borderL: 2 }`                 |                           |
+| **Start**       | `border-inline-start-width` | `border-s-2`                                   | `{ borderS: 2 }`                 |                           |
+| **End**         | `border-inline-end-width`   | `border-e-2`                                   | `{ borderE: 2 }`                 |                           |
+| **Block Start** | `border-block-start-width`  | `border-bs-2`                                  | `{ borderBs: 2 }`                | v4.2: logical block-side. |
+| **Block End**   | `border-block-end-width`    | `border-be-2`                                  | `{ borderBe: 2 }`                | v4.2: logical block-side. |
+| **Arbitrary**   | `border-width: 3px`         | `border-[3px]`                                 | `{ border: '3px' }`              |                           |
+| **Variable**    | `border-width: var(--w)`    | `border-(--w)`                                 | `{ border: '--w' }`              |                           |
 
 ## Border Color
 

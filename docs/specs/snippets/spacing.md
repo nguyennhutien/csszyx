@@ -18,6 +18,8 @@ Controlling inner spacing.
 | **Left**            | `padding-left: calc(var(--spacing) * <number>)`         | `pl-<number>`     | `{ pl: <number> }`        | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
 | **Start (Logical)** | `padding-inline-start: calc(var(--spacing) * <number>)` | `ps-<number>`     | `{ ps: <number> }`        | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
 | **End (Logical)**   | `padding-inline-end: calc(var(--spacing) * <number>)`   | `pe-<number>`     | `{ pe: <number> }`        | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
+| **Block Start**     | `padding-block-start: calc(var(--spacing) * <number>)`  | `pbs-<number>`    | `{ pbs: <number> }`       | v4.2: logical block-direction.                                                   |
+| **Block End**       | `padding-block-end: calc(var(--spacing) * <number>)`    | `pbe-<number>`    | `{ pbe: <number> }`       | v4.2: logical block-direction.                                                   |
 | **Arbitrary**       | `padding: 5px`                                          | `p-[5px]`         | `{ p: '5px' }`            |                                                                                  |
 | **CSS Variable**    | `padding: var(--p)`                                     | `p-(--p)`         | `{ p: '--p' }`            | **Sugar**: Auto-detects `--`.                                                    |
 
@@ -39,6 +41,8 @@ Controlling outer spacing.
 | **Left**               | `margin-left: calc(var(--spacing) * <number>)`         | `ml-<number>`     | `{ ml: <number> }`        | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
 | **Start (Logical)**    | `margin-inline-start: calc(var(--spacing) * <number>)` | `ms-<number>`     | `{ ms: <number> }`        | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
 | **End (Logical)**      | `margin-inline-end: calc(var(--spacing) * <number>)`   | `me-<number>`     | `{ me: <number> }`        | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
+| **Block Start**        | `margin-block-start: calc(var(--spacing) * <number>)`  | `mbs-<number>`    | `{ mbs: <number> }`       | v4.2: logical block-direction. Supports negative.                                |
+| **Block End**          | `margin-block-end: calc(var(--spacing) * <number>)`    | `mbe-<number>`    | `{ mbe: <number> }`       | v4.2: logical block-direction. Supports negative.                                |
 | **Negative**           | `margin-top: calc(var(--spacing) * -<number>)`         | `-mt-<number>`    | `{ mt: -<number> }`       | v4: fully dynamic, no static scale, accept any integer or 0.5-step decimal bare. |
 | **Auto**               | `margin: auto`                                         | `m-auto`          | `{ m: 'auto' }`           |                                                                                  |
 | **Arbitrary**          | `margin: 5px`                                          | `m-[5px]`         | `{ m: '5px' }`            |                                                                                  |

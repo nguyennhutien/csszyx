@@ -71,6 +71,8 @@ export const PROPERTY_MAP: Record<string, string> = {
     borderY: 'border-y',
     borderS: 'border-s',
     borderE: 'border-e',
+    borderBs: 'border-bs',
+    borderBe: 'border-be',
 
     // Divide
     divideX: 'divide-x',
@@ -100,6 +102,8 @@ export const PROPERTY_MAP: Record<string, string> = {
     py: 'py',
     ps: 'ps',
     pe: 'pe',
+    pbs: 'pbs',
+    pbe: 'pbe',
 
     m: 'm',
     mt: 'mt',
@@ -110,6 +114,8 @@ export const PROPERTY_MAP: Record<string, string> = {
     my: 'my',
     ms: 'ms',
     me: 'me',
+    mbs: 'mbs',
+    mbe: 'mbe',
 
     // Space between
     spaceX: 'space-x',
@@ -123,6 +129,12 @@ export const PROPERTY_MAP: Record<string, string> = {
     minH: 'min-h',
     maxH: 'max-h',
     size: 'size',
+    blockSize: 'block',
+    minBlockSize: 'min-block',
+    maxBlockSize: 'max-block',
+    inlineSize: 'inline',
+    minInlineSize: 'min-inline',
+    maxInlineSize: 'max-inline',
 
     // Layout
     aspect: 'aspect',
@@ -154,8 +166,13 @@ export const PROPERTY_MAP: Record<string, string> = {
     right: 'right',
     bottom: 'bottom',
     left: 'left',
-    start: 'start',
-    end: 'end',
+    // TW v4.2: start/end now emit inset-s-*/inset-e-* (same CSS, deprecated old class names)
+    start: 'inset-s',
+    end: 'inset-e',
+    insetS: 'inset-s',
+    insetE: 'inset-e',
+    insetBs: 'inset-bs',
+    insetBe: 'inset-be',
 
     // Visibility
     visibility: 'visibility',
@@ -185,6 +202,7 @@ export const PROPERTY_MAP: Record<string, string> = {
     leading: 'leading',
     tracking: 'tracking',
     lineClamp: 'line-clamp',
+    fontFeatures: 'font-features',
     list: 'list',
     listPos: 'list',
     listImg: 'list-image',
@@ -309,6 +327,10 @@ export const PROPERTY_MAP: Record<string, string> = {
     scrollPe: 'scroll-pe',
     scrollPx: 'scroll-px',
     scrollPy: 'scroll-py',
+    scrollPbs: 'scroll-pbs',
+    scrollPbe: 'scroll-pbe',
+    scrollMbs: 'scroll-mbs',
+    scrollMbe: 'scroll-mbe',
     snapAlign: 'snap',
     snapStop: 'snap',
     snapType: 'snap',
@@ -659,8 +681,10 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 // NEGATIVE_ALLOWED: Properties that support negative values
 // ============================================================================
 const NEGATIVE_ALLOWED = new Set([
-    'm', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me',
-    'top', 'right', 'bottom', 'left', 'inset', 'inset-x', 'inset-y', 'start', 'end',
+    'm', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me', 'mbs', 'mbe',
+    'top', 'right', 'bottom', 'left', 'inset', 'inset-x', 'inset-y',
+    // TW v4.2: start/end now map to inset-s/inset-e
+    'inset-s', 'inset-e', 'inset-bs', 'inset-be',
     'z', 'order', 'col', 'col-start', 'col-end', 'row', 'row-start', 'row-end',
     'rotate', 'skew-x', 'skew-y', 'translate-x', 'translate-y',
     'space-x', 'space-y', 'tracking', 'indent',

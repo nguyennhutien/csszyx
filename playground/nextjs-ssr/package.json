@@ -13,7 +13,7 @@
     "dependencies": {
         "@csszyx/runtime": "workspace:*",
         "@csszyx/unplugin": "workspace:*",
-        "@tailwindcss/postcss": "^4.1.18",
+        "@tailwindcss/postcss": "^4.2.1",
         "csszyx": "workspace:*",
         "next": "^15.0.0",
         "react": "^19.0.0",
