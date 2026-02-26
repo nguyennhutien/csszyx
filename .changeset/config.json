@@ -2,7 +2,17 @@
     "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
     "changelog": "@changesets/cli/changelog",
     "commit": false,
-    "fixed": [],
+    "fixed": [
+        [
+            "@csszyx/compiler",
+            "csszyx",
+            "@csszyx/runtime",
+            "@csszyx/core",
+            "@csszyx/types",
+            "@csszyx/unplugin",
+            "@csszyx/cli"
+        ]
+    ],
     "linked": [],
     "access": "public",
     "baseBranch": "main",

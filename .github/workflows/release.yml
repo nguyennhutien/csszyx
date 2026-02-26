@@ -51,7 +51,25 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
+          version: pnpm version
           publish: pnpm changeset publish
+          createGithubReleases: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(echo '${{ steps.changesets.outputs.publishedPackages }}' \
+            | jq -r '.[] | select(.name == "csszyx") | .version')
+          [ -z "$VERSION" ] && echo "csszyx not in published set, skipping" && exit 0
+
+          NOTES=$(awk "/^## $VERSION/{flag=1; next} /^## /{if(flag) exit} flag" \
+            packages/csszyx/CHANGELOG.md)
+
+          gh release create "v$VERSION" \
+            --title "csszyx v$VERSION" \
+            --notes "$NOTES"

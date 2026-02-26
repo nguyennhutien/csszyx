@@ -36,7 +36,7 @@
         "clean": "rm -rf node_modules .turbo packages/*/node_modules packages/*/dist playground/*/node_modules playground/*/dist playground/*/.next playground/*/out",
         "reset": "pnpm clean && pnpm install && turbo run build --filter='./packages/*'",
         "changeset": "changeset",
-        "version": "changeset version",
+        "version": "node scripts/version.mjs",
         "release": "turbo run build && changeset publish"
     },
     "devDependencies": {
