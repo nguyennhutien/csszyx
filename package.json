@@ -20,7 +20,8 @@
     "author": "Tien Nguyen",
     "license": "MIT",
     "workspaces": [
-        "packages/*"
+        "packages/*",
+        "apps/*"
     ],
     "scripts": {
         "prepare": "husky",

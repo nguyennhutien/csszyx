@@ -19,6 +19,7 @@ export default [
             '**/coverage/**',
             '**/examples/**',
             'docs/**',
+            'apps/**',
             'playground/**',
             '**/pkg-node/**',
             '**/benchmarks/**',
