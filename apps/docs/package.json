@@ -6,7 +6,9 @@
     "scripts": {
         "dev": "astro dev",
         "build": "astro build",
-        "preview": "astro preview"
+        "preview": "astro preview",
+        "pages:preview": "pnpm build && wrangler pages dev dist",
+        "pages:deploy": "pnpm build && wrangler pages deploy dist"
     },
     "dependencies": {
         "@astrojs/starlight": "^0.37.0",

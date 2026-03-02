@@ -1,0 +1,4 @@
+#:schema https://raw.githubusercontent.com/cloudflare/wrangler/main/packages/wrangler/config-schema.json
+name = "csszyx-docs"
+compatibility_date = "2024-03-02"
+pages_build_output_dir = "./dist"
