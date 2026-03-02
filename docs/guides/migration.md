@@ -1,6 +1,6 @@
 # Migrating from Tailwind CSS
 
-csszyx provides a powerful CLI tool to automatically migrate your existing Tailwind CSS projects. This tool converts your `className` attributes into type-safe `sz` prop objects.
+CSSzyx provides a powerful CLI tool to automatically migrate your existing Tailwind CSS projects. This tool converts your `className` attributes into type-safe `sz` prop objects.
 
 ## Using the Migration CLI
 

@@ -1,10 +1,10 @@
 # @csszyx/types
 
-Shared TypeScript type definitions for the csszyx framework.
+Shared TypeScript type definitions for the CSSzyx framework.
 
 ## Features
 
-- **Configuration Types**: Complete type definitions for csszyx configuration
+- **Configuration Types**: Complete type definitions for CSSzyx configuration
 - **Runtime Types**: Types for runtime operations, hydration, and recovery
 - **Compiler Types**: Types for build phases, transformations, and plugins
 - **Comprehensive Documentation**: All types fully documented with JSDoc
@@ -45,7 +45,7 @@ import type { BuildResult, CompilerOptions } from "@csszyx/types/compiler";
 
 ### Configuration Types (`/config`)
 
-Types for configuring the csszyx framework:
+Types for configuring the CSSzyx framework:
 
 ```typescript
 import type {
@@ -210,7 +210,7 @@ const myPlugin: CompilerPlugin = {
 
 #### CsszyxConfig
 
-Main configuration for the csszyx framework:
+Main configuration for the CSSzyx framework:
 
 ```typescript
 interface CsszyxConfig {
@@ -313,7 +313,7 @@ import {
 
 ### isCsszyxWindow
 
-Check if window has csszyx extensions:
+Check if window has CSSzyx extensions:
 
 ```typescript
 import { isCsszyxWindow } from "@csszyx/types";

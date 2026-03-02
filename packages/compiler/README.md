@@ -1,6 +1,6 @@
 # @csszyx/compiler
 
-TypeScript compiler package for csszyx - handles JSX transformation, recovery token generation, and manifest creation.
+TypeScript compiler package for CSSzyx - handles JSX transformation, recovery token generation, and manifest creation.
 
 ## Features
 
@@ -83,7 +83,7 @@ const manifest = builder.build();
 
 #### `transform(szProp: SzObject, prefix?: string): string`
 
-Transforms a csszyx sz object into a Tailwind CSS className string.
+Transforms a CSSzyx sz object into a Tailwind CSS className string.
 
 #### `isValidSzProp(szProp: unknown): boolean`
 

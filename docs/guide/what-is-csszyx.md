@@ -1,6 +1,6 @@
-# What is csszyx?
+# What is CSSzyx?
 
-csszyx is a modern CSS-in-JS framework that combines the power of Tailwind CSS with object syntax, providing type safety, automatic minification, and SSR safety.
+CSSzyx is a modern CSS-in-JS framework that combines the power of Tailwind CSS with object syntax, providing type safety, automatic minification, and SSR safety.
 
 ## The Problem
 
@@ -34,7 +34,7 @@ Traditional approaches to styling React applications have tradeoffs:
 
 ## The Solution
 
-csszyx provides the best of both worlds:
+CSSzyx provides the best of both worlds:
 
 ```tsx
 // Coming soon: Object syntax
@@ -137,7 +137,7 @@ import { _sz, _szIf } from "@csszyx/runtime";
 
 ## How It Works
 
-csszyx uses a 5-phase build pipeline:
+CSSzyx uses a 5-phase build pipeline:
 
 ```
 1. Type Generation
@@ -201,7 +201,7 @@ csszyx/
     └── webpack-react/   # Webpack example
 ```
 
-## When to Use csszyx
+## When to Use CSSzyx
 
 ### ✅ Great For
 

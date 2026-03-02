@@ -1,8 +1,8 @@
 # @csszyx/core
 
-> Rust/WASM core for csszyx -- encoder, checksum, collision detection, and recovery tokens.
+> Rust/WASM core for CSSzyx -- encoder, checksum, collision detection, and recovery tokens.
 
-Compiled to WebAssembly, this package provides the performance-critical operations for the csszyx ecosystem. It runs in Node.js, browsers, and edge environments.
+Compiled to WebAssembly, this package provides the performance-critical operations for the CSSzyx ecosystem. It runs in Node.js, browsers, and edge environments.
 
 ## Installation
 

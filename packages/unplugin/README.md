@@ -1,6 +1,6 @@
 # @csszyx/unplugin
 
-> Vite, Webpack, and esbuild integration for csszyx.
+> Vite, Webpack, and esbuild integration for CSSzyx.
 
 Build-time plugin that transforms `sz` props into Tailwind classes, generates static CSS, mangles class names in production, and injects hydration scripts for SSR.
 

@@ -4,7 +4,7 @@ The `@csszyx/runtime` package provides runtime helpers for className composition
 
 ## Full vs Lite Runtime
 
-csszyx provides two runtime entry points:
+CSSzyx provides two runtime entry points:
 
 | Feature            | Full (`@csszyx/runtime`) | Lite (`csszyx/lite`) |
 | ------------------ | ------------------------ | -------------------- |
@@ -181,7 +181,7 @@ __szColorVar("rgb(255,0,0)"); // → 'rgb(255,0,0)'
 
 ### `initRuntime()`
 
-Initializes the csszyx runtime. Call once at application startup.
+Initializes the CSSzyx runtime. Call once at application startup.
 
 **Signature:**
 

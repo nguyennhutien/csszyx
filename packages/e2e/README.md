@@ -1,8 +1,8 @@
 # @csszyx/e2e
 
-> End-to-end tests for csszyx playgrounds using Playwright.
+> End-to-end tests for CSSzyx playgrounds using Playwright.
 
-Ensures that csszyx works correctly in real browser environments, verifying:
+Ensures that CSSzyx works correctly in real browser environments, verifying:
 
 - Class name extraction.
 - Mangling correctness.
@@ -37,4 +37,4 @@ Ensures that csszyx works correctly in real browser environments, verifying:
 
 ## License
 
-MIT © [csszyx contributors](https://github.com/nguyennhutien/csszyx)
+MIT © [CSSzyx contributors](https://github.com/nguyennhutien/csszyx)

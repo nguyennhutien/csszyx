@@ -339,7 +339,7 @@ Configuration and logic.
 
 Strategy for static analysis vs runtime generation.
 
-**Core Decision**: `csszyx` uses **AST Parsing**, not Regex Scanning. This allows for smarter static extraction and shake-tree logic.
+**Core Decision**: `CSSzyx` uses **AST Parsing**, not Regex Scanning. This allows for smarter static extraction and shake-tree logic.
 
 | Concept                  | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                           |
 | :----------------------- | :----------------------- | :----------------------- | :----------------------------------------------------------------------------- |

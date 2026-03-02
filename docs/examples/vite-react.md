@@ -1,6 +1,6 @@
 # Vite + React Example
 
-Complete example demonstrating csszyx with Vite and React.
+Complete example demonstrating CSSzyx with Vite and React.
 
 ## Overview
 

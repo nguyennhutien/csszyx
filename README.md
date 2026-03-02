@@ -1,4 +1,4 @@
-# csszyx
+# CSSzyx
 
 CSS-in-JS framework for the AI era with Tailwind object syntax, automatic minification, and SSR safety.
 

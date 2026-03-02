@@ -1,6 +1,6 @@
-# csszyx - Vite + React Playground
+# CSSzyx - Vite + React Playground
 
-Comprehensive E2E testing environment for csszyx class mangling.
+Comprehensive E2E testing environment for CSSzyx class mangling.
 
 ## Features Tested
 
@@ -70,6 +70,6 @@ pnpm preview # Preview production build
 
 ## Files
 
-- `vite.config.ts` - csszyx plugin configuration
+- `vite.config.ts` - CSSzyx plugin configuration
 - `src/App.tsx` - Test component with sz prop
 - `tailwind.config.js` - Tailwind CSS configuration

@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: csszyx
+  name: CSSzyx
   text: CSS-in-JS with Tailwind
   tagline: Type-safe, performant, SSR-safe CSS-in-JS using Tailwind object syntax
   actions:
@@ -91,7 +91,7 @@ function Button({ isActive }) {
 <div className="a b c" />
 ```
 
-## Why csszyx?
+## Why CSSzyx?
 
 ### Type Safety
 
@@ -134,7 +134,7 @@ Full TypeScript support with autocomplete for all Tailwind classes:
 
 ## Architecture
 
-csszyx uses a 5-phase build pipeline:
+CSSzyx uses a 5-phase build pipeline:
 
 1. **Type Generation** - Scan Tailwind config → generate TypeScript types
 2. **JSX Transform** - Transform `sz` prop → `className` strings
@@ -156,4 +156,4 @@ Check out our example projects:
 
 ## License
 
-MIT © 2024-present csszyx contributors
+MIT © 2024-present CSSzyx contributors

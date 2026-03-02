@@ -1,6 +1,6 @@
 # @csszyx/runtime
 
-Runtime package for csszyx - provides zero-allocation className helpers, recovery token verification, and hydration guards.
+Runtime package for CSSzyx - provides zero-allocation className helpers, recovery token verification, and hydration guards.
 
 ## Features
 
@@ -222,7 +222,7 @@ Gets the count of aborted subtrees.
 
 #### `initRuntime(config?): void`
 
-Initializes the csszyx runtime with optional configuration.
+Initializes the CSSzyx runtime with optional configuration.
 
 #### `getRuntimeConfig(): RuntimeConfig`
 

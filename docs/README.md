@@ -1,6 +1,6 @@
-# csszyx Documentation
+# CSSzyx Documentation
 
-Official documentation for csszyx, built with VitePress.
+Official documentation for CSSzyx, built with VitePress.
 
 ## Development
 

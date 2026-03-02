@@ -1,6 +1,6 @@
 # Getting Started
 
-Get up and running with csszyx in minutes.
+Get up and running with CSSzyx in minutes.
 
 ## Installation
 
@@ -31,7 +31,7 @@ export default defineConfig({
 });
 ```
 
-**Why this order?** csszyx transforms `sz` props into `className` strings first. Then Tailwind scans those strings to generate CSS. Finally React handles JSX.
+**Why this order?** CSSzyx transforms `sz` props into `className` strings first. Then Tailwind scans those strings to generate CSS. Finally React handles JSX.
 
 ### Next.js
 
@@ -70,7 +70,7 @@ Make sure you have `postcss-loader` with Tailwind CSS configured in your module 
 
 ## Tailwind CSS v4
 
-csszyx requires Tailwind CSS v4. Create a CSS entry point:
+CSSzyx requires Tailwind CSS v4. Create a CSS entry point:
 
 ```css
 /* src/index.css */
@@ -99,7 +99,7 @@ Use the `sz` prop for type-safe, object-based styling:
 </div>
 ```
 
-At build time, csszyx transforms this into:
+At build time, CSSzyx transforms this into:
 
 ```html
 <div class="p-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
@@ -186,7 +186,7 @@ initRuntime({
 });
 ```
 
-This is optional — csszyx works without it, but SSR hydration guards require initialization.
+This is optional — CSSzyx works without it, but SSR hydration guards require initialization.
 
 ## Troubleshooting
 
@@ -200,7 +200,7 @@ Make sure your CSS entry point imports Tailwind v4:
 
 ### Plugin order matters
 
-csszyx must be **before** Tailwind and React plugins. If classes aren't being generated, check your plugin order.
+CSSzyx must be **before** Tailwind and React plugins. If classes aren't being generated, check your plugin order.
 
 ### TypeScript errors with `sz` prop
 

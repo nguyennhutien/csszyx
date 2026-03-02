@@ -1,6 +1,6 @@
 # @csszyx/cli
 
-> Command-line tools for csszyx.
+> Command-line tools for CSSzyx.
 
 Review usage stats, diagnose issues, and initialize projects.
 
@@ -16,7 +16,7 @@ npx csszyx <command>
 
 ### `init`
 
-Initialize csszyx in a new or existing project.
+Initialize CSSzyx in a new or existing project.
 
 ```bash
 npx csszyx init
@@ -48,7 +48,7 @@ npx csszyx generate-types
 
 ### `migrate`
 
-Convert Tailwind `className="..."` to csszyx `sz={...}` props. Phase 1 supports static string classNames.
+Convert Tailwind `className="..."` to CSSzyx `sz={...}` props. Phase 1 supports static string classNames.
 
 ```bash
 npx csszyx migrate src/
@@ -58,4 +58,4 @@ npx csszyx migrate --ignore "*.test.*"  # skip test files
 
 ## License
 
-MIT © [csszyx contributors](https://github.com/nguyennhutien/csszyx)
+MIT © [CSSzyx contributors](https://github.com/nguyennhutien/csszyx)

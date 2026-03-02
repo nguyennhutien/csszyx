@@ -1,4 +1,4 @@
-# csszyx Hydration Safety Architecture
+# CSSzyx Hydration Safety Architecture
 
 ## 🎯 Design Principles
 
@@ -288,7 +288,7 @@ element.setAttribute('szRecover', 'csr')
 window.__RECOVERY_MODE__ = true
 ```
 
-**Solution: Cryptographic Tokens**
+### Solution: Cryptographic Tokens
 
 ```tsx
 // Build generates unforgeable token

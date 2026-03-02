@@ -1,8 +1,8 @@
-# csszyx - Complete Implementation Guide
+# CSSzyx - Complete Implementation Guide
 
 ## 📖 Tổng Quan
 
-csszyx là CSS-in-JS framework cho Tailwind CSS với:
+CSSzyx là CSS-in-JS framework cho Tailwind CSS với:
 
 - **Object Syntax**: Viết Tailwind bằng JavaScript objects thay vì strings
 - **Type Safety**: Full TypeScript autocomplete và error detection
@@ -40,7 +40,7 @@ csszyx là CSS-in-JS framework cho Tailwind CSS với:
 
 ### 2. Build Pipeline
 
-csszyx sử dụng 5-phase pipeline:
+CSSzyx sử dụng 5-phase pipeline:
 
 ```
 Phase 1: Type Generation
@@ -899,7 +899,7 @@ describe("SSR Hydration", () => {
 
 ## 📝 Summary
 
-csszyx provides:
+CSSzyx provides:
 
 - **Type-safe** object syntax cho Tailwind
 - **42% bundle reduction** qua tier encoding + variable optimization

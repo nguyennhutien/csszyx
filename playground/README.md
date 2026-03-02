@@ -1,6 +1,6 @@
-# csszyx Playgrounds
+# CSSzyx Playgrounds
 
-E2E testing environments for validating the complete csszyx pipeline.
+E2E testing environments for validating the complete CSSzyx pipeline.
 
 ## Available Playgrounds
 
