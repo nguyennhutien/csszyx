@@ -67,6 +67,7 @@ CLAUDE.md
 .agent/
 .cursorrules
 llms.txt
+docs/guides/ai-usage.md
 
 # Rust
 # Cargo.lock (Un-ignored to ensure reproducible builds)
