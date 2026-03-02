@@ -1,44 +1,88 @@
 # Configuration Overview
 
-csszyx provides comprehensive configuration options for both development and production environments.
+CSSzyx is configured by passing options directly to the plugin in your bundler config.
+There is no standalone `csszyx.config.ts` file — all config lives where your build tool is configured.
 
 ## Quick Start
 
-Create a `csszyx.config.js` file in your project root:
+### Vite
+
+```ts
+// vite.config.ts
+import csszyx from "csszyx/vite";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    // csszyx MUST come before tailwindcss and react
+    ...csszyx({
+      development: {
+        debug: true,
+        autoInjectRecovery: true,
+      },
+      production: {
+        mangle: true,
+        injectChecksum: true,
+      },
+    }),
+    tailwindcss(),
+    react(),
+  ],
+});
+```
+
+### Next.js (Webpack)
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+const csszyxWebpack = require("@csszyx/unplugin/webpack").default;
+
+const nextConfig: NextConfig = {
+  webpack(config) {
+    config.plugins.push(
+      csszyxWebpack({
+        production: { mangle: true, injectChecksum: true },
+      }),
+    );
+    return config;
+  },
+};
+
+export default nextConfig;
+```
+
+### Webpack
 
 ```js
-/** @type {import('@csszyx/types').CsszyxConfig} */
-export default {
+// webpack.config.js
+const csszyxWebpack = require("@csszyx/unplugin/webpack").default;
+
+module.exports = {
+  plugins: [
+    csszyxWebpack({
+      production: { mangle: true, injectChecksum: true },
+    }),
+  ],
+};
+```
+
+## TypeScript Types
+
+Import `PartialCsszyxConfig` for full type safety:
+
+```ts
+import type { PartialCsszyxConfig } from "@csszyx/types";
+
+const csszyxOptions: PartialCsszyxConfig = {
   development: {
-    autoInjectRecovery: false,
-    strictMode: false,
     debug: true,
-    allowCSRRecovery: true,
   },
   production: {
     mangle: true,
-    contentHashing: true,
     injectChecksum: true,
-    incrementalBuild: true,
-    minify: true,
-  },
-  build: {
-    buildId: undefined, // Auto-generated
-    tailwindConfig: "tailwind.config.js",
-    outputDir: ".csszyx",
-    cacheDir: ".csszyx/cache",
-    astBudgetLimit: 50000,
-  },
-  hydration: {
-    strict: true,
-    defaultRecoveryMode: null,
-    auditLog: true,
-  },
-  performance: {
-    parallel: true,
-    workers: undefined, // Auto-detected
-    optimizeVariables: true,
-    zeroRuntime: true,
   },
 };
 ```
@@ -54,7 +98,7 @@ interface DevelopmentConfig {
   autoInjectRecovery: boolean; // Auto-inject recovery tokens
   strictMode: boolean; // Treat warnings as errors
   debug: boolean; // Enable debug logging
-  allowCSRRecovery: boolean; // Allow client-side recovery
+  allowCSRRecovery: boolean; // Allow client-side recovery on hydration mismatch
 }
 ```
 
@@ -71,11 +115,11 @@ Controls production build behavior:
 
 ```ts
 interface ProductionConfig {
-  mangle: boolean; // Minify class names
+  mangle: boolean; // Minify class names (z, y, x, ...)
   contentHashing: boolean; // Hash for immutable caching
-  injectChecksum: boolean; // Add hydration checksum
+  injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
-  minify: boolean; // Minify output (class names and attributes)
+  minify: boolean; // Minify output
 }
 ```
 
@@ -93,11 +137,11 @@ Controls build pipeline:
 
 ```ts
 interface BuildConfig {
-  buildId?: string; // Build identifier
-  tailwindConfig?: string; // Tailwind config path
+  buildId?: string; // Build identifier (auto-generated if omitted)
+  tailwindConfig?: string; // Path to Tailwind config file
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
-  astBudgetLimit?: number; // Max AST nodes per file
+  astBudgetLimit?: number; // Max AST nodes per file before warning
 }
 ```
 
@@ -116,7 +160,7 @@ Controls SSR hydration behavior:
 ```ts
 interface HydrationConfig {
   strict: boolean; // Enable strict checks
-  defaultRecoveryMode?: "csr" | "dev-only"; // Default recovery
+  defaultRecoveryMode?: "csr" | "dev-only"; // Default recovery mode
   auditLog: boolean; // Log hydration events
 }
 ```
@@ -133,10 +177,10 @@ Controls performance optimizations:
 
 ```ts
 interface PerformanceConfig {
-  parallel: boolean; // Parallel processing
-  workers?: number; // Worker thread count
+  parallel: boolean; // Parallel processing during build
+  workers?: number; // Worker thread count (auto-detected)
   optimizeVariables: boolean; // CSS variable optimization
-  zeroRuntime: boolean; // Static optimization
+  zeroRuntime: boolean; // Static optimization for zero-runtime cases
 }
 ```
 
@@ -146,58 +190,6 @@ interface PerformanceConfig {
 - `workers`: Auto-detected (CPU cores)
 - `optimizeVariables`: `true`
 - `zeroRuntime`: `true`
-
-## Environment-Specific Config
-
-Use environment variables to customize behavior:
-
-```js
-export default {
-  development: {
-    debug: process.env.DEBUG === "true",
-    allowCSRRecovery: process.env.NODE_ENV === "development",
-  },
-  production: {
-    mangle: process.env.NODE_ENV === "production",
-  },
-};
-```
-
-## TypeScript Support
-
-For type safety, use TypeScript config:
-
-```ts
-// csszyx.config.ts
-import type { CsszyxConfig } from "@csszyx/types";
-
-const config: CsszyxConfig = {
-  development: {
-    autoInjectRecovery: false,
-    strictMode: false,
-    debug: true,
-    allowCSRRecovery: true,
-  },
-  // ... other config
-};
-
-export default config;
-```
-
-## Runtime Configuration
-
-Configure runtime behavior separately:
-
-```tsx
-import { initRuntime } from "@csszyx/runtime";
-
-initRuntime({
-  development: process.env.NODE_ENV === "development",
-  allowCSRRecovery: true,
-  strictHydration: true,
-  debug: false,
-});
-```
 
 ## See Also
 
