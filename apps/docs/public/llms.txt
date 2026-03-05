@@ -1,0 +1,343 @@
+# CSSzyx
+
+> Object-syntax Tailwind CSS. Type-safe. Zero runtime. SSR-safe.
+
+CSSzyx is a build-time CSS framework that transforms JSX `sz` props into Tailwind v4 utility classes. The compiler runs at build time — no runtime overhead in the browser.
+
+## Why CSSzyx
+
+- **Object syntax** — `sz={{ p: 4, bg: 'blue-500' }}` instead of `className="p-4 bg-blue-500"`
+- **Type-safe** — full TypeScript autocomplete for every prop
+- **Zero runtime** — all transforms happen at build time via Babel AST
+- **SSR-safe** — SHA-256 checksum validates server/client class map match
+- **Class mangling** — production builds mangle `p-4` → `z` for maximum compression
+- **Tailwind v4** — requires Tailwind CSS v4.x (v3 not supported)
+
+## Install
+
+```bash
+npm install csszyx
+```
+
+### Vite
+
+```js
+// vite.config.ts
+import csszyx from 'csszyx/vite';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [
+    ...csszyx(),      // csszyx MUST come before tailwindcss
+    tailwindcss(),
+  ],
+});
+```
+
+### Next.js (Webpack)
+
+```js
+// next.config.js
+const csszyxWebpack = require('@csszyx/unplugin/webpack').default;
+
+module.exports = {
+  webpack(config) {
+    config.plugins.unshift(...csszyxWebpack());
+    return config;
+  },
+};
+```
+
+## Core Syntax
+
+### Basic usage
+
+```tsx
+// Before (Tailwind)
+<div className="flex items-center p-4 bg-blue-500 rounded-lg" />
+
+// After (CSSzyx)
+<div sz={{ flex: true, items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
+```
+
+The compiler transforms `sz` props → Tailwind classes at build time. The browser never sees `sz`.
+
+### Boolean shorthand
+
+Many display/position properties accept `true`:
+
+```tsx
+<div sz={{ flex: true, relative: true, hidden: true }} />
+// → className="flex relative hidden"
+```
+
+### Arbitrary values
+
+```tsx
+<div sz={{ w: '333px', top: '-1px', bg: '#316ff6' }} />
+// → className="w-[333px] top-[-1px] bg-[#316ff6]"
+// Note: compiler auto-wraps in [] — no need to add them yourself
+```
+
+### CSS variables
+
+```tsx
+<div sz={{ color: '--ds-primary', p: '--spacing-4' }} />
+// → className="text-(--ds-primary) p-(--spacing-4)"
+// Sugar: any value starting with -- is auto-wrapped in ()
+```
+
+### Color with opacity
+
+```tsx
+<div sz={{ bg: { color: 'blue-500', op: 50 } }} />
+// → className="bg-blue-500/50"
+```
+
+## Variants
+
+Variants are nested objects:
+
+```tsx
+<div sz={{
+  bg: 'white',
+  hover: { bg: 'blue-100' },
+  dark: { bg: 'gray-800' },
+  md: { p: 8 },
+  focus: { outline: 'none', ring: 2 },
+}} />
+```
+
+### Responsive
+
+```tsx
+sz={{ w: 'full', md: { w: '1/2' }, lg: { w: '1/3' } }}
+// → className="w-full md:w-1/2 lg:w-1/3"
+```
+
+### State modifiers
+
+```tsx
+sz={{
+  hover: { bg: 'sky-700' },
+  focus: { outline: 'none' },
+  active: { opacity: 80 },
+  disabled: { opacity: 50 },
+  focusVisible: { ring: 2 },
+}}
+```
+
+### Dark mode
+
+```tsx
+sz={{ bg: 'white', dark: { bg: 'gray-900' } }}
+```
+
+### Group / Peer
+
+```tsx
+sz={{ group: { hover: { color: 'white' } } }}
+// → className="group-hover:text-white"
+
+sz={{ peer: { checked: { bg: 'blue-500' } } }}
+// → className="peer-checked:bg-blue-500"
+```
+
+### Data / ARIA attributes
+
+```tsx
+sz={{ data: { active: { bg: 'blue' } } }}
+// → className="data-[active]:bg-blue"
+
+sz={{ aria: { expanded: { color: 'blue' } } }}
+// → className="aria-expanded:text-blue"
+```
+
+### Pseudo-elements
+
+```tsx
+sz={{ before: { content: "''" }, after: { bg: 'blue-500' } }}
+sz={{ placeholder: { color: 'gray-400' } }}
+```
+
+### Container queries
+
+```tsx
+sz={{ '@container': true, '@md': { flex: true } }}
+// → className="@container @md:flex"
+```
+
+## Common Props Reference
+
+### Spacing
+
+```tsx
+{ p: 4 }         // padding: 1rem        → p-4
+{ px: 4 }        // padding-inline       → px-4
+{ py: 2 }        // padding-block        → py-2
+{ m: 'auto' }    // margin: auto         → m-auto
+{ m: -4 }        // margin: -1rem        → -m-4
+{ gap: 4 }       // gap: 1rem            → gap-4
+{ spaceX: 2 }    // space-x              → space-x-2
+```
+
+### Sizing
+
+```tsx
+{ w: 'full' }    // width: 100%          → w-full
+{ h: 'screen' }  // height: 100vh        → h-screen
+{ size: 10 }     // width & height       → size-10
+{ maxW: '2xl' }  // max-width            → max-w-2xl
+```
+
+### Layout
+
+```tsx
+{ flex: true }           // display: flex     → flex
+{ grid: true }           // display: grid     → grid
+{ hidden: true }         // display: none     → hidden
+{ absolute: true }       // position          → absolute
+{ relative: true }       // position          → relative
+{ overflow: 'hidden' }   // overflow          → overflow-hidden
+{ z: 10 }                // z-index           → z-10
+```
+
+### Flexbox / Grid
+
+```tsx
+{ flexDir: 'col' }       // flex-col
+{ items: 'center' }      // items-center
+{ justify: 'between' }   // justify-between
+{ gridCols: 3 }          // grid-cols-3
+{ colSpan: 2 }           // col-span-2
+{ grow: true }           // grow
+{ shrink: 0 }            // shrink-0
+```
+
+### Typography
+
+```tsx
+{ text: 'xl' }           // text-xl (size + leading)
+{ fontWeight: 'bold' }   // font-bold
+{ fontFamily: 'mono' }   // font-mono
+{ tracking: 'tight' }    // tracking-tight
+{ leading: 7 }           // leading-7
+{ textAlign: 'center' }  // text-center
+{ uppercase: true }      // uppercase
+{ truncate: true }       // truncate
+```
+
+### Backgrounds
+
+```tsx
+{ bg: 'blue-500' }                           // bg-blue-500
+{ bg: { color: 'blue-500', op: 50 } }        // bg-blue-500/50
+{ bgImg: { gradient: 'linear', dir: 'to-r' } } // bg-linear-to-r
+{ from: 'blue-500', to: 'purple-500' }       // gradient stops
+```
+
+### Borders
+
+```tsx
+{ border: true }         // border (1px solid)
+{ border: 2 }            // border-2
+{ borderColor: 'red-500' } // border-red-500
+{ rounded: 'lg' }        // rounded-lg
+{ rounded: 'full' }      // rounded-full
+{ ring: 2 }              // ring-2
+{ outline: 'none' }      // outline-none
+```
+
+### Effects & Filters
+
+```tsx
+{ shadow: 'lg' }         // shadow-lg
+{ opacity: 50 }          // opacity-50
+{ blur: 'sm' }           // blur-sm
+{ grayscale: true }      // grayscale
+{ transition: true }     // transition (common props)
+{ duration: 300 }        // duration-300
+{ animate: 'spin' }      // animate-spin
+```
+
+### Transforms
+
+```tsx
+{ rotate: 45 }           // rotate-45
+{ scale: 105 }           // scale-105
+{ translateX: 4 }        // translate-x-4
+{ origin: 'center' }     // origin-center
+```
+
+## Runtime Helpers
+
+For dynamic classes at runtime (the only runtime overhead):
+
+```tsx
+import { _sz, _szIf, _szSwitch, _szMerge } from '@csszyx/runtime';
+
+// Concatenate class strings
+<div className={_sz('base-class', conditionalClass)} />
+
+// Conditional class
+<div className={_szIf(isActive, 'active-class', 'inactive-class')} />
+
+// Switch/enum
+<div className={_szSwitch(status, {
+  loading: 'opacity-50',
+  error: 'border-red-500',
+  success: 'border-green-500',
+})} />
+
+// Merge (last wins for conflicts)
+<div className={_szMerge(baseClasses, overrideClasses)} />
+```
+
+For color CSS variables:
+
+```tsx
+import { __szColorVar } from '@csszyx/runtime';
+// Usage: __szColorVar('--ds-primary') → 'rgb(var(--ds-primary))'
+```
+
+## SSR Hydration
+
+CSSzyx validates that server and client use the same mangle map:
+
+```tsx
+// Server (Next.js app/layout.tsx)
+import { initRuntime } from '@csszyx/runtime';
+import { headers } from 'next/headers';
+
+const hdrs = await headers();
+initRuntime({ checksum: hdrs.get('x-csszyx-checksum') ?? '' });
+```
+
+If the checksum mismatches, the runtime aborts hydration to prevent CSS corruption.
+
+## Production Build (Mangling)
+
+In production, class names are mangled for maximum compression:
+
+```js
+// vite.config.ts (production)
+...csszyx({ production: { mangle: true } })
+```
+
+Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
+
+## Tailwind v4 Compatibility
+
+- Requires `@tailwindcss/vite` or `@tailwindcss/postcss` v4.x
+- `csszyx` Vite plugin MUST come before `tailwindcss` in plugins array
+- All spacing values are dynamic (any integer, 0.5-step decimals work bare)
+- Arbitrary values: `{ p: '5px' }` → `p-[5px]` (auto-wrapped)
+- CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
+
+## Full API Reference
+
+For the complete sz prop mapping (all 250+ props, all variants, all edge cases):
+https://csszyx.com/llms-full.txt
+
+For documentation:
+https://csszyx.com/guide/introduction

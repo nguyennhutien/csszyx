@@ -1,0 +1,142 @@
+---
+title: Backgrounds
+description: Background color, image, gradient, position, size, and attachment props.
+---
+
+import { PropTable } from '../../../components/PropTable.tsx';
+import { BackgroundColorSwatches, BackgroundOpacity, LinearGradient, LinearGradientVia } from '../../../components/demos/backgrounds.tsx';
+
+## Background Color
+
+<PropTable rows={[
+  { sz: "{ bg: 'blue-500' }", tw: "bg-blue-500" },
+  { sz: "{ bg: 'white' }", tw: "bg-white" },
+  { sz: "{ bg: 'transparent' }", tw: "bg-transparent" },
+  { sz: "{ bg: 'inherit' }", tw: "bg-inherit" },
+  { sz: "{ bg: 'current' }", tw: "bg-current" },
+  { sz: "{ bg: '#333' }", tw: "bg-[#333]" },
+  { sz: "{ bg: '--my-color' }", tw: "bg-(--my-color)" },
+  { sz: "{ bg: { color: 'blue-500', op: 50 } }", tw: "bg-blue-500/50" },
+  { sz: "{ bg: { color: 'blue-500', op: '78%' } }", tw: "bg-blue-500/[78%]" },
+]} />
+
+<BackgroundColorSwatches />
+
+<BackgroundOpacity />
+
+## Background Image
+
+<PropTable rows={[
+  { sz: "{ bgImg: 'none' }", tw: "bg-none" },
+  { sz: "{ bgImg: 'url(...)' }", tw: "bg-[url(...)]" },
+  { sz: "{ bgImg: '--my-image' }", tw: "bg-(image:--my-image)" },
+]} />
+
+## Gradients
+
+Use the `bgImg` object syntax for gradients:
+
+<PropTable rows={[
+  { sz: "{ bgImg: { gradient: 'linear' } }", tw: "bg-linear-to-r" },
+  { sz: "{ bgImg: { gradient: 'linear', dir: 'to-b' } }", tw: "bg-linear-to-b" },
+  { sz: "{ bgImg: { gradient: 'linear', dir: 90 } }", tw: "bg-linear-90" },
+  { sz: "{ bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } }", tw: "bg-linear-to-r/hsl" },
+  { sz: "{ bgImg: { gradient: 'radial' } }", tw: "bg-radial" },
+  { sz: "{ bgImg: { gradient: 'conic' } }", tw: "bg-conic" },
+  { sz: "{ bgImg: { gradient: 'conic', dir: 180 } }", tw: "bg-conic-180" },
+]} />
+
+## Gradient Color Stops
+
+<PropTable rows={[
+  { sz: "{ from: 'blue-500' }", tw: "from-blue-500" },
+  { sz: "{ via: 'purple-500' }", tw: "via-purple-500" },
+  { sz: "{ to: 'pink-500' }", tw: "to-pink-500" },
+  { sz: "{ fromPos: 10 }", tw: "from-10%" },
+  { sz: "{ viaPos: 50 }", tw: "via-50%" },
+  { sz: "{ toPos: 90 }", tw: "to-90%" },
+]} />
+
+<LinearGradient />
+
+<LinearGradientVia />
+
+## Background Position
+
+<PropTable rows={[
+  { sz: "{ bgPos: 'center' }", tw: "bg-center" },
+  { sz: "{ bgPos: 'top' }", tw: "bg-top" },
+  { sz: "{ bgPos: 'bottom' }", tw: "bg-bottom" },
+  { sz: "{ bgPos: 'left' }", tw: "bg-left" },
+  { sz: "{ bgPos: 'right' }", tw: "bg-right" },
+  { sz: "{ bgPos: 'top-left' }", tw: "bg-top-left" },
+  { sz: "{ bgPos: 'center top 1rem' }", tw: "bg-position-[center_top_1rem]" },
+]} />
+
+## Background Size
+
+<PropTable rows={[
+  { sz: "{ bgSize: 'cover' }", tw: "bg-cover" },
+  { sz: "{ bgSize: 'contain' }", tw: "bg-contain" },
+  { sz: "{ bgSize: 'auto' }", tw: "bg-auto" },
+  { sz: "{ bgSize: 'auto 100px' }", tw: "bg-size-[auto_100px]" },
+]} />
+
+## Background Repeat
+
+<PropTable rows={[
+  { sz: "{ bgRepeat: 'repeat' }", tw: "bg-repeat" },
+  { sz: "{ bgRepeat: 'no-repeat' }", tw: "bg-no-repeat" },
+  { sz: "{ bgRepeat: 'repeat-x' }", tw: "bg-repeat-x" },
+  { sz: "{ bgRepeat: 'repeat-y' }", tw: "bg-repeat-y" },
+]} />
+
+## Background Attachment / Clip / Origin
+
+<PropTable rows={[
+  { sz: "{ bgAttach: 'fixed' }", tw: "bg-fixed" },
+  { sz: "{ bgAttach: 'local' }", tw: "bg-local" },
+  { sz: "{ bgAttach: 'scroll' }", tw: "bg-scroll" },
+  { sz: "{ bgClip: 'text' }", tw: "bg-clip-text" },
+  { sz: "{ bgClip: 'border' }", tw: "bg-clip-border" },
+  { sz: "{ bgOrigin: 'border' }", tw: "bg-origin-border" },
+  { sz: "{ bgOrigin: 'padding' }", tw: "bg-origin-padding" },
+]} />
+
+## Examples
+
+```tsx
+// Solid color with opacity
+<div sz={{ bg: { color: 'blue-500', op: 20 } }} />
+
+// Linear gradient
+<div sz={{
+  bgImg: { gradient: 'linear', dir: 'to-r' },
+  from: 'blue-500',
+  to: 'purple-600',
+}} />
+
+// Radial gradient with oklch interpolation
+<div sz={{
+  bgImg: { gradient: 'radial', in: 'oklch' },
+  from: 'cyan-400',
+  to: 'blue-700',
+}} />
+
+// Background image
+<div sz={{
+  bgImg: "url('/hero.jpg')",
+  bgPos: 'center',
+  bgSize: 'cover',
+  h: 64,
+}} />
+
+// Gradient text
+<h1 sz={{
+  bgImg: { gradient: 'linear', dir: 'to-r' },
+  from: 'blue-600',
+  to: 'purple-600',
+  bgClip: 'text',
+  color: 'transparent',
+}} />
+```

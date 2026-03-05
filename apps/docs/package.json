@@ -7,11 +7,20 @@
         "dev": "astro dev",
         "build": "astro build",
         "preview": "astro preview",
+        "clean:build": "rm -rf dist",
+        "clean": "rm -rf node_modules && clean:build",
         "pages:preview": "pnpm build && wrangler pages dev dist",
         "pages:deploy": "pnpm build && wrangler pages deploy dist"
     },
     "dependencies": {
+        "@astrojs/react": "^4.0.0",
         "@astrojs/starlight": "^0.37.0",
-        "astro": "^5.0.0"
+        "@tailwindcss/vite": "^4.2.0",
+        "astro": "^5.0.0",
+        "csszyx": "workspace:*",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "sharp": "^0.34.5",
+        "tailwindcss": "^4.2.0"
     }
 }

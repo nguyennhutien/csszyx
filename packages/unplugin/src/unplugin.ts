@@ -91,32 +91,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         if (!content.includes('sz=') && !content.includes('sz:')) {continue;}
                         const result = transformSourceCode(content);
                         if (!result.transformed) {continue;}
-                        // Extract class names from transformed output
-                        const classPattern = /class(?:Name)?=["']([^"']*)["']/g;
-                        let match;
-                        while ((match = classPattern.exec(result.code)) !== null) {
-                            for (const cls of match[1].split(/\s+/).filter(Boolean)) {
-                                discoveredClasses.add(cls);
-                            }
-                        }
-                        // Also extract from className={...} expression containers (ternaries)
-                        const exprPattern = /className=\{/g;
-                        while ((match = exprPattern.exec(result.code)) !== null) {
-                            let depth = 1;
-                            let i = match.index + match[0].length;
-                            while (i < result.code.length && depth > 0) {
-                                if (result.code[i] === '{') {depth++;} else if (result.code[i] === '}') {depth--;}
-                                i++;
-                            }
-                            const expr = result.code.slice(match.index + match[0].length, i - 1);
-                            const strPattern = /"([^"]+)"|'([^']+)'/g;
-                            let strMatch;
-                            while ((strMatch = strPattern.exec(expr)) !== null) {
-                                const str = strMatch[1] || strMatch[2];
-                                for (const cls of str.split(/\s+/).filter(Boolean)) {
-                                    discoveredClasses.add(cls);
-                                }
-                            }
+                        // Piggyback: use classes collected inside the Babel JSXAttribute visitor.
+                        // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
+                        // comments, and string literals in other positions never produce false
+                        // positives (they are different AST node types and never reach the visitor).
+                        for (const cls of result.classes) {
+                            discoveredClasses.add(cls);
                         }
                         // Extract static classes from _sz() runtime calls.
                         // When an sz prop has any dynamic value, the compiler wraps the
@@ -200,13 +180,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param code source code
      */
     function extractClasses(code: string): void {
-        // Pass 1: Direct className="..." / class="..." patterns
-        const classPattern = /(?:class(?:Name)?|sz)[:=]\s*["']([^"']*)["']/g;
+        // Pass 1: Direct className="..." / class="..." patterns.
+        // Use separate patterns for double-quoted and single-quoted strings so that
+        // class names containing single quotes (e.g. before:content-['']) are captured
+        // fully from double-quoted strings, and vice versa.
+        const dqPattern = /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g;
+        const sqPattern = /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g;
         let match;
-        while ((match = classPattern.exec(code)) !== null) {
-            const classes = match[1].split(/\s+/).filter(Boolean);
-            for (const cls of classes) {
-                state.classes.add(cls);
+        for (const classPattern of [dqPattern, sqPattern]) {
+            while ((match = classPattern.exec(code)) !== null) {
+                const classes = match[1].split(/\s+/).filter(Boolean);
+                for (const cls of classes) {
+                    state.classes.add(cls);
+                }
             }
         }
 
@@ -271,15 +257,34 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function mangleCodeClasses(code: string): string {
         // Pass 1: Direct className="..." / class="..." / className:"..."
-        let result = code.replace(/(?:class(?:Name)?|sz)[:=]\s*["']([^"']*)["']/g, (match, classes) => {
-            const mangled = mangleClassString(classes);
-            if (mangled === classes) {return match;}
-            return match.replace(classes, mangled);
-        });
+        // Use separate patterns for double-quoted and single-quoted strings so that
+        // class names containing single quotes (e.g. before:content-['']) are mangled
+        // correctly from double-quoted strings, and vice versa.
+        let result = code
+            .replace(/(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g, (match, classes) => {
+                const mangled = mangleClassString(classes);
+                if (mangled === classes) {return match;}
+                return match.replace(classes, mangled);
+            })
+            .replace(/(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g, (match, classes) => {
+                const mangled = mangleClassString(classes);
+                if (mangled === classes) {return match;}
+                return match.replace(classes, mangled);
+            });
 
         // Pass 2: className:EXPR with ternary operators containing quoted strings
         // Handles patterns like: className:cond?"class-a":other?"class-b":"class-c"
-        result = result.replace(/className:([^,;}\])\n]+)/g, (fullMatch, expr: string) => {
+        //
+        // Negative lookahead (?!["']) ensures the regex never matches static strings
+        // (className:"..." or className:'...') — those are handled by Pass 1.
+        // Without this, already-mangled symbols (e.g. "z") would be looked up in
+        // mangleMap again and corrupted if a class name happened to collide with a
+        // mangled symbol.
+        result = result.replace(/className:(?!["'])([^,;}\])\n]+)/g, (fullMatch, expr: string) => {
+            // Defense-in-depth: expr must contain "?" followed by ":" to be a valid
+            // ternary. Non-ternary expressions that slipped through the regex are skipped.
+            const qIdx = expr.indexOf('?');
+            if (qIdx === -1 || !expr.slice(qIdx).includes(':')) {return fullMatch;}
             let changed = false;
             const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
                 const parts = inner.split(/\s+/).filter(Boolean);
@@ -348,7 +353,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         },
 
         /**
-         * Filters files for the pre-transform phase — only source files outside node_modules.
+         * Filters files for the pre-transform phase — source files plus CSS files.
+         * CSS files need special handling to inject @source inline() for Tailwind class discovery.
          * @param id - the file path to check for inclusion
          * @returns true if the file should be transformed, false otherwise
          */
@@ -356,21 +362,53 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (id.includes('node_modules') || id.includes('/packages/') || (id.includes('.next') && !id.includes('static'))) {
                 return false;
             }
+            // Handle CSS files to inject discovered classes as @source inline()
+            if (/\.css(\?.*)?$/.test(id)) {return true;}
             // Only handle source files in PRE phase
             return /\.[tj]sx?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte');
         },
 
         /**
          * Core transform: detects sz prop, compiles to className, injects runtime, collects classes.
+         * For CSS files: injects @source inline() so Tailwind generates CSS for sz-derived classes.
          * @param code - the source code to transform
          * @param id - the file path of the module being transformed
          * @returns transformed code with source map, or null if no changes were made
          */
         transform(code, id) {
+            // CSS transform: inject @source inline() so Tailwind sees csszyx-generated class names.
+            // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.js
+            // is not imported anywhere, so it's invisible to Tailwind. Injecting @source inline()
+            // directly into the CSS that imports tailwindcss is the only reliable way to ensure
+            // Tailwind generates CSS for the classes that csszyx transforms sz props into.
+            if (/\.css(\?.*)?$/.test(id)) {
+                const hasTailwindImport = code.includes('@import "tailwindcss') ||
+                    code.includes("@import 'tailwindcss");
+                if (hasTailwindImport && state.classes.size > 0) {
+                    // Only include classes that look like real Tailwind candidates:
+                    // at least 2 chars, starts with a letter, not pure mangled symbols.
+                    const candidates = Array.from(state.classes)
+                        .filter(c => c.length >= 2 && /^[a-z]/.test(c))
+                        .join(' ');
+                    if (candidates) {
+                        const inlineDirective = `@source inline("${candidates}");\n`;
+                        const transformed = code.replace(
+                            /(@import\s+["']tailwindcss[^"']*["'];)/,
+                            `$1\n${inlineDirective}`,
+                        );
+                        if (transformed !== code) {
+                            return { code: transformed, map: null };
+                        }
+                    }
+                }
+                return null;
+            }
+
             let transformedCode = code;
             let usesRuntime = false;
             let usesColorVar = false;
             let transformed = false;
+            let szClasses: Set<string> | undefined;
 
             // Detect sz prop in both JSX (sz="...", sz={{...}}) and JS/JSX-transformed (sz: "...", sz: {...}) formats
             const hasSzProp = code.includes('sz=') || /\bsz\s*:\s*["'{]/.test(code) || code.includes('sz: "');
@@ -394,6 +432,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     usesRuntime = result.usesRuntime;
                     usesColorVar = result.usesColorVar;
                     transformed = result.transformed;
+                    szClasses = result.classes;
                 }
             }
 
@@ -435,7 +474,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // Extract classes for the mangle map but DON'T mangle yet.
             // Mangling is deferred to processAssets/generateBundle where we have the complete map.
             if (transformed || transformedCode.includes('class=') || transformedCode.includes('className=')) {
-                extractClasses(transformedCode);
+                if (szClasses !== undefined) {
+                    // TSX/JSX sz file: use piggyback classes from Babel JSXAttribute visitor.
+                    // No regex needed — classes were collected during the existing Babel traverse
+                    // at zero extra cost, with no false positives from text content or JSDoc.
+                    for (const cls of szClasses) {state.classes.add(cls);}
+                } else {
+                    // Non-sz file (fast-path, no Babel ran) or Vue/Svelte adapter:
+                    // fall back to regex for existing className attributes.
+                    extractClasses(transformedCode);
+                }
                 return { code: transformedCode, map: null };
             }
             return null;

@@ -1,6 +1,185 @@
 ---
-title: sz Props
-description: The sz prop object syntax and all supported properties.
+title: Sz Props Basics
+description: The sz prop object syntax — how to write Tailwind as JavaScript objects.
 ---
 
-Documentation coming soon.
+import { Callout } from '../../../components/Callout.tsx';
+
+The `sz` prop lets you write Tailwind CSS as a JavaScript object. The build
+plugin transforms it to a `className` string at compile time — zero runtime
+cost for static values.
+
+## Basic Usage
+
+Every Tailwind utility has a corresponding sz prop key:
+
+```tsx
+// Tailwind string syntax
+<div className="p-4 bg-blue-500 text-white rounded-lg" />
+
+// Equivalent sz prop syntax
+<div sz={{ p: 4, bg: 'blue-500', color: 'white', rounded: 'lg' }} />
+```
+
+Both produce identical HTML. In production, the classes are mangled to single
+characters.
+
+## Property Mapping
+
+Tailwind class names map to camelCase sz prop keys:
+
+| Tailwind class | sz prop |
+|---|---|
+| `p-4` | `{ p: 4 }` |
+| `px-6` | `{ px: 6 }` |
+| `bg-blue-500` | `{ bg: 'blue-500' }` |
+| `text-white` | `{ color: 'white' }` |
+| `rounded-lg` | `{ rounded: 'lg' }` |
+| `font-bold` | `{ fontWeight: 'bold' }` |
+| `flex` | `{ flex: true }` |
+| `hidden` | `{ hidden: true }` |
+
+## Boolean Props
+
+Many Tailwind utilities are boolean — they're either on or off:
+
+```tsx
+<div sz={{
+  flex: true,        // flex
+  hidden: true,      // hidden
+  uppercase: true,   // uppercase
+  italic: true,      // italic
+  truncate: true,    // truncate
+}} />
+```
+
+## Nested Variants
+
+Variants (hover, focus, responsive breakpoints) use nested objects:
+
+```tsx
+<button sz={{
+  bg: 'blue-500',
+  color: 'white',
+  px: 4,
+  py: 2,
+  rounded: 'md',
+  hover: {
+    bg: 'blue-600',
+  },
+  focus: {
+    outline: 'none',
+    ring: 2,
+    ringColor: 'blue-400',
+  },
+  disabled: {
+    opacity: 50,
+    cursor: 'not-allowed',
+  },
+}} />
+```
+
+## Responsive Breakpoints
+
+Responsive modifiers are nested objects with the breakpoint as the key:
+
+```tsx
+<div sz={{
+  w: 'full',        // width: 100% on mobile
+  md: {
+    w: '1/2',       // width: 50% at md+
+  },
+  lg: {
+    w: '1/3',       // width: 33% at lg+
+  },
+}} />
+```
+
+## Dark Mode
+
+```tsx
+<div sz={{
+  bg: 'white',
+  color: 'gray-900',
+  dark: {
+    bg: 'gray-800',
+    color: 'white',
+  },
+}} />
+```
+
+## Arbitrary Values
+
+For one-off values not in the Tailwind scale, pass a string. The compiler
+wraps it in `[...]` automatically:
+
+```tsx
+<div sz={{
+  w: '333px',        // w-[333px]
+  bg: '#316ff6',     // bg-[#316ff6]
+  p: '1.25rem',      // p-[1.25rem]
+  top: '37px',       // top-[37px]
+}} />
+```
+
+<Callout label="ARBITRARY VALUES">
+  For arbitrary values that look like fractions or Tailwind scale values,
+  use explicit units. `{ w: 4 }` → `w-4` (1rem), but `{ w: '4px' }` → `w-[4px]`
+  (exactly 4 pixels).
+</Callout>
+
+## CSS Variables
+
+Prefix any CSS custom property with `--` and the compiler wraps it in `(...)`:
+
+```tsx
+<div sz={{
+  bg: '--my-brand-color',    // bg-(--my-brand-color)
+  color: '--text-primary',   // text-(--text-primary)
+  p: '--spacing-lg',         // p-(--spacing-lg)
+}} />
+```
+
+## Conditional Values
+
+Pass conditional expressions directly in the object. The compiler extracts
+all possible classes statically:
+
+```tsx
+<div sz={{
+  bg: isActive ? 'blue-500' : 'gray-200',
+  color: hasError ? 'red-600' : 'gray-900',
+}} />
+```
+
+## Combining with className
+
+The `sz` prop and `className` prop can coexist. The compiler merges them:
+
+```tsx
+<div
+  sz={{ p: 4, bg: 'blue-500' }}
+  className="custom-class"
+/>
+// → className="p-4 bg-blue-500 custom-class"
+```
+
+## Runtime Helpers for Dynamic Classes
+
+When class names depend on runtime values, use the helper functions:
+
+```tsx
+import { _sz, _szIf, _szSwitch } from 'csszyx';
+
+// Concatenate multiple class strings
+<div className={_sz('p-4 bg-blue-500', extraClass)} />
+
+// Conditional: apply class only when condition is true
+<div className={_szIf(isActive, 'ring-2 ring-blue-400')} />
+
+// Switch: first truthy condition wins
+<div className={_szSwitch([
+  [variant === 'primary', 'bg-blue-600 text-white'],
+  [variant === 'danger',  'bg-red-600 text-white'],
+], 'bg-gray-500 text-gray-900')} />
+```

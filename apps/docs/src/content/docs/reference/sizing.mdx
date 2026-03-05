@@ -1,0 +1,123 @@
+---
+title: Sizing
+description: Width, height, min/max, and logical sizing props.
+---
+
+import { PropTable } from '../../../components/PropTable.tsx';
+import { Callout } from '../../../components/Callout.tsx';
+import { WidthScale, MaxWidth, HeightScale, SizeSquareAndCircle } from '../../../components/demos/sizing.tsx';
+
+## Width
+
+<PropTable rows={[
+  { sz: "{ w: 4 }", tw: "w-4" },
+  { sz: "{ w: 'full' }", tw: "w-full" },
+  { sz: "{ w: 'screen' }", tw: "w-screen" },
+  { sz: "{ w: 'auto' }", tw: "w-auto" },
+  { sz: "{ w: '1/2' }", tw: "w-1/2" },
+  { sz: "{ w: '1/3' }", tw: "w-1/3" },
+  { sz: "{ w: 'min' }", tw: "w-min" },
+  { sz: "{ w: 'max' }", tw: "w-max" },
+  { sz: "{ w: 'fit' }", tw: "w-fit" },
+  { sz: "{ w: 'px' }", tw: "w-px" },
+  { sz: "{ w: '333px' }", tw: "w-[333px]" },
+  { sz: "{ w: '--w' }", tw: "w-(--w)" },
+]} />
+
+<WidthScale />
+
+## Min / Max Width
+
+<PropTable rows={[
+  { sz: "{ minW: 0 }", tw: "min-w-0" },
+  { sz: "{ minW: 'full' }", tw: "min-w-full" },
+  { sz: "{ maxW: 'sm' }", tw: "max-w-sm" },
+  { sz: "{ maxW: 'md' }", tw: "max-w-md" },
+  { sz: "{ maxW: 'lg' }", tw: "max-w-lg" },
+  { sz: "{ maxW: 'xl' }", tw: "max-w-xl" },
+  { sz: "{ maxW: '2xl' }", tw: "max-w-2xl" },
+  { sz: "{ maxW: '4xl' }", tw: "max-w-4xl" },
+  { sz: "{ maxW: '7xl' }", tw: "max-w-7xl" },
+  { sz: "{ maxW: 'none' }", tw: "max-w-none" },
+  { sz: "{ maxW: 'prose' }", tw: "max-w-prose" },
+]} />
+
+<MaxWidth />
+
+## Height
+
+<PropTable rows={[
+  { sz: "{ h: 4 }", tw: "h-4" },
+  { sz: "{ h: 'full' }", tw: "h-full" },
+  { sz: "{ h: 'screen' }", tw: "h-screen" },
+  { sz: "{ h: 'dvh' }", tw: "h-dvh" },
+  { sz: "{ h: 'svh' }", tw: "h-svh" },
+  { sz: "{ h: 'auto' }", tw: "h-auto" },
+  { sz: "{ h: 'fit' }", tw: "h-fit" },
+  { sz: "{ h: 'min' }", tw: "h-min" },
+  { sz: "{ minH: 'screen' }", tw: "min-h-screen" },
+  { sz: "{ maxH: 64 }", tw: "max-h-64" },
+  { sz: "{ maxH: 'none' }", tw: "max-h-none" },
+]} />
+
+<HeightScale />
+
+## Size (Width + Height Together)
+
+<PropTable rows={[
+  { sz: "{ size: 4 }", tw: "size-4" },
+  { sz: "{ size: 'full' }", tw: "size-full" },
+  { sz: "{ size: '1/2' }", tw: "size-1/2" },
+  { sz: "{ size: 'fit' }", tw: "size-fit" },
+  { sz: "{ size: 'px' }", tw: "size-px" },
+]} />
+
+<SizeSquareAndCircle />
+
+## Logical Sizing (v4.2)
+
+<Callout label="NEW IN V4.2">
+  `blockSize` is the logical equivalent of `height` (maps to `block-size`).
+  `inlineSize` is the logical equivalent of `width` (maps to `inline-size`).
+  These follow the writing direction and are useful for RTL/vertical text.
+</Callout>
+
+<PropTable rows={[
+  { sz: "{ blockSize: 4 }", tw: "block-4" },
+  { sz: "{ blockSize: 'full' }", tw: "block-full" },
+  { sz: "{ blockSize: 'screen' }", tw: "block-screen" },
+  { sz: "{ minBlockSize: 8 }", tw: "min-block-8" },
+  { sz: "{ maxBlockSize: 64 }", tw: "max-block-64" },
+  { sz: "{ inlineSize: 4 }", tw: "inline-4" },
+  { sz: "{ inlineSize: 'full' }", tw: "inline-full" },
+  { sz: "{ minInlineSize: 8 }", tw: "min-inline-8" },
+  { sz: "{ maxInlineSize: 64 }", tw: "max-inline-64" },
+]} />
+
+## Examples
+
+```tsx
+// Responsive sizing
+<img sz={{
+  w: 'full',
+  h: 48,
+  objectFit: 'cover',
+  md: { h: 64 },
+  lg: { h: 96 },
+}} />
+
+// Square icon
+<div sz={{ size: 10, rounded: 'full', bg: 'blue-500' }} />
+
+// Constrained content width
+<main sz={{ maxW: '4xl', mx: 'auto', px: 4 }}>
+  Content
+</main>
+
+// Full viewport height with scrollable body
+<div sz={{ minH: 'screen', flex: true, flexDir: 'col' }}>
+  <header />
+  <main sz={{ flex: true, grow: true }} />
+  <footer />
+</div>
+```

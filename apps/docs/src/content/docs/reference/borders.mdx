@@ -1,0 +1,150 @@
+---
+title: Borders
+description: Border width, color, radius, outline, ring, and divider props.
+---
+
+import { PropTable } from '../../../components/PropTable.tsx';
+import { Callout } from '../../../components/Callout.tsx';
+import { BorderRadiusScale, BorderWidthScale, BorderStyles, RingDemo, DivideY } from '../../../components/demos/borders.tsx';
+
+## Border Radius
+
+<PropTable rows={[
+  { sz: "{ rounded: 'sm' }", tw: "rounded-sm" },
+  { sz: "{ rounded: 'md' }", tw: "rounded-md" },
+  { sz: "{ rounded: 'lg' }", tw: "rounded-lg" },
+  { sz: "{ rounded: 'xl' }", tw: "rounded-xl" },
+  { sz: "{ rounded: 'full' }", tw: "rounded-full" },
+  { sz: "{ rounded: 'none' }", tw: "rounded-none" },
+  { sz: "{ roundedT: 'lg' }", tw: "rounded-t-lg" },
+  { sz: "{ roundedB: 'lg' }", tw: "rounded-b-lg" },
+  { sz: "{ roundedL: 'md' }", tw: "rounded-l-md" },
+  { sz: "{ roundedR: 'md' }", tw: "rounded-r-md" },
+  { sz: "{ roundedTl: 'lg' }", tw: "rounded-tl-lg" },
+  { sz: "{ roundedTr: 'lg' }", tw: "rounded-tr-lg" },
+  { sz: "{ rounded: '5px' }", tw: "rounded-[5px]" },
+]} />
+
+<BorderRadiusScale />
+
+## Border Width
+
+<PropTable rows={[
+  { sz: "{ border: true }", tw: "border" },
+  { sz: "{ border: 0 }", tw: "border-0" },
+  { sz: "{ border: 2 }", tw: "border-2" },
+  { sz: "{ border: 4 }", tw: "border-4" },
+  { sz: "{ borderX: 2 }", tw: "border-x-2" },
+  { sz: "{ borderY: 1 }", tw: "border-y-1" },
+  { sz: "{ borderT: 2 }", tw: "border-t-2" },
+  { sz: "{ borderR: 2 }", tw: "border-r-2" },
+  { sz: "{ borderB: 2 }", tw: "border-b-2" },
+  { sz: "{ borderL: 4 }", tw: "border-l-4" },
+]} />
+
+<Callout label="NEW IN V4.2">
+  Logical block-direction borders: `{ borderBs: 2 }` → `border-bs-2`
+  (block-start), `{ borderBe: 2 }` → `border-be-2` (block-end).
+</Callout>
+
+<BorderWidthScale />
+
+## Border Color
+
+<PropTable rows={[
+  { sz: "{ borderColor: 'gray-200' }", tw: "border-gray-200" },
+  { sz: "{ borderColor: 'blue-500' }", tw: "border-blue-500" },
+  { sz: "{ borderColor: 'transparent' }", tw: "border-transparent" },
+  { sz: "{ borderColor: '--ds-border' }", tw: "border-(--ds-border)" },
+  { sz: "{ borderTColor: 'red-500' }", tw: "border-t-red-500" },
+  { sz: "{ borderBColor: 'blue-500' }", tw: "border-b-blue-500" },
+  { sz: "{ borderColor: { color: 'red-500', op: 50 } }", tw: "border-red-500/50" },
+]} />
+
+## Border Style
+
+<PropTable rows={[
+  { sz: "{ borderStyle: 'solid' }", tw: "border-solid" },
+  { sz: "{ borderStyle: 'dashed' }", tw: "border-dashed" },
+  { sz: "{ borderStyle: 'dotted' }", tw: "border-dotted" },
+  { sz: "{ borderStyle: 'double' }", tw: "border-double" },
+  { sz: "{ borderStyle: 'none' }", tw: "border-none" },
+]} />
+
+<BorderStyles />
+
+## Outline
+
+<PropTable rows={[
+  { sz: "{ outline: 'none' }", tw: "outline-none" },
+  { sz: "{ outline: 2 }", tw: "outline-2" },
+  { sz: "{ outlineColor: 'blue-500' }", tw: "outline-blue-500" },
+  { sz: "{ outlineStyle: 'dashed' }", tw: "outline-dashed" },
+  { sz: "{ outlineOffset: 2 }", tw: "outline-offset-2" },
+]} />
+
+## Ring (Focus Ring)
+
+<PropTable rows={[
+  { sz: "{ ring: true }", tw: "ring" },
+  { sz: "{ ring: 1 }", tw: "ring-1" },
+  { sz: "{ ring: 2 }", tw: "ring-2" },
+  { sz: "{ ring: 4 }", tw: "ring-4" },
+  { sz: "{ ringColor: 'blue-500' }", tw: "ring-blue-500" },
+  { sz: "{ ringOffset: 2 }", tw: "ring-offset-2" },
+  { sz: "{ ringOffsetColor: 'white' }", tw: "ring-offset-white" },
+  { sz: "{ ringInset: true }", tw: "ring-inset" },
+]} />
+
+<RingDemo />
+
+## Divide (Between Children)
+
+<PropTable rows={[
+  { sz: "{ divideX: true }", tw: "divide-x" },
+  { sz: "{ divideX: 2 }", tw: "divide-x-2" },
+  { sz: "{ divideY: true }", tw: "divide-y" },
+  { sz: "{ divideY: 2 }", tw: "divide-y-2" },
+  { sz: "{ divideColor: 'gray-200' }", tw: "divide-gray-200" },
+  { sz: "{ divideStyle: 'dashed' }", tw: "divide-dashed" },
+]} />
+
+<DivideY />
+
+## Examples
+
+```tsx
+// Card border
+<div sz={{
+  border: 1,
+  borderColor: 'gray-200',
+  rounded: 'lg',
+  p: 6,
+}} />
+
+// Focus ring on button
+<button sz={{
+  focusVisible: {
+    outline: 'none',
+    ring: 2,
+    ringColor: 'blue-500',
+    ringOffset: 2,
+  },
+}} />
+
+// Left accent border (callout style)
+<div sz={{
+  border: 1,
+  borderL: '3px',
+  borderColor: 'gray-200',
+  borderLColor: 'blue-500',
+  pl: 4,
+  rounded: 'sm',
+}} />
+
+// Divider between list items
+<ul sz={{ divideY: 1, divideColor: 'gray-100' }}>
+  <li sz={{ py: 3 }}>Item 1</li>
+  <li sz={{ py: 3 }}>Item 2</li>
+</ul>
+```

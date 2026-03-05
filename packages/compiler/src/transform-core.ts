@@ -181,6 +181,7 @@ export const PROPERTY_MAP: Record<string, string> = {
     color: 'text',
     text: 'text',
     fontWeight: 'font',
+    weight: 'font',
     fontFamily: 'font',
     fontStretch: 'font-stretch',
     textAlign: 'text',
@@ -277,9 +278,14 @@ export const PROPERTY_MAP: Record<string, string> = {
     scale: 'scale',
     scaleX: 'scale-x',
     scaleY: 'scale-y',
+    scaleZ: 'scale-z',
     rotate: 'rotate',
+    rotateX: 'rotate-x',
+    rotateY: 'rotate-y',
+    rotateZ: 'rotate-z',
     translateX: 'translate-x',
     translateY: 'translate-y',
+    translateZ: 'translate-z',
     skewX: 'skew-x',
     skewY: 'skew-y',
     origin: 'origin',
@@ -287,6 +293,7 @@ export const PROPERTY_MAP: Record<string, string> = {
     perspective: 'perspective',
     perspectiveOrigin: 'perspective-origin',
     transformStyle: 'transform',
+    transform: 'transform',
 
     // Transitions & Animation
     transition: 'transition',
@@ -307,6 +314,8 @@ export const PROPERTY_MAP: Record<string, string> = {
     cursor: 'cursor',
     caret: 'caret',
     pointerEvents: 'pointer-events',
+    fieldSizing: 'field-sizing',
+    scheme: 'scheme',
     resize: 'resize',
     scroll: 'scroll',
     scrollM: 'scroll-m',
@@ -595,7 +604,7 @@ const BOOLEAN_SHORTHANDS = new Set([
     'blur', 'grayscale', 'invert', 'sepia',
     'backdropBlur', 'backdropGrayscale', 'backdropInvert', 'backdropSepia',
     // Misc
-    'container', 'prose', 'srOnly', 'notSrOnly', 'isolate', 'ordinal', 'slashedZero',
+    'container', 'prose', 'proseInvert', 'srOnly', 'notSrOnly', 'isolate', 'ordinal', 'slashedZero',
     // Font variant numeric
     'liningNums', 'oldstyleNums', 'proportionalNums', 'tabularNums',
     'diagonalFractions', 'stackedFractions',
@@ -606,7 +615,7 @@ const BOOLEAN_SHORTHANDS = new Set([
     // Outline
     'outline',
     // Transforms
-    'scale3d', 'rotate3d', 'translate3d', 'transformGpu', 'transformCpu', 'transformNone',
+    'scale3d', 'rotate3d', 'translate3d', 'transformGpu', 'transformCpu',
 ]);
 
 // ============================================================================
@@ -648,7 +657,8 @@ const BOOLEAN_TO_CLASS: Record<string, string> = {
     translate3d: 'translate-3d',
     transformGpu: 'transform-gpu',
     transformCpu: 'transform-cpu',
-    transformNone: 'transform-none',
+    // Misc
+    proseInvert: 'prose-invert',
 };
 
 // ============================================================================
@@ -686,7 +696,11 @@ const NEGATIVE_ALLOWED = new Set([
     // TW v4.2: start/end now map to inset-s/inset-e
     'inset-s', 'inset-e', 'inset-bs', 'inset-be',
     'z', 'order', 'col', 'col-start', 'col-end', 'row', 'row-start', 'row-end',
-    'rotate', 'skew-x', 'skew-y', 'translate-x', 'translate-y',
+    'rotate', 'rotate-x', 'rotate-y', 'rotate-z',
+    'scale-z',
+    'skew-x', 'skew-y',
+    'translate-x', 'translate-y', 'translate-z',
+    'mask',
     'space-x', 'space-y', 'tracking', 'indent',
     'scroll-m', 'scroll-mx', 'scroll-my', 'scroll-mt', 'scroll-mr', 'scroll-mb', 'scroll-ml',
     'hue-rotate', 'backdrop-hue-rotate',
@@ -774,7 +788,7 @@ export function normalizeArbitraryVariant(key: string): string {
  * @returns normalized value with spaces replaced by underscores
  */
 export function normalizeArbitraryValue(value: string): string {
-    return value.trim().replace(/\s*([+*/(),:])\s*/g, '$1').replace(/\s+/g, '_');
+    return value.trim().replace(/\s+/g, '_');
 }
 
 // Properties that support native fraction values (e.g. w-1/2) without brackets
@@ -789,6 +803,8 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'top', 'right', 'bottom', 'left', 'start', 'end',
     // Translate
     'translate-x', 'translateX', 'translate-y', 'translateY',
+    // Aspect
+    'aspect',
 ]);
 
 /**
@@ -798,8 +814,10 @@ const FRACTION_SUPPORTED_PROPS = new Set([
  */
 function needsArbitraryBrackets(value: string): boolean {
     return (
-        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(value) || // Units
+        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(value) || // Positive units
+        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(value) || // Negative units like -1px, -2rem
         /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(value) || // Values starting with . like .25em
+        /^-\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(value) || // Negative values starting with -. like -.25em
         value.startsWith('#') || // Hex colors
         value.startsWith('rgb') || // RGB colors
         value.startsWith('hsl') || // HSL colors
@@ -1501,12 +1519,13 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
 
         // Handle will-change (opt-in mapping)
         if (rawKey === 'willChange' && typeof value === 'string') {
-            if (value === 'scroll') {
-                classes.push(`${prefix}will-change-scroll-position`);
+            const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
+            if (WILL_CHANGE_KEYWORDS.has(value)) {
+                classes.push(`${prefix}will-change-${value}`);
             } else if (value.startsWith('--')) {
                 classes.push(`${prefix}will-change-(${value})`);
             } else {
-                classes.push(`${prefix}will-change-${value}`);
+                classes.push(`${prefix}will-change-[${normalizeArbitraryValue(value)}]`);
             }
             continue;
         }
@@ -1644,12 +1663,12 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 continue;
             }
 
-            // textOverflow: 'ellipsis' → truncate, 'clip' → text-clip
+            // textOverflow: 'ellipsis' → text-ellipsis, 'clip' → text-clip
             if (rawKey === 'textOverflow') {
-                if (value === 'ellipsis') {
-                    classes.push(`${prefix}truncate`);
-                } else {
+                if (value === 'ellipsis' || value === 'clip') {
                     classes.push(`${prefix}text-${value}`);
+                } else {
+                    classes.push(`${prefix}text-[${value}]`);
                 }
                 continue;
             }
@@ -1737,9 +1756,15 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     className += `font-${sValue}`;
                 } else if (sValue.startsWith('--')) {
                     className += `font-stretch-(${sValue})`;
-                } else if (/^\d+%$/.test(sValue)) {
-                    // Percentage values: font-stretch-50%, font-stretch-125%
-                    className += `font-stretch-${sValue}`;
+                } else if (/^\d+(\.\d+)?%$/.test(sValue)) {
+                    // Percentage values: font-stretch-50%, font-stretch-[110%]
+                    const valNum = parseFloat(sValue);
+                    // Standard tailwind v4 values don't need brackets
+                    if (sValue.includes('.') || !Number.isInteger(valNum)) {
+                        className += `font-stretch-[${sValue}]`;
+                    } else {
+                        className += `font-stretch-${sValue}`;
+                    }
                 } else {
                     className += `font-stretch-[${sValue}]`;
                 }
@@ -1895,6 +1920,19 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 continue;
             }
 
+            // bgRepeat: 'repeat' → bg-repeat
+            if (rawKey === 'bgRepeat' || rawKey === 'backgroundRepeat') {
+                if (value === 'repeat') {
+                    className += 'bg-repeat';
+                } else if (value === 'no-repeat') {
+                    className += 'bg-no-repeat';
+                } else {
+                    className += `bg-repeat-${value}`;
+                }
+                classes.push(className);
+                continue;
+            }
+
             // maskSize: 'cover' | 'contain' | 'auto' → mask-auto, mask-cover, mask-contain
             if (rawKey === 'maskSize') {
                 className += `mask-${value}`;
@@ -1931,8 +1969,12 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             }
 
             // content: "'hello'" → content-['hello'], '--c' → content-(--c)
-            if (rawKey === 'content') {
-                if (value.startsWith('--')) {
+            // But wait, content is also an alias for align-content ("content-normal", "content-between")
+            if (rawKey === 'content' || rawKey === 'alignContent') {
+                const ALIGN_CONTENT_KEYWORDS = new Set(['normal', 'center', 'start', 'end', 'between', 'around', 'evenly', 'baseline', 'stretch']);
+                if (ALIGN_CONTENT_KEYWORDS.has(value)) {
+                    className += `content-${value}`;
+                } else if (value.startsWith('--')) {
                     className += `content-(${value})`;
                 } else if (!['none', 'empty'].includes(value)) {
                     className += `content-[${value}]`;
@@ -2145,8 +2187,6 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 continue;
             }
 
-            const isAspectRatio = key === 'aspect' && /^\d+\/\d+$/.test(finalValue);
-
             // v4 Variable Syntax: '--color' → '(--color)'
             // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'
             if (finalValue.startsWith('--')) {
@@ -2166,13 +2206,24 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     finalValue = `[${finalValue}]`;
                 }
                 // else: allowed bare fraction (w-1/2, basis-1/3)
-            } else if (needsArbitraryBrackets(finalValue) || isAspectRatio || /^\d+\.\d+%$/.test(finalValue)) {
-                // Check if needs arbitrary brackets (aspect ratio, percentages with decimals, etc.)
+            } else if (key === 'aspect' && /^[0-9]+(?:\.[0-9]+)?\/[0-9]+(?:\.[0-9]+)?$/.test(finalValue)) {
+                if (finalValue === 'auto' || finalValue === 'square' || finalValue === 'video' || /^\d+\/\d+$/.test(finalValue)) {
+                    // standard
+                } else {
+                    finalValue = `[${finalValue}]`;
+                }
+            } else if (needsArbitraryBrackets(finalValue) || /^\d+\.\d+%$/.test(finalValue)) {
+                // Check if needs arbitrary brackets (aspect ratio, percentages with decimals, numbers passed to stroke-width, etc.)
                 finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
             }
 
-            // Build final class name
-            className += `${key}-${finalValue}`;
+            // check negative string values (-px, -1/2)
+            if (finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)) {
+                className = `-${prefix}${key}-${finalValue.substring(1)}`;
+            } else {
+                // Build final class name
+                className += `${key}-${finalValue}`;
+            }
 
             // Add important modifier
             if (important) {

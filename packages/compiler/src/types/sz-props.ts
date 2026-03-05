@@ -146,6 +146,8 @@ export interface LayoutProps {
   container?: boolean;
   /** Boolean sugar for prose */
   prose?: boolean;
+  /** Boolean sugar for prose-invert (requires @tailwindcss/typography plugin) */
+  proseInvert?: boolean;
 
   /** @see https://tailwindcss.com/docs/float */
   float?: 'right' | 'left' | 'start' | 'end' | 'none';
@@ -843,17 +845,27 @@ export interface TransformProps {
   scale?: 0 | 50 | 75 | 90 | 95 | 100 | 105 | 110 | 125 | 150 | 200 | number | (string & {});
   scaleX?: TransformProps['scale'];
   scaleY?: TransformProps['scale'];
+  /** @see https://tailwindcss.com/docs/scale (Z-axis, 3D) */
+  scaleZ?: TransformProps['scale'];
   /** Boolean sugar for 3D scale */
   scale3d?: boolean;
 
   /** @see https://tailwindcss.com/docs/rotate */
   rotate?: 0 | 1 | 2 | 3 | 6 | 12 | 45 | 90 | 180 | number | (string & {});
+  /** @see https://tailwindcss.com/docs/rotate (X-axis, 3D) */
+  rotateX?: TransformProps['rotate'];
+  /** @see https://tailwindcss.com/docs/rotate (Y-axis, 3D) */
+  rotateY?: TransformProps['rotate'];
+  /** @see https://tailwindcss.com/docs/rotate (Z-axis, 3D) */
+  rotateZ?: TransformProps['rotate'];
   /** Boolean sugar for 3D rotate */
   rotate3d?: boolean;
 
   /** @see https://tailwindcss.com/docs/translate */
   translateX?: SpacingValue | FractionValue;
   translateY?: SpacingValue | FractionValue;
+  /** @see https://tailwindcss.com/docs/translate (Z-axis, 3D) */
+  translateZ?: SpacingValue;
   /** Boolean sugar for 3D translate */
   translate3d?: boolean;
 
@@ -870,7 +882,8 @@ export interface TransformProps {
   /** Transform rendering hints */
   transformGpu?: boolean;
   transformCpu?: boolean;
-  transformNone?: boolean;
+  /** @see https://tailwindcss.com/docs/transform */
+  transform?: 'none';
 
   /** @see https://tailwindcss.com/docs/perspective */
   perspective?: 'none' | (string & {});
@@ -936,6 +949,12 @@ export interface InteractivityProps {
 
   /** @see https://tailwindcss.com/docs/pointer-events */
   pointerEvents?: 'none' | 'auto';
+
+  /** @see https://tailwindcss.com/docs/field-sizing */
+  fieldSizing?: 'fixed' | 'content';
+
+  /** @see https://tailwindcss.com/docs/color-scheme */
+  scheme?: 'normal' | 'dark' | 'light' | 'light-dark' | 'only-dark' | 'only-light';
 
   /** @see https://tailwindcss.com/docs/resize */
   resize?: 'none' | 'y' | 'x' | boolean;

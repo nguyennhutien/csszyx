@@ -1,0 +1,1235 @@
+# CSSzyx — Full API Reference
+
+> Object-syntax Tailwind CSS. Type-safe. Zero runtime. SSR-safe.
+> For the lite version: https://csszyx.com/llms.txt
+
+This file contains the complete sz prop mapping for all categories.
+Source of truth: docs/specs/snippets/ in the CSSzyx repository.
+Last updated: 2026-03-05 (Tailwind v4.2 compatible)
+
+---
+
+## OVERVIEW
+
+CSSzyx transforms JSX `sz` props into Tailwind v4 utility classes at build time.
+
+```tsx
+// Input (your code)
+<div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
+
+// Build-time output
+<div className="p-4 bg-blue-500 hover:bg-blue-700" />
+
+// Production output (with mangle: true)
+<div class="z y x" />   // CSS: .z{padding:1rem} .y{background-color:...} .x{...}
+```
+
+### Install
+
+```bash
+npm install csszyx
+```
+
+### Vite setup
+
+```js
+import csszyx from 'csszyx/vite';
+import tailwindcss from '@tailwindcss/vite';
+export default defineConfig({
+  plugins: [...csszyx(), tailwindcss()],  // csszyx MUST be first
+});
+```
+
+### Key rules
+
+- Numbers are bare for any integer or 0.5-step decimal: `{ p: 4 }` → `p-4`, `{ p: 1.5 }` → `p-1.5`
+- Arbitrary CSS values auto-wrap in `[]`: `{ p: '5px' }` → `p-[5px]`
+- CSS variables auto-wrap in `()`: `{ p: '--my-var' }` → `p-(--my-var)`
+- Variants are nested objects: `{ hover: { bg: 'blue' } }` → `hover:bg-blue`
+- Boolean sugar: `{ flex: true }` → `flex`, `{ hidden: true }` → `hidden`
+- Color opacity: `{ bg: { color: 'blue-500', op: 50 } }` → `bg-blue-500/50`
+
+---
+
+## CORE CONCEPTS
+
+### Basic Utilities
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Padding | `p-6` | `{ p: 6 }` |
+| Background Color | `bg-sky-500` | `{ bg: 'sky-500' }` |
+| Text Color | `text-white` | `{ color: 'white' }` |
+| Border Radius | `rounded-lg` | `{ rounded: 'lg' }` |
+| Box Shadow | `shadow-xl` | `{ shadow: 'xl' }` |
+| Flex Container | `flex` | `{ flex: true }` |
+
+### State Modifiers
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Hover | `hover:bg-sky-700` | `{ hover: { bg: 'sky-700' } }` |
+| Focus | `focus:outline-none` | `{ focus: { outline: 'none' } }` |
+| Active | `active:opacity-80` | `{ active: { opacity: 80 } }` |
+| Disabled+Hover | `disabled:hover:bg-sky-500` | `{ disabled: { hover: { bg: 'sky-500' } } }` |
+
+### Responsive Breakpoints
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Small | `sm:grid-cols-3` | `{ sm: { gridCols: 3 } }` |
+| Medium | `md:flex` | `{ md: { flex: true } }` |
+| Large | `lg:px-8` | `{ lg: { px: 8 } }` |
+| Breakpoint range | `md:max-xl:flex` | `{ md: { maxXl: { flex: true } } }` |
+| Custom | `min-[320px]:text-center` | `{ min: { '[320px]': { textAlign: 'center' } } }` |
+
+### Dark Mode
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Dark background | `dark:bg-gray-800` | `{ dark: { bg: 'gray-800' } }` |
+| Dark text | `dark:text-white` | `{ dark: { color: 'white' } }` |
+
+### Arbitrary Values
+
+| Concept | Tailwind v4 Class | sz Prop | Note |
+|---------|-------------------|---------|------|
+| Arbitrary color | `bg-[#316ff6]` | `{ bg: '#316ff6' }` | |
+| Arbitrary size | `w-[333px]` | `{ w: '333px' }` | |
+| CSS variable | `w-(--spacing-4)` | `{ w: '--spacing-4' }` | Auto-detects `--` prefix |
+
+### Complex Selectors
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Group Hover | `group-hover:text-blue` | `{ group: { hover: { color: 'blue' } } }` |
+| Peer Focus | `peer-focus:text-blue` | `{ peer: { focus: { color: 'blue' } } }` |
+| Data Attribute | `data-[active]:text-blue` | `{ data: { active: { color: 'blue' } } }` |
+| ARIA Attribute | `aria-expanded:text-blue` | `{ aria: { expanded: { color: 'blue' } } }` |
+| Arbitrary Variant | `[&>span]:text-blue` | `{ '[& > span]': { color: 'blue' } }` |
+| Important | `text-red-500!` | `{ color: 'red-500!' }` |
+| Named Group | `group-hover/name:text-white` | `{ group: { name: { hover: { color: 'white' } } } }` |
+
+### Pseudo-classes
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| First/Last child | `first:pt-0 last:pb-0` | `{ first: { pt: 0 }, last: { pb: 0 } }` |
+| Odd/Even | `odd:bg-white even:bg-gray` | `{ odd: { bg: 'white' }, even: { bg: 'gray' } }` |
+| Focus Within | `focus-within:ring` | `{ focusWithin: { ring: true } }` |
+| Focus Visible | `focus-visible:ring` | `{ focusVisible: { ring: true } }` |
+| Has | `has-[img]:bg-blue` | `{ has: { img: { bg: 'blue' } } }` |
+| Not | `not-hover:opacity-75` | `{ not: { hover: { opacity: 75 } } }` |
+| Target | `target:shadow` | `{ target: { shadow: true } }` |
+| Visited | `visited:text-purple` | `{ visited: { color: 'purple' } }` |
+
+### Pseudo-elements
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Before/After | `before:content-['']` | `{ before: { ... } }` |
+| Placeholder | `placeholder:text-gray` | `{ placeholder: { color: 'gray' } }` |
+| File | `file:border` | `{ file: { border: true } }` |
+| Selection | `selection:bg-pink` | `{ selection: { bg: 'pink' } }` |
+| First Line | `first-line:uppercase` | `{ firstLine: { uppercase: true } }` |
+| First Letter | `first-letter:text-7xl` | `{ firstLetter: { text: '7xl' } }` |
+
+### Media & Feature Queries
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Reduced Motion | `motion-reduce:hidden` | `{ motionReduce: { hidden: true } }` |
+| Print | `print:hidden` | `{ print: { hidden: true } }` |
+| Portrait | `portrait:hidden` | `{ portrait: { hidden: true } }` |
+| Supports | `supports-[display:grid]:grid` | `{ supports: { 'display:grid': { grid: true } } }` |
+| Starting Style | `starting:opacity-0` | `{ starting: { opacity: 0 } }` |
+
+### Container Queries
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Mark Container | `@container` | `{ '@container': true }` |
+| Named Container | `@container/sidebar` | `{ '@container': 'sidebar' }` |
+| Container Breakpoint | `@md:flex` | `{ '@md': { flex: true } }` |
+| Named Query | `@md/sidebar:block` | `{ '@md': { sidebar: { block: true } } }` |
+| Arbitrary Query | `@min-[475px]:flex` | `{ '@min': { '[475px]': { flex: true } } }` |
+
+### Colors with Opacity
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Standard | `bg-blue-500` | `{ bg: 'blue-500' }` |
+| Integer opacity | `bg-blue-500/50` | `{ bg: { color: 'blue-500', op: 50 } }` |
+| Decimal opacity | `bg-black/75.5` | `{ bg: { color: 'black', op: 75.5 } }` |
+| Arbitrary opacity | `bg-pink-500/[78%]` | `{ bg: { color: 'pink-500', op: '78%' } }` |
+| CSS var opacity | `bg-blue-500/(--alpha)` | `{ bg: { color: 'blue-500', op: '--alpha' } }` |
+
+### Attribute Selectors
+
+| Concept | Tailwind v4 Class | sz Prop |
+|---------|-------------------|---------|
+| Data | `data-[active]:bg-blue` | `{ data: { active: { bg: 'blue' } } }` |
+| ARIA | `aria-checked:bg-blue` | `{ aria: { checked: { bg: 'blue' } } }` |
+| RTL | `rtl:mr-2` | `{ rtl: { mr: 2 } }` |
+| Open | `open:bg-white` | `{ open: { bg: 'white' } }` |
+| Direct children | `*:p-4` | `{ '*': { p: 4 } }` |
+
+---
+
+## SPACING
+
+### Padding
+
+All accept: any integer, 0.5-step decimal, `'px'`, `'auto'`, arbitrary string, CSS variable.
+
+| sz Prop | Tailwind Class | CSS Property |
+|---------|----------------|--------------|
+| `{ p: N }` | `p-N` | padding (all sides) |
+| `{ px: N }` | `px-N` | padding-inline |
+| `{ py: N }` | `py-N` | padding-block |
+| `{ pt: N }` | `pt-N` | padding-top |
+| `{ pr: N }` | `pr-N` | padding-right |
+| `{ pb: N }` | `pb-N` | padding-bottom |
+| `{ pl: N }` | `pl-N` | padding-left |
+| `{ ps: N }` | `ps-N` | padding-inline-start (logical) |
+| `{ pe: N }` | `pe-N` | padding-inline-end (logical) |
+| `{ pbs: N }` | `pbs-N` | padding-block-start (v4.2) |
+| `{ pbe: N }` | `pbe-N` | padding-block-end (v4.2) |
+| `{ p: '5px' }` | `p-[5px]` | padding: 5px |
+| `{ p: '--p' }` | `p-(--p)` | padding: var(--p) |
+
+### Margin
+
+All accept: any integer (including negative), 0.5-step decimal, `'px'`, `'auto'`, arbitrary, CSS variable.
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ m: N }` | `m-N` | margin (all sides) |
+| `{ m: -N }` | `-m-N` | negative margin |
+| `{ mx: N }` | `mx-N` | margin-inline |
+| `{ my: N }` | `my-N` | margin-block |
+| `{ mt: N }` | `mt-N` | margin-top |
+| `{ mr: N }` | `mr-N` | margin-right |
+| `{ mb: N }` | `mb-N` | margin-bottom |
+| `{ ml: N }` | `ml-N` | margin-left |
+| `{ ms: N }` | `ms-N` | margin-inline-start |
+| `{ me: N }` | `me-N` | margin-inline-end |
+| `{ mbs: N }` | `mbs-N` | margin-block-start (v4.2) |
+| `{ mbe: N }` | `mbe-N` | margin-block-end (v4.2) |
+| `{ m: 'auto' }` | `m-auto` | |
+
+### Space Between
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ spaceX: N }` | `space-x-N` |
+| `{ spaceY: N }` | `space-y-N` |
+| `{ spaceXReverse: true }` | `space-x-reverse` |
+| `{ spaceYReverse: true }` | `space-y-reverse` |
+| `{ spaceX: -N }` | `-space-x-N` |
+
+---
+
+## SIZING
+
+### Width
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ w: N }` | `w-N` | any integer or 0.5-step decimal |
+| `{ w: 'full' }` | `w-full` | 100% |
+| `{ w: 'screen' }` | `w-screen` | 100vw |
+| `{ w: 'svw' }` | `w-svw` | 100svw |
+| `{ w: 'min' }` | `w-min` | min-content |
+| `{ w: 'max' }` | `w-max` | max-content |
+| `{ w: 'fit' }` | `w-fit` | fit-content |
+| `{ w: 'auto' }` | `w-auto` | |
+| `{ w: '1/2' }` | `w-1/2` | fraction |
+| `{ minW: N }` | `min-w-N` | min-width |
+| `{ maxW: N }` | `max-w-N` | max-width |
+| `{ maxW: '2xl' }` | `max-w-2xl` | 42rem |
+| `{ maxW: 'prose' }` | `max-w-prose` | 65ch |
+
+### Height
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ h: N }` | `h-N` |
+| `{ h: 'full' }` | `h-full` |
+| `{ h: 'screen' }` | `h-screen` |
+| `{ h: 'svh' }` | `h-svh` |
+| `{ h: 'dvh' }` | `h-dvh` |
+| `{ minH: N }` | `min-h-N` |
+| `{ maxH: N }` | `max-h-N` |
+
+### Combined Size
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ size: N }` | `size-N` | sets both width and height |
+| `{ size: 'full' }` | `size-full` | |
+| `{ blockSize: N }` | `block-N` | logical height (v4.2) |
+| `{ inlineSize: N }` | `inline-N` | logical width (v4.2) |
+| `{ minBlockSize: N }` | `min-block-N` | v4.2 |
+| `{ maxBlockSize: N }` | `max-block-N` | v4.2 |
+| `{ minInlineSize: N }` | `min-inline-N` | v4.2 |
+| `{ maxInlineSize: N }` | `max-inline-N` | v4.2 |
+| `{ container: true }` | `container` | responsive max-width |
+
+---
+
+## LAYOUT
+
+### Display
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ block: true }` | `block` |
+| `{ inline: true }` | `inline` |
+| `{ inlineBlock: true }` | `inline-block` |
+| `{ flex: true }` | `flex` |
+| `{ inlineFlex: true }` | `inline-flex` |
+| `{ grid: true }` | `grid` |
+| `{ inlineGrid: true }` | `inline-grid` |
+| `{ contents: true }` | `contents` |
+| `{ table: true }` | `table` |
+| `{ hidden: true }` | `hidden` |
+| `{ srOnly: true }` | `sr-only` |
+| `{ notSrOnly: true }` | `not-sr-only` |
+| `{ flowRoot: true }` | `flow-root` |
+| `{ listItem: true }` | `list-item` |
+| `{ display: 'block' }` | `block` | canonical form |
+
+### Position
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ static: true }` | `static` |
+| `{ fixed: true }` | `fixed` |
+| `{ absolute: true }` | `absolute` |
+| `{ relative: true }` | `relative` |
+| `{ sticky: true }` | `sticky` |
+
+### Placement (top/right/bottom/left)
+
+All accept: integer, negative integer, fraction string, `'px'`, `'full'`, `'auto'`, arbitrary, CSS var.
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ inset: N }` | `inset-N` | all sides |
+| `{ insetX: N }` | `inset-x-N` | inline |
+| `{ insetY: N }` | `inset-y-N` | block |
+| `{ top: N }` | `top-N` | |
+| `{ right: N }` | `right-N` | |
+| `{ bottom: N }` | `bottom-N` | |
+| `{ left: N }` | `left-N` | |
+| `{ start: N }` | `inset-s-N` | logical inline-start (v4.2) |
+| `{ end: N }` | `inset-e-N` | logical inline-end (v4.2) |
+| `{ insetS: N }` | `inset-s-N` | alias for start (v4.2) |
+| `{ insetE: N }` | `inset-e-N` | alias for end (v4.2) |
+| `{ insetBs: N }` | `inset-bs-N` | block-start (v4.2) |
+| `{ insetBe: N }` | `inset-be-N` | block-end (v4.2) |
+
+### Overflow
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ overflow: 'hidden' }` | `overflow-hidden` |
+| `{ overflow: 'auto' }` | `overflow-auto` |
+| `{ overflow: 'scroll' }` | `overflow-scroll` |
+| `{ overflow: 'clip' }` | `overflow-clip` |
+| `{ overflowX: 'hidden' }` | `overflow-x-hidden` |
+| `{ overflowY: 'auto' }` | `overflow-y-auto` |
+| `{ overscroll: 'contain' }` | `overscroll-contain` |
+
+### Z-Index
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ z: N }` | `z-N` |
+| `{ z: -N }` | `-z-N` |
+| `{ z: 'auto' }` | `z-auto` |
+
+### Visibility
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ visible: true }` | `visible` |
+| `{ invisible: true }` | `invisible` |
+| `{ collapse: true }` | `collapse` |
+
+### Aspect Ratio
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ aspect: 'square' }` | `aspect-square` |
+| `{ aspect: 'video' }` | `aspect-video` |
+| `{ aspect: '4/3' }` | `aspect-4/3` |
+
+### Float / Clear
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ float: 'right' }` | `float-right` |
+| `{ float: 'left' }` | `float-left` |
+| `{ clear: 'both' }` | `clear-both` |
+
+### Object Fit / Position
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ objectFit: 'cover' }` | `object-cover` |
+| `{ objectFit: 'contain' }` | `object-contain` |
+| `{ objectPos: 'center' }` | `object-center` |
+
+---
+
+## FLEXBOX & GRID
+
+### Flex
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ flex: true }` | `flex` |
+| `{ flexDir: 'col' }` | `flex-col` |
+| `{ flexDir: 'row' }` | `flex-row` |
+| `{ flexDir: 'row-reverse' }` | `flex-row-reverse` |
+| `{ flexWrap: 'wrap' }` | `flex-wrap` |
+| `{ flexWrap: 'nowrap' }` | `flex-nowrap` |
+| `{ grow: true }` | `grow` |
+| `{ grow: 0 }` | `grow-0` |
+| `{ shrink: true }` | `shrink` |
+| `{ shrink: 0 }` | `shrink-0` |
+| `{ basis: 'auto' }` | `basis-auto` |
+| `{ basis: 'full' }` | `basis-full` |
+| `{ basis: N }` | `basis-N` |
+| `{ flex: 'auto' }` | `flex-auto` |
+| `{ flex: 'none' }` | `flex-none` |
+| `{ order: N }` | `order-N` |
+| `{ order: 'first' }` | `order-first` |
+| `{ order: 'last' }` | `order-last` |
+
+### Grid
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ grid: true }` | `grid` |
+| `{ gridCols: N }` | `grid-cols-N` |
+| `{ gridCols: 'none' }` | `grid-cols-none` |
+| `{ gridCols: 'subgrid' }` | `grid-cols-subgrid` |
+| `{ gridRows: N }` | `grid-rows-N` |
+| `{ colSpan: N }` | `col-span-N` |
+| `{ colSpan: 'full' }` | `col-span-full` |
+| `{ colStart: N }` | `col-start-N` |
+| `{ colEnd: N }` | `col-end-N` |
+| `{ rowSpan: N }` | `row-span-N` |
+| `{ rowStart: N }` | `row-start-N` |
+| `{ rowEnd: N }` | `row-end-N` |
+| `{ gridFlow: 'col' }` | `grid-flow-col` |
+| `{ gridFlow: 'row-dense' }` | `grid-flow-row-dense` |
+| `{ autoCols: 'auto' }` | `auto-cols-auto` |
+| `{ autoCols: 'fr' }` | `auto-cols-fr` |
+| `{ autoRows: 'auto' }` | `auto-rows-auto` |
+
+### Gap
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ gap: N }` | `gap-N` |
+| `{ gapX: N }` | `gap-x-N` |
+| `{ gapY: N }` | `gap-y-N` |
+
+### Alignment
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ justify: 'center' }` | `justify-center` |
+| `{ justify: 'between' }` | `justify-between` |
+| `{ justify: 'start' }` | `justify-start` |
+| `{ justify: 'end' }` | `justify-end` |
+| `{ justify: 'evenly' }` | `justify-evenly` |
+| `{ justifyItems: 'center' }` | `justify-items-center` |
+| `{ justifySelf: 'center' }` | `justify-self-center` |
+| `{ items: 'center' }` | `items-center` |
+| `{ items: 'start' }` | `items-start` |
+| `{ items: 'end' }` | `items-end` |
+| `{ items: 'baseline' }` | `items-baseline` |
+| `{ items: 'stretch' }` | `items-stretch` |
+| `{ self: 'center' }` | `self-center` |
+| `{ self: 'auto' }` | `self-auto` |
+| `{ content: 'center' }` | `content-center` |
+| `{ content: 'between' }` | `content-between` |
+| `{ placeContent: 'center' }` | `place-content-center` |
+| `{ placeItems: 'center' }` | `place-items-center` |
+| `{ placeSelf: 'center' }` | `place-self-center` |
+
+---
+
+## TYPOGRAPHY
+
+### Font Family
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ fontFamily: 'sans' }` | `font-sans` |
+| `{ fontFamily: 'serif' }` | `font-serif` |
+| `{ fontFamily: 'mono' }` | `font-mono` |
+| `{ fontFamily: "'My Font'" }` | `font-['My_Font']` |
+| `{ fontFamily: '--f' }` | `font-(family-name:--f)` |
+
+### Font Size
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ text: 'xs' }` | `text-xs` | Sets size + line-height |
+| `{ text: 'sm' }` | `text-sm` | |
+| `{ text: 'base' }` | `text-base` | |
+| `{ text: 'lg' }` | `text-lg` | |
+| `{ text: 'xl' }` | `text-xl` | |
+| `{ text: '2xl' }` | `text-2xl` | |
+| `{ text: '3xl' }` | `text-3xl` | |
+| `{ text: '4xl' }` | `text-4xl` | |
+| `{ text: '5xl' }` | `text-5xl` | |
+| `{ text: '6xl' }` | `text-6xl` | |
+| `{ text: '7xl' }` | `text-7xl` | |
+| `{ text: '8xl' }` | `text-8xl` | |
+| `{ text: '9xl' }` | `text-9xl` | |
+| `{ text: '16px' }` | `text-[16px]` | |
+
+### Font Weight
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ fontWeight: 'thin' }` | `font-thin` |
+| `{ fontWeight: 'light' }` | `font-light` |
+| `{ fontWeight: 'normal' }` | `font-normal` |
+| `{ fontWeight: 'medium' }` | `font-medium` |
+| `{ fontWeight: 'semibold' }` | `font-semibold` |
+| `{ fontWeight: 'bold' }` | `font-bold` |
+| `{ fontWeight: 'extrabold' }` | `font-extrabold` |
+| `{ fontWeight: 'black' }` | `font-black` |
+| `{ fontWeight: 700 }` | `font-700` |
+| `{ weight: 'bold' }` | `font-bold` | sugar alias |
+
+### Letter Spacing
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ tracking: 'tighter' }` | `tracking-tighter` |
+| `{ tracking: 'tight' }` | `tracking-tight` |
+| `{ tracking: 'normal' }` | `tracking-normal` |
+| `{ tracking: 'wide' }` | `tracking-wide` |
+| `{ tracking: 'wider' }` | `tracking-wider` |
+| `{ tracking: 'widest' }` | `tracking-widest` |
+
+### Line Height
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ leading: 'none' }` | `leading-none` |
+| `{ leading: 'tight' }` | `leading-tight` |
+| `{ leading: 'normal' }` | `leading-normal` |
+| `{ leading: 'relaxed' }` | `leading-relaxed` |
+| `{ leading: 'loose' }` | `leading-loose` |
+| `{ leading: N }` | `leading-N` |
+
+**Text+Leading shorthand:** `{ text: 'lg', leading: 7 }` → `text-lg/7`
+
+### Text Alignment
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ textAlign: 'left' }` | `text-left` |
+| `{ textAlign: 'center' }` | `text-center` |
+| `{ textAlign: 'right' }` | `text-right` |
+| `{ textAlign: 'justify' }` | `text-justify` |
+
+### Text Color
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ color: 'white' }` | `text-white` |
+| `{ color: 'slate-500' }` | `text-slate-500` |
+| `{ color: '#50d71e' }` | `text-[#50d71e]` |
+| `{ color: '--c' }` | `text-(--c)` |
+| `{ color: { color: 'blue-500', op: 50 } }` | `text-blue-500/50` |
+
+### Text Transform
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ uppercase: true }` | `uppercase` |
+| `{ textTransform: 'uppercase' }` | `uppercase` |
+| `{ textTransform: 'lowercase' }` | `lowercase` |
+| `{ textTransform: 'capitalize' }` | `capitalize` |
+
+### Text Decoration
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ underline: true }` | `underline` |
+| `{ lineThrough: true }` | `line-through` |
+| `{ noUnderline: true }` | `no-underline` |
+| `{ decoration: 'underline' }` | `underline` |
+| `{ decorationStyle: 'dashed' }` | `decoration-dashed` |
+| `{ decorationColor: 'blue-500' }` | `decoration-blue-500` |
+| `{ decorationThickness: 2 }` | `decoration-2` |
+| `{ underlineOffset: 2 }` | `underline-offset-2` |
+
+### Text Overflow & Wrapping
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ truncate: true }` | `truncate` |
+| `{ textOverflow: 'ellipsis' }` | `text-ellipsis` |
+| `{ textWrap: 'nowrap' }` | `text-nowrap` |
+| `{ textWrap: 'balance' }` | `text-balance` |
+| `{ lineClamp: 3 }` | `line-clamp-3` |
+| `{ whitespace: 'nowrap' }` | `whitespace-nowrap` |
+
+### Font Style
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ italic: true }` | `italic` |
+| `{ antialiased: true }` | `antialiased` |
+| `{ fontStretch: '75%' }` | `font-stretch-75%` |
+
+### Font Features (v4.2)
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ fontFeatures: 'normal' }` | `font-features-normal` |
+| `{ fontFeatures: '"liga" 1' }` | `font-features-["liga"_1]` |
+
+### List Styles
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ list: 'disc' }` | `list-disc` |
+| `{ list: 'decimal' }` | `list-decimal` |
+| `{ list: 'none' }` | `list-none` |
+| `{ listPos: 'inside' }` | `list-inside` |
+
+---
+
+## BACKGROUNDS
+
+### Background Color
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ bg: 'blue-500' }` | `bg-blue-500` | |
+| `{ bg: 'transparent' }` | `bg-transparent` | |
+| `{ bg: '#333' }` | `bg-[#333]` | |
+| `{ bg: '--my-color' }` | `bg-(--my-color)` | |
+| `{ bg: { color: 'blue-500', op: 20 } }` | `bg-blue-500/20` | |
+
+### Background Image
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ bgImg: 'url(...)' }` | `bg-[url(...)]` |
+| `{ bgImg: 'none' }` | `bg-none` |
+| `{ bgImg: { gradient: 'linear' } }` | `bg-linear-to-r` |
+| `{ bgImg: { gradient: 'linear', dir: 'to-r' } }` | `bg-linear-to-r` |
+| `{ bgImg: { gradient: 'linear', dir: 45 } }` | `bg-linear-45` |
+| `{ bgImg: { gradient: 'radial' } }` | `bg-radial` |
+| `{ bgImg: { gradient: 'conic', dir: 90 } }` | `bg-conic-90` |
+| `{ bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } }` | `bg-linear-to-r/hsl` |
+
+### Gradient Color Stops
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ from: 'blue-500' }` | `from-blue-500` |
+| `{ via: 'purple-500' }` | `via-purple-500` |
+| `{ to: 'pink-500' }` | `to-pink-500` |
+| `{ fromPos: 10 }` | `from-10%` |
+| `{ viaPos: 50 }` | `via-50%` |
+| `{ toPos: 90 }` | `to-90%` |
+
+### Background Position / Size / Attachment
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ bgPos: 'center' }` | `bg-center` |
+| `{ bgPos: 'top-right' }` | `bg-top-right` |
+| `{ bgSize: 'cover' }` | `bg-cover` |
+| `{ bgSize: 'contain' }` | `bg-contain` |
+| `{ bgAttach: 'fixed' }` | `bg-fixed` |
+| `{ bgClip: 'text' }` | `bg-clip-text` |
+| `{ bgRepeat: 'no-repeat' }` | `bg-no-repeat` |
+| `{ bgOrigin: 'border' }` | `bg-origin-border` |
+
+---
+
+## BORDERS
+
+### Border Width
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ border: true }` | `border` | 1px |
+| `{ border: 2 }` | `border-2` | |
+| `{ border: 4 }` | `border-4` | |
+| `{ borderX: 2 }` | `border-x-2` | |
+| `{ borderY: 2 }` | `border-y-2` | |
+| `{ borderT: 2 }` | `border-t-2` | |
+| `{ borderR: 2 }` | `border-r-2` | |
+| `{ borderB: 2 }` | `border-b-2` | |
+| `{ borderL: 2 }` | `border-l-2` | |
+| `{ borderS: 2 }` | `border-s-2` | inline-start |
+| `{ borderE: 2 }` | `border-e-2` | inline-end |
+| `{ borderBs: 2 }` | `border-bs-2` | block-start (v4.2) |
+| `{ borderBe: 2 }` | `border-be-2` | block-end (v4.2) |
+
+### Border Color
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ borderColor: 'red-500' }` | `border-red-500` |
+| `{ borderColor: { color: 'red-500', op: 50 } }` | `border-red-500/50` |
+| `{ borderTColor: 'red-500' }` | `border-t-red-500` |
+
+### Border Style
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ borderStyle: 'solid' }` | `border-solid` |
+| `{ borderStyle: 'dashed' }` | `border-dashed` |
+| `{ borderStyle: 'dotted' }` | `border-dotted` |
+| `{ borderStyle: 'none' }` | `border-none` |
+
+### Border Radius
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ rounded: 'sm' }` | `rounded-sm` |
+| `{ rounded: 'md' }` | `rounded-md` |
+| `{ rounded: 'lg' }` | `rounded-lg` |
+| `{ rounded: 'xl' }` | `rounded-xl` |
+| `{ rounded: '2xl' }` | `rounded-2xl` |
+| `{ rounded: 'full' }` | `rounded-full` |
+| `{ rounded: 'none' }` | `rounded-none` |
+| `{ roundedT: 'lg' }` | `rounded-t-lg` |
+| `{ roundedB: 'lg' }` | `rounded-b-lg` |
+| `{ roundedL: 'lg' }` | `rounded-l-lg` |
+| `{ roundedR: 'lg' }` | `rounded-r-lg` |
+| `{ roundedTl: 'lg' }` | `rounded-tl-lg` |
+| `{ roundedTr: 'lg' }` | `rounded-tr-lg` |
+
+### Divide
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ divideX: true }` | `divide-x` |
+| `{ divideX: 2 }` | `divide-x-2` |
+| `{ divideY: true }` | `divide-y` |
+| `{ divideY: 2 }` | `divide-y-2` |
+| `{ divideColor: 'gray-200' }` | `divide-gray-200` |
+| `{ divideStyle: 'dashed' }` | `divide-dashed` |
+
+### Outline
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ outline: 1 }` | `outline-1` |
+| `{ outline: 'none' }` | `outline-none` |
+| `{ outlineColor: 'blue-500' }` | `outline-blue-500` |
+| `{ outlineStyle: 'dashed' }` | `outline-dashed` |
+| `{ outlineOffset: 2 }` | `outline-offset-2` |
+
+### Ring
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ ring: 1 }` | `ring-1` |
+| `{ ring: 'none' }` | `ring-none` |
+| `{ insetRing: 1 }` | `inset-ring-1` |
+
+---
+
+## EFFECTS
+
+### Box Shadow
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ shadow: '2xs' }` | `shadow-2xs` |
+| `{ shadow: 'xs' }` | `shadow-xs` |
+| `{ shadow: 'sm' }` | `shadow-sm` |
+| `{ shadow: 'md' }` | `shadow-md` |
+| `{ shadow: 'lg' }` | `shadow-lg` |
+| `{ shadow: 'xl' }` | `shadow-xl` |
+| `{ shadow: '2xl' }` | `shadow-2xl` |
+| `{ shadow: 'none' }` | `shadow-none` |
+| `{ shadowColor: 'blue-500' }` | `shadow-blue-500` |
+| `{ insetShadow: 'sm' }` | `inset-shadow-sm` |
+| `{ insetShadowColor: 'blue-500' }` | `inset-shadow-blue-500` |
+
+### Text Shadow
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ textShadow: 'sm' }` | `text-shadow-sm` |
+| `{ textShadow: 'none' }` | `text-shadow-none` |
+| `{ textShadowColor: 'blue-500' }` | `text-shadow-blue-500` |
+
+### Opacity
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ opacity: 50 }` | `opacity-50` | any integer 0-100+ |
+| `{ opacity: '.33' }` | `opacity-[.33]` | arbitrary |
+
+### Mix Blend Mode
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ mixBlend: 'multiply' }` | `mix-blend-multiply` |
+| `{ mixBlend: 'screen' }` | `mix-blend-screen` |
+| `{ mixBlend: 'overlay' }` | `mix-blend-overlay` |
+| `{ bgBlend: 'multiply' }` | `bg-blend-multiply` |
+
+### Masking (v4.1+)
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ mask: 'none' }` | `mask-none` |
+| `{ mask: 'linear-to-r' }` | `mask-linear-to-r` |
+| `{ mask: 'radial' }` | `mask-radial` |
+| `{ maskSize: 'cover' }` | `mask-cover` |
+| `{ maskPos: 'center' }` | `mask-center` |
+| `{ maskRepeat: 'no-repeat' }` | `mask-no-repeat` |
+| `{ maskShape: 'circle' }` | `mask-circle` |
+| `{ maskMode: 'alpha' }` | `mask-alpha` |
+| `{ maskType: 'luminance' }` | `mask-type-luminance` |
+| `{ maskComposite: 'add' }` | `mask-add` |
+
+---
+
+## FILTERS
+
+### Filter (applied to element)
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ blur: 'sm' }` | `blur-sm` |
+| `{ blur: 'md' }` | `blur-md` |
+| `{ blur: 'lg' }` | `blur-lg` |
+| `{ blur: 'xl' }` | `blur-xl` |
+| `{ blur: '2xl' }` | `blur-2xl` |
+| `{ blur: '3xl' }` | `blur-3xl` |
+| `{ blur: 'none' }` | `blur-none` |
+| `{ brightness: 50 }` | `brightness-50` |
+| `{ brightness: 150 }` | `brightness-150` |
+| `{ contrast: 75 }` | `contrast-75` |
+| `{ dropShadow: 'lg' }` | `drop-shadow-lg` |
+| `{ dropShadowColor: 'red-500' }` | `drop-shadow-red-500` |
+| `{ grayscale: true }` | `grayscale` |
+| `{ grayscale: 50 }` | `grayscale-50` |
+| `{ hueRotate: 90 }` | `hue-rotate-90` |
+| `{ hueRotate: -15 }` | `-hue-rotate-15` |
+| `{ invert: true }` | `invert` |
+| `{ saturate: 150 }` | `saturate-150` |
+| `{ sepia: true }` | `sepia` |
+
+### Backdrop Filter
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ backdropBlur: 'md' }` | `backdrop-blur-md` |
+| `{ backdropBrightness: 110 }` | `backdrop-brightness-110` |
+| `{ backdropContrast: 125 }` | `backdrop-contrast-125` |
+| `{ backdropGrayscale: true }` | `backdrop-grayscale` |
+| `{ backdropHueRotate: 180 }` | `backdrop-hue-rotate-180` |
+| `{ backdropInvert: true }` | `backdrop-invert` |
+| `{ backdropOpacity: 50 }` | `backdrop-opacity-50` |
+| `{ backdropSaturate: 150 }` | `backdrop-saturate-150` |
+| `{ backdropSepia: true }` | `backdrop-sepia` |
+
+---
+
+## TRANSFORMS
+
+### Rotate
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ rotate: 45 }` | `rotate-45` |
+| `{ rotate: 90 }` | `rotate-90` |
+| `{ rotate: 180 }` | `rotate-180` |
+| `{ rotate: -45 }` | `-rotate-45` |
+| `{ rotateX: 45 }` | `rotate-x-45` |
+| `{ rotateY: 90 }` | `rotate-y-90` |
+
+### Scale
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ scale: 100 }` | `scale-100` |
+| `{ scale: 105 }` | `scale-105` |
+| `{ scale: 110 }` | `scale-110` |
+| `{ scale: 125 }` | `scale-125` |
+| `{ scale: 150 }` | `scale-150` |
+| `{ scaleX: 50 }` | `scale-x-50` |
+| `{ scaleY: 50 }` | `scale-y-50` |
+
+### Translate
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ translateX: 4 }` | `translate-x-4` |
+| `{ translateX: 'full' }` | `translate-x-full` |
+| `{ translateY: 4 }` | `translate-y-4` |
+
+### Skew
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ skewX: 6 }` | `skew-x-6` |
+| `{ skewY: 3 }` | `skew-y-3` |
+
+### Transform Origin
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ origin: 'center' }` | `origin-center` |
+| `{ origin: 'top' }` | `origin-top` |
+| `{ origin: 'bottom-right' }` | `origin-bottom-right` |
+
+### 3D / Perspective
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ transformStyle: '3d' }` | `transform-3d` |
+| `{ backface: 'hidden' }` | `backface-hidden` |
+| `{ perspective: 'md' }` | `perspective-md` |
+
+---
+
+## TRANSITIONS & ANIMATION
+
+### Transition
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ transition: true }` | `transition` |
+| `{ transition: 'all' }` | `transition-all` |
+| `{ transition: 'colors' }` | `transition-colors` |
+| `{ transition: 'opacity' }` | `transition-opacity` |
+| `{ transition: 'transform' }` | `transition-transform` |
+| `{ transition: 'none' }` | `transition-none` |
+
+### Duration
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ duration: 75 }` | `duration-75` |
+| `{ duration: 150 }` | `duration-150` |
+| `{ duration: 300 }` | `duration-300` |
+| `{ duration: 500 }` | `duration-500` |
+| `{ duration: 1000 }` | `duration-1000` |
+
+### Easing
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ ease: 'linear' }` | `ease-linear` |
+| `{ ease: 'in' }` | `ease-in` |
+| `{ ease: 'out' }` | `ease-out` |
+| `{ ease: 'in-out' }` | `ease-in-out` |
+
+### Delay
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ delay: 75 }` | `delay-75` |
+| `{ delay: 150 }` | `delay-150` |
+| `{ delay: 300 }` | `delay-300` |
+
+### Animation
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ animate: 'spin' }` | `animate-spin` |
+| `{ animate: 'ping' }` | `animate-ping` |
+| `{ animate: 'pulse' }` | `animate-pulse` |
+| `{ animate: 'bounce' }` | `animate-bounce` |
+| `{ animate: 'none' }` | `animate-none` |
+
+---
+
+## INTERACTIVITY
+
+### Cursor
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ cursor: 'pointer' }` | `cursor-pointer` |
+| `{ cursor: 'default' }` | `cursor-default` |
+| `{ cursor: 'wait' }` | `cursor-wait` |
+| `{ cursor: 'not-allowed' }` | `cursor-not-allowed` |
+| `{ cursor: 'grab' }` | `cursor-grab` |
+| `{ cursor: 'text' }` | `cursor-text` |
+| `{ cursor: 'none' }` | `cursor-none` |
+
+### User Select
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ select: 'none' }` | `select-none` |
+| `{ select: 'text' }` | `select-text` |
+| `{ select: 'all' }` | `select-all` |
+| `{ select: 'auto' }` | `select-auto` |
+
+### Pointer Events
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ pointerEvents: 'none' }` | `pointer-events-none` |
+| `{ pointerEvents: 'auto' }` | `pointer-events-auto` |
+
+### Resize
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ resize: true }` | `resize` |
+| `{ resize: 'x' }` | `resize-x` |
+| `{ resize: 'y' }` | `resize-y` |
+| `{ resize: 'none' }` | `resize-none` |
+
+### Scroll
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ scroll: 'smooth' }` | `scroll-smooth` |
+| `{ scroll: 'auto' }` | `scroll-auto` |
+| `{ scrollM: N }` | `scroll-m-N` |
+| `{ scrollMt: N }` | `scroll-mt-N` |
+| `{ scrollP: N }` | `scroll-p-N` |
+| `{ scrollPt: N }` | `scroll-pt-N` |
+| `{ scrollMbs: N }` | `scroll-mbs-N` | v4.2 logical |
+| `{ scrollPbs: N }` | `scroll-pbs-N` | v4.2 logical |
+| `{ snapType: 'x' }` | `snap-x` |
+| `{ snapAlign: 'start' }` | `snap-start` |
+
+### Will Change / Touch
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ willChange: 'transform' }` | `will-change-transform` |
+| `{ willChange: 'scroll' }` | `will-change-scroll` |
+| `{ touch: 'none' }` | `touch-none` |
+| `{ touch: 'pan-x' }` | `touch-pan-x` |
+
+### Form Controls
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ appearance: 'none' }` | `appearance-none` |
+| `{ accent: 'blue-500' }` | `accent-blue-500` |
+| `{ caret: 'blue-500' }` | `caret-blue-500` |
+| `{ fieldSizing: 'content' }` | `field-sizing-content` |
+| `{ scheme: 'dark' }` | `scheme-dark` |
+
+---
+
+## TABLES
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ borderCollapse: 'collapse' }` | `border-collapse` |
+| `{ borderCollapse: 'separate' }` | `border-separate` |
+| `{ borderSpacing: N }` | `border-spacing-N` |
+| `{ tableLayout: 'fixed' }` | `table-fixed` |
+| `{ tableLayout: 'auto' }` | `table-auto` |
+| `{ caption: 'top' }` | `caption-top` |
+| `{ caption: 'bottom' }` | `caption-bottom` |
+
+---
+
+## SVG
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ fill: 'red-500' }` | `fill-red-500` |
+| `{ fill: 'none' }` | `fill-none` |
+| `{ fill: 'current' }` | `fill-current` |
+| `{ stroke: 'red-500' }` | `stroke-red-500` |
+| `{ stroke: 'none' }` | `stroke-none` |
+| `{ strokeWidth: 2 }` | `stroke-2` |
+
+## ACCESSIBILITY
+
+| sz Prop | Tailwind Class |
+|---------|----------------|
+| `{ forcedColorAdjust: 'auto' }` | `forced-color-adjust-auto` |
+| `{ forcedColorAdjust: 'none' }` | `forced-color-adjust-none` |
+
+---
+
+## RUNTIME API
+
+```ts
+import { _sz, _szIf, _szSwitch, _szMerge, __szColorVar } from '@csszyx/runtime';
+```
+
+### `_sz(...classes: string[]): string`
+
+Concatenates class strings, filtering falsy values.
+
+```tsx
+<div className={_sz('base', isActive && 'active')} />
+```
+
+### `_szIf(condition, trueClass, falseClass?): string`
+
+Returns one of two class strings based on condition.
+
+```tsx
+<div className={_szIf(isError, 'border-red-500', 'border-gray-200')} />
+```
+
+### `_szSwitch(value, map): string`
+
+Returns class string based on enum value.
+
+```tsx
+<div className={_szSwitch(status, {
+  loading: 'opacity-50',
+  error: 'border-red-500',
+  success: 'border-green-500',
+})} />
+```
+
+### `_szMerge(...classes: string[]): string`
+
+Merges class strings (last value wins for conflicts, uses tailwind-merge semantics).
+
+```tsx
+<div className={_szMerge(baseClasses, overrideClasses)} />
+```
+
+### `__szColorVar(varName: string): string`
+
+Wraps a CSS variable as an RGB color value.
+
+```tsx
+const color = __szColorVar('--ds-primary'); // → 'rgb(var(--ds-primary))'
+```
+
+---
+
+## SSR HYDRATION
+
+CSSzyx uses SHA-256 checksums to validate that the server-rendered mangle map matches the client's. If they differ, the runtime aborts hydration to prevent invisible CSS.
+
+### Server setup (Next.js)
+
+```tsx
+// app/layout.tsx
+import { initRuntime } from '@csszyx/runtime';
+import { headers } from 'next/headers';
+
+export default async function RootLayout({ children }) {
+  const hdrs = await headers();
+  initRuntime({ checksum: hdrs.get('x-csszyx-checksum') ?? '' });
+  return <html>{children}</html>;
+}
+```
+
+### Recovery tokens
+
+On checksum mismatch, a recovery token is injected into the HTML. The browser can detect this and reload with the correct styles.
+
+---
+
+## PLUGIN CONFIG
+
+```ts
+// vite.config.ts
+import csszyx from 'csszyx/vite';
+
+csszyx({
+  // Production mangling
+  production: {
+    mangle: true,       // Mangle class names (p-4 → z)
+    minify: true,       // Minify generated CSS (default: true with mangle)
+  },
+  // Prefix for all generated classes (matches Tailwind prefix config)
+  prefix: 'tw-',
+})
+```
+
+### Plugin order requirement
+
+```js
+plugins: [
+  ...csszyx(),     // MUST come before tailwindcss
+  tailwindcss(),
+]
+```
+
+---
+
+## TAILWIND v4.2 NEW PROPS
+
+Added in Tailwind CSS v4.2, available in CSSzyx:
+
+- `pbs`, `pbe` — padding-block-start/end
+- `mbs`, `mbe` — margin-block-start/end (supports negative)
+- `blockSize`, `minBlockSize`, `maxBlockSize` — logical height
+- `inlineSize`, `minInlineSize`, `maxInlineSize` — logical width
+- `start`, `end`, `insetS`, `insetE` — emits `inset-s-*`/`inset-e-*`
+- `insetBs`, `insetBe` — inset-block-start/end
+- `borderBs`, `borderBe` — border-block-start/end width
+- `scrollPbs`, `scrollPbe` — scroll-padding-block-start/end
+- `scrollMbs`, `scrollMbe` — scroll-margin-block-start/end
+- `fontFeatures` — font-feature-settings
+
+---
+
+## COMMON MISTAKES
+
+### Wrong: slash notation for opacity
+```tsx
+// ❌ Not supported
+{ bg: 'blue-500/50' }
+
+// ✅ Correct
+{ bg: { color: 'blue-500', op: 50 } }
+```
+
+### Wrong: brackets in sz values
+```tsx
+// ❌ Don't add brackets
+{ p: '[5px]' }
+
+// ✅ Correct — compiler auto-wraps
+{ p: '5px' }
+```
+
+### Wrong: plugin order
+```js
+// ❌ Wrong order
+plugins: [tailwindcss(), ...csszyx()]
+
+// ✅ Correct
+plugins: [...csszyx(), tailwindcss()]
+```
+
+### Wrong: @source inline() in CSS
+```css
+/* ❌ Disables auto-scanning of sz output */
+@source inline("p-4 bg-blue-500");
+
+/* ✅ Just import tailwindcss — auto-scanning picks up csszyx output */
+@import "tailwindcss";
+```
+
+---
+
+For the lite reference: https://csszyx.com/llms.txt
+For documentation: https://csszyx.com/guide/introduction

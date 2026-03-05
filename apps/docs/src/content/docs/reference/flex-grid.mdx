@@ -1,0 +1,155 @@
+---
+title: Flexbox & Grid
+description: Flex container, flex item, grid container, and grid item props.
+---
+
+import { PropTable } from '../../../components/PropTable.tsx';
+import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from '../../../components/demos/flex-grid.tsx';
+
+## Flexbox Container
+
+<PropTable rows={[
+  { sz: "{ flex: true }", tw: "flex" },
+  { sz: "{ inlineFlex: true }", tw: "inline-flex" },
+  { sz: "{ flexDir: 'row' }", tw: "flex-row" },
+  { sz: "{ flexDir: 'col' }", tw: "flex-col" },
+  { sz: "{ flexDir: 'row-reverse' }", tw: "flex-row-reverse" },
+  { sz: "{ flexDir: 'col-reverse' }", tw: "flex-col-reverse" },
+  { sz: "{ flexWrap: 'wrap' }", tw: "flex-wrap" },
+  { sz: "{ flexWrap: 'nowrap' }", tw: "flex-nowrap" },
+  { sz: "{ flexWrap: 'wrap-reverse' }", tw: "flex-wrap-reverse" },
+]} />
+
+<FlexDirection />
+
+## Alignment
+
+<PropTable rows={[
+  { sz: "{ items: 'start' }", tw: "items-start" },
+  { sz: "{ items: 'center' }", tw: "items-center" },
+  { sz: "{ items: 'end' }", tw: "items-end" },
+  { sz: "{ items: 'stretch' }", tw: "items-stretch" },
+  { sz: "{ items: 'baseline' }", tw: "items-baseline" },
+  { sz: "{ justify: 'start' }", tw: "justify-start" },
+  { sz: "{ justify: 'center' }", tw: "justify-center" },
+  { sz: "{ justify: 'end' }", tw: "justify-end" },
+  { sz: "{ justify: 'between' }", tw: "justify-between" },
+  { sz: "{ justify: 'around' }", tw: "justify-around" },
+  { sz: "{ justify: 'evenly' }", tw: "justify-evenly" },
+  { sz: "{ content: 'start' }", tw: "content-start" },
+  { sz: "{ content: 'center' }", tw: "content-center" },
+  { sz: "{ content: 'between' }", tw: "content-between" },
+]} />
+
+<JustifyVariants />
+
+## Gap
+
+<PropTable rows={[
+  { sz: "{ gap: 4 }", tw: "gap-4" },
+  { sz: "{ gapX: 4 }", tw: "gap-x-4" },
+  { sz: "{ gapY: 2 }", tw: "gap-y-2" },
+  { sz: "{ gap: 'px' }", tw: "gap-px" },
+  { sz: "{ gap: '1.5rem' }", tw: "gap-[1.5rem]" },
+]} />
+
+<GapScale />
+
+## Flex Item
+
+<PropTable rows={[
+  { sz: "{ grow: true }", tw: "grow" },
+  { sz: "{ grow: 0 }", tw: "grow-0" },
+  { sz: "{ shrink: true }", tw: "shrink" },
+  { sz: "{ shrink: 0 }", tw: "shrink-0" },
+  { sz: "{ flexBasis: '1/2' }", tw: "basis-1/2" },
+  { sz: "{ flexBasis: 0 }", tw: "basis-0" },
+  { sz: "{ flex: '1' }", tw: "flex-1" },
+  { sz: "{ flex: 'auto' }", tw: "flex-auto" },
+  { sz: "{ flex: 'none' }", tw: "flex-none" },
+  { sz: "{ self: 'center' }", tw: "self-center" },
+  { sz: "{ self: 'start' }", tw: "self-start" },
+  { sz: "{ order: 1 }", tw: "order-1" },
+  { sz: "{ order: 'last' }", tw: "order-last" },
+]} />
+
+## Grid Container
+
+<PropTable rows={[
+  { sz: "{ grid: true }", tw: "grid" },
+  { sz: "{ inlineGrid: true }", tw: "inline-grid" },
+  { sz: "{ gridCols: 3 }", tw: "grid-cols-3" },
+  { sz: "{ gridCols: 'none' }", tw: "grid-cols-none" },
+  { sz: "{ gridRows: 3 }", tw: "grid-rows-3" },
+  { sz: "{ gridFlow: 'row' }", tw: "grid-flow-row" },
+  { sz: "{ gridFlow: 'col' }", tw: "grid-flow-col" },
+  { sz: "{ gridFlow: 'dense' }", tw: "grid-flow-dense" },
+  { sz: "{ gridFlow: 'row-dense' }", tw: "grid-flow-row-dense" },
+  { sz: "{ gridFlow: 'col-dense' }", tw: "grid-flow-col-dense" },
+  { sz: "{ autoCols: 'auto' }", tw: "auto-cols-auto" },
+  { sz: "{ autoCols: 'min' }", tw: "auto-cols-min" },
+  { sz: "{ autoCols: 'fr' }", tw: "auto-cols-fr" },
+  { sz: "{ autoRows: 'auto' }", tw: "auto-rows-auto" },
+  { sz: "{ autoRows: 'fr' }", tw: "auto-rows-fr" },
+]} />
+
+<GridThreeCols />
+
+## Grid Item
+
+<PropTable rows={[
+  { sz: "{ colSpan: 2 }", tw: "col-span-2" },
+  { sz: "{ colSpan: 'full' }", tw: "col-span-full" },
+  { sz: "{ colStart: 1 }", tw: "col-start-1" },
+  { sz: "{ colEnd: 4 }", tw: "col-end-4" },
+  { sz: "{ rowSpan: 2 }", tw: "row-span-2" },
+  { sz: "{ rowStart: 1 }", tw: "row-start-1" },
+  { sz: "{ rowEnd: 3 }", tw: "row-end-3" },
+  { sz: "{ justifySelf: 'center' }", tw: "justify-self-center" },
+  { sz: "{ placeSelf: 'center' }", tw: "place-self-center" },
+  { sz: "{ placeItems: 'center' }", tw: "place-items-center" },
+]} />
+
+<ColSpan />
+
+## Examples
+
+```tsx
+// Centered hero section
+<div sz={{
+  flex: true,
+  items: 'center',
+  justify: 'center',
+  minH: 'screen',
+}} />
+
+// Responsive grid
+<div sz={{
+  grid: true,
+  gridCols: 1,
+  gap: 6,
+  sm: { gridCols: 2 },
+  lg: { gridCols: 3 },
+}} />
+
+// Navigation bar
+<nav sz={{
+  flex: true,
+  items: 'center',
+  justify: 'between',
+  px: 6,
+  py: 4,
+}}>
+  <div sz={{ flex: true, items: 'center', gap: 8 }}>
+    <Logo />
+    <Links />
+  </div>
+  <Actions />
+</nav>
+
+// Sidebar layout
+<div sz={{ flex: true, gap: 8, minH: 'screen' }}>
+  <aside sz={{ w: 64, shrink: 0 }} />
+  <main sz={{ grow: true }} />
+</div>
+```

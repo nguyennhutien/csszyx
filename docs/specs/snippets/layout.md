@@ -273,12 +273,24 @@ Positioning mapped elements.
 | **Inset Block End** | `inset-block-end: ...` | `inset-be-<number>` | `{ insetBe: <number> }` | v4.2: logical block-end inset. |
 
 | **Top** | `top: calc(var(--spacing) * <number>)` | `top-<number>` | `{ top: <number> }` | |
+| **Top Negative** | `top: calc(var(--spacing) * -<number>)` | `-top-<number>` | `{ top: -<number> }` | |
+| **Top Arbitrary** | `top: -1px` | `top-[-1px]` | `{ top: '-1px' }` | No `[]` needed in sz — compiler auto-wraps. |
+| **Top CSS Variable** | `top: var(--offset)` | `top-(--offset)` | `{ top: '--offset' }` | |
 
 | **Right** | `right: calc(var(--spacing) * <number>)` | `right-<number>` | `{ right: <number> }` | |
+| **Right Negative** | `right: calc(var(--spacing) * -<number>)` | `-right-<number>` | `{ right: -<number> }` | |
+| **Right Arbitrary** | `right: -1px` | `right-[-1px]` | `{ right: '-1px' }` | No `[]` needed in sz — compiler auto-wraps. |
+| **Right CSS Variable** | `right: var(--offset)` | `right-(--offset)` | `{ right: '--offset' }` | |
 
 | **Bottom** | `bottom: calc(var(--spacing) * <number>)` | `bottom-<number>` | `{ bottom: <number> }` | |
+| **Bottom Negative** | `bottom: calc(var(--spacing) * -<number>)` | `-bottom-<number>` | `{ bottom: -<number> }` | |
+| **Bottom Arbitrary** | `bottom: -1px` | `bottom-[-1px]` | `{ bottom: '-1px' }` | No `[]` needed in sz — compiler auto-wraps. |
+| **Bottom CSS Variable** | `bottom: var(--offset)` | `bottom-(--offset)` | `{ bottom: '--offset' }` | |
 
 | **Left** | `left: calc(var(--spacing) * <number>)` | `left-<number>` | `{ left: <number> }` | |
+| **Left Negative** | `left: calc(var(--spacing) * -<number>)` | `-left-<number>` | `{ left: -<number> }` | |
+| **Left Arbitrary** | `left: -1px` | `left-[-1px]` | `{ left: '-1px' }` | No `[]` needed in sz — compiler auto-wraps. |
+| **Left CSS Variable** | `left: var(--offset)` | `left-(--offset)` | `{ left: '--offset' }` | |
 
 ## Visibility
 

@@ -35,12 +35,14 @@ Utilities for controlling the color of the text input cursor.
 
 Utilities for specifying the color scheme an element should be rendered with.
 
-| Concept    | CSS Rule                    | Tailwind v4 Class        | `sz` Prop (Object Syntax)      | Note |
-| :--------- | :-------------------------- | :----------------------- | :----------------------------- | :--- |
-| **Dark**   | `color-scheme: dark;`       | `color-scheme-dark`      | `{ colorScheme: 'dark' }`      |      |
-| **Light**  | `color-scheme: light;`      | `color-scheme-light`     | `{ colorScheme: 'light' }`     |      |
-| **Normal** | `color-scheme: normal;`     | `color-scheme-normal`    | `{ colorScheme: 'normal' }`    |      |
-| **Only**   | `color-scheme: only (etc);` | `color-scheme-only-dark` | `{ colorScheme: 'only-dark' }` |      |
+| Concept        | CSS Rule                   | Tailwind v4 Class   | `sz` Prop (Object Syntax)  | Note |
+| :------------- | :------------------------- | :------------------ | :------------------------- | :--- |
+| **Dark**       | `color-scheme: dark`       | `scheme-dark`       | `{ scheme: 'dark' }`       |      |
+| **Light**      | `color-scheme: light`      | `scheme-light`      | `{ scheme: 'light' }`      |      |
+| **Normal**     | `color-scheme: normal`     | `scheme-normal`     | `{ scheme: 'normal' }`     |      |
+| **Light-Dark** | `color-scheme: light dark` | `scheme-light-dark` | `{ scheme: 'light-dark' }` |      |
+| **Only Dark**  | `color-scheme: only dark`  | `scheme-only-dark`  | `{ scheme: 'only-dark' }`  |      |
+| **Only Light** | `color-scheme: only light` | `scheme-only-light` | `{ scheme: 'only-light' }` |      |
 
 ## Cursor
 

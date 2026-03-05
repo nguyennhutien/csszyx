@@ -1,0 +1,31 @@
+---
+// Renders the logo as inline SVG so CSS variables cascade from the page.
+// We swap `fill: currentColor` → `fill: var(--logo-fill)` so we own the color
+// directly via a CSS variable, bypassing Starlight's white header text color.
+import type { Props } from '@astrojs/starlight/props';
+import logoRaw from '../../assets/logo.svg?raw';
+
+const { entry } = Astro.props;
+const href = Astro.locals.starlightRoute?.base ?? '/';
+---
+
+<a href={href} class="site-title" aria-label="CSSzyx Home">
+    <Fragment set:html={logoRaw} />
+    <span class="sr-only">{entry?.data?.title ?? 'CSSzyx'}</span>
+</a>
+
+<style>
+    .site-title {
+        --logo-fill: #003bcc;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+    }
+    .site-title svg {
+        height: 1.75rem;
+        width: auto;
+    }
+    :global([data-theme='dark']) .site-title {
+        --logo-fill: #ffffff;
+    }
+</style>

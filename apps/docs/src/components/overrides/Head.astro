@@ -1,0 +1,19 @@
+---
+// Extends Starlight's default Head with Cloudflare Web Analytics.
+// Only injects the beacon script in production builds — dev visits never pollute analytics.
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Head.astro';
+
+const token = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
+const isProd = import.meta.env.PROD;
+---
+
+<Default {...Astro.props} />
+{token && isProd && (
+    <script
+        is:inline
+        defer
+        src="https://static.cloudflare.com/insights/iframeless/mpa/latest/cloudflare-insights.js"
+        data-cf-beacon={`{"token":"${token}"}`}
+    ></script>
+)}

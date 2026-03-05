@@ -20,14 +20,15 @@ export * from './transform-core.js';
  * @param {string} source - The source code to transform
  * @returns {object} Transformation result with code and metadata
  */
-export function transformSourceCode(source: string): { code: string; transformed: boolean; usesRuntime: boolean; usesColorVar: boolean } {
+export function transformSourceCode(source: string): { code: string; transformed: boolean; usesRuntime: boolean; usesColorVar: boolean; classes: Set<string> } {
     let usesRuntime = false;
     let usesColorVar = false;
     let transformed = false;
+    const collectedClasses = new Set<string>();
 
     // Fast path: check if file contains 'sz' before parsing
     if (!source.includes('sz')) {
-        return { code: source, transformed: false, usesRuntime: false, usesColorVar: false };
+        return { code: source, transformed: false, usesRuntime: false, usesColorVar: false, classes: collectedClasses };
     }
 
     try {
@@ -45,13 +46,34 @@ export function transformSourceCode(source: string): { code: string; transformed
                     return {
                         visitor: {
                             JSXAttribute(path: babel.NodePath<t.JSXAttribute>) {
-                                if (path.node.name.name !== 'sz') {return;}
+                                const attrName = t.isJSXIdentifier(path.node.name)
+                                    ? path.node.name.name
+                                    : '';
+
+                                // Piggyback: collect existing className/class string literal values.
+                                // Only JSXAttribute nodes are visited here — text content, JSDoc,
+                                // and string literals in other positions are different AST node
+                                // types and never reach this visitor, eliminating false positives.
+                                if (attrName === 'className' || attrName === 'class') {
+                                    const val = path.node.value;
+                                    if (t.isStringLiteral(val)) {
+                                        for (const c of val.value.split(/\s+/)) {
+                                            if (c) {collectedClasses.add(c);}
+                                        }
+                                    }
+                                    return;
+                                }
+
+                                if (attrName !== 'sz') {return;}
 
                                 const value = path.node.value;
 
                                 // Case 1: sz="string"
                                 if (t.isStringLiteral(value)) {
                                     path.node.name.name = 'className';
+                                    for (const c of value.value.split(/\s+/)) {
+                                        if (c) {collectedClasses.add(c);}
+                                    }
                                     transformed = true;
                                     return;
                                 }
@@ -66,6 +88,9 @@ export function transformSourceCode(source: string): { code: string; transformed
                                         if (staticObject !== null) {
                                             // Compile time transformation
                                             const { className, attributes } = transform(staticObject);
+                                            for (const c of className.split(/\s+/)) {
+                                                if (c) {collectedClasses.add(c);}
+                                            }
                                             path.node.name.name = 'className';
                                             path.node.value = t.stringLiteral(className);
 
@@ -113,6 +138,9 @@ export function transformSourceCode(source: string): { code: string; transformed
 
                                             // Combine all classes into a single string
                                             const allClasses = [...staticClasses, ...partial.rawClasses, ...cssVarClasses].join(' ');
+                                            for (const c of allClasses.split(/\s+/)) {
+                                                if (c) {collectedClasses.add(c);}
+                                            }
 
                                             // Set className
                                             path.node.name.name = 'className';
@@ -151,8 +179,12 @@ export function transformSourceCode(source: string): { code: string; transformed
                                                     path.node.name.name = 'className';
                                                     if (t.isStringLiteral(resolved)) {
                                                         path.node.value = resolved;
+                                                        for (const c of resolved.value.split(/\s+/)) {
+                                                            if (c) {collectedClasses.add(c);}
+                                                        }
                                                     } else {
                                                         value.expression = resolved;
+                                                        collectFromExpr(resolved, collectedClasses);
                                                     }
                                                     transformed = true;
                                                     return;
@@ -168,8 +200,12 @@ export function transformSourceCode(source: string): { code: string; transformed
                                             path.node.name.name = 'className';
                                             if (t.isStringLiteral(resolved)) {
                                                 path.node.value = resolved;
+                                                for (const c of resolved.value.split(/\s+/)) {
+                                                    if (c) {collectedClasses.add(c);}
+                                                }
                                             } else {
                                                 value.expression = resolved;
+                                                collectFromExpr(resolved, collectedClasses);
                                             }
                                             transformed = true;
                                             return;
@@ -198,10 +234,11 @@ export function transformSourceCode(source: string): { code: string; transformed
             transformed: transformed,
             usesRuntime: usesRuntime,
             usesColorVar: usesColorVar,
+            classes: collectedClasses,
         };
     } catch (e) {
         console.warn('[csszyx] AST transform failed, falling back to original code:', e);
-        return { code: source, transformed: false, usesRuntime: false, usesColorVar: false };
+        return { code: source, transformed: false, usesRuntime: false, usesColorVar: false, classes: collectedClasses };
     }
 }
 
@@ -529,6 +566,26 @@ function generateStyleValueExpression(info: DynamicPropInfo): t.Expression {
                 ],
                 [expression],
             );
+    }
+}
+
+/**
+ * Recursively collects class names from a statically-resolved expression tree.
+ * Only handles StringLiteral and ConditionalExpression — the only two node types
+ * that tryStaticTransformNode can produce. Dynamic nodes (identifiers, calls) are
+ * intentionally skipped since their class names are unknown at build time.
+ *
+ * @param node - resolved expression node (StringLiteral or ConditionalExpression)
+ * @param classes - Set to collect into
+ */
+function collectFromExpr(node: t.Expression, classes: Set<string>): void {
+    if (t.isStringLiteral(node)) {
+        for (const c of node.value.split(/\s+/)) {
+            if (c) {classes.add(c);}
+        }
+    } else if (t.isConditionalExpression(node)) {
+        collectFromExpr(node.consequent as t.Expression, classes);
+        collectFromExpr(node.alternate as t.Expression, classes);
     }
 }
 
