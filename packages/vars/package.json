@@ -1,0 +1,26 @@
+{
+    "name": "@csszyx/vars",
+    "version": "0.1.0",
+    "description": "CSS custom property helpers — inject and patch CSS variables for runtime-driven styling",
+    "type": "module",
+    "exports": {
+        ".": {
+            "import": "./src/index.ts",
+            "types": "./src/index.ts"
+        },
+        "./react": {
+            "import": "./src/react.ts",
+            "types": "./src/react.ts"
+        }
+    },
+    "peerDependencies": {
+        "react": ">=18.0.0"
+    },
+    "peerDependenciesMeta": {
+        "react": {
+            "optional": true
+        }
+    },
+    "keywords": ["csszyx", "css-variables", "css-custom-properties", "runtime-styling"],
+    "license": "MIT"
+}
