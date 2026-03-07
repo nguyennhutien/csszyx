@@ -21,5 +21,6 @@
         }
     },
     "remoteUser": "root",
-    "workspaceFolder": "/workspaces/csszyx"
+    "workspaceFolder": "/workspaces/csszyx",
+    "postCreateCommand": "npm install -g @anthropic-ai/claude-code"
 }

@@ -38,7 +38,8 @@
         "reset": "pnpm clean && pnpm install && turbo run build --filter='./packages/*'",
         "changeset": "changeset",
         "version": "node scripts/version.mjs",
-        "release": "turbo run build && changeset publish"
+        "release": "turbo run build && changeset publish",
+        "pages:build": "bash scripts/build-cf-pages.sh"
     },
     "devDependencies": {
         "@changesets/cli": "^2.27.1",
