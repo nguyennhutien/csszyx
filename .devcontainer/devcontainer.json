@@ -22,5 +22,5 @@
     },
     "remoteUser": "root",
     "workspaceFolder": "/workspaces/csszyx",
-    "postCreateCommand": "npm install -g @anthropic-ai/claude-code"
+    "postCreateCommand": "npm install -g @anthropic-ai/claude-code && ln -sfn /root/.claude/projects/-Users-tiennguyen-Projects-csszyx /root/.claude/projects/-workspaces-csszyx"
 }
