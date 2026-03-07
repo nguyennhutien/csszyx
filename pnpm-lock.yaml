@@ -341,11 +341,10 @@ importers:
         version: 5.9.3
 
   packages/types:
-    dependencies:
-      '@csszyx/compiler':
-        specifier: '>=0.0.0'
-        version: link:../compiler
     devDependencies:
+      '@csszyx/compiler':
+        specifier: workspace:*
+        version: link:../compiler
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.30

@@ -2,3 +2,31 @@
 export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
 
 npx lint-staged --allow-empty
+
+# Auto-sync pnpm lockfile when dependency fields change in any package.json
+_deps_changed() {
+    node -e "
+        const { execSync } = require('child_process');
+        const files = execSync('git diff --cached --name-only')
+            .toString().split('\n')
+            .filter(f => f.endsWith('package.json'));
+        const keys = ['dependencies','devDependencies','peerDependencies','optionalDependencies'];
+        const changed = files.some(file => {
+            try {
+                const staged = JSON.parse(execSync('git show :' + file).toString());
+                let head = {};
+                try { head = JSON.parse(execSync('git show HEAD:' + file).toString()); } catch {}
+                return keys.some(k => JSON.stringify(staged[k]) !== JSON.stringify(head[k]));
+            } catch { return false; }
+        });
+        process.exit(changed ? 0 : 1);
+    "
+}
+
+if _deps_changed; then
+    if ! pnpm install --frozen-lockfile --silent 2>/dev/null; then
+        echo "Lockfile out of sync — auto-updating..."
+        pnpm install --lockfile-only
+        git add pnpm-lock.yaml
+    fi
+fi
