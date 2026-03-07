@@ -288,7 +288,7 @@ element.setAttribute('szRecover', 'csr')
 window.__RECOVERY_MODE__ = true
 ```
 
-### Solution: Cryptographic Tokens
+**Solution: Cryptographic Tokens**
 
 ```tsx
 // Build generates unforgeable token
@@ -374,21 +374,21 @@ async function verifyRecoveryToken(
   // Step 1: Check token exists
   const token = element.getAttribute("data-sz-recovery-token");
   if (!token) {
-    console.error("csszyxSecurityError: Recovery token missing");
+    console.error("CSSzyxSecurityError: Recovery token missing");
     return false;
   }
 
   // Step 2: Verify manifest checksum
   const computedChecksum = SHA256(JSON.stringify(manifest.tokens));
   if (computedChecksum !== manifest.checksum) {
-    console.error("csszyxSecurityError: Manifest corruption detected");
+    console.error("CSSzyxSecurityError: Manifest corruption detected");
     return false;
   }
 
   // Step 3: Lookup token
   const tokenData = manifest.tokens[token];
   if (!tokenData) {
-    console.error("csszyxSecurityError: Invalid recovery token");
+    console.error("CSSzyxSecurityError: Invalid recovery token");
     console.error("This may indicate tampering or build mismatch");
     return false;
   }
@@ -396,7 +396,7 @@ async function verifyRecoveryToken(
   // Step 4: Verify mode matches
   const declaredMode = element.getAttribute("szRecover");
   if (tokenData.mode !== declaredMode) {
-    console.error("csszyxSecurityError: Recovery mode mismatch");
+    console.error("CSSzyxSecurityError: Recovery mode mismatch");
     console.error(`Expected: ${tokenData.mode}, Got: ${declaredMode}`);
     return false;
   }

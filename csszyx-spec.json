@@ -451,10 +451,10 @@
                                 },
 
                                 "error_messages": {
-                                    "missing_token": "csszyxSecurityError: Recovery declared but token missing. Component: {name}",
-                                    "invalid_token": "csszyxSecurityError: Invalid recovery token. This may indicate tampering or build mismatch.",
-                                    "mode_mismatch": "csszyxSecurityError: Recovery mode mismatch (expected: {manifest}, actual: {attribute})",
-                                    "manifest_corrupt": "csszyxSecurityError: Recovery manifest checksum mismatch"
+                                    "missing_token": "CSSzyxSecurityError: Recovery declared but token missing. Component: {name}",
+                                    "invalid_token": "CSSzyxSecurityError: Invalid recovery token. This may indicate tampering or build mismatch.",
+                                    "mode_mismatch": "CSSzyxSecurityError: Recovery mode mismatch (expected: {manifest}, actual: {attribute})",
+                                    "manifest_corrupt": "CSSzyxSecurityError: Recovery manifest checksum mismatch"
                                 }
                             },
 
@@ -694,19 +694,19 @@
                                 "verification_steps": {
                                     "step_1_token_exists": {
                                         "check": "element.hasAttribute('data-sz-recovery-token')",
-                                        "on_false": "Reject with csszyxSecurityError: 'Recovery token missing'"
+                                        "on_false": "Reject with CSSzyxSecurityError: 'Recovery token missing'"
                                     },
                                     "step_2_manifest_checksum": {
                                         "check": "SHA256(manifest.tokens) === manifest.checksum",
-                                        "on_false": "Reject with csszyxSecurityError: 'Manifest corruption detected'"
+                                        "on_false": "Reject with CSSzyxSecurityError: 'Manifest corruption detected'"
                                     },
                                     "step_3_token_lookup": {
                                         "check": "token in manifest.tokens",
-                                        "on_false": "Reject with csszyxSecurityError: 'Invalid recovery token'"
+                                        "on_false": "Reject with CSSzyxSecurityError: 'Invalid recovery token'"
                                     },
                                     "step_4_mode_match": {
                                         "check": "manifest.tokens[token].mode === element.getAttribute('szRecover')",
-                                        "on_false": "Reject with csszyxSecurityError: 'Recovery mode mismatch'"
+                                        "on_false": "Reject with CSSzyxSecurityError: 'Recovery mode mismatch'"
                                     },
                                     "step_5_environment_check": {
                                         "if_mode_dev_only": {
@@ -1055,7 +1055,7 @@
                         "detection": "Scan before parsing",
                         "on_violation": {
                             "action": "Fatal Build Error",
-                            "error_format": "csszyxSecurityError: Forbidden token '{token}' in class '{class}' at {path}:{line}:{col}",
+                            "error_format": "CSSzyxSecurityError: Forbidden token '{token}' in class '{class}' at {path}:{line}:{col}",
                             "rationale": "Prevent CSS injection and XSS"
                         }
                     },
