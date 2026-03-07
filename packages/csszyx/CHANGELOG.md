@@ -1,5 +1,24 @@
 # csszyx
 
+## 0.3.0
+
+### Minor Changes
+
+- feat(compiler): add sz props — scheme, fieldSizing, rotateX/Y/Z, skewX/Y, proseInvert; improve arbitrary value and negative number handling
+
+  fix(unplugin): resolve class mangling collision — negative lookahead prevents re-encoding of already-mangled symbols; Babel piggyback prescan eliminates false positives from JSDoc and string literals
+
+  feat: add @csszyx/vars package — low-level CSS custom property helpers (applySzVars, patchSzVars for vanilla JS; useSzVars hook via @csszyx/vars/react)
+
+### Patch Changes
+
+- @csszyx/compiler@0.3.0
+- @csszyx/runtime@0.3.0
+- @csszyx/core@0.3.0
+- @csszyx/types@0.3.0
+- @csszyx/unplugin@0.3.0
+- @csszyx/vars@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

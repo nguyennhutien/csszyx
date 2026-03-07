@@ -10,7 +10,8 @@
             "@csszyx/core",
             "@csszyx/types",
             "@csszyx/unplugin",
-            "@csszyx/cli"
+            "@csszyx/cli",
+            "@csszyx/vars"
         ]
     ],
     "linked": [],
