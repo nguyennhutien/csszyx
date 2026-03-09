@@ -62,9 +62,13 @@ playwright/.cache/
 .tmp/
 .cache/
 
-# AI agent docs (kept locally, not in repo)
+# AI agent docs — tracked on internal/docs branch, private remote only.
+# To commit changes: git docs "your message"
+# To view history:   git log internal/docs -- .agent/
+# Remote:            git@github.com:nguyennhutien/csszyx-internal.git
 CLAUDE.md
 .agent/
+.claude/
 .cursorrules
 docs/guides/ai-usage.md
 
