@@ -429,12 +429,28 @@ describe('flexbox & grid — justify self', () => {
 });
 
 describe('flexbox & grid — align content', () => {
-    it('{ content: "normal" } → content-normal', () => {
-        expect(t({ content: 'normal' })).toBe('content-normal');
+    it('{ alignContent: "normal" } → content-normal', () => {
+        expect(t({ alignContent: 'normal' })).toBe('content-normal');
     });
 
-    it('{ content: "between" } → content-between', () => {
-        expect(t({ content: 'between' })).toBe('content-between');
+    it('{ alignContent: "between" } → content-between', () => {
+        expect(t({ alignContent: 'between' })).toBe('content-between');
+    });
+
+    it('{ alignContent: "center" } → content-center', () => {
+        expect(t({ alignContent: 'center' })).toBe('content-center');
+    });
+
+    it('{ alignContent: "stretch" } → content-stretch', () => {
+        expect(t({ alignContent: 'stretch' })).toBe('content-stretch');
+    });
+
+    it('alignContent + content on same object — no collision', () => {
+        // This was impossible before: a single sz object could not express both
+        // align-content (layout) and CSS content property (pseudo-element) simultaneously.
+        const result = t({ alignContent: 'between', content: "''" });
+        expect(result).toContain('content-between');
+        expect(result).toContain("content-['']");
     });
 });
 

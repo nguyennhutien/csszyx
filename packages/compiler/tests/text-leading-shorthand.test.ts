@@ -55,6 +55,31 @@ describe('Text/Leading Shorthand', () => {
             expect(result).toContain('text-white');
             expect(result).not.toContain('leading-7');
         });
+
+        it('color + leading — color must NOT merge with leading (regression)', () => {
+            // Bug: text-(.+) regex was too broad, causing text-emerald-300 (color)
+            // to be merged with leading-relaxed → text-emerald-300/relaxed (invalid)
+            const result = t({ color: 'emerald-300', leading: 'relaxed' });
+            expect(result).toContain('text-emerald-300');
+            expect(result).toContain('leading-relaxed');
+            expect(result).not.toContain('text-emerald-300/relaxed');
+        });
+
+        it('text + color + leading — only text-size merges, color stays separate', () => {
+            const result = t({ text: 'sm', color: 'emerald-300', leading: 'relaxed' });
+            expect(result).toContain('text-sm/relaxed');
+            expect(result).toContain('text-emerald-300');
+            expect(result).not.toContain('text-emerald-300/relaxed');
+            expect(result).not.toContain('leading-relaxed');
+        });
+
+        it('leading consumed only once when multiple text-size classes present', () => {
+            // Edge case: two text-size classes + one leading — leading merges with first match only
+            const result = t({ text: 'sm', leading: 5, hover: { text: 'lg' } });
+            expect(result).toContain('text-sm/5');
+            expect(result).toContain('hover:text-lg');
+            expect(result).not.toContain('leading-5');
+        });
     });
 
     describe('merging within variants', () => {

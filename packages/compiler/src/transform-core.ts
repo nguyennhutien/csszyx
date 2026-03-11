@@ -1968,18 +1968,24 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 continue;
             }
 
-            // content: "'hello'" → content-['hello'], '--c' → content-(--c)
-            // But wait, content is also an alias for align-content ("content-normal", "content-between")
-            if (rawKey === 'content' || rawKey === 'alignContent') {
-                const ALIGN_CONTENT_KEYWORDS = new Set(['normal', 'center', 'start', 'end', 'between', 'around', 'evenly', 'baseline', 'stretch']);
-                if (ALIGN_CONTENT_KEYWORDS.has(value)) {
-                    className += `content-${value}`;
+            // alignContent → align-content via Tailwind content-* classes.
+            if (rawKey === 'alignContent') {
+                className += `content-${value}`;
+                classes.push(className);
+                continue;
+            }
+
+            // content → CSS content property (for ::before / ::after).
+            // Values are arbitrary strings so must be wrapped: content-['hello'].
+            // Keeping separate from alignContent eliminates the naming collision:
+            // { alignContent: 'between', content: "''" } now works on one element.
+            if (rawKey === 'content') {
+                if (value === 'none') {
+                    className += 'content-none';
                 } else if (value.startsWith('--')) {
                     className += `content-(${value})`;
-                } else if (!['none', 'empty'].includes(value)) {
-                    className += `content-[${value}]`;
                 } else {
-                    className += `content-${value}`;
+                    className += `content-[${value}]`;
                 }
                 classes.push(className);
                 continue;
@@ -2235,8 +2241,13 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
     }
 
     // Post-processing: merge text-{size} + leading-{value} → text-{size}/{value}
+    //
+    // WHY restricted pattern: text-(.+) is too broad — it also matches color classes
+    // like text-emerald-300 (from `color` prop). Those must NOT be merged with leading.
+    // Only font-size suffixes are valid merge targets: xs, sm, base, lg, [2-9]?xl,
+    // arbitrary [...], or CSS variable (...).
     let mergedClasses = classes;
-    const textSizePattern = /^((?:[a-z0-9\-[\]@/:]*:)*)text-(.+)$/;
+    const textSizePattern = /^((?:[a-z0-9\-[\]@/:]*:)*)text-(xs|sm|base|lg|[2-9]?xl|\[.+\]|\(.+\))$/;
     const leadingPattern = /^((?:[a-z0-9\-[\]@/:]*:)*)leading-(.+)$/;
     const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
     const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
@@ -2249,12 +2260,17 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
     }
     if (textEntries.length > 0 && leadingEntries.length > 0) {
         const removeIndices = new Set<number>();
+        // Track consumed leading entries so one leading cannot merge with multiple text-size classes.
+        const consumedLeading = new Set<number>();
         for (const te of textEntries) {
-            const matchingLeading = leadingEntries.find(le => le.prefix === te.prefix);
+            const matchingLeading = leadingEntries.find(
+                le => le.prefix === te.prefix && !consumedLeading.has(le.index),
+            );
             if (matchingLeading) {
                 // Merge: text-lg + leading-7 → text-lg/7
                 mergedClasses[te.index] = `${te.prefix}text-${te.size}/${matchingLeading.value}`;
                 removeIndices.add(matchingLeading.index);
+                consumedLeading.add(matchingLeading.index);
             }
         }
         if (removeIndices.size > 0) {

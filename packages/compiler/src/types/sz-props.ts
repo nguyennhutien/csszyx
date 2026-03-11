@@ -288,7 +288,10 @@ export interface FlexboxGridProps {
   /** @see https://tailwindcss.com/docs/justify-self */
   justifySelf?: 'auto' | 'start' | 'end' | 'center' | 'stretch' | 'safe-center' | 'safe-end';
 
-  // NOTE: align-content is now covered by "content" key in TypographyProps
+  /** @see https://tailwindcss.com/docs/align-content */
+  alignContent?:
+    | 'normal' | 'start' | 'end' | 'center' | 'between'
+    | 'around' | 'evenly' | 'baseline' | 'stretch';
 
   /** @see https://tailwindcss.com/docs/align-items */
   items?: 'start' | 'end' | 'center' | 'baseline' | 'stretch' | 'safe-center' | 'safe-end' | (string & {});
@@ -572,12 +575,8 @@ export interface TypographyProps {
   /** @see https://tailwindcss.com/docs/hyphens */
   hyphens?: 'none' | 'manual' | 'auto';
 
-  /** @see https://tailwindcss.com/docs/content — also handles align-content */
-  content?:
-    | 'none'
-    | 'normal' | 'start' | 'end' | 'center' | 'between'
-    | 'around' | 'evenly' | 'baseline' | 'stretch'
-    | (string & {});
+  /** @see https://tailwindcss.com/docs/content */
+  content?: 'none' | (string & {});
 
   /** @see https://tailwindcss.com/docs/font-feature-settings */
   fontFeatures?: string & {};

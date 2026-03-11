@@ -286,17 +286,17 @@ Controlling individual item alignment.
 
 Controlling placement along the cross axis.
 
-| Concept      | CSS Rule                       | Tailwind v4 Class  | `sz` Prop (Canonical)     |
-| :----------- | :----------------------------- | :----------------- | :------------------------ |
-| **Normal**   | `align-content: normal`        | `content-normal`   | `{ content: 'normal' }`   |
-| **Start**    | `align-content: flex-start`    | `content-start`    | `{ content: 'start' }`    |
-| **End**      | `align-content: flex-end`      | `content-end`      | `{ content: 'end' }`      |
-| **Center**   | `align-content: center`        | `content-center`   | `{ content: 'center' }`   |
-| **Between**  | `align-content: space-between` | `content-between`  | `{ content: 'between' }`  |
-| **Around**   | `align-content: space-around`  | `content-around`   | `{ content: 'around' }`   |
-| **Evenly**   | `align-content: space-evenly`  | `content-evenly`   | `{ content: 'evenly' }`   |
-| **Stretch**  | `align-content: stretch`       | `content-stretch`  | `{ content: 'stretch' }`  |
-| **Baseline** | `align-content: baseline`      | `content-baseline` | `{ content: 'baseline' }` |
+| Concept      | CSS Rule                       | Tailwind v4 Class  | `sz` Prop (Canonical)          |
+| :----------- | :----------------------------- | :----------------- | :----------------------------- |
+| **Normal**   | `align-content: normal`        | `content-normal`   | `{ alignContent: 'normal' }`   |
+| **Start**    | `align-content: flex-start`    | `content-start`    | `{ alignContent: 'start' }`    |
+| **End**      | `align-content: flex-end`      | `content-end`      | `{ alignContent: 'end' }`      |
+| **Center**   | `align-content: center`        | `content-center`   | `{ alignContent: 'center' }`   |
+| **Between**  | `align-content: space-between` | `content-between`  | `{ alignContent: 'between' }`  |
+| **Around**   | `align-content: space-around`  | `content-around`   | `{ alignContent: 'around' }`   |
+| **Evenly**   | `align-content: space-evenly`  | `content-evenly`   | `{ alignContent: 'evenly' }`   |
+| **Stretch**  | `align-content: stretch`       | `content-stretch`  | `{ alignContent: 'stretch' }`  |
+| **Baseline** | `align-content: baseline`      | `content-baseline` | `{ alignContent: 'baseline' }` |
 
 ## Align Items
 
