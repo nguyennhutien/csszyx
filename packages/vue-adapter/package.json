@@ -1,6 +1,6 @@
 {
     "name": "@csszyx/vue-adapter",
-    "version": "0.0.1",
+    "version": "0.3.1",
     "private": true,
     "description": "Vue SFC preprocessor for csszyx - transform sz props to className",
     "license": "MIT",

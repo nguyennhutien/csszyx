@@ -1,5 +1,12 @@
 # csszyx
 
+## 0.3.1
+
+### Patch Changes
+
+- **fix(compiler):** `color` + `leading` props no longer merge into an invalid `text-color/leading` shorthand — the text/leading shorthand regex is now restricted to font-size suffixes only.
+- **fix(compiler):** `content` (CSS content property) and `alignContent` (align-content layout) are now separate handlers — previously both mapped to `content-*` causing a naming collision. A single sz object can now express both simultaneously.
+
 ## 0.3.0
 
 ### Minor Changes

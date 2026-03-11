@@ -11,7 +11,10 @@
             "@csszyx/types",
             "@csszyx/unplugin",
             "@csszyx/cli",
-            "@csszyx/vars"
+            "@csszyx/vars",
+            "@csszyx/mcp-server",
+            "@csszyx/svelte-adapter",
+            "@csszyx/vue-adapter"
         ]
     ],
     "linked": [],
