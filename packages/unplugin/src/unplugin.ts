@@ -314,7 +314,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             result = result.split(CHECKSUM_PLACEHOLDER).join(state.checksum);
         }
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
-            result = result.split(MANGLE_MAP_PLACEHOLDER).join(JSON.stringify(state.mangleMap));
+            const jsonMap = JSON.stringify(state.mangleMap);
+            // Webpack dev mode wraps each module in eval("..."). Inside that eval string,
+            // double-quotes must be escaped as \" or they will terminate the string literal early.
+            // Detect eval-wrapped output by checking if the file uses eval().
+            const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
+            result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         return result;
     }
