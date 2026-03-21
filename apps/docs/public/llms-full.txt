@@ -156,13 +156,16 @@ export default defineConfig({
 
 ### Colors with Opacity
 
-| Concept | Tailwind v4 Class | sz Prop |
-|---------|-------------------|---------|
-| Standard | `bg-blue-500` | `{ bg: 'blue-500' }` |
-| Integer opacity | `bg-blue-500/50` | `{ bg: { color: 'blue-500', op: 50 } }` |
-| Decimal opacity | `bg-black/75.5` | `{ bg: { color: 'black', op: 75.5 } }` |
-| Arbitrary opacity | `bg-pink-500/[78%]` | `{ bg: { color: 'pink-500', op: '78%' } }` |
-| CSS var opacity | `bg-blue-500/(--alpha)` | `{ bg: { color: 'blue-500', op: '--alpha' } }` |
+| Concept | Tailwind v4 Class | sz Prop | Note |
+|---------|-------------------|---------|------|
+| Standard | `bg-blue-500` | `{ bg: 'blue-500' }` | |
+| Integer opacity | `bg-blue-500/50` | `{ bg: { color: 'blue-500', op: 50 } }` | |
+| Half-step decimal | `bg-black/0.5` | `{ bg: { color: 'black', op: 0.5 } }` | op × 2 = integer → plain |
+| Sub-half decimal | `bg-black/[0.05]` | `{ bg: { color: 'black', op: 0.05 } }` | op × 2 ≠ integer → arbitrary `[...]` |
+| Arbitrary opacity | `bg-pink-500/[78%]` | `{ bg: { color: 'pink-500', op: '78%' } }` | String with `%` → arbitrary |
+| CSS var opacity | `bg-blue-500/(--alpha)` | `{ bg: { color: 'blue-500', op: '--alpha' } }` | |
+| Hex color + opacity | `bg-[#0d0d12]/90` | `{ bg: { color: '#0d0d12', op: 90 } }` | Hex/rgb/hsl auto-wrapped in `[...]` |
+| RGB color + opacity | `bg-[rgb(10,20,30)]/80` | `{ bg: { color: 'rgb(10,20,30)', op: 80 } }` | Same rule for rgb/hsl values |
 
 ### Attribute Selectors
 
@@ -826,6 +829,8 @@ All accept: integer, negative integer, fraction string, `'px'`, `'full'`, `'auto
 | `{ brightness: 150 }` | `brightness-150` |
 | `{ contrast: 75 }` | `contrast-75` |
 | `{ dropShadow: 'lg' }` | `drop-shadow-lg` |
+| `{ dropShadow: '0 0 15px rgba(45,213,151,0.5)' }` | `drop-shadow-[0_0_15px_rgba(45,213,151,0.5)]` |
+| `{ hover: { dropShadow: '0 0 15px rgba(45,213,151,0.5)' } }` | `hover:drop-shadow-[0_0_15px_rgba(45,213,151,0.5)]` |
 | `{ dropShadowColor: 'red-500' }` | `drop-shadow-red-500` |
 | `{ grayscale: true }` | `grayscale` |
 | `{ grayscale: 50 }` | `grayscale-50` |
@@ -906,6 +911,14 @@ All accept: integer, negative integer, fraction string, `'px'`, `'full'`, `'auto
 | `{ transformStyle: '3d' }` | `transform-3d` |
 | `{ backface: 'hidden' }` | `backface-hidden` |
 | `{ perspective: 'md' }` | `perspective-md` |
+
+### Transform GPU / CPU / None
+
+| sz Prop | Tailwind Class | Note |
+|---------|----------------|------|
+| `{ transform: 'none' }` | `transform-none` | Disable all transforms |
+| `{ transform: 'gpu' }` | `transform-gpu` | Force GPU compositing via `translateZ(0)` |
+| `{ transform: 'cpu' }` | `transform-cpu` | Disable GPU compositing |
 
 ---
 
@@ -1228,6 +1241,62 @@ plugins: [...csszyx(), tailwindcss()]
 /* ✅ Just import tailwindcss — auto-scanning picks up csszyx output */
 @import "tailwindcss";
 ```
+
+---
+
+## MIGRATE CLI
+
+The `csszyx migrate` command converts `className=` (JSX/TSX) or `class=` (HTML) attributes to `sz=` props.
+
+### JSX/TSX migration
+```bash
+npx csszyx migrate src/
+```
+
+### HTML migration
+```bash
+# Basic HTML migration (auto-injects FOUC CSS)
+npx csszyx migrate public/
+
+# Inject browser runtime script (local file)
+npx csszyx migrate public/ --inject-runtime local
+
+# Inject browser runtime script (CDN)
+npx csszyx migrate public/ --inject-runtime cdn --cdn-url https://cdn.csszyx.com/runtime.js
+
+# Wrap sz values in outer braces: sz="{ p: 4 }" instead of sz="p: 4"
+npx csszyx migrate public/ --braces
+
+# Skip FOUC-prevention CSS injection
+npx csszyx migrate public/ --no-fouc
+```
+
+### HTML-specific options
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--braces` | false | Wrap sz attribute values in outer `{ }` |
+| `--no-fouc` | false (inject enabled) | Skip injecting FOUC-prevention CSS before `</head>` |
+| `--inject-runtime <mode>` | false | Inject runtime script tag: `local` or `cdn` |
+| `--cdn-url <url>` | `https://cdn.csszyx.com/runtime.js` | CDN URL for `--inject-runtime cdn` |
+| `--local-path <path>` | `csszyx-runtime.js` | Local script path for `--inject-runtime local` |
+
+### FOUC prevention (auto-injected)
+When migrating HTML, the CLI injects this CSS before `</head>` so elements with `sz` attributes are hidden until the runtime processes them:
+```html
+<style>
+  [sz] { visibility: hidden; }
+  body.sz-ready [sz] { visibility: visible; }
+</style>
+```
+
+---
+
+## KNOWN FIXES
+
+### Webpack dev mode: mangle map SyntaxError
+In webpack dev mode, modules are wrapped in `eval("...")`. When the plugin injects the mangle map JSON, raw `"` characters in the JSON terminated the eval string early, causing `SyntaxError: missing ) after argument list`.
+
+**Fix (v0.4.x+):** The plugin now detects eval-wrapped output via `source.includes('eval(')` and escapes `"` as `\"` in the mangle map JSON before substitution. Production webpack builds are unaffected.
 
 ---
 

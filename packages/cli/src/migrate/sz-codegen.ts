@@ -15,6 +15,28 @@ export function generateSzExpression(obj: Record<string, unknown>): string {
 }
 
 /**
+ * Generate an HTML attribute value string from sz object.
+ * By default strips outer braces so the attribute reads naturally:
+ *   sz="p: 4, bg: 'blue-500'"  (default, no braces)
+ *   sz="{ p: 4, bg: 'blue-500' }"  (braces: true)
+ *
+ * The csszyx runtime auto-wraps the bare form before parsing,
+ * so both formats are equivalent.
+ *
+ * @param obj - The sz property object.
+ * @param braces - Wrap value in outer { } (default: false).
+ * @returns {string} The attribute value string (no wrapping quotes).
+ */
+export function generateSzHtmlValue(obj: Record<string, unknown>, braces = false): string {
+    const s = objectToString(obj);
+    if (braces) {return s;}
+    // Strip outermost braces: "{ ... }" → "..."
+    if (s.startsWith('{ ') && s.endsWith(' }')) {return s.slice(2, -2);}
+    if (s.startsWith('{') && s.endsWith('}')) {return s.slice(1, -1).trim();}
+    return s;
+}
+
+/**
  * Convert an object to its string representation.
  * @param obj - The object to stringify.
  * @param indent - Current indentation level.

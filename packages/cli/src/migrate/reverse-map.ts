@@ -360,9 +360,7 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'scale-3d': 'scale3d',
     'rotate-3d': 'rotate3d',
     'translate-3d': 'translate3d',
-    'transform-gpu': 'transformGpu',
-    'transform-cpu': 'transformCpu',
-    'transform-none': 'transformNone',
+    // transform-gpu/cpu/none use BOOLEAN_VALUE_MAP → { transform: 'gpu'/'cpu'/'none' }
 
     // Font numeric
     'normal-nums': 'fontVariant',
@@ -434,6 +432,11 @@ export const BOOLEAN_VALUE_MAP: Record<string, { prop: string; value: unknown }>
     // Appearance
     'appearance-none': { prop: 'appearance', value: 'none' },
     'appearance-auto': { prop: 'appearance', value: 'auto' },
+
+    // Transform
+    'transform-none': { prop: 'transform', value: 'none' },
+    'transform-gpu': { prop: 'transform', value: 'gpu' },
+    'transform-cpu': { prop: 'transform', value: 'cpu' },
 };
 
 // ============================================================================

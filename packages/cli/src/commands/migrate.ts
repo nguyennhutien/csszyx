@@ -10,7 +10,7 @@ import path from 'node:path';
 
 import fg from 'fast-glob';
 
-import { transformSourceSimple } from '../migrate/ast-transformer.js';
+import { transformHtmlSourceSimple, transformSourceSimple } from '../migrate/ast-transformer.js';
 import {
     printHeader,
     printInfo,
@@ -27,6 +27,16 @@ export interface MigrateOptions {
     ignore?: string[];
     cwd?: string;
     pattern?: string;
+    /** Wrap HTML sz attribute values in outer { } braces (default: false). */
+    braces?: boolean;
+    /** Inject FOUC-prevention CSS into HTML files (default: true). */
+    injectFouc?: boolean;
+    /** Inject runtime script tag into HTML files: 'local' | 'cdn' | false. */
+    injectRuntime?: 'local' | 'cdn' | false;
+    /** CDN URL for --inject-runtime cdn. */
+    cdnUrl?: string;
+    /** Local script path for --inject-runtime local. */
+    localPath?: string;
 }
 
 /**
@@ -44,10 +54,10 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         printInfo('Dry run mode — no files will be modified');
     }
 
-    // Find JSX/TSX files
+    // Find JSX/TSX/HTML files
     const patterns = options.pattern
         ? [options.pattern]
-        : ['**/*.{jsx,tsx}'];
+        : ['**/*.{jsx,tsx,html}'];
 
     const ignore = [
         '**/node_modules/**',
@@ -77,13 +87,23 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
     for (const filePath of files) {
         const source = fs.readFileSync(filePath, 'utf-8');
+        const isHtml = filePath.endsWith('.html');
 
-        // Skip files without className
-        if (!source.includes('className=')) {
+        // Skip files without relevant class attributes
+        const hasRelevantAttr = isHtml ? source.includes('class=') : source.includes('className=');
+        if (!hasRelevantAttr) {
             continue;
         }
 
-        const result = transformSourceSimple(source, filePath);
+        const result = isHtml
+            ? transformHtmlSourceSimple(source, filePath, {
+                braces: options.braces,
+                injectFouc: options.injectFouc,
+                injectRuntime: options.injectRuntime,
+                cdnUrl: options.cdnUrl,
+                localPath: options.localPath,
+            })
+            : transformSourceSimple(source, filePath);
 
         if (result.changed) {
             totalFiles++;

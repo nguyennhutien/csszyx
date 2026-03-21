@@ -564,11 +564,39 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     (assets) => {
                         finalizeMangleMap();
 
+                        // Webpack dev mode wraps every module in eval("..."), which means
+                        // className:"..." strings become className:\"...\" inside the eval.
+                        // The mangleCodeClasses regex matches plain "..." delimiters only,
+                        // so it cannot mangle classes inside eval-wrapped bundles.
+                        // Disabling class mangling in dev mode keeps CSS and HTML consistent:
+                        // both use the original Tailwind class names (e.g. "text-white"),
+                        // so styles render correctly during development.
+                        const isWebpackDevMode = compiler.options.mode === 'development';
+
+                        // Emit CSS manifest for @csszyx/dynamic delta check.
+                        const manifestData: {
+                            version: string;
+                            buildId: string;
+                            classes: string[];
+                            mangleMap?: Record<string, string>;
+                        } = {
+                            version: '0.4.0',
+                            buildId: state.checksum,
+                            classes: Object.keys(state.mangleMap),
+                        };
+                        if (manglingEnabled && !isWebpackDevMode && Object.keys(state.mangleMap).length > 0) {
+                            manifestData.mangleMap = state.mangleMap;
+                        }
+                        compilation.emitAsset(
+                            'csszyx-manifest.json',
+                            new compiler.webpack.sources.RawSource(JSON.stringify(manifestData)),
+                        );
+
                         for (const file in assets) {
                             const asset = assets[file];
                             const source = asset.source().toString();
 
-                            if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                            if (manglingEnabled && !isWebpackDevMode && Object.keys(state.mangleMap).length > 0) {
                                 if (file.endsWith('.css')) {
                                     try {
                                         const result = mangleCSSSync(source, state.mangleMap, {

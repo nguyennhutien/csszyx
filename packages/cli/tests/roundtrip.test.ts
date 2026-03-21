@@ -237,6 +237,22 @@ describe('round-trip: TW → migrate → compile', () => {
     });
 
     // ========================================================================
+    // COLOR + OPACITY (decimal bracket form)
+    // ========================================================================
+    describe('color + opacity', () => {
+        it.each([
+            // Integer opacity (no brackets) — already worked
+            'bg-white/90', 'border-black/5', 'text-black/50',
+            // Decimal opacity in brackets — was broken (op stayed as string)
+            'border-black/[0.05]', 'bg-white/[0.02]', 'bg-white/[0.04]',
+            'hover:border-black/[0.08]',
+            'dark:bg-white/[0.02]',
+        ])('%s', (cls) => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+    });
+
+    // ========================================================================
     // GRADIENTS
     // ========================================================================
     describe('gradients', () => {

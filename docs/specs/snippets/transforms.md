@@ -135,6 +135,8 @@ Utilities for controlling the origin of the perspective.
 
 Utilities for controlling the transform property itself.
 
-| Concept  | CSS Rule           | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
-| :------- | :----------------- | :---------------- | :------------------------ | :--- |
-| **None** | `transform: none;` | `transform-none`  | `{ transform: 'none' }`   |      |
+| Concept  | CSS Rule                                     | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :------- | :------------------------------------------- | :---------------- | :------------------------ | :--- |
+| **None** | `transform: none;`                           | `transform-none`  | `{ transform: 'none' }`   |      |
+| **GPU**  | `transform: translateZ(0)` (GPU compositing) | `transform-gpu`   | `{ transform: 'gpu' }`    |      |
+| **CPU**  | `transform: none` (disable GPU compositing)  | `transform-cpu`   | `{ transform: 'cpu' }`    |      |

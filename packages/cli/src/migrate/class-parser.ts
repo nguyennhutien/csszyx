@@ -317,7 +317,13 @@ function disambiguateAndParse(prefix: string, rawValue: string, negative: boolea
 
             // Parse opacity
             if (opacity.startsWith('[') && opacity.endsWith(']')) {
-                opacity = opacity.slice(1, -1); // strip brackets → "78%"
+                opacity = opacity.slice(1, -1); // strip brackets → "0.05" or "78%"
+                // Convert numeric strings to numbers after stripping brackets.
+                // "0.05" → 0.05 (decimal fraction), "78%" stays as string (percentage).
+                if (!String(opacity).includes('%')) {
+                    const opNum = Number(opacity);
+                    if (!isNaN(opNum)) {opacity = opNum;}
+                }
             } else if (opacity.startsWith('(') && opacity.endsWith(')')) {
                 opacity = opacity.slice(1, -1); // strip parens → "--alpha"
             } else {

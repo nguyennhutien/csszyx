@@ -68,9 +68,9 @@ describe('class-parser', () => {
         });
 
         it('transform booleans', () => {
-            expect(parseClass('transform-gpu')).toEqual({ prop: 'transformGpu', value: true });
-            expect(parseClass('transform-cpu')).toEqual({ prop: 'transformCpu', value: true });
-            expect(parseClass('transform-none')).toEqual({ prop: 'transformNone', value: true });
+            expect(parseClass('transform-gpu')).toEqual({ prop: 'transform', value: 'gpu' });
+            expect(parseClass('transform-cpu')).toEqual({ prop: 'transform', value: 'cpu' });
+            expect(parseClass('transform-none')).toEqual({ prop: 'transform', value: 'none' });
         });
 
         it('snap booleans', () => {

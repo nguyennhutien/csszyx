@@ -92,6 +92,14 @@ Many display/position properties accept `true`:
 ```tsx
 <div sz={{ bg: { color: 'blue-500', op: 50 } }} />
 // → className="bg-blue-500/50"
+
+// Hex/rgb/hsl values are auto-wrapped in brackets
+<div sz={{ bg: { color: '#0d0d12', op: 90 } }} />
+// → className="bg-[#0d0d12]/90"
+
+// Sub-half-step decimals use arbitrary brackets
+<div sz={{ bg: { color: 'black', op: 0.05 } }} />
+// → className="bg-black/[0.05]"
 ```
 
 ## Variants
@@ -258,6 +266,9 @@ sz={{ '@container': true, '@md': { flex: true } }}
 { transition: true }     // transition (common props)
 { duration: 300 }        // duration-300
 { animate: 'spin' }      // animate-spin
+// Arbitrary drop shadow works in any variant context:
+{ hover: { dropShadow: '0 0 15px rgba(45,213,151,0.5)' } }
+// → hover:drop-shadow-[0_0_15px_rgba(45,213,151,0.5)]
 ```
 
 ### Transforms
@@ -267,6 +278,9 @@ sz={{ '@container': true, '@md': { flex: true } }}
 { scale: 105 }           // scale-105
 { translateX: 4 }        // translate-x-4
 { origin: 'center' }     // origin-center
+{ transform: 'none' }    // transform-none
+{ transform: 'gpu' }     // transform-gpu (GPU compositing)
+{ transform: 'cpu' }     // transform-cpu (disable GPU compositing)
 ```
 
 ## Runtime Helpers
@@ -333,6 +347,28 @@ Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injec
 - All spacing values are dynamic (any integer, 0.5-step decimals work bare)
 - Arbitrary values: `{ p: '5px' }` → `p-[5px]` (auto-wrapped)
 - CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
+
+## Migrate CLI
+
+Convert `className=` (JSX/TSX) or `class=` (HTML) to `sz=` props:
+
+```bash
+# Migrate JSX/TSX files
+npx csszyx migrate src/
+
+# Migrate HTML files (auto-injects FOUC prevention CSS)
+npx csszyx migrate public/
+
+# HTML: inject browser runtime script
+npx csszyx migrate public/ --inject-runtime local
+npx csszyx migrate public/ --inject-runtime cdn
+
+# HTML: wrap sz values in braces
+npx csszyx migrate public/ --braces
+
+# HTML: skip FOUC CSS injection
+npx csszyx migrate public/ --no-fouc
+```
 
 ## Full API Reference
 

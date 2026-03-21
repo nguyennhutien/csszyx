@@ -97,12 +97,24 @@ cli
     .option('--ignore <patterns>', 'Glob patterns to ignore (comma-separated)')
     .option('--pattern <glob>', 'Custom glob pattern for file discovery')
     .option('--cwd <dir>', 'Current working directory')
+    .option('--braces', 'Wrap HTML sz values in outer { } braces (default: bare)')
+    .option('--no-fouc', 'Skip FOUC-prevention CSS injection into HTML files')
+    .option('--inject-runtime <mode>', 'Inject runtime script into HTML: local | cdn')
+    .option('--cdn-url <url>', 'Custom CDN URL for --inject-runtime cdn')
+    .option('--local-path <path>', 'Local script path for --inject-runtime local (default: csszyx-runtime.js)')
     .action(async (dir, options) => {
         await migrate({
             dryRun: options.dryRun,
             ignore: options.ignore ? options.ignore.split(',') : undefined,
             pattern: options.pattern,
             cwd: dir || options.cwd,
+            braces: options.braces,
+            injectFouc: options.fouc !== false,
+            injectRuntime: options.injectRuntime === 'local' ? 'local'
+            : options.injectRuntime === 'cdn' ? 'cdn'
+            : false,
+            cdnUrl: options.cdnUrl,
+            localPath: options.localPath,
         });
     });
 

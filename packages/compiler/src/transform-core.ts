@@ -755,7 +755,12 @@ function handleImportant(value: string): { value: string; important: boolean } {
  * @returns formatted opacity string for Tailwind class
  */
 function formatOpacity(op: number | string): string {
-    if (typeof op === 'number') {return String(op);}
+    if (typeof op === 'number') {
+        // Integers and half-step decimals (×2 is integer: 0, 0.5, 1, 50, 75.5, …) → plain "/50", "/0.5"
+        // Other decimals (e.g. 0.05, 0.02) are fraction-scale → arbitrary "/[0.05]"
+        if (Number.isInteger(op * 2)) {return String(op);}
+        return `[${op}]`;
+    }
     if (typeof op === 'string') {
         if (op.startsWith('--')) {return `(${op})`;}
         return `[${op}]`;
@@ -1259,7 +1264,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'color' in (value as Record<string, unknown>)) {
             const colorObj = value as { color: string; op?: number | string };
             const twPrefix = PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-            const colorBase = String(colorObj.color);
+            const rawColorBase = String(colorObj.color);
+            // Arbitrary color values (hex, rgb, hsl, etc.) need bracket wrapping
+            const colorBase = needsArbitraryBrackets(rawColorBase) ? `[${rawColorBase}]` : rawColorBase;
 
             if (colorObj.op !== undefined) {
                 const opStr = formatOpacity(colorObj.op);
@@ -2048,7 +2055,7 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 const sVal = String(value);
                 const prop = PROPERTY_MAP[rawKey] || rawKey;
                 if (needsArbitraryBrackets(sVal) || sVal.includes('(') || sVal.includes('_') || sVal.includes('%')) {
-                    classes.push(`${prop}-[${normalizeArbitraryValue(sVal)}]`);
+                    classes.push(`${className}${prop}-[${normalizeArbitraryValue(sVal)}]`);
                     continue;
                 }
             }
