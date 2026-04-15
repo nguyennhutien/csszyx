@@ -264,6 +264,22 @@ export default [
         },
     },
 
+    // Node.js scripts — define process/console as globals (flat config does not auto-enable env globals)
+    {
+        files: ['scripts/**/*.mjs', 'scripts/**/*.js', '**/esbuild.mjs'],
+        languageOptions: {
+            globals: {
+                process: 'readonly',
+                console: 'readonly',
+                __dirname: 'readonly',
+                __filename: 'readonly',
+            },
+        },
+        rules: {
+            'no-console': 'off',
+        },
+    },
+
     // Allow console logs in CLI, tests, dev-tools, and scripts
     {
         files: [
