@@ -73,7 +73,7 @@ const testMangleMap = {
     'file:mr-4': 'av',
     'marker:text-blue-500': 'aw',
     'selection:bg-blue-200': 'ax',
-    'before:content-[""]': 'ay',
+    "before:content-['']": 'ay',
     'after:absolute': 'az',
 };
 
@@ -344,11 +344,11 @@ describe('Arbitrary Values', () => {
         expect(result.css).toBe('.q { font-size: 14px; }');
     });
 
-    it('should NOT mangle arbitrary content (before:content)', () => {
-        // eslint-disable-next-line no-useless-escape
-        const css = '.before\\:content-\\[\\\"\\\"\\]::before { content: ""; }';
+    it('should mangle before:content empty string class (before:content)', () => {
+        // Build the selector from the class name so we don't have to hand-write the escaping
+        const selector = `.${escapeCSSClassName("before:content-['']")}::before`;
+        const css = `${selector} { content: ''; }`;
         const result = mangleCSSSync(css, testMangleMap);
-        // The class should be mangled but content should be preserved
         expect(result.css).toContain('.ay::before');
     });
 

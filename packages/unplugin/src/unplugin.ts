@@ -14,6 +14,8 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
 import { transformIndexHtml as injectHydrationData } from './html-transformer.js';
+import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
+import { writeThemeDts } from './theme-type-writer.js';
 import {
     createChecksumModule,
     createMangleMapModule,
@@ -31,6 +33,7 @@ interface PluginState {
   mangleMap: Record<string, string>;
   checksum: string;
   finalized: boolean;
+  rootDir: string;
 }
 
 /**
@@ -39,6 +42,307 @@ interface PluginState {
  */
 const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
+
+let _hasWarnedTsConfig = false;
+
+/**
+ * Scans CSS files for Tailwind v4 @theme blocks and writes .csszyx/theme.d.ts.
+ * Called once at startup and again on HMR when a watched CSS file changes.
+ * No-ops silently if scanCss is not configured or if files can't be read.
+ * @param rootDir - project root directory (used to resolve relative paths and output dir)
+ * @param scanCss - path or glob patterns to CSS files (from BuildConfig.scanCss)
+ */
+function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): void {
+    if (!scanCss) {return;}
+    const patterns = Array.isArray(scanCss) ? scanCss : [scanCss];
+    const sourceFiles: string[] = [];
+    for (const pattern of patterns) {
+        const resolved = path.isAbsolute(pattern) ? pattern : path.join(rootDir, pattern);
+        // Simple literal path — no glob expansion needed for MVP (no glob dep)
+        if (fs.existsSync(resolved)) {
+            sourceFiles.push(resolved);
+        }
+    }
+    if (sourceFiles.length === 0) {return;}
+    const themes = sourceFiles.map(f => {
+        try {
+            return parseThemeBlocks(fs.readFileSync(f, 'utf-8'));
+        } catch {
+            return null;
+        }
+    }).filter((t): t is NonNullable<typeof t> => t !== null);
+    const merged = mergeThemes(themes);
+    const outputPath = path.join(rootDir, '.csszyx', 'theme.d.ts');
+    writeThemeDts({ outputPath, theme: merged, sourceFiles });
+
+    // Smart Warning: Check if TypeScript knows about the generated theme file
+    if (!_hasWarnedTsConfig) {
+        _hasWarnedTsConfig = true;
+        try {
+            const checkFile = (cfgPath: string): boolean => {
+                if (fs.existsSync(cfgPath)) {
+                    const content = fs.readFileSync(cfgPath, 'utf-8');
+                    if (!content.includes('.csszyx')) {
+                        console.warn('\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n');
+                    }
+                    return true;
+                }
+                return false;
+            };
+
+            // Try standard Next.js / tsc config first
+            if (!checkFile(path.join(rootDir, 'tsconfig.json'))) {
+                // Fallback to Vite/Vue app config
+                checkFile(path.join(rootDir, 'tsconfig.app.json'));
+            }
+        } catch {
+            // Ignore file read errors
+        }
+    }
+}
+
+/**
+ * Mangles class strings in bundled code (JS/HTML assets) using the given mangle map.
+ *
+ * Exported for unit testing; the plugin calls this via the thin private wrapper that
+ * supplies state.mangleMap.
+ *
+ * Pass 1:   Direct `className="..."` / `class="..."` static strings
+ * Pass 1.5: Template literal quasi (static) segments in `className:\`...\``
+ * Pass 2:   `className:EXPR` patterns with ternary operators containing quoted strings
+ * Pass 3:   Quoted string arguments to csszyx runtime helpers (_szMerge, _szIf, etc.)
+ *
+ * @param code     bundled source code
+ * @param mangleMap class-name → mangled-token mapping
+ * @returns code with mangled class names
+ */
+export function mangleCodeClassesSync(code: string, mangleMap: Record<string, string>): string {
+    /**
+     * Replaces each space-separated token in a class string with its mangled form.
+     * @param classString - space-separated CSS class names
+     * @returns mangled class string (unknown classes left unchanged)
+     */
+    function mangleClassString(classString: string): string {
+        return classString
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((cls: string) => {
+                // Class names inside a double-quoted JS string may have \" (and other
+                // sequences) escaped. Unescape before map lookup so that e.g.
+                // before:content-['\"\"'] resolves to its mangle map entry, which is
+                // keyed by the actual class name before:content-['""'].
+                // If not in the map, return the original (escaped) token unchanged.
+                return mangleMap[cls.replace(/\\(.)/g, '$1')] || cls;
+            })
+            .join(' ');
+    }
+
+    // Pass 1: Direct className="..." / class="..." / className:"..."
+    // Use separate patterns for double-quoted and single-quoted strings so that
+    // class names containing single quotes (e.g. before:content-['']) are mangled
+    // correctly from double-quoted strings, and vice versa.
+    // (?:[^"\\]|\\.)*  — proper JS string literal matcher: accepts any char except
+    // `"` and `\`, OR a backslash followed by any char (handles \" \\  \n etc.).
+    // Naive [^"]* broke on class names with embedded escaped quotes such as
+    // before:content-['""'] which the pre-plugin emits as "before:content-['\"\"']".
+    let result = code
+        .replace(/(?:class(?:Name)?|sz)[:=]\s*"((?:[^"\\]|\\.)*)"/g, (match, classes) => {
+            const mangled = mangleClassString(classes);
+            if (mangled === classes) { return match; }
+            return match.replace(classes, mangled);
+        })
+        .replace(/(?:class(?:Name)?|sz)[:=]\s*'((?:[^'\\]|\\.)*)'/g, (match, classes) => {
+            const mangled = mangleClassString(classes);
+            if (mangled === classes) { return match; }
+            return match.replace(classes, mangled);
+        });
+
+    // Pass 1.5: Template literal quasi (static) segments in className:`...`
+    // Generated by the pre-plugin for sz objects with ternary property values, e.g.:
+    //   sz={{ flex: true, flexDir: isRow ? 'row' : 'col' }}
+    //   → className={`flex items-center ${isRow ? "flex-row" : "flex-col"}`}
+    // In minified client bundles:    className:`flex items-center ${isRow?"flex-row":"flex-col"}`
+    // In unminified SSR bundles:     className: `flex items-center ${isRow?"flex-row":"flex-col"}`
+    // The \s* allows the optional space after the colon that appears in unminified SSR output.
+    // Pass 1 skips template literals (only targets "..." strings).
+    // Pass 2 mangles the quoted parts of the ternary but leaves the quasi text unmangled.
+    result = result.replace(/className:\s*`([^`]+)`/g, (fullMatch, tplContent) => {
+        let changed = false;
+        let out = '';
+        let i = 0;
+        while (i < tplContent.length) {
+            const interStart = tplContent.indexOf('${', i);
+            if (interStart === -1) {
+                // Trailing quasi — rest of the template literal is static text
+                const quasi = tplContent.slice(i);
+                const trimmed = quasi.trim();
+                if (trimmed) {
+                    const m = mangleClassString(trimmed);
+                    if (m !== trimmed) {
+                        changed = true;
+                        out += quasi.replace(trimmed, m);
+                    } else {
+                        out += quasi;
+                    }
+                } else {
+                    out += quasi;
+                }
+                break;
+            }
+            // Quasi text before the next ${...} interpolation
+            const quasi = tplContent.slice(i, interStart);
+            const trimmed = quasi.trim();
+            if (trimmed) {
+                const m = mangleClassString(trimmed);
+                if (m !== trimmed) {
+                    changed = true;
+                    out += quasi.replace(trimmed, m);
+                } else {
+                    out += quasi;
+                }
+            } else {
+                out += quasi;
+            }
+            // Mangle quoted strings inside the ${...} interpolation (ternary branch strings)
+            // then copy the interpolation with its surrounding ${ and } delimiters.
+            let j = interStart + 2;
+            let depth = 0;
+            while (j < tplContent.length) {
+                if (tplContent[j] === '{') { depth++; } else if (tplContent[j] === '}') {
+                    if (depth === 0) { j++; break; }
+                    depth--;
+                }
+                j++;
+            }
+            const interInner = tplContent.slice(interStart + 2, j - 1);
+            const mangledInner = interInner.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
+                const parts = inner.split(/\s+/).filter(Boolean);
+                if (parts.length === 0) { return qm; }
+                const m = parts.map((p: string) => mangleMap[p] || p).join(' ');
+                if (m === inner) { return qm; }
+                changed = true;
+                return '"' + m + '"';
+            });
+            out += '${' + mangledInner + '}';
+            i = j;
+        }
+        return changed ? 'className:`' + out + '`' : fullMatch;
+    });
+
+    // Pass 2: className:EXPR with ternary operators containing quoted strings.
+    // Handles all forms produced by the compiler:
+    //   - Simple ternary:          className:cond?"class-a":"class-b"
+    //   - Ternary in call arg:     className:r(cond?"class-a":"class-b")
+    //   - Leading static + ternary:className:r("static",cond?"class-a":"class-b")
+    //   - Multi-arg combos:        className:r("z",pe&&"p-4",cond?"rounded-xl":"scale-75")
+    //
+    // Uses character-level balanced-paren scanning to extract the full expression so
+    // that commas inside nested call args do NOT prematurely stop extraction (the old
+    // regex `[^,;}\])\n]+` stopped at the first `,`, missing ternaries after a leading
+    // static argument).
+    //
+    // Skip `className:"..."`, `className:'...'`, `className:\`...\`` — Pass 1/1.5
+    // handle those; re-mangling would corrupt already-mangled tokens.
+    {
+        const marker = 'className:';
+        let searchFrom = 0;
+        let out = '';
+        while (searchFrom < result.length) {
+            const idx = result.indexOf(marker, searchFrom);
+            if (idx === -1) {
+                out += result.slice(searchFrom);
+                break;
+            }
+            out += result.slice(searchFrom, idx + marker.length);
+            const afterColon = idx + marker.length;
+            // Skip optional space (unminified SSR form: "className: `...")
+            let exprStart = afterColon;
+            while (exprStart < result.length && result[exprStart] === ' ') { exprStart++; }
+            const firstChar = result[exprStart];
+            // Static string or template literal → Pass 1/1.5 territory, leave untouched
+            if (firstChar === '"' || firstChar === "'" || firstChar === '`') {
+                searchFrom = afterColon;
+                continue;
+            }
+            // Extract the full expression using paren-depth tracking.
+            // Stop at depth-0 terminators: , ; \n } ] )
+            // The comma terminator prevents over-reaching into adjacent object properties
+            // (e.g. {className:cond?"a":"b",title:"flex"} — must not mangle "flex" in title).
+            // Commas INSIDE function calls are at depth > 0, so they are not terminators:
+            //   className:r("static",cond?"a":"b") — the comma between args is depth-1, fine.
+            let depth = 0;
+            let j = afterColon;
+            while (j < result.length) {
+                const ch = result[j];
+                if (ch === '(' || ch === '[') { depth++; } else if (ch === ')' || ch === ']') {
+                    if (depth === 0) { break; }
+                    depth--;
+                } else if (depth === 0 && (ch === ',' || ch === ';' || ch === '\n' || ch === '}')) {
+                    break;
+                }
+                j++;
+            }
+            const expr = result.slice(afterColon, j);
+            // Only process if there is a ternary operator — otherwise leave untouched
+            // (e.g. className:someVar has no quoted strings to mangle anyway).
+            const qIdx = expr.indexOf('?');
+            if (qIdx === -1 || !expr.slice(qIdx).includes(':')) {
+                out += expr;
+                searchFrom = j;
+                continue;
+            }
+            let changed = false;
+            const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
+                const parts = inner.split(/\s+/).filter(Boolean);
+                if (parts.length === 0) { return qm; }
+                const mangledStr = parts.map((p: string) => mangleMap[p] || p).join(' ');
+                if (mangledStr !== inner) {
+                    changed = true;
+                    return '"' + mangledStr + '"';
+                }
+                return qm;
+            });
+            out += changed ? mangled : expr;
+            searchFrom = j;
+        }
+        result = out;
+    }
+
+    // Pass 3: Mangle quoted string arguments to csszyx runtime helpers (_szMerge, _szIf, etc.)
+    // that did NOT get a className= prefix in Pass 1. These are compiled class strings
+    // produced by the sz array/conditional compiler path — e.g. the static arg in:
+    //   _szMerge("demo-preview", "p-8 flex gap-6...", { bg })
+    // Safe heuristic: only replace a string if ALL its space-separated tokens are in
+    // the mangle map. Mangled tokens (e.g. "J", "h") are NOT keys in the map, so
+    // already-mangled strings from Pass 1/2 are never double-mangled.
+    //
+    // Lookbehind (?<=[,(]\s*) ensures we only match strings preceded by a comma or
+    // open-paren (i.e., function arguments), allowing optional whitespace between
+    // the separator and the opening quote. Without this guard, the naive /"([^"]+)"/g
+    // regex matches "garbage" between the close-quote of one string and the open-quote
+    // of the next (e.g. `","` in `"demo-preview","p-8 flex..."`), consuming the opening
+    // quote of the target string so it is never matched.
+    // The \s* is required because SSR bundles are NOT minified — spaces appear after
+    // commas and operators (e.g. `_szMerge(x, "p-8 flex...")`, `pe && "text-right"`).
+    // The lookbehind also covers && so that conditional array elements compiled by the
+    // sz-array path (condition && "class-string") are mangled correctly.
+    result = result.replace(/(?<=(?:[,(]|&&)\s*)"([^"]+)"/g, (match, inner) => {
+        const tokens = inner.split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) { return match; }
+        let changed = false;
+        const mangled: string[] = [];
+        for (const t of tokens) {
+            const m = mangleMap[t];
+            if (m === undefined) { return match; } // any unknown token → skip whole string
+            if (m !== t) { changed = true; }
+            mangled.push(m);
+        }
+        if (!changed) { return match; }
+        return '"' + mangled.join(' ') + '"';
+    });
+
+    return result;
+}
 
 /**
  * Core factory that creates the shared state and both pre/post plugins.
@@ -56,21 +360,56 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         mangleMap: {},
         checksum: '',
         finalized: false,
+        rootDir: process.cwd(),
     };
 
-    const SAFELIST_FILENAME = 'csszyx-classes.js';
+    const SAFELIST_FILENAME = 'csszyx-classes.html';
     const SOURCE_EXTENSIONS = new Set(['.tsx', '.jsx', '.ts', '.js']);
     const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
+
+    /**
+     * Writes the safelist manifest (csszyx-classes.html) from the given class set.
+     * No-ops if the file content is already up to date.
+     *
+     * HTML format is required (not JS string) because Tailwind v4's oxide scanner
+     * only generates child-combinator CSS (used by space-y-*, divide-y-*, etc.) when
+     * it sees the class applied to an element that has children in a scanned file.
+     * A flat JS string export generates an empty .space-y-N {} rule — no margin CSS.
+     * The HTML below puts every class on both a parent div and two child divs so that
+     * all utility variants (parent-targeting and child-targeting) are correctly emitted.
+     * @param classes - the full set of discovered classes to write
+     */
+    function writeSafelistFile(classes: Set<string>): void {
+        if (classes.size === 0) { return; }
+        const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
+        const classList = Array.from(classes).join(' ');
+        const content =
+            '<!-- Auto-generated by csszyx — DO NOT EDIT -->\n' +
+            '<!-- Tailwind CSS scans this file for class name detection -->\n' +
+            `<div class="${classList}">` +
+            `<div class="${classList}">x</div>` +
+            `<div class="${classList}">x</div>` +
+            '</div>\n';
+        try {
+            const existing = fs.existsSync(safelistPath) ? fs.readFileSync(safelistPath, 'utf-8') : '';
+            if (existing !== content) {
+                fs.writeFileSync(safelistPath, content);
+            }
+        } catch {
+            // Non-fatal: Tailwind just won't see prescanned classes
+        }
+    }
 
     /**
      * Pre-scans source files to discover class names before Tailwind CSS runs.
      * Tailwind v4 reads source files from disk and can't detect classes generated
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
      * This writes a manifest file with all discovered class names so Tailwind can scan it.
-     * @param rootDir - the project root directory to scan for source files
      */
-    function prescanAndWriteClasses(rootDir: string): void {
+    function prescanAndWriteClasses(): void {
         const discoveredClasses = new Set<string>();
+        // Raw className attribute values — used only for TW JIT safelist, never for the mangle map.
+        const rawDiscoveredClasses = new Set<string>();
 
         /**
          * Recursively walks directories to discover source files containing sz prop usage.
@@ -95,8 +434,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
                         // comments, and string literals in other positions never produce false
                         // positives (they are different AST node types and never reach the visitor).
+                        // result.classes = sz-generated → safelist + mangle map
+                        // result.rawClassNames = raw className attrs → safelist only (never mangled)
                         for (const cls of result.classes) {
                             discoveredClasses.add(cls);
+                        }
+                        for (const cls of result.rawClassNames) {
+                            rawDiscoveredClasses.add(cls);
                         }
                         // Extract static classes from _sz() runtime calls.
                         // When an sz prop has any dynamic value, the compiler wraps the
@@ -148,29 +492,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         }
 
-        scanDir(rootDir);
+        scanDir(state.rootDir);
 
-        // Also add to plugin state for mangle map building
+        // Add only sz-generated classes to state.classes (the mangle map source).
+        // Raw className attribute values are intentionally excluded — they are custom CSS classes
+        // that must not be mangled, since JS code references them by their original names.
         for (const cls of discoveredClasses) {
             state.classes.add(cls);
         }
 
-        // Write manifest file for Tailwind to scan
-        if (discoveredClasses.size > 0) {
-            const safelistPath = path.join(rootDir, SAFELIST_FILENAME);
-            const content =
-                '// Auto-generated by csszyx — DO NOT EDIT\n' +
-                '// Tailwind CSS scans this file for class name detection\n' +
-                'export default "' + Array.from(discoveredClasses).join(' ') + '";\n';
-            try {
-                const existing = fs.existsSync(safelistPath) ? fs.readFileSync(safelistPath, 'utf-8') : '';
-                if (existing !== content) {
-                    fs.writeFileSync(safelistPath, content);
-                }
-            } catch {
-                // Non-fatal: Tailwind just won't see prescanned classes
-            }
-        }
+        // Write manifest file for Tailwind to scan — includes both sz-generated AND raw class names
+        // so Tailwind JIT can detect any custom utilities that happen to shadow TW class names.
+        const safelistClasses = new Set([...discoveredClasses, ...rawDiscoveredClasses]);
+        writeSafelistFile(safelistClasses);
     }
 
     /**
@@ -237,70 +571,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Mangles a single class string using the mangle map.
-     * @param classString space-separated class names
-     * @returns mangled class string
-     */
-    function mangleClassString(classString: string): string {
-        return classString.split(/\s+/)
-            .map((cls: string) => state.mangleMap[cls] || cls)
-            .join(' ');
-    }
-
-    /**
-     * Mangles class strings in bundled code (JS/HTML assets).
-     * Uses two passes:
-     * 1. Direct className="..." and className:"..." patterns
-     * 2. className:EXPR patterns with ternary expressions containing quoted strings
-     * @param code bundled source code
+     * Thin wrapper: supplies state.mangleMap to the exported pure function.
+     * @param code - bundled source code to mangle
      * @returns code with mangled class names
      */
     function mangleCodeClasses(code: string): string {
-        // Pass 1: Direct className="..." / class="..." / className:"..."
-        // Use separate patterns for double-quoted and single-quoted strings so that
-        // class names containing single quotes (e.g. before:content-['']) are mangled
-        // correctly from double-quoted strings, and vice versa.
-        let result = code
-            .replace(/(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g, (match, classes) => {
-                const mangled = mangleClassString(classes);
-                if (mangled === classes) {return match;}
-                return match.replace(classes, mangled);
-            })
-            .replace(/(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g, (match, classes) => {
-                const mangled = mangleClassString(classes);
-                if (mangled === classes) {return match;}
-                return match.replace(classes, mangled);
-            });
-
-        // Pass 2: className:EXPR with ternary operators containing quoted strings
-        // Handles patterns like: className:cond?"class-a":other?"class-b":"class-c"
-        //
-        // Negative lookahead (?!["']) ensures the regex never matches static strings
-        // (className:"..." or className:'...') — those are handled by Pass 1.
-        // Without this, already-mangled symbols (e.g. "z") would be looked up in
-        // mangleMap again and corrupted if a class name happened to collide with a
-        // mangled symbol.
-        result = result.replace(/className:(?!["'])([^,;}\])\n]+)/g, (fullMatch, expr: string) => {
-            // Defense-in-depth: expr must contain "?" followed by ":" to be a valid
-            // ternary. Non-ternary expressions that slipped through the regex are skipped.
-            const qIdx = expr.indexOf('?');
-            if (qIdx === -1 || !expr.slice(qIdx).includes(':')) {return fullMatch;}
-            let changed = false;
-            const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
-                const parts = inner.split(/\s+/).filter(Boolean);
-                if (parts.length === 0) {return qm;}
-                const mangledStr = parts.map((p: string) => state.mangleMap[p] || p).join(' ');
-                if (mangledStr !== inner) {
-                    changed = true;
-                    return '"' + mangledStr + '"';
-                }
-                return qm;
-            });
-            if (changed) {return 'className:' + mangled;}
-            return fullMatch;
-        });
-
-        return result;
+        return mangleCodeClassesSync(code, state.mangleMap);
     }
 
     /**
@@ -381,9 +657,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @returns transformed code with source map, or null if no changes were made
          */
         transform(code, id) {
-            // CSS transform: inject @source inline() so Tailwind sees csszyx-generated class names.
-            // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.js
-            // is not imported anywhere, so it's invisible to Tailwind. Injecting @source inline()
+            // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
+            // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
+            // is not imported anywhere, so it's invisible to Tailwind. Injecting @source
             // directly into the CSS that imports tailwindcss is the only reliable way to ensure
             // Tailwind generates CSS for the classes that csszyx transforms sz props into.
             if (/\.css(\?.*)?$/.test(id)) {
@@ -396,10 +672,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         .filter(c => c.length >= 2 && /^[a-z]/.test(c))
                         .join(' ');
                     if (candidates) {
-                        const inlineDirective = `@source inline("${candidates}");\n`;
+                        const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME).replace(/\\/g, '/');
+                        const cssDir = path.dirname(id).replace(/\\/g, '/');
+                        let relPath = path.posix.relative(cssDir, safelistPath);
+                        if (!relPath.startsWith('.')) {relPath = './' + relPath;}
+                        const sourceDirective = `@source "${relPath}";\n`;
                         const transformed = code.replace(
                             /(@import\s+["']tailwindcss[^"']*["'];)/,
-                            `$1\n${inlineDirective}`,
+                            `$1\n${sourceDirective}`,
                         );
                         if (transformed !== code) {
                             return { code: transformed, map: null };
@@ -411,6 +691,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
             let transformedCode = code;
             let usesRuntime = false;
+            let usesMerge = false;
             let usesColorVar = false;
             let transformed = false;
             let szClasses: Set<string> | undefined;
@@ -435,9 +716,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     const result = transformSourceCode(code);
                     transformedCode = result.code;
                     usesRuntime = result.usesRuntime;
+                    usesMerge = result.usesMerge;
                     usesColorVar = result.usesColorVar;
                     transformed = result.transformed;
                     szClasses = result.classes;
+                    // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
+                    // Suppressed in production to avoid leaking source paths into build output.
+                    if (result.diagnostics.length > 0 && process.env.NODE_ENV !== 'production') {
+                        for (const msg of result.diagnostics) {
+                            this.warn(`[csszyx] ${id}\n  ${msg}`);
+                        }
+                    }
                 }
             }
 
@@ -462,15 +751,29 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             {
                 const imports: string[] = [];
                 if (usesRuntime) {imports.push('_sz');}
+                if (usesMerge) {imports.push('_szMerge');}
                 if (usesColorVar) {imports.push('__szColorVar');}
-                if (imports.length > 0 && !transformedCode.includes("from 'csszyx/lite'")) {
-                    const importStmt = `import { ${imports.join(', ')} } from 'csszyx/lite';\n`;
-                    const directiveMatch = transformedCode.match(/^['"]use (client|server)['"];?\s*/);
-                    if (directiveMatch) {
-                        const directive = directiveMatch[0];
-                        transformedCode = transformedCode.replace(directive, `${directive}${importStmt}`);
+                // Filter out helpers already imported from @csszyx/runtime
+                const needed = imports.filter(
+                    name => !new RegExp(`\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]@csszyx/runtime['"]`).test(transformedCode),
+                );
+                if (needed.length > 0) {
+                    const existingImport = transformedCode.match(/^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m);
+                    if (existingImport) {
+                        // Append to the existing @csszyx/runtime import
+                        transformedCode = transformedCode.replace(
+                            existingImport[0],
+                            `${existingImport[1]}, ${needed.join(', ')} } from '@csszyx/runtime'`,
+                        );
                     } else {
-                        transformedCode = `${importStmt}${transformedCode}`;
+                        const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
+                        const directiveMatch = transformedCode.match(/^['"]use (client|server)['"];?\s*/);
+                        if (directiveMatch) {
+                            const directive = directiveMatch[0];
+                            transformedCode = transformedCode.replace(directive, `${directive}${importStmt}`);
+                        } else {
+                            transformedCode = `${importStmt}${transformedCode}`;
+                        }
                     }
                     transformed = true;
                 }
@@ -483,6 +786,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // TSX/JSX sz file: use piggyback classes from Babel JSXAttribute visitor.
                     // No regex needed — classes were collected during the existing Babel traverse
                     // at zero extra cost, with no false positives from text content or JSDoc.
+                    // Only sz-generated classes go into state.classes (the mangle map).
+                    // Raw className attribute values (szRawClassNames) are intentionally excluded:
+                    // they are custom CSS classes (e.g. reveal-item, glow-card) defined in raw CSS
+                    // files, not TW utilities. Mangling them would break JS that references them by
+                    // name (querySelectorAll, classList.add) without updating those call sites.
                     for (const cls of szClasses) {state.classes.add(cls);}
                 } else {
                     // Non-sz file (fast-path, no Babel ran) or Vue/Svelte adapter:
@@ -497,6 +805,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         /** Finalizes the mangle map after all source modules have been processed. */
         buildEnd() {
             finalizeMangleMap();
+            // Expose the mangle map as a Node.js global so that dynamic() SSR calls
+            // (which run in the same process during Astro/Next.js SSG) can resolve
+            // original class names to their mangled equivalents. Without this, dynamic()
+            // in SSR returns unmangled names (e.g. "p-4") while the built CSS only has
+            // mangled selectors (e.g. ".q0"), causing styles to silently not apply.
+            if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map = state.mangleMap;
+            }
         },
 
         /**
@@ -505,25 +821,101 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          */
         webpack(compiler: WebpackCompiler) {
             compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
+                const root = compiler.context || process.cwd();
+                state.rootDir = root;
                 if (state.classes.size === 0) {
-                    prescanAndWriteClasses(compiler.context || process.cwd());
+                    prescanAndWriteClasses();
                 }
+                // Generate theme type augmentation from @theme CSS blocks
+                runThemeScan(root, options.build?.scanCss);
             });
+            // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
+            if (options.build?.scanCss) {
+                const patterns = Array.isArray(options.build.scanCss)
+                    ? options.build.scanCss
+                    : [options.build.scanCss];
+                compiler.hooks.thisCompilation.tap('csszyx:theme-deps', (compilation) => {
+                    const root = compiler.context || process.cwd();
+                    for (const pattern of patterns) {
+                        const resolved = path.isAbsolute(pattern) ? pattern : path.join(root, pattern);
+                        if (fs.existsSync(resolved)) {
+                            compilation.fileDependencies.add(resolved);
+                        }
+                    }
+                });
+            }
         },
 
         vite: {
             /**
              * Vite hook: pre-scans source files when config is resolved.
+             * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
              * @param config - the resolved Vite configuration object
              */
             configResolved(config) {
+                const root = config.root || process.cwd();
+                state.rootDir = root;
                 // Pre-scan source files so Tailwind can discover classes
-                prescanAndWriteClasses(config.root || process.cwd());
+                prescanAndWriteClasses();
+                // Generate theme type augmentation from @theme CSS blocks
+                runThemeScan(root, options.build?.scanCss);
+            },
+
+            /**
+             * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
+             * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
+             * @param ctx - HMR context containing the changed file
+             */
+            handleHotUpdate(ctx) {
+                // Theme scan for @theme CSS blocks
+                const scanCss = options.build?.scanCss;
+                if (scanCss) {
+                    const patterns = Array.isArray(scanCss) ? scanCss : [scanCss];
+                    const root = ctx.server.config.root || process.cwd();
+                    const isWatched = patterns.some(p => {
+                        const resolved = path.isAbsolute(p) ? p : path.join(root, p);
+                        return ctx.file === resolved;
+                    });
+                    if (isWatched) {
+                        runThemeScan(root, scanCss);
+                    }
+                }
+
+                // Incremental sz class discovery: when a source file changes, scan it
+                // immediately and update csszyx-classes.html if new classes are found.
+                // This ensures Tailwind generates CSS for new sz props without a dev restart.
+                // handleHotUpdate fires before the module is re-transformed, so we must
+                // read and transform the file ourselves to discover any new classes.
+                if (!SOURCE_EXTENSIONS.has(path.extname(ctx.file))) { return; }
+                if (ctx.file.includes('node_modules')) { return; }
+
+                let fileContent: string, result: ReturnType<typeof transformSourceCode>;
+                try { fileContent = fs.readFileSync(ctx.file, 'utf-8'); } catch { return; }
+
+                if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) { return; }
+
+                try { result = transformSourceCode(fileContent); } catch { return; }
+
+                if (!result.transformed) { return; }
+
+                const sizeBefore = state.classes.size;
+                for (const cls of result.classes) { state.classes.add(cls); }
+
+                if (state.classes.size > sizeBefore) {
+                    // New classes found — update manifest so Tailwind regenerates CSS
+                    writeSafelistFile(state.classes);
+                    // Emit a synthetic watcher event on the manifest file so Tailwind's
+                    // internal file scanner (which listens on ctx.server.watcher) picks up
+                    // the change immediately, even if the OS fs event arrives with a delay.
+                    const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
+                    ctx.server.watcher.emit('change', safelistPath);
+                }
             },
             transformIndexHtml: {
                 order: 'pre',
                 /**
                  * Injects hydration data (mangle map + checksum) into the HTML document.
+                 * Also mangles class attributes in SSR-rendered HTML so they match mangled CSS selectors.
                  * @param html - the raw HTML string to transform
                  * @returns transformed HTML with injected hydration data
                  */
@@ -617,6 +1009,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                             throw e;
                                         }
                                     }
+                                } else if (file.endsWith('.html')) {
+                                    // Mangle class attributes in HTML assets (SSR-generated pages)
+                                    const mangledHtml = source
+                                        .replace(/\bclass="([^"]*)"/g, (_m: string, cls: string) => {
+                                            const out = cls.split(/\s+/).filter(Boolean)
+                                                .map((c: string) => state.mangleMap[c] || c).join(' ');
+                                            return out !== cls ? `class="${out}"` : _m;
+                                        })
+                                        .replace(/\bclass='([^']*)'/g, (_m: string, cls: string) => {
+                                            const out = cls.split(/\s+/).filter(Boolean)
+                                                .map((c: string) => state.mangleMap[c] || c).join(' ');
+                                            return out !== cls ? `class='${out}'` : _m;
+                                        });
+                                    if (mangledHtml !== source) {
+                                        compilation.updateAsset(
+                                            file,
+                                            new compiler.webpack.sources.RawSource(mangledHtml),
+                                        );
+                                        continue;
+                                    }
                                 } else if (file.endsWith('.js')) {
                                     // Mangle class name strings in JS bundles
                                     let mangled = mangleCodeClasses(source);
@@ -656,6 +1068,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             generateBundle(_options, bundle) {
                 finalizeMangleMap();
+
+                // Emit CSS manifest for @csszyx/dynamic delta check.
+                // Lists all original class names (and mangle map if mangling enabled)
+                // so runtime dynamic() can skip injection for pre-built classes.
+                const manifestData: {
+                    version: string;
+                    buildId: string;
+                    classes: string[];
+                    mangleMap?: Record<string, string>;
+                } = {
+                    version: '0.4.0',
+                    buildId: state.checksum,
+                    classes: Object.keys(state.mangleMap),
+                };
+                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                    manifestData.mangleMap = state.mangleMap;
+                }
+                this.emitFile({
+                    type: 'asset',
+                    fileName: 'csszyx-manifest.json',
+                    source: JSON.stringify(manifestData),
+                });
 
                 for (const file in bundle) {
                     const chunk = bundle[file];
@@ -762,8 +1196,11 @@ export const esbuildPlugin = (options: PartialCsszyxConfig = {}): EsbuildPlugin 
          * @param build - the esbuild plugin build context
          */
         setup(build: PluginBuild) {
-            prePlugin.esbuild(options).setup(build);
-            postPlugin.esbuild(options).setup(build);
+            // `unplugin` resolves esbuild via vite's hoisted esbuild@0.21.x while our
+            // local peer is esbuild@0.27.x — type-incompatible but identical at runtime.
+            const b = build as unknown as Parameters<ReturnType<typeof prePlugin.esbuild>['setup']>[0];
+            prePlugin.esbuild(options).setup(b);
+            postPlugin.esbuild(options).setup(b);
         },
     };
 };
