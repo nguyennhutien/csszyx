@@ -9,7 +9,7 @@
  * @module @csszyx/runtime/concatenate
  */
 
-import { type SzObject, transform } from '@csszyx/compiler';
+import { type SzObject, transform } from '@csszyx/compiler/browser';
 
 /**
  * Type for sz input - can be a pre-compiled string or SzObject.

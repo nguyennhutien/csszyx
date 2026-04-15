@@ -15,6 +15,12 @@ import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 // Export concatenation helpers
 export { _sz, _sz2, _sz3, _szIf, _szMerge, _szSwitch } from './concatenate.js';
 
+// Export variant authoring helper
+export { szv } from './variants.js';
+
+// Re-export lite helpers so consumers can import everything from @csszyx/runtime
+export { __szColorVar } from './lite.js';
+
 // Export verification functions
 export {
     getRecoveryMode,
