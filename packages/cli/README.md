@@ -40,10 +40,22 @@ npx csszyx audit
 
 ### `generate-types`
 
-Generate TypeScript definitions from your `tailwind.config.js`.
+> **Not applicable for Tailwind v4 projects.**
+>
+> CSSzyx requires Tailwind v4, which replaces `tailwind.config.js` with `@theme {}` blocks
+> in CSS. This command uses Tailwind v3's `resolveConfig()` API to parse JS config files —
+> that API does not exist in v4.
+>
+> For v4 projects, use the plugin's `build.scanCss` option instead. See
+> [Plugin Config docs](/docs/reference/config).
+>
+> This command is kept for potential future Tailwind v3 compatibility support.
+> If your project needs it, open an issue.
 
 ```bash
 npx csszyx generate-types
+npx csszyx generate-types --config ./path/to/tailwind.config.js
+npx csszyx generate-types --output ./src/csszyx.d.ts
 ```
 
 ### `migrate`

@@ -183,6 +183,75 @@ describe('variant-parser', () => {
             expect(mapVariant('group-focus-within')).toEqual(['group', 'focusWithin']);
         });
 
+        // group-data-* variants
+        it('group-data-[active] (with brackets)', () => {
+            expect(mapVariant('group-data-[active]')).toEqual(['group', 'data', 'active']);
+        });
+
+        it('group-data-active (bare shorthand, no brackets)', () => {
+            // TW v4 allows omitting brackets for simple attribute names
+            expect(mapVariant('group-data-active')).toEqual(['group', 'data', 'active']);
+        });
+
+        it("group-data-[active='true'] (attribute with value)", () => {
+            expect(mapVariant("group-data-[active='true']")).toEqual(['group', 'data', "active='true'"]);
+        });
+
+        it('group-data-[state=open] (attribute with value)', () => {
+            expect(mapVariant('group-data-[state=open]')).toEqual(['group', 'data', 'state=open']);
+        });
+
+        // Common real-world data attributes (bare shorthand = no brackets, attribute presence only)
+        it('group-data-open (bare shorthand)', () => {
+            expect(mapVariant('group-data-open')).toEqual(['group', 'data', 'open']);
+        });
+
+        it('group-data-closed (bare shorthand)', () => {
+            expect(mapVariant('group-data-closed')).toEqual(['group', 'data', 'closed']);
+        });
+
+        it('group-data-disabled (bare shorthand)', () => {
+            expect(mapVariant('group-data-disabled')).toEqual(['group', 'data', 'disabled']);
+        });
+
+        it('group-data-[open] (with brackets — same result as bare shorthand)', () => {
+            expect(mapVariant('group-data-[open]')).toEqual(['group', 'data', 'open']);
+        });
+
+        it('group-data-[state=open] (value match — brackets required)', () => {
+            expect(mapVariant('group-data-[state=open]')).toEqual(['group', 'data', 'state=open']);
+        });
+
+        it('group-data-[orientation=horizontal] (Radix UI orientation)', () => {
+            expect(mapVariant('group-data-[orientation=horizontal]')).toEqual(['group', 'data', 'orientation=horizontal']);
+        });
+
+        // group-aria-* variants
+        it('group-aria-checked', () => {
+            expect(mapVariant('group-aria-checked')).toEqual(['group', 'aria', 'checked']);
+        });
+
+        it('group-aria-expanded', () => {
+            expect(mapVariant('group-aria-expanded')).toEqual(['group', 'aria', 'expanded']);
+        });
+
+        it('group-aria-[current=page]', () => {
+            expect(mapVariant('group-aria-[current=page]')).toEqual(['group', 'aria', 'current=page']);
+        });
+
+        // peer-data-* (same pattern, different type)
+        it('peer-data-[active] (with brackets)', () => {
+            expect(mapVariant('peer-data-[active]')).toEqual(['peer', 'data', 'active']);
+        });
+
+        it('peer-data-active (bare shorthand)', () => {
+            expect(mapVariant('peer-data-active')).toEqual(['peer', 'data', 'active']);
+        });
+
+        it('peer-data-[state=open] (value match)', () => {
+            expect(mapVariant('peer-data-[state=open]')).toEqual(['peer', 'data', 'state=open']);
+        });
+
         it('peer-focus-visible/label', () => {
             expect(mapVariant('peer-focus-visible/label')).toEqual(['peer', 'label', 'focusVisible']);
         });
@@ -304,6 +373,30 @@ describe('variant-parser', () => {
         it('group-hover/sidebar', () => {
             const { szObject } = classNameToSzObject('group-hover/sidebar:text-white');
             expect(szObject).toEqual({ group: { sidebar: { hover: { color: 'white' } } } });
+        });
+
+        it('group-data-[active] (brackets)', () => {
+            const { szObject } = classNameToSzObject('group-data-[active]:border-blue-500');
+            expect(szObject).toEqual({ group: { data: { active: { borderColor: 'blue-500' } } } });
+        });
+
+        it('group-data-active (bare shorthand)', () => {
+            const { szObject } = classNameToSzObject('group-data-active:border-blue-500');
+            expect(szObject).toEqual({ group: { data: { active: { borderColor: 'blue-500' } } } });
+        });
+
+        it("group-data-[active='true']/card (value match + named group)", () => {
+            const { szObject } = classNameToSzObject("group-data-[active='true']/card:text-blue-600");
+            expect(szObject).toEqual({
+                group: { card: { data: { "active='true'": { color: 'blue-600' } } } },
+            });
+        });
+
+        it('dark:group-data-[active]:border-blue-500 (compound)', () => {
+            const { szObject } = classNameToSzObject('dark:group-data-[active]:border-blue-500');
+            expect(szObject).toEqual({
+                dark: { group: { data: { active: { borderColor: 'blue-500' } } } },
+            });
         });
 
         it('has variant', () => {

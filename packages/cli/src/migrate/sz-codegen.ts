@@ -37,6 +37,21 @@ export function generateSzHtmlValue(obj: Record<string, unknown>, braces = false
 }
 
 /**
+ * Generate an sz object literal string (without JSX expression braces).
+ * Used by dynamic pattern handlers to produce array element strings.
+ *
+ * @example
+ * generateSzObjectLiteral({ p: 4, bg: 'blue-500' })
+ * // Returns: "{ p: 4, bg: 'blue-500' }"
+ *
+ * @param obj - The sz property object.
+ * @returns {string} Object literal string.
+ */
+export function generateSzObjectLiteral(obj: Record<string, unknown>): string {
+    return objectToString(obj);
+}
+
+/**
  * Convert an object to its string representation.
  * @param obj - The object to stringify.
  * @param indent - Current indentation level.

@@ -56,30 +56,35 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
 
     // Mangle Statistics
     printSection('📊 Mangle Statistics');
-    console.log(`  Total Classes:       ${stats.totalClasses}`);
-    console.log(`  Mangled Classes:     ${stats.totalClasses} (100%)`);
-    console.log('  Unmangled Classes:   0');
-    console.log();
-    console.log('  Tier Distribution:');
+    if (stats.totalClasses === 0) {
+        console.log('  Tier distribution not yet available.');
+        console.log('  Run a production build first, then re-run csszyx audit.');
+    } else {
+        console.log(`  Total Classes:       ${stats.totalClasses}`);
+        console.log(`  Mangled Classes:     ${stats.totalClasses} (100%)`);
+        console.log('  Unmangled Classes:   0');
+        console.log();
+        console.log('  Tier Distribution:');
 
-    const tierNames = [
-        'Tier 1 (a-Z)',
-        'Tier 2 (a0-Z9)',
-        'Tier 3 (aa-ZZ)',
-        'Tier 4 (a00-Z99)',
-        'Tier 5 (aaa+)',
-    ];
+        const tierNames = [
+            'Tier 1 (a-Z)',
+            'Tier 2 (a0-Z9)',
+            'Tier 3 (aa-ZZ)',
+            'Tier 4 (a00-Z99)',
+            'Tier 5 (aaa+)',
+        ];
 
-    for (let i = 1; i <= 5; i++) {
-        const count = stats.tierDistribution[i] || 0;
-        const percent = stats.totalClasses
-            ? Math.round((count / stats.totalClasses) * 100)
-            : 0;
-        const bar = printBar([count], stats.totalClasses, 20);
+        for (let i = 1; i <= 5; i++) {
+            const count = stats.tierDistribution[i] || 0;
+            const percent = stats.totalClasses
+                ? Math.round((count / stats.totalClasses) * 100)
+                : 0;
+            const bar = printBar([count], stats.totalClasses, 20);
 
-        console.log(
-            `  • ${tierNames[i - 1].padEnd(18)} ${String(count).padStart(3)} (${String(percent).padStart(2)}%)  ${colors.dim(bar)}`,
-        );
+            console.log(
+                `  • ${tierNames[i - 1].padEnd(18)} ${String(count).padStart(3)} (${String(percent).padStart(2)}%)  ${colors.dim(bar)}`,
+            );
+        }
     }
 
     // Bundle Size Impact
@@ -149,15 +154,9 @@ async function collectStats(cwd: string): Promise<AuditStats> {
         stats.bundleSavings.originalCSS = Math.round(stats.bundleSavings.mangledCSS * 1.71);
     }
 
-    // Mock tier distribution for demo
-    stats.totalClasses = 247;
-    stats.tierDistribution = {
-        1: 52,
-        2: 87,
-        3: 64,
-        4: 32,
-        5: 12,
-    };
+    // Tier distribution requires the csszyx mangle map (injected by the build plugin
+    // into the HTML as data-sz-manifest). Not available from dist files alone — this
+    // will be implemented when the manifest reader is added in a future release.
 
     return stats;
 }

@@ -44,12 +44,10 @@ cli
 // doctor command
 cli
     .command('doctor', 'Diagnose mangling issues')
-    .option('--fix', 'Auto-fix common issues')
     .option('--verbose', 'Show detailed output')
     .option('--cwd <dir>', 'Current working directory')
     .action(async (options) => {
         await doctor({
-            fix: options.fix,
             verbose: options.verbose,
             cwd: options.cwd,
         });
@@ -102,6 +100,9 @@ cli
     .option('--inject-runtime <mode>', 'Inject runtime script into HTML: local | cdn')
     .option('--cdn-url <url>', 'Custom CDN URL for --inject-runtime cdn')
     .option('--local-path <path>', 'Local script path for --inject-runtime local (default: csszyx-runtime.js)')
+    .option('--audit', 'Scan without modifying files and output .csszyx-todo.json')
+    .option('--inject-todos', 'Inject {/* @sz-todo */} comments above unrecognized classes')
+    .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz properties')
     .action(async (dir, options) => {
         await migrate({
             dryRun: options.dryRun,
@@ -115,6 +116,9 @@ cli
             : false,
             cdnUrl: options.cdnUrl,
             localPath: options.localPath,
+            audit: options.audit,
+            injectTodos: options.injectTodos,
+            resolveTodos: options.resolveTodos,
         });
     });
 
@@ -147,3 +151,9 @@ export {
     flattenColors,
     scanTailwindConfig,
 } from './scanner/tailwind-scanner.js';
+
+// Migrate utilities — used by @csszyx/mcp-server
+export type { TransformResult as MigrateResult } from './migrate/ast-transformer.js';
+export { transformSource as migrateSource } from './migrate/ast-transformer.js';
+export type { CsszyxTodoEntry, CsszyxTodoMap } from './migrate/variant-parser.js';
+export { classNameToSzObject } from './migrate/variant-parser.js';
