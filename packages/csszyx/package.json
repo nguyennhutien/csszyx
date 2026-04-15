@@ -44,21 +44,30 @@
     "./webpack": {
       "types": "./dist/webpack.d.ts",
       "import": "./dist/webpack.js"
+    },
+    "./dynamic": {
+      "types": "./dist/dynamic.d.ts",
+      "import": "./dist/dynamic.js"
+    },
+    "./dynamic/react": {
+      "types": "./dist/dynamic-react.d.ts",
+      "import": "./dist/dynamic-react.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts --format esm --dts && echo '/// <reference types=\"@csszyx/types/jsx\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
-    "dev": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts --format esm --dts --watch"
+    "build": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts src/dynamic.ts src/dynamic-react.ts --format esm --dts && echo '/// <reference types=\"@csszyx/types/jsx\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
+    "dev": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts src/dynamic.ts src/dynamic-react.ts --format esm --dts --watch"
   },
   "dependencies": {
     "@csszyx/core": "workspace:*",
     "@csszyx/runtime": "workspace:*",
     "@csszyx/compiler": "workspace:*",
     "@csszyx/unplugin": "workspace:*",
-    "@csszyx/types": "workspace:*"
+    "@csszyx/types": "workspace:*",
+    "@csszyx/dynamic": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.0.2",

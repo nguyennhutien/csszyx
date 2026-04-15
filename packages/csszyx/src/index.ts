@@ -27,6 +27,9 @@ export {
     _szSwitch,
 } from '@csszyx/runtime';
 
+// === Variant Authoring ===
+export { szv } from '@csszyx/runtime';
+
 // === Runtime Lite (minimal bundle) ===
 export { _szIf as _szIfLite, _sz as _szLite } from '@csszyx/runtime/lite';
 
