@@ -30,6 +30,10 @@ export function isValidColorString(value: string): boolean {
     if (/^(rgb|hsl|oklch|color|hwb|lab|lch|oklab)\(/.test(value)) {return true;}
     // Color scale: blue-500, brand-500, brand-primary-500 — any word-number pattern
     if (/^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*-\d+$/.test(value)) {return true;}
+    // Tailwind v4 semantic tokens: single-word or hyphenated identifiers without trailing number.
+    // Any CSS identifier is a potential semantic token (e.g. 'primary', 'muted-foreground').
+    // We accept these rather than falsely rejecting valid theme tokens.
+    if (/^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z][a-zA-Z0-9]*)*$/.test(value)) {return true;}
     return false;
 }
 

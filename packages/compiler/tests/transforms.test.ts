@@ -51,8 +51,8 @@ describe('transforms — scale', () => {
         expect(t({ scaleZ: 50 })).toBe('scale-z-50');
     });
 
-    it('{ scale3d: true } → scale-3d', () => {
-        expect(t({ scale3d: true })).toBe('scale-3d');
+    it("{ scale: '3d' } → scale-3d", () => {
+        expect(t({ scale: '3d' })).toBe('scale-3d');
     });
 
     it('{ scale: "1.5" } → scale-[1.5] (arbitrary)', () => {
@@ -115,8 +115,8 @@ describe('transforms — translate', () => {
         expect(t({ translateY: 'full' })).toBe('translate-y-full');
     });
 
-    it('{ translate3d: true } → translate-3d', () => {
-        expect(t({ translate3d: true })).toBe('translate-3d');
+    it('{ translate: "3d" } → translate-3d', () => {
+        expect(t({ translate: '3d' })).toBe('translate-3d');
     });
 
     it('{ translateX: "5px" } → translate-x-[5px] (arbitrary)', () => {
@@ -125,6 +125,30 @@ describe('transforms — translate', () => {
 
     it('{ translateX: "--t" } → translate-x-(--t) (css variable)', () => {
         expect(t({ translateX: '--t' })).toBe('translate-x-(--t)');
+    });
+
+    it('{ translateX: "-1/2" } → -translate-x-1/2 (negative fraction)', () => {
+        expect(t({ translateX: '-1/2' })).toBe('-translate-x-1/2');
+    });
+
+    it('{ translateY: "-1/2" } → -translate-y-1/2 (negative fraction)', () => {
+        expect(t({ translateY: '-1/2' })).toBe('-translate-y-1/2');
+    });
+
+    it('{ translate: "1/2" } → translate-1/2 (shorthand, both axes)', () => {
+        expect(t({ translate: '1/2' })).toBe('translate-1/2');
+    });
+
+    it('{ translate: "-1/2" } → -translate-1/2 (shorthand negative fraction)', () => {
+        expect(t({ translate: '-1/2' })).toBe('-translate-1/2');
+    });
+
+    it('{ translate: "full" } → translate-full', () => {
+        expect(t({ translate: 'full' })).toBe('translate-full');
+    });
+
+    it('{ translate: 4 } → translate-4', () => {
+        expect(t({ translate: 4 })).toBe('translate-4');
     });
 });
 
@@ -193,5 +217,13 @@ describe('transforms — perspective origin', () => {
 describe('transforms — transform', () => {
     it('{ transform: "none" } → transform-none', () => {
         expect(t({ transform: 'none' })).toBe('transform-none');
+    });
+
+    it('{ transform: "gpu" } → transform-gpu', () => {
+        expect(t({ transform: 'gpu' })).toBe('transform-gpu');
+    });
+
+    it('{ transform: "cpu" } → transform-cpu', () => {
+        expect(t({ transform: 'cpu' })).toBe('transform-cpu');
     });
 });

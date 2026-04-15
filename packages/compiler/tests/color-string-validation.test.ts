@@ -62,10 +62,17 @@ describe('isValidColorString', () => {
         expect(isValidColorString('red-500/50')).toBe(false);
     });
 
-    it('rejects unrecognized strings', () => {
-        expect(isValidColorString('totally-invalid')).toBe(false); // no number suffix
-        expect(isValidColorString('blue500')).toBe(false); // no dash
-        expect(isValidColorString('notacolor')).toBe(false);
+    it('rejects non-identifier strings', () => {
+        expect(isValidColorString('500blue')).toBe(false); // starts with digit (invalid CSS ident)
+    });
+
+    it('accepts Tailwind v4 semantic tokens (CSS identifiers)', () => {
+        // Any CSS identifier is a potential semantic token in TW v4
+        expect(isValidColorString('primary')).toBe(true);
+        expect(isValidColorString('background')).toBe(true);
+        expect(isValidColorString('muted-foreground')).toBe(true);
+        expect(isValidColorString('card')).toBe(true);
+        expect(isValidColorString('popover')).toBe(true);
     });
 });
 
@@ -139,21 +146,20 @@ describe('transform() — color string validation (JS path)', () => {
         });
     });
 
-    describe('unrecognized color strings — warn + suppress', () => {
-        it('suppresses bg: "totally-invalid-xyz" and warns', () => {
-            const result = transform({ bg: 'totally-invalid-xyz' });
-            expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(
-                expect.stringContaining('is not a recognized color value'),
-            );
+    describe('TW v4 semantic tokens — pass through, no suppress', () => {
+        // TW v4 semantic tokens like 'primary', 'background', 'muted-foreground' are
+        // valid CSS identifiers that may be defined in the user's theme. We accept them
+        // rather than falsely rejecting valid theme tokens.
+        it('passes bg: "primary" (TW v4 semantic token)', () => {
+            const result = transform({ bg: 'primary' });
+            expect(result.className).toBe('bg-primary');
+            expect(console.warn).not.toHaveBeenCalled();
         });
 
-        it('suppresses bg: "notacolor" and warns', () => {
-            const result = transform({ bg: 'notacolor' });
-            expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(
-                expect.stringContaining('is not a recognized color value'),
-            );
+        it('passes bg: "muted-foreground" (hyphenated semantic token)', () => {
+            const result = transform({ bg: 'muted-foreground' });
+            expect(result.className).toBe('bg-muted-foreground');
+            expect(console.warn).not.toHaveBeenCalled();
         });
     });
 

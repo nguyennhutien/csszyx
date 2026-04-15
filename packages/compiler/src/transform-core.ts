@@ -23,6 +23,19 @@ export interface SzObject {
   [key: string]: SzValue;
 }
 
+/**
+ * Readonly variant of SzValue — accepts values from `as const` objects.
+ */
+export type ReadonlySzValue = string | number | boolean | ReadonlySzObject;
+
+/**
+ * Readonly variant of SzObject — accepts `as const` objects without requiring `as any`.
+ * Use this as the parameter type for functions that accept but do not mutate sz objects.
+ */
+export interface ReadonlySzObject {
+  readonly [key: string]: ReadonlySzValue;
+}
+
 // ============================================================================
 // PROPERTY_MAP: Maps sz prop names to Tailwind utility prefixes
 // ============================================================================
@@ -86,11 +99,13 @@ export const PROPERTY_MAP: Record<string, string> = {
     outlineOffset: 'outline-offset',
     outlineStyle: 'outline',
 
-    // Ring (v3 — keep for future v3 support)
+    // Ring (v4: outset ring + inset ring)
     ring: 'ring',
     ringColor: 'ring',
     ringOffset: 'ring-offset',
     ringOffsetColor: 'ring-offset',
+    insetRing: 'inset-ring',
+    insetRingColor: 'inset-ring',
 
     // Spacing (canonical shorthand only)
     p: 'p',
@@ -283,6 +298,7 @@ export const PROPERTY_MAP: Record<string, string> = {
     rotateX: 'rotate-x',
     rotateY: 'rotate-y',
     rotateZ: 'rotate-z',
+    translate: 'translate',
     translateX: 'translate-x',
     translateY: 'translate-y',
     translateZ: 'translate-z',
@@ -302,6 +318,7 @@ export const PROPERTY_MAP: Record<string, string> = {
     ease: 'ease',
     delay: 'delay',
     animate: 'animate',
+    animationDelay: 'animation-delay', // animation-delay — distinct from transition delay
 
     // Masks
     mask: 'mask',
@@ -379,8 +396,9 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
 
 // ============================================================================
 // SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
+// This is exported for the MCP server so AI can guide users accurately.
 // ============================================================================
-const SUGGESTION_MAP: Record<string, string> = {
+export const SUGGESTION_MAP: Record<string, string> = {
     // Background
     backgroundColor: 'bg',
     backgroundImage: 'bgImg',
@@ -586,7 +604,7 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
-const BOOLEAN_SHORTHANDS = new Set([
+export const BOOLEAN_SHORTHANDS = new Set([
     // Display
     'block', 'inline', 'inlineBlock', 'flex', 'inlineFlex', 'grid', 'inlineGrid',
     'hidden', 'contents', 'table', 'tableRow', 'tableCell', 'flowRoot', 'listItem',
@@ -614,8 +632,6 @@ const BOOLEAN_SHORTHANDS = new Set([
     'ring',
     // Outline
     'outline',
-    // Transforms
-    'scale3d', 'rotate3d', 'translate3d', 'transformGpu', 'transformCpu',
 ]);
 
 // ============================================================================
@@ -652,9 +668,6 @@ const BOOLEAN_TO_CLASS: Record<string, string> = {
     diagonalFractions: 'diagonal-fractions',
     stackedFractions: 'stacked-fractions',
     // Transforms
-    scale3d: 'scale-3d',
-    rotate3d: 'rotate-3d',
-    translate3d: 'translate-3d',
     transformGpu: 'transform-gpu',
     transformCpu: 'transform-cpu',
     // Misc
@@ -699,7 +712,7 @@ const NEGATIVE_ALLOWED = new Set([
     'rotate', 'rotate-x', 'rotate-y', 'rotate-z',
     'scale-z',
     'skew-x', 'skew-y',
-    'translate-x', 'translate-y', 'translate-z',
+    'translate', 'translate-x', 'translate-y', 'translate-z',
     'mask',
     'space-x', 'space-y', 'tracking', 'indent',
     'scroll-m', 'scroll-mx', 'scroll-my', 'scroll-mt', 'scroll-mr', 'scroll-mb', 'scroll-ml',
@@ -793,7 +806,10 @@ export function normalizeArbitraryVariant(key: string): string {
  * @returns normalized value with spaces replaced by underscores
  */
 export function normalizeArbitraryValue(value: string): string {
-    return value.trim().replace(/\s+/g, '_');
+    // Strip user-provided outer brackets — sz auto-wraps arbitrary values;
+    // users must never pre-wrap (e.g. '[100px]' → '100px', then re-wrapped as needed).
+    const stripped = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
+    return stripped.trim().replace(/\s+/g, '_');
 }
 
 // Properties that support native fraction values (e.g. w-1/2) without brackets
@@ -807,7 +823,7 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'inset', 'inset-x', 'insetX', 'inset-y', 'insetY',
     'top', 'right', 'bottom', 'left', 'start', 'end',
     // Translate
-    'translate-x', 'translateX', 'translate-y', 'translateY',
+    'translate', 'translate-x', 'translateX', 'translate-y', 'translateY',
     // Aspect
     'aspect',
 ]);
@@ -818,22 +834,24 @@ const FRACTION_SUPPORTED_PROPS = new Set([
  * @returns whether the value requires wrapping in brackets
  */
 function needsArbitraryBrackets(value: string): boolean {
+    // Strip user-provided outer brackets before detection so '[100px]' is treated as '100px'
+    const v = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
     return (
-        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(value) || // Positive units
-        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(value) || // Negative units like -1px, -2rem
-        /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(value) || // Values starting with . like .25em
-        /^-\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(value) || // Negative values starting with -. like -.25em
-        value.startsWith('#') || // Hex colors
-        value.startsWith('rgb') || // RGB colors
-        value.startsWith('hsl') || // HSL colors
-        value.includes('calc(') || // Calculations
-        value.includes('var(') || // CSS variables (old syntax)
-        value.includes('attr(') || // attr() function
-        value.includes('url(') || // URLs
-        value.includes('clamp(') || // Clamp
-        value.includes('min(') || // Min
-        value.includes('max(') || // Max
-        value.includes(' ') // Values with spaces need brackets
+        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(v) || // Positive units
+        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(v) || // Negative units like -1px, -2rem
+        /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Values starting with . like .25em
+        /^-\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Negative values starting with -. like -.25em
+        v.startsWith('#') || // Hex colors
+        v.startsWith('rgb') || // RGB colors
+        v.startsWith('hsl') || // HSL colors
+        v.includes('calc(') || // Calculations
+        v.includes('var(') || // CSS variables (old syntax)
+        v.includes('attr(') || // attr() function
+        v.includes('url(') || // URLs
+        v.includes('clamp(') || // Clamp
+        v.includes('min(') || // Min
+        v.includes('max(') || // Max
+        v.includes(' ') // Values with spaces need brackets
     );
 }
 
@@ -892,10 +910,16 @@ const FONT_STRETCH_KEYWORDS = new Set([
 ]);
 */
 
-// Properties that need [prop:value] arbitrary property syntax (truly unknown CSS properties)
-const NEEDS_ARBITRARY_PROPERTY = new Set([
-    'mask-type', 'mask-composite', 'mask-mode',
-]);
+/**
+ * Converts a camelCase CSS property name to kebab-case.
+ * CSS custom properties (--*) are returned unchanged.
+ * @param prop - camelCase property name (e.g. "writingMode", "touchAction")
+ * @returns kebab-case string (e.g. "writing-mode", "touch-action")
+ */
+function camelToKebab(prop: string): string {
+    if (prop.startsWith('--')) { return prop; }
+    return prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
 
 /**
  * Gets the variant prefix from a camelCase key
@@ -953,6 +977,34 @@ function handleGroupPeer(
             continue;
         }
 
+        // Special case: group/peer with data attribute
+        // { group: { data: { active: { bg: 'blue' }}}} → group-data-[active]:bg-blue
+        // { group: { data: { 'state=open': { text: 'lg' }}}} → group-data-[state=open]:text-lg
+        if (nestedKey === 'data' && typeof nestedValue === 'object') {
+            for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
+                if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                const variantPrefix = `${prefix}${type}-data-[${attr}]:`;
+                const result = transform(attrValue as SzObject, variantPrefix);
+                if (result.className) {classes.push(result.className);}
+            }
+            continue;
+        }
+
+        // Special case: group/peer with aria attribute
+        // { group: { aria: { checked: { bg: 'blue' }}}} → group-aria-checked:bg-blue
+        // { group: { aria: { 'current=page': { ... }}}} → group-aria-[current=page]:
+        if (nestedKey === 'aria' && typeof nestedValue === 'object') {
+            for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
+                if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                const variantPrefix = ARIA_STATES.has(attr)
+                    ? `${prefix}${type}-aria-${attr}:`
+                    : `${prefix}${type}-aria-[${attr}]:`;
+                const result = transform(attrValue as SzObject, variantPrefix);
+                if (result.className) {classes.push(result.className);}
+            }
+            continue;
+        }
+
         // Check if nestedKey is a known variant
         const isVariant = KNOWN_VARIANTS.has(nestedKey) || KNOWN_VARIANTS.has(getVariantPrefix(nestedKey));
         // Check if it starts with arbitrary selector syntax
@@ -972,8 +1024,31 @@ function handleGroupPeer(
             if (result.className) {classes.push(result.className);}
         } else if (typeof nestedValue === 'object' && nestedValue !== null) {
             // { group: { name: { hover: { ... }}}} → group-hover/name:
+            // Also handles data/aria inside named group:
+            // { group: { card: { data: { active: { ... }}}}} → group-data-[active]/card:
             for (const [state, stateValue] of Object.entries(nestedValue as SzObject)) {
                 if (stateValue === null || stateValue === undefined || stateValue === false) {
+                    continue;
+                }
+                // data inside named group
+                if (state === 'data' && typeof stateValue === 'object') {
+                    for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
+                        if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                        const variantPrefix = `${prefix}${type}-data-[${attr}]/${nestedKey}:`;
+                        const result = transform(attrValue as SzObject, variantPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    }
+                    continue;
+                }
+                // aria inside named group
+                if (state === 'aria' && typeof stateValue === 'object') {
+                    for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
+                        if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                        const ariaSegment = ARIA_STATES.has(attr) ? `aria-${attr}` : `aria-[${attr}]`;
+                        const variantPrefix = `${prefix}${type}-${ariaSegment}/${nestedKey}:`;
+                        const result = transform(attrValue as SzObject, variantPrefix);
+                        if (result.className) {classes.push(result.className);}
+                    }
                     continue;
                 }
                 const mappedState = getVariantPrefix(state);
@@ -1173,6 +1248,24 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             continue;
         }
 
+        // ================================================================
+        // css: {} — Arbitrary CSS sub-prop
+        // Escape hatch for CSS properties with no sz/Tailwind equivalent.
+        // { css: { writingMode: 'vertical-lr' } } → [writing-mode:vertical-lr]
+        // { css: { '--my-color': 'red' } } → [--my-color:red]
+        // Works inside variants via recursion (hover: { css: { cursor: 'crosshair' } })
+        // ================================================================
+        if (rawKey === 'css') {
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+                for (const [cssProp, cssVal] of Object.entries(value as Record<string, unknown>)) {
+                    if (cssVal === null || cssVal === undefined) { continue; }
+                    const kebab = camelToKebab(cssProp);
+                    classes.push(`${prefix}[${kebab}:${normalizeArbitraryValue(String(cssVal))}]`);
+                }
+            }
+            continue;
+        }
+
         // { @container: "sidebar" } → @container/sidebar (string value with @ prefix)
         if (rawKey.startsWith('@') && typeof value === 'string') {
             const mappedKey = VARIANT_MAP[rawKey] || rawKey;
@@ -1261,12 +1354,12 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         // HANDLE COLOR OBJECT SYNTAX (before variant nesting)
         // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
         // ================================================================
-        if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'color' in (value as Record<string, unknown>)) {
+        if (typeof value === 'object' && value !== null && !Array.isArray(value) && rawKey in PROPERTY_MAP && 'color' in (value as Record<string, unknown>)) {
             const colorObj = value as { color: string; op?: number | string };
             const twPrefix = PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
             const rawColorBase = String(colorObj.color);
             // Arbitrary color values (hex, rgb, hsl, etc.) need bracket wrapping
-            const colorBase = needsArbitraryBrackets(rawColorBase) ? `[${rawColorBase}]` : rawColorBase;
+            const colorBase = needsArbitraryBrackets(rawColorBase) ? `[${normalizeArbitraryValue(rawColorBase)}]` : normalizeArbitraryValue(rawColorBase);
 
             if (colorObj.op !== undefined) {
                 const opStr = formatOpacity(colorObj.op);
@@ -1743,7 +1836,7 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             // decorationThickness: '2' | '3px' → decoration-2, decoration-[3px]
             if (rawKey === 'decorationThickness' || rawKey === 'textDecorationThickness') {
                 if (needsArbitraryBrackets(value)) {
-                    className += `decoration-[${value}]`;
+                    className += `decoration-[${normalizeArbitraryValue(value)}]`;
                 } else if (value.startsWith('--')) {
                     className += `decoration-(${value})`;
                 } else {
@@ -1812,7 +1905,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     ? `backdrop-${rawKey.slice(8).toLowerCase()}`
                     : rawKey;
                 const sValue = String(value);
-                if (sValue.startsWith('--')) {
+                if (sValue === '3d' && rawKey === 'scale') {
+                    classes.push(`${prefix}scale-3d`);
+                } else if (sValue.startsWith('--')) {
                     classes.push(`${prop}-(${sValue})`);
                 } else {
                     // String values always go to arbitrary []
@@ -1864,33 +1959,38 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 const v = String(value).trim();
                 // Keywords
                 if (v === 'none') {
-                    classes.push('bg-none');
+                    classes.push(`${prefix}bg-none`);
                     continue;
                 }
                 // Gradient prefixes: linear-*, radial*, conic* (with optional negative)
                 // v3 compat: gradient-to-* → linear-to-* (v4 renamed bg-gradient-to-* to bg-linear-to-*)
+                // repeating-*-gradient → arbitrary bg-[repeating-*-gradient(...)] (no Tailwind utility)
                 const vNorm = v.startsWith('-') ? v.slice(1) : v;
+                if (vNorm.startsWith('repeating-')) {
+                    classes.push(`${prefix}bg-[${normalizeArbitraryValue(v)}]`);
+                    continue;
+                }
                 if (vNorm.startsWith('linear-') || vNorm.startsWith('radial') || vNorm.startsWith('conic') || vNorm.startsWith('gradient-to-')) {
                     const vMapped = vNorm.startsWith('gradient-to-') ? vNorm.replace('gradient-to-', 'linear-to-') : vNorm;
                     if (v.startsWith('-')) {
-                        classes.push(`-bg-${vMapped}`);
+                        classes.push(`${prefix}-bg-${vMapped}`);
                     } else {
-                        classes.push(`bg-${vMapped}`);
+                        classes.push(`${prefix}bg-${vMapped}`);
                     }
                     continue;
                 }
                 // CSS variable
                 if (v.startsWith('--')) {
-                    classes.push(`bg-(image:${v})`);
+                    classes.push(`${prefix}bg-(image:${v})`);
                     continue;
                 }
                 // Already has url()
                 if (v.startsWith('url(')) {
-                    classes.push(`bg-[${v}]`);
+                    classes.push(`${prefix}bg-[${v}]`);
                     continue;
                 }
                 // Arbitrary URL
-                classes.push(`bg-[url(${v})]`);
+                classes.push(`${prefix}bg-[url(${v})]`);
                 continue;
             }
 
@@ -1898,11 +1998,25 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             if (rawKey === 'bgPos') {
                 const sVal = String(value);
                 if (sVal.startsWith('--')) {
-                    classes.push(`bg-(${sVal})`);
+                    classes.push(`${prefix}bg-(${sVal})`);
                 } else if (sVal.includes('_') || needsArbitraryBrackets(sVal)) {
-                    classes.push(`bg-[${normalizeArbitraryValue(sVal)}]`);
+                    classes.push(`${prefix}bg-[${normalizeArbitraryValue(sVal)}]`);
                 } else {
-                    classes.push(`bg-${sVal}`);
+                    classes.push(`${prefix}bg-${sVal}`);
+                }
+                continue;
+            }
+
+            // bgSize: Tailwind v4 uses bg-size-[<value>] for arbitrary background-size.
+            // Keywords (auto/cover/contain) stay as bg-auto/bg-cover/bg-contain via generic map.
+            if (rawKey === 'bgSize') {
+                const sVal = String(value);
+                if (sVal === 'auto' || sVal === 'cover' || sVal === 'contain') {
+                    classes.push(`${prefix}bg-${sVal}`);
+                } else if (sVal.startsWith('--')) {
+                    classes.push(`${prefix}bg-size-(${sVal})`);
+                } else {
+                    classes.push(`${prefix}bg-size-[${normalizeArbitraryValue(sVal)}]`);
                 }
                 continue;
             }
@@ -1934,7 +2048,10 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 } else if (value === 'no-repeat') {
                     className += 'bg-no-repeat';
                 } else {
-                    className += `bg-repeat-${value}`;
+                    // Strip optional 'repeat-' prefix so both 'x' and 'repeat-x' produce bg-repeat-x.
+                    // Canonical sz form is the TW suffix ('x', 'y', 'space', 'round') for consistency.
+                    const suffix = value.startsWith('repeat-') ? value.slice(7) : value;
+                    className += `bg-repeat-${suffix}`;
                 }
                 classes.push(className);
                 continue;
@@ -1992,7 +2109,13 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 } else if (value.startsWith('--')) {
                     className += `content-(${value})`;
                 } else {
-                    className += `content-[${value}]`;
+                    // Tailwind convention: content arbitrary values use single quotes → content-['hello'].
+                    // Normalize double-quote CSS strings to single-quote so both forms produce a
+                    // consistent class name that Tailwind JIT actually generates CSS for.
+                    const inner = value.startsWith('"') && value.endsWith('"') && value.length >= 2
+                        ? `'${value.slice(1, -1)}'`
+                        : value;
+                    className += `content-[${inner}]`;
                 }
                 classes.push(className);
                 continue;
@@ -2060,13 +2183,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 }
             }
 
-            // transformStyle: 'flat' | 'preserve-3d' → transform-flat, transform-3d
+            // transformStyle: 'flat' | '3d' → transform-flat, transform-3d
             if (rawKey === 'transformStyle') {
-                if (value === 'preserve-3d' || value === '3d') {
-                    className += 'transform-3d';
-                } else {
-                    className += `transform-${value}`;
-                }
+                className += `transform-${value}`;
                 classes.push(className);
                 continue;
             }
@@ -2079,7 +2198,7 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 } else if (value.startsWith('--')) {
                     className += `perspective-(${value})`;
                 } else if (needsArbitraryBrackets(value)) {
-                    className += `perspective-[${value}]`;
+                    className += `perspective-[${normalizeArbitraryValue(value)}]`;
                 } else {
                     className += `perspective-${value}`;
                 }
@@ -2119,7 +2238,6 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 PROPERTY_MAP[rawKey] ||
                 BOOLEAN_SHORTHANDS.has(rawKey) ||
                 SNAP_DIRECT_MAP[rawKey] ||
-                NEEDS_ARBITRARY_PROPERTY.has(key) ||
                 rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos' ||
                 rawKey.startsWith('--') ||
                 rawKey.startsWith('[') ||
@@ -2165,6 +2283,17 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         }
 
         // ================================================================
+        // HANDLE animationDelay — no Tailwind utility, always arbitrary property
+        // 150 → [animation-delay:150ms],  '0.5s' → [animation-delay:0.5s]
+        // Placed before numeric/string blocks because it must intercept both types.
+        // ================================================================
+        if (rawKey === 'animationDelay') {
+            const ms = typeof value === 'number' ? `${value}ms` : String(value);
+            classes.push(`${className}[animation-delay:${ms}]`);
+            continue;
+        }
+
+        // ================================================================
         // HANDLE NUMERIC VALUES
         // ================================================================
         if (typeof value === 'number') {
@@ -2186,19 +2315,6 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             // Check for important modifier (Fix #4)
             const { value: cleanValue, important } = handleImportant(value);
             let finalValue = cleanValue;
-
-            // Check if this property needs arbitrary property syntax [prop:value]
-            // Only use for truly unknown CSS properties like mask-type
-            // { maskType: "luminance" } → [mask-type:luminance]
-            if (NEEDS_ARBITRARY_PROPERTY.has(key)) {
-                const arbitraryProp = `[${key}:${finalValue}]`;
-                className += arbitraryProp;
-                if (important) {
-                    className += '!';
-                }
-                classes.push(className);
-                continue;
-            }
 
             // v4 Variable Syntax: '--color' → '(--color)'
             // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'

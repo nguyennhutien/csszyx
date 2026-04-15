@@ -158,6 +158,48 @@ describe('Color Opacity Object Form', () => {
         });
     });
 
+    describe('op vs opacity — spec clarification', () => {
+        // SPEC:
+        //   op   = sub-key inside a color object { color: 'X', op: Y }
+        //          → emits slash opacity: bg-red-500/40
+        //   opacity = standalone sz prop → CSS `opacity` utility class
+        //          → emits: opacity-50
+        //
+        // WRONG: { hover: { color: 'red-500', op: 40 } }
+        //   Here op is a TOP-LEVEL sz prop inside hover, NOT a sub-key of color object.
+        //   op has no CSS mapping → ignored/warned. Only color: 'red-500' is emitted.
+        //
+        // CORRECT: { hover: { color: { color: 'red-500', op: 40 } } }
+        //   color is the sz prop (text color), { color: 'red-500', op: 40 } is its value.
+        //   → hover:text-red-500/40
+
+        it('{ opacity: 50 } → opacity-50 (CSS opacity property)', () => {
+            const result = transform({ opacity: 50 } as SzObject);
+            expect(result.className).toBe('opacity-50');
+        });
+
+        it('{ hover: { opacity: 50 } } → hover:opacity-50', () => {
+            const result = transform({ hover: { opacity: 50 } } as SzObject);
+            expect(result.className).toBe('hover:opacity-50');
+        });
+
+        it('{ color: { color: "red-500", op: 40 } } → text-red-500/40 (text color with slash opacity)', () => {
+            const result = transform({ color: { color: 'red-500', op: 40 } } as SzObject);
+            expect(result.className).toBe('text-red-500/40');
+        });
+
+        it('{ hover: { color: { color: "red-500", op: 40 } } } → hover:text-red-500/40', () => {
+            const result = transform({ hover: { color: { color: 'red-500', op: 40 } } } as SzObject);
+            expect(result.className).toBe('hover:text-red-500/40');
+        });
+
+        it('{ opacity: 50, bg: "blue-500" } → bg-blue-500 opacity-50 (independent props)', () => {
+            const result = transform({ opacity: 50, bg: 'blue-500' } as SzObject);
+            expect(result.className).toContain('bg-blue-500');
+            expect(result.className).toContain('opacity-50');
+        });
+    });
+
     describe('special color values', () => {
         it('should handle inherit', () => {
             const result = transform({ bg: { color: 'inherit' } } as SzObject);

@@ -159,3 +159,9 @@ describe('misc utilities — accessibility screen readers', () => {
         expect(t({ notSrOnly: true })).toBe('not-sr-only');
     });
 });
+
+describe('tables — border spacing Y axis', () => {
+    it('{ borderSpacingY: 4 } → border-spacing-y-4', () => {
+        expect(t({ borderSpacingY: 4 })).toBe('border-spacing-y-4');
+    });
+});

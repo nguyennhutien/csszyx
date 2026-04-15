@@ -138,6 +138,92 @@ describe('group variant', () => {
             .toBe('group-[[data-active]]:bg-green-500');
     });
 
+    // --- group-data-* (attribute presence) ---
+    // Note: sz uses { group: { data: { attr: {...} } } } for ALL group-data-* variants.
+    // The compiler always emits the bracket form group-data-[attr]:, which handles both
+    // simple names (active, open) and value-match (state=open, active='true').
+    // TW v4 bare shorthand (group-data-active: without brackets) is accepted as input
+    // by the migration CLI and normalized to the same sz object — output always uses [].
+
+    it('group-data-[active]: presence check', () => {
+        expect(t({ group: { data: { active: { bg: 'blue-500' } } } }))
+            .toBe('group-data-[active]:bg-blue-500');
+    });
+
+    it('group-data-[open]: common Radix/Headless UI attribute', () => {
+        expect(t({ group: { data: { open: { bg: 'blue-500' } } } }))
+            .toBe('group-data-[open]:bg-blue-500');
+    });
+
+    it('group-data-[closed]: closed state', () => {
+        expect(t({ group: { data: { closed: { hidden: true } } } }))
+            .toBe('group-data-[closed]:hidden');
+    });
+
+    it('group-data-[disabled]: disabled state', () => {
+        expect(t({ group: { data: { disabled: { opacity: 50 } } } }))
+            .toBe('group-data-[disabled]:opacity-50');
+    });
+
+    it('group-data-[highlighted]: highlighted state', () => {
+        expect(t({ group: { data: { highlighted: { bg: 'blue-100' } } } }))
+            .toBe('group-data-[highlighted]:bg-blue-100');
+    });
+
+    // --- group-data-* (attribute value match, brackets required) ---
+    it('group-data-[state=open]: value match', () => {
+        expect(t({ group: { data: { 'state=open': { text: 'lg' } } } }))
+            .toBe('group-data-[state=open]:text-lg');
+    });
+
+    it("group-data-[active='true']: quoted value match", () => {
+        expect(t({ group: { data: { "active='true'": { color: 'blue-600' } } } }))
+            .toBe("group-data-[active='true']:text-blue-600");
+    });
+
+    it('group-data-[orientation=horizontal]: Radix orientation', () => {
+        expect(t({ group: { data: { 'orientation=horizontal': { flex: true } } } }))
+            .toBe('group-data-[orientation=horizontal]:flex');
+    });
+
+    // --- group-data-* with named group (/name) ---
+    it('group-data-[active]/card: named group', () => {
+        expect(t({ group: { card: { data: { active: { color: 'blue-600' } } } } }))
+            .toBe('group-data-[active]/card:text-blue-600');
+    });
+
+    it("group-data-[active='true']/dialog: value match + named group", () => {
+        expect(t({ group: { dialog: { data: { "active='true'": { color: 'blue-600' } } } } }))
+            .toBe("group-data-[active='true']/dialog:text-blue-600");
+    });
+
+    // --- group-aria-* ---
+    it('group-aria-checked', () => {
+        expect(t({ group: { aria: { checked: { bg: 'blue-500' } } } }))
+            .toBe('group-aria-checked:bg-blue-500');
+    });
+
+    it('group-aria-expanded', () => {
+        expect(t({ group: { aria: { expanded: { block: true } } } }))
+            .toBe('group-aria-expanded:block');
+    });
+
+    it('group-aria-[current=page]: arbitrary aria value', () => {
+        expect(t({ group: { aria: { 'current=page': { color: 'blue-600' } } } }))
+            .toBe('group-aria-[current=page]:text-blue-600');
+    });
+
+    // --- peer-data-* (same pattern as group-data but for peer) ---
+    it('peer-data-[active]: presence check', () => {
+        expect(t({ peer: { data: { active: { color: 'blue-500' } } } }))
+            .toBe('peer-data-[active]:text-blue-500');
+    });
+
+    it('peer-data-[state=open]: value match', () => {
+        expect(t({ peer: { data: { 'state=open': { block: true } } } }))
+            .toBe('peer-data-[state=open]:block');
+    });
+
     // --- Skips ---
     it('skips null nested values', () => {
         expect(t({ group: { hover: null } })).toBe('');
