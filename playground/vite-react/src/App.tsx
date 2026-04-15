@@ -1,9 +1,33 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { VerificationComponent } from './Verification';
+
+// Lazy-load DynamicForm so @csszyx/dynamic (and its deps) are NOT bundled into
+// the main chunk. This avoids a WASM pre-transform warning from Vite when the
+// @csszyx/core WASM is encountered during regular page loads.
+const DynamicForm = lazy(() => import('./DynamicForm').then(m => ({ default: m.DynamicForm })));
+const JsonFormEditor = lazy(() => import('./JsonFormEditor').then(m => ({ default: m.JsonFormEditor })));
 
 function App() {
   const [count, setCount] = useState(0);
   const [isActive, setIsActive] = useState(false);
+
+  const page = new URLSearchParams(window.location.search).get('page');
+
+  if (page === 'dynamic') {
+    return (
+      <Suspense fallback={<div>Loading…</div>}>
+        <DynamicForm />
+      </Suspense>
+    );
+  }
+
+  if (page === 'editor') {
+    return (
+      <Suspense fallback={<div>Loading…</div>}>
+        <JsonFormEditor />
+      </Suspense>
+    );
+  }
 
   return (
     <div sz={{ minH: 'screen', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'purple-500', to: 'pink-500', flex: true, items: 'center', justify: 'center', p: 8 }}>

@@ -14,7 +14,10 @@ declare global {
  * Supports the subset of JS object syntax used in sz attributes:
  *   { key: 'value', nested: { a: true, b: 42 } }
  */
-function parseSzAttribute(input: string): Record<string, unknown> {
+function parseSzAttribute(rawInput: string): Record<string, unknown> {
+    // Auto-wrap: outer braces are optional — "p: 4, bg: 'blue'" is as valid as "{p: 4, bg: 'blue'}"
+    const trimmed = rawInput.trim();
+    let input = trimmed.startsWith('{') ? trimmed : `{${trimmed}}`;
     let pos = 0;
 
     function skipWhitespace() {
@@ -134,10 +137,7 @@ function parseSzAttribute(input: string): Record<string, unknown> {
     }
 
     skipWhitespace();
-    if (input[pos] === '{') {
-        return parseObject();
-    }
-    throw new Error(`Expected '{' at position ${pos}`);
+    return parseObject();
 }
 
 /**

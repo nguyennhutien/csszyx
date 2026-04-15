@@ -41,7 +41,7 @@ export function EdgeCaseTests() {
                 {/* Case 2: Arbitrary value */}
                 <div
                     data-case="2-arbitrary"
-                    sz={{ w: '[100px]', h: '[60px]', bg: 'purple-500', rounded: 'md', color: 'white', text: 'sm', flex: true, items: 'center', justify: 'center' }}
+                    sz={{ w: '100px', h: '60px', bg: 'purple-500', rounded: 'md', color: 'white', text: 'sm', flex: true, items: 'center', justify: 'center' }}
                 >
                     100x60px
                 </div>

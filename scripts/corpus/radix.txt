@@ -1,0 +1,44 @@
+# radix — auto-extracted individual class corpus
+# Source: https://github.com/radix-ui/themes (MIT)
+# Generated: 2026-03-13 via scripts/extract-corpus.ts
+# Format: one Tailwind class per line
+# Re-generate: pnpm corpus:extract radix
+
+-
+calc(100svh
+calc(100svw
+rt-AlertDialogOverlay
+rt-AlertDialogScroll
+rt-BaseCheckboxIndicator
+rt-BaseDialogOverlay
+rt-BaseDialogScroll
+rt-BaseMenuItemIndicator
+rt-BaseMenuItemIndicatorIcon
+rt-BaseMenuShortcut
+rt-BaseMenuSubTriggerIcon
+rt-BaseTabListTriggerInner
+rt-BaseTabListTriggerInnerHidden
+rt-CheckboxIndicator
+rt-ContextMenuItemIndicator
+rt-ContextMenuItemIndicatorIcon
+rt-ContextMenuShortcut
+rt-ContextMenuSubTriggerIcon
+rt-DialogOverlay
+rt-DialogScroll
+rt-DropdownMenuItemIndicator
+rt-DropdownMenuItemIndicatorIcon
+rt-DropdownMenuShortcut
+rt-DropdownMenuSubtriggerIcon
+rt-ScrollAreaScrollbar
+rt-TabNavLinkInner
+rt-TabNavLinkInnerHidden
+rt-TabsTriggerInner
+rt-TabsTriggerInnerHidden
+rt-TextAreaInput
+rt-TextFieldInput
+rt-r-size-1
+rt-reset
+var(--space-2)
+var(--space-2))
+var(--space-4)
+var(--space-4))

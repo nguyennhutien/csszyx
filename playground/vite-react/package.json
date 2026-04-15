@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@csszyx/dynamic": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "csszyx": "workspace:*",
     "react": "^18.2.0",

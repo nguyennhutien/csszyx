@@ -1,0 +1,198 @@
+# shadcn — auto-extracted combo corpus
+# Source: https://github.com/shadcn-ui/ui (MIT)
+# Generated: 2026-03-13 via scripts/extract-corpus.ts
+# Format: each line = all TW classes on ONE DOM element → tested as a single sz object
+# Re-generate: pnpm corpus:extract shadcn
+
+overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up
+flex w-full flex-col
+fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0
+absolute top-2 right-2
+bg-card text-card-foreground
+relative aspect-(--ratio)
+aspect-square size-full rounded-full object-cover
+absolute right-0 bottom-0 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground bg-blend-color ring-2 ring-background select-none
+bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40
+hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50
+text-primary underline-offset-4 hover:underline
+inline-flex items-center gap-1
+transition-colors hover:text-foreground
+font-normal text-foreground
+flex flex-wrap items-center gap-1.5 text-sm wrap-break-word text-muted-foreground
+relative self-stretch bg-input data-horizontal:mx-px data-horizontal:w-auto data-vertical:my-px data-vertical:h-auto
+border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50
+bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground
+hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50
+bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40
+flex size-(--cell-size) items-center justify-center text-center
+flex w-full flex-col gap-4
+mt-2 flex w-full
+cn-rtl-flip size-4
+relative flex flex-col gap-4 md:flex-row
+absolute inset-x-0 top-0 flex w-full items-center justify-between gap-1
+size-(--cell-size) p-0 select-none aria-disabled:opacity-50
+flex h-(--cell-size) w-full items-center justify-center px-(--cell-size)
+flex h-(--cell-size) w-full items-center justify-center gap-1.5 text-sm font-medium
+cn-calendar-dropdown-root relative rounded-(--cell-radius)
+absolute inset-0 bg-popover opacity-0
+font-medium select-none
+w-full border-collapse
+flex-1 rounded-(--cell-radius) text-[0.8rem] font-normal text-muted-foreground select-none
+w-(--cell-size) select-none
+text-[0.8rem] text-muted-foreground select-none
+relative isolate z-0 rounded-l-(--cell-radius) bg-muted after:absolute after:inset-y-0 after:right-0 after:w-4 after:bg-muted
+relative isolate z-0 rounded-r-(--cell-radius) bg-muted after:absolute after:inset-y-0 after:left-0 after:w-4 after:bg-muted
+text-muted-foreground aria-selected:text-muted-foreground
+text-muted-foreground opacity-50
+text-sm text-muted-foreground
+col-start-2 row-span-2 row-start-1 self-start justify-self-end
+min-w-0 shrink-0 grow-0 basis-full
+absolute touch-manipulation rounded-full
+top-1/2 -left-12 -translate-y-1/2
+top-1/2 -right-12 -translate-y-1/2
+grid gap-1.5
+font-mono font-medium text-foreground tabular-nums
+h-2 w-2 shrink-0 rounded-[2px]
+grid min-w-32 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl
+shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)
+w-0 border-[1.5px] border-dashed bg-transparent
+flex flex-1 justify-between leading-none
+flex items-center justify-center gap-4
+grid place-content-center text-current transition-none
+peer relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary
+pointer-events-none size-4 text-muted-foreground
+isolate z-50
+pointer-events-none absolute right-2 flex size-4 items-center justify-center
+-ml-1 opacity-50 hover:opacity-100
+px-2 py-1.5 text-xs text-muted-foreground
+-mx-1 my-1 h-px bg-border
+min-w-16 flex-1 outline-none
+hidden w-full justify-center py-2 text-center text-sm text-muted-foreground
+p-1 pb-0
+size-4 shrink-0 opacity-50
+py-6 text-center text-sm
+-mx-1 h-px bg-border
+flex size-full flex-col overflow-hidden bg-popover p-1 text-popover-foreground
+top-1/3 translate-y-0 overflow-hidden p-0
+w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50
+no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none
+ml-auto text-xs tracking-widest text-muted-foreground
+isolate z-50 outline-none
+cn-rtl-flip ml-auto
+cn-menu-target cn-menu-translucent shadow-lg
+pointer-events-none absolute right-2
+px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7
+flex flex-col gap-2
+text-base leading-none font-medium
+fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-background p-4 text-sm ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95
+mx-auto mt-4 hidden h-1 w-[100px] shrink-0 rounded-full bg-muted
+mt-auto flex flex-col gap-2 p-4
+text-base font-medium text-foreground
+fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0
+pointer-events-none absolute right-2 flex items-center justify-center
+flex max-w-sm flex-col items-center gap-2
+text-sm font-medium tracking-tight
+flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-xl border-dashed p-6 text-center text-balance
+flex w-full max-w-sm min-w-0 flex-col items-center gap-2.5 text-sm text-balance
+absolute inset-0 top-1/2
+relative mx-auto block w-fit bg-background px-2 text-muted-foreground
+ml-4 flex list-disc flex-col gap-1
+text-sm font-normal text-destructive
+group/field-content flex flex-1 flex-col gap-0.5 leading-snug
+last:mt-0 nth-last-2:-mt-1
+flex items-center gap-2 text-sm shadow-none
+flex-1 rounded-none border-0 bg-transparent shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent
+flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent
+pointer-events-none absolute inset-0 flex items-center justify-center
+h-4 w-px animate-caret-blink bg-foreground duration-1000
+cn-input-otp flex items-center has-disabled:opacity-50
+flex items-center rounded-lg has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40
+h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40
+flex items-center gap-2
+group/item flex w-full flex-wrap items-center rounded-lg border text-sm transition-colors duration-100 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50
+border-transparent bg-muted/50
+gap-2.5 px-3 py-2.5
+line-clamp-1 flex w-fit items-center gap-2 text-sm leading-snug font-medium underline-offset-4
+flex basis-full items-center justify-between gap-2
+pointer-events-none absolute left-1.5 flex size-4 items-center justify-center
+flex h-8 items-center gap-0.5 rounded-lg border p-[3px]
+flex items-center rounded-sm px-1.5 py-[2px] text-sm font-medium outline-hidden select-none hover:bg-muted aria-expanded:bg-muted
+px-1.5 py-1 text-sm font-medium data-inset:pl-7
+h-8 w-full min-w-0 appearance-none rounded-lg border border-input bg-transparent py-1 pr-8 pl-2.5 text-sm transition-colors outline-none select-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40
+pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground select-none
+xs:w-(--popup-width) relative h-(--popup-height) w-(--popup-width) origin-(--transform-origin) rounded-lg bg-popover text-popover-foreground shadow ring-1 ring-foreground/10 duration-[0.35s] outline-none data-ending-style:scale-90 data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-90 data-starting-style:opacity-0
+relative size-full overflow-hidden
+relative top-[60%] h-2 w-2 rotate-45 rounded-tl-sm bg-border shadow-md
+group/navigation-menu relative flex max-w-max flex-1 items-center justify-center
+group flex flex-1 list-none items-center justify-center gap-0
+group/navigation-menu-trigger inline-flex h-9 w-max items-center justify-center rounded-lg bg-background px-2.5 py-1.5 text-sm font-medium transition-all outline-none hover:bg-muted focus:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-popup-open:bg-muted/50 data-popup-open:hover:bg-muted data-open:bg-muted/50 data-open:hover:bg-muted data-open:focus:bg-muted
+hidden sm:block
+mx-auto flex w-full justify-center
+flex items-center gap-0.5
+flex flex-col gap-0.5 text-sm
+flex flex-wrap gap-3
+h-full bg-primary transition-all
+text-sm font-medium
+relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted
+ml-auto text-sm text-muted-foreground tabular-nums
+flex size-4 items-center justify-center
+absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground
+grid w-full gap-2
+group/radio-group-item peer relative flex aspect-square size-4 shrink-0 rounded-full border border-input outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary
+z-10 flex h-6 w-1 shrink-0 rounded-lg bg-border
+size-full rounded-[inherit] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1
+relative flex-1 rounded-full bg-border
+flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent
+flex flex-1 shrink-0 gap-2 whitespace-nowrap
+scroll-my-1 p-1
+flex flex-1 text-left
+px-1.5 py-1 text-xs text-muted-foreground
+pointer-events-none -mx-1 my-1 h-px bg-border
+shrink-0 bg-border data-horizontal:h-px data-horizontal:w-full data-vertical:w-px data-vertical:self-stretch
+absolute top-3 right-3
+flex flex-col gap-0.5 p-4
+fixed inset-0 z-50 bg-black/10 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs
+w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground
+flex h-full w-full flex-col
+group peer hidden text-sidebar-foreground md:block
+size-4 rounded-md
+h-4 max-w-(--skeleton-width) flex-1
+h-8 w-full bg-background shadow-none
+flex flex-col gap-2 p-2
+mx-2 w-auto bg-sidebar-border
+relative flex w-full min-w-0 flex-col p-2
+w-full text-sm
+flex w-full min-w-0 flex-col gap-0
+group/menu-item relative
+flex h-8 items-center gap-2 rounded-md px-2
+group/menu-sub-item relative
+flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground
+relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear
+hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
+animate-pulse rounded-md bg-muted
+relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col
+relative grow overflow-hidden rounded-full bg-muted select-none data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1
+bg-primary select-none data-horizontal:h-full data-vertical:w-full
+relative block size-3 shrink-0 rounded-full border border-ring bg-white ring-ring/50 select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50
+data-horizontal:w-full data-vertical:h-full
+toaster group
+size-4 animate-spin
+relative w-full overflow-x-auto
+w-full caption-bottom text-sm
+mt-4 text-sm text-muted-foreground
+flex-1 text-sm outline-none
+group/tabs flex gap-2 data-horizontal:flex-col
+gap-1 bg-transparent
+data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground
+flex field-sizing-content min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40
+border border-input bg-transparent hover:bg-muted
+h-8 min-w-8 px-2
+h-9 min-w-9 px-2.5
+fixed inset-0 z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0
+cn-rtl-flip ml-auto size-4
+absolute top-full left-0 isolate z-50 flex justify-center
+origin-top-center relative mt-1.5 h-(--radix-navigation-menu-viewport-height) w-full overflow-hidden rounded-lg bg-popover text-popover-foreground shadow ring-1 ring-foreground/10 duration-100 md:w-(--radix-navigation-menu-viewport-width) data-open:animate-in data-open:zoom-in-90 data-closed:animate-out data-closed:zoom-out-90
+size-full flex-1 bg-primary transition-all
+relative grow overflow-hidden rounded-full bg-muted data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1
+absolute bg-primary select-none data-horizontal:h-full data-vertical:w-full
+z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground

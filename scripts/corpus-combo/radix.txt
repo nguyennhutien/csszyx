@@ -1,0 +1,30 @@
+# radix — auto-extracted combo corpus
+# Source: https://github.com/radix-ui/themes (MIT)
+# Generated: 2026-03-13 via scripts/extract-corpus.ts
+# Format: each line = all TW classes on ONE DOM element → tested as a single sz object
+# Re-generate: pnpm corpus:extract radix
+
+rt-BaseDialogOverlay rt-AlertDialogOverlay
+rt-BaseDialogScroll rt-AlertDialogScroll
+rt-BaseCheckboxIndicator rt-CheckboxIndicator
+rt-BaseMenuShortcut rt-ContextMenuShortcut
+rt-BaseMenuItemIndicator rt-ContextMenuItemIndicator
+rt-BaseMenuItemIndicatorIcon rt-ContextMenuItemIndicatorIcon
+rt-BaseMenuSubTriggerIcon rt-ContextMenuSubTriggerIcon
+rt-BaseDialogOverlay rt-DialogOverlay
+rt-BaseDialogScroll rt-DialogScroll
+rt-BaseMenuShortcut rt-DropdownMenuShortcut
+rt-BaseMenuItemIndicator rt-DropdownMenuItemIndicator
+rt-BaseMenuItemIndicatorIcon rt-DropdownMenuItemIndicatorIcon
+rt-BaseMenuSubTriggerIcon rt-DropdownMenuSubtriggerIcon
+rt-ScrollAreaScrollbar rt-r-size-1
+rt-BaseTabListTriggerInner rt-TabNavLinkInner
+rt-BaseTabListTriggerInnerHidden rt-TabNavLinkInnerHidden
+rt-BaseTabListTriggerInner rt-TabsTriggerInner
+rt-BaseTabListTriggerInnerHidden rt-TabsTriggerInnerHidden
+rt-reset rt-TextAreaInput
+rt-reset rt-TextFieldInput
+calc(100svh - var(--space-2) - var(--space-2))
+calc(100svh - var(--space-4) - var(--space-4))
+calc(100svw - var(--space-2) - var(--space-2))
+calc(100svw - var(--space-4) - var(--space-4))
