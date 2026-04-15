@@ -2,7 +2,7 @@
     "name": "@csszyx/mcp-server",
     "version": "0.3.1",
     "private": true,
-    "description": "Model Context Protocol (MCP) server for csszyx",
+    "description": "Model Context Protocol (MCP) server for csszyx — enables AI agents to understand and generate sz props",
     "license": "MIT",
     "type": "module",
     "main": "dist/index.js",
@@ -11,27 +11,35 @@
         "csszyx-mcp": "dist/index.js"
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsup src/index.ts --format esm --dts --clean && node -e \"require('fs').copyFileSync('../../apps/docs/public/llms-full.txt', 'llms-full.txt')\"",
         "start": "node dist/index.js",
-        "dev": "ts-node src/index.ts"
+        "dev": "tsx src/index.ts",
+        "test": "vitest run"
     },
     "files": [
-        "dist"
+        "dist",
+        "llms-full.txt"
     ],
     "dependencies": {
         "@modelcontextprotocol/sdk": "^0.6.0",
         "@csszyx/compiler": "workspace:*",
+        "@csszyx/cli": "workspace:*",
+        "@csszyx/unplugin": "workspace:*",
         "zod": "^3.23.8"
     },
     "devDependencies": {
         "typescript": "^5.5.0",
         "@types/node": "^20.0.0",
-        "ts-node": "^10.9.2"
+        "tsup": "^8.0.0",
+        "tsx": "^4.0.0",
+        "vitest": "^1.6.0"
     },
     "keywords": [
         "csszyx",
         "mcp",
         "model-context-protocol",
-        "ai"
+        "ai",
+        "tailwindcss",
+        "sz-prop"
     ]
 }
