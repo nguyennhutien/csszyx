@@ -25,7 +25,7 @@
     ],
     "scripts": {
         "prepare": "husky",
-        "postinstall": "bash .agent/fix-linux-arm64-binaries.sh",
+        "postinstall": "[ -f .agent/fix-linux-arm64-binaries.sh ] && bash .agent/fix-linux-arm64-binaries.sh || true",
         "gen:llms": "node scripts/gen-llms.mjs",
         "build": "pnpm run gen:llms && turbo run build",
         "dev": "turbo run dev --parallel",
