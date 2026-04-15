@@ -1,0 +1,165 @@
+---
+title: Layout
+description: Controlling element positioning, display, overflow, and visibility.
+---
+
+import { PropTable } from '../../../../components/PropTable.tsx';
+import { FlexRow, BlockVsInlineBlock, AbsoluteOverlay, OverflowHidden, ZIndex, AspectRatio } from '../../../../components/demos/layout.tsx';
+
+Layout props control how elements are positioned, displayed, and flow within
+the document.
+
+## Display
+
+<PropTable rows={[
+  { sz: "{ flex: true }", tw: "flex" },
+  { sz: "{ grid: true }", tw: "grid" },
+  { sz: "{ block: true }", tw: "block" },
+  { sz: "{ inlineBlock: true }", tw: "inline-block" },
+  { sz: "{ inline: true }", tw: "inline" },
+  { sz: "{ hidden: true }", tw: "hidden" },
+  { sz: "{ contents: true }", tw: "contents" },
+  { sz: "{ inlineFlex: true }", tw: "inline-flex" },
+  { sz: "{ inlineGrid: true }", tw: "inline-grid" },
+  { sz: "{ flowRoot: true }", tw: "flow-root" },
+  { sz: "{ srOnly: true }", tw: "sr-only" },
+]} />
+
+<FlexRow />
+
+<BlockVsInlineBlock />
+
+## Position
+
+<PropTable rows={[
+  { sz: "{ relative: true }", tw: "relative" },
+  { sz: "{ absolute: true }", tw: "absolute" },
+  { sz: "{ fixed: true }", tw: "fixed" },
+  { sz: "{ sticky: true }", tw: "sticky" },
+  { sz: "{ static: true }", tw: "static" },
+]} />
+
+<AbsoluteOverlay />
+
+## Inset (Top / Right / Bottom / Left)
+
+<PropTable rows={[
+  { sz: "{ inset: 4 }", tw: "inset-4" },
+  { sz: "{ inset: 'auto' }", tw: "inset-auto" },
+  { sz: "{ inset: 'full' }", tw: "inset-full" },
+  { sz: "{ insetX: 4 }", tw: "inset-x-4" },
+  { sz: "{ insetY: 4 }", tw: "inset-y-4" },
+  { sz: "{ top: 0 }", tw: "top-0" },
+  { sz: "{ right: 4 }", tw: "right-4" },
+  { sz: "{ bottom: 0 }", tw: "bottom-0" },
+  { sz: "{ left: 4 }", tw: "left-4" },
+  { sz: "{ inset: '-px' }", tw: "-inset-px" },
+]} />
+
+:::tip[New in v4.2]
+Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
+`{ insetE: 4 }` → `inset-e-4` (inline-end), `{ insetBs: 4 }` → `inset-bs-4`
+(block-start), `{ insetBe: 4 }` → `inset-be-4` (block-end).
+:::
+
+## Overflow
+
+<PropTable rows={[
+  { sz: "{ overflow: 'hidden' }", tw: "overflow-hidden" },
+  { sz: "{ overflow: 'auto' }", tw: "overflow-auto" },
+  { sz: "{ overflow: 'scroll' }", tw: "overflow-scroll" },
+  { sz: "{ overflow: 'visible' }", tw: "overflow-visible" },
+  { sz: "{ overflow: 'clip' }", tw: "overflow-clip" },
+  { sz: "{ overflowX: 'auto' }", tw: "overflow-x-auto" },
+  { sz: "{ overflowY: 'hidden' }", tw: "overflow-y-hidden" },
+]} />
+
+<OverflowHidden />
+
+## Visibility
+
+<PropTable rows={[
+  { sz: "{ visible: true }", tw: "visible" },
+  { sz: "{ invisible: true }", tw: "invisible" },
+  { sz: "{ collapse: true }", tw: "collapse" },
+]} />
+
+## Z-Index
+
+<PropTable rows={[
+  { sz: "{ z: 10 }", tw: "z-10" },
+  { sz: "{ z: 50 }", tw: "z-50" },
+  { sz: "{ z: -1 }", tw: "-z-1" },
+  { sz: "{ z: 'auto' }", tw: "z-auto" },
+]} />
+
+<ZIndex />
+
+## Box Sizing
+
+<PropTable rows={[
+  { sz: "{ box: 'border' }", tw: "box-border" },
+  { sz: "{ box: 'content' }", tw: "box-content" },
+]} />
+
+## Float & Clear
+
+<PropTable rows={[
+  { sz: "{ float: 'right' }", tw: "float-right" },
+  { sz: "{ float: 'left' }", tw: "float-left" },
+  { sz: "{ float: 'none' }", tw: "float-none" },
+  { sz: "{ clear: 'both' }", tw: "clear-both" },
+  { sz: "{ clear: 'left' }", tw: "clear-left" },
+]} />
+
+## Aspect Ratio
+
+<PropTable rows={[
+  { sz: "{ aspect: 'auto' }", tw: "aspect-auto" },
+  { sz: "{ aspect: 'square' }", tw: "aspect-square" },
+  { sz: "{ aspect: 'video' }", tw: "aspect-video" },
+  { sz: "{ aspect: '4/3' }", tw: "aspect-4/3" },
+]} />
+
+<AspectRatio />
+
+## Object Fit / Position
+
+<PropTable rows={[
+  { sz: "{ objectFit: 'cover' }", tw: "object-cover" },
+  { sz: "{ objectFit: 'contain' }", tw: "object-contain" },
+  { sz: "{ objectFit: 'fill' }", tw: "object-fill" },
+  { sz: "{ objectPos: 'center' }", tw: "object-center" },
+  { sz: "{ objectPos: 'top' }", tw: "object-top" },
+]} />
+
+## Examples
+
+```tsx
+// Absolutely positioned overlay
+<div sz={{ relative: true }}>
+  <div sz={{
+    absolute: true,
+    inset: 0,
+    bg: 'black',
+    opacity: 50,
+  }} />
+</div>
+
+// Sticky header
+<header sz={{
+  sticky: true,
+  top: 0,
+  z: 50,
+  bg: 'white',
+  borderB: 1,
+  borderColor: 'gray-200',
+}} />
+
+// Scrollable container
+<div sz={{
+  overflow: 'hidden',
+  overflowY: 'auto',
+  h: 64,
+}} />
+```

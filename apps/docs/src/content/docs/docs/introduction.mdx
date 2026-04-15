@@ -1,0 +1,112 @@
+---
+title: Introduction
+description: What is CSSzyx and how does it work?
+---
+
+import { FileTree, Steps, Card, CardGrid } from '@astrojs/starlight/components';
+
+CSSzyx is a CSS-in-JS framework that compiles object-syntax Tailwind props to
+plain `className` strings at build time, then mangles those strings in
+production for maximum compression.
+
+## The Problem with String Literals
+
+Traditional Tailwind usage has sharp edges:
+
+```tsx
+// ❌ No type safety — typos silently produce no styles
+<div className="p-4 bg-red-500 hover:bg-blue-600" />
+
+// ❌ String concatenation is fragile
+<div className={`p-4 ${isActive ? 'bg-blue-500' : 'bg-gray-200'} ${extraClass}`} />
+```
+
+CSSzyx solves this with object syntax:
+
+```tsx
+// ✅ TypeScript catches invalid values at compile time
+<div sz={{ p: 4, bg: 'red-500', hover: { bg: 'blue-600' } }} />
+
+// ✅ Conditionals are natural JavaScript
+<div sz={{ p: 4, bg: isActive ? 'blue-500' : 'gray-200' }} />
+```
+
+## The 5-Phase Pipeline
+
+<Steps>
+
+1. **Pre-scan** — Walk source files at startup, write `csszyx-classes.js` so
+   Tailwind JIT can discover every sz-generated class name before compilation begins.
+
+2. **JSX Transform** — `sz={{ p: 4, hover: { bg: 'blue-500' } }}` → `className="p-4 hover:bg-blue-500"` (Babel AST).
+   Also injects the `@source` directive into your CSS entry and auto-imports
+   `csszyx/lite` runtime helpers where needed.
+
+3. **Tailwind JIT** — Reads `csszyx-classes.js`, scans transformed `className`
+   strings, generates CSS for every class in the build.
+
+4. **Mangle** — Builds the encode map `p-4 → z`, `bg-blue-500 → y` … using
+   reversed tier-based encoding, then computes a SHA-256 checksum of the full map.
+
+5. **Emit** — Mangles CSS selectors and JS class strings in all output assets,
+   then injects the checksum and mangle map into the HTML document.
+
+</Steps>
+
+Each phase is incremental. During dev, HMR updates `csszyx-classes.js` when new
+sz props are added — no server restart needed.
+
+## Key Features
+
+<CardGrid>
+  <Card title="Zero Runtime" icon="rocket">
+    Static sz props compile to string literals. Nothing runs in the browser
+    for the common case.
+  </Card>
+  <Card title="Type Safe" icon="approve-check">
+    Auto-generated types from your Tailwind config. Invalid values are
+    TypeScript errors, not silent bugs.
+  </Card>
+  <Card title="SSR Safety" icon="warning">
+    SHA-256 checksums verify the mangle map matches between server and
+    client. Mismatch triggers the abort protocol.
+  </Card>
+</CardGrid>
+
+## What Gets Mangled
+
+In production builds, every Tailwind class is replaced by a short encoded
+symbol using reversed tier-based encoding (`z → y → x → ...`):
+
+```html
+<!-- Development build -->
+<div class="p-4 bg-blue-500 hover:bg-blue-600 rounded-lg text-white">
+
+<!-- Production build -->
+<div class="z y x a b">
+```
+
+The mangle map (`z → p-4`, `y → bg-blue-500`, ...) is embedded in the HTML
+along with a SHA-256 checksum. The client runtime verifies this before
+hydrating.
+
+## Architecture
+
+<FileTree>
+- packages
+  - csszyx/ Umbrella package — csszyx/vite, csszyx/webpack
+  - compiler/ sz → Tailwind class transform (TypeScript, Babel AST)
+  - runtime/ _sz, _szIf, _szSwitch + SSR hydration guards
+  - core/ Encoder, SHA-256 checksum, collision detection (Rust/WASM)
+  - unplugin/ Unified plugin: Vite + Webpack + esbuild
+  - types/ Shared TypeScript types + JSX augmentation
+</FileTree>
+
+The hot paths (encoding, checksum, collision detection) are implemented in
+Rust and compiled to WASM for performance. The compiler and runtime remain
+TypeScript for fast iteration.
+
+## Tailwind Compatibility
+
+CSSzyx targets **Tailwind CSS v4 only**. Tailwind v3 support is planned for a
+future release after the core is stable.

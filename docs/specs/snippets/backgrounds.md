@@ -21,11 +21,13 @@ Controlling the background of an element.
 
 ### String Patterns (Simple Cases)
 
-| Concept          | CSS Rule                            | Tailwind v4 Class       | `sz` Prop (Object Syntax) | Note                          |
-| :--------------- | :---------------------------------- | :---------------------- | :------------------------ | :---------------------------- |
-| **URL**          | `background-image: url(...)`        | `bg-[url(...)]`         | `{ bgImg: 'url(...)' }`   |                               |
-| **None**         | `background-image: none`            | `bg-none`               | `{ bgImg: 'none' }`       |                               |
-| **CSS Variable** | `background-image: var(--my-image)` | `bg-(image:--my-image)` | `{ bgImg: '--my-image' }` | **Sugar**: Auto-detects `--`. |
+| Concept              | CSS Rule                                           | Tailwind v4 Class                     | `sz` Prop (Object Syntax)                                                                                      | Note                               |
+| :------------------- | :------------------------------------------------- | :------------------------------------ | :------------------------------------------------------------------------------------------------------------- | :--------------------------------- |
+| **URL**              | `background-image: url(...)`                       | `bg-[url(...)]`                       | `{ bgImg: 'url(...)' }`                                                                                        |                                    |
+| **None**             | `background-image: none`                           | `bg-none`                             | `{ bgImg: 'none' }`                                                                                            |                                    |
+| **CSS Variable**     | `background-image: var(--my-image)`                | `bg-(image:--my-image)`               | `{ bgImg: '--my-image' }`                                                                                      | **Sugar**: Auto-detects `--`.      |
+| **Repeating Linear** | `background-image: repeating-linear-gradient(...)` | `bg-[repeating-linear-gradient(...)]` | `{ bgImg: 'repeating-linear-gradient(315deg,currentColor 0,currentColor 1px,transparent 0,transparent 50%)' }` | Spaces normalised to `_` in class. |
+| **Repeating Radial** | `background-image: repeating-radial-gradient(...)` | `bg-[repeating-radial-gradient(...)]` | `{ bgImg: 'repeating-radial-gradient(circle, red 0, blue 10px)' }`                                             |                                    |
 
 ### Object Patterns (Gradients)
 
@@ -117,19 +119,19 @@ Appends `/method` suffix to gradient class:
 
 ## Background Position
 
-| Concept          | CSS Rule                               | Tailwind v4 Class               | `sz` Prop (Object Syntax)      | Note                          |
-| :--------------- | :------------------------------------- | :------------------------------ | :----------------------------- | :---------------------------- |
-| **Top Left**     | `background-position: top left`        | `bg-top-left`                   | `{ bgPos: 'top-left' }`        |                               |
-| **Top**          | `background-position: top`             | `bg-top`                        | `{ bgPos: 'top' }`             |                               |
-| **Top Right**    | `background-position: top right`       | `bg-top-right`                  | `{ bgPos: 'top-right' }`       |                               |
-| **Left**         | `background-position: left`            | `bg-left`                       | `{ bgPos: 'left' }`            |                               |
-| **Center**       | `background-position: center`          | `bg-center`                     | `{ bgPos: 'center' }`          |                               |
-| **Right**        | `background-position: right`           | `bg-right`                      | `{ bgPos: 'right' }`           |                               |
-| **Bottom Left**  | `background-position: bottom left`     | `bg-bottom-left`                | `{ bgPos: 'bottom-left' }`     |                               |
-| **Bottom**       | `background-position: bottom`          | `bg-bottom`                     | `{ bgPos: 'bottom' }`          |                               |
-| **Bottom Right** | `background-position: bottom right`    | `bg-bottom-right`               | `{ bgPos: 'bottom-right' }`    |                               |
-| **Arbitrary**    | `background-position: center top 1rem` | `bg-position-[center_top_1rem]` | `{ bgPos: 'center top 1rem' }` |                               |
-| **CSS Variable** | `background-position: var(--bg-pos)`   | `bg-position-(--bg-pos)`        | `{ bgPos: '--bg-pos' }`        | **Sugar**: Auto-detects `--`. |
+| Concept          | CSS Rule                               | Tailwind v4 Class      | `sz` Prop (Object Syntax)      | Note                          |
+| :--------------- | :------------------------------------- | :--------------------- | :----------------------------- | :---------------------------- |
+| **Top Left**     | `background-position: top left`        | `bg-top-left`          | `{ bgPos: 'top-left' }`        |                               |
+| **Top**          | `background-position: top`             | `bg-top`               | `{ bgPos: 'top' }`             |                               |
+| **Top Right**    | `background-position: top right`       | `bg-top-right`         | `{ bgPos: 'top-right' }`       |                               |
+| **Left**         | `background-position: left`            | `bg-left`              | `{ bgPos: 'left' }`            |                               |
+| **Center**       | `background-position: center`          | `bg-center`            | `{ bgPos: 'center' }`          |                               |
+| **Right**        | `background-position: right`           | `bg-right`             | `{ bgPos: 'right' }`           |                               |
+| **Bottom Left**  | `background-position: bottom left`     | `bg-bottom-left`       | `{ bgPos: 'bottom-left' }`     |                               |
+| **Bottom**       | `background-position: bottom`          | `bg-bottom`            | `{ bgPos: 'bottom' }`          |                               |
+| **Bottom Right** | `background-position: bottom right`    | `bg-bottom-right`      | `{ bgPos: 'bottom-right' }`    |                               |
+| **Arbitrary**    | `background-position: center top 1rem` | `bg-[center_top_1rem]` | `{ bgPos: 'center top 1rem' }` |                               |
+| **CSS Variable** | `background-position: var(--bg-pos)`   | `bg-(--bg-pos)`        | `{ bgPos: '--bg-pos' }`        | **Sugar**: Auto-detects `--`. |
 
 ## Background Size
 

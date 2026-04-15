@@ -55,3 +55,29 @@ Utilities for controlling whether browsers should automatically adjust element c
 | :------- | :--------------------------- | :------------------------- | :------------------------------ | :--- |
 | **Auto** | `forced-color-adjust: auto;` | `forced-color-adjust-auto` | `{ forcedColorAdjust: 'auto' }` |      |
 | **None** | `forced-color-adjust: none;` | `forced-color-adjust-none` | `{ forcedColorAdjust: 'none' }` |      |
+
+---
+
+## `css: {}` — Arbitrary CSS Escape Hatch
+
+For CSS properties with no `sz` prop or Tailwind utility equivalent.
+Each key-value pair in the `css` object generates a Tailwind arbitrary-property class `[prop:value]`.
+Keys are camelCase CSS properties; the compiler converts them to kebab-case automatically.
+CSS custom properties (`--*`) are passed through unchanged.
+
+**TypeScript:** `css?` is typed as `CSS.Properties & { [cssVar: \`--${string}\`]: string | number }` — full IDE autocomplete and typo protection.
+
+| Concept             | Example `sz` Prop                                 | Output Class                    | Note                           |
+| :------------------ | :------------------------------------------------ | :------------------------------ | :----------------------------- |
+| **Regular prop**    | `{ css: { writingMode: 'vertical-lr' } }`         | `[writing-mode:vertical-lr]`    | camelCase → kebab-case         |
+| **Multi-word**      | `{ css: { touchAction: 'none' } }`                | `[touch-action:none]`           |                                |
+| **CSS custom prop** | `{ css: { '--my-color': 'red' } }`                | `[--my-color:red]`              | `--*` passed through unchanged |
+| **Inside variant**  | `{ hover: { css: { cursor: 'crosshair' } } }`     | `hover:[cursor:crosshair]`      | works in all variants          |
+| **Responsive**      | `{ md: { css: { writingMode: 'vertical-lr' } } }` | `md:[writing-mode:vertical-lr]` |                                |
+| **Numeric value**   | `{ css: { zIndex: 10 } }`                         | `[z-index:10]`                  | numbers coerced to string      |
+
+### Notes
+
+- `css: {}` is intentional bypass — no sz-layer mapping applied. `{ css: { backgroundColor: 'red' } }` outputs `[background-color:red]`, not `bg-red`.
+- Spaces in values are normalised to underscores: `repeat(3, 1fr)` → `repeat(3,_1fr)`.
+- Works inside `dynamic()` at runtime — the same compiler logic handles the `css` key.

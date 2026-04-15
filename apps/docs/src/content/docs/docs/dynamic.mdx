@@ -1,0 +1,171 @@
+---
+title: "@csszyx/dynamic — Runtime CSS Injection"
+description: Apply sz styles from JSON, API responses, or user config at runtime. Delta-injection ensures only missing CSS is injected.
+---
+
+
+`@csszyx/dynamic` enables sz-style objects from external sources (JSON config, API
+responses, CMS, form renderer schemas) to be applied at runtime. CSS is injected only for
+classes not already present in the pre-built stylesheet.
+
+## When to use
+
+| Use case | Approach |
+|----------|----------|
+| Styles defined in source code | `sz` prop (build-time, zero runtime) |
+| Styles from JSON / API / user config | `@csszyx/dynamic` (runtime injection) |
+| Conditional / variant styles | `szv()` + `sz` array syntax (build-time) |
+
+## Install
+
+```bash
+npm install @csszyx/dynamic
+# or use the umbrella:
+npm install csszyx   # csszyx/dynamic is included
+```
+
+## Framework-agnostic
+
+```tsx
+import { dynamic } from '@csszyx/dynamic';
+// or:
+import { dynamic } from 'csszyx/dynamic';
+
+const cls = dynamic({ p: 4, bg: 'blue-500', hover: { bg: 'blue-600' } });
+// → "p-4 bg-blue-500 hover:bg-blue-600"
+// CSS for missing classes is injected into the page automatically.
+
+// `as const` objects are supported — no `as any` cast needed
+const style = { p: 4, bg: 'blue-500' } as const;
+const cls2 = dynamic(style);  // ✅
+```
+
+## React hook — `useSz()`
+
+```tsx
+import { useSz } from '@csszyx/dynamic/react';
+// or:
+import { useSz } from 'csszyx/dynamic/react';
+
+function DynamicCard({ style }: { style: SzObject }) {
+  const { sz } = useSz();
+  return <div className={sz(style)} />;
+}
+```
+
+`useSz()` wraps `dynamic()` and memoises results by input object identity.
+
+## React hook — `useDynamicScope()`
+
+For components that inject classes for a bounded lifetime (e.g. a form renderer
+widget that unmounts when the form closes):
+
+```tsx
+import { useDynamicScope } from '@csszyx/dynamic/react';
+
+function FormWidget({ schema }) {
+  const { sz, cleanup } = useDynamicScope();
+
+  useEffect(() => {
+    return cleanup; // injected stylesheets removed on unmount
+  }, [cleanup]);
+
+  return <div className={sz(schema.style)} />;
+}
+```
+
+:::note
+`useDynamicScope()` uses deferred cleanup (`setTimeout(0)`) to survive React
+StrictMode's double-mount cycle — cleanup only fires if the component is truly
+unmounting, not during the dev-mode teardown/remount.
+:::
+
+## Preloading the manifest
+
+`@csszyx/dynamic` fetches `/csszyx-manifest.json` (written by the build plugin) to
+check which classes are already in the pre-built stylesheet. Without preloading,
+the manifest is lazy-fetched on the first `dynamic()` call.
+
+```tsx
+import { preloadManifest } from '@csszyx/dynamic';
+
+// In your app entry — preload before first render for zero-latency inject
+await preloadManifest('/csszyx-manifest.json');
+```
+
+## Delta injection — only missing CSS
+
+On each `dynamic()` call:
+
+1. `transform(szProps)` → Tailwind class string (same logic as the build-time compiler)
+2. Each class is looked up in the manifest:
+   - **In manifest** → use the resolved name (mangled in production builds)
+   - **Not in manifest** → generate CSS rule + inject into a `CSSStyleSheet` tier
+3. Return the final class string
+
+This means a `<div className={sz({ p: 4 })} />` inside a form renderer widget that is
+also using `p-4` in the main app will reuse the existing CSS — no duplicate rule injected.
+
+## Build-time extraction (Layer-1 prescan)
+
+When `dynamic()` receives a **static literal** or a **module-level `const` reference**,
+the compiler extracts all classes at build time and adds them to the Tailwind safelist.
+Tailwind pre-generates the CSS — no runtime injection needed.
+
+```tsx
+// Static literal — classes extracted at build time
+<div className={dynamic({ w: 7, h: 8, rounded: 'sm' })} />
+
+// Const reference — compiler resolves it automatically
+const boxStyles = { w: 7, h: 8, rounded: 'sm' } as const;
+<div className={dynamic(boxStyles)} />
+```
+
+This is especially useful in **Astro SSR** without `client:*` — the CSS is already in the
+built stylesheet, so `dynamic()` finds the classes in the manifest and returns them with
+zero CSSOM work.
+
+For truly runtime-dynamic values (variables, API data), the standard browser injection
+path applies as normal.
+
+## SSR safety
+
+On the server, `dynamic()` returns class names without touching CSSOM. There is no
+`document` access in SSR environments.
+
+## Manifest generation
+
+The build plugin writes the manifest automatically when you use the csszyx Vite or
+Webpack plugin. No extra config needed.
+
+```ts
+// vite.config.ts — manifest is written automatically in production
+import csszyx from 'csszyx/vite';
+
+export default defineConfig({
+  plugins: [...csszyx(), tailwindcss(), react()],
+});
+```
+
+The manifest file (`csszyx-manifest.json`) is output to the `public/` directory so
+it is served as a static asset.
+
+## Use with form renderers (RJSF, Formily, etc.)
+
+```tsx
+// Store sz style in JSON schema
+const schema = {
+  uiSchema: {
+    'ui:sz': { bg: 'white', p: 4, hover: { bg: 'gray-50' }, dark: { bg: 'gray-900' } }
+  }
+};
+
+// Apply at render time
+function RenderedField({ uiSchema }) {
+  const { sz } = useSz();
+  return <div className={sz(uiSchema['ui:sz'])} />;
+}
+```
+
+This is the primary target use case: form renderers that store component definitions in
+JSON and need `hover:`, `dark:`, `responsive:` variants from user-supplied config.

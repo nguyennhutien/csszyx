@@ -1,0 +1,129 @@
+---
+title: szv() — Variant Authoring
+description: CVA-equivalent for csszyx. Build type-safe component variants that compose with the sz prop.
+---
+
+`szv()` is the csszyx equivalent of CVA (class-variance-authority). It returns a factory
+function that produces sz objects — keeping DX consistent with the `sz` prop throughout.
+
+## Basic usage
+
+```tsx
+import { szv } from 'csszyx';
+
+const buttonSz = szv({
+  base: { inlineFlex: true, items: 'center', rounded: 'md', fontWeight: 'medium' },
+  variants: {
+    variant: {
+      default:     { bg: 'primary', text: 'primary-foreground' },
+      destructive: { bg: 'destructive', text: 'destructive-foreground' },
+      outline:     { border: true, borderColor: 'blue-500', bg: 'transparent' },
+      ghost:       { hover: { bg: 'accent' } },
+    },
+    size: {
+      sm:   { h: 9,  px: 3, text: 'sm' },
+      md:   { h: 10, px: 4 },
+      lg:   { h: 11, px: 8 },
+      icon: { h: 10, w: 10 },
+    },
+  },
+  defaultVariants: { variant: 'default', size: 'md' },
+});
+
+// Usage — returns an sz object, feeds directly into sz prop
+<button sz={buttonSz({ variant: 'outline', size: 'sm' })} />
+
+// defaultVariants apply when no selection given
+<button sz={buttonSz()} />
+```
+
+## TypeScript inference — no annotations needed
+
+`szv()` infers all variant keys and valid values from the config object.
+TypeScript catches invalid values at the call site without any manual type annotations:
+
+```tsx
+buttonSz({ variant: 'outline' })   // ✅ valid
+buttonSz({ variant: 'invalid' })   // ❌ TypeScript error: '"invalid"' not assignable
+buttonSz({ size: 'xl' })           // ❌ TypeScript error: '"xl"' not assignable
+buttonSz({})                       // ✅ defaultVariants apply
+buttonSz()                         // ✅ same as {}
+```
+
+:::note
+TypeScript inference works because `szv()` is generic over the `variants` object literal.
+Pass the config inline — do not hoist it to a separate `const` with an explicit type, as that
+would widen the literal types and lose the inference.
+:::
+
+## Compose with sz array syntax
+
+`szv()` output is a plain sz object — compose it with conditional styles using the array syntax:
+
+```tsx
+<button sz={[
+  buttonSz({ variant: props.variant, size: props.size }),
+  isLoading  && { opacity: 50, cursor: 'wait' },
+  isDisabled && { opacity: 50, cursor: 'not-allowed' },
+]} />
+```
+
+The compiler handles static items at build time; conditionals use `_szMerge` at runtime.
+
+## Nested variants are deep merged
+
+Base hover styles are preserved when a variant adds its own hover:
+
+```tsx
+const cardSz = szv({
+  base: { rounded: 'lg', hover: { shadow: 'md' } },
+  variants: {
+    color: {
+      blue: { bg: 'blue-50', hover: { bg: 'blue-100' } },
+      red:  { bg: 'red-50',  hover: { bg: 'red-100' } },
+    },
+  },
+});
+
+cardSz({ color: 'blue' })
+// → { rounded: 'lg', bg: 'blue-50', hover: { shadow: 'md', bg: 'blue-100' } }
+//                                             ^^^^^^^^^^^  ↑ base kept
+```
+
+## null / undefined falls back to defaultVariants
+
+Passing `null` or `undefined` for a variant key is treated as "not specified" —
+the defaultVariant applies instead of clearing the style:
+
+```tsx
+<button sz={buttonSz({ variant: props.variant ?? null })} />
+// If props.variant is null/undefined → defaultVariants.variant ('default') applies
+```
+
+## With @csszyx/dynamic
+
+`szv()` works identically in runtime-injection mode:
+
+```tsx
+import { useSz } from 'csszyx/dynamic/react';
+
+const { sz } = useSz();
+<button className={sz(buttonSz({ variant: 'outline' }))} />
+```
+
+## No base required
+
+```tsx
+const pill = szv({
+  variants: {
+    size: {
+      sm: { px: 2, py: 1, text: 'xs' },
+      lg: { px: 4, py: 2, text: 'base' },
+    },
+  },
+  defaultVariants: { size: 'sm' },
+});
+
+<span sz={pill()} />             // size: 'sm' (default)
+<span sz={pill({ size: 'lg' })} />
+```

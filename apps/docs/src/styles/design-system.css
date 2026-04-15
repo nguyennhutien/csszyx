@@ -1,26 +1,55 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap");
+/* Establish layer order so Tailwind utilities beat Starlight's reset layer.
+   Starlight declares @layer starlight.reset after @layer utilities — without this,
+   `* { margin: 0 }` from starlight.reset wins over zero-specificity utilities
+   (space-y, divide-y, etc). Listing all layers here gives utilities the last slot. */
+@layer theme, base, components,
+       starlight.base, starlight.reset, starlight.core,
+       starlight.content, starlight.components, starlight.utils,
+       utilities;
 @import "tailwindcss";
+@source "../../csszyx-classes.html";
+/* Exclude AI reference files — they contain example class strings that produce invalid CSS */
+@source not "../../public/llms.txt";
+@source not "../../public/llms-full.txt";
 
 /* ================================================================
    Design Tokens
    ================================================================ */
 
 :root {
-  /* Primary — the one variable to change when retheming */
-  --ds-primary: #2563eb;
-  --ds-primary-dark: #1d4ed8;
-  --ds-primary-darker: #1e40af;
-  --ds-primary-light: #dbeafe;
-  --ds-primary-faint: #eff6ff;
+  color-scheme: light;
 
-  /* Neutral scale */
-  --ds-bg: #ffffff;
-  --ds-bg-alt: #f8fafc;
-  --ds-border: #e2e8f0;
-  --ds-border-strong: #94a3b8;
-  --ds-text: #0f172a;
-  --ds-text-muted: #475569;
-  --ds-text-subtle: #94a3b8;
+  /* Primary — CSSzyx brand green */
+  --ds-primary: #2dd597;
+  --ds-primary-dark: light-dark(#1ea07a, #f1fffa);
+  --ds-primary-darker: light-dark(#0d6b52, #1ea07a);
+  --ds-primary-light: light-dark(#c6f5e3, rgba(35, 135, 98, 0.2));
+  --ds-primary-faint: light-dark(#f0fef9, rgba(114, 223, 183, 0.06));
+  --ds-primary-tag-fg: light-dark(#0d6b52, #1ea07a);
+  --ds-tag-border: #80808033;
+
+  /* Secondary — CSSzyx brand purple */
+  --ds-secondary: #a855f7;
+  --ds-secondary-dark: light-dark(#8b5cf6, #f8f1ff);
+  --ds-secondary-darker: light-dark(#6d28d9, #4b1ea0);
+  --ds-secondary-light: light-dark(#d8c6f5, rgba(83, 35, 135, 0.2));
+  --ds-secondary-faint: light-dark(#f5f0fe, rgba(172, 112, 244, 0.06));
+  --ds-secondary-tag-fg: light-dark(#2c0d6b, #d2a7ee);
+
+  /* Selection */
+  --ds-selection-bg: #4c1e08;
+  --ds-selection-text: #ffdad0;
+
+  /* Neutral scale — matches landing.css surface/border/text tokens */
+  --ds-bg: light-dark(#ffffff, #000);
+  --ds-bg-alt: light-dark(#f8f6f6, #0d0d12);
+  --ds-border: light-dark(#e2e8f0, #25252f);
+  --ds-code-block-border: light-dark(#e2e8f0, #ffffff0f);
+  --ds-border-strong: light-dark(#94a3b8, #475569);
+  --ds-text: light-dark(#0f172a, #fafafa);
+  --ds-text-muted: light-dark(#475569, #94a3b8);
+  --ds-text-subtle: light-dark(#94a3b8, #e8edf2);
+  --ds-link: light-dark(#0f172a, #fafafa);
 
   /* Status */
   --ds-success: #22c55e;
@@ -28,18 +57,68 @@
   --ds-warning: #f59e0b;
   --ds-error: #ef4444;
 
-  /* Typography */
-  --ds-font-ui: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
-  --ds-font-body: "Inter", system-ui, -apple-system, sans-serif;
-  --ds-font-code: "JetBrains Mono", ui-monospace, monospace;
+  /* Typography — matches landing.css @theme fonts */
+  --ds-font-ui:
+    var(--font-geist-mono), ui-monospace, "Cascadia Code", monospace;
+  --ds-font-body:
+    var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
+  --ds-font-code: var(--font-geist-mono), ui-monospace, monospace;
 
-  /* Blueprint grid */
-  --ds-grid-color: rgba(100, 116, 139, 0.18);
+  /* Blueprint grid — grey in light, faint CSSzyx green in dark */
+  --ds-grid-color: light-dark(
+    rgba(100, 116, 139, 0.18),
+    rgba(45, 213, 151, 0.06)
+  );
   --ds-grid-size: 24px;
 
   /* Shape */
   --ds-radius: 3px;
   --ds-radius-md: 6px;
+
+  /* Easing */
+  --ease-spring: linear(
+    0,
+    0.009,
+    0.035 2.1%,
+    0.141,
+    0.281 6.7%,
+    0.723 12.9%,
+    0.938 16.7%,
+    1.017,
+    1.077,
+    1.121,
+    1.149 24.3%,
+    1.159,
+    1.163,
+    1.154,
+    1.129 32.8%,
+    1.051 39.6%,
+    1.017 43.1%,
+    0.991,
+    0.977 51%,
+    0.974 53.8%,
+    0.975 57.1%,
+    0.997 69.8%,
+    1.003 75.3%,
+    1
+  );
+
+  /* Custom Backinout */
+  --custom-backinout: cubic-bezier(1, -1, 0, 1.99);
+}
+
+/* Demo panel traffic-light dots */
+.demo-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* TODO: re-enable once light theme is signed off */
+starlight-theme-select {
+  display: none !important;
 }
 
 /* ================================================================
@@ -56,6 +135,98 @@
   --sl-text-code: var(--ds-font-code);
 }
 
+::selection {
+  color: var(--ds-selection-text);
+  background-color: var(--ds-selection-bg);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ds-code-block-border) transparent;
+}
+
+/* ================================================================
+   Page Container — centred, max 96rem
+   ================================================================ */
+header .header,
+.page {
+  max-width: 96rem;
+  margin-inline: auto;
+}
+
+/* Demo preview — dot-grid pattern, adapts to light/dark via --ds-grid-color */
+.demo-preview {
+  background-image: radial-gradient(
+    circle,
+    var(--ds-grid-color) 1.5px,
+    transparent 1.5px
+  );
+  background-size: 20px 20px;
+  background-position: 10px 10px;
+}
+
+.header .right-group {
+  > * {
+    &:not(:first-child)::before {
+      content: "";
+      height: 2rem;
+      border-inline-end: 1px solid var(--sl-color-gray-5);
+    }
+
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/* ================================================================
+   Fixed-element alignment — keep within 96rem centered page
+   .header, .sidebar-pane, .right-sidebar are all position:fixed so
+   they use the viewport as their containing block and ignore .page's
+   max-width. On wide viewports (> 96rem) we shift each one inward by
+   the margin that .page leaves on each side.
+   ================================================================ */
+
+header {
+  padding: 0;
+}
+
+header .header {
+  padding-inline: var(--sl-nav-pad-x);
+}
+
+@media (min-width: 96rem) {
+  /* Fixed left sidebar panel */
+  .sidebar-pane {
+    inset-inline-start: calc((100vw - 96rem) / 2);
+  }
+
+  /* Fixed right sidebar (TOC) — anchor to right edge of page */
+  .right-sidebar {
+    inset-inline-start: auto;
+    inset-inline-end: calc((100vw - 96rem) / 2);
+    width: var(--sl-sidebar-width);
+  }
+
+  /*
+   * TwoColumnContent normally splits "extra" flex space evenly between
+   * .main-pane and .right-sidebar-container, assuming page = 100vw.
+   * With max-width: 96rem the flex container is narrower, so that formula
+   * leaves a gap between content and the fixed sidebar.
+   * Fix: collapse right-sidebar-container to exactly sidebar-width so the
+   * container edge aligns with the fixed sidebar's inset-inline-end position,
+   * and let main-pane fill the rest.
+   */
+  .right-sidebar-container {
+    width: var(--sl-sidebar-width);
+  }
+
+  [data-has-sidebar][data-has-toc] .main-pane {
+    --sl-content-margin-inline: auto;
+    width: calc(100% - var(--sl-sidebar-width));
+  }
+}
+
 /* ================================================================
    Blueprint Dot Grid Background
    ================================================================ */
@@ -70,7 +241,24 @@ body {
   background-size: var(--ds-grid-size) var(--ds-grid-size);
 }
 
-/* Content areas sit on solid white so the grid shows only in margins */
+b,
+strong {
+  font-weight: 600;
+}
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--ds-link);
+  font-weight: 500;
+  text-decoration-line: underline;
+  text-underline-offset: 0.25em;
+
+  &:hover {
+    text-decoration-color: #c792ea;
+    text-decoration-thickness: 1.5px;
+  }
+}
+
+/* Content areas sit on solid bg so the grid shows only in margins */
 .sl-markdown-content,
 starlight-toc,
 .right-sidebar-container {
@@ -78,26 +266,52 @@ starlight-toc,
 }
 
 /* ================================================================
-   Navigation & Sidebar — monospace uppercase labels
+   Navigation & Sidebar
    ================================================================ */
 
 .sidebar-content a,
 .sidebar-group > summary,
 header nav a,
 .sl-sidebar-item {
-  font-family: var(--ds-font-ui);
-  font-size: 0.72rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: 0.875rem;
+  font-weight: 400;
 }
 
 /* Sidebar group label */
 .group-label span {
-  font-family: var(--ds-font-ui);
-  font-size: 0.65rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--ds-text-subtle);
+}
+
+.sidebar-content {
+  --sl-color-hairline-light: transparent;
+
+  li {
+    margin-left: 0;
+    /* padding-left: 0.5em; */
+    border: 0;
+  }
+
+  a {
+    --sl-sidebar-item-padding-inline: 0.75em;
+    padding-top: 0.375em;
+    padding-bottom: 0.375em;
+    padding-left: 1em;
+    border-radius: 0.5em;
+  }
+
+  a[aria-current="page"] {
+    font-weight: 500;
+  }
+}
+
+.right-sidebar-panel:where(.astro-aprzkuzd) :where(a) {
+  color: var(--sl-color-gray-2);
+
+  &:hover {
+    color: var(--sl-color-white);
+  }
 }
 
 /* ================================================================
@@ -105,8 +319,8 @@ header nav a,
    ================================================================ */
 
 .expressive-code {
-  border: 1px solid var(--ds-border);
-  border-radius: var(--ds-radius-md);
+  /* border: 1px solid var(--ds-code-block-border); */
+  /* border-radius: var(--ds-radius-md); */
 }
 
 /* ================================================================
@@ -144,10 +358,554 @@ header nav a,
 
 :not(pre) > code {
   font-family: var(--ds-font-code);
-  font-size: 0.875em;
-  background: var(--ds-primary-faint);
-  color: var(--ds-primary-dark);
-  padding: 0.15em 0.4em;
+  font-size: 0.8125rem;
+  /* padding: 0.15em 0.4em; */
+  padding: 0.2308em;
   border-radius: var(--ds-radius);
-  border: 1px solid var(--ds-primary-light);
+  border: 1px solid var(--ds-tag-border);
+}
+
+:not([data-theme="dark"]) :not(pre) > code {
+  background: var(--ds-text-muted);
+  color: var(--ds-text);
+}
+
+[data-theme="dark"] :not(pre) > code {
+  background: #141414;
+  color: var(--ds-text);
+}
+
+.sl-heading-wrapper {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.333333em;
+
+    > code {
+      font-size: 90%;
+      font-weight: 500;
+      border-radius: var(--ds-radius);
+      border: 1px solid var(--ds-code-block-border);
+      /* background: var(--ds-primary-light);
+      border-radius: var(--ds-radius);
+      border: 1px solid var(--ds-primary-light); */
+    }
+  }
+
+  &.level-h1 {
+    margin-top: 0;
+    margin-bottom: 0.888889em;
+    font-size: 1.875em;
+    font-weight: 800;
+    line-height: 1.11111;
+  }
+
+  &.level-h2 {
+    margin-top: 2em;
+    margin-bottom: 1em;
+    font-size: 1.5em;
+    font-weight: 600;
+    line-height: 1.33333;
+  }
+
+  &.level-h3 {
+    margin-top: 1.6em;
+    margin-bottom: 0.6em;
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.6;
+  }
+
+  &.level-h4,
+  &.level-h5,
+  &.level-h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+}
+
+/* ================================================================
+   Tabs
+   ================================================================ */
+
+starlight-tabs {
+  [role="tab"] {
+    --sl-tab-color-border: var(--ds-border); /* inactive */
+    font-size: 14px;
+  }
+  [role="tablist"] {
+    padding-left: 0.45em;
+    border-bottom: 0;
+  }
+  [role="tab"] {
+    position: relative;
+    padding-left: 0.75em;
+    padding-right: 0.75em;
+    padding-bottom: 0.75em;
+    box-shadow: none;
+
+    &::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0.75em;
+      right: 0.75em;
+      border-bottom: 1px solid transparent;
+    }
+
+    &[aria-selected="true"]::after {
+      border-bottom: 2px solid #e1e4e8;
+    }
+  }
+  [role="tabpanel"] {
+    margin-top: 0;
+  }
+}
+
+/* ================================================================
+   Steps
+   ================================================================ */
+
+.sl-steps {
+  > li:last-child {
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/* ================================================================
+   Dark Theme — Starlight token overrides
+   ================================================================ */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ds-tag-border: #80808033;
+
+  /* Surfaces */
+  --sl-color-bg: #0c0c11;
+  --sl-color-bg-nav: light-dark(#fff, #000);
+  --sl-color-bg-sidebar: light-dark(#fff, #000);
+  --sl-color-bg-inline-code: rgba(45, 213, 151, 0.07);
+  --sl-color-bg-badge: #13131a;
+
+  /* Borders */
+  --sl-color-hairline-light: #1a1a24;
+  --sl-color-hairline: #25252f;
+  --sl-color-hairline-shade: #1c1c26;
+
+  /* Text */
+  --sl-color-white: #e8edf2;
+  --sl-color-gray-1: #c8d3e0;
+  --sl-color-gray-2: #94a3b8;
+  --sl-color-gray-3: #64748b;
+  --sl-color-gray-4: #334155;
+  --sl-color-gray-5: #1e293b;
+  --sl-color-gray-6: #0f172a;
+  --sl-color-black: #0c0c11;
+
+  --ds-font-code: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Accent */
+  --sl-color-accent-low: rgba(45, 213, 151, 0.1);
+  --sl-color-accent: light-dark(var(--sl-color-black), var(--sl-color-white));
+  --sl-color-accent-high: #1ea07a;
+}
+
+[data-theme="dark"] starlight-tabs [role="tab"][aria-selected="true"] {
+  --sl-tab-color-border: #1ea07a; /* active */
+}
+
+/* ================================================================
+   Dark Theme — prose heading & body contrast
+   ================================================================ */
+
+[data-theme="dark"] .sl-markdown-content h1,
+[data-theme="dark"] .sl-markdown-content h2,
+[data-theme="dark"] .sl-markdown-content h3,
+[data-theme="dark"] .sl-markdown-content h4 {
+  color: #e8edf2;
+}
+
+[data-theme="dark"] .sl-markdown-content p,
+[data-theme="dark"] .sl-markdown-content li {
+  /* color: #c8d3e0; */
+  color: color-mix(in oklab, var(--ds-text) 90%, transparent);
+}
+
+[data-theme="dark"] .sl-markdown-content a:not([role="tab"]) {
+  /* color: #2dd597; */
+  text-decoration-line: underline;
+}
+
+[data-theme="dark"] .sl-markdown-content a:not([aria-selected="true"]):hover {
+  color: #4aedb0;
+}
+
+[data-theme="dark"] .sl-markdown-content strong {
+  /* color: #e8edf2; */
+  color: color-mix(in oklab, var(--ds-text) 90%, transparent);
+}
+
+/* ================================================================
+   Dark Theme — Callout / Aside blocks
+   ================================================================ */
+
+[data-theme="dark"] .starlight-aside {
+  background: #0d0d12;
+  border-radius: var(--ds-radius-md);
+}
+
+[data-theme="dark"] .starlight-aside--note {
+  --sl-color-asides-text-accent: #38bdf8;
+  border-inline-start-color: #38bdf8;
+}
+
+[data-theme="dark"] .starlight-aside--tip {
+  --sl-color-asides-text-accent: #2dd597;
+  border-inline-start-color: #2dd597;
+}
+
+[data-theme="dark"] .starlight-aside--caution {
+  --sl-color-asides-text-accent: #f59e0b;
+  border-inline-start-color: #f59e0b;
+}
+
+[data-theme="dark"] .starlight-aside--danger {
+  --sl-color-asides-text-accent: #f87171;
+  border-inline-start-color: #f87171;
+}
+
+[data-theme="dark"] .starlight-aside .starlight-aside__title {
+  font-family: var(--ds-font-ui);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ================================================================
+   Light Theme — Expressive Code frame overrides
+   ================================================================ */
+
+:root:not([data-theme="dark"]) .expressive-code {
+  --ec-brdRad: 6px;
+  --ec-brdCol: #d0d7de;
+  --ec-codeBg: #ffffff;
+  --ec-frm-edTabBarBg: #f6f8fa;
+  --ec-frm-edActTabBg: #ffffff;
+  --ec-frm-edActTabFg: #1f2328;
+  --ec-frm-edActTabBrdTopCol: #0a6442;
+  --ec-frm-edTabBarBrdBtmCol: #d0d7de;
+  --ec-frm-termTtlBarBg: #f6f8fa;
+  --ec-frm-termTtlBarBrdBtmCol: #d0d7de;
+}
+
+:root:not([data-theme="dark"]) .expressive-code .frame {
+  filter: none;
+}
+
+:root:not([data-theme="dark"]) .expressive-code pre,
+:root:not([data-theme="dark"]) .expressive-code code {
+  font-family: var(--ds-font-code);
+  font-size: 0.8125rem;
+  line-height: calc(10 / 7);
+}
+
+/* Copy button */
+:root:not([data-theme="dark"]) .expressive-code .copy button {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  color: #57606a;
+
+  &::before {
+    border-color: transparent;
+  }
+}
+
+:root:not([data-theme="dark"]) .expressive-code .copy button:hover {
+  background: #eaeef2;
+  color: #1f2328;
+}
+
+/* ================================================================
+   Dark Theme — Expressive Code frame overrides
+   ================================================================ */
+
+[data-theme="dark"] .expressive-code {
+  --ec-brdRad: 6px;
+  --ec-brdCol: #ffffff0f;
+  --ec-codeBg: #050505;
+  --ec-frm-edTabBarBg: #050505;
+  --ec-frm-edActTabBg: #050505;
+  --ec-frm-edActTabBrdTopCol: #2dd597;
+  /* --ec-frm-edTabBarBrdBtmCol: #25252f; */
+  --ec-frm-termTtlBarBg: #050505;
+  /* --ec-frm-termTtlBarBrdBtmCol: #25252f; */
+
+  .frame.has-title:not(.is-terminal) {
+    .header {
+      --ec-frm-edTabBarBrdBtmCol: #ffffff0f;
+      --ec-frm-edTabBarBg: #010101;
+    }
+    .title {
+      border-right-color: #ffffff0f;
+    }
+  }
+}
+
+@media (min-width: 50em) {
+  :root {
+    --sl-nav-height: 4rem;
+    --sl-nav-pad-x: 1.5rem;
+    --sl-text-h1: var(--sl-text-3xl);
+    --sl-text-h2: var(--sl-text-2xl);
+    --sl-text-h3: var(--sl-text-xl);
+    --sl-text-h4: var(--sl-text-lg);
+  }
+}
+
+.expressive-code .frame {
+  --header-border-radius: 0px;
+}
+
+[data-theme="dark"] .expressive-code .frame {
+  /* box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45); */
+  filter: saturate(0.84) opacity(1);
+  transition: filter 240ms ease-in-out;
+
+  &:hover {
+    filter: saturate(1.4) opacity(1);
+  }
+}
+
+[data-theme="dark"] .expressive-code pre,
+[data-theme="dark"] .expressive-code code {
+  font-family: var(--ds-font-code);
+  font-size: 0.8125rem;
+  line-height: calc(10 / 7);
+  border-radius: 0px;
+}
+
+/* Copy button */
+[data-theme="dark"] .expressive-code .copy button {
+  background: #1c1c26;
+  border: 1px solid var(--ds-code-block-border);
+  color: #64748b;
+
+  &::before {
+    border-color: transparent;
+  }
+}
+
+[data-theme="dark"] .expressive-code .copy button:hover {
+  background: #25252f;
+  color: #c8d3e0;
+}
+
+/* ================================================================
+   SzToken — syntax token classes (PropTable key/value coloring)
+   Using [data-theme] selectors instead of light-dark() inside
+   CSS vars because inline styles don't reliably inherit color-scheme.
+   ================================================================ */
+
+.sz-punct {
+  color: #4c555f;
+} /* 7.6:1 — muted punctuation */
+.sz-key {
+  color: #035186;
+} /* 8.7:1 — deep blue, property key */
+.sz-val-num {
+  color: #953800;
+} /* 7.4:1 — orange, number */
+.sz-val-bool {
+  color: #5b21b6;
+} /* 9.0:1 — purple, boolean */
+.sz-val-str {
+  color: #0e6251;
+} /* 7.3:1 — teal, string */
+
+[data-theme="dark"] .sz-punct {
+  color: #475569;
+}
+[data-theme="dark"] .sz-key {
+  color: #a1d3ff;
+} /* blue — property key token */
+[data-theme="dark"] .sz-val-num {
+  color: #f78c6c;
+} /* orange — number token */
+[data-theme="dark"] .sz-val-bool {
+  color: #c792ea;
+} /* purple — boolean token */
+[data-theme="dark"] .sz-val-str {
+  color: #6cdca8;
+} /* teal — string token */
+
+/* ================================================================
+   Table — base (both themes)
+   Clean borderless layout: collapse cells, row separators only,
+   no outer box, width collapses to content.
+   ================================================================ */
+
+.sl-markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  border: none;
+}
+
+/* Reset all cell borders — we draw our own */
+.sl-markdown-content :is(th, td) {
+  border: none;
+  border-bottom: 1px solid var(--ds-code-block-border);
+}
+
+/* No separator after last row */
+.sl-markdown-content tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ================================================================
+   Table header — styled like Tab titles (monospace, muted, uppercase)
+   ================================================================ */
+
+.sl-markdown-content th {
+  padding-block: 0.5rem;
+  color: var(--ds-text);
+  font-size: 0.9rem;
+  font-weight: 400;
+  background: transparent;
+  border-bottom: 1px solid var(--ds-border);
+}
+
+/* ================================================================
+   Dark Theme — Table
+   ================================================================ */
+
+[data-theme="dark"] .sl-markdown-content td {
+  color: #c8d3e0;
+}
+
+/* Striped rows */
+[data-theme="dark"] .sl-markdown-content tbody tr:nth-child(odd) td {
+  background: rgba(255, 255, 255, 0.0075);
+}
+
+/* ================================================================
+   Light Theme — Table
+   ================================================================ */
+
+:root:not([data-theme="dark"]) .sl-markdown-content td {
+  color: #1f2328;
+}
+
+/* Striped rows */
+:root:not([data-theme="dark"]) .sl-markdown-content tbody tr:nth-child(odd) td {
+  background: rgba(0, 0, 0, 0.0075);
+}
+
+/* ================================================================
+   Dark Theme — Pagination
+   ================================================================ */
+
+[data-theme="dark"] .pagination-links a {
+  background: #0d0d12;
+  border-color: #25252f;
+  color: #c8d3e0;
+}
+
+[data-theme="dark"] .pagination-links a:hover {
+  border-color: #2dd597;
+  color: #2dd597;
+}
+
+/* ================================================================
+   Dark Theme — Sidebar active item
+   ================================================================ */
+
+[data-theme="dark"] .sidebar-content a[aria-current="page"] {
+  background: rgba(45, 213, 151, 0.1);
+  color: #2dd597;
+  border-inline-start-color: #2dd597;
+}
+
+/* ================================================================
+   Dark Theme — FileTree
+   Match code block: same bg, border, radius, font
+   ================================================================ */
+
+[data-theme="dark"] starlight-file-tree {
+  background-color: #050505;
+  border: 1px solid #ffffff0f;
+  /* border-radius: 6px; */
+  font-family: var(--ds-font-code);
+  font-size: 0.8125rem;
+}
+
+/* Indent guide lines */
+[data-theme="dark"] starlight-file-tree ul {
+  border-inline-start-color: #25252f;
+}
+
+/* Directory label */
+[data-theme="dark"] starlight-file-tree .directory > details > summary {
+  color: #c8d3e0;
+}
+
+/* Expand/collapse marker */
+[data-theme="dark"] starlight-file-tree .directory > details > summary::marker,
+[data-theme="dark"]
+  starlight-file-tree
+  .directory
+  > details
+  > summary::-webkit-details-marker {
+  color: #475569;
+}
+
+/* Directory hover */
+[data-theme="dark"] starlight-file-tree .directory > details > summary:hover,
+[data-theme="dark"]
+  starlight-file-tree
+  .directory
+  > details
+  > summary:hover
+  .tree-icon {
+  color: #2dd597;
+}
+
+[data-theme="dark"]
+  starlight-file-tree
+  .directory
+  > details
+  > summary:hover
+  ~ ul {
+  border-color: #2dd597;
+}
+
+/* File entries */
+[data-theme="dark"] starlight-file-tree .file {
+  color: #94a3b8;
+}
+
+/* Comments */
+[data-theme="dark"] starlight-file-tree .comment {
+  color: #73879c;
+}
+
+/* Icons */
+[data-theme="dark"] starlight-file-tree svg {
+  fill: #475569;
+}
+
+/* Highlighted entries — use primary green */
+[data-theme="dark"] starlight-file-tree .highlight {
+  background-color: rgba(45, 213, 151, 0.15);
+  color: #2dd597;
+  border-radius: 3px;
 }

@@ -42,7 +42,7 @@ Utilities for scaling elements.
 | **X Axis**    | `scale-x: 0.5`    | `scale-x-50`      | `{ scaleX: 50 }`          |      |
 | **Y Axis**    | `scale-y: 0.5`    | `scale-y-50`      | `{ scaleY: 50 }`          |      |
 | **Z Axis**    | `scale-z: 0.5`    | `scale-z-50`      | `{ scaleZ: 50 }`          |      |
-| **3D**        | `scale: 0.5`      | `scale-3d`        | `{ scale3d: true }`       |      |
+| **3D**        | `scale: 0.5`      | `scale-3d`        | `{ scale: '3d' }`         |      |
 | **Arbitrary** | `scale: 1.5`      | `scale-[1.5]`     | `{ scale: '1.5' }`        |      |
 | **Variable**  | `scale: var(--s)` | `scale-(--s)`     | `{ scale: '--s' }`        |      |
 
@@ -70,19 +70,23 @@ Utilities for skewing elements.
 
 Utilities for translating elements.
 
-| Concept                  | CSS Rule                                       | Tailwind v4 Class                      | `sz` Prop (Object Syntax)       | Note                                                           |
-| :----------------------- | :--------------------------------------------- | :------------------------------------- | :------------------------------ | :------------------------------------------------------------- |
-| **Translate X Spacing**  | `translate-x: calc(var(--spacing) * <number>)` | `translate-x-<number>`                 | `{ translateX: <number> }`      | v4: fully dynamic, accept any integer or 0.5-step decimal bare |
-| **Translate X Px**       | `translate-x: 1px`                             | `translate-x-px`                       | `{ translateX: 'px' }`          |                                                                |
-| **Translate X Fraction** | `translate-x: calc(<int>/<int> * 100%)`        | `translate-x-<int>/<int>`              | `{ translateX: '<int>/<int>' }` | v4: any integer/integer fraction works bare                    |
-| **Translate Y Spacing**  | `translate-y: calc(var(--spacing) * <number>)` | `translate-y-<number>`                 | `{ translateY: <number> }`      | v4: fully dynamic, accept any integer or 0.5-step decimal bare |
-| **Translate Y Px**       | `translate-y: 1px`                             | `translate-y-px`                       | `{ translateY: 'px' }`          |                                                                |
-| **Translate Y Fraction** | `translate-y: calc(<int>/<int> * 100%)`        | `translate-y-<int>/<int>`              | `{ translateY: '<int>/<int>' }` | v4: any integer/integer fraction works bare                    |
-| **Z Axis**               | `translate-z: 4px`                             | `translate-z-0`(etc)                   | `{ translateZ: 4 }`             |                                                                |
-| **Full**                 | `translate: (value)`                           | `translate-x-full`, `translate-y-full` | `{ translateX: 'full' }`        |                                                                |
-| **3D**                   | `translate: (value)`                           | `translate-3d`                         | `{ translate3d: true }`         |                                                                |
-| **Arbitrary**            | `translate-x: 5px`                             | `translate-x-[5px]`                    | `{ translateX: '5px' }`         |                                                                |
-| **Variable**             | `translate-x: var(--t)`                        | `translate-x-(--t)`                    | `{ translateX: '--t' }`         |                                                                |
+| Concept                  | CSS Rule                                       | Tailwind v4 Class          | `sz` Prop (Object Syntax)        | Note                                                           |
+| :----------------------- | :--------------------------------------------- | :------------------------- | :------------------------------- | :------------------------------------------------------------- |
+| **Shorthand Spacing**    | `translate: calc(var(--spacing) * <n>)`        | `translate-<number>`       | `{ translate: <number> }`        | CSS `translate` property — sets both axes                      |
+| **Shorthand Fraction**   | `translate: calc(<int>/<int> * 100%)`          | `translate-<int>/<int>`    | `{ translate: '<int>/<int>' }`   | v4: bare fraction, both axes                                   |
+| **Shorthand Negative**   | `translate: calc(-<int>/<int> * 100%)`         | `-translate-<int>/<int>`   | `{ translate: '-<int>/<int>' }`  |                                                                |
+| **Translate X Spacing**  | `translate-x: calc(var(--spacing) * <number>)` | `translate-x-<number>`     | `{ translateX: <number> }`       | v4: fully dynamic, accept any integer or 0.5-step decimal bare |
+| **Translate X Px**       | `translate-x: 1px`                             | `translate-x-px`           | `{ translateX: 'px' }`           |                                                                |
+| **Translate X Fraction** | `translate-x: calc(<int>/<int> * 100%)`        | `translate-x-<int>/<int>`  | `{ translateX: '<int>/<int>' }`  | v4: any integer/integer fraction works bare                    |
+| **Translate X Neg Frac** | `translate-x: calc(-<int>/<int> * 100%)`       | `-translate-x-<int>/<int>` | `{ translateX: '-<int>/<int>' }` |                                                                |
+| **Translate Y Spacing**  | `translate-y: calc(var(--spacing) * <number>)` | `translate-y-<number>`     | `{ translateY: <number> }`       | v4: fully dynamic, accept any integer or 0.5-step decimal bare |
+| **Translate Y Fraction** | `translate-y: calc(<int>/<int> * 100%)`        | `translate-y-<int>/<int>`  | `{ translateY: '<int>/<int>' }`  | v4: any integer/integer fraction works bare                    |
+| **Translate Y Neg Frac** | `translate-y: calc(-<int>/<int> * 100%)`       | `-translate-y-<int>/<int>` | `{ translateY: '-<int>/<int>' }` |                                                                |
+| **Z Axis**               | `translate-z: 4px`                             | `translate-z-4`            | `{ translateZ: 4 }`              |                                                                |
+| **Full**                 | `translate-x: 100%`                            | `translate-x-full`         | `{ translateX: 'full' }`         |                                                                |
+| **3D**                   | `translate: (value)`                           | `translate-3d`             | `{ translate: '3d' }`            |                                                                |
+| **Arbitrary**            | `translate-x: 5px`                             | `translate-x-[5px]`        | `{ translateX: '5px' }`          |                                                                |
+| **Variable**             | `translate-x: var(--t)`                        | `translate-x-(--t)`        | `{ translateX: '--t' }`          |                                                                |
 
 ## Transform Origin
 

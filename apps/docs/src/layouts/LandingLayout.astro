@@ -1,0 +1,124 @@
+---
+import '../styles/landing.css';
+
+export interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'CSSzyx — Style from data. Zero wasted CSS.',
+  description = 'CSSzyx compiles sz props to Tailwind at build time. For runtime dynamic styles — from APIs, CMS, or user config — it injects only the exact CSS delta you need.',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/csszyx-favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Material Symbols -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    />
+
+    <!-- Theme init (before render to avoid flash) -->
+    <script is:inline>
+      (function () {
+        // Light theme is still in progress — default to dark regardless of OS preference.
+        // Once light theme is ready, restore: dark = stored === 'dark' || (!stored && prefersDark)
+        var stored = localStorage.getItem('lp-theme');
+        var dark = stored !== 'light';
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.classList.toggle('light', !dark);
+      })();
+    </script>
+  </head>
+
+  <body>
+    <slot />
+
+    <!-- Scroll To Top Button -->
+    <button id="scrollToTop" class="scroll-to-top" aria-label="Scroll to top">
+      <span class="material-symbols-outlined">arrow_upward</span>
+    </button>
+
+    <!-- Global landing page scripts -->
+    <script is:inline>
+      document.addEventListener('DOMContentLoaded', function () {
+        // ── Scroll Reveal ──────────────────────────────────────────────
+        const STAGGER_MS        = 240;
+        const STAGGER_TOLERANCE = 20;
+
+        const revealObserver = new IntersectionObserver(function (entries) {
+          const triggered = entries
+            .filter(function (e) { return e.isIntersecting && !e.target.classList.contains('is-visible'); })
+            .map(function (e) { return { el: e.target, top: e.boundingClientRect.top, left: e.boundingClientRect.left }; });
+
+          if (!triggered.length) return;
+
+          const rows = [];
+          triggered.forEach(function (item) {
+            const row = rows.find(function (r) { return Math.abs(r.top - item.top) <= STAGGER_TOLERANCE; });
+            if (row) { row.items.push(item); }
+            else { rows.push({ top: item.top, items: [item] }); }
+          });
+
+          rows.forEach(function (row) {
+            row.items.sort(function (a, b) { return a.left - b.left; });
+            row.items.forEach(function (item, i) {
+              item.el.style.transitionDelay = (i * STAGGER_MS) + 'ms';
+              item.el.classList.add('is-visible');
+              revealObserver.unobserve(item.el);
+              item.el.addEventListener('transitionend', function clearDelay(e) {
+                if (e.propertyName === 'opacity') {
+                  item.el.style.transitionDelay = '';
+                  item.el.removeEventListener('transitionend', clearDelay);
+                }
+              });
+            });
+          });
+        }, { root: null, rootMargin: '0px 0px -25% 0px', threshold: 0.20 });
+
+        document.querySelectorAll('.reveal-item').forEach(function (el) { revealObserver.observe(el); });
+
+        // ── Sticky Header + Scroll To Top ──────────────────────────────
+        const header    = document.querySelector('header');
+        const scrollBtn = document.getElementById('scrollToTop');
+        window.addEventListener('scroll', function () {
+          const scrolled = window.scrollY > 50;
+          if (header)    header.classList.toggle('header-scrolled', scrolled);
+          if (scrollBtn) scrollBtn.classList.toggle('show', scrolled);
+        });
+        if (scrollBtn) {
+          scrollBtn.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        }
+
+        // ── Glow Card Mouse Tracker ────────────────────────────────────
+        document.querySelectorAll('.glow-card').forEach(function (card) {
+          card.addEventListener('mousemove', function (e) {
+            const rect = card.getBoundingClientRect();
+            card.style.setProperty('--x', (e.clientX - rect.left) + 'px');
+            card.style.setProperty('--y', (e.clientY - rect.top)  + 'px');
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

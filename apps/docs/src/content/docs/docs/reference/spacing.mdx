@@ -1,0 +1,103 @@
+---
+title: Spacing
+description: Padding, margin, and space-between props.
+---
+
+import { PropTable, SpacingViz } from '../../../../components/PropTable.tsx';
+import { PaddingScale, AsymmetricPadding, MarginAuto, SpaceX, SpaceY } from '../../../../components/demos/spacing.tsx';
+
+## Padding
+
+<PropTable rows={[
+  { sz: "{ p: 4 }", tw: "p-4", viz: <SpacingViz p={4} /> },
+  { sz: "{ px: 6 }", tw: "px-6", viz: <SpacingViz px={6} /> },
+  { sz: "{ py: 2 }", tw: "py-2", viz: <SpacingViz py={2} /> },
+  { sz: "{ pt: 4 }", tw: "pt-4", viz: <SpacingViz pt={4} /> },
+  { sz: "{ pr: 2 }", tw: "pr-2", viz: <SpacingViz pr={2} /> },
+  { sz: "{ pb: 4 }", tw: "pb-4", viz: <SpacingViz pb={4} /> },
+  { sz: "{ pl: 2 }", tw: "pl-2", viz: <SpacingViz pl={2} /> },
+  { sz: "{ ps: 4 }", tw: "ps-4", viz: <SpacingViz ps={4} /> },
+  { sz: "{ pe: 4 }", tw: "pe-4", viz: <SpacingViz pe={4} /> },
+  { sz: "{ p: 'px' }", tw: "p-px", viz: <SpacingViz p='px' /> },
+  { sz: "{ p: '5px' }", tw: "p-[5px]", viz: <SpacingViz p='5px' /> },
+  { sz: "{ p: '--p' }", tw: "p-(--p)", viz: <SpacingViz p='--p' /> },
+]} />
+
+:::tip[New in v4.2]
+Block-direction padding: `{ pbs: 4 }` → `pbs-4` (padding-block-start),
+`{ pbe: 4 }` → `pbe-4` (padding-block-end).
+:::
+
+<PaddingScale />
+
+<AsymmetricPadding />
+
+## Margin
+
+<PropTable rows={[
+  { sz: "{ m: 4 }", tw: "m-4", viz: <SpacingViz m={4} /> },
+  { sz: "{ mx: 'auto' }", tw: "mx-auto" },
+  { sz: "{ my: 6 }", tw: "my-6", viz: <SpacingViz my={6} /> },
+  { sz: "{ mt: 4 }", tw: "mt-4", viz: <SpacingViz mt={4} /> },
+  { sz: "{ mr: 2 }", tw: "mr-2", viz: <SpacingViz mr={2} /> },
+  { sz: "{ mb: 8 }", tw: "mb-8", viz: <SpacingViz mb={8} /> },
+  { sz: "{ ml: 2 }", tw: "ml-2", viz: <SpacingViz ml={2} /> },
+  { sz: "{ ms: 4 }", tw: "ms-4" },
+  { sz: "{ me: 4 }", tw: "me-4" },
+  { sz: "{ m: -4 }", tw: "-m-4" },
+  { sz: "{ mt: -2 }", tw: "-mt-2" },
+  { sz: "{ m: 'px' }", tw: "m-px" },
+]} />
+
+:::tip[New in v4.2]
+Block-direction margin: `{ mbs: 4 }` → `mbs-4` (margin-block-start),
+`{ mbe: 4 }` → `mbe-4` (margin-block-end). Both support negative values.
+:::
+
+<MarginAuto />
+
+## Space Between
+
+Controls spacing between child elements (alternative to `gap`):
+
+<PropTable rows={[
+  { sz: "{ spaceX: 4 }", tw: "space-x-4" },
+  { sz: "{ spaceY: 4 }", tw: "space-y-4" },
+  { sz: "{ spaceX: -2 }", tw: "-space-x-2" },
+  { sz: "{ spaceXReverse: true }", tw: "space-x-reverse" },
+  { sz: "{ spaceYReverse: true }", tw: "space-y-reverse" },
+  { sz: "{ spaceX: 'px' }", tw: "space-x-px" },
+  { sz: "{ spaceX: '--space' }", tw: "space-x-(--space)" },
+]} />
+
+<SpaceX />
+
+<SpaceY />
+
+## Examples
+
+```tsx
+// Card with internal padding and margin
+<div sz={{ p: 6, m: 4, bg: 'white', rounded: 'lg' }}>
+  <h2 sz={{ mb: 4, text: 'xl', fontWeight: 'bold' }}>Title</h2>
+  <p sz={{ mb: 0 }}>Content</p>
+</div>
+
+// Centered container
+<div sz={{ maxW: '4xl', mx: 'auto', px: 4 }}>
+  Page content
+</div>
+
+// Inline elements with space between
+<div sz={{ flex: true, spaceX: 4 }}>
+  <span>Item 1</span>
+  <span>Item 2</span>
+  <span>Item 3</span>
+</div>
+
+// Stack with vertical spacing
+<ul sz={{ spaceY: 2 }}>
+  <li>First item</li>
+  <li>Second item</li>
+</ul>
+```

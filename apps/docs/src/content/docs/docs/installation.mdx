@@ -1,0 +1,211 @@
+---
+title: Installation
+description: How to install and configure CSSzyx in your project.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Install
+
+<Tabs>
+  <TabItem label="npm">
+    ```bash
+    npm install csszyx
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add csszyx
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add csszyx
+    ```
+  </TabItem>
+</Tabs>
+
+The `csszyx` umbrella package includes the compiler, runtime, types, and
+build plugin.
+
+## Setup by Platform
+
+<Tabs>
+  <TabItem label="Vite + React">
+    ```ts
+    // vite.config.ts
+    import { defineConfig } from 'vite';
+    import csszyx from 'csszyx/vite';
+    import tailwindcss from '@tailwindcss/vite';
+    import react from '@vitejs/plugin-react';
+
+    export default defineConfig({
+      plugins: [
+        // Order matters: csszyx → tailwindcss → react
+        ...csszyx(),
+        tailwindcss(),
+        react(),
+      ],
+    });
+    ```
+
+:::caution[Order matters]
+CSSzyx must come **before** Tailwind and React in the plugins array.
+CSSzyx transforms `sz` props into `className` strings first. Then Tailwind
+scans those strings to generate CSS. Then React handles JSX compilation.
+:::
+  </TabItem>
+
+  <TabItem label="Next.js">
+    ```ts
+    // next.config.ts
+    import type { NextConfig } from 'next';
+
+    const nextConfig: NextConfig = {
+      reactStrictMode: true,
+      webpack: (config) => {
+        const csszyxWebpack = require('@csszyx/unplugin/webpack').default;
+        config.plugins.push(csszyxWebpack());
+        return config;
+      },
+    };
+
+    export default nextConfig;
+    ```
+  </TabItem>
+
+  <TabItem label="Webpack">
+    ```js
+    // webpack.config.js
+    const csszyxWebpack = require('@csszyx/unplugin/webpack').default;
+
+    module.exports = {
+      plugins: [
+        csszyxWebpack(),
+        // ... other plugins
+      ],
+    };
+    ```
+  </TabItem>
+</Tabs>
+
+## Tailwind CSS v4 Entry Point
+
+CSSzyx requires Tailwind CSS v4. Create a CSS entry point:
+
+```css
+/* src/index.css */
+@import "tailwindcss";
+```
+
+Import this in your app entry point:
+
+```tsx
+// src/main.tsx
+import './index.css';
+```
+
+## Plugin Options
+
+```ts
+csszyx({
+  development: {
+    debug: true,              // Enable debug logging
+    autoInjectRecovery: true, // Auto-inject CSR recovery script
+    allowCSRRecovery: true,   // Allow client-side recovery on mismatch
+  },
+  production: {
+    mangle: true,             // Minify class names (z, y, x, ...)
+    injectChecksum: true,     // Inject SSR hydration checksum
+  },
+});
+```
+
+## Optional: Initialize Runtime
+
+For SSR hydration safety, initialize the runtime in your app entry:
+
+```tsx
+import { initRuntime } from '@csszyx/runtime';
+
+initRuntime({
+  development: process.env.NODE_ENV === 'development',
+  allowCSRRecovery: true,
+});
+```
+
+This is optional — CSSzyx works without it, but SSR hydration guards require
+it to be called before first render.
+
+## TypeScript
+
+The `sz` prop is automatically available on all HTML elements once `csszyx` is
+installed. No extra configuration needed:
+
+```tsx
+// ✅ TypeScript knows this is valid
+<div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
+
+// ❌ TypeScript error: 'red-999' is not a valid color
+<div sz={{ bg: 'red-999' }} />
+```
+
+## Troubleshooting
+
+**Classes not applying** — make sure your CSS entry point uses the full Tailwind v4 bundle:
+```css
+/* ✅ correct — includes theme + preflight + utilities */
+@import "tailwindcss";
+
+/* ❌ wrong — utilities only, theme variables undefined */
+@import "tailwindcss/utilities";
+```
+
+Partial imports like `tailwindcss/utilities` only generate static-value utilities
+(`.border-0`, `.m-px`). Scale-dependent utilities like `p-4`, `rounded-sm`, `text-xs`
+require the theme layer (`--spacing`, `--radius-sm`, `--text-xs`) and will silently
+produce no CSS without it.
+
+**Monorepo with both Tailwind v3 and v4** — if your workspace has other packages
+that depend on Tailwind v3, your package's CSS resolver may accidentally pick up v3
+instead of v4, causing `@import "tailwindcss"` to fail or generate no theme utilities.
+
+Fix: explicitly declare `tailwindcss` as a dependency in each package that uses CSSzyx:
+
+```json
+{
+  "dependencies": {
+    "csszyx": "^0.1.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
+```
+
+**Plugin order warnings** — CSSzyx must be **before** Tailwind and React in
+the plugins array.
+
+**TypeScript errors with `sz` prop** — make sure `csszyx` is installed. The
+JSX type augmentation is included in the package.
+
+**Hydration warnings in Next.js** — initialize the runtime in your root layout
+with `allowCSRRecovery: true`.
+
+**`sz` props not working in Astro MDX** — the MDX Vite plugin compiles JSX to
+runtime calls before csszyx runs, so `sz={{ ... }}` props written directly in
+`.mdx` files are never transformed and render as `sz="[object Object]"`.
+
+Fix: put `sz` props in `.tsx` components and import them in MDX:
+
+```tsx
+// src/components/MyDemo.tsx  ← compiled by csszyx ✅
+export function MyDemo() {
+  return <div sz={{ p: 4, bg: 'blue-500' }}>Hello</div>;
+}
+```
+
+```mdx
+{/* src/pages/guide.mdx */}
+import { MyDemo } from '../../components/MyDemo.tsx';
+
+<MyDemo />
+```

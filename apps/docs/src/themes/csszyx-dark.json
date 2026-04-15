@@ -1,0 +1,310 @@
+{
+  "name": "csszyx-dark",
+  "type": "dark",
+  "colors": {
+    "editor.background":                  "#050505",
+    "editor.foreground":                  "#e1e4e8",
+    "editor.lineHighlightBackground":     "#13131a",
+    "editor.selectionBackground":         "#2dd59722",
+    "editorLineNumber.foreground":        "#2d3748",
+    "editorLineNumber.activeForeground":  "#4a5568",
+    "editorCursor.foreground":            "#2dd597",
+    "editorIndentGuide.background1":      "#1a1a24",
+    "editorBracketMatch.background":      "#2dd59733"
+  },
+  "tokenColors": [
+    {
+      "name": "Comment",
+      "scope": ["comment", "punctuation.definition.comment"],
+      "settings": { "foreground": "#4c6580" }
+    },
+
+    {
+      "name": "String",
+      "scope": ["string", "string.quoted", "string.template"],
+      "settings": { "foreground": "#2dd597" }
+    },
+    {
+      "name": "String — escape / interpolation",
+      "scope": [
+        "constant.character.escape",
+        "string.template punctuation.definition.template-expression"
+      ],
+      "settings": { "foreground": "#89ddff" }
+    },
+    {
+      "name": "Regex",
+      "scope": ["string.regexp", "punctuation.definition.group.regexp"],
+      "settings": { "foreground": "#f78c6c" }
+    },
+
+    {
+      "name": "Number / Unit",
+      "scope": [
+        "constant.numeric",
+        "keyword.other.unit.css",
+        "keyword.other.unit.scss"
+      ],
+      "settings": { "foreground": "#f78c6c" }
+    },
+    {
+      "name": "Boolean / Null / Undefined",
+      "scope": [
+        "constant.language.boolean",
+        "constant.language.null",
+        "constant.language.undefined",
+        "constant.language.nan"
+      ],
+      "settings": { "foreground": "#c792ea" }
+    },
+
+    {
+      "name": "Storage type — const / let / var / function / class",
+      "scope": ["storage.type", "storage.modifier"],
+      "settings": { "foreground": "#c792ea" }
+    },
+    {
+      "name": "Control flow — if / for / return / import / export",
+      "scope": [
+        "keyword.control",
+        "keyword.operator.new",
+        "keyword.operator.expression",
+        "keyword.operator.delete",
+        "keyword.operator.typeof",
+        "keyword.operator.void"
+      ],
+      "settings": { "foreground": "#c792ea" }
+    },
+    {
+      "name": "Operator",
+      "scope": [
+        "keyword.operator",
+        "punctuation.accessor",
+        "keyword.operator.assignment",
+        "keyword.operator.arithmetic",
+        "keyword.operator.logical",
+        "keyword.operator.comparison"
+      ],
+      "settings": { "foreground": "#89ddff" }
+    },
+
+    {
+      "name": "Function — declaration",
+      "scope": [
+        "entity.name.function",
+        "meta.function entity.name.function"
+      ],
+      "settings": { "foreground": "#82aaff" }
+    },
+    {
+      "name": "Function — call",
+      "scope": [
+        "support.function",
+        "meta.function-call entity.name.function",
+        "variable.function"
+      ],
+      "settings": { "foreground": "#82aaff" }
+    },
+
+    {
+      "name": "Variable",
+      "scope": ["variable.other", "variable.other.readwrite"],
+      "settings": { "foreground": "#e1e4e8" }
+    },
+    {
+      "name": "Variable — parameter",
+      "scope": ["variable.parameter"],
+      "settings": { "foreground": "#e2a97e" }
+    },
+    {
+      "name": "Variable — this / self",
+      "scope": ["variable.language.this", "variable.language.self"],
+      "settings": { "foreground": "#f07178" }
+    },
+    {
+      "name": "Constant",
+      "scope": ["variable.other.constant", "entity.name.constant"],
+      "settings": { "foreground": "#f78c6c" }
+    },
+
+    {
+      "name": "Class / Type name",
+      "scope": [
+        "entity.name.class",
+        "entity.name.type",
+        "support.class",
+        "meta.class entity.name.class"
+      ],
+      "settings": { "foreground": "#ffcb8b" }
+    },
+
+    {
+      "name": "Decorator",
+      "scope": [
+        "meta.decorator",
+        "punctuation.decorator",
+        "entity.name.function.decorator"
+      ],
+      "settings": { "foreground": "#ffcb8b" }
+    },
+
+    {
+      "name": "Punctuation",
+      "scope": [
+        "punctuation.definition.block",
+        "punctuation.definition.parameters",
+        "punctuation.definition.array",
+        "punctuation.terminator.statement",
+        "punctuation.separator.comma",
+        "punctuation.separator.key-value",
+        "meta.brace"
+      ],
+      "settings": { "foreground": "#546e7a" }
+    },
+
+    {
+      "name": "Tag — name (HTML / JSX)",
+      "scope": ["entity.name.tag"],
+      "settings": { "foreground": "#f07178" }
+    },
+    {
+      "name": "Tag — component (JSX/TSX)",
+      "scope": ["support.class.component"],
+      "settings": { "foreground": "#ffcb8b" }
+    },
+    {
+      "name": "Tag — attribute name",
+      "scope": ["entity.other.attribute-name"],
+      "settings": { "foreground": "#ffcb8b" }
+    },
+    {
+      "name": "Tag — attribute value",
+      "scope": ["meta.tag string"],
+      "settings": { "foreground": "#2dd597" }
+    },
+
+    {
+      "name": "CSS — Property name",
+      "scope": [
+        "support.type.property-name.css",
+        "support.type.vendored.property-name",
+        "meta.property-name"
+      ],
+      "settings": { "foreground": "#7fdbca" }
+    },
+    {
+      "name": "CSS — Custom property (--var)",
+      "scope": [
+        "variable.css",
+        "variable.other.custom-property.name.css",
+        "support.type.custom-property.css"
+      ],
+      "settings": { "foreground": "#2dd597" }
+    },
+    {
+      "name": "CSS — Value",
+      "scope": [
+        "support.constant.property-value.css",
+        "meta.property-value.css"
+      ],
+      "settings": { "foreground": "#e1e4e8" }
+    },
+    {
+      "name": "CSS — Color value",
+      "scope": ["constant.other.color", "constant.other.color.rgb-value.hex"],
+      "settings": { "foreground": "#f78c6c" }
+    },
+    {
+      "name": "CSS — Selector (class / id / tag)",
+      "scope": [
+        "entity.other.attribute-name.class.css",
+        "entity.other.attribute-name.id.css",
+        "entity.name.tag.css",
+        "entity.other.attribute-name.pseudo-class.css",
+        "entity.other.attribute-name.pseudo-element.css"
+      ],
+      "settings": { "foreground": "#ffcb8b" }
+    },
+    {
+      "name": "CSS — Pseudo-class / element colon",
+      "scope": [
+        "punctuation.definition.entity.css",
+        "punctuation.definition.attribute-selector.css"
+      ],
+      "settings": { "foreground": "#89ddff" }
+    },
+    {
+      "name": "CSS — At-rule keyword (@media, @keyframes…)",
+      "scope": [
+        "keyword.control.at-rule",
+        "punctuation.definition.keyword.css"
+      ],
+      "settings": { "foreground": "#c792ea" }
+    },
+    {
+      "name": "CSS — At-rule name (media, keyframes…)",
+      "scope": ["keyword.control.at-rule.media.css"],
+      "settings": { "foreground": "#89ddff" }
+    },
+    {
+      "name": "CSS — Function (var, calc, rgb…)",
+      "scope": [
+        "support.function.misc.css",
+        "entity.name.function.css",
+        "support.function.transform.css"
+      ],
+      "settings": { "foreground": "#82aaff" }
+    },
+
+    {
+      "name": "JSON — Key",
+      "scope": [
+        "support.type.property-name.json",
+        "meta.mapping.key string"
+      ],
+      "settings": { "foreground": "#7fdbca" }
+    },
+
+    {
+      "name": "TypeScript — Type annotation",
+      "scope": [
+        "meta.type.annotation",
+        "support.type.builtin.ts",
+        "support.type.builtin.tsx",
+        "keyword.operator.type",
+        "keyword.operator.type.annotation"
+      ],
+      "settings": { "foreground": "#89ddff" }
+    },
+    {
+      "name": "TypeScript — Interface / Type alias",
+      "scope": [
+        "entity.name.type.interface",
+        "entity.name.type.alias",
+        "entity.name.type.ts"
+      ],
+      "settings": { "foreground": "#ffcb8b" }
+    },
+    {
+      "name": "TypeScript — Generic bracket",
+      "scope": ["punctuation.definition.typeparameters"],
+      "settings": { "foreground": "#89ddff" }
+    },
+
+    {
+      "name": "Diff — inserted",
+      "scope": ["markup.inserted", "diff.inserted"],
+      "settings": { "foreground": "#2dd597" }
+    },
+    {
+      "name": "Diff — deleted",
+      "scope": ["markup.deleted", "diff.deleted"],
+      "settings": { "foreground": "#f07178" }
+    },
+    {
+      "name": "Diff — changed",
+      "scope": ["markup.changed"],
+      "settings": { "foreground": "#ffcb8b" }
+    }
+  ]
+}

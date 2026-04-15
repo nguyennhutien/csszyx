@@ -1,0 +1,311 @@
+---
+title: Runtime Helpers
+description: _sz, _szIf, _szSwitch, _szMerge, szv() — className composition and variant authoring helpers.
+---
+
+import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
+
+The runtime package provides helpers for composing `className` strings
+dynamically. For static sz props, no helpers are needed — the compiler
+produces plain strings at build time.
+
+<CardGrid>
+  <Card title="5 Helpers" icon="puzzle">
+    `_sz`, `_szIf`, `_szSwitch`, `_szMerge`, `__szColorVar`
+  </Card>
+  <Card title="~0B Runtime Cost" icon="rocket">
+    Static sz props — zero overhead. Helpers only ship when you use them.
+  </Card>
+  <Card title="Tree Shakeable ESM" icon="open-book">
+    Import only what you use. Dead code eliminated at build time.
+  </Card>
+</CardGrid>
+
+## Import
+
+<Tabs>
+  <TabItem label="Original">
+    ```ts
+    import { _sz, _szIf, _szSwitch, _szMerge } from '@csszyx/runtime';
+    ```
+  </TabItem>
+  <TabItem label="Umbrella package">
+    ```ts
+    import { _sz, _szIf, _szSwitch, _szMerge } from 'csszyx';
+    ```
+  </TabItem>
+</Tabs>
+
+## `_sz(...classes)`
+
+Concatenates multiple class strings or SzObjects into a single string.
+Falsy values (`false`, `null`, `undefined`) are skipped.
+
+```ts twoslash
+import { _sz } from '@csszyx/runtime';
+
+const cls = _sz('p-4', 'bg-blue-500', false, null, 'text-white');
+```
+
+**Usage:**
+
+```tsx twoslash
+// @noErrors
+import { _sz } from '@csszyx/runtime';
+// ---cut---
+// Basic concatenation
+<div className={_sz('p-4', 'bg-blue-500', 'text-white')} />
+
+// Falsy values are skipped automatically
+const isActive = true;
+const hasError = false;
+<div className={_sz('base', isActive && 'active', hasError && 'error')} />
+```
+
+## `_szIf(condition, trueClass, falseClass?)`
+
+Applies `trueClass` when `condition` is truthy, `falseClass` otherwise.
+
+```ts
+function _szIf(
+  condition: boolean,
+  trueClass: string,
+  falseClass?: string
+): string
+```
+
+**Usage:**
+
+```tsx
+// Toggle class
+<div className={_szIf(isActive, 'ring-2 ring-blue-500')} />
+
+// Swap class
+<div className={_szIf(isDark, 'bg-gray-900 text-white', 'bg-white text-gray-900')} />
+
+// Inside _sz
+<button className={_sz(
+  'px-4 py-2 rounded-lg',
+  _szIf(variant === 'primary', 'bg-blue-500 text-white', 'bg-gray-100'),
+  _szIf(isDisabled, 'opacity-50 cursor-not-allowed'),
+)} />
+```
+
+## `_szSwitch(cases, defaultClass?)`
+
+Returns the class from the first truthy case. Optional `defaultClass` is used
+when no case matches.
+
+```ts
+function _szSwitch(
+  cases: Array<[condition: boolean, className: string]>,
+  defaultClass?: string
+): string
+```
+
+**Usage:**
+
+```tsx
+const buttonClass = _szSwitch([
+  [variant === 'primary',   'bg-blue-600 text-white'],
+  [variant === 'secondary', 'bg-gray-100 text-gray-900'],
+  [variant === 'danger',    'bg-red-600 text-white'],
+], 'bg-gray-500 text-white'); // default
+
+<button className={buttonClass} />
+```
+
+## `_szMerge(...objects)`
+
+Merges multiple SzObjects. Later objects override earlier ones for the same key.
+
+```ts
+function _szMerge(...objects: SzObject[]): string
+```
+
+**Usage:**
+
+```tsx
+const baseStyles = { p: 4, bg: 'gray-100', rounded: 'md' };
+const activeStyles = { bg: 'blue-500', color: 'white' };
+
+<div className={_szMerge(baseStyles, isActive ? activeStyles : {})} />
+```
+
+## `__szColorVar(value)`
+
+Converts a color value to the correct CSS variable format for use in
+`style` props or CSS custom properties.
+
+:::note
+`__szColorVar` is **not** exported from the `csszyx` umbrella package — import
+it from `csszyx/lite` or `@csszyx/runtime/lite`. It is primarily compiler-emitted
+but available for manual use in advanced scenarios.
+:::
+
+```ts
+import { __szColorVar } from 'csszyx/lite';
+
+function __szColorVar(value: string): string
+```
+
+| Input | Output |
+|---|---|
+| `'blue-500'` | `var(--color-blue-500)` |
+| `'#ff0000'` | `'#ff0000'` (passthrough) |
+| `'--my-var'` | `var(--my-var)` |
+| `'white'` | `var(--color-white)` |
+
+**Usage:**
+
+```tsx
+// Dynamic color for style prop (not sz prop)
+<div style={{
+  '--my-accent': __szColorVar(accentColor),
+}} />
+
+// Combined with CSS custom property
+<svg style={{ fill: __szColorVar('blue-500') }} />
+```
+
+## `initRuntime(config?)`
+
+Initializes the CSSzyx runtime. Call once at app startup.
+
+```ts
+interface RuntimeConfig {
+  development?: boolean;      // Enable dev mode features
+  allowCSRRecovery?: boolean; // Allow CSR recovery on hydration mismatch
+  strictHydration?: boolean;  // Treat hydration warnings as errors
+  debug?: boolean;            // Enable console debug logging
+}
+
+function initRuntime(config?: Partial<RuntimeConfig>): void
+```
+
+**Usage:**
+
+```tsx
+// In your app entry point
+import { initRuntime } from '@csszyx/runtime';
+
+initRuntime({
+  development: process.env.NODE_ENV === 'development',
+  allowCSRRecovery: true,
+  debug: process.env.NODE_ENV === 'development',
+});
+```
+
+## `getRuntimeConfig()`
+
+Returns the current runtime configuration (read-only copy).
+
+```ts
+function getRuntimeConfig(): Required<RuntimeConfig>
+```
+
+## `isRuntimeInitialized()`
+
+Returns `true` if `initRuntime()` has been called.
+
+```ts
+function isRuntimeInitialized(): boolean
+```
+
+## `szv(config)` — Variant Authoring
+
+Creates a type-safe variant factory that returns sz objects. CVA-equivalent for csszyx.
+
+```ts
+function szv<V extends VariantSchema>(
+  config: SzvConfig<V>
+): (selection?: VariantSelection<V>) => SzObject
+```
+
+```ts
+import { szv } from '@csszyx/runtime';
+// or:
+import { szv } from 'csszyx';
+
+const buttonSz = szv({
+  base: { inlineFlex: true, items: 'center', rounded: 'md' },
+  variants: {
+    variant: {
+      default: { bg: 'primary', text: 'primary-foreground' },
+      outline: { border: true, borderColor: 'blue-500' },
+    },
+    size: {
+      sm: { h: 9,  px: 3 },
+      md: { h: 10, px: 4 },
+    },
+  },
+  defaultVariants: { variant: 'default', size: 'md' },
+});
+
+<button sz={buttonSz({ variant: 'outline', size: 'sm' })} />
+```
+
+TypeScript infers valid keys/values from the config literal — no manual annotations needed.
+See the [szv() guide](/docs/szv) for full docs.
+
+**Numeric variant keys** are fully supported — useful for index-based variants:
+
+```ts
+const itemSz = szv({
+  base: { rounded: 'sm', shrink: 0 },
+  variants: {
+    idx: {
+      0: { opacity: 50 },
+      1: { opacity: 70 },
+      2: { opacity: 90 },
+    },
+    color: {
+      normal:  { bg: '#2dd597' },
+      reverse: { bg: '#a78bfa' },
+    },
+  },
+  defaultVariants: { idx: 0, color: 'normal' },
+});
+
+<div sz={itemSz({ idx: 1, color: 'reverse' })} />
+// → "rounded-sm shrink-0 opacity-70 bg-[#a78bfa]"
+```
+
+All variant class combinations are catalogued at build time — the compiler extracts every
+possible output and adds them to the Tailwind safelist so CSS is pre-generated.
+
+## `sz` Array Syntax
+
+Pass an array to the `sz` prop to compose multiple sz objects with conditional items:
+
+```tsx
+// Static items → extracted at build time (zero runtime)
+// Conditional items → _szMerge at runtime
+<div sz={[
+  { flex: true, items: 'center', p: 4 },
+  isActive   && { bg: 'blue-500' },
+  isDisabled && { opacity: 50, cursor: 'not-allowed' },
+]} />
+
+// Compose szv() output with extra overrides
+<button sz={[
+  buttonSz({ variant: props.variant }),
+  isLoading && { opacity: 50, cursor: 'wait' },
+]} />
+```
+
+The compiler pre-computes all static objects at build time; only the conditional merge
+paths use `_szMerge` at runtime.
+
+## Lite Runtime
+
+For edge/serverless environments that can't afford the full runtime, the
+`@csszyx/runtime/lite` export provides `_sz` and `_szIf` without hydration
+guards:
+
+```ts
+import { _sz, _szIf } from '@csszyx/runtime/lite';
+```
+
+Lite exports: `_sz`, `_sz2`, `_sz3`, `_szIf`, `_szSwitch`, `_szMerge`,
+`__szColorVar`. No hydration, no checksums, no recovery.

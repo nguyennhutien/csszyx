@@ -1,0 +1,240 @@
+---
+title: Plugin Config
+description: Full reference for CSSzyx plugin configuration options.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+CSSzyx is configured by passing options directly to the plugin. There is no
+standalone `csszyx.config.ts` file — all config lives in your bundler config.
+
+## Quick Start
+
+<Tabs>
+  <TabItem label="Vite">
+    ```ts
+    // vite.config.ts
+    import csszyx from 'csszyx/vite';
+    import tailwindcss from '@tailwindcss/vite';
+    import react from '@vitejs/plugin-react';
+    import { defineConfig } from 'vite';
+
+    export default defineConfig({
+      plugins: [
+        ...csszyx({
+          development: {
+            debug: true,
+            autoInjectRecovery: true,
+          },
+          production: {
+            mangle: true,
+            injectChecksum: true,
+          },
+        }),
+        tailwindcss(),
+        react(),
+      ],
+    });
+    ```
+
+:::caution[Order matters]
+`csszyx` must come **before** `tailwindcss` and framework plugins.
+CSSzyx transforms sz props to className strings first; then Tailwind
+scans them to generate CSS.
+:::
+  </TabItem>
+
+  <TabItem label="Next.js">
+    ```ts
+    // next.config.ts
+    import type { NextConfig } from 'next';
+    const csszyxWebpack = require('@csszyx/unplugin/webpack').default;
+
+    const nextConfig: NextConfig = {
+      webpack(config) {
+        config.plugins.push(
+          csszyxWebpack({
+            production: { mangle: true, injectChecksum: true },
+          }),
+        );
+        return config;
+      },
+    };
+
+    export default nextConfig;
+    ```
+  </TabItem>
+
+  <TabItem label="Webpack">
+    ```js
+    // webpack.config.js
+    const csszyxWebpack = require('@csszyx/unplugin/webpack').default;
+
+    module.exports = {
+      plugins: [
+        csszyxWebpack({
+          production: { mangle: true, injectChecksum: true },
+        }),
+      ],
+    };
+    ```
+  </TabItem>
+</Tabs>
+
+## TypeScript Types
+
+```ts
+import type { PartialCsszyxConfig } from '@csszyx/types';
+
+const csszyxOptions: PartialCsszyxConfig = {
+  development: { debug: true },
+  production: { mangle: true },
+};
+```
+
+## Configuration Sections
+
+### `development`
+
+Controls development mode behavior.
+
+```ts
+interface DevelopmentConfig {
+  autoInjectRecovery: boolean; // Auto-inject recovery tokens
+  strictMode: boolean;         // Treat warnings as errors
+  debug: boolean;              // Enable debug logging
+  allowCSRRecovery: boolean;   // Allow client-side recovery on mismatch
+}
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `autoInjectRecovery` | `false` | Auto-inject recovery tokens in dev builds |
+| `strictMode` | `false` | Treat all CSSzyx warnings as build errors |
+| `debug` | `false` | Enable verbose debug logging |
+| `allowCSRRecovery` | `true` | Allow client-side re-render on hydration mismatch |
+
+### `production`
+
+Controls production build behavior.
+
+```ts
+interface ProductionConfig {
+  mangle: boolean;          // Minify class names (z, y, x, ...)
+  contentHashing: boolean;  // Hash for immutable caching
+  injectChecksum: boolean;  // Add hydration checksum to HTML
+  incrementalBuild: boolean; // Enable build caching
+  minify: boolean;          // Minify output
+}
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `mangle` | `true` | Replace class names with short encoded symbols |
+| `contentHashing` | `true` | Hash CSS output for cache-busting |
+| `injectChecksum` | `true` | Embed SHA-256 checksum in HTML |
+| `incrementalBuild` | `true` | Cache build artifacts for faster rebuilds |
+| `minify` | `true` | Minify emitted CSS and JS |
+
+### `build`
+
+Controls the build pipeline.
+
+```ts
+interface BuildConfig {
+  buildId?: string;           // Build identifier (auto-generated if omitted)
+  tailwindConfig?: string;    // Path to Tailwind config file
+  outputDir?: string;         // Output directory
+  cacheDir?: string;          // Cache directory
+  astBudgetLimit?: number;    // Max AST nodes per file before warning
+  scanCss?: string | string[]; // CSS files with @theme blocks to auto-scan
+}
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `buildId` | Auto | Unique build identifier |
+| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path |
+| `outputDir` | `'.csszyx'` | Plugin output directory |
+| `cacheDir` | `'.csszyx/cache'` | Incremental build cache |
+| `astBudgetLimit` | `50000` | Warn if file exceeds this many AST nodes |
+| `scanCss` | `undefined` | CSS files to scan for `@theme` blocks (see below) |
+
+#### Theme Auto-Scan (`scanCss`)
+
+When set, the plugin parses `@theme` blocks in your CSS entry point and generates
+`.csszyx/theme.d.ts` — a declaration file that augments the `CustomTheme` interface
+in `@csszyx/compiler`. This surfaces custom design tokens (colors, spacing, fonts,
+radii, shadows) in `sz` prop IntelliSense without any manual type declarations.
+
+```ts
+// vite.config.ts
+...csszyx({
+  build: {
+    scanCss: 'src/index.css',  // path to CSS with @theme blocks
+  },
+})
+```
+
+```css
+/* src/index.css */
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #6d28d9;
+  --color-brand-600: #5b21b6;
+  --spacing-prose: 65ch;
+  --radius-card: 12px;
+}
+```
+
+After the first build, `.csszyx/theme.d.ts` is generated. Add it to your
+`tsconfig.json` so TypeScript picks it up:
+
+```json
+{ "include": ["src", ".csszyx/theme.d.ts"] }
+```
+
+Result: `{ bg: 'brand-500' }` and `{ maxW: '--spacing-prose' }` get full
+autocomplete and type-checking.
+
+`scanCss` accepts a glob or array: `['src/index.css', 'src/tokens.css']`.
+Theme files are watched in dev mode — hot-reload triggers type regeneration.
+
+### `hydration`
+
+Controls SSR hydration verification.
+
+```ts
+interface HydrationConfig {
+  strict: boolean;                        // Enable strict checks
+  defaultRecoveryMode?: 'csr' | 'dev-only'; // Default recovery mode
+  auditLog: boolean;                      // Log hydration events
+}
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `strict` | `true` | Abort on any mismatch (non-configurable in production) |
+| `defaultRecoveryMode` | `null` | No recovery by default |
+| `auditLog` | `true` | Log all hydration events |
+
+### `performance`
+
+Controls performance optimizations.
+
+```ts
+interface PerformanceConfig {
+  parallel: boolean;          // Parallel processing during build
+  workers?: number;           // Worker thread count (auto-detected)
+  optimizeVariables: boolean; // CSS variable optimization
+  zeroRuntime: boolean;       // Static optimization for zero-runtime cases
+}
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `parallel` | `true` | Process files in parallel using worker threads |
+| `workers` | Auto | Worker count (defaults to CPU cores) |
+| `optimizeVariables` | `true` | Deduplicate CSS custom properties |
+| `zeroRuntime` | `true` | Optimize static sz props to literal strings |

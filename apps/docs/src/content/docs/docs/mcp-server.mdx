@@ -1,0 +1,140 @@
+---
+title: MCP Server
+description: Use CSSzyx with AI assistants via the Model Context Protocol server.
+---
+
+`@csszyx/mcp-server` exposes CSSzyx as an
+[MCP (Model Context Protocol)](https://modelcontextprotocol.io) server so AI
+assistants (Claude, Cursor, Copilot, etc.) can expand, validate, look up, and
+migrate sz props directly inside your editor.
+
+## Install
+
+```bash
+npm install -g @csszyx/mcp-server
+# or run without installing:
+npx @csszyx/mcp-server
+```
+
+## Configure Your Editor
+
+### Claude Desktop / Claude Code
+
+Add to `~/.config/claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "csszyx": {
+      "command": "npx",
+      "args": ["-y", "@csszyx/mcp-server"]
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "csszyx": {
+      "command": "npx",
+      "args": ["-y", "@csszyx/mcp-server"]
+    }
+  }
+}
+```
+
+## Tools
+
+### `csszyx_expand`
+
+Expand a single sz object into Tailwind CSS class strings.
+
+```
+Input:  { p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }
+Output: "p-4 bg-blue-500 hover:bg-blue-700"
+```
+
+### `csszyx_batch`
+
+Expand multiple sz objects in one call — more efficient than calling
+`csszyx_expand` repeatedly.
+
+```
+Input:  [{ p: 4 }, { m: 2, bg: 'red-500' }]
+Output: ["p-4", "m-2 bg-red-500"]
+```
+
+### `csszyx_reverse`
+
+Convert a Tailwind class string back into an sz object.
+
+```
+Input:  "p-4 bg-blue-500 hover:text-white"
+Output: { p: 4, bg: 'blue-500', hover: { color: 'white' } }
+```
+
+### `csszyx_validate`
+
+Validate a sz object before using it. Reports unknown props, CSS property name
+mistakes (`padding` → `p`), and transform errors.
+
+```
+Input:  { padding: 4 }
+Output: error — "Unknown prop 'padding'. Use 'p' instead."
+```
+
+### `csszyx_lookup`
+
+Look up how a CSS property or keyword maps to an sz key. Accepts CSS property
+names (kebab-case or camelCase), sz keys, or free-text keywords.
+
+```
+Input:  "background-color"
+Output: { szKey: "bg", tailwindPrefix: "bg", examples: [...] }
+```
+
+### `csszyx_migrate`
+
+Transform a JSX/TSX code snippet, replacing `className` attributes with `sz`
+props. Handles clsx calls, ternary expressions, and template literals.
+
+```tsx
+// Input
+<div className="p-4 bg-blue-500" />
+
+// Output
+<div sz={{ p: 4, bg: 'blue-500' }} />
+```
+
+Optional parameters:
+- `customMap` — pass a parsed `.csszyx-todo.json` map to resolve custom classes
+- `injectTodos` — insert `{/* @sz-todo: ... */}` comments above unresolved elements
+
+### `csszyx_theme`
+
+Parse `@theme` CSS blocks and categorize custom design tokens (colors, spacings,
+fonts, radii, shadows).
+
+## Resources
+
+The server also exposes read-only resources that AI agents can load for context:
+
+| URI | Content |
+|---|---|
+| `csszyx://reference` | Full API reference (`llms-full.txt`) |
+| `csszyx://property-map` | `PROPERTY_MAP` as JSON |
+| `csszyx://variants` | All known variant names as a JSON array |
+
+## Prompts
+
+Two guided workflow prompts are available:
+
+| Prompt | Description |
+|---|---|
+| `migrate_component` | Paste a Tailwind component and get it migrated to sz props |
+| `create_component` | Describe a UI component and get production-ready sz code |
