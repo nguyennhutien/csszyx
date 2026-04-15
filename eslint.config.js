@@ -192,7 +192,9 @@ export default [
         languageOptions: {
             parser: tsParser,
             parserOptions: {
-                project: './tsconfig.json',
+                // tsconfig.eslint.json (if present) extends tsconfig.json to include tests/.
+                // Packages without tsconfig.eslint.json fall back to tsconfig.json silently.
+                project: ['./tsconfig.json', './tsconfig.eslint.json'],
             },
         },
         rules: {

@@ -13,7 +13,9 @@
             "@csszyx/types": ["packages/types/src"],
             "@csszyx/runtime": ["packages/runtime/src"],
             "@csszyx/cli": ["packages/cli/src"],
-            "@csszyx/unplugin": ["packages/unplugin/src"]
+            "@csszyx/unplugin": ["packages/unplugin/src"],
+            "@csszyx/dynamic": ["packages/dynamic/src/index.ts"],
+            "@csszyx/dynamic/react": ["packages/dynamic/src/react.ts"]
         }
     },
     "include": ["packages/**/*", "scripts/**/*", "tests/**/*", "playwright.config.ts"],
