@@ -1,3 +1,7 @@
+# CSSzyx
+csszyx-classes.html
+.csszyx/
+
 # Local context instruction
 context-instruction/
 .claude/
@@ -15,6 +19,8 @@ lib/
 pkg/
 target/
 *.wasm
+# MCP server bundles llms-full.txt from apps/docs/public at build time
+packages/mcp-server/llms-full.txt
 
 # Testing
 coverage/

@@ -192,7 +192,9 @@ export default [
         languageOptions: {
             parser: tsParser,
             parserOptions: {
-                project: './tsconfig.json',
+                // tsconfig.eslint.json (if present) extends tsconfig.json to include tests/.
+                // Packages without tsconfig.eslint.json fall back to tsconfig.json silently.
+                project: ['./tsconfig.json', './tsconfig.eslint.json'],
             },
         },
         rules: {
@@ -259,6 +261,22 @@ export default [
             'jsonc/comma-dangle': 'error',
             'jsonc/comma-style': ['error', 'last'],
             'jsonc/key-spacing': ['error', { beforeColon: false, afterColon: true }],
+        },
+    },
+
+    // Node.js scripts — define process/console as globals (flat config does not auto-enable env globals)
+    {
+        files: ['scripts/**/*.mjs', 'scripts/**/*.js', '**/esbuild.mjs'],
+        languageOptions: {
+            globals: {
+                process: 'readonly',
+                console: 'readonly',
+                __dirname: 'readonly',
+                __filename: 'readonly',
+            },
+        },
+        rules: {
+            'no-console': 'off',
         },
     },
 

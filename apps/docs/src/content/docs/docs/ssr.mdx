@@ -1,0 +1,177 @@
+---
+title: SSR & Hydration
+description: How CSSzyx guarantees hydration correctness with SHA-256 checksums.
+---
+
+import { Steps, Card, CardGrid } from '@astrojs/starlight/components';
+
+When using SSR (Next.js, Remix, Astro), the server renders HTML with mangled
+class names (`z`, `y`, `x`). The client must use the same mangle map to
+hydrate correctly. CSSzyx uses SHA-256 checksums to verify this.
+
+## The Hydration Problem
+
+Without protection, a stale CDN cache could serve HTML with an old mangle map
+while the browser downloads a new JS bundle with a different map. The result:
+class `z` means `p-4` on the server but `bg-blue-500` on the client. Your
+app silently renders with broken styles.
+
+CSSzyx detects this and aborts hydration before the mismatch causes damage.
+
+## How It Works
+
+<CardGrid>
+  <Card title="Step 1 — Build" icon="setting">
+    Compute a SHA-256 checksum of the full mangle map at build time.
+  </Card>
+  <Card title="Step 2 — Inject" icon="document">
+    Embed the checksum in the `<html data-sz-checksum="...">` attribute.
+  </Card>
+  <Card title="Step 3 — Verify" icon="laptop">
+    Client validates the checksum before the first React hydration.
+  </Card>
+</CardGrid>
+
+```html
+<!-- Server output includes checksum and mangle map -->
+<html data-sz-checksum="a3f9c2...">
+  <script id="__sz_mangle__" type="application/json">
+    {"z":"p-4","y":"bg-blue-500","x":"hover:bg-blue-600"}
+  </script>
+</html>
+```
+
+The client runtime calls `verifyMangleChecksum()` before hydration. If the
+checksum doesn't match the embedded mangle map, the abort protocol fires.
+
+## Abort Protocol
+
+:::danger[Non-negotiable]
+On checksum mismatch, CSSzyx calls `abortHydration()`. This preserves the
+server-rendered HTML and CSS intact. The user sees a correctly styled page.
+React hydration is blocked to prevent invisible corruption.
+
+This is intentional and non-configurable. A mismatch means the server and
+client are out of sync — attempting to recover from that silently would be
+worse than aborting.
+:::
+
+```ts
+// What happens on mismatch (automatically, no code needed)
+if (!verifyMangleChecksum(clientMangleMap, embeddedChecksum)) {
+  abortHydration(); // Preserve SSR HTML, block React hydration
+}
+```
+
+## Setting Up SSR Hydration
+
+<Steps>
+1. **Enable checksum injection in the plugin**
+
+   ```ts
+   // vite.config.ts
+   ...csszyx({
+     production: {
+       mangle: true,
+       injectChecksum: true, // ← enables the checksum in HTML
+     },
+   })
+   ```
+
+2. **Initialize the runtime at app startup**
+
+   ```tsx
+   // src/main.tsx (or app/layout.tsx for Next.js)
+   import { initRuntime } from '@csszyx/runtime';
+
+   initRuntime({
+     development: process.env.NODE_ENV === 'development',
+     strictHydration: true,
+   });
+   ```
+
+3. **(Optional) Allow CSR recovery in development**
+
+   ```ts
+   initRuntime({
+     development: true,
+     allowCSRRecovery: true, // Re-render on mismatch instead of aborting
+     debug: true,
+   });
+   ```
+</Steps>
+
+## Recovery Tokens
+
+In development, CSSzyx can inject **recovery tokens** — signed proofs that
+a specific mangle map is trusted. If the client detects a mismatch but a
+valid recovery token exists, it can attempt client-side re-render instead
+of aborting.
+
+```ts
+csszyx({
+  development: {
+    autoInjectRecovery: true, // Auto-inject tokens in dev builds
+    allowCSRRecovery: true,
+  },
+})
+```
+
+Recovery is only available in development (`NODE_ENV !== 'production'`). In
+production, mismatches always abort.
+
+## Runtime API
+
+```ts
+import {
+  initRuntime,
+  startHydration,
+  endHydration,
+  abortHydration,
+  verifyMangleChecksum,
+  verifyMangleMapIntegrity,
+  getHydrationErrors,
+  isHydrationAborted,
+} from '@csszyx/runtime';
+
+// Start hydration session
+startHydration();
+
+// Verify checksum (throws on mismatch if strictHydration: true)
+const isValid = verifyMangleChecksum(map, checksum);
+
+// Check if hydration was aborted
+if (isHydrationAborted()) {
+  // Preserve SSR HTML
+}
+
+// Get all hydration errors
+const errors = getHydrationErrors();
+```
+
+## Debugging Hydration Issues
+
+Enable debug logging to see what's happening:
+
+```ts
+initRuntime({ debug: true });
+```
+
+This logs:
+- Mangle map loaded from DOM
+- Checksum verification result
+- Any hydration errors with class-level detail
+- Recovery token status
+
+## Hydration Error Types
+
+```ts
+import type { HydrationErrorType } from '@csszyx/runtime';
+
+// Error types:
+// 'checksum_mismatch'   — SHA-256 mismatch between server/client
+// 'missing_manifest'    — No mangle map in DOM
+// 'invalid_manifest'    — Mangle map is malformed
+// 'class_not_found'     — Mangled class has no mapping
+// 'token_invalid'       — Recovery token signature is invalid
+```

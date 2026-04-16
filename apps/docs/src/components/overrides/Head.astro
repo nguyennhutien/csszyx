@@ -1,14 +1,32 @@
 ---
 // Extends Starlight's default Head with Cloudflare Web Analytics.
 // Only injects the beacon script in production builds — dev visits never pollute analytics.
+// Also injects @font-face + CSS variable definitions for each configured font family
+// via Astro's Font component — required in Astro 6 (fonts are NOT auto-injected).
 import type { Props } from '@astrojs/starlight/props';
 import Default from '@astrojs/starlight/components/Head.astro';
+import { Font } from 'astro:assets';
 
 const token = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
 const isProd = import.meta.env.PROD;
 ---
 
 <Default {...Astro.props} />
+{/* sr-only CSS is re-declared here (inline, bypassing the mangle pipeline) because
+    the csszyx mangle pass renames .sr-only in built CSS while Starlight's own templates
+    and SiteTitle.astro emit the literal class="sr-only". Without this fallback the
+    heading anchor text ("Section titled …") becomes visible on hover. */}
+<style is:inline>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}</style>
+{/* Default to dark theme for first-time visitors (no localStorage preference yet).
+    Must be inline + blocking to avoid FOUC — runs before Starlight's ThemeSelect hydrates. */}
+<script is:inline>
+    if (!localStorage.getItem('starlight-theme')) {
+        document.documentElement.dataset.theme = 'dark';
+    }
+</script>
+<Font cssVariable="--font-ibm-plex-sans" preload />
+<Font cssVariable="--font-jetbrains-mono" preload />
+<Font cssVariable="--font-geist-mono" preload />
 {token && isProd && (
     <script
         is:inline

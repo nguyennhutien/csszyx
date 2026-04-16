@@ -1,0 +1,316 @@
+---
+title: Variants & Modifiers
+description: Responsive design, pseudo-classes, dark mode, and complex selectors in sz props.
+---
+
+Variants in CSSzyx use nested objects. The key is the variant name; the value
+is another sz object with the styles to apply.
+
+## Pseudo-Classes
+
+```tsx
+<button sz={{
+  bg: 'blue-500',
+  hover:   { bg: 'blue-600' },
+  focus:   { outline: 'none', ring: 2 },
+  active:  { opacity: 80 },
+  disabled: { opacity: 50, cursor: 'not-allowed' },
+  visited: { color: 'purple-600' },
+}} />
+```
+
+State modifiers: `hover`, `focus`, `active`, `disabled`, `visited`, `target`,
+`first`, `last`, `odd`, `even`, `only`, `empty`.
+
+Camel-cased aliases: `focusWithin`, `focusVisible`, `firstOfType`.
+
+## Responsive Breakpoints
+
+Breakpoints use a mobile-first approach — unprefixed props apply to all
+screen sizes, nested props apply at the given breakpoint and up:
+
+```tsx
+<div sz={{
+  w: 'full',           // mobile: full width
+  md: { w: '1/2' },   // ≥768px: half width
+  lg: { w: '1/3' },   // ≥1024px: one third
+  xl: { flex: true },  // ≥1280px: flex layout
+}} />
+```
+
+Available breakpoints: `sm` (640px), `md` (768px), `lg` (1024px), `xl`
+(1280px), `2xl` (1536px).
+
+### Max-Width Breakpoints
+
+```tsx
+<div sz={{
+  md: {
+    maxLg: { hidden: true },  // md:max-lg:hidden (768–1023px range)
+  },
+}} />
+```
+
+### Custom Breakpoints
+
+```tsx
+<div sz={{
+  min: { '[320px]': { textAlign: 'center' } },  // min-[320px]:text-center
+  max: { '[600px]': { bg: 'sky-300' } },        // max-[600px]:bg-sky-300
+}} />
+```
+
+## Dark Mode
+
+```tsx
+<div sz={{
+  bg: 'white',
+  color: 'gray-900',
+  dark: {
+    bg: 'gray-800',
+    color: 'white',
+  },
+}} />
+```
+
+## Container Queries
+
+```tsx
+<div sz={{ '@container': true }}>
+  <div sz={{
+    '@md': { flex: true },
+    '@lg': { gridCols: 3 },
+  }} />
+</div>
+```
+
+:::note
+Container query keys use the `@` prefix as a string. `{ '@md': { ... } }` maps
+to `@md:...` — not `md:...` (which is a viewport breakpoint).
+:::
+
+## Pseudo-Elements
+
+```tsx
+<p sz={{
+  before: { content: "'»'", mr: 1 },
+  after:  { content: "'«'", ml: 1 },
+  placeholder: { color: 'gray-400' },
+  selection:   { bg: 'blue-200' },
+  firstLine:   { uppercase: true },
+  firstLetter: { text: '5xl', fontWeight: 'bold', float: 'left', mr: 2 },
+}} />
+```
+
+## Group and Peer
+
+### Group: Style based on parent state
+
+Add `group` class to the parent, then use `{ group: { hover: { ... } } }` on children:
+
+```tsx
+<div sz={{ group: true }}>
+  <p sz={{
+    group: {
+      hover: { color: 'blue-500' },
+    },
+  }}>
+    Turns blue when the parent is hovered.
+  </p>
+</div>
+```
+
+### Peer: Style based on sibling state
+
+Add `peer` class to the sibling, then use `{ peer: { ... } }` on the element to style:
+
+```tsx
+<input sz={{ peer: true }} type="checkbox" />
+<p sz={{
+  peer: {
+    checked: { color: 'green-500' },
+  },
+}}>
+  Turns green when the checkbox is checked.
+</p>
+```
+
+### Named Groups/Peers
+
+```tsx
+<div sz={{ group: 'sidebar' }}>
+  <div sz={{
+    group: {
+      sidebar: {
+        hover: { bg: 'gray-100' },
+      },
+    },
+  }} />
+</div>
+```
+
+### Group Data Attributes
+
+Style children based on a `data-*` attribute on the parent group element:
+
+```tsx
+<div sz={{ group: true }} data-active>
+  <p sz={{
+    group: {
+      data: {
+        active:      { color: 'blue-600' },    // group-data-[active]:text-blue-600
+        'state=open': { bg: 'green-50' },      // group-data-[state=open]:bg-green-50
+      },
+    },
+  }}>
+    Blue when parent has [data-active]. Green when parent has [data-state="open"].
+  </p>
+</div>
+```
+
+Named group variant (combines group name + data attribute):
+
+```tsx
+<div sz={{ group: 'card' }} data-active>
+  <p sz={{
+    group: {
+      card: {
+        data: { active: { color: 'blue-600' } },  // group-data-[active]/card:text-blue-600
+      },
+    },
+  }} />
+</div>
+```
+
+### Group ARIA States
+
+Style children based on an `aria-*` attribute on the parent group element:
+
+```tsx
+<details sz={{ group: true }}>
+  <summary sz={{
+    group: {
+      aria: {
+        expanded: { color: 'blue-600' },       // group-aria-expanded:text-blue-600
+        'current=page': { fontWeight: 'bold' }, // group-aria-[current=page]:font-bold
+      },
+    },
+  }} />
+</details>
+```
+
+Standard ARIA states (`checked`, `disabled`, `expanded`, `hidden`, `pressed`, `required`,
+`selected`) emit the bare form (`group-aria-expanded:`). Non-standard or value-match
+attributes emit bracket form (`group-aria-[current=page]:`).
+
+### Peer Data Attributes
+
+```tsx
+<input sz={{ peer: true }} data-error />
+<p sz={{
+  peer: {
+    data: {
+      error: { color: 'red-600' },   // peer-data-[error]:text-red-600
+    },
+  },
+}} />
+```
+
+### Peer ARIA States
+
+```tsx
+<input sz={{ peer: true }} aria-invalid="true" />
+<p sz={{
+  peer: {
+    aria: {
+      'invalid=true': { color: 'red-600' },  // peer-aria-[invalid=true]:text-red-600
+    },
+  },
+}} />
+```
+
+## Data Attributes
+
+```tsx
+<div sz={{
+  data: {
+    active: { bg: 'blue-50', borderColor: 'blue-200' },
+    error:  { bg: 'red-50',  borderColor: 'red-200' },
+  },
+}} />
+```
+
+## ARIA States
+
+```tsx
+<button sz={{
+  aria: {
+    expanded: { bg: 'blue-100' },
+    disabled: { opacity: 50 },
+  },
+}} />
+```
+
+## :has() Selector
+
+```tsx
+<form sz={{
+  has: {
+    '[data-error]': { borderColor: 'red-500' },
+    checked: { bg: 'green-50' },
+  },
+}} />
+```
+
+## :not() Selector
+
+```tsx
+<li sz={{
+  not: {
+    first: { mt: 4 },
+    last:  { mb: 4 },
+  },
+}} />
+```
+
+## Media Query Variants
+
+```tsx
+<div sz={{
+  motionReduce: { transition: 'none' },
+  print:        { hidden: true },
+  portrait:     { flex: true },
+  forcedColors: { border: 2 },
+}} />
+```
+
+## Arbitrary Variants
+
+For selectors not covered by the built-in variants:
+
+```tsx
+<div sz={{
+  '[&>span]': { color: 'blue-500' },
+  '[&_*]':    { p: 4 },
+  '*':         { boxSizing: 'border' },
+}} />
+```
+
+## Combining Variants
+
+Variants can be nested arbitrarily deep:
+
+```tsx
+<div sz={{
+  md: {
+    hover: {
+      bg: 'blue-500',         // md:hover:bg-blue-500
+    },
+  },
+  dark: {
+    hover: {
+      color: 'white',         // dark:hover:text-white
+    },
+  },
+}} />
+```

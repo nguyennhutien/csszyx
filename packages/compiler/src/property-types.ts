@@ -198,6 +198,7 @@ export const PROPERTY_CATEGORY_MAP: Record<string, PropertyCategory> = {
     // ---- DURATION ----
     duration: PropertyCategory.DURATION,
     delay: PropertyCategory.DURATION,
+    animationDelay: PropertyCategory.DURATION,
 };
 
 /**

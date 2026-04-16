@@ -278,7 +278,7 @@ Controls how multiple masks are combined.
   maskClip: "content";
 } // → mask-clip-content
 
-// mask-image: arbitrary values need brackets
+// mask-image: arbitrary values are auto-wrapped by compiler — no brackets needed in sz
 {
   mask: "linear-gradient(...)";
 } // → mask-[linear-gradient(...)]

@@ -1,0 +1,65 @@
+{
+    "name": "@csszyx/vscode",
+    "displayName": "CSSzyx",
+    "description": "IntelliSense, hover docs, and diagnostics for CSSzyx sz props",
+    "version": "0.1.0",
+    "publisher": "csszyx",
+    "engines": { "vscode": "^1.85.0" },
+    "categories": ["Programming Languages", "Linters"],
+    "keywords": ["csszyx", "tailwind", "css-in-js", "intellisense"],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/nguyennhutien/csszyx.git",
+        "directory": "packages/vscode-extension"
+    },
+    "activationEvents": [
+        "onLanguage:typescriptreact",
+        "onLanguage:javascriptreact",
+        "onLanguage:typescript",
+        "onLanguage:javascript",
+        "onLanguage:html"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "grammars": [
+            {
+                "scopeName": "source.sz.injection",
+                "path": "./syntaxes/sz.tmGrammar.json",
+                "injectTo": [
+                    "source.tsx",
+                    "source.ts",
+                    "source.jsx",
+                    "source.js",
+                    "text.html.basic"
+                ]
+            }
+        ],
+        "configuration": {
+            "title": "CSSzyx",
+            "properties": {
+                "csszyx.enableDiagnostics": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Report unknown sz props as warnings."
+                },
+                "csszyx.enableHover": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show generated Tailwind classes on hover."
+                }
+            }
+        }
+    },
+    "scripts": {
+        "build": "node esbuild.mjs",
+        "dev": "node esbuild.mjs --watch",
+        "type-check": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@csszyx/compiler": "workspace:*",
+        "@types/node": "^20.11.0",
+        "@types/vscode": "^1.85.0",
+        "esbuild": "^0.27.4",
+        "typescript": "^5.3.3"
+    }
+}

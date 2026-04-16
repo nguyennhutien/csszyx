@@ -1,0 +1,202 @@
+---
+title: Typography
+description: Font family, size, weight, text color, decoration, and alignment props.
+---
+
+import { PropTable } from '../../../../components/PropTable.tsx';
+import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, LetterSpacing, TextAlignment, Truncate } from '../../../../components/demos/typography.tsx';
+
+## Font Family
+
+<PropTable rows={[
+  { sz: "{ fontFamily: 'sans' }", tw: "font-sans" },
+  { sz: "{ fontFamily: 'serif' }", tw: "font-serif" },
+  { sz: "{ fontFamily: 'mono' }", tw: "font-mono" },
+  { sz: "{ fontFamily: '--my-font' }", tw: "font-(family-name:--my-font)" },
+  { sz: "{ fontFamily: \"'My Font'\" }", tw: "font-['My_Font']" },
+]} />
+
+<FontFamilies />
+
+## Font Size
+
+<PropTable rows={[
+  { sz: "{ text: 'xs' }", tw: "text-xs" },
+  { sz: "{ text: 'sm' }", tw: "text-sm" },
+  { sz: "{ text: 'base' }", tw: "text-base" },
+  { sz: "{ text: 'lg' }", tw: "text-lg" },
+  { sz: "{ text: 'xl' }", tw: "text-xl" },
+  { sz: "{ text: '2xl' }", tw: "text-2xl" },
+  { sz: "{ text: '4xl' }", tw: "text-4xl" },
+  { sz: "{ text: '6xl' }", tw: "text-6xl" },
+  { sz: "{ text: '9xl' }", tw: "text-9xl" },
+  { sz: "{ text: '1.5rem' }", tw: "text-[1.5rem]" },
+]} />
+
+<FontSizeScale />
+
+## Font Weight
+
+<PropTable rows={[
+  { sz: "{ fontWeight: 'thin' }", tw: "font-thin" },
+  { sz: "{ fontWeight: 'normal' }", tw: "font-normal" },
+  { sz: "{ fontWeight: 'medium' }", tw: "font-medium" },
+  { sz: "{ fontWeight: 'semibold' }", tw: "font-semibold" },
+  { sz: "{ fontWeight: 'bold' }", tw: "font-bold" },
+  { sz: "{ fontWeight: 700 }", tw: "font-700" },
+  { sz: "{ fontWeight: 900 }", tw: "font-900" },
+]} />
+
+<FontWeightScale />
+
+## Text Color
+
+<PropTable rows={[
+  { sz: "{ color: 'gray-900' }", tw: "text-gray-900" },
+  { sz: "{ color: 'white' }", tw: "text-white" },
+  { sz: "{ color: 'blue-500' }", tw: "text-blue-500" },
+  { sz: "{ color: 'transparent' }", tw: "text-transparent" },
+  { sz: "{ color: 'inherit' }", tw: "text-inherit" },
+  { sz: "{ color: '#50d71e' }", tw: "text-[#50d71e]" },
+  { sz: "{ color: '--text-primary' }", tw: "text-(--text-primary)" },
+  { sz: "{ color: { color: 'blue-500', op: 50 } }", tw: "text-blue-500/50" },
+]} />
+
+<TextColorExamples />
+
+## Line Height & Letter Spacing
+
+<PropTable rows={[
+  { sz: "{ leading: 'none' }", tw: "leading-none" },
+  { sz: "{ leading: 'tight' }", tw: "leading-tight" },
+  { sz: "{ leading: 'normal' }", tw: "leading-normal" },
+  { sz: "{ leading: 'relaxed' }", tw: "leading-relaxed" },
+  { sz: "{ leading: 'loose' }", tw: "leading-loose" },
+  { sz: "{ tracking: 'tight' }", tw: "tracking-tight" },
+  { sz: "{ tracking: 'wide' }", tw: "tracking-wide" },
+  { sz: "{ tracking: 'widest' }", tw: "tracking-widest" },
+]} />
+
+<LetterSpacing />
+
+## Text Shorthand (size + leading merged)
+
+```tsx
+// { text, leading } together → merged single class
+{ text: 'lg', leading: 7 }    // → text-lg/7
+{ text: 'sm', leading: 'tight' } // → text-sm/tight
+```
+
+## Text Alignment & Transform
+
+<PropTable rows={[
+  { sz: "{ textAlign: 'left' }", tw: "text-left" },
+  { sz: "{ textAlign: 'center' }", tw: "text-center" },
+  { sz: "{ textAlign: 'right' }", tw: "text-right" },
+  { sz: "{ textAlign: 'justify' }", tw: "text-justify" },
+  { sz: "{ uppercase: true }", tw: "uppercase" },
+  { sz: "{ lowercase: true }", tw: "lowercase" },
+  { sz: "{ capitalize: true }", tw: "capitalize" },
+]} />
+
+<TextAlignment />
+
+## Text Decoration
+
+<PropTable rows={[
+  { sz: "{ underline: true }", tw: "underline" },
+  { sz: "{ lineThrough: true }", tw: "line-through" },
+  { sz: "{ noUnderline: true }", tw: "no-underline" },
+  { sz: "{ decoration: 'dashed' }", tw: "decoration-dashed" },
+  { sz: "{ decorationColor: 'blue-500' }", tw: "decoration-blue-500" },
+  { sz: "{ underlineOffset: 4 }", tw: "underline-offset-4" },
+]} />
+
+## Text Overflow & Wrap
+
+<PropTable rows={[
+  { sz: "{ truncate: true }", tw: "truncate" },
+  { sz: "{ textWrap: 'nowrap' }", tw: "text-nowrap" },
+  { sz: "{ textWrap: 'balance' }", tw: "text-balance" },
+  { sz: "{ textWrap: 'pretty' }", tw: "text-pretty" },
+  { sz: "{ lineClamp: 3 }", tw: "line-clamp-3" },
+]} />
+
+<Truncate />
+
+## Font Style & Smoothing
+
+<PropTable rows={[
+  { sz: "{ italic: true }", tw: "italic" },
+  { sz: "{ notItalic: true }", tw: "not-italic" },
+  { sz: "{ antialiased: true }", tw: "antialiased" },
+  { sz: "{ subpixelAntialiased: true }", tw: "subpixel-antialiased" },
+]} />
+
+## Font Features (v4.2)
+
+:::tip[New in v4.2]
+`fontFeatures` controls CSS `font-feature-settings`.
+:::
+
+<PropTable rows={[
+  { sz: "{ fontFeatures: 'normal' }", tw: "font-features-normal" },
+  { sz: "{ fontFeatures: '\"liga\" 1' }", tw: 'font-features-["liga"_1]' },
+]} />
+
+## List Style
+
+<PropTable rows={[
+  { sz: "{ list: 'disc' }", tw: "list-disc" },
+  { sz: "{ list: 'decimal' }", tw: "list-decimal" },
+  { sz: "{ list: 'none' }", tw: "list-none" },
+  { sz: "{ listPos: 'inside' }", tw: "list-inside" },
+  { sz: "{ listPos: 'outside' }", tw: "list-outside" },
+]} />
+
+## Content (Pseudo-elements)
+
+<PropTable rows={[
+  { sz: "{ content: 'none' }", tw: "content-none" },
+  { sz: "{ content: '\"\"' }", tw: "content-['']" },
+  { sz: "{ content: \"''\" }", tw: "content-['']" },
+  { sz: "{ content: '\"hello\"' }", tw: "content-['hello']" },
+  { sz: "{ content: '--c' }", tw: "content-(--c)" },
+]} />
+
+:::tip[Quote style]
+Both `content: '""'` and `content: "''"` compile to `content-['']` — the compiler normalizes all quoted content values to single-quote brackets (Tailwind convention).
+:::
+
+## Examples
+
+```tsx
+// Heading
+<h1 sz={{
+  text: '4xl',
+  fontWeight: 'bold',
+  tracking: 'tight',
+  leading: 'tight',
+  color: 'gray-900',
+}} />
+
+// Monospace code label
+<span sz={{
+  fontFamily: 'mono',
+  text: 'xs',
+  tracking: 'wider',
+  uppercase: true,
+  color: 'blue-600',
+  bg: 'blue-50',
+  px: 2,
+  py: 0.5,
+  rounded: 'sm',
+}} />
+
+// Truncated description
+<p sz={{
+  text: 'sm',
+  color: 'gray-600',
+  lineClamp: 2,
+}} />
+```

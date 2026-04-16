@@ -35,6 +35,14 @@ export default defineConfig({
             },
         },
         {
+            name: 'dynamic',
+            testMatch: /dynamic\.spec/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5173',
+            },
+        },
+        {
             name: 'nextjs-ssr',
             testMatch: /nextjs-ssr/,
             use: {

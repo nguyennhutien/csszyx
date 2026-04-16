@@ -1,0 +1,47 @@
+{
+    "scopeName": "source.sz.injection",
+    "injectionSelector": "L:source.tsx, L:source.ts, L:source.jsx, L:source.js, L:text.html.basic",
+    "patterns": [
+        {
+            "comment": "Highlight the sz prop name distinctly in JSX/TSX attributes",
+            "match": "(?<![a-zA-Z0-9_$-])(sz)(?=\\s*=)",
+            "captures": {
+                "1": { "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx" }
+            }
+        },
+        {
+            "comment": "Highlight key:value pairs inside sz=\"...\" string attributes (HTML)",
+            "name": "meta.attribute.sz.html.csszyx",
+            "begin": "(?<=\\b(?:data-)?sz\\s*=\\s*)(\")",
+            "beginCaptures": {
+                "1": { "name": "punctuation.definition.string.begin.html" }
+            },
+            "end": "\"",
+            "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.html" }
+            },
+            "patterns": [
+                {
+                    "comment": "variant:property:value triplet (e.g. hover:bg:blue-500)",
+                    "match": "([a-zA-Z][a-zA-Z0-9-]*)(:)([a-zA-Z][a-zA-Z0-9-]*)(:)([^\\s\"]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.variant.csszyx" },
+                        "2": { "name": "punctuation.separator.csszyx" },
+                        "3": { "name": "support.type.property-name.csszyx" },
+                        "4": { "name": "punctuation.separator.csszyx" },
+                        "5": { "name": "string.unquoted.value.csszyx" }
+                    }
+                },
+                {
+                    "comment": "property:value pair (e.g. bg:blue-500)",
+                    "match": "([a-zA-Z][a-zA-Z0-9-]*)(:)([^\\s\"]*)",
+                    "captures": {
+                        "1": { "name": "support.type.property-name.csszyx" },
+                        "2": { "name": "punctuation.separator.csszyx" },
+                        "3": { "name": "string.unquoted.value.csszyx" }
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -79,3 +79,34 @@ describe('transitions & animation — animation', () => {
         expect(t({ animate: 'spin_1s_linear_infinite' })).toBe('animate-[spin_1s_linear_infinite]');
     });
 });
+
+describe('transitions & animation — animation delay', () => {
+    it('{ animationDelay: 150 } → [animation-delay:150ms]', () => {
+        expect(t({ animationDelay: 150 })).toBe('[animation-delay:150ms]');
+    });
+
+    it('{ animationDelay: 0 } → [animation-delay:0ms]', () => {
+        expect(t({ animationDelay: 0 })).toBe('[animation-delay:0ms]');
+    });
+
+    it('{ animationDelay: 300 } → [animation-delay:300ms]', () => {
+        expect(t({ animationDelay: 300 })).toBe('[animation-delay:300ms]');
+    });
+
+    it('{ animationDelay: "0.5s" } → [animation-delay:0.5s] (string passthrough)', () => {
+        expect(t({ animationDelay: '0.5s' })).toBe('[animation-delay:0.5s]');
+    });
+
+    it('{ animate: "pulse", animationDelay: 150 } → combined', () => {
+        const result = t({ animate: 'pulse', animationDelay: 150 });
+        expect(result).toContain('animate-pulse');
+        expect(result).toContain('[animation-delay:150ms]');
+    });
+
+    it('animationDelay is independent from transition delay', () => {
+        // delay → transition-delay, animationDelay → animation-delay — must not collide
+        const result = t({ delay: 200, animationDelay: 150 });
+        expect(result).toContain('delay-200');
+        expect(result).toContain('[animation-delay:150ms]');
+    });
+});

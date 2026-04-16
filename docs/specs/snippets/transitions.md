@@ -73,3 +73,15 @@ Utilities for animating elements with CSS animations.
 | **None**      | `animation: none;`                   | `animate-none`                                                    | `{ animate: 'none' }`                    |      |
 | **Keywords**  | `animation: spin 1s linear infinite` | `animate-spin`, `animate-ping`, `animate-pulse`, `animate-bounce` | `{ animate: 'spin' }`                    |      |
 | **Arbitrary** | `animation: spin_1s_linear_infinite` | `animate-[spin_1s_linear_infinite]`                               | `{ animate: 'spin_1s_linear_infinite' }` |      |
+
+## Animation Delay
+
+Tailwind v4 has no `animation-delay-*` utility. CSSzyx emits an arbitrary CSS property.
+`delay` is **transition-delay** — do not confuse with `animationDelay`.
+
+| Concept           | CSS Rule                        | Output Class                            | `sz` Prop (Object Syntax)                   | Note                                             |
+| :---------------- | :------------------------------ | :-------------------------------------- | :------------------------------------------ | :----------------------------------------------- |
+| **Number (ms)**   | `animation-delay: 150ms`        | `[animation-delay:150ms]`               | `{ animationDelay: 150 }`                   | Number → appended `ms`                           |
+| **Number zero**   | `animation-delay: 0ms`          | `[animation-delay:0ms]`                 | `{ animationDelay: 0 }`                     |                                                  |
+| **String**        | `animation-delay: 0.5s`         | `[animation-delay:0.5s]`                | `{ animationDelay: '0.5s' }`                | String passed through as-is                      |
+| **Stagger combo** | `animation: pulse; delay 150ms` | `animate-pulse [animation-delay:150ms]` | `{ animate: 'pulse', animationDelay: 150 }` | `delay` is transition-delay, not animation-delay |

@@ -1,0 +1,663 @@
+/* ================================================================
+   Landing Page Styles — imported only on the landing page
+   (not injected into Starlight docs)
+   ================================================================ */
+
+/* Tailwind CSS base layer */
+@import "tailwindcss";
+
+/* csszyx-generated class names — Tailwind scans this to generate CSS for sz props */
+@source "../../csszyx-classes.html";
+/* Exclude AI reference files — they contain example class strings that produce invalid CSS */
+@source not "../../public/llms.txt";
+@source not "../../public/llms-full.txt";
+
+/* ================================================================
+   Color Tokens (csszyx branding)
+   These must be defined so all components work the same in dev and prod.
+   ================================================================ */
+
+/* Tailwind v4: dark mode triggered by html.dark class */
+@variant dark (&:where(.dark, .dark *));
+
+/* Tailwind v4: custom color scale for the brand */
+@theme {
+  --color-primary: #2dd597;
+  --color-primary-thin: #2dd597;
+  --color-secondary: #3f0fa6;
+  --color-highlight-fb: #ffdad0;
+  --color-highlight-bg: #4c1e08;
+  --color-background-light: #f8f6f6;
+  --color-background-dark: #0c0c11;
+  --color-tech-blue: #1a122d;
+  --color-surface: #0a0a0f;
+  --color-surface-alt: #0d0d12;
+  --font-display: "IBM Plex Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Material Symbols font */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined" !important;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+/* ================================================================
+   Design Tokens (landing-specific)
+   ================================================================ */
+
+:root {
+  color-scheme: light dark;
+  --lp-surface: light-dark(#ffffff, #14141a);
+  --lp-border: light-dark(#e2e8f0, #25252f);
+  --lp-text-muted: light-dark(#64748b, #94a3b8);
+  --lp-text: light-dark(#0f172a, #f1f5f9);
+
+  --trans-fast: 0.15s ease;
+  --trans-smooth: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+html.light {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  color: var(--color-slate-100);
+  font-family: var(--font-display);
+  background-color: var(--color-background-dark);
+}
+
+::selection {
+  color: var(--color-highlight-fb);
+  background-color: var(--color-highlight-bg);
+}
+
+/* ================================================================
+   Dot Grid Background
+   ================================================================ */
+
+.lp-dot-grid {
+  background-image: radial-gradient(
+    circle,
+    light-dark(#00603d, #2dd597) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+  background-repeat: repeat;
+  opacity: 0.175;
+}
+.dark .lp-dot-grid {
+  opacity: 0.075;
+}
+
+/* ================================================================
+   Scroll Reveal
+   ================================================================ */
+
+.reveal-item {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 2.4s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 2.4s cubic-bezier(0.16, 1, 0.3, 1),
+    translate 2.4s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal-item.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-item__benchmark {
+  transition: color 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ================================================================
+   Glow Card
+   ================================================================ */
+
+.glow-card {
+  position: relative;
+  overflow: hidden;
+}
+.glow-card::before {
+  content: "";
+  position: absolute;
+  top: var(--y);
+  left: var(--x);
+  transform: translate(-50%, -50%);
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(var(--color-primary), transparent, transparent);
+  opacity: 0;
+  border-radius: var(--radius-3xl);
+  transition:
+    opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    top 0s,
+    left 0s;
+}
+.glow-card:hover::before {
+  opacity: 1;
+}
+.glow-card::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  /* In light mode use near-white to let card bg show; dark mode uses the deep surface */
+  background: light-dark(rgba(255, 255, 255, 0.92), rgba(13, 13, 18, 0.92));
+  border-radius: var(--radius-3xl);
+}
+
+/* ================================================================
+   Header
+   ================================================================ */
+
+.cmd-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-border);
+  border-radius: 10px;
+  color: var(--lp-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color var(--trans-fast);
+}
+.cmd-bar kbd {
+  font-family: "Inter", sans-serif;
+  font-size: 0.68rem;
+  background: transparent;
+  border: 1px solid var(--lp-border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--lp-text-muted);
+}
+header.header-scrolled {
+  background: light-dark(
+    rgba(255, 255, 255, 0.5),
+    rgba(10, 10, 15, 0.5)
+  ) !important;
+  border-bottom: 1px solid var(--lp-border) !important;
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+/* ================================================================
+   Corner Markers
+   ================================================================ */
+
+.corner-marker {
+  position: relative;
+}
+.corner-marker::before {
+  content: "[";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  color: light-dark(#cbd5e1, #2dd597);
+  font-family: "JetBrains Mono";
+  font-size: 20px;
+}
+.corner-marker::after {
+  content: "]";
+  position: absolute;
+  bottom: -10px;
+  right: -10px;
+  color: light-dark(#cbd5e1, #2dd597);
+  font-family: "JetBrains Mono";
+  font-size: 20px;
+}
+.ruler-underline {
+  background-image: linear-gradient(
+    to right,
+    light-dark(#cbd5e1, #2dd597) 1px,
+    transparent 1px
+  );
+  background-size: 10px 100%;
+  height: 2px;
+  width: 100%;
+}
+
+/* ================================================================
+   Package Manager Tabs
+   ================================================================ */
+
+.pkg-tab {
+  color: light-dark(#94a3b8, #64748b);
+  background: none;
+  border: none;
+}
+.pkg-tab:hover {
+  color: light-dark(#171717, #fff);
+}
+.pkg-tab[data-active] {
+  background: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.06));
+  color: light-dark(#171717, #fff);
+}
+
+/* ================================================================
+   Footer Logo Hover
+   ================================================================ */
+
+.footer-logo__rect {
+  transition: opacity 700ms ease-in-out;
+}
+.logo-flat {
+  opacity: 1;
+}
+.logo-brand {
+  opacity: 0;
+}
+.footer-logo:hover .logo-flat {
+  opacity: 0;
+}
+.footer-logo:hover .logo-brand {
+  opacity: 1;
+}
+
+/* ================================================================
+   Scroll To Top Button
+   ================================================================ */
+
+.scroll-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-border);
+  color: var(--lp-text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.scroll-to-top.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.scroll-to-top:hover {
+  border-color: light-dark(#cbd5e1, #2dd597);
+  color: light-dark(#0f172a, #2dd597);
+}
+
+/* ================================================================
+   Beam Wrapper (card edge beams)
+   ================================================================ */
+
+.beam-wrapper {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 50%,
+    black 50%,
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 50%,
+    black 50%,
+    transparent
+  );
+}
+
+/* ================================================================
+   CTA Particle Effect
+   ================================================================ */
+
+.cta-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  box-shadow:
+    0 0 20px var(--color-primary),
+    0 0 50px var(--color-primary);
+  opacity: 0;
+  z-index: -1;
+  animation: cta-particle-anim 2s linear forwards;
+  pointer-events: none;
+}
+
+/* ================================================================
+   Hero Scramble Animation
+   ================================================================ */
+
+.scramble-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  z-index: 5;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 15%,
+    black 85%,
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 15%,
+    black 85%,
+    transparent
+  );
+}
+.scramble-row {
+  position: absolute;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  transform: translateX(-100%);
+}
+.phase-sz,
+.phase-tw,
+.phase-mangle {
+  transition:
+    filter 1s ease,
+    color 1s ease,
+    text-shadow 1s ease;
+}
+.phase-sz {
+  color: light-dark(#475569, #c5c5c5);
+  filter: saturate(0.2) opacity(0.7);
+}
+.phase-sz .key {
+  color: light-dark(#2a62db, #60a5fa);
+}
+.phase-sz .string {
+  color: light-dark(#1ea44f, #34d399);
+}
+.phase-sz .number {
+  color: light-dark(#cc8406, #fb923c);
+}
+.phase-sz .boolean {
+  color: light-dark(#db2777, #f472b6);
+}
+.phase-tw {
+  color: light-dark(#7e22ce, #ad96dc);
+  font-weight: 500;
+  filter: saturate(0.6) opacity(0.9);
+}
+.phase-mangle {
+  color: light-dark(#059669, #89ecb4);
+  font-weight: 700;
+  text-shadow:
+    0 0 12px light-dark(rgba(5, 150, 105, 0.4), rgba(19, 241, 112, 0.8)),
+    0 0 4px light-dark(rgba(5, 150, 105, 0.2), rgba(19, 241, 112, 0.5));
+  filter: saturate(1) opacity(1);
+}
+
+/* Hero opening typewriter */
+#ho-sz {
+  filter: saturate(0.2) opacity(1);
+}
+#ho-sz .ho-key {
+  color: light-dark(#2a62db, #60a5fa);
+}
+#ho-sz .ho-string {
+  color: light-dark(#1ea44f, #34d399);
+}
+#ho-sz .ho-number {
+  color: light-dark(#cc8406, #fb923c);
+}
+#ho-sz .ho-boolean {
+  color: light-dark(#db2777, #f472b6);
+}
+#ho-sz .ho-symbol {
+  color: light-dark(#94a3b8, #475569);
+}
+#ho-tw-row {
+  filter: saturate(0.6) opacity(1);
+}
+
+@keyframes cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+#ho-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 11px;
+  background: #2dd597;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.7s step-end infinite;
+}
+
+@keyframes cinematic-entry {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateZ(0);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateZ(0);
+    filter: blur(0);
+  }
+}
+.scramble-container.start-anim {
+  animation: cinematic-entry 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Hero left-column fade-in */
+@keyframes hero-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.hero-in-1 {
+  opacity: 0;
+  animation: hero-fade-up 2.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+}
+.hero-in-2 {
+  opacity: 0;
+  animation: hero-fade-up 2.4s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards;
+}
+.hero-in-3 {
+  opacity: 0;
+  animation: hero-fade-up 2.4s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+}
+
+/* ================================================================
+   Delta Architecture Animations
+   ================================================================ */
+
+/* Card border beam sweep */
+@keyframes beam-sweep-h {
+  0% {
+    left: -96px;
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+/* Delta sequential data flow — glow only */
+@keyframes delta-trace-top {
+  0% {
+    top: -2px;
+    left: 0%;
+    width: 0;
+    height: 3px;
+    opacity: 0;
+  }
+  0.1% {
+    opacity: 1;
+    width: 100px;
+    left: 0%;
+    top: -2px;
+    height: 3px;
+  }
+  20% {
+    top: -2px;
+    left: calc(100% - 100px);
+    width: 100px;
+    height: 3px;
+    opacity: 1;
+  }
+  20.1% {
+    top: -2px;
+    left: calc(100% - 3px);
+    width: 3px;
+    height: 60px;
+    opacity: 1;
+  }
+  28.3% {
+    top: calc(50% - 60px);
+    left: calc(100% - 3px);
+    width: 3px;
+    height: 60px;
+    opacity: 1;
+  }
+  28.4%,
+  100% {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+}
+@keyframes delta-trace-bottom {
+  0% {
+    bottom: -2px;
+    left: 0%;
+    width: 0;
+    height: 3px;
+    opacity: 0;
+  }
+  0.1% {
+    opacity: 1;
+    width: 100px;
+    left: 0%;
+    bottom: -2px;
+    height: 3px;
+  }
+  20% {
+    bottom: -2px;
+    left: calc(100% - 100px);
+    width: 100px;
+    height: 3px;
+    opacity: 1;
+  }
+  20.1% {
+    bottom: -2px;
+    left: calc(100% - 3px);
+    width: 3px;
+    height: 60px;
+    opacity: 1;
+  }
+  28.3% {
+    bottom: calc(50% - 60px);
+    left: calc(100% - 3px);
+    width: 3px;
+    height: 60px;
+    opacity: 1;
+  }
+  28.4%,
+  100% {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+}
+@keyframes delta-trace-line {
+  0%,
+  28.3% {
+    left: 0%;
+    width: 0;
+    opacity: 0;
+  }
+  28.4% {
+    opacity: 1;
+    left: 0%;
+    width: 50px;
+  }
+  33.3% {
+    opacity: 1;
+    left: 100%;
+    width: 50px;
+  }
+  33.4%,
+  100% {
+    opacity: 0;
+    left: 100%;
+    width: 0;
+  }
+}
+@keyframes delta-pulse-dot {
+  0%,
+  60% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  65% {
+    transform: scale(3.5);
+    opacity: 0.05;
+  }
+  80%,
+  100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+}
+
+/* ================================================================
+   CTA Particle keyframe
+   ================================================================ */
+
+@keyframes cta-particle-anim {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.5);
+    opacity: 0;
+  }
+}

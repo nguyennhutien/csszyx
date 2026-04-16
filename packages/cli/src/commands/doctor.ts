@@ -19,7 +19,6 @@ import {
  *
  */
 export interface DoctorOptions {
-    fix?: boolean;
     verbose?: boolean;
     cwd?: string;
 }
@@ -112,7 +111,5 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
         printSuccess('✨ No issues found! Your setup looks good.');
     } else {
         printWarn(`Found ${issueCount} issue(s)`);
-        console.log();
-        console.log('Run `csszyx doctor --fix` to auto-fix common issues');
     }
 }

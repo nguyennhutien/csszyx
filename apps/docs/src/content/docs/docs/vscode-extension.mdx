@@ -1,0 +1,81 @@
+---
+title: VS Code Extension
+description: IntelliSense, hover, and diagnostics for sz props in VS Code.
+---
+
+`@csszyx/vscode` adds first-class editor support for `sz` props: autocompletion,
+hover previews, and inline diagnostics — with zero configuration required.
+
+## Features
+
+### Autocompletion
+
+Completions trigger automatically inside `sz={{ ... }}` expressions.
+
+- **Key completions** — all sz prop names (`p`, `bg`, `text`, `flex`, `hover`, …)
+- **Value completions** — curated suggestions per key (spacing scale, color palette, named values)
+- **Variant-aware** — inside nested variant objects (`hover: { … }`, `sm: { … }`) completions switch to variant-key mode
+
+```tsx
+<div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-600' } }} />
+//              ^                         ^
+//         value completions         variant-value completions
+```
+
+### Hover Preview
+
+Hovering anywhere inside a `sz={{ ... }}` expression shows the generated
+Tailwind class string and any inline CSS variable attributes.
+
+```
+CSSzyx → generated classes:
+
+p-4 bg-blue-500 hover:bg-blue-600
+
+Inline styles (CSS variables):
+
+(none)
+```
+
+The hover evaluates the object at editor time using the same `transform()` call
+the compiler uses at build time — what you see is exactly what ships.
+
+### Diagnostics
+
+Unknown prop keys are flagged as warnings in the Problems panel and underlined
+in the editor. When the key is close to a known prop, a suggestion is shown.
+
+```
+Unknown sz prop 'padding'. Did you mean 'p'?
+Unknown sz prop 'color'. Did you mean 'text'?
+```
+
+Diagnostics run immediately on file open/save and with a 300 ms debounce while
+editing. Disable them per-workspace via the `csszyx.enableDiagnostics` setting.
+
+### Syntax Highlighting
+
+The `sz` attribute name and its value get dedicated TextMate scopes for accurate
+syntax coloring in JSX, TSX, JavaScript, TypeScript, and HTML files.
+
+## Install
+
+The extension is not yet published to the VS Code Marketplace. To install
+locally from the repo:
+
+```bash
+cd packages/vscode-extension
+pnpm build
+# Then: Extensions panel → "Install from VSIX…" → select dist/csszyx-vscode-*.vsix
+```
+
+## Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `csszyx.enableDiagnostics` | `true` | Show unknown-prop warnings |
+| `csszyx.enableHover` | `true` | Show hover preview |
+
+## Supported Languages
+
+`typescriptreact`, `javascriptreact`, `typescript`, `javascript`, `html`

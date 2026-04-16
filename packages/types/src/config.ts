@@ -119,6 +119,17 @@ export interface BuildConfig {
    * @default 50000
    */
   astBudgetLimit?: number;
+
+  /**
+   * CSS file(s) to scan for Tailwind v4 @theme blocks.
+   * When set, the plugin generates .csszyx/theme.d.ts with TypeScript augmentation
+   * for custom design tokens, enabling IntelliSense for user-defined colors, spacings, etc.
+   *
+   * Accepts a single glob/path or an array of globs/paths.
+   *
+   * @example ['src/styles/theme.css', 'src/styles/tokens.css']
+   */
+  scanCss?: string | string[];
 }
 
 /**

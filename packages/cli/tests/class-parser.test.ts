@@ -68,9 +68,9 @@ describe('class-parser', () => {
         });
 
         it('transform booleans', () => {
-            expect(parseClass('transform-gpu')).toEqual({ prop: 'transformGpu', value: true });
-            expect(parseClass('transform-cpu')).toEqual({ prop: 'transformCpu', value: true });
-            expect(parseClass('transform-none')).toEqual({ prop: 'transformNone', value: true });
+            expect(parseClass('transform-gpu')).toEqual({ prop: 'transform', value: 'gpu' });
+            expect(parseClass('transform-cpu')).toEqual({ prop: 'transform', value: 'cpu' });
+            expect(parseClass('transform-none')).toEqual({ prop: 'transform', value: 'none' });
         });
 
         it('snap booleans', () => {
@@ -270,6 +270,16 @@ describe('class-parser', () => {
             expect(parseClass('indent-4')).toEqual({ prop: 'indent', value: 4 });
             expect(parseClass('-indent-4')).toEqual({ prop: 'indent', value: -4 });
         });
+
+        it('content — both quote forms normalize to double-quote (round-trip stability)', () => {
+            // content-[''] and content-[""] must both produce { content: '""' } so that
+            // the compiler can reliably re-generate content-[''] on the next forward pass.
+            expect(parseClass("content-['']")).toEqual({ prop: 'content', value: '""' });
+            expect(parseClass('content-[""]')).toEqual({ prop: 'content', value: '""' });
+            expect(parseClass("content-['hello']")).toEqual({ prop: 'content', value: '"hello"' });
+            expect(parseClass('content-["hello"]')).toEqual({ prop: 'content', value: '"hello"' });
+            expect(parseClass('content-none')).toEqual({ prop: 'content', value: 'none' });
+        });
     });
 
     // ========================================================================
@@ -402,6 +412,15 @@ describe('class-parser', () => {
             expect(parseClass('border-8')).toEqual({ prop: 'border', value: 8 });
         });
 
+        it('border arbitrary width (not color)', () => {
+            // Arbitrary dimensions → border width, NOT borderColor
+            expect(parseClass('border-[1.5px]')).toEqual({ prop: 'border', value: '1.5px' });
+            expect(parseClass('border-[3px]')).toEqual({ prop: 'border', value: '3px' });
+            expect(parseClass('border-[0.5rem]')).toEqual({ prop: 'border', value: '0.5rem' });
+            // Arbitrary colors still → borderColor
+            expect(parseClass('border-[#50d71e]')).toEqual({ prop: 'borderColor', value: '#50d71e' });
+        });
+
         it('border style', () => {
             expect(parseClass('border-solid')).toEqual({ prop: 'borderStyle', value: 'solid' });
             expect(parseClass('border-dashed')).toEqual({ prop: 'borderStyle', value: 'dashed' });
@@ -436,11 +455,24 @@ describe('class-parser', () => {
             expect(parseClass('ring-offset-2')).toEqual({ prop: 'ringOffset', value: 2 });
         });
 
+        it('ring arbitrary width (not color)', () => {
+            // Arbitrary dimensions → ring width, NOT ringColor
+            expect(parseClass('ring-[3px]')).toEqual({ prop: 'ring', value: '3px' });
+            expect(parseClass('ring-[1.5px]')).toEqual({ prop: 'ring', value: '1.5px' });
+            // Arbitrary colors still → ringColor
+            expect(parseClass('ring-[#ff0000]')).toEqual({ prop: 'ringColor', value: '#ff0000' });
+        });
+
         it('outline', () => {
             expect(parseClass('outline-2')).toEqual({ prop: 'outline', value: 2 });
             expect(parseClass('outline-dashed')).toEqual({ prop: 'outlineStyle', value: 'dashed' });
             expect(parseClass('outline-blue-500')).toEqual({ prop: 'outlineColor', value: 'blue-500' });
             expect(parseClass('outline-offset-2')).toEqual({ prop: 'outlineOffset', value: 2 });
+        });
+
+        it('outline arbitrary width (not color)', () => {
+            // Arbitrary dimensions → outline width, NOT outlineColor
+            expect(parseClass('outline-[3px]')).toEqual({ prop: 'outline', value: '3px' });
         });
     });
 
@@ -761,6 +793,15 @@ describe('class-parser', () => {
         it('arbitrary colors', () => {
             expect(parseClass('text-[#ff0000]')).toEqual({ prop: 'color', value: '#ff0000' });
             expect(parseClass('bg-[#333]')).toEqual({ prop: 'bg', value: '#333' });
+        });
+
+        it('text arbitrary size (not color)', () => {
+            // Arbitrary CSS dimensions → font size (text prop), NOT color
+            expect(parseClass('text-[0.8rem]')).toEqual({ prop: 'text', value: '0.8rem' });
+            expect(parseClass('text-[16px]')).toEqual({ prop: 'text', value: '16px' });
+            expect(parseClass('text-[1.5em]')).toEqual({ prop: 'text', value: '1.5em' });
+            // Arbitrary hex color still → color
+            expect(parseClass('text-[#50d71e]')).toEqual({ prop: 'color', value: '#50d71e' });
         });
 
         it('CSS variable sugar', () => {

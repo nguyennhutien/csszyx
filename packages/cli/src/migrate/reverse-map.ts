@@ -54,9 +54,10 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'outline': 'outline',
     'outline-offset': 'outlineOffset',
 
-    // Ring
+    // Ring (v4: outset ring + inset ring)
     'ring': 'ring',
     'ring-offset': 'ringOffset',
+    'inset-ring': 'insetRing',
 
     // Spacing
     'p': 'p',
@@ -118,8 +119,9 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'right': 'right',
     'bottom': 'bottom',
     'left': 'left',
-    'start': 'start',
-    'end': 'end',
+    // TW v4.2: start/end are deprecated — migrate to inset-s/inset-e
+    'start': 'insetS',
+    'end': 'insetE',
 
     // Typography (ambiguous — text-*, font-* disambiguated)
     'text': 'color', // default for text- prefix
@@ -172,6 +174,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
 
     // Effects
     'shadow': 'shadow', // ambiguous (shadow vs shadowColor)
+    'inset-shadow': 'insetShadow',
     'opacity': 'opacity',
     'mix-blend': 'mixBlend',
     'bg-blend': 'bgBlend',
@@ -352,17 +355,16 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'space-x-reverse': 'spaceXReverse',
     'space-y-reverse': 'spaceYReverse',
 
-    // Ring/Outline (boolean defaults)
+    // Ring/Outline/Border-radius (boolean defaults)
     'ring': 'ring',
+    'inset-ring': 'insetRing',
     'outline': 'outline',
+    'rounded': 'rounded',
 
     // Transforms
-    'scale-3d': 'scale3d',
-    'rotate-3d': 'rotate3d',
-    'translate-3d': 'translate3d',
-    'transform-gpu': 'transformGpu',
-    'transform-cpu': 'transformCpu',
-    'transform-none': 'transformNone',
+    'scale-3d': 'scale',
+    'translate-3d': 'translate',
+    // transform-gpu/cpu/none use BOOLEAN_VALUE_MAP → { transform: 'gpu'/'cpu'/'none' }
 
     // Font numeric
     'normal-nums': 'fontVariant',
@@ -434,6 +436,11 @@ export const BOOLEAN_VALUE_MAP: Record<string, { prop: string; value: unknown }>
     // Appearance
     'appearance-none': { prop: 'appearance', value: 'none' },
     'appearance-auto': { prop: 'appearance', value: 'auto' },
+
+    // Transform
+    'transform-none': { prop: 'transform', value: 'none' },
+    'transform-gpu': { prop: 'transform', value: 'gpu' },
+    'transform-cpu': { prop: 'transform', value: 'cpu' },
 };
 
 // ============================================================================

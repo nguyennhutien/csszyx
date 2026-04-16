@@ -1,12 +1,16 @@
 import { Demo } from '../Demo.tsx';
 
+// zinc-700→zinc-800 gradient replaces zinc-900 (which is invisible against the panel bg)
+const item = { p: 3, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
+const label = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
+
 export function FlexRow() {
     return (
-        <Demo label="flex: true — children laid out in a row">
+        <Demo label="{ flex: true } — children laid out in a row">
             <div sz={{ flex: true, gap: 3 }}>
-                <div sz={{ p: 3, bg: 'sky-100', rounded: 'sm', text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700' }}>A</div>
-                <div sz={{ p: 3, bg: 'sky-100', rounded: 'sm', text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700' }}>B</div>
-                <div sz={{ p: 3, bg: 'sky-100', rounded: 'sm', text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700' }}>C</div>
+                <div sz={item}>A</div>
+                <div sz={item}>B</div>
+                <div sz={item}>C</div>
             </div>
         </Demo>
     );
@@ -14,11 +18,11 @@ export function FlexRow() {
 
 export function BlockVsInlineBlock() {
     return (
-        <Demo label="block: true vs inlineBlock: true">
+        <Demo label="{ block: true } vs { inlineBlock: true }">
             <div sz={{ w: 48 }}>
-                <div sz={{ block: true, bg: '--ds-primary-faint', border: true, borderColor: '--ds-primary-light', rounded: 'sm', p: 2, text: 'xs', fontFamily: '--ds-font-ui', color: '--ds-primary', mb: 1 }}>block (full width)</div>
-                <span sz={{ inlineBlock: true, bg: 'sky-100', rounded: 'sm', p: 2, text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700' }}>inline</span>
-                <span sz={{ inlineBlock: true, bg: 'sky-100', rounded: 'sm', p: 2, text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700', ml: 1 }}>block</span>
+                <div sz={{ ...item, block: true, mb: 1 }}>block (full width)</div>
+                <span sz={{ ...item, p: 2, inlineBlock: true }}>inline</span>
+                <span sz={{ ...item, p: 2, inlineBlock: true, ml: 1 }}>block</span>
             </div>
         </Demo>
     );
@@ -27,12 +31,12 @@ export function BlockVsInlineBlock() {
 export function AbsoluteOverlay() {
     return (
         <Demo label="relative parent + absolute child overlay">
-            <div sz={{ relative: true, w: 32, h: 20, bg: 'sky-100', rounded: 'sm', border: true, borderColor: 'sky-200' }}>
+            <div sz={{ relative: true, w: 40, h: 24, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'lg', shadow: 'sm' }}>
                 <div sz={{ absolute: true, inset: 0, flex: true, items: 'center', justify: 'center' }}>
-                    <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700' }}>parent</span>
+                    <span sz={label}>parent</span>
                 </div>
-                <div sz={{ absolute: true, top: 0, right: 0, bg: '--ds-primary', rounded: 'sm', px: 1.5, py: 0.5 }}>
-                    <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: 'white' }}>abs</span>
+                <div sz={{ absolute: true, top: 0, right: 0, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: 'lg', px: 1.5, py: 0.5 }}>
+                    <span sz={{ ...label, color: 'white' }}>abs</span>
                 </div>
             </div>
         </Demo>
@@ -42,8 +46,8 @@ export function AbsoluteOverlay() {
 export function OverflowHidden() {
     return (
         <Demo label="{ overflow: 'hidden' } — long text clipped to box">
-            <div sz={{ w: 40, h: 12, overflow: 'hidden', bg: '--ds-primary-faint', border: true, borderColor: '--ds-primary-light', rounded: 'sm', p: 2 }}>
-                <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: '--ds-primary' }}>
+            <div sz={{ w: 40, h: 12, overflow: 'hidden', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'lg', p: 2 }}>
+                <span sz={label}>
                     This text is intentionally long and will be clipped by overflow-hidden at the box boundary.
                 </span>
             </div>
@@ -54,12 +58,12 @@ export function OverflowHidden() {
 export function ZIndex() {
     return (
         <Demo label="z-index — higher z stacks on top">
-            <div sz={{ relative: true, w: 40, h: 20 }}>
-                <div sz={{ absolute: true, top: 0, left: 0, z: 10, w: 28, h: 16, bg: 'sky-200', rounded: 'sm', flex: true, items: 'center', justify: 'center' }}>
-                    <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-800' }}>z-10</span>
+            <div sz={{ relative: true, w: 48, h: 24 }}>
+                <div sz={{ absolute: true, top: 0, left: 0, z: 10, w: 32, h: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', shadow: 'sm', rounded: 'lg', flex: true, items: 'center', justify: 'center' }}>
+                    <span sz={label}>z-10</span>
                 </div>
-                <div sz={{ absolute: true, top: 4, left: 8, z: 20, w: 28, h: 16, bg: '--ds-primary', rounded: 'sm', flex: true, items: 'center', justify: 'center' }}>
-                    <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: 'white' }}>z-20 (top)</span>
+                <div sz={{ absolute: true, top: 4, left: 10, z: 20, w: 32, h: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', shadow: 'md', rounded: 'lg', flex: true, items: 'center', justify: 'center' }}>
+                    <span sz={{ ...label, color: 'white' }}>z-20 (top)</span>
                 </div>
             </div>
         </Demo>
@@ -69,11 +73,11 @@ export function ZIndex() {
 export function AspectRatio() {
     return (
         <Demo label="aspect ratio comparison">
-            <div sz={{ aspect: 'square', w: 16, bg: 'sky-100', rounded: 'sm', flex: true, items: 'center', justify: 'center' }}>
-                <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: 'sky-700' }}>1:1</span>
+            <div sz={{ aspect: 'square', w: 16, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: 'lg', flex: true, items: 'center', justify: 'center' }}>
+                <span sz={label}>1:1</span>
             </div>
-            <div sz={{ aspect: 'video', w: 24, bg: '--ds-primary-faint', rounded: 'sm', flex: true, items: 'center', justify: 'center' }}>
-                <span sz={{ text: 'xs', fontFamily: '--ds-font-ui', color: '--ds-primary' }}>16:9</span>
+            <div sz={{ aspect: 'video', w: 24, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'sky-400', to: 'indigo-500', rounded: 'lg', flex: true, items: 'center', justify: 'center' }}>
+                <span sz={label}>16:9</span>
             </div>
         </Demo>
     );

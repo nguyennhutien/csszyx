@@ -7,13 +7,41 @@
  *
  * Bundle size target: < 500 bytes (minified + gzipped)
  *
+ * __szColorVar is imported from @csszyx/compiler/color-var and inlined at
+ * build time by tsup (noExternal). Zero runtime deps — single source of truth.
+ *
  * @module @csszyx/runtime/lite
  */
+
+// Inlined at build time — NOT a runtime dep. See tsup.config.ts.
+export { __szColorVar } from '@csszyx/compiler/color-var';
 
 /**
  * Type for sz input - string-only (objects are pre-compiled at build time).
  */
 export type SzInput = string | null | undefined | false;
+
+/**
+ * Dev-only guard: throw when a plain object reaches a string-only helper.
+ * Compiled sz props are always strings; an object here means the compiler
+ * hit an unhandled pattern and fell back to _sz(objectExpr).
+ *
+ * Dead-code eliminated in production builds (process.env.NODE_ENV check).
+ * @param cls - Value to check; expected to be a string, null, undefined, or false
+ * @param fnName - Name of the calling helper, included in the error message
+ */
+function assertNotObject(cls: unknown, fnName: string): void {
+    if (cls !== null && cls !== undefined && cls !== false && typeof cls !== 'string') {
+        throw new Error(
+            `[csszyx] ${fnName}() received a plain object — the compiler could not resolve this sz prop at build time.\n` +
+            '\n' +
+            'Common cause:   sz={{ ...(cond ? varA : varB), key: \'val\' }}\n' +
+            'Fix:            sz={[cond ? varA : varB, { key: \'val\' }]}\n' +
+            '\n' +
+            `Received: ${JSON.stringify(cls)}`,
+        );
+    }
+}
 
 /**
  * Zero-overhead className passthrough/concatenation.
@@ -29,6 +57,7 @@ export type SzInput = string | null | undefined | false;
  */
 export function _sz(...classes: SzInput[]): string {
     if (classes.length === 1) {
+        if (process.env.NODE_ENV !== 'production') { assertNotObject(classes[0], '_sz'); }
         return classes[0] || '';
     }
 
@@ -37,6 +66,7 @@ export function _sz(...classes: SzInput[]): string {
 
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
+        if (process.env.NODE_ENV !== 'production') { assertNotObject(cls, '_sz'); }
         if (!cls) {continue;}
         if (needsSpace) {result += ' ';}
         result += cls;
@@ -68,6 +98,35 @@ export function _szIf(
 }
 
 /**
+ * Merges className strings from compiled array sz props, deduplicating tokens.
+ *
+ * Emitted by the compiler for sz={[varA, cond && varB, ...]} when at least one
+ * element is a runtime conditional. All arguments must be pre-compiled strings
+ * (the compiler resolves each element to a string before passing it here).
+ *
+ * @param {...SzInput[]} classes - Pre-compiled class strings to merge
+ * @returns {string} Merged className string with duplicate tokens removed
+ */
+export function _szMerge(...classes: SzInput[]): string {
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (let i = 0; i < classes.length; i++) {
+        const cls = classes[i];
+        if (process.env.NODE_ENV !== 'production') { assertNotObject(cls, '_szMerge'); }
+        if (!cls) {continue;}
+        for (const token of (cls as string).split(' ')) {
+            if (token && !seen.has(token)) {
+                seen.add(token);
+                result.push(token);
+            }
+        }
+    }
+
+    return result.join(' ');
+}
+
+/**
  * Two-argument optimized concatenation.
  * @param a - first class string
  * @param b - second class string
@@ -79,20 +138,3 @@ export function _sz2(a: string, b: string): string {
     return a + ' ' + b;
 }
 
-/**
- * Resolves a dynamic color value to a CSS-compatible string.
- * Maps Tailwind color names to CSS custom properties, passes through raw CSS values.
- *
- * @param v - Color value (Tailwind name, CSS color, or CSS variable)
- * @returns CSS-compatible color string
- *
- * @example
- * __szColorVar('blue-500')  // → 'var(--color-blue-500)'
- * __szColorVar('#ff0')      // → '#ff0'
- * __szColorVar('--my-var')  // → 'var(--my-var)'
- */
-export function __szColorVar(v: string): string {
-    if (v.startsWith('#') || v.startsWith('rgb') || v.startsWith('hsl') || v.startsWith('oklch')) {return v;}
-    if (v.startsWith('--')) {return `var(${v})`;}
-    return `var(--color-${v})`;
-}

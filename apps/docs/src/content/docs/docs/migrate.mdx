@@ -1,0 +1,185 @@
+---
+title: Migrate from Tailwind
+description: Automatically convert className to sz props using the CSSzyx CLI.
+---
+
+The `csszyx migrate` CLI command converts `className=` (JSX/TSX) or `class=`
+(HTML) attributes to `sz=` props automatically. It handles static strings, clsx
+calls, ternary expressions, and template literals.
+
+## Basic Usage
+
+```bash
+npx csszyx migrate src/           # migrate all JSX/TSX/HTML under src/
+npx csszyx migrate --dry-run      # preview changes without writing files
+npx csszyx migrate --ignore "**/*.test.tsx,**/fixtures/**"
+npx csszyx migrate --pattern "src/components/**/*.tsx"
+```
+
+Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
+
+## Audit — Discover Unrecognized Classes
+
+Before migrating, run an audit to see what csszyx cannot automatically convert:
+
+```bash
+npx csszyx migrate --audit
+```
+
+This scans your codebase and writes `.csszyx-todo.json` without touching any
+source files. Each entry starts as `"sz:todo"`:
+
+```json
+{
+  "btn": "sz:todo",
+  "custom-card": "sz:todo",
+  "animate-spin-slow": "sz:todo"
+}
+```
+
+## Resolving the Todo Map
+
+Edit `.csszyx-todo.json` to tell csszyx what to do with each class:
+
+| Value | Meaning |
+|---|---|
+| `"sz:todo"` | Not yet decided — skip, surface in reports |
+| `"sz:keep"` | Keep in `className`, acknowledged as intentional |
+| `"sz:remove"` | Drop from output entirely |
+| `{ p: 4, bg: 'blue-500' }` | Direct sz object — merged into `sz` prop |
+| `"p-4 bg-blue-500"` | Tailwind string — auto-converted to sz |
+| `null` / `false` | Same as `"sz:todo"` (backwards compat) |
+
+:::note[`sz:todo` entries are never silently converted]
+Even if a class happens to be valid Tailwind, `sz:todo` entries are always
+skipped. This prevents accidental conversion of classes you have explicitly
+flagged as "not yet decided."
+:::
+
+## `--resolve-todos` — Apply the Resolution Map
+
+```bash
+npx csszyx migrate --resolve-todos .csszyx-todo.json
+```
+
+Reads `.csszyx-todo.json` and applies it during migration. Classes mapped to
+`sz:keep` stay in `className`; `sz:remove` entries are dropped; sz objects and
+Tailwind strings are converted.
+
+`--resolve-todos` is **read-only** — it never writes to the todo file. Still-unresolved
+`sz:todo` entries appear in the console and log only.
+
+## `--inject-todos` — Mark Unresolved Classes in Code
+
+```bash
+npx csszyx migrate --inject-todos
+```
+
+Inserts `{/* @sz-todo: classname1, classname2 */}` comments above JSX elements
+that still have unrecognized classes — a visual marker so you can grep or skim
+the diff to find what needs attention.
+
+When `--resolve-todos` is active, `--inject-todos` is automatically enabled for
+any still-unresolved classes.
+
+## Full Workflow
+
+```bash
+# 1. Dry run — preview what will change
+npx csszyx migrate --dry-run
+
+# 2. Audit — find unrecognized classes
+npx csszyx migrate --audit
+# → writes .csszyx-todo.json
+
+# 3. Edit .csszyx-todo.json
+# → set "sz:keep", "sz:remove", or direct sz objects for each entry
+
+# 4. Apply with resolution map
+npx csszyx migrate --resolve-todos .csszyx-todo.json
+
+# 5. Re-audit if anything remains unresolved
+npx csszyx migrate --audit
+```
+
+## HTML Files
+
+For plain HTML files (no JSX build step), csszyx converts `class="..."` to
+`sz="..."` attributes. A runtime script is needed at page load to process them —
+the migration command can inject it for you.
+
+**By default** (`csszyx migrate public/`), the command:
+- Converts `class="..."` → `sz="..."` ✅
+- Injects FOUC prevention CSS into `<head>` ✅
+- Does **not** inject a runtime script ❌
+
+:::caution[FOUC + no runtime = permanently hidden elements]
+The FOUC CSS injects `[sz] { visibility: hidden; }` and elements stay hidden
+until the runtime adds `sz-ready` to `<body>`. If you run the migration with
+no `--inject-runtime` flag (the default) and don't load the runtime separately,
+every element with an `sz` attribute will be **permanently invisible**. Always
+pair FOUC injection with a runtime, or use `--no-fouc` if you're loading the
+runtime yourself.
+:::
+
+### Injecting the runtime
+
+```bash
+# CDN (default URL: https://cdn.csszyx.com/runtime.js)
+npx csszyx migrate public/ --inject-runtime cdn
+
+# Local file (default path: csszyx-runtime.js, relative to each HTML file)
+npx csszyx migrate public/ --inject-runtime local
+
+# Custom CDN URL
+npx csszyx migrate public/ --inject-runtime cdn --cdn-url https://my-cdn.com/csszyx.js
+
+# Custom local path
+npx csszyx migrate public/ --inject-runtime local --local-path ./vendor/csszyx-runtime.js
+```
+
+The runtime script tag is injected before `</body>`.
+
+### FOUC prevention
+
+Enabled by default. Injects this block before `</head>`:
+
+```html
+<style>
+  /* csszyx: hide [sz] elements until runtime processes them */
+  [sz] { visibility: hidden; }
+  body.sz-ready [sz] { visibility: visible; }
+</style>
+```
+
+Pass `--no-fouc` to skip this if you are managing the loading transition yourself.
+
+### `--braces` flag
+
+Controls the format of the generated `sz` attribute value.
+
+Without `--braces` (default — bare object contents):
+
+```html
+<div sz="p: 4, bg: 'blue-500'"></div>
+```
+
+With `--braces` (full object syntax):
+
+```html
+<div sz="{ p: 4, bg: 'blue-500' }"></div>
+```
+
+Use `--braces` if your HTML is processed by a template engine that expects
+full object literal syntax.
+
+## TypeScript Types
+
+The todo map types are exported for use in custom tooling:
+
+```ts
+import type { CsszyxTodoEntry, CsszyxTodoMap } from '@csszyx/cli';
+
+// CsszyxTodoEntry = Record<string, unknown> | string | null | false
+// CsszyxTodoMap   = Record<string, CsszyxTodoEntry>
+```

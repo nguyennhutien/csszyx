@@ -1,0 +1,166 @@
+---
+title: Interactivity
+description: Cursor, pointer events, resize, scroll, user-select, and appearance props.
+---
+
+import { PropTable } from '../../../../components/PropTable.tsx';
+import { CursorVariants, UserSelect, ResizeTextarea } from '../../../../components/demos/interactivity.tsx';
+
+## Cursor
+
+<PropTable rows={[
+  { sz: "{ cursor: 'auto' }", tw: "cursor-auto" },
+  { sz: "{ cursor: 'default' }", tw: "cursor-default" },
+  { sz: "{ cursor: 'pointer' }", tw: "cursor-pointer" },
+  { sz: "{ cursor: 'wait' }", tw: "cursor-wait" },
+  { sz: "{ cursor: 'text' }", tw: "cursor-text" },
+  { sz: "{ cursor: 'move' }", tw: "cursor-move" },
+  { sz: "{ cursor: 'not-allowed' }", tw: "cursor-not-allowed" },
+  { sz: "{ cursor: 'grab' }", tw: "cursor-grab" },
+  { sz: "{ cursor: 'grabbing' }", tw: "cursor-grabbing" },
+  { sz: "{ cursor: 'zoom-in' }", tw: "cursor-zoom-in" },
+  { sz: "{ cursor: 'none' }", tw: "cursor-none" },
+]} />
+
+<CursorVariants />
+
+## Pointer Events
+
+<PropTable rows={[
+  { sz: "{ pointerEvents: 'none' }", tw: "pointer-events-none" },
+  { sz: "{ pointerEvents: 'auto' }", tw: "pointer-events-auto" },
+]} />
+
+## User Select
+
+<PropTable rows={[
+  { sz: "{ select: 'none' }", tw: "select-none" },
+  { sz: "{ select: 'text' }", tw: "select-text" },
+  { sz: "{ select: 'all' }", tw: "select-all" },
+  { sz: "{ select: 'auto' }", tw: "select-auto" },
+]} />
+
+<UserSelect />
+
+## Resize
+
+<PropTable rows={[
+  { sz: "{ resize: true }", tw: "resize" },
+  { sz: "{ resize: 'none' }", tw: "resize-none" },
+  { sz: "{ resize: 'x' }", tw: "resize-x" },
+  { sz: "{ resize: 'y' }", tw: "resize-y" },
+]} />
+
+<ResizeTextarea />
+
+## Scroll Behavior
+
+<PropTable rows={[
+  { sz: "{ scroll: 'smooth' }", tw: "scroll-smooth" },
+  { sz: "{ scroll: 'auto' }", tw: "scroll-auto" },
+  { sz: "{ scrollMt: 4 }", tw: "scroll-mt-4" },
+  { sz: "{ scrollPt: 4 }", tw: "scroll-pt-4" },
+  { sz: "{ scrollPx: 4 }", tw: "scroll-px-4" },
+  { sz: "{ scrollPy: 4 }", tw: "scroll-py-4" },
+  { sz: "{ overscroll: 'none' }", tw: "overscroll-none" },
+  { sz: "{ overscroll: 'contain' }", tw: "overscroll-contain" },
+]} />
+
+:::tip[New in v4.2]
+Logical scroll padding: `{ scrollPbs: 4 }` → `scroll-pbs-4` (block-start),
+`{ scrollPbe: 4 }` → `scroll-pbe-4` (block-end), `{ scrollMbs: 4 }` →
+`scroll-mbs-4`, `{ scrollMbe: 4 }` → `scroll-mbe-4`.
+:::
+
+## Scroll Snap
+
+<PropTable rows={[
+  { sz: "{ snapType: 'x' }", tw: "snap-x" },
+  { sz: "{ snapType: 'y' }", tw: "snap-y" },
+  { sz: "{ snapType: 'both' }", tw: "snap-both" },
+  { sz: "{ snapType: 'none' }", tw: "snap-none" },
+  { sz: "{ snapStrictness: 'mandatory' }", tw: "snap-mandatory" },
+  { sz: "{ snapStrictness: 'proximity' }", tw: "snap-proximity" },
+  { sz: "{ snapAlign: 'start' }", tw: "snap-start" },
+  { sz: "{ snapAlign: 'center' }", tw: "snap-center" },
+  { sz: "{ snapAlign: 'end' }", tw: "snap-end" },
+  { sz: "{ snapStop: 'always' }", tw: "snap-always" },
+]} />
+
+## Touch Action
+
+<PropTable rows={[
+  { sz: "{ touch: 'none' }", tw: "touch-none" },
+  { sz: "{ touch: 'pan-x' }", tw: "touch-pan-x" },
+  { sz: "{ touch: 'pan-y' }", tw: "touch-pan-y" },
+  { sz: "{ touch: 'auto' }", tw: "touch-auto" },
+]} />
+
+## Appearance
+
+<PropTable rows={[
+  { sz: "{ appearance: 'none' }", tw: "appearance-none" },
+  { sz: "{ appearance: 'auto' }", tw: "appearance-auto" },
+  { sz: "{ caret: 'auto' }", tw: "caret-auto" },
+  { sz: "{ caret: 'blue-500' }", tw: "caret-blue-500" },
+  { sz: "{ accent: 'blue-500' }", tw: "accent-blue-500" },
+]} />
+
+## Color Scheme
+
+<PropTable rows={[
+  { sz: "{ scheme: 'dark' }", tw: "scheme-dark" },
+  { sz: "{ scheme: 'light' }", tw: "scheme-light" },
+  { sz: "{ scheme: 'light-dark' }", tw: "scheme-light-dark" },
+  { sz: "{ scheme: 'only-dark' }", tw: "scheme-only-dark" },
+  { sz: "{ scheme: 'normal' }", tw: "scheme-normal" },
+]} />
+
+## Field Sizing
+
+<PropTable rows={[
+  { sz: "{ fieldSizing: 'content' }", tw: "field-sizing-content" },
+  { sz: "{ fieldSizing: 'fixed' }", tw: "field-sizing-fixed" },
+]} />
+
+## Will Change
+
+<PropTable rows={[
+  { sz: "{ willChange: 'auto' }", tw: "will-change-auto" },
+  { sz: "{ willChange: 'transform' }", tw: "will-change-transform" },
+  { sz: "{ willChange: 'opacity' }", tw: "will-change-[opacity]" },
+]} />
+
+## Examples
+
+```tsx
+// Disabled button
+<button sz={{
+  cursor: 'not-allowed',
+  opacity: 50,
+  pointerEvents: 'none',
+}} />
+
+// Smooth scroll container
+<div sz={{
+  overflowY: 'auto',
+  scroll: 'smooth',
+  scrollMt: 4,
+}} />
+
+// Horizontal snap carousel
+<div sz={{
+  flex: true,
+  overflow: 'hidden',
+  snapType: 'x',
+  snapStrictness: 'mandatory',
+}}>
+  <div sz={{ shrink: 0, w: 'full', snapAlign: 'center' }} />
+  <div sz={{ shrink: 0, w: 'full', snapAlign: 'center' }} />
+</div>
+
+// Text not selectable
+<p sz={{ select: 'none', cursor: 'default' }}>
+  Not selectable
+</p>
+```

@@ -1,0 +1,208 @@
+---
+title: Reusing Styles
+description: Share sz style objects across components using variables, spreads, arrays, and ternaries — all resolved at build time.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+CSSzyx resolves style variables **at build time** — the same way it resolves inline
+objects. No runtime overhead, no `className="[object Object]"`.
+
+## Direct Reference
+
+The simplest way to reuse a style object — pass the variable directly to `sz`:
+
+```tsx
+const card = { p: 6, rounded: 'xl', shadow: 'md', bg: 'white' } as const;
+
+// All three components share the same compiled className
+<div sz={card} />
+<article sz={card} />
+<section sz={card} />
+// → className="p-6 rounded-xl shadow-md bg-white"
+```
+
+`as const` is optional — the compiler resolves both annotated and plain const/let objects.
+
+## Override with Spread
+
+Use `sz={{ ...var, key: val }}` when some components need different values. **Last key
+wins**, so you can layer overrides cleanly:
+
+```tsx
+const item = { p: 3, rounded: 'md', bg: 'white', border: true, borderColor: 'gray-200' } as const;
+
+// Each variant adds or overrides specific keys
+<div sz={item} />                          // base — p-3
+<div sz={{ ...item, p: 6 }} />             // larger padding
+<div sz={{ ...item, bg: 'blue-50', borderColor: 'blue-200' }} />  // tinted
+```
+
+:::tip[When to use which]
+- **`sz={var}`** — no overrides needed. Simpler and equally efficient.
+- **`sz={{ ...var, ... }}`** — only when you need to override or add properties.
+:::
+
+## Array Composition
+
+Pass an array to compose multiple objects. The compiler merges fully-static arrays at
+build time; conditional elements use `_szMerge` at runtime:
+
+```tsx
+const layout = { flex: true, items: 'center', gap: 3 } as const;
+const text   = { text: 'sm', fontWeight: 'medium' } as const;
+
+// Static — single className string, zero runtime
+<div sz={[layout, text]} />
+
+// Conditional — only isActive element is dynamic
+<div sz={[layout, text, isActive && { bg: 'blue-50' }]} />
+```
+
+Variables work as array elements too — no inline objects required:
+
+```tsx
+const active   = { bg: 'blue-500', color: 'white' } as const;
+const disabled = { opacity: 50, cursor: 'not-allowed' } as const;
+
+<button sz={[layout, isActive && active, isDisabled && disabled]} />
+```
+
+## Ternary Branches
+
+When a component switches entirely between two styles, use a ternary:
+
+```tsx
+const active   = { bg: 'blue-500', color: 'white', shadow: 'md' } as const;
+const inactive = { bg: 'gray-100', color: 'gray-600' } as const;
+
+<button sz={isActive ? active : inactive} />
+// Compiler emits: className={isActive ? "bg-blue-500 text-white shadow-md" : "bg-gray-100 text-gray-600"}
+```
+
+Both branches are compiled to static strings — no runtime object merging.
+
+## Chained Variables
+
+A variable can reference another variable in its initializer. The compiler resolves the
+chain recursively:
+
+```tsx
+const base     = { p: 4, rounded: 'lg' };
+const elevated = { ...base, shadow: 'md', bg: 'white' };
+const featured = { ...elevated, ring: 2, ringColor: 'blue-500' };
+
+<div sz={featured} />
+// → className="p-4 rounded-lg shadow-md bg-white ring-2 ring-blue-500"
+```
+
+## Component Patterns
+
+<Tabs>
+<TabItem label="Shared base">
+```tsx
+// styles/card.ts
+export const cardBase = {
+    p: 6, rounded: 'xl', bg: 'white',
+    border: true, borderColor: 'gray-200', shadow: 'sm',
+} as const;
+
+// components/Card.tsx
+import { cardBase } from '../styles/card';
+
+export function Card({ elevated }: { elevated?: boolean }) {
+    return (
+        <div sz={elevated ? { ...cardBase, shadow: 'lg' } : cardBase}>
+            {/* ... */}
+        </div>
+    );
+}
+```
+</TabItem>
+<TabItem label="Shared label style">
+```tsx
+const label = { text: 'sm', fontWeight: 'medium', color: 'gray-600' } as const;
+
+function SpaceXDemo() {
+    return (
+        <div sz={{ flex: true, gap: 4 }}>
+            <div sz={{ flex: true, spaceX: 2 }}>
+                <div sz={item}>A</div>
+                <div sz={item}>B</div>
+                <span sz={{ ...label, ml: 2 }}>spaceX-2</span>
+            </div>
+        </div>
+    );
+}
+```
+</TabItem>
+<TabItem label="Conditional array">
+```tsx
+const btnBase    = { px: 4, py: 2, rounded: 'md', fontWeight: 'medium' } as const;
+const btnPrimary = { bg: 'blue-600', color: 'white', hover: { bg: 'blue-700' } } as const;
+const btnGhost   = { bg: 'transparent', color: 'blue-600', hover: { bg: 'blue-50' } } as const;
+
+function Button({ variant, disabled }: ButtonProps) {
+    return (
+        <button sz={[
+            btnBase,
+            variant === 'primary' ? btnPrimary : btnGhost,
+            disabled && { opacity: 50, cursor: 'not-allowed' },
+        ]}>
+            {children}
+        </button>
+    );
+}
+```
+</TabItem>
+</Tabs>
+
+## Graceful Fallback
+
+The compiler only resolves variables **declared in the same file** with a static object
+literal initializer. Anything else falls back to the `_sz()` runtime helper — no crash,
+no `[object Object]`:
+
+| Pattern | Resolution |
+|---|---|
+| `const x = { ... }` (same file) | Build time ✅ |
+| `const x = { ... } as const` | Build time ✅ |
+| `const x = { ...other, key: val }` | Build time ✅ (recursive) |
+| `sz={{ ...(cond ? a : b), key: val }}` | Build time ✅ (conditional spread hoist) |
+| `import { x } from './styles'` | Runtime fallback |
+| `const x = getStyles()` | Runtime fallback |
+| `const x = condition ? a : b` | Runtime fallback (variable init — use `sz={cond ? a : b}` instead) |
+
+In development, the compiler emits a build-time warning for any pattern it
+falls back to `_sz()` — explaining why the fallback occurred and pointing to
+the right alternative (`szv()` for static variants, `dynamic()` for runtime
+data). The warning appears in the Vite/webpack dev-server output, not at runtime.
+
+## Component Variant Libraries
+
+For predefined variant systems (intent, size, state…), use
+[`szv()`](/docs/szv) instead of manual conditionals:
+
+```tsx
+import { szv } from 'csszyx';
+
+const btn = szv({
+    base: { px: 4, py: 2, rounded: 'md', fontWeight: 'medium' },
+    variants: {
+        intent: {
+            primary: { bg: 'blue-600', color: 'white' },
+            ghost:   { bg: 'transparent', color: 'blue-600' },
+        },
+        size: {
+            sm: { text: 'sm', px: 3, py: 1.5 },
+            lg: { text: 'lg', px: 6, py: 3 },
+        },
+    },
+    defaultVariants: { intent: 'primary', size: 'sm' },
+});
+
+<button sz={btn({ intent: 'ghost', size: 'lg' })} />
+```
+
+`szv()` handles the conditional logic and TypeScript inference — you define styles once,
+use them everywhere.

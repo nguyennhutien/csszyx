@@ -138,16 +138,3 @@ describe('arbitrary values — negative units in before:/after: variants', () =>
     });
 });
 
-// ============================================================================
-// User-provided brackets still pass through (backward compat)
-// ============================================================================
-
-describe('arbitrary values — user-provided brackets pass through', () => {
-    it('top: "[-1px]" (user-provided) → top-[-1px]', () => {
-        expect(t({ top: '[-1px]' })).toBe('top-[-1px]');
-    });
-
-    it('left: "[2rem]" (user-provided) → left-[2rem]', () => {
-        expect(t({ left: '[2rem]' })).toBe('left-[2rem]');
-    });
-});

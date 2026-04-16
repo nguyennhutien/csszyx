@@ -65,10 +65,10 @@ Mapping precise, non-theme values to JIT syntax (Arbitrary Properties or Values)
 | **Arbitrary Size**  | `width: 333px`                | `w-[333px]`                    | `{ w: '333px' }`                    | Explicit unit required string.            |
 | **Data Prop**       | `content: attr(data-content)` | `content-[attr(data-content)]` | `{ content: 'attr(data-content)' }` | Complex arbitrary strings.                |
 
-**Global Parsing Rule**: For all arbitrary values and variants enclosed in `[(etc)]`, the compiler **MUST normalize whitespace** before generation.
+**Global Parsing Rule**: The compiler **MUST normalize whitespace** in arbitrary variant _keys_ before generation.
 
-- `{ w: '[ calc( 100% - 20px ) ]' }` -> `w-[calc(100%-20px)]`
-- `{ '[ & > span ]': (etc) }` -> `[&>span]:(etc)`
+- `{ '[ & > span ]': (etc) }` -> `[&>span]:(etc)` — whitespace in arbitrary selector keys is stripped
+- Values never need brackets: `{ w: 'calc(100% - 20px)' }` -> `w-[calc(100%_-_20px)]` — the compiler auto-wraps arbitrary values
 - This ensures robust matching regardless of user formatting.
 
 ## Complex Selectors & Modifiers
@@ -135,25 +135,34 @@ Styling based on descendants.
 
 Styling children based on parent `group` class.
 
-| Concept              | Tailwind v4 Class             | `sz` Prop (Object Syntax)                            | Note                                 |
-| :------------------- | :---------------------------- | :--------------------------------------------------- | :----------------------------------- |
-| **Group Hover**      | `group-hover:text-white`      | `{ group: { hover: { color: 'white' } } }`           | **Sugar**: Nested scope.             |
-| **Group Focus**      | `group-focus:text-white`      | `{ group: { focus: { color: 'white' } } }`           |                                      |
-| **Group Active**     | `group-active:text-white`     | `{ group: { active: { color: 'white' } } }`          |                                      |
-| **Nested Groups**    | `group-hover/name:text-white` | `{ group: { name: { hover: { color: 'white' } } } }` | **Sugar**: Scope name as nested key. |
-| **Arbitrary Groups** | `group-[.is-published]:block` | `{ group: { '.is-published': { block: true } } }`    |                                      |
-| **Group Has**        | `group-has-[a]:block`         | `{ group: { has: { a: { block: true } } } }`         |                                      |
+| Concept                      | Tailwind v4 Class                     | `sz` Prop (Object Syntax)                                         | Note                                 |
+| :--------------------------- | :------------------------------------ | :---------------------------------------------------------------- | :----------------------------------- |
+| **Group Hover**              | `group-hover:text-white`              | `{ group: { hover: { color: 'white' } } }`                        | **Sugar**: Nested scope.             |
+| **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                        |                                      |
+| **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                       |                                      |
+| **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`              | **Sugar**: Scope name as nested key. |
+| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { block: true } } }`                 |                                      |
+| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { block: true } } } }`                      |                                      |
+| **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`              | **Sugar**: Nested `data` key.        |
+| **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
+| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { block: true } } } }`          | `=` in key → bracket form always.    |
+| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { block: true } } } }`              | Standard states: bare form.          |
+| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }` | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 
 Styling based on previous sibling `peer` class.
 
-| Concept                   | Tailwind v4 Class           | `sz` Prop (Object Syntax)                         | Note                                 |
-| :------------------------ | :-------------------------- | :------------------------------------------------ | :----------------------------------- |
-| **Peer Hover**            | `peer-hover:text-white`     | `{ peer: { hover: { color: 'white' } } }`         | **Sugar**: Nested scope.             |
-| **Peer Checked**          | `peer-checked:bg-blue`      | `{ peer: { checked: { bg: 'blue' } } }`           |                                      |
-| **Differentiating Peers** | `peer-checked/name:bg-blue` | `{ peer: { name: { checked: { bg: 'blue' } } } }` | **Sugar**: Scope name as nested key. |
-| **Arbitrary Peers**       | `peer-[.is-dirty]:block`    | `{ peer: { '.is-dirty': { block: true } } }`      |                                      |
+| Concept                     | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                  | Note                                 |
+| :-------------------------- | :---------------------------------- | :--------------------------------------------------------- | :----------------------------------- |
+| **Peer Hover**              | `peer-hover:text-white`             | `{ peer: { hover: { color: 'white' } } }`                  | **Sugar**: Nested scope.             |
+| **Peer Checked**            | `peer-checked:bg-blue`              | `{ peer: { checked: { bg: 'blue' } } }`                    |                                      |
+| **Differentiating Peers**   | `peer-checked/name:bg-blue`         | `{ peer: { name: { checked: { bg: 'blue' } } } }`          | **Sugar**: Scope name as nested key. |
+| **Arbitrary Peers**         | `peer-[.is-dirty]:block`            | `{ peer: { '.is-dirty': { block: true } } }`               |                                      |
+| **Peer Data**               | `peer-data-[active]:text-blue`      | `{ peer: { data: { active: { color: 'blue' } } } }`        | **Sugar**: Nested `data` key.        |
+| **Peer Data (value match)** | `peer-data-[state=open]:block`      | `{ peer: { data: { 'state=open': { block: true } } } }`    | `=` in key → bracket form always.    |
+| **Peer ARIA**               | `peer-aria-checked:bg-blue`         | `{ peer: { aria: { checked: { bg: 'blue' } } } }`          | Standard states: bare form.          |
+| **Peer ARIA (arbitrary)**   | `peer-aria-[invalid=true]:text-red` | `{ peer: { aria: { 'invalid=true': { color: 'red' } } } }` | Non-standard: bracket form.          |
 
 ## :not()
 
@@ -341,12 +350,16 @@ Strategy for static analysis vs runtime generation.
 
 **Core Decision**: `CSSzyx` uses **AST Parsing**, not Regex Scanning. This allows for smarter static extraction and shake-tree logic.
 
-| Concept                  | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                           |
-| :----------------------- | :----------------------- | :----------------------- | :----------------------------------------------------------------------------- |
-| **String Interpolation** | ❌ Fails `bg-${color}`   | ✅ **Runtime Support**   | Compiler marks as dynamic, handled at runtime via variable injection.          |
-| **Conditionals**         | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` -> Extracts BOTH `.bg-blue` and `.bg-gray`. |
-| **Object Spread**        | ❌ Fails spread          | ✅ **Static Analysis**   | `{ (etc)baseProps }` works if `baseProps` is statically analyzable.            |
-| **Safelist**             | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.              |
+| Concept                       | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                                                                                                                                                                       |
+| :---------------------------- | :----------------------- | :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **String Interpolation**      | ❌ Fails `bg-${color}`   | ✅ **Runtime Support**   | Compiler marks as dynamic, handled at runtime via variable injection.                                                                                                                                                      |
+| **Conditionals**              | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` and `{ scale: shrunk ? 75 : 100 }` → both branches compiled to static Tailwind classes at build time. CSS variable fallback only when a branch is a runtime expression (not a literal). |
+| **Variable reference**        | ❌ Not applicable        | ✅ **Build time**        | `sz={myVar}` — pass variable directly when no override needed. Compiler resolves the binding to its object literal initializer (incl. `as const`, `satisfies`, explicit type annotation).                                  |
+| **Object Spread**             | ❌ Fails spread          | ✅ **Static Analysis**   | `sz={{ ...baseProps, key: val }}` — use spread only when overriding/adding; last key wins. Resolved at build time for local literals. Multiple/nested spreads supported. Imported vars fall back to `_sz()` — no crash.    |
+| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — variable array elements resolved at build time. Static elements merged to single string; conditional elements use `_szMerge` at runtime.                             |
+| **Ternary variable branches** | ❌ Not applicable        | ✅ **Build time**        | `sz={cond ? varA : varB}` — both branches compiled to static strings when variables are local literals.                                                                                                                    |
+| **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                  |
+| **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                          |
 
 **Performance Rule**: Prefer **Static Strings** in `sz` objects.
 

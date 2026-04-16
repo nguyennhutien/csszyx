@@ -14,7 +14,8 @@
             "@csszyx/vars",
             "@csszyx/mcp-server",
             "@csszyx/svelte-adapter",
-            "@csszyx/vue-adapter"
+            "@csszyx/vue-adapter",
+            "@csszyx/dynamic"
         ]
     ],
     "linked": [],

@@ -1,0 +1,122 @@
+---
+title: Transitions & Animation
+description: Transition, animation, and timing function props.
+---
+
+import { PropTable } from '../../../../components/PropTable.tsx';
+import { TransitionColors, AnimateSpin, AnimatePulse, AnimateBounce, TransitionCompare } from '../../../../components/demos/transitions.tsx';
+
+## Transition Property
+
+<PropTable rows={[
+  { sz: "{ transition: true }", tw: "transition" },
+  { sz: "{ transition: 'all' }", tw: "transition-all" },
+  { sz: "{ transition: 'colors' }", tw: "transition-colors" },
+  { sz: "{ transition: 'opacity' }", tw: "transition-opacity" },
+  { sz: "{ transition: 'shadow' }", tw: "transition-shadow" },
+  { sz: "{ transition: 'transform' }", tw: "transition-transform" },
+  { sz: "{ transition: 'none' }", tw: "transition-none" },
+]} />
+
+<TransitionColors />
+
+<TransitionCompare client:visible />
+
+## Duration
+
+<PropTable rows={[
+  { sz: "{ duration: 75 }", tw: "duration-75" },
+  { sz: "{ duration: 100 }", tw: "duration-100" },
+  { sz: "{ duration: 150 }", tw: "duration-150" },
+  { sz: "{ duration: 200 }", tw: "duration-200" },
+  { sz: "{ duration: 300 }", tw: "duration-300" },
+  { sz: "{ duration: 500 }", tw: "duration-500" },
+  { sz: "{ duration: 700 }", tw: "duration-700" },
+  { sz: "{ duration: 1000 }", tw: "duration-1000" },
+  { sz: "{ duration: '2000ms' }", tw: "duration-[2000ms]" },
+]} />
+
+## Timing Function (Ease)
+
+<PropTable rows={[
+  { sz: "{ ease: 'linear' }", tw: "ease-linear" },
+  { sz: "{ ease: 'in' }", tw: "ease-in" },
+  { sz: "{ ease: 'out' }", tw: "ease-out" },
+  { sz: "{ ease: 'in-out' }", tw: "ease-in-out" },
+  { sz: "{ ease: 'initial' }", tw: "ease-initial" },
+]} />
+
+## Delay
+
+<PropTable rows={[
+  { sz: "{ delay: 75 }", tw: "delay-75" },
+  { sz: "{ delay: 100 }", tw: "delay-100" },
+  { sz: "{ delay: 300 }", tw: "delay-300" },
+  { sz: "{ delay: 500 }", tw: "delay-500" },
+  { sz: "{ delay: 1000 }", tw: "delay-1000" },
+]} />
+
+## Animation
+
+<PropTable rows={[
+  { sz: "{ animate: 'none' }", tw: "animate-none" },
+  { sz: "{ animate: 'spin' }", tw: "animate-spin" },
+  { sz: "{ animate: 'ping' }", tw: "animate-ping" },
+  { sz: "{ animate: 'pulse' }", tw: "animate-pulse" },
+  { sz: "{ animate: 'bounce' }", tw: "animate-bounce" },
+  { sz: "{ motionReduce: { animate: 'none' } }", tw: "motion-reduce:animate-none" },
+]} />
+
+<AnimateSpin />
+
+<AnimatePulse />
+
+<AnimateBounce />
+
+## Animation Delay
+
+Tailwind v4 has no `animation-delay-*` utility. CSSzyx emits an **arbitrary CSS property**.
+
+:::caution[`delay` ≠ `animationDelay`]
+`delay` controls **transition-delay** (`delay-150` → `transition-delay: 150ms`).
+`animationDelay` controls **animation-delay** (`[animation-delay:150ms]`). They are independent.
+:::
+
+<PropTable rows={[
+  { sz: "{ animationDelay: 150 }", tw: "[animation-delay:150ms]" },
+  { sz: "{ animationDelay: 0 }", tw: "[animation-delay:0ms]" },
+  { sz: "{ animationDelay: 300 }", tw: "[animation-delay:300ms]" },
+  { sz: "{ animationDelay: '0.5s' }", tw: "[animation-delay:0.5s]" },
+]} />
+
+## Examples
+
+```tsx
+// Smooth color transition on hover
+<button sz={{
+  bg: 'blue-500',
+  transition: 'colors',
+  duration: 200,
+  ease: 'in-out',
+  hover: { bg: 'blue-600' },
+}} />
+
+// Loading spinner
+<div sz={{ animate: 'spin', size: 6 }}>
+  {/* spinner icon */}
+</div>
+
+// Staggered pulse dots — animationDelay, not delay
+<div sz={{ animate: 'pulse', animationDelay: 0 }} />
+<div sz={{ animate: 'pulse', animationDelay: 150 }} />
+<div sz={{ animate: 'pulse', animationDelay: 300 }} />
+
+// delay is transition-delay — only for CSS transitions
+<div sz={{ transition: 'colors', delay: 100 }} />
+
+// Respect reduced motion
+<div sz={{
+  animate: 'bounce',
+  motionReduce: { animate: 'none' },
+}} />
+```

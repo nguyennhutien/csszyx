@@ -312,8 +312,18 @@ describe('typography — text overflow & whitespace', () => {
         expect(t({ content: 'none' })).toBe('content-none');
     });
 
-    it('{ content: "\'hello\'" } → content-[\'hello\'] (arbitrary)', () => {
+    it('{ content: "\'hello\'" } → content-[\'hello\'] (arbitrary, single-quote CSS string)', () => {
         expect(t({ content: "'hello'" })).toBe("content-['hello']");
+    });
+
+    // Double-quote CSS string style is normalized to single-quote (Tailwind convention).
+    // content: '""' → content-[''] so Tailwind JIT generates CSS for the class.
+    it('{ content: \'""\'  } → content-[\'\'} (empty string — double-quote normalized to single-quote)', () => {
+        expect(t({ content: '""' })).toBe("content-['']");
+    });
+
+    it('{ content: \'"hello"\' } → content-[\'hello\'] (double-quote normalized to single-quote)', () => {
+        expect(t({ content: '"hello"' })).toBe("content-['hello']");
     });
 
     it('{ content: "--c" } → content-(--c) (css variable)', () => {

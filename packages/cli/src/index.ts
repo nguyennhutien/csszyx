@@ -44,12 +44,10 @@ cli
 // doctor command
 cli
     .command('doctor', 'Diagnose mangling issues')
-    .option('--fix', 'Auto-fix common issues')
     .option('--verbose', 'Show detailed output')
     .option('--cwd <dir>', 'Current working directory')
     .action(async (options) => {
         await doctor({
-            fix: options.fix,
             verbose: options.verbose,
             cwd: options.cwd,
         });
@@ -97,12 +95,30 @@ cli
     .option('--ignore <patterns>', 'Glob patterns to ignore (comma-separated)')
     .option('--pattern <glob>', 'Custom glob pattern for file discovery')
     .option('--cwd <dir>', 'Current working directory')
+    .option('--braces', 'Wrap HTML sz values in outer { } braces (default: bare)')
+    .option('--no-fouc', 'Skip FOUC-prevention CSS injection into HTML files')
+    .option('--inject-runtime <mode>', 'Inject runtime script into HTML: local | cdn')
+    .option('--cdn-url <url>', 'Custom CDN URL for --inject-runtime cdn')
+    .option('--local-path <path>', 'Local script path for --inject-runtime local (default: csszyx-runtime.js)')
+    .option('--audit', 'Scan without modifying files and output .csszyx-todo.json')
+    .option('--inject-todos', 'Inject {/* @sz-todo */} comments above unrecognized classes')
+    .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz properties')
     .action(async (dir, options) => {
         await migrate({
             dryRun: options.dryRun,
             ignore: options.ignore ? options.ignore.split(',') : undefined,
             pattern: options.pattern,
             cwd: dir || options.cwd,
+            braces: options.braces,
+            injectFouc: options.fouc !== false,
+            injectRuntime: options.injectRuntime === 'local' ? 'local'
+            : options.injectRuntime === 'cdn' ? 'cdn'
+            : false,
+            cdnUrl: options.cdnUrl,
+            localPath: options.localPath,
+            audit: options.audit,
+            injectTodos: options.injectTodos,
+            resolveTodos: options.resolveTodos,
         });
     });
 
@@ -135,3 +151,9 @@ export {
     flattenColors,
     scanTailwindConfig,
 } from './scanner/tailwind-scanner.js';
+
+// Migrate utilities — used by @csszyx/mcp-server
+export type { TransformResult as MigrateResult } from './migrate/ast-transformer.js';
+export { transformSource as migrateSource } from './migrate/ast-transformer.js';
+export type { CsszyxTodoEntry, CsszyxTodoMap } from './migrate/variant-parser.js';
+export { classNameToSzObject } from './migrate/variant-parser.js';

@@ -19,6 +19,14 @@ export {
     transformSourceCode,
 } from './transform.js';
 
+// Export transform-core constants needed by MCP and CLI
+export {
+    BOOLEAN_SHORTHANDS,
+    KNOWN_VARIANTS,
+    PROPERTY_MAP,
+    SUGGESTION_MAP,
+} from './transform-core.js';
+
 // Export recovery token system
 export {
     createRecoveryToken,
@@ -58,6 +66,8 @@ export {
 } from './hoisting.js';
 
 // Export sz prop types (for IntelliSense and type safety)
+// CustomTheme is the augmentable interface — exported so users and plugins can
+// `declare module '@csszyx/compiler' { interface CustomTheme { colors: 'brand' } }`
 export type {
     BackgroundProps,
     BorderProps,
@@ -68,6 +78,7 @@ export type {
     ColorShade,
     ColorValue,
     ContainerSize,
+    CustomTheme,
     EffectsProps,
     FilterProps,
     FlexboxGridProps,

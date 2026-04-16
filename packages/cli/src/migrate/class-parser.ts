@@ -100,6 +100,10 @@ export function parseClass(cls: string): ParsedClass | null {
             if (prefix === 'border') {
                 return applyImportant({ prop: 'border', value: true }, important);
             }
+            // For border-t/r/b/l/x/y/s/e without value → boolean side border
+            if (['border-t', 'border-r', 'border-b', 'border-l', 'border-x', 'border-y', 'border-s', 'border-e'].includes(prefix)) {
+                return applyImportant({ prop, value: true }, important);
+            }
             continue;
         }
 
@@ -317,7 +321,13 @@ function disambiguateAndParse(prefix: string, rawValue: string, negative: boolea
 
             // Parse opacity
             if (opacity.startsWith('[') && opacity.endsWith(']')) {
-                opacity = opacity.slice(1, -1); // strip brackets → "78%"
+                opacity = opacity.slice(1, -1); // strip brackets → "0.05" or "78%"
+                // Convert numeric strings to numbers after stripping brackets.
+                // "0.05" → 0.05 (decimal fraction), "78%" stays as string (percentage).
+                if (!String(opacity).includes('%')) {
+                    const opNum = Number(opacity);
+                    if (!isNaN(opNum)) {opacity = opNum;}
+                }
             } else if (opacity.startsWith('(') && opacity.endsWith(')')) {
                 opacity = opacity.slice(1, -1); // strip parens → "--alpha"
             } else {
@@ -382,6 +392,10 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return disambiguateRing(value, negative);
         case 'ring-offset':
             return disambiguateRingOffset(value);
+        case 'inset-ring':
+            return disambiguateInsetRing(value, negative);
+        case 'inset-shadow':
+            return disambiguateInsetShadow(value);
         case 'stroke':
             return disambiguateStroke(value);
         case 'list':
@@ -425,6 +439,8 @@ function disambiguateText(value: string): ParsedClass | null {
     if (TEXT_ALIGN_KEYWORDS.has(value)) {return { prop: 'textAlign', value };}
     if (TEXT_WRAP_KEYWORDS.has(value)) {return { prop: 'textWrap', value };}
     if (TEXT_OVERFLOW_KEYWORDS.has(value)) {return { prop: 'textOverflow', value };}
+    // Arbitrary dimension → font size (e.g. text-[0.8rem], text-[16px])
+    if (isArbitraryDimension(value)) {return { prop: 'text', value: parseStringValue(value) };}
     // Default: color
     return { prop: 'color', value: parseStringValue(value) };
 }
@@ -456,6 +472,8 @@ function disambiguateFont(value: string): ParsedClass | null {
 function disambiguateBorder(value: string): ParsedClass | null {
     if (BORDER_WIDTH_KEYWORDS.has(value) || value === 'px') {return { prop: 'border', value: parseNumericOrString('border', value, false) };}
     if (BORDER_STYLE_KEYWORDS.has(value)) {return { prop: 'borderStyle', value };}
+    // Arbitrary dimension → width (e.g. border-[1.5px])
+    if (isArbitraryDimension(value)) {return { prop: 'border', value: parseStringValue(value) };}
     // Default: color
     return { prop: 'borderColor', value: parseStringValue(value) };
 }
@@ -507,6 +525,8 @@ function disambiguateOutline(value: string): ParsedClass | null {
     // Check if it's a width (number)
     const num = Number(value);
     if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'outline', value: num };}
+    // Arbitrary dimension → width (e.g. outline-[3px])
+    if (isArbitraryDimension(value)) {return { prop: 'outline', value: parseStringValue(value) };}
     // Default: color
     return { prop: 'outlineColor', value: parseStringValue(value) };
 }
@@ -537,8 +557,8 @@ function disambiguateRing(value: string, negative: boolean): ParsedClass | null 
     // ring-0, ring-1, ring-2, ring-4, ring-8 → width
     const num = Number(value);
     if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'ring', value: negative ? -num : num };}
-    // ring-inset → treated as ring
-    if (value === 'inset') {return { prop: 'ring', value: 'inset' };}
+    // Arbitrary dimension → width (e.g. ring-[3px])
+    if (isArbitraryDimension(value)) {return { prop: 'ring', value: parseStringValue(value) };}
     // Default: color
     return { prop: 'ringColor', value: parseStringValue(value) };
 }
@@ -552,6 +572,33 @@ function disambiguateRingOffset(value: string): ParsedClass | null {
     const num = Number(value);
     if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'ringOffset', value: num };}
     return { prop: 'ringOffsetColor', value: parseStringValue(value) };
+}
+
+/**
+ * Disambiguates inset-ring-* classes (TW v4) into width or color.
+ * inset-ring-1 → { insetRing: 1 }, inset-ring-blue-500 → { insetRingColor: 'blue-500' }
+ * @param value - The suffix after 'inset-ring-'.
+ * @param negative - Whether a '-' prefix was present.
+ * @returns Parsed class with insetRing or insetRingColor prop, or null.
+ */
+function disambiguateInsetRing(value: string, negative: boolean): ParsedClass | null {
+    const num = Number(value);
+    if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'insetRing', value: negative ? -num : num };}
+    if (isArbitraryDimension(value)) {return { prop: 'insetRing', value: parseStringValue(value) };}
+    return { prop: 'insetRingColor', value: parseStringValue(value) };
+}
+
+/**
+ * Disambiguates inset-shadow-* classes (TW v4) into size keyword or color.
+ * inset-shadow-sm → { insetShadow: 'sm' }, inset-shadow-blue-500 → { insetShadowColor: 'blue-500' }
+ * @param value - The suffix after 'inset-shadow-'.
+ * @returns Parsed class with insetShadow or insetShadowColor prop, or null.
+ */
+function disambiguateInsetShadow(value: string): ParsedClass | null {
+    const INSET_SHADOW_SIZE_KEYWORDS = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
+    if (INSET_SHADOW_SIZE_KEYWORDS.has(value)) {return { prop: 'insetShadow', value };}
+    if (isArbitraryDimension(value)) {return { prop: 'insetShadow', value: parseStringValue(value) };}
+    return { prop: 'insetShadowColor', value: parseStringValue(value) };
 }
 
 /**
@@ -636,6 +683,29 @@ function disambiguateDivide(value: string): ParsedClass | null {
 }
 
 // ============================================================================
+// ARBITRARY VALUE CLASSIFICATION
+// ============================================================================
+
+/**
+ * CSS length/dimension units — used to decide if an arbitrary value like
+ * [1.5px] or [0.8rem] is a *dimension* (maps to width/size prop) vs a color.
+ */
+const CSS_DIMENSION_RE =
+    /^-?[\d.]+(?:px|r?em|ex|ch|vw|vh|vmin|vmax|svh|svw|dvh|dvw|lvh|lvw|cqw|cqh|cqi|cqb|%|fr|deg|rad|turn|grad|ms|s|pt|pc|cm|mm|in)$/;
+
+/**
+ * Returns true when value is an arbitrary bracket expression whose inner
+ * content is a CSS dimension (e.g. [1.5px], [0.8rem], [3px]).
+ * Used by disambiguators to decide width/size vs color routing.
+ * @param value - Raw value string (may include brackets)
+ * @returns True if the value is an arbitrary CSS dimension
+ */
+function isArbitraryDimension(value: string): boolean {
+    if (!value.startsWith('[') || !value.endsWith(']')) {return false;}
+    return CSS_DIMENSION_RE.test(value.slice(1, -1));
+}
+
+// ============================================================================
 // VALUE VALIDATION
 // ============================================================================
 
@@ -681,6 +751,16 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
     if (value.startsWith('[') && value.endsWith(']')) {
         const inner = value.slice(1, -1).replace(/_/g, ' ');
         if (negative) {return '-' + inner;}
+        // content prefix: normalize CSS string literals to double-quote form so that
+        // content-[''] and content-[""] both produce { content: '""' } for round-trip stability.
+        if (prefix === 'content') {
+            const isQuoted =
+                (inner.startsWith("'") && inner.endsWith("'")) ||
+                (inner.startsWith('"') && inner.endsWith('"'));
+            if (isQuoted) {
+                return `"${inner.slice(1, -1)}"`;
+            }
+        }
         return inner;
     }
 
@@ -697,7 +777,7 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
     }
 
     // Px keyword
-    if (value === 'px') {return 'px';}
+    if (value === 'px') {return negative ? '-px' : 'px';}
 
     // Auto
     if (value === 'auto') {return 'auto';}

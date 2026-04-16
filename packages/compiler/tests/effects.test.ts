@@ -55,8 +55,16 @@ describe('effects — box shadow', () => {
         expect(t({ ring: 'none' })).toBe('ring-none');
     });
 
+    it('{ insetRing: true } → inset-ring', () => {
+        expect(t({ insetRing: true })).toBe('inset-ring');
+    });
+
     it('{ insetRing: 1 } → inset-ring-1', () => {
         expect(t({ insetRing: 1 })).toBe('inset-ring-1');
+    });
+
+    it('{ insetRingColor: "blue-500" } → inset-ring-blue-500', () => {
+        expect(t({ insetRingColor: 'blue-500' })).toBe('inset-ring-blue-500');
     });
 });
 
@@ -273,5 +281,15 @@ describe('filters — backdrop filter', () => {
 
     it('{ backdropSepia: true } → backdrop-sepia', () => {
         expect(t({ backdropSepia: true })).toBe('backdrop-sepia');
+    });
+});
+
+describe('effects — ring offset', () => {
+    it('{ ringOffset: 2 } → ring-offset-2', () => {
+        expect(t({ ringOffset: 2 })).toBe('ring-offset-2');
+    });
+
+    it('{ ringOffset: "4px" } → ring-offset-[4px] (arbitrary)', () => {
+        expect(t({ ringOffset: '4px' })).toBe('ring-offset-[4px]');
     });
 });

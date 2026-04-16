@@ -1,0 +1,483 @@
+# tremor — auto-extracted combo corpus
+# Source: https://github.com/tremorlabs/tremor (Apache-2.0)
+# Generated: 2026-03-13 via scripts/extract-corpus.ts
+# Format: each line = all TW classes on ONE DOM element → tested as a single sz object
+# Re-generate: pnpm corpus:extract tremor
+
+group flex flex-1 cursor-pointer items-center justify-between py-3 text-left text-sm leading-none font-medium
+text-gray-900 dark:text-gray-50
+data-disabled:cursor-default data-disabled:text-gray-400 dark:data-disabled:text-gray-600
+focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-hidden focus-visible:ring-inset
+text-gray-400 dark:text-gray-600
+group-data-disabled:text-gray-300 dark:group-data-disabled:text-gray-700
+overflow-hidden pb-4 text-sm
+text-gray-700 dark:text-gray-200
+overflow-hidden border-b first:mt-0
+border-gray-200 dark:border-gray-800
+mx-auto mt-3 max-w-sm
+flex flex-col gap-2
+font-semibold text-gray-900 dark:text-gray-50
+mx-auto max-w-lg
+text-md font-semibold text-gray-900 dark:text-gray-50
+flex items-center gap-2
+size-4 text-blue-500
+size-4 text-blue-500 group-data-disabled:text-blue-200 dark:group-data-disabled:text-blue-200
+size-4 text-blue-500 group-data-disabled:text-blue-200 dark:group-data-disabled:text-blue-900
+font-semibold text-gray-800
+flex items-center justify-between space-x-8
+flex items-center space-x-2
+fill-gray-800 text-sm font-medium dark:fill-gray-200
+relative overflow-hidden
+border-b border-inherit px-4 py-2
+space-y-1 px-4 py-2
+h-80 w-full
+stroke-gray-200 stroke-1 dark:stroke-gray-800
+group inline-flex flex-nowrap items-center gap-1.5 rounded-sm px-2 py-1 whitespace-nowrap transition
+cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800
+h-[3px] w-3.5 shrink-0 rounded-full
+truncate text-xs whitespace-nowrap
+text-gray-700 dark:text-gray-300
+group-hover:text-gray-900 dark:group-hover:text-gray-50
+group inline-flex size-5 items-center truncate rounded-sm transition
+cursor-not-allowed text-gray-400 dark:text-gray-600
+cursor-pointer text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-50
+absolute top-0 right-0 bottom-0 flex h-full items-center justify-center pr-1
+bg-white dark:bg-gray-950
+flex items-center
+rounded-md border text-sm shadow-md
+text-right whitespace-nowrap
+text-right font-medium whitespace-nowrap tabular-nums
+fill-gray-500 dark:fill-gray-500
+stroke-white dark:stroke-gray-950
+to render an x-axis
+to render an y-axis
+flex items-center gap-3
+w-56 rounded-md border bg-white p-2 text-sm shadow-xs
+flex flex-1 space-x-2.5
+font-medium text-gray-900
+whitespace-nowrap text-right text-gray-700
+whitespace-nowrap text-right font-medium text-gray-900
+inline-flex items-center gap-x-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset
+bg-blue-50 text-blue-900 ring-blue-500/30
+dark:bg-blue-400/10 dark:text-blue-400 dark:ring-blue-400/30
+bg-gray-50 text-gray-900 ring-gray-500/30
+dark:bg-gray-400/10 dark:text-gray-400 dark:ring-gray-400/20
+bg-emerald-50 text-emerald-900 ring-emerald-600/30
+dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/20
+bg-red-50 text-red-900 ring-red-600/20
+dark:bg-red-400/10 dark:text-red-400 dark:ring-red-400/20
+bg-yellow-50 text-yellow-900 ring-yellow-600/30
+dark:bg-yellow-400/10 dark:text-yellow-500 dark:ring-yellow-400/20
+flex flex-wrap gap-4
+flex items-center justify-between gap-8 rounded-md bg-blue-50 py-2.5 pl-2.5 pr-4 text-sm dark:bg-blue-900/50
+flex items-center gap-2 truncate
+ring-none dark:ring-none rounded-full bg-blue-800 text-white dark:bg-blue-500 dark:text-white
+truncate text-blue-800 dark:text-blue-400
+font-semibold text-blue-800 dark:text-blue-400
+size-2 shrink-0 rounded-xs
+relative w-full space-y-1.5
+flex justify-between space-x-6
+absolute left-2 flex max-w-full pr-2
+group w-full rounded-sm
+hover:bg-gray-50 dark:hover:bg-gray-900
+flex items-center rounded-sm transition-all
+bg-blue-200 dark:bg-blue-900
+group-hover:bg-blue-300 dark:group-hover:bg-blue-800
+truncate whitespace-nowrap rounded-sm text-sm
+hover:underline hover:underline-offset-2
+truncate whitespace-nowrap text-sm
+flex items-center justify-end
+truncate whitespace-nowrap text-sm leading-none
+relative flex flex-col gap-3
+w-fit rounded-md bg-gray-100 p-2 font-mono text-sm text-gray-700
+pointer-events-none flex shrink-0 items-center justify-center gap-1.5
+size-4 shrink-0 animate-spin
+relative inline-flex items-center justify-center whitespace-nowrap rounded-md border px-3 py-2 text-center text-sm font-medium shadow-xs transition-all duration-100 ease-in-out
+disabled:pointer-events-none disabled:shadow-none
+text-white dark:text-white
+bg-blue-500 dark:bg-blue-500
+hover:bg-blue-600 dark:hover:bg-blue-600
+disabled:bg-blue-300 disabled:text-white
+dark:disabled:bg-blue-800 dark:disabled:text-blue-400
+border-gray-300 dark:border-gray-800
+hover:bg-gray-50 dark:hover:bg-gray-900/60
+bg-gray-200 dark:bg-gray-900
+hover:bg-gray-300/70 dark:hover:bg-gray-800/80
+disabled:bg-gray-100 disabled:text-gray-400
+dark:disabled:bg-gray-800 dark:disabled:text-gray-600
+bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800/80
+bg-red-600 dark:bg-red-700
+hover:bg-red-700 dark:hover:bg-red-600
+disabled:bg-red-300 disabled:text-white
+dark:disabled:bg-red-950 dark:disabled:text-red-400
+size-full shrink-0
+flex items-center justify-between
+flex items-center gap-1
+text-sm font-medium capitalize tabular-nums text-gray-900 dark:text-gray-50
+flex size-8 shrink-0 select-none items-center justify-center rounded-sm border p-1 outline-hidden transition sm:size-[30px]
+text-gray-600 hover:text-gray-800
+dark:text-gray-400 dark:hover:text-gray-200
+hover:bg-gray-50 active:bg-gray-100
+dark:hover:bg-gray-900 dark:active:bg-gray-800
+disabled:border-gray-200 dark:disabled:border-gray-800
+disabled:text-gray-400 dark:disabled:text-gray-600
+gap-1 flex items-center rounded-full size-full justify-between p-4
+w-full border-collapse space-y-1
+w-9 font-medium text-sm sm:text-xs text-center text-gray-400 dark:text-gray-600 pb-2
+relative p-0 text-center focus-within:relative
+size-9 rounded-sm text-sm focus:z-10
+hover:bg-gray-200 dark:hover:bg-gray-700
+aria-selected:bg-blue-500 aria-selected:text-white
+dark:aria-selected:bg-blue-500 dark:aria-selected:text-white
+flex items-center justify-center
+absolute inset-x-1/2 bottom-1.5 h-0.5 w-4 -translate-x-1/2 rounded-[2px]
+bg-gray-400 text-gray-400 dark:bg-gray-400 dark:text-gray-600
+flex flex-col items-center gap-y-4
+rounded-sm bg-gray-100 p-2 text-gray-500 dark:bg-gray-800 dark:text-gray-300
+flex items-start
+mr-1.5 h-5 w-5 shrink-0
+flex flex-col overflow-hidden rounded-md p-4 text-sm
+text-blue-900 dark:text-blue-400
+bg-blue-50 dark:bg-blue-950/70
+text-emerald-900 dark:text-emerald-500
+bg-emerald-50 dark:bg-emerald-950/70
+text-red-900 dark:text-red-500
+bg-red-50 dark:bg-red-950/70
+text-yellow-900 dark:text-yellow-500
+bg-yellow-50 dark:bg-yellow-950/70
+text-gray-900 dark:text-gray-400
+bg-gray-100 dark:bg-gray-800/70
+relative w-full rounded-lg border p-6 text-left shadow-xs
+border-gray-200 dark:border-gray-900
+mt-2 text-sm leading-7 text-gray-900 dark:text-gray-50
+max-w-lg p-0
+p-4 font-semibold text-gray-900 dark:text-gray-50
+border-t p-4 text-sm leading-7 text-gray-900 dark:border-gray-900 dark:text-gray-50
+flex list-none flex-col gap-4
+flex gap-3
+grid w-full grid-cols-3
+text-sm text-gray-500 sm:text-gray-500
+mt-4 flex flex-col gap-3
+mt-4 flex gap-3
+flex items-center space-x-4
+flex justify-center
+flex items-center gap-x-3
+flex w-full gap-2 dark:border-gray-800
+absolute bottom-0 left-0 flex items-center
+flex items-center justify-end pr-0.5
+absolute bottom-0 right-0 flex items-center
+relative flex h-2 w-full items-center
+flex h-full flex-1 items-center gap-0.5 overflow-hidden rounded-full
+absolute size-7 -translate-x-[45%] -translate-y-[15%]
+block translate-x-1/2 text-sm tabular-nums
+relative mb-2 flex h-5 w-full text-sm font-medium
+absolute w-2 -translate-x-1/2
+transform-gpu transition-all duration-300 ease-in-out
+relative mx-auto h-4 w-1 rounded-full ring-2
+ring-white dark:ring-gray-950
+mx-auto h-4 w-1 rounded-full ring-2
+flex size-full items-center justify-center
+relative inline-flex size-4 shrink-0 appearance-none items-center justify-center rounded-sm shadow-xs outline-hidden ring-1 ring-inset transition duration-100 enabled:cursor-pointer
+text-white dark:text-gray-50
+ring-gray-300 dark:ring-gray-800
+data-disabled:bg-gray-100 data-disabled:text-gray-400 data-disabled:ring-gray-300
+dark:data-disabled:bg-gray-800 dark:data-disabled:text-gray-500 dark:data-disabled:ring-gray-700
+flex items-center justify-center gap-2
+flex flex-col items-center gap-4
+flex w-5 items-center justify-center
+group inline-flex flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-1 transition
+size-2 rounded-xs
+truncate whitespace-nowrap text-xs
+absolute bottom-0 right-0 top-0 flex h-full items-center justify-center pr-1
+whitespace-nowrap text-right
+whitespace-nowrap text-right font-medium tabular-nums
+should render x-axis with correct labels
+should render y-axis with correct values
+should render chart with two y-axes
+should format y-axis and tooltip values correctly
+should respect custom min and max values for y-axes
+w-56 rounded-md border bg-white p-3 text-sm shadow-xs
+mb-2 font-medium text-gray-900
+flex flex-col space-y-2
+group/time-input inline-flex w-full gap-x-2
+size-5 shrink-0 text-gray-400 dark:text-gray-600
+flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap text-gray-900 dark:text-gray-50
+flex items-start gap-x-2 sm:flex-col
+sm:w-full sm:py-px
+flex flex-col sm:flex-row sm:items-start
+absolute px-2 pr-2 sm:inset-0 sm:left-0 sm:py-2
+border-t border-gray-200 p-3 dark:border-gray-800
+flex items-center gap-x-2 border-t border-gray-200 p-3 dark:border-gray-800
+h-8 w-full
+flex flex-col overflow-x-auto sm:flex-row sm:items-start
+absolute px-3 sm:inset-0 sm:left-0 sm:p-2
+flex items-center justify-evenly gap-x-3 border-t border-gray-200 p-3 dark:border-gray-800
+flex flex-1 items-center gap-x-2
+dark:text-gray-30 text-gray-700
+size-4 shrink-0 text-gray-400
+border-t border-gray-200 p-3 sm:flex sm:items-center sm:justify-between dark:border-gray-800
+text-gray-900 tabular-nums dark:text-gray-50
+mt-2 flex items-center gap-x-2 sm:mt-0
+h-8 w-full sm:w-fit
+relative block w-full appearance-none rounded-md border px-2.5 py-1.5 text-left uppercase tabular-nums shadow-xs outline-hidden transition sm:text-sm
+border-none bg-transparent px-0 text-gray-400 shadow-none
+border-gray-300 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500
+peer flex w-full cursor-pointer appearance-none items-center gap-x-2 truncate rounded-md border px-3 py-2 shadow-xs outline-hidden transition-all sm:text-sm
+placeholder-gray-400 dark:placeholder-gray-500
+hover:bg-gray-50 dark:hover:bg-gray-950/50
+dark:disabled:border-gray-800 dark:disabled:bg-gray-800 dark:disabled:text-gray-500
+dark:aria-invalid:ring-red-400/20 aria-invalid:ring-2 aria-invalid:ring-red-200 aria-invalid:border-red-500 invalid:ring-2 invalid:ring-red-200 invalid:border-red-500
+relative z-50 w-fit rounded-md border text-sm shadow-xl shadow-black/[2.5%]
+max-w-[95vw] min-w-[calc(var(--radix-select-trigger-width)-2px)]
+relative w-full overflow-hidden rounded-sm border px-2.5 py-1.5 text-left text-base text-ellipsis whitespace-nowrap shadow-xs outline-hidden transition-all sm:border-none sm:py-2 sm:text-sm sm:shadow-none
+focus-visible:bg-gray-100 dark:focus-visible:bg-gray-900
+hover:bg-gray-100 dark:hover:bg-gray-900
+bg-gray-100 dark:bg-gray-900
+relative flex h-14 w-full items-center sm:h-full sm:w-40
+border-b border-gray-200 sm:border-r sm:border-b-0 dark:border-gray-800
+relative flex h-16 w-full items-center sm:h-full sm:w-40
+flex flex-row divide-x divide-gray-200 dark:divide-gray-800 overflow-x-auto
+mb-6 text-gray-500
+flex w-80 gap-2
+flex w-96 gap-2
+flex items-center justify-between gap-x-2 px-3 py-2
+flex w-40 flex-col gap-y-4
+flex flex-col gap-y-1
+text-gray-500 dark:text-gray-500
+fixed inset-0 z-50 overflow-y-auto
+fixed left-1/2 top-1/2 z-50 w-[95vw] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border p-6 shadow-lg
+text-lg font-semibold
+flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2
+mt-1 text-sm/7
+mt-2 w-full sm:mt-0 sm:w-fit
+w-full sm:w-fit
+whitespace-nowrap text-inherit
+mx-auto my-6 flex w-full items-center justify-between gap-3 text-sm
+bg-gray-200 dark:bg-gray-800
+h-5 w-5
+text-sm text-gray-500 dark:text-gray-500
+text-3xl font-semibold text-gray-900 dark:text-gray-50
+mt-2 text-sm leading-7 text-gray-500 dark:text-gray-500
+fill-gray-700 dark:fill-gray-300
+h-40 w-40
+size-2 shrink-0 rounded-full
+w-fit rounded-md border bg-white p-2 text-sm shadow-xs
+flex items-center justify-between space-x-2
+flex items-start justify-between gap-x-4 border-b border-gray-200 pb-4 dark:border-gray-900
+aspect-square p-1 hover:bg-gray-100 dark:hover:bg-gray-400/10
+mt-1 flex flex-col gap-y-1
+flex-1 py-4
+fixed inset-y-2 z-50 mx-auto flex w-[95vw] flex-1 flex-col overflow-y-auto rounded-md border p-4 shadow-lg focus:outline-hidden max-sm:inset-x-2 sm:inset-y-2 sm:right-2 sm:max-w-lg sm:p-6
+text-base font-semibold
+flex flex-col-reverse border-t border-gray-200 pt-4 sm:flex-row sm:justify-end sm:space-x-2 dark:border-gray-900
+mt-1 text-sm
+ml-auto size-4 shrink-0
+absolute left-2 flex size-4 items-center justify-center
+size-full shrink-0 text-gray-800 dark:text-gray-200
+ml-auto pl-2 text-sm text-gray-400 dark:text-gray-600
+data-disabled:pointer-events-none data-disabled:text-gray-400 data-disabled:hover:bg-none dark:data-disabled:text-gray-600
+relative z-50 overflow-hidden rounded-md border p-1 shadow-xl shadow-black/[2.5%]
+ml-auto text-sm font-normal text-gray-400 dark:text-gray-600
+ml-auto text-sm font-normal tracking-widest text-gray-400 dark:border-gray-800 dark:text-gray-600
+px-2 py-2 text-xs font-medium tracking-wide
+text-gray-600 dark:text-gray-400
+flex items-center gap-x-2
+size-4 text-inherit
+size-4 text-gray-500
+size-[1.125rem] shrink-0
+size-5 shrink-0
+relative w-full
+relative block w-full appearance-none rounded-md border px-2.5 py-2 shadow-xs outline-hidden transition sm:text-sm
+disabled:border-gray-300 disabled:bg-gray-100 disabled:text-gray-400
+dark:disabled:border-gray-700 dark:disabled:bg-gray-800 dark:disabled:text-gray-500
+file:-my-2 file:-ml-2.5 file:cursor-pointer file:rounded-l-[5px] file:rounded-r-none file:border-0 file:px-3 file:py-2 file:outline-hidden focus:outline-hidden disabled:pointer-events-none file:disabled:pointer-events-none
+file:border-solid file:border-gray-300 file:bg-gray-50 file:text-gray-500 file:hover:bg-gray-100 dark:file:border-gray-800 dark:file:bg-gray-950 dark:file:hover:bg-gray-900/20 dark:file:disabled:border-gray-700
+file:disabled:bg-gray-100 file:disabled:text-gray-500 dark:file:disabled:bg-gray-800
+pointer-events-none absolute bottom-0 left-2 flex h-full items-center justify-center
+absolute bottom-0 right-0 flex h-full items-center justify-center px-3
+h-fit w-fit rounded-xs outline-hidden transition-all
+hover:text-gray-500 dark:hover:text-gray-500
+flex gap-1
+inline-flex items-center gap-1
+text-sm leading-none
+flex flex-col gap-3
+flex gap-2
+max-h-[var(--radix-popper-available-height)] min-w-60 overflow-hidden rounded-md border p-2.5 text-sm shadow-md
+flex flex-col gap-2 p-2
+flex items-center gap-2 border-t border-gray-200 p-2 dark:border-gray-800
+mx-auto w-full
+text-sm leading-7
+z-50 p-0
+flex w-full items-center
+bg-blue-200 dark:bg-blue-500/30
+bg-gray-200 dark:bg-gray-500/40
+bg-gray-500 dark:bg-gray-500
+bg-yellow-200 dark:bg-yellow-500/30
+bg-yellow-500 dark:bg-yellow-500
+bg-red-200 dark:bg-red-500/30
+bg-red-500 dark:bg-red-500
+bg-emerald-200 dark:bg-emerald-500/30
+bg-emerald-500 dark:bg-emerald-500
+relative flex h-2 w-full items-center rounded-full
+h-full flex-col rounded-full
+ml-2 whitespace-nowrap text-sm font-medium leading-none
+w-96 space-y-4
+flex items-center justify-between space-x-3
+text-sm font-semibold text-gray-900 dark:text-gray-50
+text-sm font-medium text-gray-900 dark:text-gray-50
+mt-2 flex items-center space-x-2
+whitespace-nowrap text-sm text-gray-500
+-rotate-90 transform
+transition-colors ease-linear
+absolute inset-0 flex items-center justify-center
+stroke-blue-200 dark:stroke-blue-500/30
+stroke-blue-500 dark:stroke-blue-500
+stroke-gray-200 dark:stroke-gray-500/40
+stroke-gray-500 dark:stroke-gray-500
+stroke-yellow-200 dark:stroke-yellow-500/30
+stroke-yellow-500 dark:stroke-yellow-500
+stroke-red-200 dark:stroke-red-500/30
+stroke-red-500 dark:stroke-red-500
+stroke-emerald-200 dark:stroke-emerald-500/30
+stroke-emerald-500 dark:stroke-emerald-500
+flex items-center justify-center gap-x-5
+text-sm font-medium text-gray-700
+text-tremor-default text-tremor-content-strong dark:text-dark-tremor-content-strong font-medium
+text-tremor-default text-tremor-content dark:text-dark-tremor-content
+flex flex-wrap items-center justify-center gap-6
+flex items-center space-x-8
+grid gap-2
+group relative w-full rounded-md border p-4 text-left shadow-xs transition focus:outline-hidden
+data-disabled:border-gray-100 dark:data-disabled:border-gray-800
+data-disabled:bg-gray-50 data-disabled:shadow-none dark:data-disabled:bg-gray-900
+relative flex size-4 shrink-0 appearance-none items-center justify-center rounded-full border shadow-xs outline-hidden
+group-data-disabled:border-gray-300 group-data-disabled:bg-gray-100 group-data-disabled:text-gray-400
+dark:group-data-disabled:border-gray-700 dark:group-data-disabled:bg-gray-800
+size size-1.5 shrink-0 rounded-full
+group-data-disabled:bg-gray-400 dark:group-data-disabled:bg-gray-500
+flex flex-col items-center justify-start
+mt-2 grid grid-cols-1 gap-4 text-sm md:grid-cols-2
+flex items-start gap-3
+mt-1 text-xs text-gray-500
+mt-6 w-fit rounded-md bg-gray-100 p-2 font-mono text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200
+size-1.5 shrink-0 rounded-full
+group relative flex size-4 appearance-none items-center justify-center outline-hidden
+flex size-4 shrink-0 items-center justify-center rounded-full border shadow-xs
+text-sm font-medium text-gray-800
+flex flex-col gap-6
+flex items-start gap-x-3
+mt-px flex flex-col gap-y-2.5
+text-sm font-semibold leading-none
+text-sm text-gray-500
+size-3 shrink-0
+flex-1 truncate
+size-5 shrink-0 text-gray-800 dark:text-gray-200
+group/trigger flex w-full select-none items-center justify-between gap-2 truncate rounded-md border px-3 py-2 shadow-xs outline-hidden transition sm:text-sm
+data-placeholder:text-gray-500 dark:data-placeholder:text-gray-500
+data-disabled:bg-gray-100 data-disabled:text-gray-400
+dark:data-disabled:border-gray-700 dark:data-disabled:bg-gray-800 dark:data-disabled:text-gray-500
+flex cursor-default items-center justify-center py-1
+relative z-50 overflow-hidden rounded-md border shadow-xl shadow-black/[2.5%]
+min-w-[calc(var(--radix-select-trigger-width)-2px)] max-w-[95vw]
+h-[var(--radix-select-trigger-height)] w-full min-w-[calc(var(--radix-select-trigger-width))]
+px-3 py-2 text-xs font-medium tracking-wide
+bg-gray-300 dark:bg-gray-700
+size-4 shrink-0
+mt-2 text-sm text-gray-500
+peer w-full cursor-pointer appearance-none truncate rounded-md border py-2 pl-3 pr-7 shadow-xs outline-hidden transition-all sm:text-sm
+relative flex cursor-pointer touch-none select-none
+relative grow overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800
+absolute rounded-full bg-blue-500 dark:bg-blue-500
+data-disabled:bg-gray-300 dark:data-disabled:bg-gray-700
+block size-[17px] shrink-0 rounded-full border shadow-sm transition-all
+border-gray-400 dark:border-gray-500
+data-disabled:pointer-events-none data-disabled:bg-gray-200 dark:data-disabled:border-gray-800 dark:data-disabled:bg-gray-600
+flex gap-4
+mt-2 w-fit
+ml-1 font-semibold text-gray-900 dark:text-gray-50
+h-12 w-28
+group relative isolate inline-flex shrink-0 cursor-pointer items-center rounded-full p-0.5 shadow-inner outline-hidden ring-1 ring-inset transition-all
+bg-gray-200 dark:bg-gray-950
+ring-black/5 dark:ring-gray-800
+pointer-events-none relative inline-block transform appearance-none rounded-full border-none shadow-lg outline-hidden transition-all duration-150 ease-in-out focus:border-none focus:outline-hidden focus:outline-transparent
+bg-white dark:bg-gray-50
+group-data-disabled:bg-gray-50 dark:group-data-disabled:bg-gray-500
+group relative flex shrink-0 select-none items-center justify-center
+group-hover:text-gray-700 dark:group-hover:text-gray-400
+group-hover:border-gray-300 dark:group-hover:border-gray-400
+group-data-active:border-blue-500 group-data-active:text-blue-500
+dark:group-data-active:border-blue-500 dark:group-data-active:text-blue-500
+pointer-events-none text-gray-300 dark:text-gray-700
+inline-flex gap-2
+-ml-1 size-4
+w-full overflow-auto whitespace-nowrap
+w-full caption-bottom border-b
+border-b px-4 py-3.5 text-left text-sm font-semibold
+divide-gray-200 dark:divide-gray-800
+border-t text-left font-medium
+mt-3 px-3 text-center text-sm
+flex items-center justify-start border-b
+inline-flex items-center justify-center rounded-md p-1
+hover:text-gray-700 dark:hover:text-gray-400
+hover:border-gray-300 dark:hover:border-gray-400
+data-disabled:text-gray-300 dark:data-disabled:text-gray-700
+inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1 text-sm font-medium ring-1 ring-inset transition-all
+text-gray-500 dark:text-gray-400
+hover:text-gray-700 dark:hover:text-gray-200
+data-disabled:pointer-events-none data-disabled:text-gray-400 data-disabled:opacity-50 dark:data-disabled:text-gray-600
+ml-2 mt-4
+space-y-2 text-sm leading-7 text-gray-600 dark:text-gray-500
+flex min-h-[4rem] w-full rounded-md border px-3 py-1.5 shadow-xs outline-hidden transition-colors sm:text-sm
+disabled:border-gray-300 disabled:bg-gray-100 disabled:text-gray-300
+font-medium text-gray-900 dark:text-gray-50
+mt-4 text-sm text-gray-500
+size-5 shrink-0 text-emerald-600 dark:text-emerald-500
+size-5 shrink-0 text-amber-500 dark:text-amber-500
+size-5 shrink-0 text-red-600 dark:text-red-500
+size-5 shrink-0 animate-spin text-gray-600 dark:text-gray-500
+size-5 shrink-0 text-blue-500 dark:text-blue-500
+flex flex-col gap-1
+text-sm text-gray-600 dark:text-gray-400
+flex flex-col
+h-px w-full bg-gray-200 dark:bg-gray-800
+flex h-fit min-h-16 w-full overflow-hidden rounded-md border shadow-lg shadow-black/5
+flex flex-1 items-start gap-3 p-4
+border-r border-gray-200 dark:border-gray-800
+flex flex-1 items-center justify-center px-6 text-sm font-semibold transition-colors
+hover:bg-gray-50 dark:hover:bg-gray-900/30
+text-gray-800 dark:text-gray-100
+active:bg-gray-100 dark:active:bg-gray-800
+text-red-600 dark:text-red-500
+flex flex-1 items-center justify-center px-6 text-sm transition-colors
+flex items-center justify-center gap-1 flex-nowrap
+group inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-md border px-2 text-sm font-medium shadow-xs transition-all duration-100 ease-in-out
+disabled:pointer-events-none disabled:text-gray-400 dark:disabled:text-gray-600
+pointer-events-none size-4 shrink-0
+border-none fill-gray-900 dark:fill-gray-50
+max-w-60 select-none rounded-md px-2.5 py-1.5 text-sm leading-5 shadow-md
+text-gray-50 dark:text-gray-900
+bg-gray-900 dark:bg-gray-50
+text-gray-700 dark:text-gray-700
+flex flex-wrap justify-center gap-6
+rounded-md bg-gray-100 p-2 font-medium text-gray-700 dark:border dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300
+h-5 w-5 text-gray-700 dark:text-gray-700
+h-5 w-5 text-gray-700
+mt-4 max-w-sm leading-6 text-gray-700 dark:text-gray-700
+size-full overflow-hidden px-[0.5px] transition first:rounded-l-[4px] first:pl-0 last:rounded-r-[4px] last:pr-0 sm:px-px
+group flex h-8 w-full items-center
+size-full rounded-[1px]
+w-auto rounded-md px-2 py-1 text-sm shadow-md
+text-white dark:text-gray-900
+bg-gray-400 dark:bg-gray-400
+hidden w-full lg:flex
+hidden w-full md:flex lg:hidden
+flex w-full sm:hidden
+bg-emerald-600 dark:bg-emerald-500
+bg-red-600 dark:bg-red-500
+bg-yellow-600 dark:bg-yellow-500
+focus:ring-blue-200 dark:focus:ring-blue-700/30
+focus:border-blue-500 dark:focus:border-blue-700
+outline outline-offset-2 outline-0 focus-visible:outline-2
+outline-blue-500 dark:outline-blue-500
+border-red-500 dark:border-red-700
+ring-red-200 dark:ring-red-700/30

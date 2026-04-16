@@ -1,0 +1,32 @@
+# catalyst — auto-extracted combo corpus
+# Source: https://github.com/tailwindlabs/headlessui (MIT)
+# Generated: 2026-03-13 via scripts/extract-corpus.ts
+# Format: each line = all TW classes on ONE DOM element → tested as a single sz object
+# Re-generate: pnpm corpus:extract catalyst
+
+inner py-1
+charlie - closed
+should not be possible to navigate up or down if there is only a single non-disabled option
+should be a no-op when we click outside of a closed combobox
+should be a no-op when we move the mouse and the combobox option is already active
+should be a no-op when we move the mouse and the combobox option is disabled
+should be possible to mouse leave a disabled option and be a no-op
+should be a no-op when we click outside of a closed listbox
+should be a no-op when we move the mouse and the listbox option is already active
+should be a no-op when we move the mouse and the listbox option is disabled
+should not be possible to navigate up or down if there is only a single non-disabled item
+should be a no-op when we click outside of a closed menu
+should be a no-op when we move the mouse and the menu item is already active
+should be a no-op when we move the mouse and the menu item is disabled
+should be possible to mouse leave a disabled item and be a no-op
+should be a no-op when clicking on the same item
+bg bg-on-hover
+should be a no-op when clicking on a disabled tab
+inner enter enter-from
+My Page
+foo1 foo2
+foo1 foo2 leave
+should strip out aria-hidden elements
+should be possible to get the text value from the aria-label
+should be possible to get the text value from the aria-label (even if there is content)
+should be possible to get the text value from the element referenced by aria-labelledby (using its contents)
