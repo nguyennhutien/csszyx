@@ -17,7 +17,7 @@ export default function BenchmarksSection() {
         flexDir: 'col',
         justify: 'center',
         bg: 'slate-50',
-        dark: { bg: '#0a0a0f' },
+        dark: { bg: { color: '--color-background-light', op:35 } },
         overflow: 'hidden',
       }}
     >
@@ -48,11 +48,14 @@ export default function BenchmarksSection() {
                 p: 12,
                 bg: 'white',
                 dark: {
-                  bg: { color: 'white', op: 0.02 },
+                  bg: { color: '#1e1e2a', op: 50 },
                   borderColor: { color: 'white', op: 5 },
-                  hover: { bg: { color: 'white', op: 0.04 } },
+                  hover: {
+                    borderColor: { color: '#b491ff', op: 15 },
+                    dropShadow: '0 0 40px rgba(128, 74, 255, 0.4)'
+                  },
                 },
-                backdropBlur: true,
+                backdropBlur: 'xl',
                 border: true,
                 borderColor: { color: 'black', op: 5 },
                 rounded: '3xl',
@@ -71,13 +74,17 @@ export default function BenchmarksSection() {
                   color: 'neutral-900',
                   dark: { color: 'white' },
                   mb: 4,
-                  group: { hover: { color: 'primary' } },
+                  group: { hover: { color: 'primary-thin' } },
                   transition: 'colors',
                 }}
               >
                 {value}<span sz={{ text: '3xl' }}>{unit}</span>
               </div>
-              <div sz={{ text: '13px', color: 'slate-500', dark: { color: 'slate-400' }, fontWeight: 'light', tracking: 'wide' }}>
+              <div sz={{
+                text: '13px', color: 'slate-500', dark: { color: 'slate-400' }, fontWeight: 'light', tracking: 'wide',
+                group: { hover: { color: { color: 'white', op: 95 }, } },
+                transition: 'colors',
+              }}>
                 {label}
               </div>
             </div>

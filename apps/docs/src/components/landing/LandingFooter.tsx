@@ -4,7 +4,7 @@ export default function LandingFooter() {
       sz={{
         borderT: true,
         borderColor: { color: 'black', op: 5 },
-        dark: { borderColor: { color: 'white', op: 5 }, bg: '#0a0a0f' },
+        dark: { borderColor: { color: 'white', op: 5 }, bg: { color: '#1e1e2aff', op: 50 } },
         py: 16,
         mt: 32,
         bg: 'slate-50',

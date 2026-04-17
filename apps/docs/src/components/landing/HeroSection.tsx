@@ -1,106 +1,111 @@
 import { useEffect, useRef } from 'react';
 
 // ── Compiler animation data ────────────────────────────────────────
-const compileData: [string, string][] = [
+// Object form is intentional: property values sit after `:` in the bundle, which is
+// outside the lookbehind of the mangler's Pass 3 regex (?<=(?:[,(]|&&)\s*).
+// Array tuple form `[sz, tw]` would place the `tw` string after `,` → Pass 3 would
+// mangle it, replacing e.g. "flex" with the minified token "z".
+interface CompileEntry { sz: string; tw: string; }
+const compileData: CompileEntry[] = [
     // Common
-    ["{flex: true}", "flex"],
-    ["{shrink: 0}", "shrink-0"],
-    ["{grayscale: true}", "grayscale"],
-    ["{firstLine: {uppercase: true}}", "first-line:uppercase"],
-    ["{bg: 'sky-500'}", "bg-sky-500"],
-    ["{fontFamily: 'mono'}", "font-mono"],
-    ["{bgRepeat: 'no-repeat'}", "bg-no-repeat"],
+    { sz: "{flex: true}", tw: "flex" },
+    { sz: "{shrink: 0}", tw: "shrink-0" },
+    { sz: "{grayscale: true}", tw: "grayscale" },
+    { sz: "{firstLine: {uppercase: true}}", tw: "first-line:uppercase" },
+    { sz: "{bg: 'sky-500'}", tw: "bg-sky-500" },
+    { sz: "{fontFamily: 'mono'}", tw: "font-mono" },
+    { sz: "{bgRepeat: 'no-repeat'}", tw: "bg-no-repeat" },
 
     // Complex deep nesting resulting in single classes
-    ["{peer: {hover: {color: 'white'}}}", "peer-hover:text-white"],
-    ["{selection: {bg: 'highlight-bg'}}", "selection:bg-highlight-bg"],
-    ["{selection: {text: 'highlight-fb'}}", "selection:text-highlight-fb"],
-    ["{insetShadowColor: { color: 'red-500', op: 30 }}", "inset-shadow-red-500/30"],
-    ["{hover: {active: {focus: {bg: 'blue-600'}}}", "hover:active:focus:bg-blue-600"],
-    ["{disabled: {hover: {opacity: 80}}}", "disabled:hover:opacity-80"],
-    ["{md: {dark: {text: {color: 'white', op: 90}}}", "md:dark:text-white/90"],
-    ["{groupHover: {last: {border: {b: 2}}}}", "group-hover:last:border-b-2"],
-    ["{sm: {focusWithin: {ring: {offset: {color: 'primary'}}}}}", "sm:focus-within:ring-offset-primary"],
-    ["{lg: {peerChecked: {scale: 105}}}", "lg:peer-checked:scale-105"],
-    ["{ariaExpanded: {flex: 1}}", "aria-expanded:flex-1"],
-    ["{in: {'.group.is-published': {bg: 'green-50'}}}", "in-[.group.is-published]:bg-green-50"],
-    ["{has: {':checked': {text: 'blue-900'}}}", "has-[:checked]:text-blue-900"],
-    ["{supports: {grid: {grid: {cols: 2}}}}", "supports-[display:grid]:grid-cols-2"],
-    ["{motionReduce: {transition: 'none'}}", "motion-reduce:transition-none"],
-    ["{bgImg: { gradient: 'conic', dir: 'at 50% 75%' }}", "bg-conic-[at_50%_75%]"],
+    { sz: "{peer: {hover: {color: 'white'}}}", tw: "peer-hover:text-white" },
+    { sz: "{selection: {bg: 'highlight-bg'}}", tw: "selection:bg-highlight-bg" },
+    { sz: "{selection: {text: 'highlight-fb'}}", tw: "selection:text-highlight-fb" },
+    { sz: "{insetShadowColor: { color: 'red-500', op: 30 }}", tw: "inset-shadow-red-500/30" },
+    { sz: "{hover: {active: {focus: {bg: 'blue-600'}}}", tw: "hover:active:focus:bg-blue-600" },
+    { sz: "{disabled: {hover: {opacity: 80}}}", tw: "disabled:hover:opacity-80" },
+    { sz: "{md: {dark: {text: {color: 'white', op: 90}}}", tw: "md:dark:text-white/90" },
+    { sz: "{groupHover: {last: {border: {b: 2}}}}", tw: "group-hover:last:border-b-2" },
+    { sz: "{sm: {focusWithin: {ring: {offset: {color: 'primary'}}}}}", tw: "sm:focus-within:ring-offset-primary" },
+    { sz: "{lg: {peerChecked: {scale: 105}}}", tw: "lg:peer-checked:scale-105" },
+    { sz: "{ariaExpanded: {flex: 1}}", tw: "aria-expanded:flex-1" },
+    { sz: "{in: {'.group.is-published': {bg: 'green-50'}}}", tw: "in-[.group.is-published]:bg-green-50" },
+    { sz: "{has: {':checked': {text: 'blue-900'}}}", tw: "has-[:checked]:text-blue-900" },
+    { sz: "{supports: {grid: {grid: {cols: 2}}}}", tw: "supports-[display:grid]:grid-cols-2" },
+    { sz: "{motionReduce: {transition: 'none'}}", tw: "motion-reduce:transition-none" },
+    { sz: "{bgImg: { gradient: 'conic', dir: 'at 50% 75%' }}", tw: "bg-conic-[at_50%_75%]" },
 
     // Abstract property combinations
-    ["{'[&>span]': {color: 'blue'}}", "[&>span]:text-blue"], // Note: single class focus
-    ["{before: {content: '\"\"', block: true}}", "before:content-['']"], // Note: single class focus
-    ["{xl: {portrait: {bg: {gradient: 'to-r'}}}}", "xl:portrait:bg-gradient-to-r"],
-    ["{lg: {landscape: {w: 'full'}}}", "lg:landscape:w-full"],
-    ["{print: {hidden: true}}", "print:hidden"],
-    ["{selection: {bg: 'fuchsia-300'}}", "selection:bg-fuchsia-300"],
-    ["{marker: {text: 'sky-400'}}", "marker:text-sky-400"],
-    ["{file: {border: 0, bg: 'transparent'}}", "file:border-0"],
-    ["{placeholder: {text: 'slate-400'}}", "placeholder:text-slate-400"],
+    { sz: "{'[&>span]': {color: 'blue'}}", tw: "[&>span]:text-blue" },
+    { sz: "{before: {content: '\"\"', block: true}}", tw: "before:content-['']" },
+    { sz: "{xl: {portrait: {bg: {gradient: 'to-r'}}}}", tw: "xl:portrait:bg-gradient-to-r" },
+    { sz: "{lg: {landscape: {w: 'full'}}}", tw: "lg:landscape:w-full" },
+    { sz: "{print: {hidden: true}}", tw: "print:hidden" },
+    { sz: "{selection: {bg: 'fuchsia-300'}}", tw: "selection:bg-fuchsia-300" },
+    { sz: "{marker: {text: 'sky-400'}}", tw: "marker:text-sky-400" },
+    { sz: "{file: {border: 0, bg: 'transparent'}}", tw: "file:border-0" },
+    { sz: "{placeholder: {text: 'slate-400'}}", tw: "placeholder:text-slate-400" },
 
     // Arbitrary values and variants
-    ["{maxW: '1200px'}", "max-w-[1200px]"],
-    ["{w: 'calc(100vh-2rem)'}", "w-[calc(100vh-2rem)]"],
-    ["{grid: {cols: '200px_minmax(900px,_1fr)_100px'}}", "grid-cols-[200px_minmax(900px,_1fr)_100px]"],
-    ["{bg: {image: 'url(…)'}}", "bg-[url(…)]"],
-    ["{text: '#50d71e'}", "text-[#50d71e]"],
-    ["{animate: 'spin_3s_linear_infinite'}", "animate-[spin_3s_linear_infinite]"],
-    ["{dropShadow: '0 0 15px rgba(255,255,255,0.02)'}", "drop-shadow-[0_0_15px_rgba(255,255,255,0.02)]"],
+    { sz: "{maxW: '1200px'}", tw: "max-w-[1200px]" },
+    { sz: "{w: 'calc(100vh-2rem)'}", tw: "w-[calc(100vh-2rem)]" },
+    { sz: "{grid: {cols: '200px_minmax(900px,_1fr)_100px'}}", tw: "grid-cols-[200px_minmax(900px,_1fr)_100px]" },
+    { sz: "{bg: {image: 'url(…)'}}", tw: "bg-[url(…)]" },
+    { sz: "{text: '#50d71e'}", tw: "text-[#50d71e]" },
+    { sz: "{animate: 'spin_3s_linear_infinite'}", tw: "animate-[spin_3s_linear_infinite]" },
+    { sz: "{dropShadow: '0 0 15px rgba(255,255,255,0.02)'}", tw: "drop-shadow-[0_0_15px_rgba(255,255,255,0.02)]" },
 
     // Specific edge cases
-    ["{bgImg: {gradient: 'conic', dir: -145}}", "-bg-conic-145"],
-    ["{focusVisible: {ring: {2: true, color: 'rose-500'}}}", "focus-visible:ring-rose-500"],
-    ["{data: {'state=open': {animate: 'slide-down'}}}", "data-[state=open]:animate-slide-down"],
-    ["{even: {bg: 'slate-100'}}", "even:bg-slate-100"],
-    ["{only: {flex: 1}}", "only:flex-1"],
+    { sz: "{bgImg: {gradient: 'conic', dir: -145}}", tw: "-bg-conic-145" },
+    { sz: "{focusVisible: {ring: {2: true, color: 'rose-500'}}}", tw: "focus-visible:ring-rose-500" },
+    { sz: "{data: {'state=open': {animate: 'slide-down'}}}", tw: "data-[state=open]:animate-slide-down" },
+    { sz: "{even: {bg: 'slate-100'}}", tw: "even:bg-slate-100" },
+    { sz: "{only: {flex: 1}}", tw: "only:flex-1" },
 
     // Spacing utilities
-    ["{p: 4}", "p-4"],
-    ["{px: 6}", "px-6"],
-    ["{m: 'auto'}", "m-auto"],
-    ["{gap: 6}", "gap-6"],
+    { sz: "{p: 4}", tw: "p-4" },
+    { sz: "{px: 6}", tw: "px-6" },
+    { sz: "{m: 'auto'}", tw: "m-auto" },
+    { sz: "{gap: 6}", tw: "gap-6" },
 
     // Sizing
-    ["{w: 'full'}", "w-full"],
-    ["{h: 'screen'}", "h-screen"],
-    ["{maxW: '2xl'}", "max-w-2xl"],
+    { sz: "{w: 'full'}", tw: "w-full" },
+    { sz: "{h: 'screen'}", tw: "h-screen" },
+    { sz: "{maxW: '2xl'}", tw: "max-w-2xl" },
 
     // Layout
-    ["{overflow: 'hidden'}", "overflow-hidden"],
-    ["{z: 10}", "z-10"],
-    ["{absolute: true}", "absolute"],
-    ["{inlineFlex: true}", "inline-flex"],
+    { sz: "{overflow: 'hidden'}", tw: "overflow-hidden" },
+    { sz: "{z: 10}", tw: "z-10" },
+    { sz: "{absolute: true}", tw: "absolute" },
+    { sz: "{inlineFlex: true}", tw: "inline-flex" },
 
     // Flexbox & Grid
-    ["{flexDir: 'col'}", "flex-col"],
-    ["{items: 'center'}", "items-center"],
-    ["{justify: 'between'}", "justify-between"],
-    ["{gridCols: 3}", "grid-cols-3"],
-    ["{grow: true}", "grow"],
+    { sz: "{flexDir: 'col'}", tw: "flex-col" },
+    { sz: "{items: 'center'}", tw: "items-center" },
+    { sz: "{justify: 'between'}", tw: "justify-between" },
+    { sz: "{gridCols: 3}", tw: "grid-cols-3" },
+    { sz: "{grow: true}", tw: "grow" },
 
     // Typography
-    ["{text: 'xl'}", "text-xl"],
-    ["{fontWeight: 'bold'}", "font-bold"],
-    ["{tracking: 'tight'}", "tracking-tight"],
-    ["{truncate: true}", "truncate"],
+    { sz: "{text: 'xl'}", tw: "text-xl" },
+    { sz: "{fontWeight: 'bold'}", tw: "font-bold" },
+    { sz: "{tracking: 'tight'}", tw: "tracking-tight" },
+    { sz: "{truncate: true}", tw: "truncate" },
 
     // Borders & Effects
-    ["{rounded: 'full'}", "rounded-full"],
-    ["{ring: 2}", "ring-2"],
-    ["{shadow: 'lg'}", "shadow-lg"],
-    ["{opacity: 50}", "opacity-50"],
-    ["{blur: 'sm'}", "blur-sm"],
+    { sz: "{rounded: 'full'}", tw: "rounded-full" },
+    { sz: "{ring: 2}", tw: "ring-2" },
+    { sz: "{shadow: 'lg'}", tw: "shadow-lg" },
+    { sz: "{opacity: 50}", tw: "opacity-50" },
+    { sz: "{blur: 'sm'}", tw: "blur-sm" },
 
     // Transforms
-    ["{rotate: 45}", "rotate-45"],
-    ["{scale: 105}", "scale-105"],
+    { sz: "{rotate: 45}", tw: "rotate-45" },
+    { sz: "{scale: 105}", tw: "scale-105" },
 
     // Backgrounds
-    ["{bg: {color: 'blue-500', op: 50}}", "bg-blue-500/50"],
-    ["{from: 'blue-500'}", "from-blue-500"],
-    ["{to: 'purple-500'}", "to-purple-500"],
+    { sz: "{bg: {color: 'blue-500', op: 50}}", tw: "bg-blue-500/50" },
+    { sz: "{from: 'blue-500'}", tw: "from-blue-500" },
+    { sz: "{to: 'purple-500'}", tw: "to-purple-500" },
 ];
 
 const mangleChars = 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA';
@@ -242,14 +247,14 @@ export default function HeroSection() {
           el.appendChild(textEl);
           const data = compileData[Math.floor(Math.random() * compileData.length)];
           textEl.className = 'phase-sz';
-          textEl.innerText = data[0];
+          textEl.innerText = data.sz;
           const wPct = ((el.offsetWidth || w * 0.3) / Math.max(w, 1)) * 100;
           textEl.innerText = '';
           const startX = last ? last.xPos - wPct - 2 : -wPct - 1;
           const item: any = {
             el, textEl, track, widthPct: wPct, xPos: startX,
             speed: track.speed, scrambler: new TextScrambler(textEl),
-            data: { sz: data[0], tw: data[1] },
+            data: { sz: data.sz, tw: data.tw },
           };
           activeItems.push(item);
           runPhases(item);

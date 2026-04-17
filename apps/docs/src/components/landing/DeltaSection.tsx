@@ -54,7 +54,7 @@ export default function DeltaSection() {
             relative: true,
             z: 10,
             bg: { color: 'white', op: 90 },
-            dark: { bg: { color: '#0d0d12', op: 90 }, borderColor: { color: 'white', op: 5 } },
+            dark: { bg: { color: '#1e1e2a', op: 50 }, borderColor: { color: 'white', op: 5 } },
             backdropBlur: 'xl',
             border: true,
             borderColor: { color: 'black', op: 5 },
@@ -76,7 +76,7 @@ export default function DeltaSection() {
           <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', fontWeight: 'light', mb: 8 }}>
             sz props compile to Tailwind classes before JIT runs. Zero overhead at runtime — just standard CSS selectors.
           </p>
-          <div sz={{ bg: 'slate-50', dark: { bg: { color: 'black', op: 50 }, borderColor: { color: 'white', op: 5 } }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', overflowX: 'auto', relative: true, z: 30 }}>
+          <div sz={{ bg: 'slate-50', dark: { bg: '--color-background-light', borderColor: { color: 'white', op: 5 } }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', overflowX: 'auto', relative: true, z: 30 }}>
             {'<'}<span sz={{ color: 'emerald-500', dark: { color: 'emerald-400' } }}>Field</span>{' '}
             <span sz={{ color: 'sky-500', dark: { color: 'sky-200' } }}>sz</span>
             {'={'}<span sz={{ color: 'sky-600', dark: { color: 'sky-300' } }}>{'{'}</span>
@@ -96,7 +96,7 @@ export default function DeltaSection() {
             relative: true,
             z: 10,
             bg: { color: 'white', op: 90 },
-            dark: { bg: { color: '#0d0d12', op: 90 }, borderColor: { color: 'white', op: 5 } },
+            dark: { bg: { color: '#1e1e2a', op: 50 }, borderColor: { color: 'white', op: 5 } },
             backdropBlur: 'xl',
             border: true,
             borderColor: { color: 'black', op: 5 },
@@ -118,7 +118,7 @@ export default function DeltaSection() {
           <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', fontWeight: 'light', mb: 8 }}>
             Every class in your built CSS is recorded into a map. Giving you O(1) instantaneous lookup.
           </p>
-          <div sz={{ bg: 'slate-50', dark: { bg: { color: 'black', op: 50 }, borderColor: { color: 'white', op: 5 }, color: 'white' }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', color: 'neutral-900', overflowX: 'auto', relative: true, z: 30 }}>
+          <div sz={{ bg: 'slate-50', dark: { bg: '--color-background-light', borderColor: { color: 'white', op: 5 }, color: 'white' }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', color: 'neutral-900', overflowX: 'auto', relative: true, z: 30 }}>
             <span sz={{ color: 'slate-400', dark: { color: 'slate-500' } }}>{'// csszyx-manifest.json'}</span><br />
             {'{'}<br />
             &nbsp;&nbsp;<span sz={{ color: 'sky-500', dark: { color: 'sky-200' } }}>"classes"</span>
@@ -138,7 +138,7 @@ export default function DeltaSection() {
             relative: true,
             z: 10,
             bg: 'white',
-            dark: { bg: '#0d0d12', borderColor: { color: 'secondary', op: 20 } },
+            dark: { bg: { color: '#1e1e2a', op: 50 }, borderColor: { color: 'secondary', op: 20 } },
             border: true,
             borderColor: { color: 'primary', op: 10 },
             rounded: '3xl',
@@ -159,7 +159,7 @@ export default function DeltaSection() {
           <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', fontWeight: 'light', mb: 8 }}>
             Unknown styles are detected and injected automatically on demand. Never duplicated.
           </p>
-          <div sz={{ bg: 'slate-50', dark: { bg: { color: 'black', op: 50 }, borderColor: { color: 'white', op: 5 } }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', overflowX: 'auto', relative: true, z: 30 }}>
+          <div sz={{ bg: 'slate-50', dark: { bg: '--color-background-light', borderColor: { color: 'white', op: 5 } }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', overflowX: 'auto', relative: true, z: 30 }}>
             <span sz={{ color: 'pink-600', dark: { color: 'pink-400' } }}>const</span>
             {' { sz } = '}
             <span sz={{ color: 'sky-500', dark: { color: 'sky-300' } }}>useSz</span>

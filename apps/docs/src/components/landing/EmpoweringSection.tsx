@@ -50,7 +50,7 @@ export default function EmpoweringSection() {
             p: 10,
             border: true,
             borderColor: { color: 'black', op: 5 },
-            dark: { borderColor: { color: 'white', op: 5 }, bg: '#0d0d12' },
+            dark: { borderColor: { color: 'white', op: 5 }, bg: '--color-background-dark' },
             bg: 'white',
             rounded: '3xl',
             hover: { borderColor: { color: 'black', op: 10 } },
@@ -79,7 +79,7 @@ export default function EmpoweringSection() {
             p: 10,
             border: true,
             borderColor: { color: 'black', op: 5 },
-            dark: { borderColor: { color: 'white', op: 5 }, bg: '#0d0d12' },
+            dark: { borderColor: { color: 'white', op: 5 }, bg: '--color-background-dark' },
             bg: 'white',
             rounded: '3xl',
             hover: { borderColor: { color: 'black', op: 10 } },
@@ -106,7 +106,7 @@ export default function EmpoweringSection() {
             p: 8,
             border: true,
             borderColor: { color: 'black', op: 5 },
-            dark: { borderColor: { color: 'white', op: 5 }, bg: '#0d0d12' },
+            dark: { borderColor: { color: 'white', op: 5 }, bg: '--color-background-dark' },
             bg: 'white',
             rounded: '3xl',
             hover: { borderColor: { color: 'black', op: 8 } },
@@ -133,7 +133,7 @@ export default function EmpoweringSection() {
               w: 'full',
               maxW: 'xl',
               bg: 'slate-50',
-              dark: { bg: { color: '#0a0a0f', op: 50 }, borderColor: '#25252f', color: 'slate-300' },
+              dark: { bg: { color: '#1e1e2aff', op: 50 }, borderColor: '--lp-border', color: 'slate-300' },
               border: true,
               borderColor: { color: 'black', op: 5 },
               rounded: 'xl',
@@ -149,7 +149,7 @@ export default function EmpoweringSection() {
             style={{ WebkitBackdropFilter: 'blur(16px)', backdropFilter: 'blur(16px)' }}
           >
             {/* Mac title bar */}
-            <div sz={{ absolute: true, top: 0, insetX: 0, h: 10, bg: 'slate-100', dark: { bg: '#14141a', borderColor: '#25252f' }, borderB: true, borderColor: { color: 'black', op: 5 }, flex: true, items: 'center', px: 4, gap: 2 }}>
+            <div sz={{ absolute: true, top: 0, insetX: 0, h: 10, bg: 'slate-100', dark: { bg: '#1a1a21', borderColor: '--lp-border' }, borderB: true, borderColor: { color: 'black', op: 5 }, flex: true, items: 'center', px: 4, gap: 2 }}>
               <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'rose-500', op: 80 } }} />
               <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'amber-500', op: 80 } }} />
               <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'emerald-500', op: 80 } }} />

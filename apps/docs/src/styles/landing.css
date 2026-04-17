@@ -27,10 +27,12 @@
   --color-secondary: #3f0fa6;
   --color-highlight-fb: #ffdad0;
   --color-highlight-bg: #4c1e08;
-  --color-background-light: #f8f6f6;
-  --color-background-dark: #0c0c11;
+  --color-background-light: #050505ff;
+  --color-background-dark-rgb: 3, 3, 3;
+  --color-background-dark: rgb(var(--color-background-dark-rgb));
+  --color-background-darkest: #000;
   --color-tech-blue: #1a122d;
-  --color-surface: #0a0a0f;
+  --color-surface: var(--color-background-light);
   --color-surface-alt: #0d0d12;
   --font-display: "IBM Plex Sans", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
@@ -44,6 +46,15 @@
     "wght" 400,
     "GRAD" 0,
     "opsz" 24;
+  /* Prevent icon text from showing before font loads — avoids layout shift */
+  font-display: block;
+}
+
+/* astro-island is a custom element (display:inline by default).
+   display:contents removes it from the layout box tree so it never
+   affects flex/grid parents or causes nav position shifts on hydration. */
+astro-island {
+  display: contents;
 }
 
 /* ================================================================
@@ -52,8 +63,8 @@
 
 :root {
   color-scheme: light dark;
-  --lp-surface: light-dark(#ffffff, #14141a);
-  --lp-border: light-dark(#e2e8f0, #25252f);
+  --lp-surface: light-dark(#ffffff, var(--color-background-light));
+  --lp-border: light-dark(#e2e8f0, #25252f80);
   --lp-text-muted: light-dark(#64748b, #94a3b8);
   --lp-text: light-dark(#0f172a, #f1f5f9);
 
@@ -74,7 +85,7 @@ html.dark {
 body {
   color: var(--color-slate-100);
   font-family: var(--font-display);
-  background-color: var(--color-background-dark);
+  background-color: var(--color-background-darkest);
 }
 
 ::selection {
@@ -155,7 +166,10 @@ body {
   position: absolute;
   inset: 1px;
   /* In light mode use near-white to let card bg show; dark mode uses the deep surface */
-  background: light-dark(rgba(255, 255, 255, 0.92), rgba(13, 13, 18, 0.92));
+  background: light-dark(
+    rgba(255, 255, 255, 0.92),
+    rgba(var(--color-background-dark-rgb), 0.92)
+  );
   border-radius: var(--radius-3xl);
 }
 
@@ -188,13 +202,92 @@ body {
 header.header-scrolled {
   background: light-dark(
     rgba(255, 255, 255, 0.5),
-    rgba(10, 10, 15, 0.5)
+    rgba(0, 0, 0, 0.5)
   ) !important;
   border-bottom: 1px solid var(--lp-border) !important;
   padding-top: 1.5rem !important;
   padding-bottom: 1.5rem !important;
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
+}
+
+/* ================================================================
+   Search Modal
+   ================================================================ */
+
+.search-overlay {
+  background: light-dark(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.65));
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.search-modal {
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-border);
+}
+.search-input-row {
+  border-bottom: 1px solid var(--lp-border);
+}
+.search-icon {
+  font-size: 20px;
+  color: var(--lp-text-muted);
+}
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--lp-text);
+  font-size: 0.9rem;
+  padding: 1rem 0;
+  font-family: var(--font-display);
+}
+.search-input::placeholder {
+  color: var(--lp-text-muted);
+}
+.search-esc-key {
+  font-size: 0.68rem;
+  background: transparent;
+  border: 1px solid var(--lp-border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--lp-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.search-results-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--lp-border);
+}
+.search-result {
+  display: block;
+  text-decoration: none;
+  transition: background var(--trans-fast);
+}
+.search-result:hover {
+  background: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.04));
+}
+.search-result-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--lp-text);
+  margin-bottom: 0.25rem;
+}
+.search-result-excerpt {
+  font-size: 0.75rem;
+  color: var(--lp-text-muted);
+  line-height: 1.5;
+}
+.search-result-excerpt mark {
+  background: transparent;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+.search-state {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--lp-text-muted);
 }
 
 /* ================================================================

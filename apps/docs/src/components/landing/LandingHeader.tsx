@@ -1,4 +1,21 @@
+import { useState, useEffect } from 'react';
+import SearchModal from './SearchModal';
+
 export default function LandingHeader() {
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Open search on Ctrl+K / Cmd+K
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <header
       sz={{
@@ -79,17 +96,22 @@ export default function LandingHeader() {
             }}
           >
             Docs
-            <span className="material-symbols-outlined" style={{ fontSize: '14px', verticalAlign: 'middle' }}>open_in_new</span>
+            <span
+              className="material-symbols-outlined"
+              sz={{ text: '14px!', align: 'middle', w: '14px', h: '14px', overflow: 'hidden', inlineBlock: true }}
+            >open_in_new</span>
           </a>
         </nav>
 
         {/* Right side */}
         <div sz={{ flex: true, items: 'center', gap: 4 }}>
-          <div className="cmd-bar" id="searchTrigger">
+          <div className="cmd-bar" id="searchTrigger" onClick={() => setIsSearchOpen(true)}>
             Search... <kbd>Ctrl</kbd><kbd>K</kbd>
           </div>
         </div>
       </div>
+
+      <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     </header>
   );
 }
