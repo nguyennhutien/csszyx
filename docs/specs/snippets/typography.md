@@ -131,13 +131,14 @@ Controlling the alignment of text.
 
 Controlling the text color.
 
-| Concept          | CSS Rule          | Tailwind v4 Class                                                              | `sz` Prop (Object Syntax)                  | Note                          |
-| :--------------- | :---------------- | :----------------------------------------------------------------------------- | :----------------------------------------- | :---------------------------- |
-| **Keywords**     | `color: inherit`  | `text-inherit`, `text-current`, `text-transparent`, `text-black`, `text-white` | `{ color: 'inherit' }` etc.                |                               |
-| **Color**        | `color: (value)`  | `text-slate-50`(etc)`text-slate-950` (and full palette)                        | `{ color: 'slate-50' }` etc.               | Full color palette.           |
-| **Opacity**      | `color: (value)`  | `text-blue-500/50`                                                             | `{ color: { color: 'blue-500', op: 50 } }` |                               |
-| **Arbitrary**    | `color: (value)`  | `text-[#50d71e]`                                                               | `{ color: '#50d71e' }`                     |                               |
-| **CSS Variable** | `color: var(--c)` | `text-(--c)`                                                                   | `{ color: '--c' }`                         | **Sugar**: Auto-detects `--`. |
+| Concept               | CSS Rule          | Tailwind v4 Class                                                              | `sz` Prop (Object Syntax)                  | Note                                       |
+| :-------------------- | :---------------- | :----------------------------------------------------------------------------- | :----------------------------------------- | :----------------------------------------- |
+| **Keywords**          | `color: inherit`  | `text-inherit`, `text-current`, `text-transparent`, `text-black`, `text-white` | `{ color: 'inherit' }` etc.                |                                            |
+| **Color**             | `color: (value)`  | `text-slate-50`(etc)`text-slate-950` (and full palette)                        | `{ color: 'slate-50' }` etc.               | Full color palette.                        |
+| **Opacity**           | `color: (value)`  | `text-blue-500/50`                                                             | `{ color: { color: 'blue-500', op: 50 } }` |                                            |
+| **CSS Var + Opacity** | `color: var(--c)` | `text-(--c)/50`                                                                | `{ color: { color: '--c', op: 50 } }`      | CSS variables are auto-wrapped in `(...)`. |
+| **Arbitrary**         | `color: (value)`  | `text-[#50d71e]`                                                               | `{ color: '#50d71e' }`                     |                                            |
+| **CSS Variable**      | `color: var(--c)` | `text-(--c)`                                                                   | `{ color: '--c' }`                         | **Sugar**: Auto-detects `--`.              |
 
 ## Text Decoration
 

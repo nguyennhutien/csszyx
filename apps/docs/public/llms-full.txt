@@ -609,10 +609,11 @@ Controlling the background of an element.
 | **Transparent**     | `background-color: transparent`           | `bg-transparent`    | `{ bg: 'transparent' }`                    |                                                  |
 | **Arbitrary**       | `background-color: #333`                  | `bg-[#333]`         | `{ bg: '#333' }`                           |                                                  |
 | **CSS Variable**    | `background-color: var(--my-color)`       | `bg-(--my-color)`   | `{ bg: '--my-color' }`                     | **Sugar**: Auto-detects `--`.                    |
-| **With Opacity**    | `background-color: rgb(59 130 246 / 20%)` | `bg-blue-500/20`    | `{ bg: { color: 'blue-500', op: 20 } }`    | String slash (`'blue-500/20'`) is not supported. |
-| **Hex + Opacity**   | `background-color: #0d0d12` at 90%        | `bg-[#0d0d12]/90`   | `{ bg: { color: '#0d0d12', op: 90 } }`     | Hex/rgb/hsl values are auto-wrapped in `[...]`.  |
-| **Decimal Opacity** | `background-color: black / 5%`            | `bg-black/[0.05]`   | `{ bg: { color: 'black', op: 0.05 } }`     | Non-half-step decimals use arbitrary `/[0.05]`.  |
-| **Percent Opacity** | `background-color: pink-500 / 78%`        | `bg-pink-500/[78%]` | `{ bg: { color: 'pink-500', op: '78%' } }` | String with `%` stays arbitrary.                 |
+| **With Opacity**      | `background-color: rgb(59 130 246 / 20%)` | `bg-blue-500/20`         | `{ bg: { color: 'blue-500', op: 20 } }`       | String slash (`'blue-500/20'`) is not supported. |
+| **CSS Var + Opacity** | `background-color: var(--c) / 50%`        | `bg-(--my-color)/50`     | `{ bg: { color: '--my-color', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`.       |
+| **Hex + Opacity**     | `background-color: #0d0d12` at 90%        | `bg-[#0d0d12]/90`        | `{ bg: { color: '#0d0d12', op: 90 } }`        | Hex/rgb/hsl values are auto-wrapped in `[...]`.  |
+| **Decimal Opacity**   | `background-color: black / 5%`            | `bg-black/[0.05]`        | `{ bg: { color: 'black', op: 0.05 } }`        | Non-half-step decimals use arbitrary `/[0.05]`.  |
+| **Percent Opacity**   | `background-color: pink-500 / 78%`        | `bg-pink-500/[78%]`      | `{ bg: { color: 'pink-500', op: '78%' } }`    | String with `%` stays arbitrary.                 |
 
 ## Background Image
 
@@ -833,8 +834,9 @@ Controlling the color of an element's borders.
 
 | Concept         | CSS Rule                     | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
 | :-------------- | :--------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
-| **Color**       | `border-color: currentColor` | `border-red-500`    | `{ borderColor: 'red-500' }`                    |                                            |
-| **Opacity**     | `border-color: currentColor` | `border-red-500/50` | `{ borderColor: { color: 'red-500', op: 50 } }` |                                            |
+| **Color**             | `border-color: currentColor`  | `border-red-500`       | `{ borderColor: 'red-500' }`                          |                                            |
+| **Opacity**           | `border-color: currentColor`  | `border-red-500/50`    | `{ borderColor: { color: 'red-500', op: 50 } }`       |                                            |
+| **CSS Var + Opacity** | `border-color: var(--c) / 50` | `border-(--c)/50`      | `{ borderColor: { color: '--c', op: 50 } }`           | CSS variables are auto-wrapped in `(...)`. |
 | **X/Y/T/R/B/L** | `border-color: currentColor` | `border-t-red-500`  | `{ borderTColor: 'red-500' }`                   | Verbose keys to avoid conflict with Width. |
 | **Arbitrary**   | `border-color: currentColor` | `border-[#50d71e]`  | `{ borderColor: '#50d71e' }`                    |                                            |
 | **Variable**    | `border-color: var(--c)`     | `border-(--c)`      | `{ borderColor: '--c' }`                        |                                            |
@@ -873,8 +875,9 @@ Utilities for controlling the border color between elements.
 
 | Concept       | CSS Rule                     | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note |
 | :------------ | :--------------------------- | :------------------ | :---------------------------------------------- | :--- |
-| **Color**     | `border-color: currentColor` | `divide-red-500`    | `{ divideColor: 'red-500' }`                    |      |
-| **Opacity**   | `border-color: currentColor` | `divide-red-500/50` | `{ divideColor: { color: 'red-500', op: 50 } }` |      |
+| **Color**             | `border-color: currentColor`  | `divide-red-500`    | `{ divideColor: 'red-500' }`                          |                                            |
+| **Opacity**           | `border-color: currentColor`  | `divide-red-500/50` | `{ divideColor: { color: 'red-500', op: 50 } }`       |                                            |
+| **CSS Var + Opacity** | `border-color: var(--c) / 50` | `divide-(--c)/50`   | `{ divideColor: { color: '--c', op: 50 } }`           | CSS variables are auto-wrapped in `(...)`. |
 | **Arbitrary** | `border-color: currentColor` | `divide-[#50d71e]`  | `{ divideColor: '#50d71e' }`                    |      |
 | **Variable**  | `border-color: var(--c)`     | `divide-(--c)`      | `{ divideColor: '--c' }`                        |      |
 
@@ -951,9 +954,13 @@ Controlling the box shadow of an element.
 | **None**           | `box-shadow: 0 0 #0000`                     | `shadow-none`                                                                                                     | `{ shadow: 'none' }`                                                                                                                         |                                              |
 | **Inset None**     | `box-shadow: inset 0 0 #0000`               | `inset-shadow-none`                                                                                               | `{ insetShadow: 'none' }`                                                                                                                    |                                              |
 | **Ring None**      | `box-shadow: 0 0 #0000`                     | `ring-none`                                                                                                       | `{ ring: 'none' }`                                                                                                                           |                                              |
-| **Color**          | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-blue-500`, `inset-shadow-blue-500`, `ring-blue-500`                                                       | `{ shadowColor: 'blue-500' }`                                                                                                                |                                              |
-| **Inset Sh Color** | `--tw-inset-shadow-color: (value)`          | `inset-shadow-blue-500`                                                                                           | `{ insetShadowColor: 'blue-500' }`                                                                                                           | Separate key for inset shadow color.         |
-| **Inset Sh Var**   | `--tw-inset-shadow-color: var(--c)`         | `inset-shadow-(color:--c)`                                                                                        | `{ insetShadowColor: '--c' }`                                                                                                                | CSS variable with `color:` type hint.        |
+| **Color**               | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-blue-500`, `inset-shadow-blue-500`, `ring-blue-500` | `{ shadowColor: 'blue-500' }`                             |                                              |
+| **Color + Opacity**     | `--tw-shadow-color: (value) / 50%`           | `shadow-blue-500/50`                                        | `{ shadowColor: { color: 'blue-500', op: 50 } }`          |                                              |
+| **CSS Var + Opacity**   | `--tw-shadow-color: var(--c) / 50%`          | `shadow-(--c)/50`                                           | `{ shadowColor: { color: '--c', op: 50 } }`               | CSS variables are auto-wrapped in `(...)`.   |
+| **Inset Sh Color**      | `--tw-inset-shadow-color: (value)`           | `inset-shadow-blue-500`                                     | `{ insetShadowColor: 'blue-500' }`                        | Separate key for inset shadow color.         |
+| **Inset Sh Var**        | `--tw-inset-shadow-color: var(--c)`          | `inset-shadow-(color:--c)`                                  | `{ insetShadowColor: '--c' }`                             | CSS variable with `color:` type hint.        |
+| **Inset Sh + Opacity**  | `--tw-inset-shadow-color: (value) / 30%`     | `inset-shadow-black/30`                                     | `{ insetShadowColor: { color: 'black', op: 30 } }`        |                                              |
+| **Inset Sh Var + Op**   | `--tw-inset-shadow-color: var(--c) / 30%`    | `inset-shadow-(--c)/30`                                     | `{ insetShadowColor: { color: '--c', op: 30 } }`          | CSS variables are auto-wrapped in `(...)`.   |
 | **Inherit/Custom** | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-inherit`, `shadow-current`, `shadow-black`, `shadow-white`, `shadow-transparent`                          | `{ shadowColor: 'inherit' }` etc.                                                                                                            |                                              |
 | **Custom Var**     | `--tw-shadow-color: var(--value)`           | `shadow-(color:--my-color)`                                                                                       | `{ shadowColor: '--my-color' }`                                                                                                              | **New in v4**: Sets variable explicitly.     |
 | **Arbitrary**      | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]`                                                                      | `{ shadow: '0 35px 60px -15px rgba(0,0,0,0.3)' }`                                                                                            |                                              |
@@ -3142,9 +3149,10 @@ Controlling the text color.
 | :--------------- | :---------------- | :----------------------------------------------------------------------------- | :----------------------------------------- | :---------------------------- |
 | **Keywords**     | `color: inherit`  | `text-inherit`, `text-current`, `text-transparent`, `text-black`, `text-white` | `{ color: 'inherit' }` etc.                |                               |
 | **Color**        | `color: (value)`  | `text-slate-50`(etc)`text-slate-950` (and full palette)                        | `{ color: 'slate-50' }` etc.               | Full color palette.           |
-| **Opacity**      | `color: (value)`  | `text-blue-500/50`                                                             | `{ color: { color: 'blue-500', op: 50 } }` |                               |
-| **Arbitrary**    | `color: (value)`  | `text-[#50d71e]`                                                               | `{ color: '#50d71e' }`                     |                               |
-| **CSS Variable** | `color: var(--c)` | `text-(--c)`                                                                   | `{ color: '--c' }`                         | **Sugar**: Auto-detects `--`. |
+| **Opacity**           | `color: (value)`  | `text-blue-500/50`  | `{ color: { color: 'blue-500', op: 50 } }`  |                                            |
+| **CSS Var + Opacity** | `color: var(--c)` | `text-(--c)/50`     | `{ color: { color: '--c', op: 50 } }`       | CSS variables are auto-wrapped in `(...)`. |
+| **Arbitrary**         | `color: (value)`  | `text-[#50d71e]`    | `{ color: '#50d71e' }`                      |                                            |
+| **CSS Variable**      | `color: var(--c)` | `text-(--c)`        | `{ color: '--c' }`                          | **Sugar**: Auto-detects `--`.              |
 
 ## Text Decoration
 

@@ -1358,8 +1358,11 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             const colorObj = value as { color: string; op?: number | string };
             const twPrefix = PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
             const rawColorBase = String(colorObj.color);
-            // Arbitrary color values (hex, rgb, hsl, etc.) need bracket wrapping
-            const colorBase = needsArbitraryBrackets(rawColorBase) ? `[${normalizeArbitraryValue(rawColorBase)}]` : normalizeArbitraryValue(rawColorBase);
+            // CSS variables use (--var) syntax; hex/rgb/hsl/units need [bracket] wrapping;
+            // named colors (e.g. 'blue-500') pass through as-is.
+            const colorBase = rawColorBase.startsWith('--')
+                ? `(${rawColorBase})`
+                : needsArbitraryBrackets(rawColorBase) ? `[${normalizeArbitraryValue(rawColorBase)}]` : normalizeArbitraryValue(rawColorBase);
 
             if (colorObj.op !== undefined) {
                 const opStr = formatOpacity(colorObj.op);

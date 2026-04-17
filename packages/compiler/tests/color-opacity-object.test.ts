@@ -82,6 +82,33 @@ describe('Color Opacity Object Form', () => {
         });
     });
 
+    describe('CSS variable color', () => {
+        it('should wrap CSS variable color in () without op', () => {
+            const result = transform({ bg: { color: '--my-color' } } as SzObject);
+            expect(result.className).toBe('bg-(--my-color)');
+        });
+
+        it('should wrap CSS variable color in () with integer op', () => {
+            const result = transform({ bg: { color: '--my-color', op: 50 } } as SzObject);
+            expect(result.className).toBe('bg-(--my-color)/50');
+        });
+
+        it('should wrap CSS variable color in () with CSS variable op', () => {
+            const result = transform({ bg: { color: '--my-color', op: '--alpha' } } as SzObject);
+            expect(result.className).toBe('bg-(--my-color)/(--alpha)');
+        });
+
+        it('should wrap CSS variable color in () for text color', () => {
+            const result = transform({ color: { color: '--brand', op: 80 } } as SzObject);
+            expect(result.className).toBe('text-(--brand)/80');
+        });
+
+        it('should wrap CSS variable color in () for borderColor', () => {
+            const result = transform({ borderColor: { color: '--border-color', op: 40 } } as SzObject);
+            expect(result.className).toBe('border-(--border-color)/40');
+        });
+    });
+
     describe('string opacity (arbitrary)', () => {
         it('should use [] syntax for percentage opacity', () => {
             const result = transform({ bg: { color: 'blue-500', op: '73%' } } as SzObject);

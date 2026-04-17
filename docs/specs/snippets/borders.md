@@ -52,13 +52,14 @@ Controlling the width of an element's borders.
 
 Controlling the color of an element's borders.
 
-| Concept         | CSS Rule                     | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
-| :-------------- | :--------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
-| **Color**       | `border-color: currentColor` | `border-red-500`    | `{ borderColor: 'red-500' }`                    |                                            |
-| **Opacity**     | `border-color: currentColor` | `border-red-500/50` | `{ borderColor: { color: 'red-500', op: 50 } }` |                                            |
-| **X/Y/T/R/B/L** | `border-color: currentColor` | `border-t-red-500`  | `{ borderTColor: 'red-500' }`                   | Verbose keys to avoid conflict with Width. |
-| **Arbitrary**   | `border-color: currentColor` | `border-[#50d71e]`  | `{ borderColor: '#50d71e' }`                    |                                            |
-| **Variable**    | `border-color: var(--c)`     | `border-(--c)`      | `{ borderColor: '--c' }`                        |                                            |
+| Concept               | CSS Rule                      | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
+| :-------------------- | :---------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
+| **Color**             | `border-color: currentColor`  | `border-red-500`    | `{ borderColor: 'red-500' }`                    |                                            |
+| **Opacity**           | `border-color: currentColor`  | `border-red-500/50` | `{ borderColor: { color: 'red-500', op: 50 } }` |                                            |
+| **CSS Var + Opacity** | `border-color: var(--c) / 50` | `border-(--c)/50`   | `{ borderColor: { color: '--c', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`. |
+| **X/Y/T/R/B/L**       | `border-color: currentColor`  | `border-t-red-500`  | `{ borderTColor: 'red-500' }`                   | Verbose keys to avoid conflict with Width. |
+| **Arbitrary**         | `border-color: currentColor`  | `border-[#50d71e]`  | `{ borderColor: '#50d71e' }`                    |                                            |
+| **Variable**          | `border-color: var(--c)`      | `border-(--c)`      | `{ borderColor: '--c' }`                        |                                            |
 
 ## Border Style
 
@@ -92,12 +93,13 @@ Utilities for controlling the border width between elements.
 
 Utilities for controlling the border color between elements.
 
-| Concept       | CSS Rule                     | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note |
-| :------------ | :--------------------------- | :------------------ | :---------------------------------------------- | :--- |
-| **Color**     | `border-color: currentColor` | `divide-red-500`    | `{ divideColor: 'red-500' }`                    |      |
-| **Opacity**   | `border-color: currentColor` | `divide-red-500/50` | `{ divideColor: { color: 'red-500', op: 50 } }` |      |
-| **Arbitrary** | `border-color: currentColor` | `divide-[#50d71e]`  | `{ divideColor: '#50d71e' }`                    |      |
-| **Variable**  | `border-color: var(--c)`     | `divide-(--c)`      | `{ divideColor: '--c' }`                        |      |
+| Concept               | CSS Rule                      | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
+| :-------------------- | :---------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
+| **Color**             | `border-color: currentColor`  | `divide-red-500`    | `{ divideColor: 'red-500' }`                    |                                            |
+| **Opacity**           | `border-color: currentColor`  | `divide-red-500/50` | `{ divideColor: { color: 'red-500', op: 50 } }` |                                            |
+| **CSS Var + Opacity** | `border-color: var(--c) / 50` | `divide-(--c)/50`   | `{ divideColor: { color: '--c', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`. |
+| **Arbitrary**         | `border-color: currentColor`  | `divide-[#50d71e]`  | `{ divideColor: '#50d71e' }`                    |                                            |
+| **Variable**          | `border-color: var(--c)`      | `divide-(--c)`      | `{ divideColor: '--c' }`                        |                                            |
 
 ## Divide Style
 
