@@ -1,5 +1,9 @@
 export default {
     extends: ['@commitlint/config-conventional'],
+    // `changesets/action@v1` commits its Version Packages PR with the
+    // literal message "Version Packages" (hardcoded, no override). Let it
+    // bypass commitlint so husky's commit-msg hook doesn't block CI.
+    ignores: [(message) => message.trim() === 'Version Packages'],
     rules: {
         'type-enum': [
             2,
