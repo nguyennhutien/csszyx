@@ -49,7 +49,7 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          version: pnpm run version
+          version: pnpm changeset version
           publish: pnpm changeset publish
           createGithubReleases: false
         env:

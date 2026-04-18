@@ -78,5 +78,12 @@ CLAUDE.md
 .cursorrules
 docs/guides/ai-usage.md
 
+# Per-package CHANGELOGs — only packages/csszyx/CHANGELOG.md is published.
+# `changeset version` generates one per package; action reads them to build
+# the Version Packages PR body (must exist on disk), but we don't commit them.
+packages/*/CHANGELOG.md
+!packages/csszyx/CHANGELOG.md
+apps/*/CHANGELOG.md
+
 # Rust
 # Cargo.lock (Un-ignored to ensure reproducible builds)

@@ -43,7 +43,6 @@
         "corpus:extract": "node --import tsx/esm scripts/extract-corpus.ts",
         "changeset": "changeset",
         "changeset:auto": "node scripts/changeset-auto.mjs",
-        "version": "node scripts/version.mjs",
         "release": "turbo run build && changeset publish",
         "pages:build": "bash scripts/build-cf-pages.sh"
     },
