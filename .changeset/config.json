@@ -15,7 +15,8 @@
             "@csszyx/mcp-server",
             "@csszyx/svelte-adapter",
             "@csszyx/vue-adapter",
-            "@csszyx/dynamic"
+            "@csszyx/dynamic",
+            "@csszyx/vscode"
         ]
     ],
     "linked": [],
