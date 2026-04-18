@@ -8,6 +8,7 @@ import csszyxLightTheme from './src/themes/csszyx-light.json' with { type: 'json
 import ecTwoslash from 'expressive-code-twoslash';
 
 export default defineConfig({
+    site: 'https://csszyx.com',
     redirects: {
         '/docs': '/docs/introduction',
     },
