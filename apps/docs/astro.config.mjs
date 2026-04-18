@@ -92,7 +92,7 @@ export default defineConfig({
                         { label: 'Component Variants (szv)', slug: 'docs/szv' },
                         { label: 'Runtime Injection', slug: 'docs/dynamic' },
                         { label: 'MCP Server', slug: 'docs/mcp-server' },
-                        { label: 'VS Code Extension', slug: 'docs/vscode-extension' },
+                        { label: 'VS Code Extension', slug: 'docs/vscode' },
                     ],
                 },
                 {
