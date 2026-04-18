@@ -3,11 +3,21 @@
     "private": true,
     "displayName": "CSSzyx",
     "description": "IntelliSense, hover docs, and diagnostics for CSSzyx sz props",
-    "version": "0.1.0",
+    "version": "0.4.0",
     "publisher": "csszyx",
-    "engines": { "vscode": "^1.85.0" },
-    "categories": ["Programming Languages", "Linters"],
-    "keywords": ["csszyx", "tailwind", "css-in-js", "intellisense"],
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "Linters"
+    ],
+    "keywords": [
+        "csszyx",
+        "tailwind",
+        "css-in-js",
+        "intellisense"
+    ],
     "repository": {
         "type": "git",
         "url": "https://github.com/nguyennhutien/csszyx.git",

@@ -1,5 +1,137 @@
 # csszyx
 
+## 0.4.0
+
+### Minor Changes
+
+- ce9f07f: v0.4.0 — @csszyx/dynamic, MCP server, VS Code extension, migration CLI, compiler hardening.
+
+  ### ⚠️ Breaking Changes
+  - **compiler:** `scale3d` and `translate3d` boolean shorthands removed. Use the string form on `scale` / `translate` instead.
+
+    **Migration:**
+
+    ```diff
+    - sz={{ scale3d: true }}
+    + sz={{ scale: '3d' }}
+
+    - sz={{ translate3d: true }}
+    + sz={{ translate: '3d' }}
+    ```
+
+  ### ✨ New Packages
+  - **`@csszyx/dynamic`** — runtime CSS injection engine. Delta-injects only styles not already in the pre-built stylesheet.
+    - API: `dynamic(sz)`, `preloadManifest(url)`, `cleanup()`.
+    - 3-layer architecture: manifest (O(1) class lookup) → generator (Tailwind v4 CSS-variable patterns) → injector (21-tier `CSSStyleSheet` for correct cascade).
+    - SSR-safe: returns class names only on the server, no CSSOM access.
+    - React integration via `@csszyx/dynamic/react` — `useSz()` hook with StrictMode-safe deferred cleanup, `sz` alias, `CsszyxProvider` for custom manifest URLs.
+    - Accepts both mutable `SzObject` and `as const` (`ReadonlySzObject`) inputs — no `as any` workaround needed.
+  - **`@csszyx/mcp-server`** — Model Context Protocol server for AI assistants (Claude Desktop, Cursor, Copilot). Transport: stdio.
+    - **Tools (7):** `sz_lookup`, `sz_reverse`, `sz_expand`, `sz_batch`, `sz_migrate`, `sz_theme`, `sz_validate`.
+    - **Resources (3):** `csszyx://docs/sz-props`, `csszyx://docs/variants`, `csszyx://llms-full`.
+    - **Prompts (2):** `review-sz-usage`, `migrate-tailwind-component`.
+  - **VS Code extension** (`@csszyx/vscode`, marked `private` for now — marketplace publish tracked separately).
+    - Completions: key + value (variant-aware depth-1 vs depth-2), boolean shorthands, known variants.
+    - Hover: inline CSS preview via sandboxed evaluation of the sz object.
+    - Diagnostics: unknown prop warnings with `SUGGESTION_MAP` hints (e.g. `padding` → "Did you mean `p`?"), 300 ms debounce, toggleable via `csszyx.enableDiagnostics`.
+    - TextMate grammar injected into `tsx` / `ts` / `jsx` / `js` / `html` scopes.
+    - Zero-Babel: uses `@csszyx/compiler/browser` subpath — 85 KB CJS bundle.
+
+  ### 🔧 Compiler
+
+  **New subpath exports (consumer-facing):**
+  - **`@csszyx/compiler/browser`** — pure JS transform, no Babel / WASM dependency. Points directly at `src/transform-core.ts`; requires a bundler-aware consumer (Vite, webpack, esbuild, tsc). Used by `@csszyx/dynamic`, the VS Code extension, and the runtime lite bundle.
+  - **`@csszyx/compiler/color-var`** — standalone 309 B export of the `__szColorVar` helper. Single source of truth, inlined into `@csszyx/runtime`'s lite bundle to prevent drift.
+
+  **Features:**
+  - `css: {}` sub-prop — arbitrary CSS escape hatch (e.g. `css: { display: 'grid' }`). Replaces the internal `NEEDS_ARBITRARY_PROPERTY` mechanism.
+  - Build-time ternary literal compilation: `sz={{ p: isLg ? 8 : 4 }}` → `p-8` or `p-4`.
+  - Build-time variable and spread resolution with a dev-mode safety guard.
+  - Dev-mode runtime-fallback diagnostics: when sz cannot be compiled statically, the compiler explains why and suggests `szv` or `dynamic()`.
+  - New props: `animationDelay`, `insetRing` / `insetRingColor` (Tailwind v4.2).
+  - New exports for tooling: `PROPERTY_MAP`, `KNOWN_VARIANTS`, `BOOLEAN_SHORTHANDS`, `SUGGESTION_MAP`, `ReadonlySzObject`, `ReadonlySzValue`.
+
+  **Fixes:**
+  - Variant prefix propagation to arbitrary-value `filter` / `dropShadow` / `ease` / `animate` / `origin` classes (e.g. `hover:drop-shadow-[...]` now correctly keeps the `hover:` prefix).
+  - Hex / rgb / hsl color opacity wrapping: `{ color: '#0d0d12', op: 90 }` → `bg-[#0d0d12]/90`.
+  - Opacity formatter: sub-half-step decimals (`0.05`) use `/[0.05]`; integer and half-step use `/50`.
+  - CSS variable in color-object form now wraps in `()`.
+  - `bgRepeat` `x` / `y` / `repeat-x` / `repeat-y` normalized to `bg-repeat-x` / `bg-repeat-y`.
+  - `content` double-quote form normalized to single-quote (Tailwind convention).
+  - `translate` shorthand, bg variant prefix, nested spread resolution.
+  - User-provided `[]` brackets on sz arbitrary values are now stripped (compiler auto-wraps).
+  - `SpacingScale` and `FractionValue` type expansion for Tailwind v4.
+  - `browser.d.ts` stub added for `moduleResolution: node` consumers of `@csszyx/compiler/browser`.
+
+  **Removed:**
+  - `scale3d` / `translate3d` boolean shorthands (see Breaking Changes).
+  - Duplicate transform props.
+
+  ### 🔌 Unplugin
+  - **Attribute merging** — sz prop merges cleanly with an existing `className` attribute.
+  - **Theme auto-scan** — reads Tailwind `@theme` CSS blocks, generates `.csszyx/theme.d.ts` for IntelliSense on custom design tokens; warns in dev if `tsconfig.json` is missing the entry.
+  - **HMR incremental class discovery** — only re-scans changed files in dev mode.
+  - **Mangling hardening** (all 3 passes):
+    - Pass 1: handle escaped quotes in class string literals.
+    - Pass 2: balanced-paren scanner (handles nested template literals).
+    - Pass 3: mangle after `&&` operators + SSR template-literal quasi form; merges auto-injected runtime helpers into the existing `@csszyx/runtime` import instead of duplicating.
+  - **Webpack dev mode:** class mangling skipped entirely (avoids source-map corruption); mangle-map `"` escaped inside `eval()`-wrapped modules to prevent `SyntaxError: missing ) after argument list`.
+  - **SSR regex fix** — handles unminified `className: \`...\`` template-literal form.
+  - **HeroSection production mangling fix** — specific regex edge case repaired.
+
+  ### 🛠️ CLI (`@csszyx/cli`)
+
+  **New migrate commands:**
+  - `csszyx migrate <path>` — now with HTML file support (`class=` → `sz=`).
+  - `csszyx migrate audit <path>` — static analysis; classifies sz fallbacks as static (inline-able), dynamic (needs `szv` / `dynamic()`), or unknown.
+  - `csszyx migrate resolve-todos` — resolves TODO markers left by a prior migration.
+  - `csszyx migrate inject-todos` — inserts TODO markers for items that need manual review.
+
+  **New flags:** `--braces`, `--no-fouc`, `--inject-runtime (local|cdn)`, `--cdn-url`, `--local-path`.
+
+  **Other:**
+  - `customMap` support — maps legacy class strings to sz prop equivalents.
+  - Two-pass `injectTodos` workflow (auto + manual review round).
+  - Reverse migration normalizes `content` strings to double-quote form.
+  - Type generator — produces TypeScript types from `PROPERTY_MAP` for IDE support.
+  - `transform-gpu` / `cpu` / `none` moved from boolean map to value map in reverse-map.
+  - Arbitrary bracket opacity values (`[0.05]`) now parse to numbers in class-parser.
+
+  ### 📦 Runtime
+  - **Lite bundle auto-gen** — `__szColorVar` moved from `runtime/src/lite.ts` (manual copy) to `@csszyx/compiler/color-var` (single source of truth). `tsup noExternal` inlines it at build time — `dist/lite.js` has zero runtime dependency on `@csszyx/compiler`.
+  - **Browser-safe internals** — runtime internal imports switched to `@csszyx/compiler/browser` (pure JS, no Babel / WASM).
+  - **New `variants` entry** — small helper for variant composition.
+
+  ### 📖 Docs
+  - **Landing page** — hero animation, Delta architecture section, benchmarks, Pagefind full-text search modal.
+  - **Reference docs for 16 sz prop categories** — layout, spacing, typography, colors, borders, effects, filters, transforms, transitions, animations, interactivity, SVG, tables, flexbox/grid, backgrounds, misc — each with `PropTable` and live preview.
+  - **Guide pages:** installation, sz-props, variants, SSR, reusing styles, `szv`, `dynamic()`, migrate CLI, MCP server, VS Code extension.
+  - **AI-discovery files** — `llms.txt` / `llms-full.txt` fully regenerated from `scripts/gen-llms.mjs` + spec snippets for transforms, filters, backgrounds, and new props.
+
+  ### 🧪 Testing & CI
+  - **`scripts/extract-corpus.ts`** — extracts Tailwind class strings from real-world component libraries (Catalyst, Flowbite, Radix, shadcn, Tremor) into `scripts/corpus/`.
+  - **`scripts/check-corpus.ts`** + `pnpm corpus:check` — round-trip validator (migrate → compile → diff). Added as a CI gate.
+  - **`property-map-coverage.test.ts`** — fails if any `PROPERTY_MAP` key has no test.
+  - **`docs-proptable-sync.test.ts`** — fails if compiler exports drift from reference docs.
+  - **E2E suite (23 Playwright tests):** 5 vite-react, 6 `@csszyx/dynamic`, 5 Next.js SSR (hydration checksum, mangle map, edge runtime), 7 edge-case tests.
+  - **Test counts:** compiler 2362, unplugin 173, runtime 104, dynamic 114, mcp-server 35, CLI 409, core (WASM) 12.
+
+  ### 🧹 Release & Tooling
+  - `@csszyx/vscode` marked `private: true` to prevent accidental npm publish.
+  - `eslint.config.js` now ignores `.pnpm-store/` (prevents spurious `jsonc/key-spacing` noise when the pnpm store is inside the repo).
+  - `scripts/changeset-auto.mjs` (`pnpm changeset:auto`) — new helper that parses Conventional Commits since the last tag into a draft changeset. Assistive only — the developer still reviews and edits before committing.
+  - Devcontainer (Node 22, pnpm 10, Rust + wasm-pack) + `.mise.toml` / `.nvmrc` / `.tool-versions` for reproducible toolchain pinning (local + Cloudflare Pages).
+  - CI: pnpm bumped to v10, Node to v22; `wasm-pack` installed via `init.sh` for speed; Rust + wasm-pack added to the lint job.
+
+### Patch Changes
+
+- @csszyx/compiler@0.4.0
+- @csszyx/runtime@0.4.0
+- @csszyx/core@0.4.0
+- @csszyx/types@0.4.0
+- @csszyx/unplugin@0.4.0
+- @csszyx/dynamic@0.4.0
+
 ## 0.3.1
 
 ### Patch Changes

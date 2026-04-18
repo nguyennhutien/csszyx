@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/compiler",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Core compiler and transformation logic for csszyx",
   "keywords": [
     "csszyx",
