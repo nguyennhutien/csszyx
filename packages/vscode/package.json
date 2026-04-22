@@ -5,6 +5,12 @@
     "description": "IntelliSense, hover docs, and diagnostics for CSSzyx sz props",
     "version": "0.4.0",
     "publisher": "csszyx",
+    "license": "MIT",
+    "icon": "icon.png",
+    "homepage": "https://csszyx.com",
+    "bugs": {
+        "url": "https://github.com/nguyennhutien/csszyx/issues"
+    },
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -64,7 +70,9 @@
     "scripts": {
         "build": "node esbuild.mjs",
         "dev": "node esbuild.mjs --watch",
-        "type-check": "tsc --noEmit"
+        "type-check": "tsc --noEmit",
+        "vsix": "pnpm build && node scripts/package.mjs",
+        "vsix:publish": "pnpm build && node scripts/package.mjs --publish"
     },
     "devDependencies": {
         "@csszyx/compiler": "workspace:*",
