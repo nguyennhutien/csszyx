@@ -34,8 +34,30 @@ jobs:
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked || true
 
+      # See ci.yml — cache wasm-bindgen CLI download. wasm-pack's built-in
+      # wasm-opt is disabled via packages/core/Cargo.toml (avoids the flaky
+      # binaryen GH Releases download). wasm-opt is re-introduced inside the
+      # @csszyx/core build script via run-wasm-opt.mjs, using apt-installed
+      # binaryen from the next step — this way the optimized pkg/ is what
+      # turbo caches.
+      - name: Cache wasm-pack tool downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v1
+
+      - name: Install binaryen (for wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
+      # so the OPTIMIZED pkg/ is what turbo captures in its cache. Doing it
+      # outside this step would be overwritten whenever turbo had a cache hit.
+      # Requires the apt binaryen install step above to provide wasm-opt.
+      - name: Build WASM core
+        run: pnpm --filter @csszyx/core build
 
       - name: Build
         run: pnpm build

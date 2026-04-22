@@ -21,10 +21,19 @@ serde-wasm-bindgen = "0.6.5"
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+# Note: [profile.release] lives in the workspace root Cargo.toml.
+# Cargo ignores profile sections in non-root workspace members and emits a
+# warning if declared here.
+
+# Disable wasm-pack's built-in wasm-opt invocation.
+# Rationale: wasm-pack auto-downloads binaryen (~4MB tarball) from GitHub
+# Releases on first run, which is occasionally flaky (504/timeout). CI + dev
+# builds do not need the wasm-opt size pass — rustc's release profile above
+# already does aggressive optimization. Release workflow runs wasm-opt
+# manually using apt-installed binaryen so production ships fully optimized
+# WASM without exposing CI to the flaky download path.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
 
 [lints]
 workspace = true

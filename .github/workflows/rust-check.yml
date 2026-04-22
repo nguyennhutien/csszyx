@@ -46,7 +46,16 @@ jobs:
       - name: Run tests
         run: cargo test --all-features
 
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked || true
+
+      # See ci.yml — cache wasm-bindgen CLI download. wasm-opt is disabled
+      # in packages/core/Cargo.toml; release.yml handles size optimization.
+      - name: Cache wasm-pack tool downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v1
+
       - name: Build WASM
-        run: |
-          cargo install wasm-pack --locked || true
-          wasm-pack build --target bundler
+        run: wasm-pack build --target bundler

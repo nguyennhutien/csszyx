@@ -23,3 +23,12 @@ missing_docs_in_private_items = "deny"
 # --- Custom overrides ---
 # Some arguments are necessary even if many
 too_many_arguments = "allow"
+
+# Release profile for all workspace members (currently just packages/core).
+# Must live at workspace root — Cargo ignores [profile.*] in non-root members.
+# Tuned for WASM: aggressive size + speed optimization; wasm-opt runs as a
+# post-step (see packages/core/scripts/run-wasm-opt.mjs) for further shrinking.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

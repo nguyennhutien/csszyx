@@ -34,8 +34,21 @@ jobs:
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
 
+      # Cache wasm-pack's lazy download of wasm-bindgen CLI. wasm-opt is
+      # disabled in packages/core/Cargo.toml, so binaryen is never downloaded
+      # here — release.yml re-runs wasm-opt manually with apt-installed
+      # binaryen. Bump the cache key suffix if upgrading wasm-pack.
+      - name: Cache wasm-pack tool downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build WASM core
+        run: pnpm --filter @csszyx/core build
 
       - name: Lint
         run: pnpm lint:check
@@ -66,8 +79,17 @@ jobs:
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
 
+      - name: Cache wasm-pack tool downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build WASM core
+        run: pnpm --filter @csszyx/core build
 
       - name: Install Playwright browsers
         run: pnpm --filter @csszyx/e2e exec playwright install --with-deps chromium
@@ -104,8 +126,17 @@ jobs:
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
 
+      - name: Cache wasm-pack tool downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build WASM core
+        run: pnpm --filter @csszyx/core build
 
       - name: Build
         run: pnpm build
