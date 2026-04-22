@@ -58,6 +58,16 @@ export default function SearchModal({ isOpen, onClose }: Props) {
         return () => window.removeEventListener('keydown', onKey);
     }, [isOpen, onClose]);
 
+    // Lock body scroll while open — prevents the page behind the backdrop from
+    // scrolling on wheel/touch. Preserves the caller's original overflow value.
+    useEffect(() => {
+        if (!isOpen) return;
+        const { body } = document;
+        const prevOverflow = body.style.overflow;
+        body.style.overflow = 'hidden';
+        return () => { body.style.overflow = prevOverflow; };
+    }, [isOpen]);
+
     const doSearch = useCallback(async (q: string) => {
         if (!q.trim()) {
             setResults([]);
