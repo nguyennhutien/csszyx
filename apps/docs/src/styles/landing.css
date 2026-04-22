@@ -138,39 +138,26 @@ body {
    Glow Card
    ================================================================ */
 
-.glow-card {
-  position: relative;
-  overflow: hidden;
-}
 .glow-card::before {
-  content: "";
-  position: absolute;
-  top: var(--y);
-  left: var(--x);
-  transform: translate(-50%, -50%);
-  width: 200%;
-  height: 200%;
   background: radial-gradient(var(--color-primary), transparent, transparent);
-  opacity: 0;
-  border-radius: var(--radius-3xl);
   transition:
     opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 1.2s cubic-bezier(0.16, 1, 0.3, 1),
     top 0s,
     left 0s;
-}
-.glow-card:hover::before {
-  opacity: 1;
 }
 .glow-card::after {
   content: "";
   position: absolute;
   inset: 1px;
-  /* In light mode use near-white to let card bg show; dark mode uses the deep surface */
-  background: light-dark(
+  background-color: light-dark(
     rgba(255, 255, 255, 0.92),
-    rgba(var(--color-background-dark-rgb), 0.92)
+    rgba(var(--color-background-dark-rgb), 1)
   );
-  border-radius: var(--radius-3xl);
+  opacity: 1;
+}
+.glow-card:hover::after {
+  opacity: 0.92;
 }
 
 /* ================================================================

@@ -1,3 +1,42 @@
+const glowCardSz = {
+  flex: true,
+  md: { colSpan: 6, p: 14 },
+  lg: { colSpan: 3 },
+  position: 'relative',
+  overflow: 'hidden',
+  p: 10,
+  border: true,
+  borderColor: { color: 'black', op: 5 },
+  dark: { bg: { color: '#1e1e2a', op: 50 }, borderColor: { color: 'white', op: 5 } },
+  backdropBlur: 'xl',
+  rounded: '3xl',
+  before: {
+    content: '""',
+    position: 'absolute',
+    top: '--y',
+    left: '--x',
+    translate: '-50%',
+    w: '2/1',
+    h: '2/1',
+    opacity: 0,
+    backdropBlur: 'xl',
+  },
+  after: {
+    content: '""',
+    position: 'absolute',
+    inset: 1,
+    rounded: '3xl',
+    backdropBlur: 'xl',
+  },
+  hover: {
+    borderColor: { color: 'black', op: 10 },
+    dropShadow: '0 0 40px rgba(0, 150, 70, 0.2)',
+    before: {
+      opacity: 100,
+    },
+  }
+} as const;
+
 export default function EmpoweringSection() {
   return (
     <section
@@ -41,20 +80,7 @@ export default function EmpoweringSection() {
         {/* For Form Renderers */}
         <div
           className="glow-card reveal-item group"
-          sz={{
-            flex: true,
-            md: { colSpan: 6, p: 14 },
-            lg: { colSpan: 3 },
-            relative: true,
-            overflow: 'hidden',
-            p: 10,
-            border: true,
-            borderColor: { color: 'black', op: 5 },
-            dark: { borderColor: { color: 'white', op: 5 }, bg: '--color-background-dark' },
-            bg: 'white',
-            rounded: '3xl',
-            hover: { borderColor: { color: 'black', op: 10 } },
-          }}
+          sz={glowCardSz}
         >
           <div sz={{ relative: true, z: 20 }}>
             <h3 sz={{ text: '3xl', fontWeight: 'black', tracking: 'tighter', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>
@@ -70,20 +96,7 @@ export default function EmpoweringSection() {
         {/* The End of Safelisting */}
         <div
           className="glow-card reveal-item group"
-          sz={{
-            flex: true,
-            md: { colSpan: 6, p: 14 },
-            lg: { colSpan: 3 },
-            relative: true,
-            overflow: 'hidden',
-            p: 10,
-            border: true,
-            borderColor: { color: 'black', op: 5 },
-            dark: { borderColor: { color: 'white', op: 5 }, bg: '--color-background-dark' },
-            bg: 'white',
-            rounded: '3xl',
-            hover: { borderColor: { color: 'black', op: 10 } },
-          }}
+          sz={glowCardSz}
         >
           <div sz={{ relative: true, z: 20 }}>
             <h3 sz={{ text: '3xl', fontWeight: 'black', tracking: 'tighter', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>
@@ -99,18 +112,10 @@ export default function EmpoweringSection() {
         <div
           className="glow-card reveal-item group"
           sz={{
+            ...glowCardSz,
             md: { colSpan: 6, p: 12 },
             lg: { colSpan: 6, flexDir: 'row' },
-            relative: true,
-            overflow: 'hidden',
             p: 8,
-            border: true,
-            borderColor: { color: 'black', op: 5 },
-            dark: { borderColor: { color: 'white', op: 5 }, bg: '--color-background-dark' },
-            bg: 'white',
-            rounded: '3xl',
-            hover: { borderColor: { color: 'black', op: 8 } },
-            flex: true,
             flexDir: 'col',
             gap: 12,
             items: 'center',
