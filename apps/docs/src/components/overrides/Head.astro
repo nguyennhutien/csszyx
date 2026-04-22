@@ -11,19 +11,22 @@ const token = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
 const isProd = import.meta.env.PROD;
 ---
 
+{/* Force dark for first-time visitors (no localStorage entry).
+    Must run BEFORE <Default /> so Starlight's own theme init script sees
+    'dark' in localStorage and skips the system-preference fallback —
+    otherwise users on a light-mode OS see a brief light-theme flash. */}
+<script is:inline>
+    if (!localStorage.getItem('starlight-theme')) {
+        localStorage.setItem('starlight-theme', 'dark');
+        document.documentElement.dataset.theme = 'dark';
+    }
+</script>
 <Default {...Astro.props} />
 {/* sr-only CSS is re-declared here (inline, bypassing the mangle pipeline) because
     the csszyx mangle pass renames .sr-only in built CSS while Starlight's own templates
     and SiteTitle.astro emit the literal class="sr-only". Without this fallback the
     heading anchor text ("Section titled …") becomes visible on hover. */}
 <style is:inline>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}</style>
-{/* Default to dark theme for first-time visitors (no localStorage preference yet).
-    Must be inline + blocking to avoid FOUC — runs before Starlight's ThemeSelect hydrates. */}
-<script is:inline>
-    if (!localStorage.getItem('starlight-theme')) {
-        document.documentElement.dataset.theme = 'dark';
-    }
-</script>
 <Font cssVariable="--font-ibm-plex-sans" preload />
 <Font cssVariable="--font-jetbrains-mono" preload />
 <Font cssVariable="--font-geist-mono" preload />
