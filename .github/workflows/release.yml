@@ -32,7 +32,8 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked || true
+        # Pin to 0.12.1 — see ci.yml comment for rationale.
+        run: cargo install wasm-pack --locked --version 0.12.1 || true
 
       # See ci.yml — cache wasm-bindgen CLI download. wasm-pack's built-in
       # wasm-opt is disabled via packages/core/Cargo.toml (avoids the flaky
