@@ -98,6 +98,16 @@ jobs:
           path: ~/.cache/.wasm-pack
           key: wasm-pack-tools-${{ runner.os }}-v2
 
+      - name: Cache wasm-bindgen-cli
+        id: cache-wasm-bindgen
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+      - name: Install wasm-bindgen-cli
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -149,6 +159,16 @@ jobs:
         with:
           path: ~/.cache/.wasm-pack
           key: wasm-pack-tools-${{ runner.os }}-v2
+
+      - name: Cache wasm-bindgen-cli
+        id: cache-wasm-bindgen
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+      - name: Install wasm-bindgen-cli
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
