@@ -32,12 +32,12 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        # Pin to v0.12.1 — v0.13.x has a regression parsing ~/.cargo/.crates.toml
-        # on second invocation (nodejs target after bundler target in the same
-        # job), failing with "invalid type: sequence, expected a string".
+        # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
+        # sequence, expected a string" parse error on the second wasm-pack
+        # invocation within the same job (nodejs target after bundler).
         uses: jetli/wasm-pack-action@v0.4.0
         with:
-          version: 'v0.12.1'
+          version: 'v0.14.0'
 
       # Cache wasm-pack's lazy download of wasm-bindgen CLI. wasm-opt is
       # disabled in packages/core/Cargo.toml, so binaryen is never downloaded
@@ -46,8 +46,8 @@ jobs:
       - name: Cache wasm-pack tool downloads
         uses: actions/cache@v4
         with:
-          path: ~/.cache/wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v1
+          path: ~/.cache/.wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -82,18 +82,18 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        # Pin to v0.12.1 — v0.13.x has a regression parsing ~/.cargo/.crates.toml
-        # on second invocation (nodejs target after bundler target in the same
-        # job), failing with "invalid type: sequence, expected a string".
+        # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
+        # sequence, expected a string" parse error on the second wasm-pack
+        # invocation within the same job (nodejs target after bundler).
         uses: jetli/wasm-pack-action@v0.4.0
         with:
-          version: 'v0.12.1'
+          version: 'v0.14.0'
 
       - name: Cache wasm-pack tool downloads
         uses: actions/cache@v4
         with:
-          path: ~/.cache/wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v1
+          path: ~/.cache/.wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -134,18 +134,18 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        # Pin to v0.12.1 — v0.13.x has a regression parsing ~/.cargo/.crates.toml
-        # on second invocation (nodejs target after bundler target in the same
-        # job), failing with "invalid type: sequence, expected a string".
+        # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
+        # sequence, expected a string" parse error on the second wasm-pack
+        # invocation within the same job (nodejs target after bundler).
         uses: jetli/wasm-pack-action@v0.4.0
         with:
-          version: 'v0.12.1'
+          version: 'v0.14.0'
 
       - name: Cache wasm-pack tool downloads
         uses: actions/cache@v4
         with:
-          path: ~/.cache/wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v1
+          path: ~/.cache/.wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

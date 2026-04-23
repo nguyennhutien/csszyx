@@ -32,8 +32,8 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        # Pin to 0.12.1 — see ci.yml comment for rationale.
-        run: cargo install wasm-pack --locked --version 0.12.1 || true
+        # Pin to 0.14.0 — see ci.yml comment for rationale.
+        run: cargo install wasm-pack --locked --version 0.14.0 || true
 
       # See ci.yml — cache wasm-bindgen CLI download. wasm-pack's built-in
       # wasm-opt is disabled via packages/core/Cargo.toml (avoids the flaky
@@ -44,8 +44,8 @@ jobs:
       - name: Cache wasm-pack tool downloads
         uses: actions/cache@v4
         with:
-          path: ~/.cache/wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v1
+          path: ~/.cache/.wasm-pack
+          key: wasm-pack-tools-${{ runner.os }}-v2
 
       - name: Install binaryen (for wasm-opt)
         run: sudo apt-get update && sudo apt-get install -y binaryen

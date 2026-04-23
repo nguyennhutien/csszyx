@@ -7,6 +7,12 @@ resolver = "2"
 [workspace.lints.rust]
 # Enforce documentation for all public items
 missing_docs = "deny"
+# wasm-bindgen 0.2.93's #[wasm_bindgen] macro emits
+# #[cfg(wasm_bindgen_unstable_test_coverage)] internally. Rust's check-cfg
+# lint flags unknown cfgs as warnings, which clippy --D warnings then
+# promotes to errors in the rust-check workflow. Whitelist the cfg name
+# so the lint stays quiet without disabling it for everything else.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
 
 [workspace.lints.clippy]
 # Enable all default lints
