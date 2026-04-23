@@ -1,378 +1,169 @@
 # CSSzyx
 
-CSS-in-JS framework for the AI era with Tailwind object syntax, automatic minification, and SSR safety.
+CSS-in-JS framework for the AI era — Tailwind-v4 object syntax, build-time class mangling, and SSR-safe hydration.
 
-> **Pronunciation:** "css-zyx" — Class names are encoded in reversed order z→y→x.
+> **Pronunciation:** "css-zyx". Class names are encoded in reversed tier order `z → y → x → … → A` for maximum compression of the most common utilities.
 
 [![npm version](https://img.shields.io/npm/v/csszyx.svg)](https://www.npmjs.com/package/csszyx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/nguyennhutien/csszyx/test.yml)](https://github.com/nguyennhutien/csszyx/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/nguyennhutien/csszyx/ci.yml?branch=main)](https://github.com/nguyennhutien/csszyx/actions/workflows/ci.yml)
 
-## ⚡ Quick Start
+## Quick Start
 
-```tsx
-// Write
-<div sz={{ p: 4, bg: 'red-500', hover: { bg: 'blue-600' } }} />
+Install:
 
-// Ship (reversed encoding: z→y→x)
-<div className="z y x" />  // 42% smaller bundle
+```bash
+pnpm add -D csszyx
 ```
 
-## ✨ Features
+Wire the plugin (Vite shown — Webpack, esbuild, Rollup, Next.js all supported via `@csszyx/unplugin`):
 
-- **Type Safety**: Full TypeScript autocomplete for Tailwind classes
-- **Auto Minification**: `p-4` → `z`, `bg-red-500` → `y` (reversed tier encoding)
-- **SSR Safe**: SHA-256 checksum validation prevents hydration mismatches
-- **Zero Runtime**: Static cases compile to string literals
-- **CSS Variable Auto-Compile**: Automatically converts static values to CSS variables
-- **Container Queries**: Full `@container` and named container support
-- **`:has()` Selector**: Support for relational pseudo-class via `has` variant
-- **Migration CLI**: Convert Tailwind `className="..."` to `sz={...}` props
-- **AI-Native**: Structured object syntax designed for LLM code generation
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import csszyx from "csszyx/vite";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 
-> **Tailwind CSS v4 only.** Tailwind CSS v3 is not supported. v3 support is planned for a future release.
-
-**Platform support:**
-
-| Platform         | Status                                    |
-| ---------------- | ----------------------------------------- |
-| React (Vite)     | Production-ready                          |
-| Next.js (SSR)    | Production-ready                          |
-| Vue 3            | Experimental (adapter included, untested) |
-| Svelte 4/5       | Experimental (adapter included, untested) |
-| esbuild / Rollup | Plugin available via `@csszyx/unplugin`   |
-
-## 📦 Bundle Size
-
-| App Size | Classes | Variables | Reduction |
-| -------- | ------- | --------- | --------- |
-| Small    | 500     | 20        | 31%       |
-| Medium   | 2,000   | 100       | 42%       |
-| Large    | 5,000   | 250       | 41%       |
-
-**Network Impact (Medium App):**
-
-- Uncompressed: 4.6KB (42% smaller)
-- Gzipped: 1.4KB (56% smaller)
-- 3G Download: 36ms faster
-
-## 🎯 How It Works
-
-### 1. Object Syntax
-
-```tsx
-sz({
-  p: 4, // padding: 1rem
-  bg: "red-500", // background: #ef4444
-  hover: { bg: "blue" }, // hover:bg-blue-500
-  md: { p: 8 }, // md:p-8
+export default defineConfig({
+  plugins: [...csszyx(), tailwindcss(), react()],
 });
 ```
 
-### 2. Reversed Tier-Based Encoding
-
-```plaintext
-z, y, x, ..., A      → 52 classes (1 char)
-z9, z8, ..., A0      → 520 classes (2 chars)
-zz, zy, ..., AA      → 2,704 classes (2 chars)
-───────────────────────────────────────
-Total < 3 chars      → 3,276 classes
-```
-
-**Examples:**
-
-```typescript
-encode(0)    → 'z'
-encode(1)    → 'y'
-encode(51)   → 'A'
-encode(52)   → 'z9'
-encode(571)  → 'A0'
-encode(572)  → 'zz'
-```
-
-### 3. CSS Variable Optimization
+Use the `sz` prop in your components:
 
 ```tsx
-// Same value → same variable → auto reuse
-<div sz={{ bg: 'var(--primary)' }} />
-<span sz={{ bg: 'var(--primary)' }} />
-
-// Output
-<parent style="--ca3f2: #ff0000">
-  <div style="background: var(--ca3f2)" />
-  <span style="background: var(--ca3f2)" />
-</parent>
+<div sz={{ p: 4, bg: "red-500", hover: { bg: "blue-600" } }} />
 ```
 
-### 4. Build Pipeline
-
-```plaintext
-Type Gen → JSX Transform → Tailwind JIT → Mangling → Emit
-   ↓           ↓               ↓              ↓         ↓
-  .d.ts    className=""     CSS bundle      z,y,x    +checksum
-```
-
-## 🔒 Safety Guarantees
-
-### SSR Hydration
+At build time, the plugin transforms `sz` to `className`, lets Tailwind JIT emit CSS, then mangles both together:
 
 ```html
-<!-- Server -->
-<html data-sz-checksum="abc123">
-  <div class="a b">Content</div>
-  <script id="__SZ_RECOVERY_MANIFEST__">
-    {"tokens":{"a94f1c...":{"mode":"csr"}}}
-  </script>
-</html>
-
-<!-- Client -->
-Checksum match? → Hydrate ✓ Checksum mismatch? → Abort (preserve server HTML) ✓
-
-<!-- Recovery (if declared) -->
-<Component szRecover="csr" data-sz-recovery-token="a94f1c..." />
-Token valid? → One-time CSR recovery ✓ Token invalid/missing? → Security error,
-stay aborted ✓
+<div class="z y" />
+<style>
+  .z{padding:1rem}.y{background:#ef4444}...
+</style>
 ```
 
-**Token-Based Security:**
+Full walkthrough: <https://csszyx.com>
 
-```tsx
-// Developer writes
-<Component szRecover="csr" />
+## Features
 
-// Build adds cryptographic token
-<Component szRecover="csr" data-sz-recovery-token="a94f1c..." />
+- **Type-safe `sz` prop** — full TypeScript autocomplete for every Tailwind v4 utility and variant
+- **Class-name mangling** — reversed-tier encoding (`p-4` → `z`, `bg-red-500` → `y`) drives ~40% bundle reduction on typical apps
+- **SSR-safe hydration** — SHA-256 checksum validation detects mangle-map mismatch between server and client and preserves server HTML
+- **Zero-runtime static path** — fully-static `sz` objects compile to string literals; dynamic objects stay light (5ns zero-alloc for 0–4 keys)
+- **Arbitrary CSS via `css: {}`** — escape hatch for properties Tailwind doesn't cover
+- **Container queries & `:has()`** — first-class support via `container` and `has` variants
+- **Variant nesting** — `hover`, `md`, `dark`, `group-hover/name`, `peer-*`, `data-*`, `aria-*`, `supports-*`
+- **Runtime injection (`@csszyx/dynamic`)** — inject styles from API/CMS data at runtime; SSR-safe
+- **Migration CLI (`@csszyx/cli`)** — convert existing Tailwind `className="..."` to `sz={...}` props
+- **MCP server (`@csszyx/mcp-server`)** — expose sz spec + compiler to AI agents (Cursor, Claude Code, etc.)
+- **VS Code extension** — IntelliSense, hover previews, and diagnostics inside `sz={{...}}` (in the Marketplace)
 
-// Runtime verifies before recovery
-✅ Token exists?
-✅ Token in manifest?
-✅ Mode matches?
-→ Allow recovery
-```
+**Tailwind CSS v4 only.** v3 support is not implemented yet.
 
-**Progressive Workflow:**
+## Platform Support
 
-```tsx
-// Week 1-2: Explore
-{ auto_inject: true } → Auto-recovery everywhere
+| Platform            | Status           | Via                        |
+| ------------------- | ---------------- | -------------------------- |
+| React + Vite        | Production-ready | `csszyx/vite`              |
+| Next.js (SSR + RSC) | Production-ready | `@csszyx/unplugin/webpack` |
+| esbuild / Rollup    | Supported        | `@csszyx/unplugin`         |
+| Vue 3               | Experimental     | `@csszyx/vue-adapter`      |
+| Svelte 4/5          | Experimental     | `@csszyx/svelte-adapter`   |
 
-// Week 3-4: Fix
-<Component szRecover="dev-only" /> → Explicit per-component
+## Packages
 
-// Week 5+: Validate
-{ strict_mode: true } → Test exact prod behavior
-```
+| Package                  | Description                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `csszyx`                 | Umbrella — re-exports all; provides `csszyx/vite`, `csszyx/webpack`, `csszyx/lite` |
+| `@csszyx/compiler`       | `sz` object → Tailwind className transform (TypeScript)                            |
+| `@csszyx/runtime`        | `_sz`, `_szIf`, `_szSwitch`, `_szMerge` + SSR hydration validator                  |
+| `@csszyx/core`           | Rust/WASM core: encoder, SHA-256 checksum, collision detection                     |
+| `@csszyx/unplugin`       | Build plugin — Vite + Webpack + esbuild + Rollup + Next.js                         |
+| `@csszyx/dynamic`        | Runtime CSS injection for API/CMS-driven styling                                   |
+| `@csszyx/cli`            | Migration CLI (Tailwind → `sz`) + type generator                                   |
+| `@csszyx/vars`           | CSS custom-property helpers (`applySzVars`, React `useSzVars`)                     |
+| `@csszyx/mcp-server`     | Model Context Protocol server for AI agents                                        |
+| `@csszyx/vscode`         | VS Code extension — IntelliSense, hover, diagnostics                               |
+| `@csszyx/types`          | Shared TypeScript types + `CsszyxConfig`                                           |
+| `@csszyx/vue-adapter`    | Vue SFC support (experimental)                                                     |
+| `@csszyx/svelte-adapter` | Svelte support (experimental)                                                      |
 
-### RSC Boundary Guard
+## Examples
 
-```tsx
-// ✅ Client Component
-"use client";
-import { _sz } from "csszyx/runtime";
-
-// ❌ Server Component
-("use server");
-import { _sz } from "csszyx/runtime"; // Fatal Build Error!
-```
-
-### Collision Prevention
-
-```typescript
-SHA-256 Checksum:
-  • Single hash algorithm for all operations
-  • Build-time: Rust (packages/core)
-  • Server-side: Node.js crypto
-  • Browser runtime: zero hashing (string passthrough)
-  • Fatal error on collision
-```
-
-## 🛠️ Advanced Features
-
-### Sugar Syntax
-
-```tsx
-// Negative values
-{ m: -4 } → '-m-4'
-
-// Opacity
-{ opacity: 0.5 } → 'opacity-50'
-
-// Color with opacity (object form)
-{ text: { color: 'red-500', op: 50 } } → 'text-red-500/50'
-
-// Auto brackets
-{ w: 'calc(100% - 20px)' } → 'w-[calc(100%-20px)]'
-```
-
-### Variant Nesting
-
-```tsx
-{
-  group: 'sidebar',
-  'group-hover/sidebar': {
-    bg: 'blue-500'
-  }
-}
-```
-
-### GPU Optimization (Planned)
-
-> **Note:** GPU optimization features are planned for a future release and are not yet implemented.
-
-```tsx
-// Planned: Automatic will-change management
-// Planned: Viewport quota, cleanup, priority scheduling
-```
-
-## 📊 Performance
-
-### Runtime
-
-```plaintext
-Static Mode:    0ns (compiled to string literal)
-Dynamic 0-4:    5ns (zero allocation)
-Dynamic 5+:     30ns (single allocation)
-```
-
-### Build Time
-
-```plaintext
-Class encoding:     ~25ns per class
-Variable hashing:   ~20ns per variable
-Collision check:    O(1) hash lookup
-```
-
-### Memory
-
-```plaintext
-Class names:    38% fewer bytes in DOM
-CSS variables:  56% fewer bytes
-CSSOM:          Proportionally smaller
-```
-
-## 🎓 Usage Examples
-
-### Basic
+**Responsive + variants:**
 
 ```tsx
 <button
   sz={{
-    p: 4,
+    p: 2,
     bg: "blue-500",
-    color: "white",
     rounded: "lg",
     hover: { bg: "blue-600" },
+    md: { p: 4 },
   }}
 >
   Click me
 </button>
 ```
 
-### Responsive
+**Runtime helpers:**
 
 ```tsx
-<div
-  sz={{
-    p: 2, // Mobile
-    md: { p: 4 }, // Tablet
-    lg: { p: 8 }, // Desktop
-  }}
-/>
+import { _sz, _szIf } from "@csszyx/runtime";
+
+<div className={_sz("base", _szIf(isActive, "active", "inactive"))} />;
 ```
 
-### Dynamic
+**Dynamic (runtime-injected styles):**
 
 ```tsx
-<div
-  sz={{
-    p: 4,
-    bg: isActive ? "green-500" : "gray-500",
-  }}
-/>
+import { dynamic } from "@csszyx/dynamic";
+
+const cls = dynamic({ p: 4, bg: "blue-500" }); // injects CSS if not already in bundle
+<div className={cls} />;
 ```
 
-### With className
+**Merging with existing `className` (`sz` wins conflicts, rest preserved):**
 
 ```tsx
-// ss wins conflicts, className preserved otherwise
-<div
-  className="mb-4 text-lg"
-  sz={{ mb: 2 }} // Overrides mb-4
-/>
+<div className="mb-4 text-lg" sz={{ mb: 2 }} />
 // → className="text-lg mb-2"
 ```
 
-## 🔧 Configuration
+## Debugging
 
-### tailwind.config.js
+In development the plugin attaches a debug helper to `window`:
 
-```javascript
-export default {
-  theme: {
-    colors: {
-      primary: "#ff0000", // Auto-promoted to global CSS var
-    },
-  },
-};
-```
-
-### TypeScript
-
-```typescript
-// Auto-generated from config
-type csszyxProps = {
-  p?: 0 | 1 | 2 | 3 | 4 | 8 | 12 | ...
-  bg?: 'red-500' | 'blue-600' | ...
-  // ... all Tailwind utilities
-}
-```
-
-## 🐛 Debugging
-
-### Development Tools
-
-```typescript
-// Debug helper (dev only)
+```ts
 window.__csszyx.decode("z"); // → 'p-4'
 window.__csszyx.encode("p-4"); // → 'z'
 window.__csszyx.decodeAll(element); // → ['p-4', 'bg-red-500']
-window.__csszyx.mangleMap; // { 'p-4': 'z', 'bg-red-500': 'y' }
-window.__csszyx.checksum; // 'a1b2c3d4...' (SHA-256 hex)
+window.__csszyx.mangleMap; // full map
+window.__csszyx.checksum; // SHA-256 hex
 ```
 
-### Audit Logging
+## Documentation
 
-```json
-// .csszyx/audit.log
-{
-  "level": "error",
-  "type": "collision",
-  "file": "/src/Button.tsx",
-  "line": 42
-}
-```
+- **Docs site:** <https://csszyx.com> — installation, sz props, variants, SSR, migration, `@csszyx/dynamic`, MCP server, VS Code extension
+- **llms.txt / llms-full.txt:** generated for Cursor, Claude, and other AI tools — see `apps/docs/public/`
 
-## 📖 Documentation
+## Project Status
 
-- **Complete Guide**: `csszyx-guide.md` - Full implementation details
-- **Spec**: `csszyx-spec.json` - AI-executable specification
+- **Version:** 0.4.0 (pre-release)
+- **Tests:** ~2400 unit (vitest) + ~30 E2E (Playwright) across 8 packages
+- **Tailwind:** v4 only (v3 planned)
+- **Release cadence:** managed via Changesets; see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
 
-## 🎯 Design Principles
+## Contributing
 
-1. **Type Safety First**: TypeScript catches errors at compile time
-2. **Zero Ambiguity**: Every decision has exactly one outcome
-3. **Deterministic**: Same input always produces same output
-4. **Performance**: Optimize bundle size without runtime cost
-5. **SSR Safe**: Never break hydration, always preserve server HTML
+Issues, discussions, and PRs welcome:
 
-## 📈 Project Status
-
-- **Version**: 0.1.0 (pre-release)
-- **Tailwind**: v4 only (v3 planned)
-- **Test Coverage**: 890 tests (873 vitest + 17 Playwright E2E)
-- **Lite Runtime**: <400B gzipped
-- **Determinism**: 100% guaranteed
+- **Issues / feature requests:** <https://github.com/nguyennhutien/csszyx/issues>
+- **Contact:** <hello@csszyx.com>
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
