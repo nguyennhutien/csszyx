@@ -10,8 +10,15 @@ repository = "https://github.com/nguyennhutien/csszyx"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# Pin wasm-bindgen to the last release that does NOT enable the
+# WASM `reference-types` feature by default. Newer versions (0.2.95+)
+# emit a `__wbindgen_init_externref_table` call that does
+# `WebAssembly.Table.grow(4)`, which Node 22's stricter V8 rejects with
+# `RangeError: WebAssembly.Table.grow(): failed to grow table by 4`
+# when Node tries to load pkg-node/csszyx_core.js — breaking the
+# @csszyx/playground-webpack-react build step in CI.
 [dependencies]
-wasm-bindgen = "0.2"
+wasm-bindgen = "=0.2.93"
 sha2 = "0.10"
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
@@ -19,7 +26,7 @@ serde_json = "1.0"
 serde-wasm-bindgen = "0.6.5"
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3"
+wasm-bindgen-test = "=0.3.43"
 
 # Note: [profile.release] lives in the workspace root Cargo.toml.
 # Cargo ignores profile sections in non-root workspace members and emits a
