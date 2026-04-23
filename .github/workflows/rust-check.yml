@@ -47,16 +47,20 @@ jobs:
         run: cargo test --all-features
 
       - name: Install wasm-pack
-        # Pin to 0.14.0 — see ci.yml comment for rationale.
         run: cargo install wasm-pack --locked --version 0.14.0 || true
 
-      # See ci.yml — cache wasm-bindgen CLI download. wasm-opt is disabled
-      # in packages/core/Cargo.toml; release.yml handles size optimization.
-      - name: Cache wasm-pack tool downloads
+      # See ci.yml — pre-install wasm-bindgen-cli so `--mode no-install`
+      # below can skip wasm-pack's own install step (which has a parse
+      # bug on repeat invocations).
+      - name: Cache wasm-bindgen-cli
+        id: cache-wasm-bindgen
         uses: actions/cache@v4
         with:
-          path: ~/.cache/.wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v2
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+      - name: Install wasm-bindgen-cli
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Build WASM
-        run: wasm-pack build --target bundler
+        run: wasm-pack build --mode no-install --target bundler

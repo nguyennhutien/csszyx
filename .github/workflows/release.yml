@@ -32,20 +32,22 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        # Pin to 0.14.0 — see ci.yml comment for rationale.
         run: cargo install wasm-pack --locked --version 0.14.0 || true
 
-      # See ci.yml — cache wasm-bindgen CLI download. wasm-pack's built-in
-      # wasm-opt is disabled via packages/core/Cargo.toml (avoids the flaky
-      # binaryen GH Releases download). wasm-opt is re-introduced inside the
-      # @csszyx/core build script via run-wasm-opt.mjs, using apt-installed
-      # binaryen from the next step — this way the optimized pkg/ is what
-      # turbo caches.
-      - name: Cache wasm-pack tool downloads
+      # See ci.yml — pre-install wasm-bindgen-cli so the @csszyx/core
+      # build script (wasm-pack --mode no-install) can skip wasm-pack's
+      # own install step. wasm-opt runs via the build script's
+      # run-wasm-opt.mjs using the apt-installed binaryen from the next
+      # step, so turbo caches the OPTIMIZED pkg/ output.
+      - name: Cache wasm-bindgen-cli
+        id: cache-wasm-bindgen
         uses: actions/cache@v4
         with:
-          path: ~/.cache/.wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v2
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+      - name: Install wasm-bindgen-cli
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Install binaryen (for wasm-opt)
         run: sudo apt-get update && sudo apt-get install -y binaryen

@@ -32,22 +32,25 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
-        # sequence, expected a string" parse error on the second wasm-pack
-        # invocation within the same job (nodejs target after bundler).
         uses: jetli/wasm-pack-action@v0.4.0
         with:
           version: 'v0.14.0'
 
-      # Cache wasm-pack's lazy download of wasm-bindgen CLI. wasm-opt is
-      # disabled in packages/core/Cargo.toml, so binaryen is never downloaded
-      # here — release.yml re-runs wasm-opt manually with apt-installed
-      # binaryen. Bump the cache key suffix if upgrading wasm-pack.
-      - name: Cache wasm-pack tool downloads
+      # Pre-install wasm-bindgen-cli so wasm-pack can run with
+      # --mode no-install (skip its own wasm-bindgen install step). That
+      # install step has a parse bug — "invalid type: sequence, expected
+      # a string at line 3 column 19" — when wasm-pack is invoked twice
+      # in the same job (bundler then nodejs). Version must match the
+      # wasm-bindgen library pin in packages/core/Cargo.toml.
+      - name: Cache wasm-bindgen-cli
+        id: cache-wasm-bindgen
         uses: actions/cache@v4
         with:
-          path: ~/.cache/.wasm-pack
-          key: wasm-pack-tools-${{ runner.os }}-v2
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+      - name: Install wasm-bindgen-cli
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
