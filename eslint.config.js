@@ -267,7 +267,7 @@ export default [
 
     // Node.js scripts — define process/console as globals (flat config does not auto-enable env globals)
     {
-        files: ['scripts/**/*.mjs', 'scripts/**/*.js', '**/esbuild.mjs'],
+        files: ['scripts/**/*.mjs', 'scripts/**/*.js', 'packages/*/scripts/**/*.mjs', 'packages/*/scripts/**/*.js', '**/esbuild.mjs'],
         languageOptions: {
             globals: {
                 process: 'readonly',
