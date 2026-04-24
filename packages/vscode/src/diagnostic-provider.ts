@@ -17,6 +17,7 @@
 import * as vscode from 'vscode';
 
 import { BOOLEAN_SHORTHANDS, KNOWN_VARIANTS, PROPERTY_MAP, SUGGESTION_MAP } from './data.js';
+import { findSzExpressions } from './parser.js';
 
 const DIAGNOSTIC_SOURCE = 'csszyx';
 
@@ -38,41 +39,6 @@ function isValidKey(key: string): boolean {
 }
 
 /**
- * Find all sz={{ ... }} expressions in the document using brace-counting.
- * Returns the object text and the document offset of the opening `{`.
- * @param text - Full document text to scan
- * @returns Array of found expressions with their text and source offset
- */
-function findSzExpressions(text: string): Array<{ objText: string; startOffset: number }> {
-    const results: Array<{ objText: string; startOffset: number }> = [];
-    let searchFrom = 0;
-
-    while (searchFrom < text.length) {
-        const szIdx = text.indexOf('sz={{', searchFrom);
-        if (szIdx === -1) {break;}
-
-        const objStart = szIdx + 4; // outer `{`
-        let depth = 0;
-        let objEnd = -1;
-
-        for (let i = objStart; i < text.length; i++) {
-            if (text[i] === '{') {depth++;} else if (text[i] === '}') {
-                depth--;
-                if (depth === 0) { objEnd = i + 1; break; }
-            }
-        }
-
-        if (objEnd !== -1) {
-            results.push({ objText: text.slice(objStart, objEnd), startOffset: objStart });
-        }
-
-        searchFrom = szIdx + 5;
-    }
-
-    return results;
-}
-
-/**
  * Validate all sz props in the document and populate the diagnostic collection.
  * @param document - The document to validate
  * @param collection - The diagnostic collection to write results into
@@ -90,11 +56,12 @@ export function validateDocument(
     const text = document.getText();
     const diagnostics: vscode.Diagnostic[] = [];
 
-    for (const { objText, startOffset } of findSzExpressions(text)) {
+    for (const { objText, startOffset, needsWrap } of findSzExpressions(text)) {
+        // Implicit form (`sz="a: 1, b: 2"`) needs `{ ... }` before eval.
+        const evalSrc = needsWrap ? `{ ${objText} }` : objText;
         let obj: Record<string, unknown>;
         try {
-
-            obj = new Function(`"use strict"; return (${objText})`)() as Record<string, unknown>;
+            obj = new Function(`"use strict"; return (${evalSrc})`)() as Record<string, unknown>;
         } catch {
             continue; // dynamic values prevent static eval — skip silently
         }

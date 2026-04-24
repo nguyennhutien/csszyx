@@ -263,6 +263,11 @@ export const TOP_LEVEL_VARIANT_COMPLETIONS: vscode.CompletionItem[] = [...KNOWN_
 
 /**
  * Build value completion items for a given sz key.
+ *
+ * String values are labeled WITHOUT surrounding quotes (`center`, not `'center'`)
+ * for a cleaner dropdown. The insertText keeps single quotes so a bare selection
+ * still produces a valid JS object literal. The provider re-adjusts the
+ * replacement range at completion time if the user has already typed a quote.
  * @param key - The sz prop key (e.g. "bg", "p")
  * @returns Array of CompletionItems, or empty array if no suggestions exist for this key
  */
@@ -272,10 +277,11 @@ export function getValueCompletions(key: string): vscode.CompletionItem[] {
     return values.map(v => {
         const isNum = !isNaN(Number(v)) && v !== '';
         const item = new vscode.CompletionItem(
-            isNum ? v : `'${v}'`,
+            v,
             isNum ? vscode.CompletionItemKind.Value : vscode.CompletionItemKind.EnumMember,
         );
         item.insertText = isNum ? v : `'${v}'`;
+        item.filterText = v;
         item.detail = `${key}: ${isNum ? v : `'${v}'`}`;
         return item;
     });

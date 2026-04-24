@@ -6,4 +6,5 @@ export default defineWorkspace([
     'packages/unplugin',
     'packages/core',
     'packages/cli',
+    'packages/vscode',
 ]);

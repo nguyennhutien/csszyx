@@ -1,10 +1,10 @@
 /**
  * HoverProvider — shows the generated Tailwind class string for a sz prop.
  *
- * When the cursor hovers over a sz={{ ... }} expression, we:
- *   1. Extract the full object text (brace-balanced, not regex)
- *   2. Evaluate it safely with new Function() (user's own code)
- *   3. Call transform() from @csszyx/compiler
+ * When the cursor hovers inside a sz expression (JSX or HTML attr form), we:
+ *   1. Extract the object text that contains the cursor (brace-balanced)
+ *   2. Evaluate it safely with `new Function()` (read-only display)
+ *   3. Call `transform()` from @csszyx/compiler
  *   4. Display the resulting className + any inline style attributes
  *
  * Falls back silently if the expression cannot be evaluated (dynamic values,
@@ -14,45 +14,33 @@
 import { type SzObject, transform } from '@csszyx/compiler/browser';
 import * as vscode from 'vscode';
 
+import { extractSzObjectAt } from './parser.js';
 import { getSzContext } from './sz-context.js';
 
 /** Max object text length we attempt to eval. Guards against pathological inputs. */
 const MAX_OBJ_LEN = 1000;
 
 /**
- * Extract the full sz={{ ... }} object text around the given position.
- * Uses brace counting (not regex) to handle nested variant objects.
+ * Extract the sz object text around the cursor, or null if the cursor is
+ * not inside any sz expression within the scan window.
  * @param document - The document being edited
  * @param position - The current cursor position
- * @returns The raw JS object text (e.g. `{ p: 4, bg: 'blue-500' }`), or null if not found
+ * @returns Raw JS object text, or null if not found.
  */
 function extractSzObjectText(
     document: vscode.TextDocument,
     position: vscode.Position,
 ): string | null {
-    // Search up to 10 lines around cursor for sz={{
     const startLine = Math.max(0, position.line - 3);
     const endLine = Math.min(document.lineCount - 1, position.line + 8);
-    const text = document.getText(
-        new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length),
-    );
+    const windowStart = new vscode.Position(startLine, 0);
+    const windowEnd = new vscode.Position(endLine, document.lineAt(endLine).text.length);
+    const text = document.getText(new vscode.Range(windowStart, windowEnd));
 
-    const szIdx = text.indexOf('sz={{');
-    if (szIdx === -1) {return null;}
-
-    const objStart = szIdx + 4; // position of the outer `{`
-    let depth = 0;
-
-    for (let i = objStart; i < text.length; i++) {
-        if (text[i] === '{') {depth++;} else if (text[i] === '}') {
-            depth--;
-            if (depth === 0) {
-                const objText = text.slice(objStart, i + 1);
-                return objText.length <= MAX_OBJ_LEN ? objText : null;
-            }
-        }
-    }
-    return null;
+    const cursorOffset = document.offsetAt(position) - document.offsetAt(windowStart);
+    const obj = extractSzObjectAt(text, cursorOffset);
+    if (!obj) { return null; }
+    return obj.length <= MAX_OBJ_LEN ? obj : null;
 }
 
 /**
@@ -64,7 +52,6 @@ function extractSzObjectText(
 function evalObject(objText: string): SzObject | null {
     try {
         // new Function runs in a fresh scope — no access to local variables
-
         const result = new Function(`"use strict"; return (${objText})`)();
         if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
             return result as SzObject;
@@ -89,15 +76,14 @@ export class SzHoverProvider implements vscode.HoverProvider {
         document: vscode.TextDocument,
         position: vscode.Position,
     ): vscode.Hover | undefined {
-        // Only show hover when cursor is inside a sz prop
         const ctx = getSzContext(document, position);
-        if (ctx.type === 'none') {return undefined;}
+        if (ctx.type === 'none') { return undefined; }
 
         const objText = extractSzObjectText(document, position);
-        if (!objText) {return undefined;}
+        if (!objText) { return undefined; }
 
         const szObj = evalObject(objText);
-        if (!szObj) {return undefined;}
+        if (!szObj) { return undefined; }
 
         let result: ReturnType<typeof transform>;
         try {

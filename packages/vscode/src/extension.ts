@@ -31,12 +31,17 @@ const SZ_LANGUAGES = [
  */
 export function activate(context: vscode.ExtensionContext): void {
     // ── Completions ─────────────────────────────────────────────────────────
+    // Trigger characters fire completions automatically as the user types
+    // inside a sz expression. `{`, `"`, `'` cover the opening of the object in
+    // HTML attribute form; `:`, `,`, ` ` cover typing a key/value/separator
+    // in both JSX and HTML forms. Without these, VS Code only invokes the
+    // provider on Ctrl+Space inside HTML attribute strings.
     const completionProvider = new SzCompletionProvider();
     context.subscriptions.push(
         vscode.languages.registerCompletionItemProvider(
             SZ_LANGUAGES,
             completionProvider,
-            // Trigger characters: typing inside sz={{ ... }}
+            '{', '"', "'", ':', ',', ' ',
         ),
     );
 
