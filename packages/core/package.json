@@ -34,8 +34,8 @@
     "pkg-node"
   ],
   "scripts": {
-    "build": "wasm-pack build --mode no-install --target bundler --out-dir pkg && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node && rm -f pkg/.gitignore pkg-node/.gitignore && node scripts/run-wasm-opt.mjs",
-    "build:test": "wasm-pack build --mode no-install --target nodejs --out-dir pkg-node",
+    "build": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target bundler --out-dir pkg && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node && rm -f pkg/.gitignore pkg-node/.gitignore && node scripts/run-wasm-opt.mjs",
+    "build:test": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node",
     "test": "npm run build:test && vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf pkg pkg-node target"
