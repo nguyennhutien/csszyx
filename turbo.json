@@ -4,7 +4,7 @@
     "pipeline": {
         "build": {
             "dependsOn": ["^build"],
-            "outputs": ["dist/**", "lib/**", "pkg/**"],
+            "outputs": ["dist/**", "lib/**", "pkg/**", "pkg-node/**"],
             "env": ["NODE_ENV"]
         },
         "dev": {

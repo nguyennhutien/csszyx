@@ -38,7 +38,8 @@
     "build:test": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node",
     "test": "npm run build:test && vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf pkg pkg-node target"
+    "clean": "rm -rf pkg pkg-node target",
+    "prepublishOnly": "node scripts/ensure-build.mjs --strict"
   },
   "devDependencies": {
     "vitest": "^1.2.0"
