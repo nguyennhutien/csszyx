@@ -92,6 +92,7 @@ export default defineConfig({
                         { label: 'Reusing Styles', slug: 'docs/reusing-styles' },
                         { label: 'Component Variants (szv)', slug: 'docs/szv' },
                         { label: 'Runtime Injection', slug: 'docs/dynamic' },
+                        { label: 'CDN — Vanilla HTML', slug: 'docs/cdn-html' },
                         { label: 'MCP Server', slug: 'docs/mcp-server' },
                         { label: 'VS Code Extension', slug: 'docs/vscode' },
                     ],

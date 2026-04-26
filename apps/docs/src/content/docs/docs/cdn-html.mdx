@@ -1,0 +1,162 @@
+---
+title: CDN — Vanilla HTML
+description: Use csszyx in plain HTML pages via a single script tag — no bundler, no JSX.
+---
+
+The `csszyx` package ships a self-contained IIFE runtime that processes
+`sz="..."` attributes directly in vanilla HTML. Drop one `<script>` tag,
+write `sz` attributes the same way you would in JSX, and Tailwind classes
+appear at runtime.
+
+This guide pairs with the [VS Code Extension](/docs/vscode/) — same
+authoring experience (autocomplete, hover, syntax highlight) for `sz=`
+attributes in `.html` files.
+
+## Quick start
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- 1. Tailwind v4 CDN — required (csszyx generates class names, Tailwind generates the CSS) -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+
+    <!-- 2. csszyx runtime — pin to a specific version for production -->
+    <script src="https://unpkg.com/csszyx@0.5.0"></script>
+
+    <!-- 3. Anti-FOUC — hide elements until the runtime has compiled them -->
+    <style>
+        [sz]:not(.sz-ready) { visibility: hidden; }
+        .sz-ready, .sz-ready [sz] { visibility: visible; }
+    </style>
+</head>
+<body sz="{ p: 8, bg: 'slate-950', color: 'slate-200', minH: 'screen' }">
+    <h1 sz="{ text: '4xl', fontWeight: 'bold', color: 'blue-500', mb: 4 }">
+        Hello csszyx
+    </h1>
+    <p sz="{ text: 'lg', color: 'slate-400' }">
+        No bundler. No JSX. Just attributes.
+    </p>
+</body>
+</html>
+```
+
+## Script order matters
+
+The runtime walks the DOM, compiles each `sz` attribute into Tailwind class
+names, removes the `sz` attribute, then adds the resulting classes to the
+element's `class` list. Tailwind v4's JIT must see those classes **after**
+csszyx has written them, which is why the Tailwind script comes first in the
+`<head>`.
+
+| Order in `<head>` | Result |
+|---|---|
+| Tailwind → csszyx | ✅ JIT picks up classes csszyx writes |
+| csszyx → Tailwind | ❌ JIT scans before classes exist; styles missing |
+
+## Pinning versions
+
+Always pin a specific version for production. CDN providers honor the
+`unpkg` and `jsdelivr` fields in `package.json` and serve the IIFE bundle
+directly at the package root URL:
+
+```html
+<!-- unpkg -->
+<script src="https://unpkg.com/csszyx@0.5.0"></script>
+
+<!-- jsdelivr -->
+<script src="https://cdn.jsdelivr.net/npm/csszyx@0.5.0"></script>
+```
+
+Avoid `csszyx@latest` in production — a major bump would silently break the
+page.
+
+## Anti-FOUC (recommended)
+
+Without the anti-FOUC CSS, users see a flash of unstyled content while the
+runtime walks the DOM. The runtime adds `sz-ready` to `<body>` after the
+initial pass, so a single CSS rule eliminates the flash:
+
+```css
+[sz]:not(.sz-ready) { visibility: hidden; }
+.sz-ready, .sz-ready [sz] { visibility: visible; }
+```
+
+This is automatically injected by `npx csszyx migrate public/` when
+converting an existing site — see [Migrate](/docs/migrate/).
+
+## Object syntax
+
+Same as JSX `sz={{ ... }}`, but quoted as a single HTML attribute value.
+Use single quotes inside (HTML attribute is double-quoted):
+
+```html
+<div sz="{ p: 4, bg: 'blue-500', hover: { bg: 'blue-600' } }">…</div>
+```
+
+Outer braces are **optional** — these are equivalent:
+
+```html
+<div sz="{ p: 4, bg: 'red-500' }">…</div>
+<div sz="p: 4, bg: 'red-500'">…</div>
+```
+
+The runtime auto-wraps when braces are missing, so the VS Code extension's
+implicit syntax works out of the box.
+
+## Dynamically added elements
+
+The runtime installs a `MutationObserver` on `<body>`, so any element added
+later (by frameworks, scripts, fragment swaps, htmx, Alpine.js, etc.) is
+processed automatically:
+
+```js
+const card = document.createElement('div');
+card.setAttribute('sz', "{ p: 4, bg: 'emerald-500', rounded: 'lg' }");
+document.body.appendChild(card);
+// → runtime sees it, compiles sz → class, removes sz attr
+```
+
+The observer recurses into subtrees, so inserting a parent with `[sz]`
+descendants processes them all in one dispatch.
+
+## Local dev (offline)
+
+If you can't depend on a public CDN, copy the bundle locally:
+
+```bash
+npm install csszyx@0.5.0
+cp node_modules/csszyx/dist/browser.iife.js public/csszyx.js
+```
+
+Then reference the local file:
+
+```html
+<script src="/csszyx.js"></script>
+```
+
+The IIFE is fully self-contained — no other csszyx files needed.
+
+## Limitations
+
+- **No build-time mangling** — class names are full Tailwind utilities
+  (`p-4`, `bg-blue-500`, …), not the mangled `z`/`y`/`x` form. Mangling
+  requires the build-time plugin pipeline, which doesn't fit a CDN script.
+- **Runtime evaluation is per-element** — large pages with thousands of
+  `[sz]` elements pay a per-element parse + transform cost on first load.
+  For high-volume use, prefer the build-time plugin (`csszyx/vite`,
+  `csszyx/webpack`).
+- **Tailwind CDN is JIT-only** — for production, ship a built Tailwind CSS
+  file and serve it from your origin.
+
+## Demo
+
+The repository ships a working demo at `playground/vanilla-html/index.html`
+covering object syntax, variants, dynamic elements, and the full anti-FOUC
+flow. Clone the repo and:
+
+```bash
+pnpm --filter @csszyx/playground-vanilla-html dev
+```
+
+Then open the URL the dev server prints.
