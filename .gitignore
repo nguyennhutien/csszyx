@@ -29,6 +29,8 @@ target/
 *.vsix
 # MCP server bundles llms-full.txt from apps/docs/public at build time
 packages/mcp-server/llms-full.txt
+# Browser runtime IIFE — copied from csszyx package dist by docs prebuild hook.
+apps/docs/public/csszyx.js
 
 # Testing
 coverage/

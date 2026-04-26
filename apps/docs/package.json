@@ -4,7 +4,9 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "predev": "node -e \"require('fs').copyFileSync(require.resolve('csszyx/browser'), 'public/csszyx.js')\"",
         "dev": "astro dev",
+        "prebuild": "node -e \"require('fs').copyFileSync(require.resolve('csszyx/browser'), 'public/csszyx.js')\"",
         "build": "astro build",
         "preview": "astro preview",
         "clean:build": "rm -rf dist",
