@@ -22,5 +22,6 @@
     },
     "remoteUser": "root",
     "workspaceFolder": "/workspaces/csszyx",
-    "postCreateCommand": "mise install && npm install -g @anthropic-ai/claude-code && ln -sfn /root/.claude/projects/-Users-tiennguyen-Projects-csszyx /root/.claude/projects/-workspaces-csszyx && pnpm install && bash .scripts/fix-linux-arm64-binaries.sh"
+    "postCreateCommand": "bash .devcontainer/setup.sh",
+    "postStartCommand": "bash .devcontainer/healthcheck.sh"
 }
