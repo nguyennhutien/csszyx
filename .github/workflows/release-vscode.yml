@@ -1,0 +1,76 @@
+name: Release VS Code Extension
+
+# Decoupled from npm release because:
+#   - Different registry (Marketplace) and credential (VSCE_PAT, not NPM_TOKEN)
+#   - Different artifact (.vsix, not tarball)
+#   - @csszyx/vscode is `private: true` in package.json so `changeset publish`
+#     skips it. Marketplace publish therefore needs its own trigger.
+#
+# Manual trigger: after the npm release lands and bumps @csszyx/vscode in
+# the linked-version group, push a tag `@csszyx/vscode@<version>`:
+#
+#   git tag @csszyx/vscode@0.5.0
+#   git push origin @csszyx/vscode@0.5.0
+#
+# This workflow then builds the extension and publishes via @vscode/vsce.
+# The VSCE_PAT secret must be set in repo settings (Azure DevOps PAT with
+# Marketplace publish scope).
+
+on:
+  push:
+    tags:
+      - '@csszyx/vscode@*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build .vsix without publishing'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: release-vscode-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish to Marketplace
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build extension
+        run: pnpm --filter @csszyx/vscode build
+
+      - name: Package .vsix (dry-run check)
+        run: pnpm --filter @csszyx/vscode vsix
+        env:
+          # `vsix` runs scripts/package.mjs without --publish; verifies the
+          # bundle is well-formed before any Marketplace API call.
+          NODE_ENV: production
+
+      - name: Publish to Marketplace
+        if: github.event.inputs.dry_run != 'true'
+        run: pnpm --filter @csszyx/vscode vsix:publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csszyx-vscode-${{ github.ref_name }}
+          path: packages/vscode/*.vsix
+          retention-days: 90
