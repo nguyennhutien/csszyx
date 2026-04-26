@@ -58,6 +58,14 @@ export default defineConfig({
                 baseURL: 'http://localhost:3002',
             },
         },
+        {
+            name: 'vanilla-html',
+            testMatch: /vanilla-html/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5179',
+            },
+        },
     ],
 
     /* Run your local dev server before starting the tests */
@@ -78,6 +86,17 @@ export default defineConfig({
             stdout: 'pipe',
             stderr: 'pipe',
             timeout: 120000,
+        },
+        {
+            // Vanilla HTML serves the IIFE bundle copied from csszyx package by
+            // the playground's predev hook, so this implicitly verifies the
+            // package→playground copy chain too.
+            command: 'pnpm run dev --port 5179 --strictPort',
+            cwd: '../../playground/vanilla-html',
+            url: 'http://localhost:5179',
+            reuseExistingServer: !process.env.CI,
+            stdout: 'pipe',
+            stderr: 'pipe',
         },
     ],
 });
