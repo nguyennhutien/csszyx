@@ -72,7 +72,7 @@ if (missing.length > 0) {
 
 try {
     execSync('npm run build', { cwd: pkgDir, stdio: 'inherit' });
-} catch (e) {
+} catch {
     console.error('[ensure-build] Build failed.');
     process.exit(1);
 }
