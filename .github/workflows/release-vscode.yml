@@ -68,9 +68,17 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+      - name: Read extension version
+        id: meta
+        # Reading from package.json is more reliable than github.ref_name
+        # because the tag is "@csszyx/vscode@0.5.0" — the slash in the
+        # publisher prefix is rejected as an artifact name. workflow_dispatch
+        # runs (no tag) would also have no version-shaped ref_name to use.
+        run: echo "version=$(node -p "require('./packages/vscode/package.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Upload .vsix artifact
         uses: actions/upload-artifact@v4
         with:
-          name: csszyx-vscode-${{ github.ref_name }}
+          name: csszyx-vscode-${{ steps.meta.outputs.version }}
           path: packages/vscode/*.vsix
           retention-days: 90
