@@ -1,0 +1,80 @@
+/**
+ * Tests for the AST budget guard. Files larger than AST_BUDGET nodes
+ * abort with ASTBudgetExceededError instead of OOM-ing the build.
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import { AST_BUDGET, ASTBudgetExceededError } from '../src/ast-budget.js';
+import { transformSourceCode } from '../src/transform.js';
+
+describe('AST budget guard', () => {
+    it('exposes the cap value matching the engine spec', () => {
+        expect(AST_BUDGET).toBe(50_000);
+    });
+
+    it('passes through small files unchanged', () => {
+        const source = '<div sz={{ p: 4, bg: \'red-500\' }}>hi</div>';
+        const result = transformSourceCode(source);
+        expect(result.transformed).toBe(true);
+        expect(result.code).toContain('className');
+    });
+
+    it('throws ASTBudgetExceededError on a synthetic over-budget file', () => {
+        // Wide flat array (60k literals) — comfortably overshoots 50k AST
+        // nodes. Avoid deep nesting (binary chains, deeply nested JSX) which
+        // hits Babel parser's recursion limit before the AST is built.
+        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
+        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+
+        expect(() => transformSourceCode(source, 'huge.tsx')).toThrow(ASTBudgetExceededError);
+    });
+
+    it('error message includes filename + node count', () => {
+        // Use a wide flat array (60k literals) instead of a deep binary
+        // expression: deep chains hit Babel parser's recursion limit before
+        // the AST is even built, so we never get to the budget check.
+        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
+        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+
+        let caught: ASTBudgetExceededError | undefined;
+        try {
+            transformSourceCode(source, 'src/generated/big.tsx');
+        } catch (e) {
+            caught = e as ASTBudgetExceededError;
+        }
+
+        expect(caught).toBeInstanceOf(ASTBudgetExceededError);
+        expect(caught?.filename).toBe('src/generated/big.tsx');
+        expect(caught?.nodeCount).toBeGreaterThan(AST_BUDGET);
+        expect(caught?.message).toContain('src/generated/big.tsx');
+        expect(caught?.message).toContain(String(AST_BUDGET));
+    });
+
+    it('falls back to <anonymous> when called without filename', () => {
+        // Use a wide flat array (60k literals) instead of a deep binary
+        // expression: deep chains hit Babel parser's recursion limit before
+        // the AST is even built, so we never get to the budget check.
+        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
+        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+
+        let caught: ASTBudgetExceededError | undefined;
+        try {
+            transformSourceCode(source);
+        } catch (e) {
+            caught = e as ASTBudgetExceededError;
+        }
+
+        expect(caught).toBeInstanceOf(ASTBudgetExceededError);
+        expect(caught?.filename).toBeUndefined();
+        expect(caught?.message).toContain('<anonymous>');
+    });
+
+    it('does not throw for budget errors when source has no sz token (fast-path)', () => {
+        // The fast-path returns before parsing, so an over-budget file with
+        // no `sz` substring slips through unchecked. That's intentional —
+        // we never traverse it, so the budget concern doesn't apply.
+        const source = '1' + '+ 1'.repeat(30_000);
+        expect(() => transformSourceCode(source)).not.toThrow();
+    });
+});

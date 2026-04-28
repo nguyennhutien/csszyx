@@ -428,7 +428,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     try {
                         const content = fs.readFileSync(filePath, 'utf-8');
                         if (!content.includes('sz=') && !content.includes('sz:')) {continue;}
-                        const result = transformSourceCode(content);
+                        const result = transformSourceCode(content, filePath);
                         if (!result.transformed) {continue;}
                         // Piggyback: use classes collected inside the Babel JSXAttribute visitor.
                         // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
@@ -713,7 +713,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         transformed = true;
                     }
                 } else {
-                    const result = transformSourceCode(code);
+                    const result = transformSourceCode(code, id);
                     transformedCode = result.code;
                     usesRuntime = result.usesRuntime;
                     usesMerge = result.usesMerge;
@@ -894,7 +894,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) { return; }
 
-                try { result = transformSourceCode(fileContent); } catch { return; }
+                try { result = transformSourceCode(fileContent, ctx.file); } catch { return; }
 
                 if (!result.transformed) { return; }
 

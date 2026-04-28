@@ -2,6 +2,7 @@
 import * as babel from '@babel/core';
 import * as t from '@babel/types';
 
+import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 import { COLOR_PROPERTIES, getCSSVariableName, getPropertyCategory, PropertyCategory } from './property-types.js';
 import {
     getVariantPrefix,
@@ -12,15 +13,19 @@ import {
     transform } from './transform-core.js';
 
 // Re-export everything from core so consumers don't break
+export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export * from './transform-core.js';
 
 /**
  * Transforms all sz props in a source code string into Tailwind classNames.
  *
  * @param {string} source - The source code to transform
+ * @param {string} [filename] - Source filename, used in error messages and
+ *   passed to Babel as the parser filename. Defaults to a placeholder.
  * @returns {object} Transformation result with code and metadata
+ * @throws {ASTBudgetExceededError} when the file's AST exceeds AST_BUDGET nodes.
  */
-export function transformSourceCode(source: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[] } {
+export function transformSourceCode(source: string, filename?: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[] } {
     let usesRuntime = false;
     let usesMerge = false;
     let usesColorVar = false;
@@ -38,7 +43,7 @@ export function transformSourceCode(source: string): { code: string; transformed
 
     try {
         const result = babel.transformSync(source, {
-            filename: 'file.tsx', // Enable TS/JSX parsing
+            filename: filename ?? 'file.tsx', // Enable TS/JSX parsing
             ast: true,
             code: true,
             configFile: false,
@@ -49,6 +54,21 @@ export function transformSourceCode(source: string): { code: string; transformed
             plugins: [
                 function() {
                     return {
+                        // Budget guard runs in `pre` (before the visitor pass)
+                        // so it short-circuits pathologically large files
+                        // before any sz transform work begins, and doesn't
+                        // interfere with the JSXAttribute handler below.
+                        pre(file: { ast: t.File }) {
+                            let nodeCount = 0;
+                            babel.traverse(file.ast, {
+                                enter() {
+                                    nodeCount++;
+                                    if (nodeCount > AST_BUDGET) {
+                                        throw new ASTBudgetExceededError(filename, nodeCount);
+                                    }
+                                },
+                            });
+                        },
                         visitor: {
                             JSXAttribute(path: babel.NodePath<t.JSXAttribute>) {
                                 const attrName = t.isJSXIdentifier(path.node.name)
@@ -612,6 +632,12 @@ export function transformSourceCode(source: string): { code: string; transformed
             diagnostics,
         };
     } catch (e) {
+        // Budget violations must propagate so the build aborts loudly with
+        // a path the user can act on. Swallowing them would just hand back
+        // unchanged source and let the OOM-prone file slip through.
+        if (e instanceof ASTBudgetExceededError) {
+            throw e;
+        }
         console.warn('[csszyx] AST transform failed, falling back to original code:', e);
         return { code: source, transformed: false, usesRuntime: false, usesMerge: false, usesColorVar: false, classes: collectedClasses, rawClassNames, diagnostics };
     }
