@@ -88,11 +88,11 @@ CLAUDE.md
 .cursorrules
 docs/guides/ai-usage.md
 
-# Per-package CHANGELOGs — only packages/csszyx/CHANGELOG.md is published.
-# `changeset version` generates one per package; action reads them to build
-# the Version Packages PR body (must exist on disk), but we don't commit them.
-packages/*/CHANGELOG.md
-!packages/csszyx/CHANGELOG.md
+# release-please writes/reads packages/*/CHANGELOG.md as the source of truth
+# for each package's release history. Track them all so release-please can
+# diff against the prior state on each run. Single GitHub Release per
+# release cycle still points only at packages/csszyx/CHANGELOG.md (config:
+# skip-github-release: true on non-csszyx packages).
 apps/*/CHANGELOG.md
 
 # Rust

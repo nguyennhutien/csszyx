@@ -1,9 +1,15 @@
 export default {
     extends: ['@commitlint/config-conventional'],
-    // `changesets/action@v1` commits its Version Packages PR with the
-    // literal message "Version Packages" (hardcoded, no override). Let it
-    // bypass commitlint so husky's commit-msg hook doesn't block CI.
-    ignores: [(message) => message.trim() === 'Version Packages'],
+    // release-please's release PR commit message follows the pattern
+    //   "chore${scope}: release ${component} ${version}"
+    // For our linked-versions group ("csszyx") the title looks like
+    //   "chore: release csszyx 0.6.0"
+    // commitlint accepts that as valid Conventional Commits, but we keep
+    // an explicit bypass so any future release-please title format change
+    // (e.g. multiple components) doesn't suddenly start blocking CI.
+    ignores: [
+        (msg) => /^chore(\([^)]*\))?: release\b/i.test(msg.trim()),
+    ],
     rules: {
         'type-enum': [
             2,
@@ -19,6 +25,7 @@ export default {
                 'chore', // Maintenance
                 'ci', // CI/CD
                 'build', // Build system
+                'revert', // Reverts (recognized by release-please's CHANGELOG)
             ],
         ],
         'subject-case': [2, 'never', ['upper-case']],

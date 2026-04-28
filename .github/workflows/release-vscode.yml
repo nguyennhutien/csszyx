@@ -3,23 +3,26 @@ name: Release VS Code Extension
 # Decoupled from npm release because:
 #   - Different registry (Marketplace) and credential (VSCE_PAT, not NPM_TOKEN)
 #   - Different artifact (.vsix, not tarball)
-#   - @csszyx/vscode is `private: true` in package.json so `changeset publish`
-#     skips it. Marketplace publish therefore needs its own trigger.
+#   - @csszyx/vscode is `private: true` in package.json so npm publish
+#     auto-skips it. Marketplace publish therefore needs its own trigger.
 #
-# Manual trigger: after the npm release lands and bumps @csszyx/vscode in
-# the linked-version group, push a tag `@csszyx/vscode@<version>`:
+# Auto-trigger: release-please creates a tag `@csszyx/vscode-<version>`
+# after the linked-versions group's release PR is merged on main. This
+# workflow listens for that tag pattern and runs Marketplace publish
+# without further human action.
 #
-#   git tag @csszyx/vscode@0.5.0
-#   git push origin @csszyx/vscode@0.5.0
+# Manual trigger: workflow_dispatch with optional dry_run (build .vsix
+# without publishing) for verification.
 #
-# This workflow then builds the extension and publishes via @vscode/vsce.
 # The VSCE_PAT secret must be set in repo settings (Azure DevOps PAT with
 # Marketplace publish scope).
 
 on:
   push:
     tags:
-      - '@csszyx/vscode@*'
+      # release-please format: <component>-<version> with include-v-in-tag: false
+      # e.g. @csszyx/vscode-0.6.0
+      - '@csszyx/vscode-*'
   workflow_dispatch:
     inputs:
       dry_run:

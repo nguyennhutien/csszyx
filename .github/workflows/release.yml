@@ -7,13 +7,42 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
-  release:
-    name: Release
+  # release-please reads conventional-commit history since the last release
+  # and opens (or updates) a "release PR" with version bumps + CHANGELOG
+  # entries. When that PR is merged, this job runs again and creates
+  # per-package tags plus a single GitHub Release for the umbrella `csszyx`
+  # package — non-csszyx packages have skip-github-release: true in the
+  # config so they only get tags, not Releases.
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Runs only when release-please created releases (i.e. the release PR was
+  # just merged). Builds the workspace and publishes to npm. Per-package
+  # tags created by release-please (e.g. @csszyx/vscode-0.6.0) will
+  # separately trigger release-vscode.yml for Marketplace publish.
+  publish:
+    name: Publish to npm
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +54,7 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -34,11 +64,8 @@ jobs:
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked --version 0.14.0 || true
 
-      # See ci.yml — pre-install wasm-bindgen-cli so the @csszyx/core
-      # build script (wasm-pack --mode no-install) can skip wasm-pack's
-      # own install step. wasm-opt runs via the build script's
-      # run-wasm-opt.mjs using the apt-installed binaryen from the next
-      # step, so turbo caches the OPTIMIZED pkg/ output.
+      # Pre-install wasm-bindgen-cli so the @csszyx/core build script
+      # (wasm-pack --mode no-install) can skip wasm-pack's own install step.
       - name: Cache wasm-bindgen-cli
         id: cache-wasm-bindgen
         uses: actions/cache@v4
@@ -56,43 +83,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
-      # so the OPTIMIZED pkg/ is what turbo captures in its cache. Doing it
-      # outside this step would be overwritten whenever turbo had a cache hit.
-      # Requires the apt binaryen install step above to provide wasm-opt.
+      # so the OPTIMIZED pkg/ is what turbo captures in its cache.
       - name: Build WASM core
         run: pnpm --filter @csszyx/core build
 
-      - name: Build
+      - name: Build all packages
         run: pnpm build
 
-      - name: Setup npm auth
-        run: echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > ~/.npmrc
+      # pnpm respects `private: true` so vscode + adapters + mcp-server are
+      # automatically skipped. --no-git-checks bypasses pnpm's interactive
+      # branch confirmation prompt.
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create Release Pull Request or Publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          version: pnpm changeset version
-          publish: pnpm changeset publish
-          createGithubReleases: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        if: steps.changesets.outputs.published == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION=$(echo '${{ steps.changesets.outputs.publishedPackages }}' \
-            | jq -r '.[] | select(.name == "csszyx") | .version')
-          [ -z "$VERSION" ] && echo "csszyx not in published set, skipping" && exit 0
-
-          NOTES=$(awk "/^## $VERSION/{flag=1; next} /^## /{if(flag) exit} flag" \
-            packages/csszyx/CHANGELOG.md)
-
-          gh release create "v$VERSION" \
-            --title "csszyx v$VERSION" \
-            --notes "$NOTES"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
