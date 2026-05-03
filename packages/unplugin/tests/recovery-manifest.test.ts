@@ -25,10 +25,10 @@ function tokenMap(...entries: Array<[string, TokenData]>): Map<string, TokenData
 
 describe('buildRecoveryManifest', () => {
     it('produces empty tokens object for empty input', () => {
-        const m = buildRecoveryManifest(new Map());
-        expect(m.tokens).toEqual({});
-        expect(m.buildId).toMatch(/^[0-9a-z]+-[0-9a-f]{6}$/);
-        expect(m.checksum).toMatch(/^[0-9a-f]{16}$/);
+        const { manifest } = buildRecoveryManifest(new Map());
+        expect(manifest.tokens).toEqual({});
+        expect(manifest.buildId).toMatch(/^[0-9a-z]+-[0-9a-f]{6}$/);
+        expect(manifest.checksum).toMatch(/^[0-9a-f]{16}$/);
     });
 
     it('serialises tokens in alphabetical order for stable checksums', () => {
@@ -41,8 +41,8 @@ describe('buildRecoveryManifest', () => {
             ['zzz', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }],
         ));
         // Same logical content — checksums must match regardless of insertion order.
-        expect(a.checksum).toBe(b.checksum);
-        expect(Object.keys(a.tokens)).toEqual(['aaa', 'zzz']);
+        expect(a.manifest.checksum).toBe(b.manifest.checksum);
+        expect(Object.keys(a.manifest.tokens)).toEqual(['aaa', 'zzz']);
     });
 
     it('includes the full token data in the manifest', () => {
@@ -51,8 +51,8 @@ describe('buildRecoveryManifest', () => {
             component: 'Button',
             path: 'src/Button.tsx:5:8',
         };
-        const m = buildRecoveryManifest(tokenMap(['abc123def456', data]));
-        expect(m.tokens['abc123def456']).toEqual(data);
+        const { manifest } = buildRecoveryManifest(tokenMap(['abc123def456', data]));
+        expect(manifest.tokens['abc123def456']).toEqual(data);
     });
 
     it('changes checksum when token contents change', () => {
@@ -62,7 +62,47 @@ describe('buildRecoveryManifest', () => {
         const b = buildRecoveryManifest(tokenMap(
             ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
         ));
-        expect(a.checksum).not.toBe(b.checksum);
+        expect(a.manifest.checksum).not.toBe(b.manifest.checksum);
+    });
+
+    it('keeps dev-only tokens by default (development build)', () => {
+        const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(tokenMap(
+            ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
+            ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
+        ));
+        expect(Object.keys(manifest.tokens)).toEqual(['t1', 't2']);
+        expect(strippedDevOnlyPaths).toEqual([]);
+    });
+
+    it('strips dev-only tokens in production builds', () => {
+        const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
+            tokenMap(
+                ['t1', { mode: 'dev-only', component: 'div', path: 'src/A.tsx:1:0' }],
+                ['t2', { mode: 'csr', component: 'span', path: 'src/B.tsx:2:0' }],
+                ['t3', { mode: 'dev-only', component: 'p', path: 'src/C.tsx:3:0' }],
+            ),
+            { production: true },
+        );
+        // dev-only tokens removed entirely; csr survives.
+        expect(Object.keys(manifest.tokens)).toEqual(['t2']);
+        // Stripped paths returned for the unplugin to surface in a single warning.
+        expect(strippedDevOnlyPaths.sort()).toEqual(['src/A.tsx:1:0', 'src/C.tsx:3:0']);
+    });
+
+    it('checksum reflects post-strip token set in production', () => {
+        const dev = buildRecoveryManifest(tokenMap(
+            ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
+            ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
+        ));
+        const prod = buildRecoveryManifest(
+            tokenMap(
+                ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
+                ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
+            ),
+            { production: true },
+        );
+        // Different token set after strip → different checksum.
+        expect(prod.manifest.checksum).not.toBe(dev.manifest.checksum);
     });
 });
 

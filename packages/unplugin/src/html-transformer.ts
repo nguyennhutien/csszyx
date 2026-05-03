@@ -258,26 +258,62 @@ export interface RecoveryManifest {
 }
 
 /**
+ * Result of {@link buildRecoveryManifest}, including the manifest itself
+ * plus any audit information the unplugin should surface to the user.
+ */
+export interface BuildRecoveryManifestResult {
+    /** The manifest ready to inject into SSR HTML. */
+    manifest: RecoveryManifest;
+    /**
+     * Source paths whose `dev-only` tokens were stripped from the
+     * production manifest. Empty in development. The unplugin uses this
+     * to emit a single rolled-up build warning rather than per-file
+     * noise.
+     */
+    strippedDevOnlyPaths: string[];
+}
+
+/**
  * Build a {@link RecoveryManifest} from the in-memory token map the
  * unplugin accumulates across all transformed files.
+ *
+ * In production, `mode: 'dev-only'` tokens are stripped — the runtime
+ * would reject them anyway (the recovery flag `__SZ_ALLOW_CSR_RECOVERY__`
+ * is dev-mode only), and shipping them would leak dev-only authoring
+ * intent into the production manifest. The visitor still emitted
+ * `data-sz-recovery-token` attributes for those elements; that's a
+ * deliberate trade-off — the runtime will reject the recovery, falling
+ * back to whatever the framework's default mismatch behaviour is, which
+ * is the correct outcome for an attribute that explicitly says "dev only".
  *
  * Tokens are sorted alphabetically before serialisation so the resulting
  * checksum is stable across runs that produce the same set of tokens
  * (otherwise Map iteration order would surface differently per build).
  *
  * @param tokens Per-build token map collected from `transformSourceCode`.
- * @returns Manifest object ready to JSON.stringify.
+ * @param options Build options.
+ * @param options.production When `true`, strip `mode: 'dev-only'` tokens
+ *   from the manifest and report their source paths via
+ *   `strippedDevOnlyPaths`. Defaults to `false` (development build).
+ * @returns Manifest + audit info (paths whose tokens were stripped).
  */
 export function buildRecoveryManifest(
     tokens: Map<string, TokenData>,
-): RecoveryManifest {
+    options: { production?: boolean } = {},
+): BuildRecoveryManifestResult {
+    const stripped = options.production === true;
+    const strippedDevOnlyPaths: string[] = [];
+
     const sorted: Record<string, TokenData> = {};
     const sortedKeys = [...tokens.keys()].sort();
     for (const key of sortedKeys) {
         const data = tokens.get(key);
-        if (data) {
-            sorted[key] = data;
+        if (!data) {continue;}
+        if (stripped && data.mode === 'dev-only') {
+            strippedDevOnlyPaths.push(data.path);
+            continue;
         }
+        sorted[key] = data;
     }
 
     const serialised = JSON.stringify(sorted);
@@ -285,7 +321,10 @@ export function buildRecoveryManifest(
     const checksum = fullChecksum.substring(0, 16);
     const buildId = `${Date.now().toString(36)}-${fullChecksum.substring(0, 6)}`;
 
-    return { buildId, checksum, tokens: sorted };
+    return {
+        manifest: { buildId, checksum, tokens: sorted },
+        strippedDevOnlyPaths,
+    };
 }
 
 /**

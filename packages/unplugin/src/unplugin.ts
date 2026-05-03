@@ -944,9 +944,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     });
                     // Recovery manifest is a no-op when zero szRecover tokens were
                     // emitted across the build, so pages without recovery sites get
-                    // no extra script tag.
+                    // no extra script tag. In production, dev-only tokens are stripped
+                    // and a single rolled-up warning lists the affected paths.
                     if (state.recoveryTokens.size > 0) {
-                        result = injectRecoveryManifest(result, buildRecoveryManifest(state.recoveryTokens));
+                        const isProduction = process.env.NODE_ENV === 'production';
+                        const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
+                            state.recoveryTokens,
+                            { production: isProduction },
+                        );
+                        if (strippedDevOnlyPaths.length > 0) {
+                            console.warn(
+                                `[csszyx] Stripped ${strippedDevOnlyPaths.length} ` +
+                                'szRecover="dev-only" token(s) from the production manifest. ' +
+                                'Recovery for these elements is disabled in production by design. ' +
+                                `Sites: ${strippedDevOnlyPaths.join(', ')}`,
+                            );
+                        }
+                        result = injectRecoveryManifest(result, manifest);
                     }
                     return result;
                 },
