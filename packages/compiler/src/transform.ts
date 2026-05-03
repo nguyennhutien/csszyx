@@ -4,6 +4,7 @@ import * as t from '@babel/types';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 import { COLOR_PROPERTIES, getCSSVariableName, getPropertyCategory, PropertyCategory } from './property-types.js';
+import { generateRecoveryToken, isValidRecoveryMode, type RecoveryTokenData } from './recovery-tokens.js';
 import {
     getVariantPrefix,
     KNOWN_VARIANTS,
@@ -14,6 +15,7 @@ import {
 
 // Re-export everything from core so consumers don't break
 export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
+export { generateRecoveryToken, isValidRecoveryMode, type RecoveryMode, type RecoveryTokenData } from './recovery-tokens.js';
 export * from './transform-core.js';
 
 /**
@@ -25,7 +27,7 @@ export * from './transform-core.js';
  * @returns {object} Transformation result with code and metadata
  * @throws {ASTBudgetExceededError} when the file's AST exceeds AST_BUDGET nodes.
  */
-export function transformSourceCode(source: string, filename?: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[] } {
+export function transformSourceCode(source: string, filename?: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[]; recoveryTokens: Map<string, RecoveryTokenData> } {
     let usesRuntime = false;
     let usesMerge = false;
     let usesColorVar = false;
@@ -35,10 +37,14 @@ export function transformSourceCode(source: string, filename?: string): { code: 
     const rawClassNames = new Set<string>();
     // Dev-mode diagnostics: emitted when sz props fall back to runtime transforms.
     const diagnostics: string[] = [];
+    // Recovery tokens collected from szRecover attributes in this file. Keyed
+    // by token (12-char hex hash); the unplugin aggregates these across all
+    // files and serializes the result into the manifest script tag.
+    const recoveryTokens = new Map<string, RecoveryTokenData>();
 
     // Fast path: check if file contains 'sz' before parsing
     if (!source.includes('sz')) {
-        return { code: source, transformed: false, usesRuntime: false, usesMerge: false, usesColorVar: false, classes: collectedClasses, rawClassNames, diagnostics };
+        return { code: source, transformed: false, usesRuntime: false, usesMerge: false, usesColorVar: false, classes: collectedClasses, rawClassNames, diagnostics, recoveryTokens };
     }
 
     try {
@@ -88,6 +94,65 @@ export function transformSourceCode(source: string, filename?: string): { code: 
                                             if (c) {rawClassNames.add(c);}
                                         }
                                     }
+                                    return;
+                                }
+
+                                // szRecover handling: emit a recovery token + data-sz-recovery-token
+                                // attribute so the runtime can match it against the manifest. Only
+                                // string-literal modes (`csr` / `dev-only`) are processed; expression
+                                // values (`szRecover={mode}`) are left untouched and warned about.
+                                if (attrName === 'szRecover') {
+                                    const recoverValue = path.node.value;
+                                    if (!t.isStringLiteral(recoverValue)) {
+                                        diagnostics.push(
+                                            `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
+                                            'only string-literal values ("csr" | "dev-only") are supported. ' +
+                                            'Dynamic values disable token emission for this element.',
+                                        );
+                                        return;
+                                    }
+                                    if (!isValidRecoveryMode(recoverValue.value)) {
+                                        diagnostics.push(
+                                            `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
+                                            `unknown mode "${recoverValue.value}" — expected "csr" or "dev-only". ` +
+                                            'Token emission skipped.',
+                                        );
+                                        return;
+                                    }
+
+                                    const opening = path.parentPath;
+                                    if (!opening?.isJSXOpeningElement()) {return;}
+                                    // Skip if a token is already attached (idempotent on re-visits, e.g. HMR).
+                                    const alreadyTagged = opening.node.attributes.some(attr =>
+                                        t.isJSXAttribute(attr)
+                                        && t.isJSXIdentifier(attr.name)
+                                        && attr.name.name === 'data-sz-recovery-token',
+                                    );
+                                    if (alreadyTagged) {return;}
+
+                                    const loc = path.node.loc;
+                                    const elementType = t.isJSXIdentifier(opening.node.name)
+                                        ? opening.node.name.name
+                                        : t.isJSXMemberExpression(opening.node.name)
+                                            ? '<member>'
+                                            : '<unknown>';
+                                    const line = loc?.start.line ?? 0;
+                                    const column = loc?.start.column ?? 0;
+                                    const file = filename ?? 'file.tsx';
+                                    const token = generateRecoveryToken(file, line, column, elementType);
+
+                                    opening.node.attributes.push(
+                                        t.jsxAttribute(
+                                            t.jsxIdentifier('data-sz-recovery-token'),
+                                            t.stringLiteral(token),
+                                        ),
+                                    );
+                                    recoveryTokens.set(token, {
+                                        mode: recoverValue.value,
+                                        component: elementType,
+                                        path: `${file}:${line}:${column}`,
+                                    });
+                                    transformed = true;
                                     return;
                                 }
 
@@ -630,6 +695,7 @@ export function transformSourceCode(source: string, filename?: string): { code: 
             classes: collectedClasses,
             rawClassNames,
             diagnostics,
+            recoveryTokens,
         };
     } catch (e) {
         // Budget violations must propagate so the build aborts loudly with
@@ -639,7 +705,7 @@ export function transformSourceCode(source: string, filename?: string): { code: 
             throw e;
         }
         console.warn('[csszyx] AST transform failed, falling back to original code:', e);
-        return { code: source, transformed: false, usesRuntime: false, usesMerge: false, usesColorVar: false, classes: collectedClasses, rawClassNames, diagnostics };
+        return { code: source, transformed: false, usesRuntime: false, usesMerge: false, usesColorVar: false, classes: collectedClasses, rawClassNames, diagnostics, recoveryTokens };
     }
 }
 
