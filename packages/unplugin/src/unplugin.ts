@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { transform, transformSourceCode } from '@csszyx/compiler';
+import { type TokenData, transform, transformSourceCode } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { preprocess as sveltePreprocess, type SvelteAdapterOptions } from '@csszyx/svelte-adapter';
 import type { PartialCsszyxConfig } from '@csszyx/types';
@@ -13,7 +13,7 @@ import type { PluginOption } from 'vite';
 import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
-import { transformIndexHtml as injectHydrationData } from './html-transformer.js';
+import { buildRecoveryManifest, injectRecoveryManifest, transformIndexHtml as injectHydrationData } from './html-transformer.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -34,6 +34,13 @@ interface PluginState {
   checksum: string;
   finalized: boolean;
   rootDir: string;
+  /**
+   * Recovery tokens collected from szRecover JSX attributes across all
+   * transformed files. Aggregated by the `transform` hook (compiler emits
+   * the data-sz-recovery-token attribute and returns the per-file map),
+   * then serialised into the manifest script tag injected into SSR HTML.
+   */
+  recoveryTokens: Map<string, TokenData>;
 }
 
 /**
@@ -361,6 +368,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         checksum: '',
         finalized: false,
         rootDir: process.cwd(),
+        recoveryTokens: new Map<string, TokenData>(),
     };
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
@@ -441,6 +449,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         }
                         for (const cls of result.rawClassNames) {
                             rawDiscoveredClasses.add(cls);
+                        }
+                        for (const [token, data] of result.recoveryTokens) {
+                            state.recoveryTokens.set(token, data);
                         }
                         // Extract static classes from _sz() runtime calls.
                         // When an sz prop has any dynamic value, the compiler wraps the
@@ -727,6 +738,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             this.warn(`[csszyx] ${id}\n  ${msg}`);
                         }
                     }
+                    for (const [token, data] of result.recoveryTokens) {
+                        state.recoveryTokens.set(token, data);
+                    }
                 }
             }
 
@@ -900,6 +914,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 const sizeBefore = state.classes.size;
                 for (const cls of result.classes) { state.classes.add(cls); }
+                for (const [token, data] of result.recoveryTokens) {
+                    state.recoveryTokens.set(token, data);
+                }
 
                 if (state.classes.size > sizeBefore) {
                     // New classes found — update manifest so Tailwind regenerates CSS
@@ -921,10 +938,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  */
                 handler(html) {
                     finalizeMangleMap();
-                    return injectHydrationData(html, state.mangleMap, state.checksum, {
+                    let result = injectHydrationData(html, state.mangleMap, state.checksum, {
                         mode: options.production?.injectChecksum === false ? 'script' : 'script',
                         minify: process.env.NODE_ENV === 'production',
                     });
+                    // Recovery manifest is a no-op when zero szRecover tokens were
+                    // emitted across the build, so pages without recovery sites get
+                    // no extra script tag.
+                    if (state.recoveryTokens.size > 0) {
+                        result = injectRecoveryManifest(result, buildRecoveryManifest(state.recoveryTokens));
+                    }
+                    return result;
                 },
             },
         },

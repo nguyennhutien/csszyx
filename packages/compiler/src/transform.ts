@@ -3,8 +3,9 @@ import * as babel from '@babel/core';
 import * as t from '@babel/types';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
+import type { TokenData } from './manifest.js';
 import { COLOR_PROPERTIES, getCSSVariableName, getPropertyCategory, PropertyCategory } from './property-types.js';
-import { generateRecoveryToken, isValidRecoveryMode, type RecoveryTokenData } from './recovery-tokens.js';
+import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
     getVariantPrefix,
     KNOWN_VARIANTS,
@@ -15,7 +16,6 @@ import {
 
 // Re-export everything from core so consumers don't break
 export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
-export { generateRecoveryToken, isValidRecoveryMode, type RecoveryMode, type RecoveryTokenData } from './recovery-tokens.js';
 export * from './transform-core.js';
 
 /**
@@ -27,7 +27,7 @@ export * from './transform-core.js';
  * @returns {object} Transformation result with code and metadata
  * @throws {ASTBudgetExceededError} when the file's AST exceeds AST_BUDGET nodes.
  */
-export function transformSourceCode(source: string, filename?: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[]; recoveryTokens: Map<string, RecoveryTokenData> } {
+export function transformSourceCode(source: string, filename?: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[]; recoveryTokens: Map<string, TokenData> } {
     let usesRuntime = false;
     let usesMerge = false;
     let usesColorVar = false;
@@ -40,7 +40,7 @@ export function transformSourceCode(source: string, filename?: string): { code: 
     // Recovery tokens collected from szRecover attributes in this file. Keyed
     // by token (12-char hex hash); the unplugin aggregates these across all
     // files and serializes the result into the manifest script tag.
-    const recoveryTokens = new Map<string, RecoveryTokenData>();
+    const recoveryTokens = new Map<string, TokenData>();
 
     // Fast path: check if file contains 'sz' before parsing
     if (!source.includes('sz')) {
@@ -111,7 +111,7 @@ export function transformSourceCode(source: string, filename?: string): { code: 
                                         );
                                         return;
                                     }
-                                    if (!isValidRecoveryMode(recoverValue.value)) {
+                                    if (!isValidInlineRecoveryMode(recoverValue.value)) {
                                         diagnostics.push(
                                             `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
                                             `unknown mode "${recoverValue.value}" — expected "csr" or "dev-only". ` +
@@ -139,7 +139,7 @@ export function transformSourceCode(source: string, filename?: string): { code: 
                                     const line = loc?.start.line ?? 0;
                                     const column = loc?.start.column ?? 0;
                                     const file = filename ?? 'file.tsx';
-                                    const token = generateRecoveryToken(file, line, column, elementType);
+                                    const token = generateInlineRecoveryToken(file, line, column, elementType);
 
                                     opening.node.attributes.push(
                                         t.jsxAttribute(

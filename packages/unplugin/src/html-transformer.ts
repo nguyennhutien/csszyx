@@ -7,6 +7,10 @@
  * @module html-transformer
  */
 
+import { createHash } from 'node:crypto';
+
+import type { TokenData } from '@csszyx/compiler';
+
 /**
  * Injection mode for mangle map.
  */
@@ -224,4 +228,93 @@ export function transformIndexHtml(
     options: HtmlInjectionOptions = {},
 ): string {
     return injectHydrationData(html, mangleMap, checksum, options);
+}
+
+/**
+ * Recovery manifest emitted to SSR HTML so `@csszyx/runtime/verify` can
+ * match `data-sz-recovery-token` attributes against valid build-time
+ * tokens. Mirrors the runtime's `RecoveryManifest` interface verbatim.
+ */
+export interface RecoveryManifest {
+    /**
+     * Identifier unique per build. Used by the runtime to detect
+     * stale manifests after a redeploy. Time-based + hash-suffixed so
+     * concurrent builds in the same millisecond still differ.
+     */
+    buildId: string;
+    /**
+     * SHA-256 of the canonicalised tokens object, truncated to 16 hex
+     * chars. Lets the runtime detect tampering without needing the full
+     * digest. Truncation is acceptable here — the manifest is integrity-
+     * checked, not cryptographically signed.
+     */
+    checksum: string;
+    /**
+     * Map from 12-char token (the value also written into the matching
+     * element's `data-sz-recovery-token` attribute) to the metadata the
+     * runtime uses for verification + error reporting.
+     */
+    tokens: Record<string, TokenData>;
+}
+
+/**
+ * Build a {@link RecoveryManifest} from the in-memory token map the
+ * unplugin accumulates across all transformed files.
+ *
+ * Tokens are sorted alphabetically before serialisation so the resulting
+ * checksum is stable across runs that produce the same set of tokens
+ * (otherwise Map iteration order would surface differently per build).
+ *
+ * @param tokens Per-build token map collected from `transformSourceCode`.
+ * @returns Manifest object ready to JSON.stringify.
+ */
+export function buildRecoveryManifest(
+    tokens: Map<string, TokenData>,
+): RecoveryManifest {
+    const sorted: Record<string, TokenData> = {};
+    const sortedKeys = [...tokens.keys()].sort();
+    for (const key of sortedKeys) {
+        const data = tokens.get(key);
+        if (data) {
+            sorted[key] = data;
+        }
+    }
+
+    const serialised = JSON.stringify(sorted);
+    const fullChecksum = createHash('sha256').update(serialised).digest('hex');
+    const checksum = fullChecksum.substring(0, 16);
+    const buildId = `${Date.now().toString(36)}-${fullChecksum.substring(0, 6)}`;
+
+    return { buildId, checksum, tokens: sorted };
+}
+
+/**
+ * Inject the recovery manifest as a JSON `<script>` tag into the HTML head.
+ * The element id `__SZ_RECOVERY_MANIFEST__` is the contract `loadManifestFromDOM`
+ * in `@csszyx/runtime/verify` reads back at hydration time.
+ *
+ * No-op when the manifest has zero tokens (avoid leaking an empty script
+ * tag into pages that never use szRecover).
+ *
+ * @param html Raw HTML content.
+ * @param manifest Manifest produced by {@link buildRecoveryManifest}.
+ * @returns Modified HTML, or unchanged if there are no tokens.
+ */
+export function injectRecoveryManifest(
+    html: string,
+    manifest: RecoveryManifest,
+): string {
+    if (Object.keys(manifest.tokens).length === 0) {
+        return html;
+    }
+
+    const json = JSON.stringify(manifest);
+    const scriptTag = `<script id="__SZ_RECOVERY_MANIFEST__" type="application/json">${json}</script>`;
+
+    if (html.includes('</head>')) {
+        return html.replace('</head>', `${scriptTag}\n</head>`);
+    } else if (html.includes('</html>')) {
+        return html.replace('</html>', `${scriptTag}\n</html>`);
+    }
+    return html + scriptTag;
 }

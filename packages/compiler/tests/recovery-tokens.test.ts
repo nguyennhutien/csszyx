@@ -9,43 +9,43 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { generateRecoveryToken, isValidRecoveryMode } from '../src/recovery-tokens.js';
+import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from '../src/recovery-tokens.js';
 import { transformSourceCode } from '../src/transform.js';
 
-describe('generateRecoveryToken', () => {
+describe('generateInlineRecoveryToken', () => {
     it('produces a 12-character hex token', () => {
-        const token = generateRecoveryToken('src/App.tsx', 10, 4, 'div');
+        const token = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
         expect(token).toMatch(/^[0-9a-f]{12}$/);
         expect(token).toHaveLength(12);
     });
 
     it('is deterministic for the same inputs', () => {
-        const a = generateRecoveryToken('src/App.tsx', 10, 4, 'div');
-        const b = generateRecoveryToken('src/App.tsx', 10, 4, 'div');
+        const a = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
+        const b = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
         expect(a).toBe(b);
     });
 
     it('differs when any input differs', () => {
-        const base = generateRecoveryToken('src/App.tsx', 10, 4, 'div');
-        expect(generateRecoveryToken('src/Other.tsx', 10, 4, 'div')).not.toBe(base);
-        expect(generateRecoveryToken('src/App.tsx', 11, 4, 'div')).not.toBe(base);
-        expect(generateRecoveryToken('src/App.tsx', 10, 5, 'div')).not.toBe(base);
-        expect(generateRecoveryToken('src/App.tsx', 10, 4, 'span')).not.toBe(base);
+        const base = generateInlineRecoveryToken('src/App.tsx', 10, 4, 'div');
+        expect(generateInlineRecoveryToken('src/Other.tsx', 10, 4, 'div')).not.toBe(base);
+        expect(generateInlineRecoveryToken('src/App.tsx', 11, 4, 'div')).not.toBe(base);
+        expect(generateInlineRecoveryToken('src/App.tsx', 10, 5, 'div')).not.toBe(base);
+        expect(generateInlineRecoveryToken('src/App.tsx', 10, 4, 'span')).not.toBe(base);
     });
 });
 
-describe('isValidRecoveryMode', () => {
+describe('isValidInlineRecoveryMode', () => {
     it('accepts the two recognised modes', () => {
-        expect(isValidRecoveryMode('csr')).toBe(true);
-        expect(isValidRecoveryMode('dev-only')).toBe(true);
+        expect(isValidInlineRecoveryMode('csr')).toBe(true);
+        expect(isValidInlineRecoveryMode('dev-only')).toBe(true);
     });
 
     it('rejects everything else', () => {
-        expect(isValidRecoveryMode('ssr')).toBe(false);
-        expect(isValidRecoveryMode('')).toBe(false);
-        expect(isValidRecoveryMode(null)).toBe(false);
-        expect(isValidRecoveryMode(undefined)).toBe(false);
-        expect(isValidRecoveryMode(0)).toBe(false);
+        expect(isValidInlineRecoveryMode('ssr')).toBe(false);
+        expect(isValidInlineRecoveryMode('')).toBe(false);
+        expect(isValidInlineRecoveryMode(null)).toBe(false);
+        expect(isValidInlineRecoveryMode(undefined)).toBe(false);
+        expect(isValidInlineRecoveryMode(0)).toBe(false);
     });
 });
 
