@@ -10,6 +10,10 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
+  # id-token: write is required so `npm publish --provenance` can mint a
+  # short-lived OIDC token from the runner. Without it, provenance claims
+  # silently disappear from the published tarballs.
+  id-token: write
 
 jobs:
   # release-please reads conventional-commit history since the last release
@@ -43,6 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Inherit id-token: write at the job level so the OIDC issuer reachable
+      # from inside `npm publish --provenance`. The job-level read default
+      # would otherwise drop the workflow-level grant.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -93,7 +101,12 @@ jobs:
       # pnpm respects `private: true` so vscode + adapters + mcp-server are
       # automatically skipped. --no-git-checks bypasses pnpm's interactive
       # branch confirmation prompt.
-      - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
+      #
+      # --provenance binds each tarball to this commit + workflow run via an
+      # OIDC-signed attestation. npm shows a "Built and signed" badge on the
+      # package page and `npm audit signatures` can verify offline. Free
+      # supply-chain hardening — only requires id-token: write (set above).
+      - name: Publish to npm with provenance
+        run: pnpm -r publish --access public --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
