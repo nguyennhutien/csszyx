@@ -101,24 +101,70 @@ if (!verifyMangleChecksum(clientMangleMap, embeddedChecksum)) {
    ```
 </Steps>
 
-## Recovery Tokens
+## Recovery Tokens via `szRecover`
 
-In development, CSSzyx can inject **recovery tokens** — signed proofs that
-a specific mangle map is trusted. If the client detects a mismatch but a
-valid recovery token exists, it can attempt client-side re-render instead
-of aborting.
+By default a hydration mismatch aborts the entire page — the safe choice
+for a production app you don't want to render with broken styles. For
+specific subtrees where re-rendering on the client is cheaper than
+aborting, opt in per-element with the `szRecover` JSX attribute.
 
-```ts
-csszyx({
-  development: {
-    autoInjectRecovery: true, // Auto-inject tokens in dev builds
-    allowCSRRecovery: true,
-  },
-})
+```tsx
+<section szRecover="csr">
+  {/* Hydration mismatch in this subtree triggers a client re-render
+      instead of aborting the whole document. */}
+  <UserGeneratedContent html={post.body} />
+</section>
+
+<aside szRecover="dev-only">
+  {/* Same recovery behaviour, but ONLY in development builds.
+      Stripped from the production manifest at build time. */}
+  <DebugPanel />
+</aside>
 ```
 
-Recovery is only available in development (`NODE_ENV !== 'production'`). In
-production, mismatches always abort.
+### How it works (build → SSR → hydration)
+
+1. **Build.** The csszyx unplugin scans every JSX element with `szRecover`
+   and tags it with `data-sz-recovery-token="<12-hex>"`. The token is a
+   deterministic hash of `${file}:${line}:${col}:${elementType}` — stable
+   across rebuilds, so HMR doesn't churn the manifest.
+
+2. **SSR HTML.** The unplugin injects a single manifest script into
+   `<head>` containing every emitted token:
+   ```html
+   <script id="__SZ_RECOVERY_MANIFEST__" type="application/json">
+     {"buildId":"…","checksum":"…","tokens":{"a3b9…":{"mode":"csr","component":"section","path":"…"}}}
+   </script>
+   ```
+
+3. **Hydration.** `@csszyx/runtime/verify` reads the manifest, then
+   `verifyRecoveryToken(element, manifest)` matches each element's
+   token against an entry. A valid match permits client recovery for
+   that subtree; an unknown token rejects.
+
+### `csr` vs `dev-only`
+
+| Mode       | Dev manifest | Prod manifest | When to use |
+|------------|--------------|---------------|-------------|
+| `csr`      | included     | included      | Subtrees that legitimately may render differently on client (auth-gated, locale-aware, A/B) |
+| `dev-only` | included     | **stripped**  | Debug overlays, dev-mode banners — the build emits a single rolled-up warning listing the stripped paths |
+
+Production strips `dev-only` because the runtime's `__SZ_ALLOW_CSR_RECOVERY__`
+flag is dev-mode only; shipping these tokens would just add bytes the
+runtime would refuse anyway.
+
+### TypeScript
+
+`szRecover` is typed on `React.HTMLAttributes` via `@csszyx/types/jsx`.
+The triple-slash reference in the umbrella `csszyx` package's type
+output means importing csszyx anywhere in the project surfaces the
+prop with full IntelliSense — no extra tsconfig wiring:
+
+```tsx
+<section szRecover="csr">…</section>     // ✓ valid
+<section szRecover="dev-only">…</section> // ✓ valid
+<section szRecover="ssr">…</section>      // ✗ Type '"ssr"' is not assignable
+```
 
 ## Runtime API
 
