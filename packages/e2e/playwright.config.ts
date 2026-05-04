@@ -43,6 +43,16 @@ export default defineConfig({
             },
         },
         {
+            // Reuses the vite-react dev server (port 5173) — fixture lives in
+            // playground/vite-react/src/Recovery.tsx, mounted at ?page=recovery.
+            name: 'recovery-manifest',
+            testMatch: /recovery-manifest\.spec/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5173',
+            },
+        },
+        {
             name: 'nextjs-ssr',
             testMatch: /nextjs-ssr/,
             use: {

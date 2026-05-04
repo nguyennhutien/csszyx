@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { RecoveryFixture } from './Recovery';
 import { VerificationComponent } from './Verification';
 
 // Lazy-load DynamicForm so @csszyx/dynamic (and its deps) are NOT bundled into
@@ -27,6 +28,10 @@ function App() {
         <JsonFormEditor />
       </Suspense>
     );
+  }
+
+  if (page === 'recovery') {
+    return <RecoveryFixture />;
   }
 
   return (

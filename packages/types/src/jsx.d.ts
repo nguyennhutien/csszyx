@@ -10,9 +10,9 @@
 
 import 'react';
 
-import type { SzProps, SzPropValue } from '@csszyx/compiler';
+import type { RecoveryMode, SzProps, SzPropValue } from '@csszyx/compiler';
 
-export type { SzProps, SzPropValue };
+export type { RecoveryMode, SzProps, SzPropValue };
 
 declare module 'react' {
   /**
@@ -30,6 +30,22 @@ declare module 'react' {
      * ```
      */
     sz?: SzPropValue;
+    /**
+     * Hydration recovery mode for the element. The csszyx unplugin
+     * compiles this attribute into a `data-sz-recovery-token` and
+     * registers the element in the SSR recovery manifest read by
+     * `@csszyx/runtime/verify` at hydration time.
+     *
+     * - `'csr'` — recovery permitted in both dev and production
+     * - `'dev-only'` — recovery permitted in development only;
+     *   stripped from the production manifest at build time.
+     *
+     * @example
+     * ```tsx
+     * <section szRecover="csr">…</section>
+     * ```
+     */
+    szRecover?: RecoveryMode;
   }
 
   /**
