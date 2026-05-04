@@ -313,7 +313,15 @@ export function buildRecoveryManifest(
             strippedDevOnlyPaths.push(data.path);
             continue;
         }
-        sorted[key] = data;
+        // Production manifests ship to every page that uses szRecover. The
+        // `path` field carries `src/Button.tsx:5:8`-style references that
+        // would let an attacker reverse-engineer the app's source tree
+        // from a public manifest. The runtime never reads `path` for
+        // verification — it's purely a devtools hint — so we strip it
+        // in production. Dev builds keep the path for hover-to-source.
+        sorted[key] = stripped
+            ? { mode: data.mode, component: data.component, path: '' }
+            : data;
     }
 
     const serialised = JSON.stringify(sorted);

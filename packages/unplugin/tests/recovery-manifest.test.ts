@@ -89,6 +89,29 @@ describe('buildRecoveryManifest', () => {
         expect(strippedDevOnlyPaths.sort()).toEqual(['src/A.tsx:1:0', 'src/C.tsx:3:0']);
     });
 
+    it('strips the path field from production tokens (no source disclosure)', () => {
+        const { manifest } = buildRecoveryManifest(
+            tokenMap(
+                ['t1', { mode: 'csr', component: 'Button', path: 'src/Button.tsx:5:8' }],
+                ['t2', { mode: 'csr', component: 'Card', path: 'src/Card.tsx:12:4' }],
+            ),
+            { production: true },
+        );
+        // Tokens still verify (mode + component intact) but path is blank,
+        // so the public manifest can't be used to map the source tree.
+        expect(manifest.tokens.t1.path).toBe('');
+        expect(manifest.tokens.t2.path).toBe('');
+        expect(manifest.tokens.t1.mode).toBe('csr');
+        expect(manifest.tokens.t1.component).toBe('Button');
+    });
+
+    it('keeps the path field in development tokens (devtools needs it)', () => {
+        const { manifest } = buildRecoveryManifest(tokenMap(
+            ['t1', { mode: 'csr', component: 'Button', path: 'src/Button.tsx:5:8' }],
+        ));
+        expect(manifest.tokens.t1.path).toBe('src/Button.tsx:5:8');
+    });
+
     it('checksum reflects post-strip token set in production', () => {
         const dev = buildRecoveryManifest(tokenMap(
             ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
