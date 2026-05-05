@@ -174,10 +174,9 @@ Initializes the CSSzyx runtime. Call once at app startup.
 
 ```ts
 interface RuntimeConfig {
-  development?: boolean;      // Enable dev mode features
-  allowCSRRecovery?: boolean; // Allow CSR recovery on hydration mismatch
-  strictHydration?: boolean;  // Treat hydration warnings as errors
-  debug?: boolean;            // Enable console debug logging
+  development?: boolean;     // Enable dev mode features
+  strictHydration?: boolean; // Treat hydration warnings as errors
+  debug?: boolean;           // Enable console debug logging
 }
 
 function initRuntime(config?: Partial<RuntimeConfig>): void
@@ -191,10 +190,14 @@ import { initRuntime } from '@csszyx/runtime';
 
 initRuntime({
   development: process.env.NODE_ENV === 'development',
-  allowCSRRecovery: true,
+  strictHydration: true,
   debug: process.env.NODE_ENV === 'development',
 });
 ```
+
+CSR recovery is now opted in per-element via the `szRecover` JSX
+attribute (`"csr"` or `"dev-only"`); no global flag needed. See
+[SSR & Hydration → Recovery Tokens](/docs/ssr/#recovery-tokens-via-szrecover).
 
 ## `getRuntimeConfig()`
 

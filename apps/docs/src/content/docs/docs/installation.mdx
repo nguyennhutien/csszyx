@@ -111,15 +111,20 @@ import './index.css';
 csszyx({
   development: {
     debug: true,              // Enable debug logging
-    autoInjectRecovery: true, // Auto-inject CSR recovery script
-    allowCSRRecovery: true,   // Allow client-side recovery on mismatch
   },
   production: {
     mangle: true,             // Minify class names (z, y, x, ...)
     injectChecksum: true,     // Inject SSR hydration checksum
   },
+  build: {
+    astBudgetLimit: 50_000,   // Per-file AST node cap; throws past it
+    scanCss: 'src/index.css', // CSS file(s) to scan for @theme tokens
+  },
 });
 ```
+
+For per-element hydration recovery (`szRecover="csr"` / `szRecover="dev-only"`)
+see [SSR & Hydration → Recovery Tokens](/docs/ssr/#recovery-tokens-via-szrecover).
 
 ## Optional: Initialize Runtime
 
@@ -130,12 +135,14 @@ import { initRuntime } from '@csszyx/runtime';
 
 initRuntime({
   development: process.env.NODE_ENV === 'development',
-  allowCSRRecovery: true,
+  strictHydration: true,
 });
 ```
 
 This is optional — CSSzyx works without it, but SSR hydration guards require
-it to be called before first render.
+it to be called before first render. Per-element CSR recovery is opted in
+via the `szRecover` JSX attribute on individual elements; see
+[SSR & Hydration](/docs/ssr/#recovery-tokens-via-szrecover).
 
 ## TypeScript
 
@@ -188,7 +195,8 @@ the plugins array.
 JSX type augmentation is included in the package.
 
 **Hydration warnings in Next.js** — initialize the runtime in your root layout
-with `allowCSRRecovery: true`.
+and opt in to per-element recovery with `<section szRecover="csr">…</section>`
+where mismatches are expected. See [SSR & Hydration](/docs/ssr/).
 
 **`sz` props not working in Astro MDX** — the MDX Vite plugin compiles JSX to
 runtime calls before csszyx runs, so `sz={{ ... }}` props written directly in

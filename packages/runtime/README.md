@@ -75,11 +75,14 @@ import { initRuntime } from "@csszyx/runtime";
 // Initialize at app startup
 initRuntime({
   development: process.env.NODE_ENV === "development",
-  allowCSRRecovery: true,
   strictHydration: true,
   debug: false,
 });
 ```
+
+Per-element CSR recovery is opted in via the `szRecover` JSX attribute
+on individual elements (`"csr"` or `"dev-only"`) rather than a global
+runtime flag. See `@csszyx/runtime/verify` for token verification helpers.
 
 ### Recovery Token Verification
 
@@ -237,7 +240,6 @@ Checks if the runtime has been initialized.
 ```typescript
 interface RuntimeConfig {
   development?: boolean; // Enable development mode features
-  allowCSRRecovery?: boolean; // Allow CSR recovery in development
   strictHydration?: boolean; // Enable strict hydration checks
   debug?: boolean; // Enable debug logging
 }

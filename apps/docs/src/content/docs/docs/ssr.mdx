@@ -90,15 +90,12 @@ if (!verifyMangleChecksum(clientMangleMap, embeddedChecksum)) {
    });
    ```
 
-3. **(Optional) Allow CSR recovery in development**
+3. **(Optional) Per-element recovery via `szRecover`**
 
-   ```ts
-   initRuntime({
-     development: true,
-     allowCSRRecovery: true, // Re-render on mismatch instead of aborting
-     debug: true,
-   });
-   ```
+   The legacy global `allowCSRRecovery` flag was replaced by the
+   per-element `szRecover` JSX attribute (see next section). It scopes
+   recovery to subtrees where it's actually safe instead of opting the
+   whole page in.
 </Steps>
 
 ## Recovery Tokens via `szRecover`

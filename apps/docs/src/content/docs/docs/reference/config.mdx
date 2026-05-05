@@ -24,11 +24,13 @@ standalone `csszyx.config.ts` file — all config lives in your bundler config.
         ...csszyx({
           development: {
             debug: true,
-            autoInjectRecovery: true,
           },
           production: {
             mangle: true,
             injectChecksum: true,
+          },
+          build: {
+            astBudgetLimit: 50_000, // optional, default 50k
           },
         }),
         tailwindcss(),
@@ -100,19 +102,19 @@ Controls development mode behavior.
 
 ```ts
 interface DevelopmentConfig {
-  autoInjectRecovery: boolean; // Auto-inject recovery tokens
-  strictMode: boolean;         // Treat warnings as errors
-  debug: boolean;              // Enable debug logging
-  allowCSRRecovery: boolean;   // Allow client-side recovery on mismatch
+  strictMode: boolean;  // Treat warnings as errors
+  debug: boolean;       // Enable debug logging
 }
 ```
 
 | Option | Default | Description |
 |---|---|---|
-| `autoInjectRecovery` | `false` | Auto-inject recovery tokens in dev builds |
 | `strictMode` | `false` | Treat all CSSzyx warnings as build errors |
 | `debug` | `false` | Enable verbose debug logging |
-| `allowCSRRecovery` | `true` | Allow client-side re-render on hydration mismatch |
+
+For per-element hydration recovery, use the `szRecover` JSX attribute
+on individual elements rather than a global flag — see
+[SSR & Hydration → Recovery Tokens](/docs/ssr/#recovery-tokens-via-szrecover).
 
 ### `production`
 
@@ -146,7 +148,7 @@ interface BuildConfig {
   tailwindConfig?: string;    // Path to Tailwind config file
   outputDir?: string;         // Output directory
   cacheDir?: string;          // Cache directory
-  astBudgetLimit?: number;    // Max AST nodes per file before warning
+  astBudgetLimit?: number;    // Max AST nodes per file before throwing
   scanCss?: string | string[]; // CSS files with @theme blocks to auto-scan
 }
 ```
@@ -157,7 +159,7 @@ interface BuildConfig {
 | `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path |
 | `outputDir` | `'.csszyx'` | Plugin output directory |
 | `cacheDir` | `'.csszyx/cache'` | Incremental build cache |
-| `astBudgetLimit` | `50000` | Warn if file exceeds this many AST nodes |
+| `astBudgetLimit` | `50000` | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via the bundler's filter. |
 | `scanCss` | `undefined` | CSS files to scan for `@theme` blocks (see below) |
 
 #### Theme Auto-Scan (`scanCss`)

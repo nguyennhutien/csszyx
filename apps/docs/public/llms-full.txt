@@ -3422,6 +3422,31 @@ initRuntime({ checksum: hdrs.get("x-csszyx-checksum") ?? "" });
 
 If the checksum mismatches, the runtime aborts hydration to prevent CSS corruption.
 
+### szRecover — per-element recovery opt-in
+
+By default a hydration mismatch aborts the entire page. For specific
+subtrees where re-rendering on the client is cheaper than aborting,
+opt in per-element with the `szRecover` JSX attribute:
+
+```tsx
+<section szRecover="csr">
+  {/* mismatch in this subtree triggers a client re-render instead of abort */}
+  <UserGeneratedContent />
+</section>
+
+<aside szRecover="dev-only">
+  {/* same, but only in development; stripped from prod manifest */}
+  <DebugPanel />
+</aside>
+```
+
+The build emits a `data-sz-recovery-token` attribute on each element
+plus a `<script id="__SZ_RECOVERY_MANIFEST__">` JSON tag in `<head>`.
+The runtime's `verifyRecoveryToken` matches the two at hydration time.
+
+`szRecover` is typed on `React.HTMLAttributes` via `@csszyx/types/jsx` —
+no tsconfig change needed.
+
 ## Production Build (Mangling)
 
 In production, class names are mangled for maximum compression:
@@ -3432,6 +3457,20 @@ In production, class names are mangled for maximum compression:
 ```
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
+
+### AST budget guard
+
+Files larger than 50 000 AST nodes throw `ASTBudgetExceededError` at
+build time — pathologically large generated files (json-as-ts fixtures,
+GraphQL schemas) would otherwise hang the build. Raise the cap when you
+need:
+
+```js
+...csszyx({ build: { astBudgetLimit: 100_000 } })
+```
+
+Or exclude the file from csszyx processing entirely via the bundler's
+`exclude` filter.
 
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 
