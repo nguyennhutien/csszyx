@@ -33,7 +33,6 @@ describe('index exports', () => {
         expect(DEFAULT_COMPILER_OPTIONS).toBeDefined();
         expect(DEFAULT_COMPILER_OPTIONS.buildId).toBeDefined();
         expect(typeof DEFAULT_COMPILER_OPTIONS.development).toBe('boolean');
-        expect(typeof DEFAULT_COMPILER_OPTIONS.autoInjectRecovery).toBe('boolean');
         expect(typeof DEFAULT_COMPILER_OPTIONS.strictMode).toBe('boolean');
     });
 });
@@ -43,7 +42,6 @@ describe('mergeOptions', () => {
         const options = mergeOptions();
         expect(options.buildId).toBeDefined();
         expect(typeof options.development).toBe('boolean');
-        expect(typeof options.autoInjectRecovery).toBe('boolean');
         expect(typeof options.strictMode).toBe('boolean');
     });
 
@@ -56,7 +54,6 @@ describe('mergeOptions', () => {
         expect(options.development).toBe(true);
         expect(options.strictMode).toBe(true);
         expect(options.buildId).toBeDefined();
-        expect(typeof options.autoInjectRecovery).toBe('boolean');
     });
 
     it('should override default options', () => {
@@ -64,13 +61,11 @@ describe('mergeOptions', () => {
         const options = mergeOptions({
             buildId: customBuildId,
             development: false,
-            autoInjectRecovery: true,
             strictMode: true,
         });
 
         expect(options.buildId).toBe(customBuildId);
         expect(options.development).toBe(false);
-        expect(options.autoInjectRecovery).toBe(true);
         expect(options.strictMode).toBe(true);
     });
 
@@ -81,7 +76,6 @@ describe('mergeOptions', () => {
 
         expect(options.development).toBe(true);
         expect(options.buildId).toBeDefined();
-        expect(typeof options.autoInjectRecovery).toBe('boolean');
         expect(typeof options.strictMode).toBe('boolean');
     });
 
@@ -89,7 +83,6 @@ describe('mergeOptions', () => {
         const options = mergeOptions({});
         expect(options.buildId).toBeDefined();
         expect(typeof options.development).toBe('boolean');
-        expect(typeof options.autoInjectRecovery).toBe('boolean');
         expect(typeof options.strictMode).toBe('boolean');
     });
 });

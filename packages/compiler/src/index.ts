@@ -122,11 +122,6 @@ export interface CompilerOptions {
   development?: boolean;
 
   /**
-   * Auto-inject recovery tokens
-   */
-  autoInjectRecovery?: boolean;
-
-  /**
    * Strict mode - fail build on warnings
    */
   strictMode?: boolean;
@@ -138,7 +133,6 @@ export interface CompilerOptions {
 export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
     buildId: Date.now().toString(),
     development: process.env.NODE_ENV !== 'production',
-    autoInjectRecovery: false,
     strictMode: false,
 };
 

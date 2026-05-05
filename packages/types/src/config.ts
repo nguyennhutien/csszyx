@@ -10,14 +10,6 @@
  */
 export interface DevelopmentConfig {
   /**
-   * Automatically inject recovery tokens for all components.
-   * When enabled, all components get szRecover="dev-only" by default.
-   *
-   * @default false
-   */
-  autoInjectRecovery: boolean;
-
-  /**
    * Enable strict mode - fail build on warnings.
    * When enabled, warnings are treated as errors.
    *
@@ -31,14 +23,6 @@ export interface DevelopmentConfig {
    * @default false
    */
   debug: boolean;
-
-  /**
-   * Allow client-side recovery on hydration mismatch.
-   * Only works in development mode.
-   *
-   * @default true
-   */
-  allowCSRRecovery: boolean;
 }
 
 /**
@@ -237,10 +221,8 @@ export type PartialCsszyxConfig = {
  * Default development configuration.
  */
 export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
-    autoInjectRecovery: false,
     strictMode: false,
     debug: false,
-    allowCSRRecovery: true,
 };
 
 /**

@@ -376,8 +376,6 @@ function generateConfigFile(
 const config: CsszyxConfig = {
   development: {
     debug: true,
-    autoInjectRecovery: ${config.enableRecovery},
-    allowCSRRecovery: ${config.enableRecovery},
   },
   production: {
     injectChecksum: ${config.enableSSR},

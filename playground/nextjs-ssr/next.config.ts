@@ -16,8 +16,6 @@ const nextConfig: NextConfig = {
             csszyxWebpack({
                 development: {
                     debug: true,
-                    autoInjectRecovery: true,
-                    allowCSRRecovery: true,
                 },
                 production: {
                     injectChecksum: true,
