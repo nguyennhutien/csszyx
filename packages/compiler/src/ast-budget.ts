@@ -18,7 +18,7 @@
 export const AST_BUDGET = 50_000;
 
 /**
- * Thrown when a single file's AST exceeds {@link AST_BUDGET} nodes during
+ * Thrown when a single file's AST exceeds the configured budget during
  * the csszyx compiler's traversal.
  */
 export class ASTBudgetExceededError extends Error {
@@ -31,26 +31,38 @@ export class ASTBudgetExceededError extends Error {
 
     /**
      * Node count at the point traversal was aborted. Always strictly
-     * greater than {@link AST_BUDGET}.
+     * greater than {@link budget}.
      */
     public readonly nodeCount: number;
+
+    /**
+     * Effective budget that was exceeded. Equals the third constructor
+     * argument, the caller's `options.astBudget`, or {@link AST_BUDGET}
+     * when no override was supplied.
+     */
+    public readonly budget: number;
 
     /**
      *
      * @param filename Source filename if known, otherwise `undefined`.
      * @param nodeCount Node count at the point traversal was aborted.
+     * @param budget Effective budget that was exceeded. Defaults to
+     *   {@link AST_BUDGET} for backwards compatibility with callers that
+     *   don't pass an override.
      */
-    constructor(filename: string | undefined, nodeCount: number) {
+    constructor(filename: string | undefined, nodeCount: number, budget: number = AST_BUDGET) {
         const where = filename ?? '<anonymous>';
         super(
-            `[csszyx] AST budget exceeded: ${where} has more than ${AST_BUDGET} nodes ` +
+            `[csszyx] AST budget exceeded: ${where} has more than ${budget} nodes ` +
             `(traversal aborted at ${nodeCount}). Files this large are almost always ` +
             'machine-generated and should be excluded from sz transformation. ' +
-            'Add the file to your bundler\'s plugin "include"/"exclude" filter ' +
-            'or your tsconfig "exclude".',
+            'Either exclude the file from the plugin (Vite: ' +
+            '`csszyx({ exclude: [/large-data\\.ts$/] })`), or raise the limit ' +
+            'globally with `csszyx({ build: { astBudgetLimit: 100_000 } })`.',
         );
         this.name = 'ASTBudgetExceededError';
         this.filename = filename;
         this.nodeCount = nodeCount;
+        this.budget = budget;
     }
 }

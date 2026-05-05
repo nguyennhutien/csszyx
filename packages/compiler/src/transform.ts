@@ -19,15 +19,33 @@ export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export * from './transform-core.js';
 
 /**
+ * Options for {@link transformSourceCode}.
+ */
+export interface TransformSourceCodeOptions {
+    /**
+     * Override the AST node budget. Files larger than this throw
+     * {@link ASTBudgetExceededError}. Defaults to {@link AST_BUDGET} (50 000).
+     * Useful for repos with legitimately large generated files (json-as-ts
+     * fixtures, GraphQL schema snapshots) that exceed the default cap but
+     * are still safe to transform.
+     */
+    astBudget?: number;
+}
+
+/**
  * Transforms all sz props in a source code string into Tailwind classNames.
  *
  * @param {string} source - The source code to transform
  * @param {string} [filename] - Source filename, used in error messages and
  *   passed to Babel as the parser filename. Defaults to a placeholder.
+ * @param {TransformSourceCodeOptions} [options] - Optional overrides
+ *   (currently: `astBudget` to raise/lower the per-file node cap).
  * @returns {object} Transformation result with code and metadata
- * @throws {ASTBudgetExceededError} when the file's AST exceeds AST_BUDGET nodes.
+ * @throws {ASTBudgetExceededError} when the file's AST exceeds the
+ *   effective budget (`options.astBudget` or {@link AST_BUDGET}).
  */
-export function transformSourceCode(source: string, filename?: string): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[]; recoveryTokens: Map<string, TokenData> } {
+export function transformSourceCode(source: string, filename?: string, options?: TransformSourceCodeOptions): { code: string; transformed: boolean; usesRuntime: boolean; usesMerge: boolean; usesColorVar: boolean; classes: Set<string>; rawClassNames: Set<string>; diagnostics: string[]; recoveryTokens: Map<string, TokenData> } {
+    const astBudget = options?.astBudget ?? AST_BUDGET;
     let usesRuntime = false;
     let usesMerge = false;
     let usesColorVar = false;
@@ -69,8 +87,8 @@ export function transformSourceCode(source: string, filename?: string): { code: 
                             babel.traverse(file.ast, {
                                 enter() {
                                     nodeCount++;
-                                    if (nodeCount > AST_BUDGET) {
-                                        throw new ASTBudgetExceededError(filename, nodeCount);
+                                    if (nodeCount > astBudget) {
+                                        throw new ASTBudgetExceededError(filename, nodeCount, astBudget);
                                     }
                                 },
                             });

@@ -77,4 +77,44 @@ describe('AST budget guard', () => {
         const source = '1' + '+ 1'.repeat(30_000);
         expect(() => transformSourceCode(source)).not.toThrow();
     });
+
+    it('respects an `astBudget` override raised above the default', () => {
+        // Source ~60k nodes — exceeds default 50k but fits a 100k override.
+        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
+        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+
+        // Default budget: throws.
+        expect(() => transformSourceCode(source, 'huge.tsx')).toThrow(ASTBudgetExceededError);
+
+        // Raised budget: passes.
+        expect(() => transformSourceCode(source, 'huge.tsx', { astBudget: 100_000 }))
+            .not.toThrow();
+    });
+
+    it('respects an `astBudget` override lowered below the default', () => {
+        // Source ~3k nodes — well under 50k default but over a 1k override.
+        const literals = Array.from({ length: 3000 }, (_, i) => i).join(', ');
+        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+
+        // Default budget: passes.
+        expect(() => transformSourceCode(source, 'small.tsx')).not.toThrow();
+
+        // Lowered budget: throws.
+        expect(() => transformSourceCode(source, 'small.tsx', { astBudget: 1_000 }))
+            .toThrow(ASTBudgetExceededError);
+    });
+
+    it('error reports the effective budget (not just the default)', () => {
+        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
+        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+
+        let caught: ASTBudgetExceededError | undefined;
+        try {
+            transformSourceCode(source, 'big.tsx', { astBudget: 55_000 });
+        } catch (e) {
+            caught = e as ASTBudgetExceededError;
+        }
+        expect(caught?.budget).toBe(55_000);
+        expect(caught?.message).toContain('55000');
+    });
 });

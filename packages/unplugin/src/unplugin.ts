@@ -361,6 +361,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     postPlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
 } {
     const manglingEnabled = options.production?.mangle !== false;
+    // User can raise/lower the AST node budget per build via the existing
+    // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
+    // compiler falls back to the default 50 000 in @csszyx/compiler.
+    const astBudgetOverride = options.build?.astBudgetLimit;
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -436,7 +440,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     try {
                         const content = fs.readFileSync(filePath, 'utf-8');
                         if (!content.includes('sz=') && !content.includes('sz:')) {continue;}
-                        const result = transformSourceCode(content, filePath);
+                        const result = transformSourceCode(content, filePath, { astBudget: astBudgetOverride });
                         if (!result.transformed) {continue;}
                         // Piggyback: use classes collected inside the Babel JSXAttribute visitor.
                         // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
@@ -724,7 +728,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         transformed = true;
                     }
                 } else {
-                    const result = transformSourceCode(code, id);
+                    const result = transformSourceCode(code, id, { astBudget: astBudgetOverride });
                     transformedCode = result.code;
                     usesRuntime = result.usesRuntime;
                     usesMerge = result.usesMerge;
@@ -908,7 +912,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) { return; }
 
-                try { result = transformSourceCode(fileContent, ctx.file); } catch { return; }
+                try { result = transformSourceCode(fileContent, ctx.file, { astBudget: astBudgetOverride }); } catch { return; }
 
                 if (!result.transformed) { return; }
 
