@@ -19,91 +19,30 @@
         { "type": "docs", "hidden": true },
         { "type": "style", "hidden": true }
     ],
+    "exclude-paths": [
+        "release-please-config.json",
+        ".release-please-manifest.json",
+        "packages/types/packages/csszyx"
+    ],
     "packages": {
-        "packages/csszyx": {
-            "package-name": "csszyx"
-        },
-        "packages/compiler": {
-            "package-name": "@csszyx/compiler",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/runtime": {
-            "package-name": "@csszyx/runtime",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/core": {
-            "package-name": "@csszyx/core",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/types": {
-            "package-name": "@csszyx/types",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/unplugin": {
-            "package-name": "@csszyx/unplugin",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/cli": {
-            "package-name": "@csszyx/cli",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/vars": {
-            "package-name": "@csszyx/vars",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/mcp-server": {
-            "package-name": "@csszyx/mcp-server",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/svelte-adapter": {
-            "package-name": "@csszyx/svelte-adapter",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/vue-adapter": {
-            "package-name": "@csszyx/vue-adapter",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/dynamic": {
-            "package-name": "@csszyx/dynamic",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        },
-        "packages/vscode": {
-            "package-name": "@csszyx/vscode",
-            "skip-github-release": true,
-            "changelog-path": "../csszyx/CHANGELOG.md"
-        }
-    },
-    "plugins": [
-        {
-            "type": "linked-versions",
-            "groupName": "csszyx",
-            "components": [
-                "csszyx",
-                "@csszyx/compiler",
-                "@csszyx/runtime",
-                "@csszyx/core",
-                "@csszyx/types",
-                "@csszyx/unplugin",
-                "@csszyx/cli",
-                "@csszyx/vars",
-                "@csszyx/mcp-server",
-                "@csszyx/svelte-adapter",
-                "@csszyx/vue-adapter",
-                "@csszyx/dynamic",
-                "@csszyx/vscode"
+        ".": {
+            "package-name": "csszyx",
+            "changelog-path": "packages/csszyx/CHANGELOG.md",
+            "extra-files": [
+                "packages/csszyx/package.json",
+                "packages/types/package.json",
+                "packages/compiler/package.json",
+                "packages/runtime/package.json",
+                "packages/core/package.json",
+                "packages/unplugin/package.json",
+                "packages/cli/package.json",
+                "packages/vars/package.json",
+                "packages/mcp-server/package.json",
+                "packages/svelte-adapter/package.json",
+                "packages/vue-adapter/package.json",
+                "packages/dynamic/package.json",
+                "packages/vscode/package.json"
             ]
-        },
-        "node-workspace"
-    ]
+        }
+    }
 }
