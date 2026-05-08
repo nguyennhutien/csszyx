@@ -1,9 +1,9 @@
 {
-    "packages/csszyx": "0.6.0",
+    "packages/csszyx": "0.6.1",
     "packages/compiler": "0.6.0",
     "packages/runtime": "0.6.0",
     "packages/core": "0.6.0",
-    "packages/types": "0.6.0",
+    "packages/types": "0.6.1",
     "packages/unplugin": "0.6.0",
     "packages/cli": "0.6.0",
     "packages/vars": "0.6.0",
