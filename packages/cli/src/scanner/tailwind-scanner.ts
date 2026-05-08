@@ -11,6 +11,17 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// `tailwindcss` is pinned to v3 in this package's package.json (`^3.4.1`)
+// on purpose — these two imports are v3-only API:
+//   - `Config` type
+//   - `tailwindcss/resolveConfig.js` entry
+// Tailwind v4 dropped JS config (`tailwind.config.{ts,js,cjs,mjs}`) in
+// favour of CSS-first `@theme {…}` blocks, and the `resolveConfig` helper
+// no longer exists. This scanner exists specifically to read v3-style
+// configs from existing user projects during `csszyx migrate`, so the v3
+// dep is the contract — do NOT bump to v4 without rewriting the scanner.
+// New v4 projects bootstrap through `csszyx init`, which writes
+// `@import "tailwindcss"` and never touches this scanner.
 import type { Config } from 'tailwindcss';
 import resolveConfig from 'tailwindcss/resolveConfig.js';
 
