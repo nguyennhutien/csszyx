@@ -20,7 +20,6 @@ export default defineConfig({
     ...csszyx({
       development: {
         debug: true,
-        autoInjectRecovery: true,
       },
       production: {
         mangle: true,
@@ -95,19 +94,17 @@ Controls development mode behavior:
 
 ```ts
 interface DevelopmentConfig {
-  autoInjectRecovery: boolean; // Auto-inject recovery tokens
   strictMode: boolean; // Treat warnings as errors
   debug: boolean; // Enable debug logging
-  allowCSRRecovery: boolean; // Allow client-side recovery on hydration mismatch
 }
 ```
 
 **Defaults:**
 
-- `autoInjectRecovery`: `false`
 - `strictMode`: `false`
 - `debug`: `false`
-- `allowCSRRecovery`: `true`
+
+> Recovery is now opt-in per element via the `szRecover` JSX attribute (`"csr"` or `"dev-only"`). The legacy global `autoInjectRecovery` and `allowCSRRecovery` flags were removed in 0.6.0.
 
 ### Production
 
