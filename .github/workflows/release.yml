@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  # Manual trigger — used to recover from cases where release-please opened
+  # a release PR but its post-merge tagging step failed (e.g. PR title pattern
+  # mismatch left `releases_created` unset). Operator runs `gh workflow run
+  # release.yml` after manually creating the missing tag + GitHub release; the
+  # publish job below will then run with the package.json versions already on
+  # main.
+  workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -43,7 +50,11 @@ jobs:
   publish:
     name: Publish to npm
     needs: release-please
-    if: needs.release-please.outputs.releases_created == 'true'
+    # Runs when release-please just minted a release (normal flow) OR when an
+    # operator manually dispatches the workflow (recovery flow — tag/release
+    # already exist, package.json versions on main are correct, just need to
+    # run pnpm publish).
+    if: needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
