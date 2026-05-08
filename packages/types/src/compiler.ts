@@ -71,11 +71,6 @@ export interface CompilerOptions {
   development?: boolean;
 
   /**
-   * Auto-inject recovery tokens
-   */
-  autoInjectRecovery?: boolean;
-
-  /**
    * Strict mode - fail build on warnings
    */
   strictMode?: boolean;
