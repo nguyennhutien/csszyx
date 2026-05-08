@@ -6,10 +6,12 @@ name: Release VS Code Extension
 #   - @csszyx/vscode is `private: true` in package.json so npm publish
 #     auto-skips it. Marketplace publish therefore needs its own trigger.
 #
-# Auto-trigger: release-please creates a tag `@csszyx/vscode-<version>`
-# after the linked-versions group's release PR is merged on main. This
-# workflow listens for that tag pattern and runs Marketplace publish
-# without further human action.
+# Auto-trigger: release-please creates a single `v<version>` tag (e.g.
+# v0.7.0) when the umbrella release PR is merged on main. This workflow
+# listens for that tag pattern and runs Marketplace publish without
+# further human action. The version itself is read from
+# packages/vscode/package.json — extra-files keeps that field in sync
+# with every release.
 #
 # Manual trigger: workflow_dispatch with optional dry_run (build .vsix
 # without publishing) for verification.
@@ -20,9 +22,9 @@ name: Release VS Code Extension
 on:
   push:
     tags:
-      # release-please format: <component>-<version> with include-v-in-tag: false
-      # e.g. @csszyx/vscode-0.6.0
-      - '@csszyx/vscode-*'
+      # Single-root release-please tag format (include-component-in-tag:
+      # false, include-v-in-tag: true) — e.g. v0.6.2, v0.7.0.
+      - 'v*'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -73,10 +75,11 @@ jobs:
 
       - name: Read extension version
         id: meta
-        # Reading from package.json is more reliable than github.ref_name
-        # because the tag is "@csszyx/vscode@0.5.0" — the slash in the
-        # publisher prefix is rejected as an artifact name. workflow_dispatch
-        # runs (no tag) would also have no version-shaped ref_name to use.
+        # Reading from package.json keeps the workflow agnostic to the
+        # tag format. extra-files in release-please-config.json updates
+        # packages/vscode/package.json on every release, so this value
+        # always matches the just-tagged version (or whatever is on main
+        # for workflow_dispatch runs).
         run: echo "version=$(node -p "require('./packages/vscode/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Upload .vsix artifact
