@@ -163,14 +163,18 @@ Pass options to customize behavior:
 csszyx({
   development: {
     debug: true, // Enable debug logging
-    autoInjectRecovery: true, // Auto-inject CSR recovery script
-    allowCSRRecovery: true, // Allow client-side recovery on mismatch
+    strictMode: false, // Treat warnings as errors
+  },
+  build: {
+    astBudgetLimit: 50_000, // Abort transform past this AST node count
   },
   production: {
     injectChecksum: true, // Inject SSR hydration checksum
   },
 });
 ```
+
+> Recovery is now controlled per-element via the `szRecover` JSX attribute (`"csr"` or `"dev-only"`). See [SSR Safety](/guide/ssr-safety) for details.
 
 ## Optional: Initialize Runtime
 
@@ -181,7 +185,7 @@ import { initRuntime } from "@csszyx/runtime";
 
 initRuntime({
   development: process.env.NODE_ENV === "development",
-  allowCSRRecovery: true,
+  strictHydration: true,
   debug: false,
 });
 ```
@@ -208,7 +212,7 @@ The `sz` prop types come from `@csszyx/types`. If you get type errors, make sure
 
 ### Hydration warnings in Next.js
 
-Initialize the runtime in your root layout with `allowCSRRecovery: true`.
+Initialize the runtime in your root layout, then mark the elements that should accept client-side recovery with `<section szRecover="csr">…</section>`. Without `szRecover`, hydration mismatches abort the affected subtree (safe default).
 
 ## Next Steps
 

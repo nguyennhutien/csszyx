@@ -1,5 +1,30 @@
 # csszyx
 
+## 0.6.0
+
+### ⚠️ Breaking Changes
+
+- **types:** remove legacy `autoInjectRecovery` + `allowCSRRecovery` from `DevelopmentConfig`. Recovery is now controlled per-element via the `szRecover` JSX attribute (`"csr"` or `"dev-only"`). The runtime-level `allowCSRRecovery` option in `RuntimeConfig` (passed to `initRuntime`) remains available.
+
+### ✨ Features
+
+- **compiler:** AST budget guard — aborts traversal at 50k nodes per file with `ASTBudgetExceededError`.
+- **compiler:** make AST budget configurable via `build.astBudgetLimit` plugin option.
+- **compiler:** emit recovery tokens from `szRecover` JSX attributes (deterministic 12-hex SHA-256 of `filename:line:column:elementType`).
+- **unplugin:** aggregate recovery tokens across all transformed files and inject `__SZ_RECOVERY_MANIFEST__` script in HTML.
+- **unplugin:** strip `szRecover='dev-only'` tokens from production manifest.
+
+### 🐛 Bug Fixes
+
+- **unplugin:** strip `path` field from production recovery manifest (avoid leaking source layout).
+- **ci:** serialize `@csszyx/core` build/test to avoid `wasm-pack` race.
+- **vscode-release:** use `package.json` version for artifact name.
+
+### 🔧 Internals
+
+- **ci:** publish to npm with `--provenance` (OIDC attestation).
+- **ci:** migrate from changesets to release-please for automated version + changelog.
+
 ## 0.5.0
 
 ### Minor Changes
