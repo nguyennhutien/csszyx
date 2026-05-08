@@ -26,62 +26,62 @@
         "packages/compiler": {
             "package-name": "@csszyx/compiler",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/runtime": {
             "package-name": "@csszyx/runtime",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/core": {
             "package-name": "@csszyx/core",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/types": {
             "package-name": "@csszyx/types",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/unplugin": {
             "package-name": "@csszyx/unplugin",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/cli": {
             "package-name": "@csszyx/cli",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/vars": {
             "package-name": "@csszyx/vars",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/mcp-server": {
             "package-name": "@csszyx/mcp-server",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/svelte-adapter": {
             "package-name": "@csszyx/svelte-adapter",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/vue-adapter": {
             "package-name": "@csszyx/vue-adapter",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/dynamic": {
             "package-name": "@csszyx/dynamic",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         },
         "packages/vscode": {
             "package-name": "@csszyx/vscode",
             "skip-github-release": true,
-            "changelog-path": "packages/csszyx/CHANGELOG.md"
+            "changelog-path": "../csszyx/CHANGELOG.md"
         }
     },
     "plugins": [
@@ -103,6 +103,7 @@
                 "@csszyx/dynamic",
                 "@csszyx/vscode"
             ]
-        }
+        },
+        "node-workspace"
     ]
 }
