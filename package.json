@@ -1,9 +1,9 @@
 {
     "name": "csszyx",
-    "version": "0.0.0",
+    "version": "0.6.2",
     "type": "module",
     "private": true,
-    "description": "CSS-in-JS framework with Tailwind object syntax, automatic minification, and SSR safety. Class names encode in reversed order z\u2192y\u2192x.",
+    "description": "CSS-in-JS framework with Tailwind object syntax, automatic minification, and SSR safety. Class names encode in reversed order z→y→x.",
     "keywords": [
         "css-in-js",
         "tailwind",

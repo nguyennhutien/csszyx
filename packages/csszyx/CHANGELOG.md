@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.6.2](https://github.com/nguyennhutien/csszyx/compare/v0.6.1...v0.6.2) (2026-05-08)
+
+
+### Bug Fixes
+
+* **release:** redirect changelog paths to umbrella + add node-workspace plugin ([#10](https://github.com/nguyennhutien/csszyx/issues/10)) ([91d2144](https://github.com/nguyennhutien/csszyx/commit/91d21447f76228f0beaf203c4d8e4d8b2239f9d3))
+
 ## [0.6.1](https://github.com/nguyennhutien/csszyx/compare/v0.6.0...v0.6.1) (2026-05-08)
 
 
