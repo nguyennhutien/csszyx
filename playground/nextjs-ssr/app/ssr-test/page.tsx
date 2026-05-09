@@ -1,6 +1,4 @@
-import { Suspense } from 'react';
 import Link from 'next/link';
-import { AsyncDataLoader } from '@/components/async-data-loader';
 
 /**
  * SSR Test Page - Tests various SSR scenarios with csszyx

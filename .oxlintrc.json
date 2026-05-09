@@ -31,8 +31,6 @@
         "**/csszyx-classes.html",
         "**/next-env.d.ts",
         "docs/**",
-        "apps/**",
-        "playground/**",
         "vitest.workspace.ts",
         "**/*.cjs"
     ]
