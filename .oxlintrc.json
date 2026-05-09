@@ -1,0 +1,20 @@
+{
+    "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+    "ignorePatterns": [
+        "**/dist/**",
+        "**/lib/**",
+        "**/node_modules/**",
+        "**/.next/**",
+        "**/.turbo/**",
+        "**/.astro/**",
+        "**/pkg/**",
+        "**/pkg-node/**",
+        "**/.pnpm-store/**",
+        "**/coverage/**",
+        "**/playwright-report/**",
+        "**/test-results/**",
+        "**/csszyx-classes.html",
+        "**/next-env.d.ts"
+    ],
+    "rules": {}
+}
