@@ -3,6 +3,7 @@ import typescript from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import jsdoc from 'eslint-plugin-jsdoc';
 import jsonc from 'eslint-plugin-jsonc';
+import oxlint from 'eslint-plugin-oxlint';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
@@ -311,4 +312,13 @@ export default [
             '**/target/**',
         ],
     },
+
+    // Disable ESLint rules that oxlint already covers. Reads
+    // .oxlintrc.json so any oxlint rule changes propagate
+    // automatically — single source of truth for rule activation
+    // is the oxlint config.
+    //
+    // MUST be last in the array. The plugin emits per-rule
+    // "off" overrides; later entries win in flat config.
+    ...oxlint.buildFromOxlintConfigFile('./.oxlintrc.json'),
 ];

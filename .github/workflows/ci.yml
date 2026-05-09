@@ -109,9 +109,43 @@ jobs:
       - name: Validate release-please config + manifest
         run: node .github/scripts/validate-release-please-config.mjs
 
+  # Fast oxlint preflight. Runs the same `pnpm lint:fast` script as
+  # local dev (oxlint only, no ESLint, no Rust toolchain) so most
+  # correctness issues surface in <30 s — well before the heavier
+  # `lint` job's WASM cache restore + ESLint pass would. The `lint`
+  # job below depends on this, so a failed oxlint run skips the
+  # slower lint stage entirely.
+  lint-fast:
+    name: Lint (oxlint preflight)
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.release_please != 'true' &&
+      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run oxlint
+        run: pnpm lint:fast
+
   lint:
     name: Lint
-    needs: detect-changes
+    # Gated on lint-fast so oxlint failures fail the gate fast and
+    # skip the heavier ESLint + type-check pass.
+    needs: [detect-changes, lint-fast]
     # Skip when:
     #   - this is a release-please PR (only version-field bumps), OR
     #   - no TS/Rust code changed (e.g. docs-only PR).
@@ -154,8 +188,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint:check
+      # ESLint only — oxlint already ran in the lint-fast preflight.
+      # Running it again here would just duplicate the ~500 ms oxlint
+      # pass for no signal.
+      - name: Lint (eslint)
+        run: pnpm exec eslint .
 
       - name: Type check
         run: pnpm type-check
@@ -335,7 +372,7 @@ jobs:
   # merges on every paths-ignored PR.
   ci-status:
     name: CI Status
-    needs: [detect-changes, validate-config, lint, test, e2e, build]
+    needs: [detect-changes, validate-config, lint-fast, lint, test, e2e, build]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -1,0 +1,37 @@
+{
+    "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+    "plugins": [
+        "typescript",
+        "unicorn",
+        "react",
+        "react-perf",
+        "import",
+        "promise",
+        "node"
+    ],
+    "categories": {
+        "correctness": "error"
+    },
+    "ignorePatterns": [
+        "**/node_modules/**",
+        "**/.pnpm-store/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/lib/**",
+        "**/.next/**",
+        "**/.turbo/**",
+        "**/.astro/**",
+        "**/coverage/**",
+        "**/examples/**",
+        "**/pkg/**",
+        "**/pkg-node/**",
+        "**/benchmarks/**",
+        "**/playwright-report/**",
+        "**/test-results/**",
+        "**/csszyx-classes.html",
+        "**/next-env.d.ts",
+        "docs/**",
+        "vitest.workspace.ts",
+        "**/*.cjs"
+    ]
+}

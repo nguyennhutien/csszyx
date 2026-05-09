@@ -119,7 +119,7 @@ function getNextMangle(): string {
 
 function highlightSz(text: string): string {
   return text.replace(
-    /(\"[^\"]*\"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}\[\],:])/g,
+    /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g,
     (match, s, k, cb, b, cn, n, sym) => {
       if (s)   return `<span class="string">${s}</span>`;
       if (k)   return `<span class="key">${k}</span>`;
@@ -331,7 +331,7 @@ export default function HeroSection() {
     let hoTyped = 0;
 
     const highlight = (text: string) => text.replace(
-      /(\"[^\"]*\"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}\[\],:])/g,
+      /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g,
       (m, s, k, cb, b, cn, n, sym) => {
         if (s)   return `<span class="ho-string">${s}</span>`;
         if (k)   return `<span class="ho-key">${k}</span>`;
