@@ -26,6 +26,7 @@ jobs:
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       release_please: ${{ steps.head-ref.outputs.is_release_please }}
       code_ts: ${{ steps.filter.outputs.code_ts }}
@@ -99,6 +100,7 @@ jobs:
   validate-config:
     name: Validate Config
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -117,6 +119,7 @@ jobs:
       needs.detect-changes.outputs.release_please != 'true' &&
       (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -129,6 +132,21 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+
+      # Restore turbo's own cache directory. Turbo computes a hash of
+      # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
+      # the hash matches a prior run, turbo skips the task entirely
+      # without invoking the build command — no wasm-pack, no Rust at
+      # all on cache hit. The unique-per-SHA key plus restore-keys
+      # fallback gives us "perfect" replay on rerun and "near-perfect"
+      # incremental on follow-up commits.
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -159,9 +177,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build WASM core
-        run: pnpm --filter @csszyx/core build
-
       - name: Lint
         run: pnpm lint:check
 
@@ -175,6 +190,7 @@ jobs:
       needs.detect-changes.outputs.release_please != 'true' &&
       (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -187,6 +203,21 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+
+      # Restore turbo's own cache directory. Turbo computes a hash of
+      # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
+      # the hash matches a prior run, turbo skips the task entirely
+      # without invoking the build command — no wasm-pack, no Rust at
+      # all on cache hit. The unique-per-SHA key plus restore-keys
+      # fallback gives us "perfect" replay on rerun and "near-perfect"
+      # incremental on follow-up commits.
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -214,9 +245,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build WASM core
-        run: pnpm --filter @csszyx/core build
-
       # `test:unit` is `turbo run test --filter=!@csszyx/e2e`. Playwright
       # tests live in @csszyx/e2e and run in their own job below — they
       # need a different gate (runtime_critical, not just code_ts) and a
@@ -242,6 +270,7 @@ jobs:
       needs.detect-changes.outputs.release_please != 'true' &&
       needs.detect-changes.outputs.runtime_critical == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -254,6 +283,21 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+
+      # Restore turbo's own cache directory. Turbo computes a hash of
+      # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
+      # the hash matches a prior run, turbo skips the task entirely
+      # without invoking the build command — no wasm-pack, no Rust at
+      # all on cache hit. The unique-per-SHA key plus restore-keys
+      # fallback gives us "perfect" replay on rerun and "near-perfect"
+      # incremental on follow-up commits.
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -277,9 +321,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Build WASM core
-        run: pnpm --filter @csszyx/core build
 
       # Build all workspace packages so the production playgrounds can
       # start (Next.js-SSR's `next start` and the Vite preview both need
@@ -310,6 +351,7 @@ jobs:
       needs.detect-changes.outputs.release_please != 'true' &&
       (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -322,6 +364,21 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+
+      # Restore turbo's own cache directory. Turbo computes a hash of
+      # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
+      # the hash matches a prior run, turbo skips the task entirely
+      # without invoking the build command — no wasm-pack, no Rust at
+      # all on cache hit. The unique-per-SHA key plus restore-keys
+      # fallback gives us "perfect" replay on rerun and "near-perfect"
+      # incremental on follow-up commits.
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -349,9 +406,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build WASM core
-        run: pnpm --filter @csszyx/core build
-
       - name: Build
         run: pnpm build
 
@@ -364,6 +418,7 @@ jobs:
     needs: [detect-changes, validate-config, lint, test, e2e, build]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Verify upstream jobs
         run: |
