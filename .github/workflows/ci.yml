@@ -30,6 +30,7 @@ jobs:
       release_please: ${{ steps.head-ref.outputs.is_release_please }}
       code_ts: ${{ steps.filter.outputs.code_ts }}
       code_rust: ${{ steps.filter.outputs.code_rust }}
+      runtime_critical: ${{ steps.filter.outputs.runtime_critical }}
     steps:
       - name: Detect release-please branch
         id: head-ref
@@ -78,6 +79,19 @@ jobs:
               - 'packages/core/src/**'
               - 'packages/core/Cargo.toml'
               - 'packages/core/Cargo.lock'
+            # E2E tests verify the runtime stack end-to-end against
+            # built playgrounds. Trigger only when something in that
+            # surface area changes.
+            runtime_critical:
+              - 'packages/csszyx/**'
+              - 'packages/runtime/**'
+              - 'packages/unplugin/**'
+              - 'packages/compiler/**'
+              - 'packages/dynamic/**'
+              - 'packages/types/**'
+              - 'packages/core/**'
+              - 'packages/e2e/**'
+              - 'playground/**'
 
   # Always-runs tripwire. Catches release-please config issues that path
   # filters and `release_please` skipping would otherwise let through.
@@ -115,28 +129,13 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      # Shared WASM artefact cache. On cache hit, the rest of the
-      # WASM toolchain steps are skipped — saves ~60-90 s per job on the
-      # 90 % of PRs that don't change Rust. Key tracks Cargo manifests,
-      # all Rust source, and packages/core/scripts (which run wasm-opt
-      # and other post-processing). Any change there triggers a rebuild.
-      - name: Cache WASM artifacts
-        id: cache-wasm
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/core/pkg
-            packages/core/pkg-node
-          key: wasm-artifacts-${{ runner.os }}-${{ hashFiles('packages/core/Cargo.toml', 'packages/core/Cargo.lock', 'packages/core/src/**', 'packages/core/scripts/**') }}
 
       - name: Setup Rust
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         uses: jetli/wasm-pack-action@v0.4.0
         with:
           version: 'v0.14.0'
@@ -148,21 +147,19 @@ jobs:
       # in the same job (bundler then nodejs). Version must match the
       # wasm-bindgen library pin in packages/core/Cargo.toml.
       - name: Cache wasm-bindgen-cli
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         id: cache-wasm-bindgen
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/wasm-bindgen
           key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
       - name: Install wasm-bindgen-cli
-        if: steps.cache-wasm.outputs.cache-hit != 'true' && steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
         run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build WASM core
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         run: pnpm --filter @csszyx/core build
 
       - name: Lint
@@ -190,23 +187,13 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      - name: Cache WASM artifacts
-        id: cache-wasm
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/core/pkg
-            packages/core/pkg-node
-          key: wasm-artifacts-${{ runner.os }}-${{ hashFiles('packages/core/Cargo.toml', 'packages/core/Cargo.lock', 'packages/core/src/**', 'packages/core/scripts/**') }}
 
       - name: Setup Rust
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
         # sequence, expected a string" parse error on the second wasm-pack
         # invocation within the same job (nodejs target after bundler).
@@ -215,34 +202,106 @@ jobs:
           version: 'v0.14.0'
 
       - name: Cache wasm-bindgen-cli
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         id: cache-wasm-bindgen
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/wasm-bindgen
           key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
       - name: Install wasm-bindgen-cli
-        if: steps.cache-wasm.outputs.cache-hit != 'true' && steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
         run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build WASM core
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         run: pnpm --filter @csszyx/core build
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @csszyx/e2e exec playwright install --with-deps chromium
-
-      - name: Run tests
-        run: pnpm test
+      # `test:unit` is `turbo run test --filter=!@csszyx/e2e`. Playwright
+      # tests live in @csszyx/e2e and run in their own job below — they
+      # need a different gate (runtime_critical, not just code_ts) and a
+      # different setup (browser install + production playgrounds).
+      - name: Run unit tests
+        run: pnpm test:unit
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         if: always()
         with:
           directory: ./coverage
+
+  # End-to-end tests against the built playgrounds (Vite-React,
+  # Next.js-SSR, vanilla HTML). Slower than the unit job because it has
+  # to build the workspace first and install playwright browsers, so
+  # gated more tightly on `runtime_critical` paths — pure CLI / docs /
+  # adapter changes don't trigger it.
+  e2e:
+    name: E2E
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.release_please != 'true' &&
+      needs.detect-changes.outputs.runtime_critical == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'v0.14.0'
+
+      - name: Cache wasm-bindgen-cli
+        id: cache-wasm-bindgen
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+      - name: Install wasm-bindgen-cli
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WASM core
+        run: pnpm --filter @csszyx/core build
+
+      # Build all workspace packages so the production playgrounds can
+      # start (Next.js-SSR's `next start` and the Vite preview both need
+      # built dist/ outputs). turbo's local cache makes the cold cost
+      # bearable; subsequent runs that pick up the actions/cache for
+      # turbo would be even faster — Phase 4 candidate.
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @csszyx/e2e exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/e2e/playwright-report/
+          retention-days: 14
 
   build:
     name: Build
@@ -263,23 +322,13 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      - name: Cache WASM artifacts
-        id: cache-wasm
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/core/pkg
-            packages/core/pkg-node
-          key: wasm-artifacts-${{ runner.os }}-${{ hashFiles('packages/core/Cargo.toml', 'packages/core/Cargo.lock', 'packages/core/src/**', 'packages/core/scripts/**') }}
 
       - name: Setup Rust
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
         # sequence, expected a string" parse error on the second wasm-pack
         # invocation within the same job (nodejs target after bundler).
@@ -288,21 +337,19 @@ jobs:
           version: 'v0.14.0'
 
       - name: Cache wasm-bindgen-cli
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         id: cache-wasm-bindgen
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/wasm-bindgen
           key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
       - name: Install wasm-bindgen-cli
-        if: steps.cache-wasm.outputs.cache-hit != 'true' && steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+        if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
         run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build WASM core
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
         run: pnpm --filter @csszyx/core build
 
       - name: Build
@@ -314,7 +361,7 @@ jobs:
   # merges on every paths-ignored PR.
   ci-status:
     name: CI Status
-    needs: [detect-changes, validate-config, lint, test, build]
+    needs: [detect-changes, validate-config, lint, test, e2e, build]
     if: always()
     runs-on: ubuntu-latest
     steps:
