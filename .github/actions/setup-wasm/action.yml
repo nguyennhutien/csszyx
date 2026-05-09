@@ -1,0 +1,39 @@
+name: Setup WASM toolchain
+description: >-
+  Install the Rust toolchain (with wasm32-unknown-unknown target), wasm-pack
+  pinned to a known-good version, and pre-install wasm-bindgen-cli so
+  `wasm-pack --mode no-install` can run twice in the same job (bundler then
+  nodejs target) without tripping the "invalid type: sequence" parse bug.
+  Used by every CI job that may need to build @csszyx/core; turbo's task
+  cache decides whether the build itself runs.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Install wasm-pack
+      # Pin to v0.14.0 — 0.12.1 and 0.13.x both hit a "invalid type:
+      # sequence, expected a string" parse error on the second wasm-pack
+      # invocation within the same job (nodejs target after bundler).
+      uses: jetli/wasm-pack-action@v0.4.0
+      with:
+        version: 'v0.14.0'
+
+    # Version must match the wasm-bindgen library pin in
+    # packages/core/Cargo.toml. The cache lives in ~/.cargo/bin so a
+    # warm runner skips the cargo install entirely.
+    - name: Cache wasm-bindgen-cli
+      id: cache-wasm-bindgen
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/wasm-bindgen
+        key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
+
+    - name: Install wasm-bindgen-cli
+      if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install wasm-bindgen-cli --version 0.2.93 --locked
