@@ -634,10 +634,10 @@ function disambiguateList(value: string): ParsedClass | null {
 
 /**
  * Disambiguates snap-* classes (fallback, usually caught by boolean map).
- * @param value - The value after the snap prefix
+ * @param _value - The value after the snap prefix (currently unused — fallback only)
  * @returns Parsed snap property result or null
  */
-function disambiguateSnap(value: string): ParsedClass | null {
+function disambiguateSnap(_value: string): ParsedClass | null {
     // snap-start, snap-end, etc. should be caught by boolean map
     // Here we handle snap-* prefix matching (shouldn't normally reach here)
     return null;
