@@ -2,7 +2,20 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 
 # Install core
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends curl git build-essential pkg-config libssl-dev
+    && apt-get -y install --no-install-recommends \
+        aggregate \
+        acl \
+        build-essential \
+        curl \
+        dnsmasq \
+        dnsutils \
+        git \
+        iproute2 \
+        ipset \
+        iptables \
+        jq \
+        libssl-dev \
+        pkg-config
 
 # mise — manages node, pnpm, and other tools via .mise.toml
 RUN curl https://mise.run | sh

@@ -3,9 +3,20 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
+    "containerEnv": {
+        "CODEX_HOME": "/root/.codex-devcontainer",
+        "HOST_CODEX_HOME": "/root/.codex",
+        "IS_SANDBOX": "1"
+    },
     "mounts": [
         "source=${localEnv:HOME}/.gemini,target=/root/.gemini,type=bind,consistency=cached",
-        "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
+        "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind,consistency=cached"
+    ],
+    "runArgs": [
+        "--cap-add=NET_ADMIN",
+        "--cap-add=NET_RAW"
     ],
     "customizations": {
         "vscode": {
@@ -23,5 +34,5 @@
     "remoteUser": "root",
     "workspaceFolder": "/workspaces/csszyx",
     "postCreateCommand": "bash .devcontainer/setup.sh",
-    "postStartCommand": "bash .devcontainer/healthcheck.sh"
+    "postStartCommand": "bash .devcontainer/configure-codex.sh && bash .devcontainer/configure-claude.sh && bash .devcontainer/healthcheck.sh && bash .devcontainer/init-firewall.sh"
 }
