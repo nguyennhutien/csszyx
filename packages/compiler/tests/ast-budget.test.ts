@@ -9,6 +9,18 @@ import { AST_BUDGET, ASTBudgetExceededError } from '../src/ast-budget.js';
 import { transformSourceCode } from '../src/transform.js';
 
 describe('AST budget guard', () => {
+    /**
+     * Builds a wide AST that exceeds the budget without hitting parser recursion.
+     *
+     * @param length Number of array literal entries to generate.
+     * @param tail Source appended after the generated array.
+     * @returns Source string with a large array plus the requested tail.
+     */
+    function wideArraySource(length: number, tail: string): string {
+        const literals = Array.from({ length }, (_, i) => i).join(', ');
+        return `const data = [${literals}]; ${tail}`;
+    }
+
     it('exposes the cap value matching the engine spec', () => {
         expect(AST_BUDGET).toBe(50_000);
     });
@@ -78,10 +90,46 @@ describe('AST budget guard', () => {
         expect(() => transformSourceCode(source)).not.toThrow();
     });
 
+    it('returns invalid syntax unchanged when source has no sz token', () => {
+        // Parser independence contract: csszyx must not invoke Babel/OXC for
+        // files that cannot contain csszyx syntax. Generated files can be huge
+        // or syntactically invalid for the TSX parser, but they are outside
+        // csszyx's transform surface when they have no `sz` marker.
+        const source = 'const broken = ;';
+        const result = transformSourceCode(source, 'broken-generated.ts');
+
+        expect(result.transformed).toBe(false);
+        expect(result.code).toBe(source);
+        expect(result.classes.size).toBe(0);
+        expect(result.recoveryTokens.size).toBe(0);
+    });
+
+    it('enforces the budget when an incidental sz marker forces parsing', () => {
+        // Current prefilter is intentionally cheap (`source.includes("sz")`).
+        // If a future OXC path narrows that prefilter, this test is the debate
+        // point: either keep this conservative protection or consciously update
+        // the contract with an equivalent "definitely no csszyx syntax" scanner.
+        const source = wideArraySource(60_000, 'const szMarker = true;');
+
+        expect(() => transformSourceCode(source, 'huge-with-sz-marker.ts'))
+            .toThrow(ASTBudgetExceededError);
+    });
+
+    it('applies the same budget to szRecover-only files', () => {
+        // szRecover is a csszyx transform surface even when there is no `sz`
+        // prop. The budget must protect recovery-token generation too.
+        const source = wideArraySource(
+            60_000,
+            'const App = () => <section szRecover="csr">x</section>;',
+        );
+
+        expect(() => transformSourceCode(source, 'huge-recovery.tsx'))
+            .toThrow(ASTBudgetExceededError);
+    });
+
     it('respects an `astBudget` override raised above the default', () => {
         // Source ~60k nodes — exceeds default 50k but fits a 100k override.
-        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
-        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+        const source = wideArraySource(60_000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
 
         // Default budget: throws.
         expect(() => transformSourceCode(source, 'huge.tsx')).toThrow(ASTBudgetExceededError);
@@ -93,8 +141,7 @@ describe('AST budget guard', () => {
 
     it('respects an `astBudget` override lowered below the default', () => {
         // Source ~3k nodes — well under 50k default but over a 1k override.
-        const literals = Array.from({ length: 3000 }, (_, i) => i).join(', ');
-        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+        const source = wideArraySource(3000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
 
         // Default budget: passes.
         expect(() => transformSourceCode(source, 'small.tsx')).not.toThrow();
@@ -105,8 +152,7 @@ describe('AST budget guard', () => {
     });
 
     it('error reports the effective budget (not just the default)', () => {
-        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
-        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
+        const source = wideArraySource(60_000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
 
         let caught: ASTBudgetExceededError | undefined;
         try {
