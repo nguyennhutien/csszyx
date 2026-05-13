@@ -47,6 +47,11 @@ export interface RecoveryManifest {
   checksum: string;
 
   /**
+   * SHA-256 checksum of the mangle map emitted in the HTML checksum attribute
+   */
+  mangleChecksum: string;
+
+  /**
    * Map of recovery token → token data
    */
   tokens: Record<string, TokenData>;

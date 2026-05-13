@@ -129,6 +129,7 @@ import type {
 const manifest: RecoveryManifest = {
     buildId: 'abc123',
     checksum: 'def456',
+    mangleChecksum: '789abc',
     tokens: {
         token1: {
             mode: 'csr',
@@ -230,6 +231,7 @@ Recovery token manifest embedded in build output:
 interface RecoveryManifest {
   buildId: string;
   checksum: string;
+  mangleChecksum: string;
   tokens: Record<string, TokenData>;
 }
 ```

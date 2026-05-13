@@ -10,7 +10,7 @@
  *   - The compiler visitor tags every szRecover element with a
  *     deterministic `data-sz-recovery-token` of the right shape.
  *   - The unplugin injects `<script id="__SZ_RECOVERY_MANIFEST__">` and
- *     the JSON has the contract shape `{ buildId, checksum, tokens }`.
+ *     the JSON has the contract shape `{ buildId, checksum, mangleChecksum, tokens }`.
  *   - csr + dev-only modes both produce manifest entries in dev (the
  *     production strip is exercised by the unit tests in
  *     packages/unplugin/tests/recovery-manifest.test.ts; running a fresh
@@ -30,6 +30,7 @@ import { expect, test } from '@playwright/test';
 interface RecoveryManifest {
     buildId: string;
     checksum: string;
+    mangleChecksum: string;
     tokens: Record<string, { mode: string; component: string; path: string }>;
 }
 
@@ -80,8 +81,11 @@ test.describe('Recovery manifest pipeline (vite-react fixture)', () => {
         await expect(script).toHaveAttribute('type', 'application/json');
 
         const manifest = parseManifest(await script.textContent());
+        const htmlChecksum = await page.locator('html').getAttribute('data-sz-checksum');
+
         expect(manifest.buildId).toMatch(/^[0-9a-z]+-[0-9a-f]{6}$/);
         expect(manifest.checksum).toMatch(/^[0-9a-f]{16}$/);
+        expect(manifest.mangleChecksum).toBe(htmlChecksum);
         expect(typeof manifest.tokens).toBe('object');
     });
 

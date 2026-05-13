@@ -250,6 +250,11 @@ export interface RecoveryManifest {
      */
     checksum: string;
     /**
+     * SHA-256 checksum of the mangle map emitted into `data-sz-checksum`.
+     * Kept separate from `checksum`, which protects the recovery token set.
+     */
+    mangleChecksum: string;
+    /**
      * Map from 12-char token (the value also written into the matching
      * element's `data-sz-recovery-token` attribute) to the metadata the
      * runtime uses for verification + error reporting.
@@ -295,11 +300,13 @@ export interface BuildRecoveryManifestResult {
  * @param options.production When `true`, strip `mode: 'dev-only'` tokens
  *   from the manifest and report their source paths via
  *   `strippedDevOnlyPaths`. Defaults to `false` (development build).
+ * @param options.mangleChecksum Mangle-map checksum emitted into the HTML
+ *   `data-sz-checksum` attribute. Kept separate from the token checksum.
  * @returns Manifest + audit info (paths whose tokens were stripped).
  */
 export function buildRecoveryManifest(
     tokens: Map<string, TokenData>,
-    options: { production?: boolean } = {},
+    options: { production?: boolean; mangleChecksum: string },
 ): BuildRecoveryManifestResult {
     const stripped = options.production === true;
     const strippedDevOnlyPaths: string[] = [];
@@ -330,7 +337,7 @@ export function buildRecoveryManifest(
     const buildId = `${Date.now().toString(36)}-${fullChecksum.substring(0, 6)}`;
 
     return {
-        manifest: { buildId, checksum, tokens: sorted },
+        manifest: { buildId, checksum, mangleChecksum: options.mangleChecksum, tokens: sorted },
         strippedDevOnlyPaths,
     };
 }

@@ -26,6 +26,7 @@ export interface TokenData {
 export interface RecoveryManifest {
   buildId: string;
   checksum: string;
+  mangleChecksum: string;
   tokens: Record<string, TokenData>;
 }
 
@@ -163,9 +164,10 @@ export function isValidManifest(
 
     return (
         typeof m.buildId === 'string' &&
-    typeof m.checksum === 'string' &&
-    typeof m.tokens === 'object' &&
-    m.tokens !== null
+        typeof m.checksum === 'string' &&
+        typeof m.mangleChecksum === 'string' &&
+        typeof m.tokens === 'object' &&
+        m.tokens !== null
     );
 }
 

@@ -3443,6 +3443,8 @@ opt in per-element with the `szRecover` JSX attribute:
 The build emits a `data-sz-recovery-token` attribute on each element
 plus a `<script id="__SZ_RECOVERY_MANIFEST__">` JSON tag in `<head>`.
 The runtime's `verifyRecoveryToken` matches the two at hydration time.
+The manifest stores both `checksum` (recovery token-set checksum) and
+`mangleChecksum` (the value checked against the page `data-sz-checksum`).
 
 `szRecover` is typed on `React.HTMLAttributes` via `@csszyx/types/jsx` —
 no tsconfig change needed.

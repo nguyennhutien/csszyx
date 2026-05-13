@@ -954,7 +954,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         const isProduction = process.env.NODE_ENV === 'production';
                         const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
                             state.recoveryTokens,
-                            { production: isProduction },
+                            {
+                                production: isProduction,
+                                mangleChecksum: state.checksum,
+                            },
                         );
                         if (strippedDevOnlyPaths.length > 0) {
                             console.warn(

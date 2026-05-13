@@ -130,9 +130,12 @@ aborting, opt in per-element with the `szRecover` JSX attribute.
    `<head>` containing every emitted token:
    ```html
    <script id="__SZ_RECOVERY_MANIFEST__" type="application/json">
-     {"buildId":"…","checksum":"…","tokens":{"a3b9…":{"mode":"csr","component":"section","path":"…"}}}
+     {"buildId":"…","checksum":"…","mangleChecksum":"…","tokens":{"a3b9…":{"mode":"csr","component":"section","path":"…"}}}
    </script>
    ```
+
+   `checksum` protects the recovery token set. `mangleChecksum` is the
+   value compared with the page's `data-sz-checksum` hydration checksum.
 
 3. **Hydration.** `@csszyx/runtime/verify` reads the manifest, then
    `verifyRecoveryToken(element, manifest)` matches each element's
