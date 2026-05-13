@@ -14,6 +14,7 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
 import { buildRecoveryManifest, injectRecoveryManifest, transformIndexHtml as injectHydrationData } from './html-transformer.js';
+import { assertNoRSCBoundaryViolation } from './rsc-boundary.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -672,6 +673,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @returns transformed code with source map, or null if no changes were made
          */
         transform(code, id) {
+            if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                assertNoRSCBoundaryViolation(code, id);
+            }
+
             // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
             // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
             // is not imported anywhere, so it's invisible to Tailwind. Injecting @source
@@ -795,6 +800,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                     transformed = true;
                 }
+            }
+
+            if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                assertNoRSCBoundaryViolation(transformedCode, id);
             }
 
             // Extract classes for the mangle map but DON'T mangle yet.
