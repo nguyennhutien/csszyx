@@ -14,7 +14,12 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
 import { buildRecoveryManifest, injectRecoveryManifest, transformIndexHtml as injectHydrationData } from './html-transformer.js';
-import { assertNoRSCBoundaryViolation } from './rsc-boundary.js';
+import {
+    assertNoRSCBoundaryViolation,
+    assertNoRSCGraphViolation,
+    createRSCModuleRecord,
+    type RSCModuleRecord,
+} from './rsc-boundary.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -42,6 +47,8 @@ interface PluginState {
    * then serialised into the manifest script tag injected into SSR HTML.
    */
   recoveryTokens: Map<string, TokenData>;
+  /** RSC graph records collected from transformed TS/JS modules. */
+  rscModules: Map<string, RSCModuleRecord>;
 }
 
 /**
@@ -374,6 +381,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         finalized: false,
         rootDir: process.cwd(),
         recoveryTokens: new Map<string, TokenData>(),
+        rscModules: new Map<string, RSCModuleRecord>(),
     };
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
@@ -804,6 +812,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
             if (/\.[tj]sx?(\?.*)?$/.test(id)) {
                 assertNoRSCBoundaryViolation(transformedCode, id);
+                const record = createRSCModuleRecord(transformedCode, id);
+                state.rscModules.set(record.id, record);
             }
 
             // Extract classes for the mangle map but DON'T mangle yet.
@@ -832,6 +842,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         /** Finalizes the mangle map after all source modules have been processed. */
         buildEnd() {
             finalizeMangleMap();
+            assertNoRSCGraphViolation(state.rscModules);
             // Expose the mangle map as a Node.js global so that dynamic() SSR calls
             // (which run in the same process during Astro/Next.js SSG) can resolve
             // original class names to their mangled equivalents. Without this, dynamic()

@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 const SERVER_DIRECTIVE_RE = /^['"]use server['"];?$/;
 const CLIENT_DIRECTIVE_RE = /^['"]use client['"];?$/;
 
@@ -28,6 +31,22 @@ export interface RSCBoundaryViolation {
     path: string;
     /** Import chain used in the fatal build error. */
     importChain: string[];
+}
+
+/**
+ * RSC module metadata collected during the transform phase.
+ */
+export interface RSCModuleRecord {
+    /** Normalized absolute module ID. */
+    id: string;
+    /** True when this module is an RSC server module entry or has `'use server'`. */
+    isServer: boolean;
+    /** True when this module declares the client boundary. */
+    isClient: boolean;
+    /** Local modules imported by this file after path resolution. */
+    imports: string[];
+    /** Forbidden runtime imports found directly in this module. */
+    runtimeImports: Array<{ source: string; symbols: string[] }>;
 }
 
 /**
@@ -115,6 +134,67 @@ export function findRSCBoundaryViolation(code: string, id: string): RSCBoundaryV
 }
 
 /**
+ * Builds module metadata for the RSC graph walker.
+ *
+ * @param code module source
+ * @param id module ID/path
+ * @returns graph metadata for the module
+ */
+export function createRSCModuleRecord(code: string, id: string): RSCModuleRecord {
+    const normalized = normalizeModuleId(id);
+    return {
+        id: normalized,
+        isServer: isRSCServerModule(code, normalized),
+        isClient: hasUseClientDirective(code),
+        imports: findLocalImportSources(code)
+            .map(source => resolveLocalModule(normalized, source))
+            .filter((resolved): resolved is string => resolved !== null),
+        runtimeImports: findRuntimeImports(code)
+            .filter(imported => imported.symbols.some(symbol => FORBIDDEN_SYMBOLS.has(symbol))),
+    };
+}
+
+/**
+ * Finds forbidden runtime helper imports reachable from an RSC server module.
+ * Traversal stops at `'use client'` modules because they define a separate
+ * client module graph.
+ *
+ * @param records module graph records keyed by normalized module ID
+ * @returns first graph violation, or null when the graph is allowed
+ */
+export function findRSCGraphViolation(records: Map<string, RSCModuleRecord>): RSCBoundaryViolation | null {
+    for (const root of records.values()) {
+        if (!root.isServer) {
+            continue;
+        }
+        const violation = walkRSCGraph(root, records, [root.id], new Set([root.id]));
+        if (violation) {
+            return {
+                symbol: violation.symbol,
+                path: root.id,
+                importChain: violation.importChain,
+            };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Throws the spec-format fatal RSC boundary error for graph-level violations.
+ *
+ * @param records module graph records keyed by normalized module ID
+ */
+export function assertNoRSCGraphViolation(records: Map<string, RSCModuleRecord>): void {
+    const violation = findRSCGraphViolation(records);
+    if (!violation) {
+        return;
+    }
+
+    throw new Error(formatRSCViolation(violation));
+}
+
+/**
  * Detects Next App Router route entry files that are Server Components unless
  * they opt into `'use client'`.
  *
@@ -139,10 +219,65 @@ export function assertNoRSCBoundaryViolation(code: string, id: string): void {
         return;
     }
 
-    throw new Error(
-        `csszyxRSCViolation: ${violation.symbol} imported in Server Component ${violation.path}\n` +
-        `  Import chain: ${violation.importChain.join(' -> ')}`,
-    );
+    throw new Error(formatRSCViolation(violation));
+}
+
+/**
+ * Formats a violation using the public spec error shape.
+ *
+ * @param violation violation details
+ * @returns fatal build error message
+ */
+function formatRSCViolation(violation: RSCBoundaryViolation): string {
+    return `csszyxRSCViolation: ${violation.symbol} imported in Server Component ${violation.path}\n` +
+        `  Import chain: ${violation.importChain.join(' -> ')}`;
+}
+
+/**
+ * Walks server-owned imports until a forbidden runtime helper is found.
+ *
+ * @param current current module record
+ * @param records graph records keyed by module ID
+ * @param chain import chain from the root server module to current
+ * @param seen visited module IDs for cycle protection
+ * @returns first violation discovered below current
+ */
+function walkRSCGraph(
+    current: RSCModuleRecord,
+    records: Map<string, RSCModuleRecord>,
+    chain: string[],
+    seen: Set<string>,
+): RSCBoundaryViolation | null {
+    if (current.isClient) {
+        return null;
+    }
+
+    const runtime = current.runtimeImports[0];
+    const symbol = runtime?.symbols.find(s => FORBIDDEN_SYMBOLS.has(s));
+    if (runtime && symbol) {
+        return {
+            symbol,
+            path: chain[0] ?? current.id,
+            importChain: [...chain, runtime.source],
+        };
+    }
+
+    for (const importedId of current.imports) {
+        if (seen.has(importedId)) {
+            continue;
+        }
+        const next = records.get(importedId);
+        if (!next) {
+            continue;
+        }
+        seen.add(importedId);
+        const violation = walkRSCGraph(next, records, [...chain, importedId], seen);
+        if (violation) {
+            return violation;
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -259,6 +394,80 @@ function findRuntimeImports(code: string): Array<{ source: string; symbols: stri
     }
 
     return imports;
+}
+
+/**
+ * Finds relative static, re-export, and dynamic imports.
+ *
+ * @param code module source
+ * @returns local import specifiers
+ */
+function findLocalImportSources(code: string): string[] {
+    const out: string[] = [];
+    const staticImportRe = /import\s+(?!type\b)(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+    const exportFromRe = /export\s+(?!type\b)(?:[\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
+    const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+    let match;
+    for (const re of [staticImportRe, exportFromRe, dynamicImportRe]) {
+        while ((match = re.exec(code)) !== null) {
+            const source = match[1];
+            if (source.startsWith('.') || source.startsWith('/')) {
+                out.push(source);
+            }
+        }
+    }
+
+    return out;
+}
+
+/**
+ * Normalizes bundler module IDs to a stable path key.
+ *
+ * @param id module ID/path
+ * @returns normalized module ID
+ */
+function normalizeModuleId(id: string): string {
+    const clean = id.split('?')[0] ?? id;
+    try {
+        return fs.realpathSync.native(clean).replace(/\\/g, '/');
+    } catch {
+        return path.resolve(clean).replace(/\\/g, '/');
+    }
+}
+
+/**
+ * Resolves a relative module specifier to a normalized module ID.
+ *
+ * @param importer normalized importer path
+ * @param source relative import source
+ * @returns normalized resolved module ID, or null when unsupported/missing
+ */
+function resolveLocalModule(importer: string, source: string): string | null {
+    const base = source.startsWith('/')
+        ? source
+        : path.resolve(path.dirname(importer), source);
+    const candidates = [
+        base,
+        `${base}.tsx`,
+        `${base}.ts`,
+        `${base}.jsx`,
+        `${base}.js`,
+        `${base}.mjs`,
+        `${base}.cjs`,
+        path.join(base, 'index.tsx'),
+        path.join(base, 'index.ts'),
+        path.join(base, 'index.jsx'),
+        path.join(base, 'index.js'),
+    ];
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            return normalizeModuleId(candidate);
+        }
+    }
+
+    return null;
 }
 
 /**
