@@ -55,6 +55,11 @@ jobs:
     # already exist, package.json versions on main are correct, just need to
     # run pnpm publish).
     if: needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch'
+    # `npm-publish` environment holds NPM_TOKEN and requires a maintainer
+    # review before the job runs. Even if a malicious workflow change
+    # reaches main, the publish step pauses until @nguyennhutien approves
+    # via the GitHub Actions deployment-review prompt.
+    environment: npm-publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
