@@ -63,4 +63,46 @@ EOF
 
 chmod +x "$CLAUDE_WRAPPER"
 
+# The Dockerfile sets PATH so /root/.local/bin (the wrapper) comes before
+# /root/.local/share/mise/shims, but `mise activate` (run from .bashrc /
+# .zshrc) re-prepends the mise shims dir on every shell startup. Without
+# this override, the wrapper at /root/.local/bin/claude is shadowed by
+# mise's claude shim and never runs — meaning the --dangerously-skip-
+# permissions flag is never injected and Claude prompts for every action.
+# Append an idempotent block AFTER `mise activate` so the wrapper wins.
+ensure_path_override() {
+    local rcfile="$1"
+    local marker="# csszyx-claude-wrapper-path"
+
+    if [ ! -f "$rcfile" ]; then
+        return
+    fi
+
+    if grep -qF "$marker" "$rcfile"; then
+        return
+    fi
+
+    cat >> "$rcfile" <<EOF
+
+$marker
+# Restore /root/.local/bin priority after \`mise activate\` so the
+# Claude wrapper at /root/.local/bin/claude shadows mise's claude shim.
+case ":\$PATH:" in
+    *":/root/.local/bin:"*)
+        # Already first — strip and re-prepend to guarantee priority.
+        PATH=":\$PATH:"
+        PATH="\${PATH//:\\/root\\/.local\\/bin:/:}"
+        PATH="\${PATH#:}"
+        PATH="\${PATH%:}"
+        ;;
+esac
+export PATH="/root/.local/bin:\$PATH"
+EOF
+}
+
+ensure_path_override /root/.bashrc
+ensure_path_override /root/.zshrc
+
 echo "[claude] Devcontainer wrapper configured: claude -> vscode + --dangerously-skip-permissions"
+echo "[claude] PATH override appended to /root/.bashrc and /root/.zshrc"
+echo "[claude] Open a new terminal (or run \`exec bash\`) for changes to take effect"
