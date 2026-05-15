@@ -91,34 +91,27 @@ EOF
 chmod 0644 "$AI_ENV_FILE"
 
 # Wrapper: point Claude at the container settings dir + acknowledge sandbox
-# + strip host credentials so a prompt-injected AI cannot silently git push
-# or SSH-tunnel out via the developer's agent. Strip targets (audit
-# 2026-05-14):
-#   - SSH_AUTH_SOCK: SSH agent — would let AI use any SSH-auth git op
-#   - GIT_ASKPASS / VSCODE_GIT_ASKPASS_*: VS Code git credential helpers —
-#     would let AI auto-authenticate HTTPS git pushes
-#   - VSCODE_IPC_HOOK_CLI: IPC socket to the VS Code/Antigravity process —
-#     could expose IDE-level filesystem/extension APIs
-#   - VSCODE_GIT_IPC_HANDLE: Unix socket for VS Code's git extension IPC —
-#     AI could write to it to trigger git operations with the IDE's
-#     stored credentials (this was the gap discovered post-Phase-3a)
-# IS_SANDBOX=1 is also still exported as belt-and-suspenders: terminal-
-# launched claude works even if containerEnv hasn't refreshed yet.
+# + strip a small set of env vars as defense-in-depth (Option C, 2026-05-15).
+#
+# Strip is symbolic-not-enforced: naive AI `git push` fails because no agent
+# is in env, but AI with shell access can still read an on-disk key file or
+# use the `gh` CLI's stored OAuth token to push. The real defense for `main`
+# and `npm` lives on GitHub: branch protection ruleset 16158734 + CODEOWNERS
+# + npm-publish environment gate. See `.agent/workflows/security-roadmap.md`
+# § 2.0 for the threat-model audit and § 1 for the Option C decision.
+#
+# Strip targets:
+#   - SSH_AUTH_SOCK / GIT_ASKPASS / VSCODE_GIT_ASKPASS_*: default-deny for
+#     naive push attempts. Doesn't stop a determined AI but raises the bar.
+#   - VSCODE_IPC_HOOK_CLI / VSCODE_GIT_IPC_HANDLE: prevent AI from speaking
+#     to the IDE's git extension or extension-host APIs.
+#
+# GIT_CONFIG override sets commit.gpgsign=false for AI processes so AI commits
+# land unsigned (visible in `git log --show-signature` — separates AI commits
+# from human-signed commits without blocking the workflow).
 cat > "$CLAUDE_WRAPPER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-
-# Defense-in-depth: re-verify no SSH private key leaked back into the
-# container before launching the AI. postStartCommand only fires on
-# container rebuild (Antigravity's "Reopen in Container" is an attach,
-# not a restart), so this catches re-injection between rebuilds.
-for f in /root/.ssh/id_* /home/vscode/.ssh/id_*; do
-    [ -e "\$f" ] || continue
-    case "\$f" in
-        *.pub) continue ;;
-    esac
-    rm -f "\$f"
-done
 
 exec env \\
     -u SSH_AUTH_SOCK \\
@@ -130,7 +123,6 @@ exec env \\
     -u VSCODE_GIT_IPC_HANDLE \\
     CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME" \\
     IS_SANDBOX=1 \\
-    GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null" \\
     GIT_CONFIG_COUNT=1 \\
     GIT_CONFIG_KEY_0=commit.gpgsign \\
     GIT_CONFIG_VALUE_0=false \\
