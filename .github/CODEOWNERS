@@ -1,0 +1,80 @@
+# CODEOWNERS — maintainer-only review enforcement for sensitive paths.
+#
+# Syntax: <pattern>  <@user-or-team>
+# Order matters: later rules override earlier ones for the same path.
+# Wildcards: `*` (one segment), `**` (recursive), trailing `/` matches dir.
+#
+# See: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+#
+# When CODEOWNERS lists an owner for a path, GitHub auto-requests their
+# review on any PR that touches that path. Combined with the `pull_request`
+# rule in ruleset 16158734 ("Protect main"), it enforces maintainer review
+# for changes that could compromise the release pipeline, dev environment,
+# or runtime correctness.
+
+# ----- Default (everything not matched below) -----
+*  @nguyennhutien
+
+# ----- CI / Workflows -----
+# Workflow files run with repo secrets (NPM_TOKEN, VSCE_PAT, etc.). A
+# malicious or careless change can exfiltrate credentials or skip required
+# checks. Always require maintainer review.
+/.github/workflows/**  @nguyennhutien
+/.github/actions/**    @nguyennhutien
+/.github/scripts/**    @nguyennhutien
+/.github/CODEOWNERS    @nguyennhutien
+
+# ----- Release tooling -----
+# release-please drives version bumps + npm publishes. Misconfiguration here
+# can ship the wrong code under a tagged version or skip the publish gate.
+/release-please-config.json     @nguyennhutien
+/.release-please-manifest.json  @nguyennhutien
+/packages/csszyx/CHANGELOG.md   @nguyennhutien
+
+# ----- Dependency pins / lockfiles -----
+# A swapped lockfile entry can pull a malicious package on the next install.
+# A new direct dependency in package.json widens the attack surface.
+/pnpm-lock.yaml         @nguyennhutien
+/pnpm-workspace.yaml    @nguyennhutien
+/package.json           @nguyennhutien
+/packages/**/package.json  @nguyennhutien
+/apps/**/package.json      @nguyennhutien
+
+# ----- WASM core (Rust) -----
+# The native binary is sandbox-bypassing once installed via npm. Any change
+# to Cargo files, .rs source, or the build script must be reviewed.
+/packages/core/**  @nguyennhutien
+
+# ----- Devcontainer / dev environment -----
+# These files run on every contributor's machine. A malicious shell script
+# or Dockerfile change can persist credentials or modify the host.
+/.devcontainer/**  @nguyennhutien
+
+# ----- Build / lint config -----
+# Behaviour-altering tooling config. Less critical than the above but
+# worth a maintainer eye since plugin changes can hide rules.
+/turbo.json          @nguyennhutien
+/eslint.config.js    @nguyennhutien
+/.oxlintrc.json      @nguyennhutien
+/.lintstagedrc       @nguyennhutien
+/tsconfig*.json      @nguyennhutien
+
+# ----- Compiler public API -----
+# The compiler defines what `sz` syntax means. Subtle changes can break
+# every downstream user. Maintainer review for the API surface; tests can
+# be written by any contributor.
+/packages/compiler/src/index.ts        @nguyennhutien
+/packages/compiler/src/transform.ts    @nguyennhutien
+/packages/compiler/src/transform-core.ts  @nguyennhutien
+/packages/compiler/src/types/**        @nguyennhutien
+
+# ----- Runtime hydration / SSR safety -----
+# Runtime helpers ship into every user's browser. Bugs surface as production
+# hydration mismatches on real apps.
+/packages/runtime/src/**  @nguyennhutien
+
+# ----- Recovery + RSC boundary guards -----
+# Security-adjacent: these gates protect against bad runtime imports and
+# enforce the recovery-token contract.
+/packages/unplugin/src/rsc-boundary.ts  @nguyennhutien
+/packages/unplugin/src/html-transformer.ts  @nguyennhutien

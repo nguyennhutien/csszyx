@@ -14,6 +14,12 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
 import { buildRecoveryManifest, injectRecoveryManifest, transformIndexHtml as injectHydrationData } from './html-transformer.js';
+import {
+    assertNoRSCBoundaryViolation,
+    assertNoRSCGraphViolation,
+    createRSCModuleRecord,
+    type RSCModuleRecord,
+} from './rsc-boundary.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -41,6 +47,8 @@ interface PluginState {
    * then serialised into the manifest script tag injected into SSR HTML.
    */
   recoveryTokens: Map<string, TokenData>;
+  /** RSC graph records collected from transformed TS/JS modules. */
+  rscModules: Map<string, RSCModuleRecord>;
 }
 
 /**
@@ -373,6 +381,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         finalized: false,
         rootDir: process.cwd(),
         recoveryTokens: new Map<string, TokenData>(),
+        rscModules: new Map<string, RSCModuleRecord>(),
     };
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
@@ -672,6 +681,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @returns transformed code with source map, or null if no changes were made
          */
         transform(code, id) {
+            if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                assertNoRSCBoundaryViolation(code, id);
+            }
+
             // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
             // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
             // is not imported anywhere, so it's invisible to Tailwind. Injecting @source
@@ -797,6 +810,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             }
 
+            if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                assertNoRSCBoundaryViolation(transformedCode, id);
+                const record = createRSCModuleRecord(transformedCode, id);
+                state.rscModules.set(record.id, record);
+            }
+
             // Extract classes for the mangle map but DON'T mangle yet.
             // Mangling is deferred to processAssets/generateBundle where we have the complete map.
             if (transformed || transformedCode.includes('class=') || transformedCode.includes('className=')) {
@@ -823,6 +842,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         /** Finalizes the mangle map after all source modules have been processed. */
         buildEnd() {
             finalizeMangleMap();
+            assertNoRSCGraphViolation(state.rscModules);
             // Expose the mangle map as a Node.js global so that dynamic() SSR calls
             // (which run in the same process during Astro/Next.js SSG) can resolve
             // original class names to their mangled equivalents. Without this, dynamic()
@@ -954,7 +974,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         const isProduction = process.env.NODE_ENV === 'production';
                         const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
                             state.recoveryTokens,
-                            { production: isProduction },
+                            {
+                                production: isProduction,
+                                mangleChecksum: state.checksum,
+                            },
                         );
                         if (strippedDevOnlyPaths.length > 0) {
                             console.warn(

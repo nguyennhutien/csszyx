@@ -17,6 +17,7 @@ describe('isValidManifest', () => {
         const manifest = {
             buildId: 'build123',
             checksum: 'abc123',
+            mangleChecksum: 'def456',
             tokens: {},
         };
         expect(isValidManifest(manifest)).toBe(true);
@@ -58,6 +59,28 @@ describe('isValidManifest', () => {
             isValidManifest({
                 buildId: 'build123',
                 checksum: 'abc123',
+                mangleChecksum: 'def456',
+            }),
+        ).toBe(false);
+    });
+
+    it('should reject missing mangleChecksum', () => {
+        expect(
+            isValidManifest({
+                buildId: 'build123',
+                checksum: 'abc123',
+                tokens: {},
+            }),
+        ).toBe(false);
+    });
+
+    it('should reject non-string mangleChecksum', () => {
+        expect(
+            isValidManifest({
+                buildId: 'build123',
+                checksum: 'abc123',
+                mangleChecksum: 123,
+                tokens: {},
             }),
         ).toBe(false);
     });
@@ -72,6 +95,7 @@ describe('verifyRecoveryToken', () => {
         manifest = {
             buildId: 'build123',
             checksum: 'abc123',
+            mangleChecksum: 'def456',
             tokens: {
                 token1: {
                     mode: 'csr',

@@ -355,6 +355,7 @@ function getHydrationErrors(): HydrationError[];
 interface RecoveryManifest {
   buildId: string;
   checksum: string;
+  mangleChecksum: string;
   tokens: Record<string, TokenData>;
 }
 ```

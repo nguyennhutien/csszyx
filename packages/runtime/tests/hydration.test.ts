@@ -12,6 +12,7 @@ import {
     enableCSRRecovery,
     getAbortedSubtreeCount,
     getHydrationErrors,
+    guardHydration,
     type HydrationError,
     isCSRRecoveryAllowed,
     isHydrationAborted,
@@ -178,6 +179,61 @@ describe('attemptCSRRecovery', () => {
         expect(element.hasAttribute('data-sz-hydration-aborted')).toBe(false);
         expect(element.hasAttribute('data-sz-abort-reason')).toBe(false);
         expect(element.hasAttribute('data-sz-interactive')).toBe(false);
+    });
+});
+
+describe('guardHydration', () => {
+    beforeEach(() => {
+        clearHydrationErrors();
+        document.documentElement.removeAttribute('data-sz-hydration-aborted');
+        document.documentElement.removeAttribute('data-sz-abort-reason');
+        document.documentElement.removeAttribute('data-sz-interactive');
+        document.documentElement.setAttribute('data-sz-checksum', 'mangle1234567890');
+    });
+
+    afterEach(() => {
+        document.documentElement.removeAttribute('data-sz-checksum');
+        document.documentElement.removeAttribute('data-sz-hydration-aborted');
+        document.documentElement.removeAttribute('data-sz-abort-reason');
+        document.documentElement.removeAttribute('data-sz-interactive');
+        clearHydrationErrors();
+    });
+
+    it('uses mangleChecksum instead of token checksum for the mangle guard', () => {
+        const result = guardHydration({
+            buildId: 'build123',
+            checksum: 'tokenabcdef12345',
+            mangleChecksum: 'mangle1234567890',
+            tokens: {},
+        });
+
+        expect(result).toBe(true);
+        expect(isHydrationAborted(document.documentElement)).toBe(false);
+    });
+
+    it('aborts when mangleChecksum does not match the HTML checksum', () => {
+        const result = guardHydration({
+            buildId: 'build123',
+            checksum: 'tokenabcdef12345',
+            mangleChecksum: 'wrong12345678901',
+            tokens: {},
+        });
+
+        expect(result).toBe(false);
+        expect(isHydrationAborted(document.documentElement)).toBe(true);
+        expect(getHydrationErrors()[0]?.type).toBe('checksum_mismatch');
+    });
+
+    it('aborts when mangleChecksum is missing from the manifest', () => {
+        const result = guardHydration({
+            buildId: 'build123',
+            checksum: 'tokenabcdef12345',
+            tokens: {},
+        } as never);
+
+        expect(result).toBe(false);
+        expect(isHydrationAborted(document.documentElement)).toBe(true);
+        expect(getHydrationErrors()[0]?.type).toBe('checksum_mismatch');
     });
 });
 

@@ -158,7 +158,7 @@ export function loadMangleMapFromDOM(): MangleMap | null {
  *
  * @example
  * ```typescript
- * if (!verifyMangleChecksum(manifest.checksum)) {
+ * if (!verifyMangleChecksum(manifest.mangleChecksum)) {
  *     console.error('Checksum mismatch detected');
  * }
  * ```
@@ -326,8 +326,9 @@ export function guardHydration(manifest: RecoveryManifest): boolean {
         return true;
     }
 
-    // Verify mangle map checksum
-    if (!verifyMangleChecksum(manifest.checksum)) {
+    // Verify mangle map checksum. Recovery manifest `checksum` protects the
+    // token set; `mangleChecksum` is the value that must match HTML.
+    if (!verifyMangleChecksum(manifest.mangleChecksum)) {
         const error: HydrationError = {
             type: 'checksum_mismatch',
             message: 'Mangle map checksum mismatch detected',
