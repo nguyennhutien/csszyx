@@ -144,6 +144,8 @@ ensure_path_override() {
 $marker
 # Restore /root/.local/bin priority after \`mise activate\` so the
 # Claude wrapper at /root/.local/bin/claude shadows mise's claude shim.
+# PATH override alone proved unreliable when the IDE re-injects mise paths
+# after .bashrc finishes — fall back to aliases (resolved before PATH lookup).
 case ":\$PATH:" in
     *":/root/.local/bin:"*)
         # Already first — strip and re-prepend to guarantee priority.
@@ -154,6 +156,8 @@ case ":\$PATH:" in
         ;;
 esac
 export PATH="/root/.local/bin:\$PATH"
+alias claude=/root/.local/bin/claude
+alias codex=/root/.local/bin/codex
 EOF
 }
 
