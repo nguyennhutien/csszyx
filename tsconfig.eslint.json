@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true
+    },
+    "include": [
+        "packages/**/*",
+        "scripts/**/*",
+        "tests/**/*",
+        "playwright.config.ts",
+        "vitest.config.ts",
+        "eslint.config.js"
+    ]
+}
