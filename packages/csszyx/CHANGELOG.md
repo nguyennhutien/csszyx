@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.6.3](https://github.com/nguyennhutien/csszyx/compare/v0.6.2...v0.6.3) (2026-05-15)
+
+
+### Features
+
+* v0.7.0 safety foundation ([#21](https://github.com/nguyennhutien/csszyx/issues/21)) ([d9f0c67](https://github.com/nguyennhutien/csszyx/commit/d9f0c67364326916bbd2a1dca6c37a39526141dc))
+
 ## [0.6.2](https://github.com/nguyennhutien/csszyx/compare/v0.6.1...v0.6.2) (2026-05-08)
 
 
