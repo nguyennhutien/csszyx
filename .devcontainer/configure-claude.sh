@@ -73,6 +73,20 @@ else
     jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
 fi
 
+# Make the devcontainer Claude env available even when Claude is launched by
+# an IDE task or a fresh shell that does not go through our wrapper aliases.
+# devcontainer.json also sets containerEnv, but that only applies after the
+# container has been recreated; /etc/profile.d keeps attach/restart flows
+# deterministic.
+AI_ENV_FILE="/etc/profile.d/csszyx-ai-env.sh"
+cat > "$AI_ENV_FILE" <<EOF
+# csszyx devcontainer AI env. Host shells must not source this file.
+export IS_SANDBOX=1
+export CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME"
+export GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null"
+EOF
+chmod 0644 "$AI_ENV_FILE"
+
 # Wrapper: point Claude at the container settings dir + acknowledge sandbox
 # + strip host credentials so a prompt-injected AI cannot silently git push
 # or SSH-tunnel out via the developer's agent. Strip targets (audit
@@ -127,6 +141,28 @@ chmod +x "$CLAUDE_WRAPPER"
 # this override, the wrapper at /root/.local/bin/claude is shadowed by
 # mise's claude shim and never runs. Append an idempotent block AFTER
 # `mise activate` so the wrapper wins.
+ensure_env_override() {
+    local rcfile="$1"
+    local marker="# csszyx-ai-env"
+
+    if [ ! -f "$rcfile" ]; then
+        return
+    fi
+
+    if grep -qF "$marker" "$rcfile"; then
+        return
+    fi
+
+    cat >> "$rcfile" <<EOF
+
+$marker
+# Keep AI tools in devcontainer mode for interactive non-login shells.
+export IS_SANDBOX=1
+export CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME"
+export GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null"
+EOF
+}
+
 ensure_path_override() {
     local rcfile="$1"
     local marker="# csszyx-claude-wrapper-path"
@@ -144,8 +180,6 @@ ensure_path_override() {
 $marker
 # Restore /root/.local/bin priority after \`mise activate\` so the
 # Claude wrapper at /root/.local/bin/claude shadows mise's claude shim.
-# PATH override alone proved unreliable when the IDE re-injects mise paths
-# after .bashrc finishes — fall back to aliases (resolved before PATH lookup).
 case ":\$PATH:" in
     *":/root/.local/bin:"*)
         # Already first — strip and re-prepend to guarantee priority.
@@ -156,15 +190,41 @@ case ":\$PATH:" in
         ;;
 esac
 export PATH="/root/.local/bin:\$PATH"
+EOF
+}
+
+ensure_alias_override() {
+    local rcfile="$1"
+    local marker="# csszyx-ai-wrapper-alias"
+
+    if [ ! -f "$rcfile" ]; then
+        return
+    fi
+
+    if grep -qF "$marker" "$rcfile"; then
+        return
+    fi
+
+    cat >> "$rcfile" <<EOF
+
+$marker
+# PATH override alone proved unreliable when the IDE re-injects mise paths
+# after .bashrc finishes. Aliases resolve before PATH lookup in interactive
+# shells, so keep the AI wrappers stable there too.
 alias claude=/root/.local/bin/claude
 alias codex=/root/.local/bin/codex
 EOF
 }
 
+ensure_env_override /root/.bashrc
+ensure_env_override /root/.zshrc
 ensure_path_override /root/.bashrc
 ensure_path_override /root/.zshrc
+ensure_alias_override /root/.bashrc
+ensure_alias_override /root/.zshrc
 
 echo "[claude] Container CLAUDE_CONFIG_DIR: $DEV_CLAUDE_HOME"
 echo "[claude] Shared state symlinked from $HOST_CLAUDE_HOME (settings.json overridden)"
+echo "[claude] AI env exported from $AI_ENV_FILE"
 echo "[claude] PATH override appended to /root/.bashrc and /root/.zshrc"
 echo "[claude] Open a new terminal (or run \`exec bash\`) for changes to take effect"
