@@ -1,5 +1,22 @@
 # csszyx
 
+## [0.7.0](https://github.com/nguyennhutien/csszyx/compare/v0.6.2...v0.7.0) (2026-05-15)
+
+  ### Features
+  
+  * **unplugin:** RSC boundary guard — fail build when csszyx runtime helpers leak into Server Components (direct imports + local import graph traversal) ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+  * **compiler:** AST budget guard caps transform input at 50k nodes, fails fast on hostile payloads ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+
+  ### Bug Fixes
+  
+  * **runtime:** separate recovery-manifest checksum from mangle-map checksum (fixes hydration verifier conflating the two) ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+  
+  ### Security
+  
+  * devcontainer isolates AI credentials — SSH agent strip + GIT_SSH_COMMAND wrapper-only + filesystem cleanup of /root/.ssh/id_* ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+  * AI commit policy — unsigned commits allowed, push remains the human checkpoint via host SSH agent forwarding ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+  * CODEOWNERS routing + npm-publish environment gate ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+
 ## [0.6.2](https://github.com/nguyennhutien/csszyx/compare/v0.6.1...v0.6.2) (2026-05-08)
 
 
