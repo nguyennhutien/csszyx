@@ -81,9 +81,12 @@ fi
 AI_ENV_FILE="/etc/profile.d/csszyx-ai-env.sh"
 cat > "$AI_ENV_FILE" <<EOF
 # csszyx devcontainer AI env. Host shells must not source this file.
+#
+# Only IS_SANDBOX + CLAUDE_CONFIG_DIR are exported here — they make wrapper
+# bypass scenarios still safe for Claude. GIT_SSH_COMMAND stays wrapper-only:
+# exporting it shell-wide would also break the developer's terminal git push.
 export IS_SANDBOX=1
 export CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME"
-export GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null"
 EOF
 chmod 0644 "$AI_ENV_FILE"
 
@@ -157,9 +160,10 @@ ensure_env_override() {
 
 $marker
 # Keep AI tools in devcontainer mode for interactive non-login shells.
+# GIT_SSH_COMMAND stays in wrapper-only — exporting shell-wide breaks
+# terminal git push for the developer.
 export IS_SANDBOX=1
 export CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME"
-export GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null"
 EOF
 }
 
