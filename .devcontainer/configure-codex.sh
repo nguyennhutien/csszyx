@@ -90,6 +90,9 @@ exec env \\
     HOST_CODEX_HOME="${HOST_CODEX_HOME}" \\
     IS_SANDBOX=1 \\
     GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null" \\
+    GIT_CONFIG_COUNT=1 \\
+    GIT_CONFIG_KEY_0=commit.gpgsign \\
+    GIT_CONFIG_VALUE_0=false \\
     "${REAL_CODEX}" "\$@"
 EOF
 
