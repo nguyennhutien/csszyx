@@ -43,6 +43,7 @@
         "corpus:check": "node --import tsx/esm scripts/check-corpus.ts",
         "corpus:check:strict": "node --import tsx/esm scripts/check-corpus.ts --fail-fast",
         "corpus:extract": "node --import tsx/esm scripts/extract-corpus.ts",
+        "compiler:profile-hotpath": "node --import tsx/esm scripts/profile-compiler-hotpath.ts",
         "pages:build": "bash scripts/build-cf-pages.sh"
     },
     "devDependencies": {
