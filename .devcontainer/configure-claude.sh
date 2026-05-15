@@ -1,75 +1,129 @@
 #!/usr/bin/env bash
 # Configure Claude Code for this devcontainer only.
 #
-# Claude Code rejects --dangerously-skip-permissions when launched as root.
-# This repo keeps remoteUser=root for existing tooling, so the container-local
-# wrapper below re-execs Claude as the non-root vscode user and adds the flag.
+# /root/.claude is bind-mounted from the host, so modifying settings.json there
+# would leak devcontainer-specific permission bypass back to the host machine.
+# Mirroring the configure-codex.sh pattern, we create a container-only
+# /root/.claude-devcontainer/ that symlinks all shared state (sessions, projects,
+# credentials, history) back to the host but overrides settings.json with
+# bypassPermissions mode. The wrapper sets CLAUDE_CONFIG_DIR so Claude reads
+# the container settings — bypass is scoped to the devcontainer.
 set -euo pipefail
 
-WORKSPACE="${WORKSPACE:-/workspaces/csszyx}"
+HOST_CLAUDE_HOME="/root/.claude"
+DEV_CLAUDE_HOME="${DEV_CLAUDE_HOME:-/root/.claude-devcontainer}"
 CLAUDE_WRAPPER="/root/.local/bin/claude"
 REAL_CLAUDE="/root/.local/share/mise/installs/node/22.22.1/bin/claude"
-
-if ! id vscode >/dev/null 2>&1; then
-    echo "[claude] ERROR: expected non-root user 'vscode' to exist."
-    exit 1
-fi
 
 if [ ! -x "$REAL_CLAUDE" ]; then
     echo "[claude] WARN: Claude CLI not found at $REAL_CLAUDE; run mise install first."
     exit 0
 fi
 
-# Allow the vscode user to traverse root-owned mise paths used by the wrapper.
-chmod 711 /root
-
-mkdir -p /home/vscode
-chown vscode:vscode /home/vscode
-
-if [ -d /home/vscode/.claude ]; then
-    chown -R vscode:vscode /home/vscode/.claude 2>/dev/null || true
+if [ ! -d "$HOST_CLAUDE_HOME" ]; then
+    echo "[claude] WARN: Host Claude home not found at $HOST_CLAUDE_HOME; skipping."
+    exit 0
 fi
 
-if command -v setfacl >/dev/null 2>&1 && [ -d "$WORKSPACE" ]; then
-    setfacl -R -m u:vscode:rwX "$WORKSPACE" 2>/dev/null || true
-    find "$WORKSPACE" -type d -exec setfacl -m d:u:vscode:rwX {} + 2>/dev/null || true
+mkdir -p "$DEV_CLAUDE_HOME"
+
+# Symlink every entry from host EXCEPT settings.json — we own settings.json
+# so the host machine's Claude continues to honor its own permission policy.
+shopt -s dotglob nullglob
+for src in "$HOST_CLAUDE_HOME"/*; do
+    name="$(basename "$src")"
+    case "$name" in
+        settings.json) continue ;;
+        .|..) continue ;;
+    esac
+    dest="$DEV_CLAUDE_HOME/$name"
+    if [ -L "$dest" ] || [ -e "$dest" ]; then
+        rm -rf "$dest"
+    fi
+    ln -s "$src" "$dest"
+done
+shopt -u dotglob nullglob
+
+# /root/.claude.json (project trust + user prefs) lives at $HOME, not inside
+# /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects it at
+# $CLAUDE_CONFIG_DIR/.claude.json. Symlink it back to the host file so login
+# state, project trust, and tips history survive without reinitialization.
+HOST_CLAUDE_JSON="/root/.claude.json"
+DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
+if [ -f "$HOST_CLAUDE_JSON" ]; then
+    if [ -L "$DEV_CLAUDE_JSON" ] || [ -e "$DEV_CLAUDE_JSON" ]; then
+        rm -rf "$DEV_CLAUDE_JSON"
+    fi
+    ln -s "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
 fi
 
-cat > "$CLAUDE_WRAPPER" <<'EOF'
+# Container settings.json = host settings + bypass permissions mode.
+# Merge with jq so user-managed keys (model, theme, permissions.allow) survive.
+DEV_SETTINGS="$DEV_CLAUDE_HOME/settings.json"
+HOST_SETTINGS="$HOST_CLAUDE_HOME/settings.json"
+
+OVERLAY='{
+    "permissions": ((.permissions // {}) + {"defaultMode": "bypassPermissions"}),
+    "skipDangerousModePermissionPrompt": true
+}'
+
+if [ -f "$HOST_SETTINGS" ]; then
+    jq ". + $OVERLAY" "$HOST_SETTINGS" > "$DEV_SETTINGS"
+else
+    jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
+fi
+
+# Wrapper: point Claude at the container settings dir + acknowledge sandbox
+# + strip host credentials so a prompt-injected AI cannot silently git push
+# or SSH-tunnel out via the developer's agent. Strip targets (audit
+# 2026-05-14):
+#   - SSH_AUTH_SOCK: SSH agent — would let AI use any SSH-auth git op
+#   - GIT_ASKPASS / VSCODE_GIT_ASKPASS_*: VS Code git credential helpers —
+#     would let AI auto-authenticate HTTPS git pushes
+#   - VSCODE_IPC_HOOK_CLI: IPC socket to the VS Code/Antigravity process —
+#     could expose IDE-level filesystem/extension APIs
+#   - VSCODE_GIT_IPC_HANDLE: Unix socket for VS Code's git extension IPC —
+#     AI could write to it to trigger git operations with the IDE's
+#     stored credentials (this was the gap discovered post-Phase-3a)
+# IS_SANDBOX=1 is also still exported as belt-and-suspenders: terminal-
+# launched claude works even if containerEnv hasn't refreshed yet.
+cat > "$CLAUDE_WRAPPER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-REAL_CLAUDE="/root/.local/share/mise/installs/node/22.22.1/bin/claude"
-CLAUDE_ARGS=("--dangerously-skip-permissions")
-
-for arg in "$@"; do
-    if [ "$arg" = "--dangerously-skip-permissions" ]; then
-        CLAUDE_ARGS=()
-        break
-    fi
+# Defense-in-depth: re-verify no SSH private key leaked back into the
+# container before launching the AI. postStartCommand only fires on
+# container rebuild (Antigravity's "Reopen in Container" is an attach,
+# not a restart), so this catches re-injection between rebuilds.
+for f in /root/.ssh/id_* /home/vscode/.ssh/id_*; do
+    [ -e "\$f" ] || continue
+    case "\$f" in
+        *.pub) continue ;;
+    esac
+    rm -f "\$f"
 done
 
-if [ "$(id -u)" -eq 0 ] && [ "${IS_SANDBOX:-}" = "1" ]; then
-    exec runuser -u vscode -- env \
-        HOME=/home/vscode \
-        CLAUDE_CONFIG_DIR=/home/vscode/.claude \
-        IS_SANDBOX="${IS_SANDBOX:-1}" \
-        PATH="/root/.local/bin:/root/.local/share/mise/shims:/root/.local/share/mise/installs/node/22.22.1/bin:/usr/local/bin:/usr/bin:/bin" \
-        "$REAL_CLAUDE" "${CLAUDE_ARGS[@]}" "$@"
-fi
-
-exec "$REAL_CLAUDE" "${CLAUDE_ARGS[@]}" "$@"
+exec env \\
+    -u SSH_AUTH_SOCK \\
+    -u GIT_ASKPASS \\
+    -u VSCODE_GIT_ASKPASS_NODE \\
+    -u VSCODE_GIT_ASKPASS_MAIN \\
+    -u VSCODE_GIT_ASKPASS_EXTRA_ARGS \\
+    -u VSCODE_IPC_HOOK_CLI \\
+    -u VSCODE_GIT_IPC_HANDLE \\
+    CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME" \\
+    IS_SANDBOX=1 \\
+    GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null" \\
+    "$REAL_CLAUDE" "\$@"
 EOF
-
 chmod +x "$CLAUDE_WRAPPER"
 
 # The Dockerfile sets PATH so /root/.local/bin (the wrapper) comes before
 # /root/.local/share/mise/shims, but `mise activate` (run from .bashrc /
 # .zshrc) re-prepends the mise shims dir on every shell startup. Without
 # this override, the wrapper at /root/.local/bin/claude is shadowed by
-# mise's claude shim and never runs — meaning the --dangerously-skip-
-# permissions flag is never injected and Claude prompts for every action.
-# Append an idempotent block AFTER `mise activate` so the wrapper wins.
+# mise's claude shim and never runs. Append an idempotent block AFTER
+# `mise activate` so the wrapper wins.
 ensure_path_override() {
     local rcfile="$1"
     local marker="# csszyx-claude-wrapper-path"
@@ -103,6 +157,7 @@ EOF
 ensure_path_override /root/.bashrc
 ensure_path_override /root/.zshrc
 
-echo "[claude] Devcontainer wrapper configured: claude -> vscode + --dangerously-skip-permissions"
+echo "[claude] Container CLAUDE_CONFIG_DIR: $DEV_CLAUDE_HOME"
+echo "[claude] Shared state symlinked from $HOST_CLAUDE_HOME (settings.json overridden)"
 echo "[claude] PATH override appended to /root/.bashrc and /root/.zshrc"
 echo "[claude] Open a new terminal (or run \`exec bash\`) for changes to take effect"

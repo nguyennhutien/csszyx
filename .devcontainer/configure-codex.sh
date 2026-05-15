@@ -61,15 +61,36 @@ if ! grep -qF '[projects."/workspaces/csszyx"]' "$CONFIG"; then
 fi
 
 if [ -x "$REAL_CODEX" ]; then
+    # Strip host credentials so a prompt-injected AI cannot silently git push
+    # or SSH-tunnel out via the developer's agent. Mirrors the Claude wrapper
+    # strip set (audit 2026-05-14).
     cat > "$CODEX_WRAPPER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-export CODEX_HOME="${DEV_CODEX_HOME}"
-export HOST_CODEX_HOME="${HOST_CODEX_HOME}"
-export IS_SANDBOX="1"
+# Defense-in-depth: re-verify no SSH private key leaked back into the
+# container before launching the AI (mirrors configure-claude.sh wrapper).
+for f in /root/.ssh/id_* /home/vscode/.ssh/id_*; do
+    [ -e "\$f" ] || continue
+    case "\$f" in
+        *.pub) continue ;;
+    esac
+    rm -f "\$f"
+done
 
-exec "${REAL_CODEX}" "\$@"
+exec env \\
+    -u SSH_AUTH_SOCK \\
+    -u GIT_ASKPASS \\
+    -u VSCODE_GIT_ASKPASS_NODE \\
+    -u VSCODE_GIT_ASKPASS_MAIN \\
+    -u VSCODE_GIT_ASKPASS_EXTRA_ARGS \\
+    -u VSCODE_IPC_HOOK_CLI \\
+    -u VSCODE_GIT_IPC_HANDLE \\
+    CODEX_HOME="${DEV_CODEX_HOME}" \\
+    HOST_CODEX_HOME="${HOST_CODEX_HOME}" \\
+    IS_SANDBOX=1 \\
+    GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null" \\
+    "${REAL_CODEX}" "\$@"
 EOF
 
     chmod +x "$CODEX_WRAPPER"
