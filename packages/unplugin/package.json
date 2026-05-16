@@ -25,24 +25,44 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./vite": {
-      "types": "./dist/vite.d.mts",
-      "import": "./dist/vite.mjs",
-      "require": "./dist/vite.cjs"
+      "import": {
+        "types": "./dist/vite.d.mts",
+        "default": "./dist/vite.mjs"
+      },
+      "require": {
+        "types": "./dist/vite.d.cts",
+        "default": "./dist/vite.cjs"
+      }
     },
     "./webpack": {
-      "types": "./dist/webpack.d.mts",
-      "import": "./dist/webpack.mjs",
-      "require": "./dist/webpack.cjs"
+      "import": {
+        "types": "./dist/webpack.d.mts",
+        "default": "./dist/webpack.mjs"
+      },
+      "require": {
+        "types": "./dist/webpack.d.cts",
+        "default": "./dist/webpack.cjs"
+      }
     },
     "./css-mangler": {
-      "types": "./dist/css-mangler.d.mts",
-      "import": "./dist/css-mangler.mjs",
-      "require": "./dist/css-mangler.cjs"
+      "import": {
+        "types": "./dist/css-mangler.d.mts",
+        "default": "./dist/css-mangler.mjs"
+      },
+      "require": {
+        "types": "./dist/css-mangler.d.cts",
+        "default": "./dist/css-mangler.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",
@@ -77,5 +97,9 @@
     "vitest": "^4.1.6",
     "webpack": "^5.104.1",
     "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

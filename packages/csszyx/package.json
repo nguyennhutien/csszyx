@@ -76,5 +76,9 @@
     "esbuild": "^0.20.0",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

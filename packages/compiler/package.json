@@ -26,18 +26,34 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./browser": {
-      "import": "./src/transform-core.ts",
-      "types": "./src/transform-core.ts"
+      "import": {
+        "types": "./dist/transform-core.d.mts",
+        "default": "./dist/transform-core.mjs"
+      },
+      "require": {
+        "types": "./dist/transform-core.d.cts",
+        "default": "./dist/transform-core.cjs"
+      }
     },
     "./color-var": {
-      "types": "./dist/color-var.d.mts",
-      "import": "./dist/color-var.mjs",
-      "require": "./dist/color-var.cjs"
+      "import": {
+        "types": "./dist/color-var.d.mts",
+        "default": "./dist/color-var.mjs"
+      },
+      "require": {
+        "types": "./dist/color-var.d.cts",
+        "default": "./dist/color-var.cjs"
+      }
     }
   },
   "files": [
@@ -64,5 +80,9 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.6",
     "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
