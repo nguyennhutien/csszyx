@@ -28,15 +28,9 @@ export const icons = {
 export function printHeader(title: string): void {
     const width = 48;
     const padding = Math.max(0, width - title.length - 4);
-    console.log(pc.cyan('┌' + '─'.repeat(width - 2) + '┐'));
-    console.log(
-        pc.cyan('│') +
-            '  ' +
-            pc.bold(title) +
-            ' '.repeat(padding) +
-            pc.cyan('│'),
-    );
-    console.log(pc.cyan('└' + '─'.repeat(width - 2) + '┘'));
+    console.log(pc.cyan(`┌${'─'.repeat(width - 2)}┐`));
+    console.log(`${pc.cyan('│')}  ${pc.bold(title)}${' '.repeat(padding)}${pc.cyan('│')}`);
+    console.log(pc.cyan(`└${'─'.repeat(width - 2)}┘`));
     console.log();
 }
 

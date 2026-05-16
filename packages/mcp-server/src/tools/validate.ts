@@ -18,9 +18,9 @@ import {
 import { z } from 'zod';
 
 export const validateSchema = z.object({
-    sz: z.record(z.any()).describe(
-        'The sz prop object to validate. Example: { padding: 4, bg: "blue-500" }',
-    ),
+    sz: z
+        .record(z.any())
+        .describe('The sz prop object to validate. Example: { padding: 4, bg: "blue-500" }'),
 });
 
 /** Validated input type for the csszyx_validate tool. */
@@ -38,7 +38,9 @@ interface ValidationError {
  * @param input - The validated input object.
  * @returns MCP tool response with validation results.
  */
-export function handleValidate(input: ValidateInput): { content: Array<{ type: 'text'; text: string }> } {
+export function handleValidate(input: ValidateInput): {
+    content: Array<{ type: 'text'; text: string }>;
+} {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
@@ -56,17 +58,15 @@ export function handleValidate(input: ValidateInput): { content: Array<{ type: '
         const isProperty = key in PROPERTY_MAP;
         const isBoolean = BOOLEAN_SHORTHANDS.has(key);
         const isVariant = KNOWN_VARIANTS.has(key);
-        const isSpecial = ['css', '@container', '*'].includes(key) ||
-                          key.startsWith('@') || key.startsWith('[');
+        const isSpecial =
+            ['css', '@container', '*'].includes(key) || key.startsWith('@') || key.startsWith('[');
 
         if (!isProperty && !isBoolean && !isVariant && !isSpecial) {
             errors.push({
                 key,
                 message: `Unknown prop '${key}'. Not a valid sz key, variant, or special prop.`,
             });
-            continue;
         }
-
     }
 
     // Run the real compiler transform to catch any remaining issues.
@@ -82,16 +82,23 @@ export function handleValidate(input: ValidateInput): { content: Array<{ type: '
         content: [
             {
                 type: 'text' as const,
-                text: JSON.stringify({
-                    valid: errors.length === 0 && !transformError,
-                    errors: errors.length > 0 ? errors : undefined,
-                    warnings: warnings.length > 0 ? warnings : undefined,
-                    transformResult: transformResult ? {
-                        className: transformResult.className,
-                        classCount: transformResult.className.split(/\s+/).filter(Boolean).length,
-                    } : undefined,
-                    transformError: transformError ?? undefined,
-                }, null, 2),
+                text: JSON.stringify(
+                    {
+                        valid: errors.length === 0 && !transformError,
+                        errors: errors.length > 0 ? errors : undefined,
+                        warnings: warnings.length > 0 ? warnings : undefined,
+                        transformResult: transformResult
+                            ? {
+                                  className: transformResult.className,
+                                  classCount: transformResult.className.split(/\s+/).filter(Boolean)
+                                      .length,
+                              }
+                            : undefined,
+                        transformError: transformError ?? undefined,
+                    },
+                    null,
+                    2,
+                ),
             },
         ],
     };

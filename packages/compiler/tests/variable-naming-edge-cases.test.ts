@@ -15,7 +15,6 @@ import { transformSourceCode } from '../src/transform.js';
  *  - szv() receiving variable objects
  */
 describe('variable naming edge cases', () => {
-
     // ─── 1. Direct reference variants ────────────────────────────────────────
 
     describe('direct sz={var} declaration forms', () => {

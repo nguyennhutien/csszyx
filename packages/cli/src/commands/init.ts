@@ -8,11 +8,7 @@ import { execa } from 'execa';
 import fs from 'fs-extra';
 import prompts from 'prompts';
 
-import {
-    type Framework,
-    getFrameworkName,
-    getProjectInfo,
-} from '../utils/framework-detector.js';
+import { type Framework, getFrameworkName, getProjectInfo } from '../utils/framework-detector.js';
 import {
     printError,
     printHeader,
@@ -114,11 +110,9 @@ export async function init(options: InitOptions = {}): Promise<void> {
             const twPackage = VITE_FRAMEWORKS.has(projectInfo.framework)
                 ? '@tailwindcss/vite'
                 : '@tailwindcss/postcss';
-            await execa(
-                projectInfo.packageManager,
-                ['add', '-D', 'tailwindcss', twPackage],
-                { cwd },
-            );
+            await execa(projectInfo.packageManager, ['add', '-D', 'tailwindcss', twPackage], {
+                cwd,
+            });
         }
         spinner.succeed(spin, 'Installed csszyx');
     } catch (error) {
@@ -265,37 +259,53 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
 
     let configPath: string | undefined;
     for (const c of candidates) {
-        if (fs.existsSync(c)) { configPath = c; break; }
+        if (fs.existsSync(c)) {
+            configPath = c;
+            break;
+        }
     }
 
-    if (!configPath) { return false; }
+    if (!configPath) {
+        return false;
+    }
 
     let content = await fs.readFile(configPath, 'utf8');
 
     // Skip if already has csszyx import
-    if (content.includes('csszyx')) { return true; }
+    if (content.includes('csszyx')) {
+        return true;
+    }
 
     // Inject import statements after the last existing import line
     const importBlock = [
-        'import csszyx from \'csszyx/vite\';',
-        content.includes('@tailwindcss/vite') ? null : 'import tailwindcss from \'@tailwindcss/vite\';',
-    ].filter(Boolean).join('\n');
+        "import csszyx from 'csszyx/vite';",
+        content.includes('@tailwindcss/vite')
+            ? null
+            : "import tailwindcss from '@tailwindcss/vite';",
+    ]
+        .filter(Boolean)
+        .join('\n');
 
     const lastImportMatch = [...content.matchAll(/^import .+$/gm)].pop();
-    if (!lastImportMatch || lastImportMatch.index === undefined) { return false; }
+    if (!lastImportMatch || lastImportMatch.index === undefined) {
+        return false;
+    }
 
     const insertAt = lastImportMatch.index + lastImportMatch[0].length;
-    content = content.slice(0, insertAt) + '\n' + importBlock + content.slice(insertAt);
+    content = `${content.slice(0, insertAt)}\n${importBlock}${content.slice(insertAt)}`;
 
     // Inject ...csszyx() as first plugin, before tailwindcss() if present
     const pluginsMatch = content.match(/plugins\s*:\s*\[/);
-    if (!pluginsMatch || pluginsMatch.index === undefined) { return false; }
+    if (!pluginsMatch || pluginsMatch.index === undefined) {
+        return false;
+    }
 
     const pluginsInsertAt = pluginsMatch.index + pluginsMatch[0].length;
     const twEntry = content.includes('tailwindcss()') ? '' : '\n    tailwindcss(),';
-    content = content.slice(0, pluginsInsertAt)
-        + `\n    ...csszyx(),      // csszyx MUST come before tailwindcss${twEntry}`
-        + content.slice(pluginsInsertAt);
+    content =
+        content.slice(0, pluginsInsertAt) +
+        `\n    ...csszyx(),      // csszyx MUST come before tailwindcss${twEntry}` +
+        content.slice(pluginsInsertAt);
 
     await fs.writeFile(configPath, content);
     printInfo(`Injected csszyx plugin into ${path.basename(configPath)}`);
@@ -317,7 +327,10 @@ async function injectNextPlugin(cwd: string): Promise<boolean> {
 
     let configPath: string | undefined;
     for (const c of candidates) {
-        if (fs.existsSync(c)) { configPath = c; break; }
+        if (fs.existsSync(c)) {
+            configPath = c;
+            break;
+        }
     }
 
     if (!configPath) {
@@ -329,7 +342,9 @@ async function injectNextPlugin(cwd: string): Promise<boolean> {
     }
 
     const content = await fs.readFile(configPath, 'utf8');
-    if (content.includes('csszyx')) { return true; }
+    if (content.includes('csszyx')) {
+        return true;
+    }
 
     // next.config already exists but doesn't have csszyx — too risky to auto-modify
     return false;
@@ -343,20 +358,27 @@ async function setupTsconfig(cwd: string): Promise<void> {
     let tsconfigPath = path.join(cwd, 'tsconfig.json');
     if (!fs.existsSync(tsconfigPath)) {
         const viteTsConfig = path.join(cwd, 'tsconfig.app.json');
-        if (fs.existsSync(viteTsConfig)) { tsconfigPath = viteTsConfig; }
+        if (fs.existsSync(viteTsConfig)) {
+            tsconfigPath = viteTsConfig;
+        }
     }
 
-    if (!fs.existsSync(tsconfigPath)) { return; }
+    if (!fs.existsSync(tsconfigPath)) {
+        return;
+    }
 
     let content = await fs.readFile(tsconfigPath, 'utf8');
-    if (content.includes('.csszyx')) { return; }
+    if (content.includes('.csszyx')) {
+        return;
+    }
 
     const includeMatch = content.match(/"include"\s*:\s*\[/);
     if (includeMatch && includeMatch.index !== undefined) {
         const insertPos = includeMatch.index + includeMatch[0].length;
-        content = content.slice(0, insertPos)
-            + '\n    "./.csszyx/theme.d.ts",\n    "./.csszyx",'
-            + content.slice(insertPos);
+        content =
+            content.slice(0, insertPos) +
+            '\n    "./.csszyx/theme.d.ts",\n    "./.csszyx",' +
+            content.slice(insertPos);
         await fs.writeFile(tsconfigPath, content);
     }
 }
@@ -368,9 +390,7 @@ async function setupTsconfig(cwd: string): Promise<void> {
  * @param config.enableRecovery - Whether to enable CSS recovery mode.
  * @returns The config file content as a string.
  */
-function generateConfigFile(
-    config: { enableSSR: boolean; enableRecovery: boolean },
-): string {
+function generateConfigFile(config: { enableSSR: boolean; enableRecovery: boolean }): string {
     return `import type { CsszyxConfig } from 'csszyx';
 
 const config: CsszyxConfig = {

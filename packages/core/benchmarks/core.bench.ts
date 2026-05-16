@@ -1,6 +1,6 @@
-import { bench, describe } from 'vitest';
-import { transform_sz, init, WasmCollisionDetector } from '../pkg-node/csszyx_core.js';
 import crypto from 'node:crypto';
+import { bench, describe } from 'vitest';
+import { init, transform_sz, WasmCollisionDetector } from '../pkg-node/csszyx_core.js';
 
 /**
  * Pure JavaScript implementation of the transformer (from @csszyx/compiler).
@@ -64,15 +64,15 @@ describe('Core Performance Analysis', async () => {
             text: 'white',
             focus: {
                 ring: 2,
-                ringColor: 'blue-400'
-            }
+                ringColor: 'blue-400',
+            },
         },
         md: {
             p: 8,
             lg: {
-                m: 0
-            }
-        }
+                m: 0,
+            },
+        },
     };
 
     describe('Transformer: Complex Object', () => {

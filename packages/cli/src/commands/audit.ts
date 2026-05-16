@@ -6,13 +6,7 @@ import path from 'node:path';
 
 import fs from 'fs-extra';
 
-import {
-    colors,
-    printBar,
-    printHeader,
-    printInfo,
-    printSection,
-} from '../utils/terminal-ui.js';
+import { colors, printBar, printHeader, printInfo, printSection } from '../utils/terminal-ui.js';
 
 /**
  *
@@ -76,9 +70,7 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
 
         for (let i = 1; i <= 5; i++) {
             const count = stats.tierDistribution[i] || 0;
-            const percent = stats.totalClasses
-                ? Math.round((count / stats.totalClasses) * 100)
-                : 0;
+            const percent = stats.totalClasses ? Math.round((count / stats.totalClasses) * 100) : 0;
             const bar = printBar([count], stats.totalClasses, 20);
 
             console.log(
@@ -94,7 +86,9 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
         const htmlPercent = Math.round((htmlSavings / stats.bundleSavings.originalHTML) * 100);
 
         console.log(`  Original HTML:       ${formatBytes(stats.bundleSavings.originalHTML)}`);
-        console.log(`  Mangled HTML:        ${formatBytes(stats.bundleSavings.mangledHTML)}   ↓ ${htmlPercent}% (-${formatBytes(htmlSavings)})`);
+        console.log(
+            `  Mangled HTML:        ${formatBytes(stats.bundleSavings.mangledHTML)}   ↓ ${htmlPercent}% (-${formatBytes(htmlSavings)})`,
+        );
         console.log();
     }
 
@@ -103,12 +97,14 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
         const cssPercent = Math.round((cssSavings / stats.bundleSavings.originalCSS) * 100);
 
         console.log(`  Original CSS:        ${formatBytes(stats.bundleSavings.originalCSS)}`);
-        console.log(`  Mangled CSS:         ${formatBytes(stats.bundleSavings.mangledCSS)}   ↓ ${cssPercent}% (-${formatBytes(cssSavings)})`);
+        console.log(
+            `  Mangled CSS:         ${formatBytes(stats.bundleSavings.mangledCSS)}   ↓ ${cssPercent}% (-${formatBytes(cssSavings)})`,
+        );
     }
 
     console.log();
     printInfo('💡 Tip: Enable runtime lite bundle for -1.1KB');
-    console.log('     → import { _sz } from \'csszyx/lite\'');
+    console.log("     → import { _sz } from 'csszyx/lite'");
 }
 
 /**
@@ -136,10 +132,12 @@ async function collectStats(cwd: string): Promise<AuditStats> {
     }
 
     // Estimate from build output
-    const htmlFiles = fs.readdirSync(distDir, { recursive: true })
-        .filter((f) => String(f).endsWith('.html'));
-    const cssFiles = fs.readdirSync(distDir, { recursive: true })
-        .filter((f) => String(f).endsWith('.css'));
+    const htmlFiles = fs
+        .readdirSync(distDir, { recursive: true })
+        .filter(f => String(f).endsWith('.html'));
+    const cssFiles = fs
+        .readdirSync(distDir, { recursive: true })
+        .filter(f => String(f).endsWith('.css'));
 
     if (htmlFiles.length > 0) {
         const htmlContent = fs.readFileSync(path.join(distDir, String(htmlFiles[0])), 'utf-8');
@@ -167,8 +165,14 @@ async function collectStats(cwd: string): Promise<AuditStats> {
  * @returns A human-readable string representation of the byte size
  */
 function formatBytes(bytes: number): string {
-    if (bytes === 0) {return '0 B';}
-    if (bytes < 1024) {return `${bytes} B`;}
-    if (bytes < 1024 * 1024) {return `${(bytes / 1024).toFixed(1)} KB`;}
+    if (bytes === 0) {
+        return '0 B';
+    }
+    if (bytes < 1024) {
+        return `${bytes} B`;
+    }
+    if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    }
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

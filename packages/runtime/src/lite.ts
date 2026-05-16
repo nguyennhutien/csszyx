@@ -34,11 +34,11 @@ function assertNotObject(cls: unknown, fnName: string): void {
     if (cls !== null && cls !== undefined && cls !== false && typeof cls !== 'string') {
         throw new Error(
             `[csszyx] ${fnName}() received a plain object — the compiler could not resolve this sz prop at build time.\n` +
-            '\n' +
-            'Common cause:   sz={{ ...(cond ? varA : varB), key: \'val\' }}\n' +
-            'Fix:            sz={[cond ? varA : varB, { key: \'val\' }]}\n' +
-            '\n' +
-            `Received: ${JSON.stringify(cls)}`,
+                '\n' +
+                "Common cause:   sz={{ ...(cond ? varA : varB), key: 'val' }}\n" +
+                "Fix:            sz={[cond ? varA : varB, { key: 'val' }]}\n" +
+                '\n' +
+                `Received: ${JSON.stringify(cls)}`,
         );
     }
 }
@@ -57,7 +57,9 @@ function assertNotObject(cls: unknown, fnName: string): void {
  */
 export function _sz(...classes: SzInput[]): string {
     if (classes.length === 1) {
-        if (process.env.NODE_ENV !== 'production') { assertNotObject(classes[0], '_sz'); }
+        if (process.env.NODE_ENV !== 'production') {
+            assertNotObject(classes[0], '_sz');
+        }
         return classes[0] || '';
     }
 
@@ -66,9 +68,15 @@ export function _sz(...classes: SzInput[]): string {
 
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
-        if (process.env.NODE_ENV !== 'production') { assertNotObject(cls, '_sz'); }
-        if (!cls) {continue;}
-        if (needsSpace) {result += ' ';}
+        if (process.env.NODE_ENV !== 'production') {
+            assertNotObject(cls, '_sz');
+        }
+        if (!cls) {
+            continue;
+        }
+        if (needsSpace) {
+            result += ' ';
+        }
         result += cls;
         needsSpace = true;
     }
@@ -89,11 +97,7 @@ export function _sz(...classes: SzInput[]): string {
  * _szIf(isActive, 'bg-green-500', 'bg-gray-500')
  * ```
  */
-export function _szIf(
-    condition: boolean,
-    truthyValue: SzInput,
-    falsyValue?: SzInput,
-): string {
+export function _szIf(condition: boolean, truthyValue: SzInput, falsyValue?: SzInput): string {
     return (condition ? truthyValue : falsyValue) || '';
 }
 
@@ -113,8 +117,12 @@ export function _szMerge(...classes: SzInput[]): string {
 
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
-        if (process.env.NODE_ENV !== 'production') { assertNotObject(cls, '_szMerge'); }
-        if (!cls) {continue;}
+        if (process.env.NODE_ENV !== 'production') {
+            assertNotObject(cls, '_szMerge');
+        }
+        if (!cls) {
+            continue;
+        }
         for (const token of (cls as string).split(' ')) {
             if (token && !seen.has(token)) {
                 seen.add(token);
@@ -133,8 +141,11 @@ export function _szMerge(...classes: SzInput[]): string {
  * @returns concatenated class string
  */
 export function _sz2(a: string, b: string): string {
-    if (!a) {return b || '';}
-    if (!b) {return a;}
-    return a + ' ' + b;
+    if (!a) {
+        return b || '';
+    }
+    if (!b) {
+        return a;
+    }
+    return `${a} ${b}`;
 }
-

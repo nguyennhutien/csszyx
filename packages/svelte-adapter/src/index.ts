@@ -12,24 +12,24 @@ import { type SzObject, transform } from '@csszyx/compiler';
  * Preprocessor options.
  */
 export interface SvelteAdapterOptions {
-  /**
-   * Enable verbose logging for debugging.
-   */
-  debug?: boolean;
+    /**
+     * Enable verbose logging for debugging.
+     */
+    debug?: boolean;
 }
 
 /**
  * Svelte preprocessor markup result.
  */
 export interface PreprocessorResult {
-  /**
-   * The transformed source code.
-   */
-  code: string;
-  /**
-   * Optional source map.
-   */
-  map?: object | null;
+    /**
+     * The transformed source code.
+     */
+    code: string;
+    /**
+     * Optional source map.
+     */
+    map?: object | null;
 }
 
 /**
@@ -41,7 +41,7 @@ export interface PreprocessorResult {
  */
 export function parseObjectLiteral(objStr: string): SzObject | null {
     try {
-    // Remove outer braces and whitespace
+        // Remove outer braces and whitespace
         const content = objStr.trim();
 
         // Use Function constructor to safely evaluate the object
@@ -49,11 +49,7 @@ export function parseObjectLiteral(objStr: string): SzObject | null {
         const fn = new Function(`return (${content})`);
         const result = fn();
 
-        if (
-            typeof result === 'object' &&
-      result !== null &&
-      !Array.isArray(result)
-        ) {
+        if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
             return result as SzObject;
         }
 
@@ -86,7 +82,7 @@ export function transformMarkup(
     const staticPattern = /sz="(\{\{?[\s\S]*?\}\}?)"/g;
 
     result = result.replace(staticPattern, (match, objStr) => {
-    // Handle double braces (escaped) - convert to single
+        // Handle double braces (escaped) - convert to single
         let normalizedObjStr = objStr;
         if (objStr.startsWith('{{') && objStr.endsWith('}}')) {
             normalizedObjStr = objStr.slice(1, -1);
@@ -96,7 +92,6 @@ export function transformMarkup(
 
         if (!szObj) {
             if (options.debug) {
-
                 console.warn(`[csszyx/svelte] Failed to parse sz object: ${objStr}`);
             }
             return match; // Return unchanged if parsing fails
@@ -106,7 +101,7 @@ export function transformMarkup(
         count++;
 
         if (options.debug) {
-            // eslint-disable-next-line no-console
+             
             console.log(`[csszyx/svelte] Transformed: ${objStr} -> "${className}"`);
         }
 
@@ -121,7 +116,6 @@ export function transformMarkup(
 
         if (!szObj) {
             if (options.debug) {
-
                 console.warn(`[csszyx/svelte] Failed to parse sz binding: ${objStr}`);
             }
             return match; // Return unchanged if parsing fails
@@ -131,10 +125,8 @@ export function transformMarkup(
         count++;
 
         if (options.debug) {
-            // eslint-disable-next-line no-console
-            console.log(
-                `[csszyx/svelte] Transformed binding: ${objStr} -> "${className}"`,
-            );
+             
+            console.log(`[csszyx/svelte] Transformed binding: ${objStr} -> "${className}"`);
         }
 
         return `class="${className}"`;
@@ -153,23 +145,20 @@ export function mergeClassAttributes(content: string): string {
     // Pattern to find elements with multiple class attributes
     // This handles cases where both class:directive and class (from sz) exist
     const multiClassPattern =
-    /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)class="([^"]*)"([^>]*?>)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)class="([^"]*)"([^>]*?>)/g;
 
     let result = content;
 
     // Merge duplicate class="..." attributes
-    result = result.replace(
-        multiClassPattern,
-        (match, before, class1, middle, class2, after) => {
-            // Combine classes with space
-            return `${before}class="${class1} ${class2}"${middle}${after}`;
-        },
-    );
+    result = result.replace(multiClassPattern, (match, before, class1, middle, class2, after) => {
+        // Combine classes with space
+        return `${before}class="${class1} ${class2}"${middle}${after}`;
+    });
 
     // Handle class:name={condition} combined with class=""
     // Pattern: class="..." followed by class:name or vice versa
     const classDirectivePattern =
-    /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(class:[a-zA-Z-]+(?:=\{[^}]*\})?)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(class:[a-zA-Z-]+(?:=\{[^}]*\})?)/g;
 
     result = result.replace(
         classDirectivePattern,
@@ -213,20 +202,14 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
     return {
         name: 'csszyx-svelte',
 
-        markup({
-            content,
-            filename,
-        }: {
-      content: string;
-      filename?: string;
-    }) {
+        markup({ content, filename }: { content: string; filename?: string }) {
             // Skip if no sz props
             if (!content.includes('sz=')) {
                 return;
             }
 
             if (options.debug && filename) {
-                // eslint-disable-next-line no-console
+                 
                 console.log(`[csszyx/svelte] Processing: ${filename}`);
             }
 
@@ -241,10 +224,8 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
             const mergedContent = mergeClassAttributes(transformResult.code);
 
             if (options.debug) {
-                // eslint-disable-next-line no-console
-                console.log(
-                    `[csszyx/svelte] Transformed ${transformResult.count} sz props`,
-                );
+                 
+                console.log(`[csszyx/svelte] Transformed ${transformResult.count} sz props`);
             }
 
             return {
@@ -320,10 +301,7 @@ export function vitePlugin(options: SvelteAdapterOptions = {}): Plugin {
  * @param {SvelteAdapterOptions} options - Preprocessor options
  * @returns {PreprocessorResult} Preprocessing result
  */
-export function preprocess(
-    source: string,
-    options: SvelteAdapterOptions = {},
-): PreprocessorResult {
+export function preprocess(source: string, options: SvelteAdapterOptions = {}): PreprocessorResult {
     const transformResult = transformMarkup(source, options);
 
     if (transformResult.count === 0) {

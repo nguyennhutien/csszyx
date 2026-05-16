@@ -14,7 +14,11 @@
  * @returns CSS-compatible color string
  */
 export function __szColorVar(v: string): string {
-    if (v.startsWith('#') || v.startsWith('rgb') || v.startsWith('hsl') || v.startsWith('oklch')) { return v; }
-    if (v.startsWith('--')) { return `var(${v})`; }
+    if (v.startsWith('#') || v.startsWith('rgb') || v.startsWith('hsl') || v.startsWith('oklch')) {
+        return v;
+    }
+    if (v.startsWith('--')) {
+        return `var(${v})`;
+    }
     return `var(--color-${v})`;
 }

@@ -36,7 +36,9 @@ function readCorpusClasses(filename: string): string[] {
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#'))
         .filter(line => {
-            if (seen.has(line)) {return false;}
+            if (seen.has(line)) {
+                return false;
+            }
             seen.add(line);
             return true;
         });
@@ -57,7 +59,9 @@ describe('corpus round-trip: UI library classes → migrate CLI → compile', ()
                     const { szObject, unrecognized } = classNameToSzObject(cls);
 
                     // Fully unrecognized — known coverage gap, skip without failing
-                    if (unrecognized.length > 0 && unrecognized[0] === cls) {return;}
+                    if (unrecognized.length > 0 && unrecognized[0] === cls) {
+                        return;
+                    }
 
                     // Recognized (fully or partially) — must round-trip
                     const result = transform(szObject as SzObject);
@@ -65,7 +69,9 @@ describe('corpus round-trip: UI library classes → migrate CLI → compile', ()
                     // Empty output means the migration CLI misclassified the class
                     // (e.g. border-[1.5px] parsed as borderColor instead of borderWidth,
                     // or unsupported variant like group-data-active:) — coverage gap, skip
-                    if (result.className === '') { return; }
+                    if (result.className === '') {
+                        return;
+                    }
 
                     if (result.className !== cls) {
                         // Check if the result is a known upgrade rather than a bug:
@@ -74,8 +80,11 @@ describe('corpus round-trip: UI library classes → migrate CLI → compile', ()
                         // Accept if: (a) output is self-consistent (round-trips through itself),
                         //            (b) OR output is unrecognized by migration CLI — meaning it's
                         //               a compiler-canonical form without a reverse parse path.
-                        const { szObject: upgradedSz, unrecognized: upgradedUnrecognized } = classNameToSzObject(result.className);
-                        const isFullyUnrecognized = upgradedUnrecognized.length > 0 && upgradedUnrecognized[0] === result.className;
+                        const { szObject: upgradedSz, unrecognized: upgradedUnrecognized } =
+                            classNameToSzObject(result.className);
+                        const isFullyUnrecognized =
+                            upgradedUnrecognized.length > 0 &&
+                            upgradedUnrecognized[0] === result.className;
                         if (isFullyUnrecognized) {
                             return; // Compiler-canonical class with no reverse parse — known upgrade
                         }

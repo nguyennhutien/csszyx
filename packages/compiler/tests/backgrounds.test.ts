@@ -44,13 +44,19 @@ describe('backgrounds — background image string patterns', () => {
     });
 
     it('{ bgImg: "repeating-linear-gradient(...)" } → bg-[repeating-linear-gradient(...)]', () => {
-        expect(t({ bgImg: 'repeating-linear-gradient(315deg,currentColor 0,currentColor 1px,transparent 0,transparent 50%)' }))
-            .toBe('bg-[repeating-linear-gradient(315deg,currentColor_0,currentColor_1px,transparent_0,transparent_50%)]');
+        expect(
+            t({
+                bgImg: 'repeating-linear-gradient(315deg,currentColor 0,currentColor 1px,transparent 0,transparent 50%)',
+            }),
+        ).toBe(
+            'bg-[repeating-linear-gradient(315deg,currentColor_0,currentColor_1px,transparent_0,transparent_50%)]',
+        );
     });
 
     it('{ bgImg: "repeating-radial-gradient(...)" } → bg-[repeating-radial-gradient(...)]', () => {
-        expect(t({ bgImg: 'repeating-radial-gradient(circle, red 0, blue 10px)' }))
-            .toBe('bg-[repeating-radial-gradient(circle,_red_0,_blue_10px)]');
+        expect(t({ bgImg: 'repeating-radial-gradient(circle, red 0, blue 10px)' })).toBe(
+            'bg-[repeating-radial-gradient(circle,_red_0,_blue_10px)]',
+        );
     });
 });
 
@@ -72,7 +78,9 @@ describe('backgrounds — linear gradient', () => {
     });
 
     it('{ bgImg: { gradient: "linear", dir: "25deg, red 5%..." } } → bg-linear-[25deg,_red_5%...] (arbitrary direction)', () => {
-        expect(t({ bgImg: { gradient: 'linear', dir: '25deg, red 5%...' } })).toBe('bg-linear-[25deg,_red_5%...]');
+        expect(t({ bgImg: { gradient: 'linear', dir: '25deg, red 5%...' } })).toBe(
+            'bg-linear-[25deg,_red_5%...]',
+        );
     });
 
     it('{ bgImg: { gradient: "linear", dir: "--var" } } → bg-linear-(--var) (css variable)', () => {
@@ -80,7 +88,9 @@ describe('backgrounds — linear gradient', () => {
     });
 
     it('{ bgImg: { gradient: "linear", dir: "to-r", in: "hsl" } } → bg-linear-to-r/hsl', () => {
-        expect(t({ bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } })).toBe('bg-linear-to-r/hsl');
+        expect(t({ bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } })).toBe(
+            'bg-linear-to-r/hsl',
+        );
     });
 });
 
@@ -90,7 +100,9 @@ describe('backgrounds — radial gradient', () => {
     });
 
     it('{ bgImg: { gradient: "radial", dir: "at 50% 75%" } } → bg-radial-[at_50%_75%] (arbitrary position)', () => {
-        expect(t({ bgImg: { gradient: 'radial', dir: 'at 50% 75%' } })).toBe('bg-radial-[at_50%_75%]');
+        expect(t({ bgImg: { gradient: 'radial', dir: 'at 50% 75%' } })).toBe(
+            'bg-radial-[at_50%_75%]',
+        );
     });
 
     it('{ bgImg: { gradient: "radial", dir: "--var" } } → bg-radial-(--var) (css variable)', () => {
@@ -330,6 +342,8 @@ describe('backgrounds — variant prefix propagation (before/after/hover)', () =
     });
 
     it('{ after: { bgImg: { gradient: "linear", dir: "to-r" } } } → after:bg-linear-to-r', () => {
-        expect(t({ after: { bgImg: { gradient: 'linear', dir: 'to-r' } } })).toBe('after:bg-linear-to-r');
+        expect(t({ after: { bgImg: { gradient: 'linear', dir: 'to-r' } } })).toBe(
+            'after:bg-linear-to-r',
+        );
     });
 });

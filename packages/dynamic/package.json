@@ -1,46 +1,46 @@
 {
-    "name": "@csszyx/dynamic",
-    "version": "0.7.0",
-    "description": "Runtime CSS injection engine for @csszyx — injects only CSS not already in the pre-built stylesheet",
-    "type": "module",
-    "exports": {
-        ".": {
-            "import": "./src/index.ts",
-            "types": "./src/index.ts"
-        },
-        "./react": {
-            "import": "./src/react.ts",
-            "types": "./src/react.ts"
-        }
+  "name": "@csszyx/dynamic",
+  "version": "0.7.0",
+  "description": "Runtime CSS injection engine for @csszyx — injects only CSS not already in the pre-built stylesheet",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
     },
-    "keywords": [
-        "csszyx",
-        "css-in-js",
-        "runtime-css",
-        "delta-injection",
-        "tailwind",
-        "form-renderer"
-    ],
-    "license": "MIT",
-    "scripts": {
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "type-check": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@csszyx/compiler": "workspace:*"
-    },
-    "peerDependencies": {
-        "react": ">=18.0.0"
-    },
-    "peerDependenciesMeta": {
-        "react": {
-            "optional": true
-        }
-    },
-    "devDependencies": {
-        "@types/react": "^18.0.0",
-        "typescript": "^5.3.3",
-        "vitest": "^4.1.6"
+    "./react": {
+      "import": "./src/react.ts",
+      "types": "./src/react.ts"
     }
+  },
+  "keywords": [
+    "csszyx",
+    "css-in-js",
+    "runtime-css",
+    "delta-injection",
+    "tailwind",
+    "form-renderer"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@csszyx/compiler": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.6"
+  }
 }

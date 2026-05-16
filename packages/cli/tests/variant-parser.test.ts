@@ -194,7 +194,11 @@ describe('variant-parser', () => {
         });
 
         it("group-data-[active='true'] (attribute with value)", () => {
-            expect(mapVariant("group-data-[active='true']")).toEqual(['group', 'data', "active='true'"]);
+            expect(mapVariant("group-data-[active='true']")).toEqual([
+                'group',
+                'data',
+                "active='true'",
+            ]);
         });
 
         it('group-data-[state=open] (attribute with value)', () => {
@@ -223,7 +227,11 @@ describe('variant-parser', () => {
         });
 
         it('group-data-[orientation=horizontal] (Radix UI orientation)', () => {
-            expect(mapVariant('group-data-[orientation=horizontal]')).toEqual(['group', 'data', 'orientation=horizontal']);
+            expect(mapVariant('group-data-[orientation=horizontal]')).toEqual([
+                'group',
+                'data',
+                'orientation=horizontal',
+            ]);
         });
 
         // group-aria-* variants
@@ -236,7 +244,11 @@ describe('variant-parser', () => {
         });
 
         it('group-aria-[current=page]', () => {
-            expect(mapVariant('group-aria-[current=page]')).toEqual(['group', 'aria', 'current=page']);
+            expect(mapVariant('group-aria-[current=page]')).toEqual([
+                'group',
+                'aria',
+                'current=page',
+            ]);
         });
 
         // peer-data-* (same pattern, different type)
@@ -253,7 +265,11 @@ describe('variant-parser', () => {
         });
 
         it('peer-focus-visible/label', () => {
-            expect(mapVariant('peer-focus-visible/label')).toEqual(['peer', 'label', 'focusVisible']);
+            expect(mapVariant('peer-focus-visible/label')).toEqual([
+                'peer',
+                'label',
+                'focusVisible',
+            ]);
         });
 
         // HAS
@@ -275,7 +291,11 @@ describe('variant-parser', () => {
         });
 
         it('not-supports-[display:grid]', () => {
-            expect(mapVariant('not-supports-[display:grid]')).toEqual(['not', 'supports', 'display:grid']);
+            expect(mapVariant('not-supports-[display:grid]')).toEqual([
+                'not',
+                'supports',
+                'display:grid',
+            ]);
         });
 
         // DATA
@@ -386,7 +406,9 @@ describe('variant-parser', () => {
         });
 
         it("group-data-[active='true']/card (value match + named group)", () => {
-            const { szObject } = classNameToSzObject("group-data-[active='true']/card:text-blue-600");
+            const { szObject } = classNameToSzObject(
+                "group-data-[active='true']/card:text-blue-600",
+            );
             expect(szObject).toEqual({
                 group: { card: { data: { "active='true'": { color: 'blue-600' } } } },
             });

@@ -31,8 +31,8 @@ describe('pbs / pbe (padding-block-start/end)', () => {
     });
 
     it('should be categorized as SPACING', () => {
-        expect(PROPERTY_CATEGORY_MAP['pbs']).toBe(PropertyCategory.SPACING);
-        expect(PROPERTY_CATEGORY_MAP['pbe']).toBe(PropertyCategory.SPACING);
+        expect(PROPERTY_CATEGORY_MAP.pbs).toBe(PropertyCategory.SPACING);
+        expect(PROPERTY_CATEGORY_MAP.pbe).toBe(PropertyCategory.SPACING);
     });
 });
 
@@ -57,8 +57,8 @@ describe('mbs / mbe (margin-block-start/end)', () => {
     });
 
     it('should be categorized as SPACING', () => {
-        expect(PROPERTY_CATEGORY_MAP['mbs']).toBe(PropertyCategory.SPACING);
-        expect(PROPERTY_CATEGORY_MAP['mbe']).toBe(PropertyCategory.SPACING);
+        expect(PROPERTY_CATEGORY_MAP.mbs).toBe(PropertyCategory.SPACING);
+        expect(PROPERTY_CATEGORY_MAP.mbe).toBe(PropertyCategory.SPACING);
     });
 });
 
@@ -98,7 +98,14 @@ describe('blockSize / inlineSize families', () => {
     });
 
     it('should be categorized as SPACING', () => {
-        for (const prop of ['blockSize', 'minBlockSize', 'maxBlockSize', 'inlineSize', 'minInlineSize', 'maxInlineSize']) {
+        for (const prop of [
+            'blockSize',
+            'minBlockSize',
+            'maxBlockSize',
+            'inlineSize',
+            'minInlineSize',
+            'maxInlineSize',
+        ]) {
             expect(PROPERTY_CATEGORY_MAP[prop]).toBe(PropertyCategory.SPACING);
         }
     });
@@ -183,8 +190,8 @@ describe('borderBs / borderBe', () => {
     });
 
     it('should be categorized as UNITLESS', () => {
-        expect(PROPERTY_CATEGORY_MAP['borderBs']).toBe(PropertyCategory.UNITLESS);
-        expect(PROPERTY_CATEGORY_MAP['borderBe']).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.borderBs).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.borderBe).toBe(PropertyCategory.UNITLESS);
     });
 });
 
@@ -238,7 +245,7 @@ describe('fontFeatures (font-feature-settings)', () => {
 
     it('should be categorized as PASSTHROUGH (unknown → pass-through)', () => {
         // fontFeatures is not in PROPERTY_CATEGORY_MAP → PASSTHROUGH
-        expect(PROPERTY_CATEGORY_MAP['fontFeatures']).toBeUndefined();
+        expect(PROPERTY_CATEGORY_MAP.fontFeatures).toBeUndefined();
     });
 });
 

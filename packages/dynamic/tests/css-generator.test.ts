@@ -10,7 +10,10 @@ import { generateCSSRule, generateDeclarations, parseVariants } from '../src/css
 describe('parseVariants', () => {
     it('returns base tier for non-variant class', () => {
         expect(parseVariants('p-4')).toMatchObject({
-            tier: 'base', pseudoSuffix: '', selectorPrefix: '', utility: 'p-4',
+            tier: 'base',
+            pseudoSuffix: '',
+            selectorPrefix: '',
+            utility: 'p-4',
         });
     });
 
@@ -122,7 +125,9 @@ describe('generateDeclarations', () => {
     });
 
     it('handles size property', () => {
-        expect(generateDeclarations('size-4')).toBe('width: calc(var(--spacing) * 4); height: calc(var(--spacing) * 4)');
+        expect(generateDeclarations('size-4')).toBe(
+            'width: calc(var(--spacing) * 4); height: calc(var(--spacing) * 4)',
+        );
     });
 
     // ── Colors ───────────────────────────────────────────────────────────────

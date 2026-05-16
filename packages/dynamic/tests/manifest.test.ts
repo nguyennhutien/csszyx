@@ -134,10 +134,12 @@ describe('manifest delta check', () => {
     it('returns mangled name when mangle map is present', async () => {
         resetManifest();
         mockFetch.mockReset();
-        setupFetchSuccess(makeMockManifest({
-            classes: ['p-4', 'bg-blue-500'],
-            mangleMap: { 'p-4': 'z', 'bg-blue-500': 'y' },
-        }));
+        setupFetchSuccess(
+            makeMockManifest({
+                classes: ['p-4', 'bg-blue-500'],
+                mangleMap: { 'p-4': 'z', 'bg-blue-500': 'y' },
+            }),
+        );
         await preloadManifest();
 
         expect(lookupManifest('p-4')).toBe('z');
@@ -147,10 +149,12 @@ describe('manifest delta check', () => {
     it('returns original name for class in manifest but not in mangle map', async () => {
         resetManifest();
         mockFetch.mockReset();
-        setupFetchSuccess(makeMockManifest({
-            classes: ['p-4', 'flex'],
-            mangleMap: { 'p-4': 'z' }, // 'flex' not in mangle map
-        }));
+        setupFetchSuccess(
+            makeMockManifest({
+                classes: ['p-4', 'flex'],
+                mangleMap: { 'p-4': 'z' }, // 'flex' not in mangle map
+            }),
+        );
         await preloadManifest();
 
         expect(lookupManifest('p-4')).toBe('z');

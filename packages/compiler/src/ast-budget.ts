@@ -54,11 +54,11 @@ export class ASTBudgetExceededError extends Error {
         const where = filename ?? '<anonymous>';
         super(
             `[csszyx] AST budget exceeded: ${where} has more than ${budget} nodes ` +
-            `(traversal aborted at ${nodeCount}). Files this large are almost always ` +
-            'machine-generated and should be excluded from sz transformation. ' +
-            'Either exclude the file from the plugin (Vite: ' +
-            '`csszyx({ exclude: [/large-data\\.ts$/] })`), or raise the limit ' +
-            'globally with `csszyx({ build: { astBudgetLimit: 100_000 } })`.',
+                `(traversal aborted at ${nodeCount}). Files this large are almost always ` +
+                'machine-generated and should be excluded from sz transformation. ' +
+                'Either exclude the file from the plugin (Vite: ' +
+                '`csszyx({ exclude: [/large-data\\.ts$/] })`), or raise the limit ' +
+                'globally with `csszyx({ build: { astBudgetLimit: 100_000 } })`.',
         );
         this.name = 'ASTBudgetExceededError';
         this.filename = filename;

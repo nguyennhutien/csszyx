@@ -269,21 +269,49 @@ describe('interactivity — will change', () => {
 });
 
 describe('interactivity — scroll margin (remaining directions)', () => {
-    it('{ scrollMr: 4 } → scroll-mr-4', () => { expect(t({ scrollMr: 4 })).toBe('scroll-mr-4'); });
-    it('{ scrollMb: 4 } → scroll-mb-4', () => { expect(t({ scrollMb: 4 })).toBe('scroll-mb-4'); });
-    it('{ scrollMl: 4 } → scroll-ml-4', () => { expect(t({ scrollMl: 4 })).toBe('scroll-ml-4'); });
-    it('{ scrollMs: 4 } → scroll-ms-4', () => { expect(t({ scrollMs: 4 })).toBe('scroll-ms-4'); });
-    it('{ scrollMe: 4 } → scroll-me-4', () => { expect(t({ scrollMe: 4 })).toBe('scroll-me-4'); });
-    it('{ scrollMx: 4 } → scroll-mx-4', () => { expect(t({ scrollMx: 4 })).toBe('scroll-mx-4'); });
-    it('{ scrollMy: 4 } → scroll-my-4', () => { expect(t({ scrollMy: 4 })).toBe('scroll-my-4'); });
+    it('{ scrollMr: 4 } → scroll-mr-4', () => {
+        expect(t({ scrollMr: 4 })).toBe('scroll-mr-4');
+    });
+    it('{ scrollMb: 4 } → scroll-mb-4', () => {
+        expect(t({ scrollMb: 4 })).toBe('scroll-mb-4');
+    });
+    it('{ scrollMl: 4 } → scroll-ml-4', () => {
+        expect(t({ scrollMl: 4 })).toBe('scroll-ml-4');
+    });
+    it('{ scrollMs: 4 } → scroll-ms-4', () => {
+        expect(t({ scrollMs: 4 })).toBe('scroll-ms-4');
+    });
+    it('{ scrollMe: 4 } → scroll-me-4', () => {
+        expect(t({ scrollMe: 4 })).toBe('scroll-me-4');
+    });
+    it('{ scrollMx: 4 } → scroll-mx-4', () => {
+        expect(t({ scrollMx: 4 })).toBe('scroll-mx-4');
+    });
+    it('{ scrollMy: 4 } → scroll-my-4', () => {
+        expect(t({ scrollMy: 4 })).toBe('scroll-my-4');
+    });
 });
 
 describe('interactivity — scroll padding (remaining directions)', () => {
-    it('{ scrollPr: 4 } → scroll-pr-4', () => { expect(t({ scrollPr: 4 })).toBe('scroll-pr-4'); });
-    it('{ scrollPb: 4 } → scroll-pb-4', () => { expect(t({ scrollPb: 4 })).toBe('scroll-pb-4'); });
-    it('{ scrollPl: 4 } → scroll-pl-4', () => { expect(t({ scrollPl: 4 })).toBe('scroll-pl-4'); });
-    it('{ scrollPs: 4 } → scroll-ps-4', () => { expect(t({ scrollPs: 4 })).toBe('scroll-ps-4'); });
-    it('{ scrollPe: 4 } → scroll-pe-4', () => { expect(t({ scrollPe: 4 })).toBe('scroll-pe-4'); });
-    it('{ scrollPx: 4 } → scroll-px-4', () => { expect(t({ scrollPx: 4 })).toBe('scroll-px-4'); });
-    it('{ scrollPy: 4 } → scroll-py-4', () => { expect(t({ scrollPy: 4 })).toBe('scroll-py-4'); });
+    it('{ scrollPr: 4 } → scroll-pr-4', () => {
+        expect(t({ scrollPr: 4 })).toBe('scroll-pr-4');
+    });
+    it('{ scrollPb: 4 } → scroll-pb-4', () => {
+        expect(t({ scrollPb: 4 })).toBe('scroll-pb-4');
+    });
+    it('{ scrollPl: 4 } → scroll-pl-4', () => {
+        expect(t({ scrollPl: 4 })).toBe('scroll-pl-4');
+    });
+    it('{ scrollPs: 4 } → scroll-ps-4', () => {
+        expect(t({ scrollPs: 4 })).toBe('scroll-ps-4');
+    });
+    it('{ scrollPe: 4 } → scroll-pe-4', () => {
+        expect(t({ scrollPe: 4 })).toBe('scroll-pe-4');
+    });
+    it('{ scrollPx: 4 } → scroll-px-4', () => {
+        expect(t({ scrollPx: 4 })).toBe('scroll-px-4');
+    });
+    it('{ scrollPy: 4 } → scroll-py-4', () => {
+        expect(t({ scrollPy: 4 })).toBe('scroll-py-4');
+    });
 });

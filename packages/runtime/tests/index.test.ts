@@ -11,8 +11,8 @@ import {
     initRuntime,
     isRuntimeInitialized,
     resetRuntime,
-    verifyRecoveryToken,
     VERSION,
+    verifyRecoveryToken,
 } from '../src/index.js';
 
 describe('index exports', () => {

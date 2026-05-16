@@ -82,16 +82,13 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
     if (fs.existsSync(distDir)) {
         const htmlFiles = fs
             .readdirSync(distDir, { recursive: true })
-            .filter((f) => String(f).endsWith('.html'));
+            .filter(f => String(f).endsWith('.html'));
 
         if (htmlFiles.length > 0) {
             printSuccess(`Found ${htmlFiles.length} HTML file(s)`);
 
             // Check for checksum attribute
-            const htmlContent = fs.readFileSync(
-                path.join(distDir, String(htmlFiles[0])),
-                'utf-8',
-            );
+            const htmlContent = fs.readFileSync(path.join(distDir, String(htmlFiles[0])), 'utf-8');
             if (htmlContent.includes('data-sz-checksum')) {
                 printSuccess('Checksum injection working');
             } else {

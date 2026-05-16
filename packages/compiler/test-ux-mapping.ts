@@ -1,11 +1,15 @@
-
 import { transform } from './src/transform';
 
 console.log('--- VS Code UX Mapping Verification ---');
 
 import type { SzObject } from './src/transform';
 
-const testCases: { name: string; input: SzObject; expected: string; expectedAttributes?: Record<string, string> }[] = [
+const testCases: {
+    name: string;
+    input: SzObject;
+    expected: string;
+    expectedAttributes?: Record<string, string>;
+}[] = [
     {
         name: 'Canonical Key',
         input: { bg: 'blue-500', p: 4 },
@@ -56,13 +60,14 @@ const testCases: { name: string; input: SzObject; expected: string; expectedAttr
 
 let failed = 0;
 
-testCases.forEach((tc) => {
+testCases.forEach(tc => {
     const result = transform(tc.input);
     const actual = result.className || '';
 
     // Check attributes for will-change test
     if (tc.expectedAttributes) {
-        const attrMatch = JSON.stringify(result.attributes) === JSON.stringify(tc.expectedAttributes);
+        const attrMatch =
+            JSON.stringify(result.attributes) === JSON.stringify(tc.expectedAttributes);
         if (!attrMatch) {
             console.log(`❌ ${tc.name}: Attributes Mismatch`);
             console.log(`   Expected: ${JSON.stringify(tc.expectedAttributes)}`);
@@ -71,7 +76,9 @@ testCases.forEach((tc) => {
             return;
         }
     }
-    const pass = actual === tc.expected || (actual.split(' ').sort().join(' ') === tc.expected.split(' ').sort().join(' '));
+    const pass =
+        actual === tc.expected ||
+        actual.split(' ').sort().join(' ') === tc.expected.split(' ').sort().join(' ');
 
     if (pass) {
         console.log(`✅ ${tc.name}: Passed`);

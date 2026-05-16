@@ -54,10 +54,7 @@ export function applySzVars(
  * @param vars - Record of CSS var name → value. Keys auto-prefixed with `--`.
  * @param element - Target element. Defaults to `document.documentElement` (`:root`).
  */
-export function patchSzVars(
-    vars: SzVars,
-    element: HTMLElement = document.documentElement,
-): void {
+export function patchSzVars(vars: SzVars, element: HTMLElement = document.documentElement): void {
     for (const [key, value] of Object.entries(vars)) {
         const name = key.startsWith('--') ? key : `--${key}`;
         element.style.setProperty(name, String(value));

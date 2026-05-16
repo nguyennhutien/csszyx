@@ -15,39 +15,39 @@ export type RecoveryMode = 'csr' | 'dev-only';
  * Token data from the manifest.
  */
 export interface TokenData {
-  mode: RecoveryMode;
-  component: string;
-  path: string;
+    mode: RecoveryMode;
+    component: string;
+    path: string;
 }
 
 /**
  * Recovery manifest structure.
  */
 export interface RecoveryManifest {
-  buildId: string;
-  checksum: string;
-  mangleChecksum: string;
-  tokens: Record<string, TokenData>;
+    buildId: string;
+    checksum: string;
+    mangleChecksum: string;
+    tokens: Record<string, TokenData>;
 }
 
 /**
  * Token verification result.
  */
 export interface VerificationResult {
-  /**
-   * Whether the token is valid
-   */
-  valid: boolean;
+    /**
+     * Whether the token is valid
+     */
+    valid: boolean;
 
-  /**
-   * Token data if valid
-   */
-  tokenData?: TokenData;
+    /**
+     * Token data if valid
+     */
+    tokenData?: TokenData;
 
-  /**
-   * Error message if invalid
-   */
-  error?: string;
+    /**
+     * Error message if invalid
+     */
+    error?: string;
 }
 
 /**
@@ -153,9 +153,7 @@ export function loadManifestFromDOM(): RecoveryManifest | null {
  * @param {unknown} manifest - Manifest to validate
  * @returns {boolean} True if valid
  */
-export function isValidManifest(
-    manifest: unknown,
-): manifest is RecoveryManifest {
+export function isValidManifest(manifest: unknown): manifest is RecoveryManifest {
     if (!manifest || typeof manifest !== 'object') {
         return false;
     }

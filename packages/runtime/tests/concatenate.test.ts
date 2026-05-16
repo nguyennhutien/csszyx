@@ -4,14 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-    _sz,
-    _sz2,
-    _sz3,
-    _szIf,
-    _szMerge,
-    _szSwitch,
-} from '../src/concatenate.js';
+import { _sz, _sz2, _sz3, _szIf, _szMerge, _szSwitch } from '../src/concatenate.js';
 
 describe('_sz', () => {
     it('should concatenate multiple classes', () => {
@@ -45,9 +38,7 @@ describe('_sz', () => {
     it('should work with conditionals', () => {
         const isActive = true;
         const hasError = false;
-        expect(_sz('base', isActive && 'active', hasError && 'error')).toBe(
-            'base active',
-        );
+        expect(_sz('base', isActive && 'active', hasError && 'error')).toBe('base active');
     });
 });
 

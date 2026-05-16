@@ -30,31 +30,47 @@ function injectRuntimeImportLikePlugin(code: string, symbol: string): string {
 
 describe('RSC boundary guard', () => {
     it('detects a top-level use server directive after comments', () => {
-        expect(hasUseServerDirective(`
+        expect(
+            hasUseServerDirective(`
             // comment
             /* block */
             'use server';
             import { action } from './action';
-        `)).toBe(true);
+        `),
+        ).toBe(true);
     });
 
     it('does not treat use client modules as server modules', () => {
-        expect(hasUseServerDirective(`
+        expect(
+            hasUseServerDirective(`
             'use client';
             import { _sz } from '@csszyx/runtime';
-        `)).toBe(false);
-        expect(hasUseClientDirective(`
+        `),
+        ).toBe(false);
+        expect(
+            hasUseClientDirective(`
             'use client';
             import { _sz } from '@csszyx/runtime';
-        `)).toBe(true);
+        `),
+        ).toBe(true);
     });
 
     it('treats Next App Router entry files as server modules unless use client is present', () => {
-        expect(isRSCServerModule('export default function Page() { return null; }', '/repo/app/page.tsx')).toBe(true);
-        expect(isRSCServerModule(`
+        expect(
+            isRSCServerModule(
+                'export default function Page() { return null; }',
+                '/repo/app/page.tsx',
+            ),
+        ).toBe(true);
+        expect(
+            isRSCServerModule(
+                `
             'use client';
             export default function Page() { return null; }
-        `, '/repo/app/page.tsx')).toBe(false);
+        `,
+                '/repo/app/page.tsx',
+            ),
+        ).toBe(false);
     });
 
     it('fails explicit forbidden runtime helper imports in use server modules', () => {
@@ -68,7 +84,7 @@ describe('RSC boundary guard', () => {
 
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow(
             'csszyxRSCViolation: _sz imported in Server Component /app/actions.tsx\n' +
-            '  Import chain: /app/actions.tsx -> @csszyx/runtime',
+                '  Import chain: /app/actions.tsx -> @csszyx/runtime',
         );
     });
 
@@ -151,35 +167,51 @@ describe('RSC boundary guard', () => {
     });
 
     it('flags namespace and dynamic runtime imports conservatively', () => {
-        expect(findRSCBoundaryViolation(`
+        expect(
+            findRSCBoundaryViolation(
+                `
             'use server';
             import * as runtime from '@csszyx/runtime';
-        `, SERVER_FILE)?.symbol).toBe('_sz');
+        `,
+                SERVER_FILE,
+            )?.symbol,
+        ).toBe('_sz');
 
-        expect(findRSCBoundaryViolation(`
+        expect(
+            findRSCBoundaryViolation(
+                `
             'use server';
             export async function action() {
                 return import('@csszyx/runtime');
             }
-        `, SERVER_FILE)?.symbol).toBe('_sz');
+        `,
+                SERVER_FILE,
+            )?.symbol,
+        ).toBe('_sz');
     });
 
     it('fails when a server route imports a child module that imports a forbidden runtime helper', () => {
         const records = new Map<string, RSCModuleRecord>([
-            ['/repo/app/page.tsx', {
-                id: '/repo/app/page.tsx',
-                isServer: true,
-                isClient: false,
-                imports: ['/repo/app/ServerCard.tsx'],
-                runtimeImports: [],
-            }],
-            ['/repo/app/ServerCard.tsx', {
-                id: '/repo/app/ServerCard.tsx',
-                isServer: false,
-                isClient: false,
-                imports: [],
-                runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
-            }],
+            [
+                '/repo/app/page.tsx',
+                {
+                    id: '/repo/app/page.tsx',
+                    isServer: true,
+                    isClient: false,
+                    imports: ['/repo/app/ServerCard.tsx'],
+                    runtimeImports: [],
+                },
+            ],
+            [
+                '/repo/app/ServerCard.tsx',
+                {
+                    id: '/repo/app/ServerCard.tsx',
+                    isServer: false,
+                    isClient: false,
+                    imports: [],
+                    runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
+                },
+            ],
         ]);
 
         expect(findRSCGraphViolation(records)).toEqual({
@@ -191,27 +223,36 @@ describe('RSC boundary guard', () => {
 
     it('stops graph traversal at use client boundaries', () => {
         const records = new Map<string, RSCModuleRecord>([
-            ['/repo/app/page.tsx', {
-                id: '/repo/app/page.tsx',
-                isServer: true,
-                isClient: false,
-                imports: ['/repo/app/ClientCard.tsx'],
-                runtimeImports: [],
-            }],
-            ['/repo/app/ClientCard.tsx', {
-                id: '/repo/app/ClientCard.tsx',
-                isServer: false,
-                isClient: true,
-                imports: ['/repo/app/ClientLeaf.tsx'],
-                runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
-            }],
-            ['/repo/app/ClientLeaf.tsx', {
-                id: '/repo/app/ClientLeaf.tsx',
-                isServer: false,
-                isClient: false,
-                imports: [],
-                runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_szMerge'] }],
-            }],
+            [
+                '/repo/app/page.tsx',
+                {
+                    id: '/repo/app/page.tsx',
+                    isServer: true,
+                    isClient: false,
+                    imports: ['/repo/app/ClientCard.tsx'],
+                    runtimeImports: [],
+                },
+            ],
+            [
+                '/repo/app/ClientCard.tsx',
+                {
+                    id: '/repo/app/ClientCard.tsx',
+                    isServer: false,
+                    isClient: true,
+                    imports: ['/repo/app/ClientLeaf.tsx'],
+                    runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
+                },
+            ],
+            [
+                '/repo/app/ClientLeaf.tsx',
+                {
+                    id: '/repo/app/ClientLeaf.tsx',
+                    isServer: false,
+                    isClient: false,
+                    imports: [],
+                    runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_szMerge'] }],
+                },
+            ],
         ]);
 
         expect(findRSCGraphViolation(records)).toBeNull();
@@ -219,27 +260,36 @@ describe('RSC boundary guard', () => {
 
     it('handles cycles while walking server-owned imports', () => {
         const records = new Map<string, RSCModuleRecord>([
-            ['/repo/app/page.tsx', {
-                id: '/repo/app/page.tsx',
-                isServer: true,
-                isClient: false,
-                imports: ['/repo/app/a.tsx'],
-                runtimeImports: [],
-            }],
-            ['/repo/app/a.tsx', {
-                id: '/repo/app/a.tsx',
-                isServer: false,
-                isClient: false,
-                imports: ['/repo/app/b.tsx'],
-                runtimeImports: [],
-            }],
-            ['/repo/app/b.tsx', {
-                id: '/repo/app/b.tsx',
-                isServer: false,
-                isClient: false,
-                imports: ['/repo/app/a.tsx'],
-                runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_szMerge'] }],
-            }],
+            [
+                '/repo/app/page.tsx',
+                {
+                    id: '/repo/app/page.tsx',
+                    isServer: true,
+                    isClient: false,
+                    imports: ['/repo/app/a.tsx'],
+                    runtimeImports: [],
+                },
+            ],
+            [
+                '/repo/app/a.tsx',
+                {
+                    id: '/repo/app/a.tsx',
+                    isServer: false,
+                    isClient: false,
+                    imports: ['/repo/app/b.tsx'],
+                    runtimeImports: [],
+                },
+            ],
+            [
+                '/repo/app/b.tsx',
+                {
+                    id: '/repo/app/b.tsx',
+                    isServer: false,
+                    isClient: false,
+                    imports: ['/repo/app/a.tsx'],
+                    runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_szMerge'] }],
+                },
+            ],
         ]);
 
         expect(findRSCGraphViolation(records)?.importChain).toEqual([
@@ -291,8 +341,7 @@ describe('Known issues — fix planned in next version pump', () => {
                 return dynamic({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE))
-            .toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
     it.fails('flags named imports from the standalone @csszyx/dynamic package', () => {
@@ -303,8 +352,7 @@ describe('Known issues — fix planned in next version pump', () => {
                 return dynamic({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE))
-            .toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
     it.fails('flags namespace imports from csszyx/dynamic in a server module', () => {
@@ -315,8 +363,7 @@ describe('Known issues — fix planned in next version pump', () => {
                 return cssz.dynamic({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE))
-            .toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
     it.fails('flags side-effect imports of csszyx/browser in a server module', () => {
@@ -331,8 +378,7 @@ describe('Known issues — fix planned in next version pump', () => {
                 return null;
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE))
-            .toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
     // ---- Issue 2 ---------------------------------------------------
@@ -351,8 +397,7 @@ describe('Known issues — fix planned in next version pump', () => {
                 return _sz({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE))
-            .toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
     it.fails('flags mixed default + named imports where the default is forbidden', () => {
@@ -363,8 +408,7 @@ describe('Known issues — fix planned in next version pump', () => {
                 return _sz({ p: 4 });
             }
         `;
-        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE))
-            .toThrow('csszyxRSCViolation');
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
     // ---- Issue 1 ---------------------------------------------------
@@ -416,13 +460,16 @@ describe('Known issues — fix planned in next version pump', () => {
 
     it.fails('graph walk should not report a violation rooted in a module whose file no longer exists', () => {
         const records = new Map<string, RSCModuleRecord>([
-            ['/repo/app/deleted-page.tsx', {
-                id: '/repo/app/deleted-page.tsx',
-                isServer: true,
-                isClient: false,
-                imports: [],
-                runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
-            }],
+            [
+                '/repo/app/deleted-page.tsx',
+                {
+                    id: '/repo/app/deleted-page.tsx',
+                    isServer: true,
+                    isClient: false,
+                    imports: [],
+                    runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
+                },
+            ],
         ]);
 
         // The file at this path was deleted between transforms; the

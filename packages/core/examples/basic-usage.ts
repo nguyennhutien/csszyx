@@ -1,9 +1,8 @@
 import {
-    init,
-    transform_sz,
     compute_mangle_checksum,
     encode,
-    generate_token
+    generate_token,
+    transform_sz,
 } from '../pkg/csszyx_core.js';
 
 async function runExamples() {
@@ -18,8 +17,8 @@ async function runExamples() {
         bg: 'blue-500',
         hover: {
             scale: 110,
-            text: 'white'
-        }
+            text: 'white',
+        },
     };
     console.log('Input:', JSON.stringify(styles, null, 2));
     console.log('Output:', transform_sz(styles));
@@ -36,7 +35,7 @@ async function runExamples() {
     console.log('\n--- Mangle Checksum ---');
     const mangleMap = {
         'p-4': 'z',
-        'bg-blue-500': 'y'
+        'bg-blue-500': 'y',
     };
     const checksum = compute_mangle_checksum(mangleMap);
     console.log('Checksum:', checksum);
@@ -49,7 +48,7 @@ async function runExamples() {
         42,
         8,
         'csr',
-        'build-hash-123'
+        'build-hash-123',
     );
     console.log('Recovery Token:', token);
 }

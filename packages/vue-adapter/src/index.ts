@@ -12,28 +12,28 @@ import { type SzObject, transform } from '@csszyx/compiler';
  * Preprocessor options.
  */
 export interface VueAdapterOptions {
-  /**
-   * Enable verbose logging for debugging.
-   */
-  debug?: boolean;
+    /**
+     * Enable verbose logging for debugging.
+     */
+    debug?: boolean;
 }
 
 /**
  * Result of preprocessing a Vue SFC.
  */
 export interface PreprocessResult {
-  /**
-   * The transformed source code.
-   */
-  code: string;
-  /**
-   * Whether any transformations were made.
-   */
-  transformed: boolean;
-  /**
-   * Number of sz props transformed.
-   */
-  count: number;
+    /**
+     * The transformed source code.
+     */
+    code: string;
+    /**
+     * Whether any transformations were made.
+     */
+    transformed: boolean;
+    /**
+     * Number of sz props transformed.
+     */
+    count: number;
 }
 
 /**
@@ -45,7 +45,7 @@ export interface PreprocessResult {
  */
 export function parseObjectLiteral(objStr: string): SzObject | null {
     try {
-    // Remove outer braces and whitespace
+        // Remove outer braces and whitespace
         const content = objStr.trim();
 
         // Use Function constructor to safely evaluate the object
@@ -53,11 +53,7 @@ export function parseObjectLiteral(objStr: string): SzObject | null {
         const fn = new Function(`return (${content})`);
         const result = fn();
 
-        if (
-            typeof result === 'object' &&
-      result !== null &&
-      !Array.isArray(result)
-        ) {
+        if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
             return result as SzObject;
         }
 
@@ -74,9 +70,9 @@ export function parseObjectLiteral(objStr: string): SzObject | null {
  * @returns {{ content: string; start: number; end: number } | null} Template info or null
  */
 export function extractTemplate(source: string): {
-  content: string;
-  start: number;
-  end: number;
+    content: string;
+    start: number;
+    end: number;
 } | null {
     // Match <template> tags (with or without attributes)
     const templateRegex = /<template(\s[^>]*)?>[\s\S]*?<\/template>/gi;
@@ -88,8 +84,7 @@ export function extractTemplate(source: string): {
 
     // Find the actual content between template tags
     const fullMatch = match[0];
-    const startTag =
-    fullMatch.match(/<template(\s[^>]*)?>/i)?.[0] || '<template>';
+    const startTag = fullMatch.match(/<template(\s[^>]*)?>/i)?.[0] || '<template>';
     const endTag = '</template>';
 
     const contentStart = fullMatch.indexOf(startTag) + startTag.length;
@@ -129,7 +124,6 @@ export function transformTemplate(
 
         if (!szObj) {
             if (options.debug) {
-
                 console.warn(`[csszyx/vue] Failed to parse sz object: ${objStr}`);
             }
             return match; // Return unchanged if parsing fails
@@ -139,7 +133,7 @@ export function transformTemplate(
         count++;
 
         if (options.debug) {
-            // eslint-disable-next-line no-console
+             
             console.log(`[csszyx/vue] Transformed: ${objStr} -> "${className}"`);
         }
 
@@ -163,7 +157,7 @@ export function mergeClassAttributes(template: string): string {
     // Pattern to find elements with multiple class attributes
     // This handles cases where both :class and class (from sz) exist
     const multiClassPattern =
-    /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?>)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?>)/g;
 
     let result = template;
 
@@ -178,7 +172,7 @@ export function mergeClassAttributes(template: string): string {
 
     // Also handle reverse order: :class before class
     const reversePattern =
-    /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?)class="([^"]*)"([^>]*?>)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?)class="([^"]*)"([^>]*?>)/g;
 
     result = result.replace(
         reversePattern,
@@ -213,10 +207,7 @@ export function mergeClassAttributes(template: string): string {
  * // </template>
  * ```
  */
-export function preprocess(
-    source: string,
-    options: VueAdapterOptions = {},
-): PreprocessResult {
+export function preprocess(source: string, options: VueAdapterOptions = {}): PreprocessResult {
     // Extract template section
     const templateInfo = extractTemplate(source);
 
@@ -244,9 +235,7 @@ export function preprocess(
 
     // Reconstruct the source with transformed template
     const code =
-    source.slice(0, templateInfo.start) +
-    mergedContent +
-    source.slice(templateInfo.end);
+        source.slice(0, templateInfo.start) + mergedContent + source.slice(templateInfo.end);
 
     return {
         code,

@@ -28,16 +28,18 @@ async function main() {
     // 3. Generate llms-full.txt — all snippets, no footer (already comprehensive)
     // Read all snippets (sort to ensure consistent order, core-concepts first)
     const snippetFiles = await fs.readdir(snippetsDir);
-    const mdFiles = snippetFiles.filter(f => f.endsWith('.md')).sort((a, b) => {
-        if (a === 'core-concepts.md') return -1;
-        if (b === 'core-concepts.md') return 1;
-        return a.localeCompare(b);
-    });
+    const mdFiles = snippetFiles
+        .filter(f => f.endsWith('.md'))
+        .sort((a, b) => {
+            if (a === 'core-concepts.md') return -1;
+            if (b === 'core-concepts.md') return 1;
+            return a.localeCompare(b);
+        });
 
     let fullSnippetsContent = '## Full Snippets Reference\n\n';
     for (const file of mdFiles) {
         const content = await fs.readFile(path.join(snippetsDir, file), 'utf8');
-        fullSnippetsContent += content + '\n\n';
+        fullSnippetsContent += `${content}\n\n`;
     }
 
     const fullContent = template.replace('{{CONTENT_SLOT}}', fullSnippetsContent.trim());

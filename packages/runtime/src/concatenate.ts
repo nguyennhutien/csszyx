@@ -46,8 +46,12 @@ export function _sz(...classes: SzInput[]): string {
     // Fast path: single string argument (most common case after compilation)
     if (classes.length === 1) {
         const cls = classes[0];
-        if (typeof cls === 'string') {return cls;}
-        if (!cls) {return '';}
+        if (typeof cls === 'string') {
+            return cls;
+        }
+        if (!cls) {
+            return '';
+        }
         const res = transform(cls);
         return typeof res === 'string' ? res : res.className;
     }
@@ -59,15 +63,21 @@ export function _sz(...classes: SzInput[]): string {
         const cls = classes[i];
 
         // Skip falsy values
-        if (!cls) {continue;}
+        if (!cls) {
+            continue;
+        }
 
         // Transform SzObject to string if needed
         const res = typeof cls === 'string' ? cls : transform(cls);
         const str = typeof res === 'string' ? res : res.className;
-        if (!str) {continue;}
+        if (!str) {
+            continue;
+        }
 
         // Add space separator if needed
-        if (needsSpace) {result += ' ';}
+        if (needsSpace) {
+            result += ' ';
+        }
         result += str;
         needsSpace = true;
     }
@@ -101,15 +111,15 @@ export function _sz(...classes: SzInput[]): string {
  * // Returns: "bg-green-500" if isActive, "" otherwise
  * ```
  */
-export function _szIf(
-    condition: boolean,
-    truthyValue: SzInput,
-    falsyValue?: SzInput,
-): string {
+export function _szIf(condition: boolean, truthyValue: SzInput, falsyValue?: SzInput): string {
     const value = condition ? truthyValue : falsyValue;
 
-    if (!value) {return '';}
-    if (typeof value === 'string') {return value;}
+    if (!value) {
+        return '';
+    }
+    if (typeof value === 'string') {
+        return value;
+    }
     const res = transform(value);
     return typeof res === 'string' ? res : res.className;
 }
@@ -140,15 +150,23 @@ export function _szSwitch(
     for (let i = 0; i < conditions.length; i++) {
         const [condition, value] = conditions[i];
         if (condition) {
-            if (!value) {return '';}
-            if (typeof value === 'string') {return value;}
+            if (!value) {
+                return '';
+            }
+            if (typeof value === 'string') {
+                return value;
+            }
             const res = transform(value);
             return typeof res === 'string' ? res : res.className;
         }
     }
 
-    if (!defaultValue) {return '';}
-    if (typeof defaultValue === 'string') {return defaultValue;}
+    if (!defaultValue) {
+        return '';
+    }
+    if (typeof defaultValue === 'string') {
+        return defaultValue;
+    }
     const res = transform(defaultValue);
     return typeof res === 'string' ? res : res.className;
 }
@@ -176,11 +194,15 @@ export function _szMerge(...classes: SzInput[]): string {
 
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
-        if (!cls) {continue;}
+        if (!cls) {
+            continue;
+        }
 
         const res = typeof cls === 'string' ? cls : transform(cls);
         const str = typeof res === 'string' ? res : res.className;
-        if (!str) {continue;}
+        if (!str) {
+            continue;
+        }
 
         const parts = str.split(/\s+/);
         for (let j = 0; j < parts.length; j++) {
@@ -212,9 +234,13 @@ export function _szMerge(...classes: SzInput[]): string {
  * ```
  */
 export function _sz2(a: string, b: string): string {
-    if (!a) {return b || '';}
-    if (!b) {return a;}
-    return a + ' ' + b;
+    if (!a) {
+        return b || '';
+    }
+    if (!b) {
+        return a;
+    }
+    return `${a} ${b}`;
 }
 
 /**
@@ -234,12 +260,16 @@ export function _sz3(a: string, b: string, c: string): string {
         needsSpace = true;
     }
     if (b) {
-        if (needsSpace) {result += ' ';}
+        if (needsSpace) {
+            result += ' ';
+        }
         result += b;
         needsSpace = true;
     }
     if (c) {
-        if (needsSpace) {result += ' ';}
+        if (needsSpace) {
+            result += ' ';
+        }
         result += c;
     }
 

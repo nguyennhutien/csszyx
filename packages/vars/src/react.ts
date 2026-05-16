@@ -26,7 +26,9 @@ export function useSzVars(vars: SzVars, ref?: RefObject<HTMLElement | null>): vo
 
     useEffect(() => {
         const el = ref?.current ?? document.documentElement;
-        if (!el) {return;}
+        if (!el) {
+            return;
+        }
         patchSzVars(latestVars.current, el);
     });
     // No dep array — runs after every render, intentional:

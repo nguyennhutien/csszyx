@@ -26,7 +26,7 @@ describe('AST budget guard', () => {
     });
 
     it('passes through small files unchanged', () => {
-        const source = '<div sz={{ p: 4, bg: \'red-500\' }}>hi</div>';
+        const source = "<div sz={{ p: 4, bg: 'red-500' }}>hi</div>";
         const result = transformSourceCode(source);
         expect(result.transformed).toBe(true);
         expect(result.code).toContain('className');
@@ -111,8 +111,9 @@ describe('AST budget guard', () => {
         // the contract with an equivalent "definitely no csszyx syntax" scanner.
         const source = wideArraySource(60_000, 'const szMarker = true;');
 
-        expect(() => transformSourceCode(source, 'huge-with-sz-marker.ts'))
-            .toThrow(ASTBudgetExceededError);
+        expect(() => transformSourceCode(source, 'huge-with-sz-marker.ts')).toThrow(
+            ASTBudgetExceededError,
+        );
     });
 
     it('applies the same budget to szRecover-only files', () => {
@@ -123,8 +124,9 @@ describe('AST budget guard', () => {
             'const App = () => <section szRecover="csr">x</section>;',
         );
 
-        expect(() => transformSourceCode(source, 'huge-recovery.tsx'))
-            .toThrow(ASTBudgetExceededError);
+        expect(() => transformSourceCode(source, 'huge-recovery.tsx')).toThrow(
+            ASTBudgetExceededError,
+        );
     });
 
     it('respects an `astBudget` override raised above the default', () => {
@@ -135,8 +137,7 @@ describe('AST budget guard', () => {
         expect(() => transformSourceCode(source, 'huge.tsx')).toThrow(ASTBudgetExceededError);
 
         // Raised budget: passes.
-        expect(() => transformSourceCode(source, 'huge.tsx', { astBudget: 100_000 }))
-            .not.toThrow();
+        expect(() => transformSourceCode(source, 'huge.tsx', { astBudget: 100_000 })).not.toThrow();
     });
 
     it('respects an `astBudget` override lowered below the default', () => {
@@ -147,8 +148,9 @@ describe('AST budget guard', () => {
         expect(() => transformSourceCode(source, 'small.tsx')).not.toThrow();
 
         // Lowered budget: throws.
-        expect(() => transformSourceCode(source, 'small.tsx', { astBudget: 1_000 }))
-            .toThrow(ASTBudgetExceededError);
+        expect(() => transformSourceCode(source, 'small.tsx', { astBudget: 1_000 })).toThrow(
+            ASTBudgetExceededError,
+        );
     });
 
     it('error reports the effective budget (not just the default)', () => {

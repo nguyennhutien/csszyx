@@ -232,9 +232,7 @@ describe('parseManifest', () => {
     it('should throw on missing fields', () => {
         expect(() => parseManifest('{}')).toThrow();
         expect(() => parseManifest('{"buildId": "123"}')).toThrow();
-        expect(() =>
-            parseManifest('{"buildId": "123", "checksum": "abc"}'),
-        ).toThrow();
+        expect(() => parseManifest('{"buildId": "123", "checksum": "abc"}')).toThrow();
     });
 });
 

@@ -9,27 +9,21 @@
 
 import { resolve } from 'node:path';
 
-import {
-    generateAndWriteTypes,
-    type GeneratorOptions,
-} from '../generator/type-generator.js';
-import {
-    findConfigFile,
-    scanTailwindConfig,
-} from '../scanner/tailwind-scanner.js';
+import { type GeneratorOptions, generateAndWriteTypes } from '../generator/type-generator.js';
+import { findConfigFile, scanTailwindConfig } from '../scanner/tailwind-scanner.js';
 
 /**
  * Command options for generate-types.
  */
 export interface GenerateTypesOptions {
-  /** Path to tailwind.config.js (auto-detect if not specified) */
-  config?: string;
-  /** Output file path (default: ./csszyx.d.ts) */
-  output?: string;
-  /** Current working directory */
-  cwd?: string;
-  /** Silent mode (no output) */
-  silent?: boolean;
+    /** Path to tailwind.config.js (auto-detect if not specified) */
+    config?: string;
+    /** Output file path (default: ./csszyx.d.ts) */
+    output?: string;
+    /** Current working directory */
+    cwd?: string;
+    /** Silent mode (no output) */
+    silent?: boolean;
 }
 
 /**
@@ -43,9 +37,7 @@ export interface GenerateTypesOptions {
  * await generateTypes({ config: './tailwind.config.js', output: './src/csszyx.d.ts' });
  * ```
  */
-export async function generateTypes(
-    options: GenerateTypesOptions = {},
-): Promise<void> {
+export async function generateTypes(options: GenerateTypesOptions = {}): Promise<void> {
     const cwd = options.cwd || process.cwd();
     const log = options.silent ? () => {} : console.log;
     const error = options.silent ? () => {} : console.error;
@@ -99,18 +91,13 @@ export async function generateTypes(
     log('\n📝 Generating TypeScript declarations...');
 
     try {
-        const writtenPath = await generateAndWriteTypes(
-            scanResult.theme,
-            generatorOptions,
-        );
+        const writtenPath = await generateAndWriteTypes(scanResult.theme, generatorOptions);
         log('\n✨ Types generated successfully!');
         log(`   Output: ${writtenPath}`);
         log('\n💡 Add this to your tsconfig.json "include" array:');
         log('   "include": ["src", "csszyx.d.ts"]');
     } catch (err) {
-        error(
-            `❌ Failed to generate types: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        error(`❌ Failed to generate types: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
     }
 }

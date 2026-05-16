@@ -67,13 +67,19 @@ export function validateDocument(
         }
 
         for (const key of Object.keys(obj)) {
-            if (isValidKey(key)) {continue;}
+            if (isValidKey(key)) {
+                continue;
+            }
 
             // Find the key's position in the original source text
             // Search within the sz expression only to avoid false matches
             const keyPattern = new RegExp(`\\b${escapeRegex(key)}\\s*:`);
-            const localMatch = keyPattern.exec(text.slice(startOffset, startOffset + objText.length));
-            if (!localMatch) {continue;}
+            const localMatch = keyPattern.exec(
+                text.slice(startOffset, startOffset + objText.length),
+            );
+            if (!localMatch) {
+                continue;
+            }
 
             const absOffset = startOffset + localMatch.index;
             const startPos = document.positionAt(absOffset);
@@ -89,7 +95,10 @@ export function validateDocument(
             diag.source = DIAGNOSTIC_SOURCE;
             if (suggestion) {
                 // Attach a code + data so a future CodeAction can auto-fix it
-                diag.code = { value: 'unknown-prop', target: vscode.Uri.parse('https://csszyx.com/docs/migrate') };
+                diag.code = {
+                    value: 'unknown-prop',
+                    target: vscode.Uri.parse('https://csszyx.com/docs/migrate'),
+                };
             }
             diagnostics.push(diag);
         }
@@ -120,11 +129,16 @@ export function createDebouncedValidator(
     return (doc: vscode.TextDocument) => {
         const key = doc.uri.toString();
         const existing = timers.get(key);
-        if (existing) {clearTimeout(existing);}
+        if (existing) {
+            clearTimeout(existing);
+        }
 
-        timers.set(key, setTimeout(() => {
-            timers.delete(key);
-            validateDocument(doc, collection);
-        }, 300));
+        timers.set(
+            key,
+            setTimeout(() => {
+                timers.delete(key);
+                validateDocument(doc, collection);
+            }, 300),
+        );
     };
 }

@@ -59,7 +59,9 @@ function stripLayerWrappers(css: string): string {
         let depth = 0;
         let j = openBrace;
         while (j < css.length) {
-            if (css[j] === '{') { depth++; }
+            if (css[j] === '{') {
+                depth++;
+            }
             if (css[j] === '}') {
                 depth--;
                 if (depth === 0) {
@@ -97,7 +99,9 @@ function extractThemeBlocks(css: string): string[] {
         let depth = 0;
         let j = openPos;
         while (j < css.length) {
-            if (css[j] === '{') { depth++; }
+            if (css[j] === '{') {
+                depth++;
+            }
             if (css[j] === '}') {
                 depth--;
                 if (depth === 0) {
@@ -132,7 +136,9 @@ function categorizeProperty(prop: string): { category: keyof ParsedTheme; token:
             let token = prop.slice(prefix.length);
             // Strip trailing numeric shade suffix: "brand-500" → "brand", "brand-dark" → "brand-dark"
             token = token.replace(/-\d+$/, '');
-            if (token) { return { category, token }; }
+            if (token) {
+                return { category, token };
+            }
         }
     }
     return null;
@@ -186,7 +192,9 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
  * @returns Merged theme with unique tokens per category
  */
 export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
-    if (themes.length === 0) { return { ...EMPTY_THEME }; }
+    if (themes.length === 0) {
+        return { ...EMPTY_THEME };
+    }
     const merged: { [K in keyof ParsedTheme]: Set<string> } = {
         colors: new Set(),
         spacings: new Set(),
@@ -196,7 +204,9 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
     };
     for (const theme of themes) {
         for (const cat of Object.keys(merged) as (keyof ParsedTheme)[]) {
-            for (const token of theme[cat]) { merged[cat].add(token); }
+            for (const token of theme[cat]) {
+                merged[cat].add(token);
+            }
         }
     }
     return {

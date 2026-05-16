@@ -52,12 +52,18 @@ export function isManifestLoaded(): boolean {
  * @returns promise that resolves when the manifest is loaded (or silently fails)
  */
 export function ensureManifest(): Promise<void> {
-    if (manifestClasses !== null) {return Promise.resolve();}
-    if (fetchPromise) {return fetchPromise;}
+    if (manifestClasses !== null) {
+        return Promise.resolve();
+    }
+    if (fetchPromise) {
+        return fetchPromise;
+    }
 
     fetchPromise = fetch(manifestUrl)
         .then(r => {
-            if (!r.ok) {throw new Error(`csszyx: manifest fetch failed ${r.status}`);}
+            if (!r.ok) {
+                throw new Error(`csszyx: manifest fetch failed ${r.status}`);
+            }
             return r.json() as Promise<CSSManifest>;
         })
         .then((data: CSSManifest) => {
@@ -82,7 +88,9 @@ export function ensureManifest(): Promise<void> {
  * @returns promise that resolves when the manifest has been fetched and cached
  */
 export async function preloadManifest(url?: string): Promise<void> {
-    if (url) {setManifestUrl(url);}
+    if (url) {
+        setManifestUrl(url);
+    }
     return ensureManifest();
 }
 
@@ -97,8 +105,12 @@ export async function preloadManifest(url?: string): Promise<void> {
  * @returns the class name to use in the DOM (mangled or original), or null if injection is needed
  */
 export function lookupManifest(originalClass: string): string | null {
-    if (manifestClasses === null) {return null;} // not loaded yet
-    if (!manifestClasses.has(originalClass)) {return null;} // not in built CSS
+    if (manifestClasses === null) {
+        return null;
+    } // not loaded yet
+    if (!manifestClasses.has(originalClass)) {
+        return null;
+    } // not in built CSS
 
     // Class is in built CSS
     if (mangleMap && originalClass in mangleMap) {

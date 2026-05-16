@@ -46,16 +46,20 @@ const sortedPrefixes = [...prefixToKeys.keys()].sort((a, b) => b.length - a.leng
  * @param twClass - A bare Tailwind class (no variant prefix, e.g. "p-4", "bg-blue-500")
  * @returns Array of candidate { szKey, value } pairs to try in round-trip
  */
-function classToSzCandidates(twClass: string): Array<{ szKey: string; value: string | number | boolean }> {
+function classToSzCandidates(
+    twClass: string,
+): Array<{ szKey: string; value: string | number | boolean }> {
     const candidates: Array<{ szKey: string; value: string | number | boolean }> = [];
 
     for (const prefix of sortedPrefixes) {
-        const sep = prefix + '-';
+        const sep = `${prefix}-`;
         if (twClass === prefix) {
             // Exact match — boolean property (e.g. "flex", "block")
             const keys = prefixToKeys.get(prefix);
             if (keys) {
-                for (const szKey of keys) { candidates.push({ szKey, value: true }); }
+                for (const szKey of keys) {
+                    candidates.push({ szKey, value: true });
+                }
             }
             break;
         }
@@ -63,10 +67,12 @@ function classToSzCandidates(twClass: string): Array<{ szKey: string; value: str
             const rawValue = twClass.slice(sep.length);
             // Numeric value: "p-4" → 4, "p-0.5" → 0.5
             const num = Number(rawValue);
-            const value = !isNaN(num) && rawValue !== '' ? num : rawValue;
+            const value = !Number.isNaN(num) && rawValue !== '' ? num : rawValue;
             const keys = prefixToKeys.get(prefix);
             if (keys) {
-                for (const szKey of keys) { candidates.push({ szKey, value }); }
+                for (const szKey of keys) {
+                    candidates.push({ szKey, value });
+                }
             }
             break;
         }
@@ -100,7 +106,9 @@ function roundTrip(twClass: string): Result {
         if (result === twClass) {
             return { status: 'covered', szKey: twClass };
         }
-    } catch { /* not a boolean prop */ }
+    } catch {
+        /* not a boolean prop */
+    }
 
     // Pass 2: try all prefix candidates, keep the first that produces an exact match.
     const candidates = classToSzCandidates(twClass);
@@ -113,8 +121,12 @@ function roundTrip(twClass: string): Result {
                 return { status: 'covered', szKey };
             }
             // Non-empty wrong result — record as last attempt
-            if (result) {lastAttempt = { szKey, got: result };}
-        } catch { /* skip */ }
+            if (result) {
+                lastAttempt = { szKey, got: result };
+            }
+        } catch {
+            /* skip */
+        }
     }
 
     if (lastAttempt) {
@@ -133,7 +145,9 @@ for (const file of corpusFiles) {
     for (const line of lines) {
         const trimmed = line.trim();
         // Skip comments and blanks
-        if (!trimmed || trimmed.startsWith('#')) {continue;}
+        if (!trimmed || trimmed.startsWith('#')) {
+            continue;
+        }
         allClasses.add(trimmed);
     }
 }
@@ -147,7 +161,7 @@ for (const cls of [...allClasses].sort()) {
     // Skip variant-prefixed classes (hover:, dark:, sm:, etc.) —
     // these are variant composition, not base property coverage.
     if (cls.includes(':')) {
-        covered.push(cls + ' (variant — skipped)');
+        covered.push(`${cls} (variant — skipped)`);
         continue;
     }
     const result = roundTrip(cls);

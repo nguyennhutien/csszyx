@@ -1,13 +1,14 @@
-
 import * as fs from 'fs';
 import * as path from 'path';
 
 const generatedDir = path.resolve('tests/generated');
 const outputFile = path.resolve(generatedDir, 'spec-tests.json');
 
-const files = fs.readdirSync(generatedDir).filter(f => f.endsWith('.tests.json') && f !== 'spec-tests.json');
+const files = fs
+    .readdirSync(generatedDir)
+    .filter(f => f.endsWith('.tests.json') && f !== 'spec-tests.json');
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 let allTests: any[] = [];
 
 console.log('Merging the following files:');

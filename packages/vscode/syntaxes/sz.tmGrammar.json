@@ -7,7 +7,9 @@
             "name": "meta.attribute.sz.html.csszyx",
             "begin": "(\\bsz)(=)(\")",
             "beginCaptures": {
-                "1": { "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx" },
+                "1": {
+                    "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx"
+                },
                 "2": { "name": "punctuation.separator.key-value.html" },
                 "3": { "name": "punctuation.definition.string.begin.html" }
             },
@@ -22,7 +24,9 @@
             "name": "meta.attribute.sz.html.csszyx",
             "begin": "(\\bsz)(=)(')",
             "beginCaptures": {
-                "1": { "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx" },
+                "1": {
+                    "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx"
+                },
                 "2": { "name": "punctuation.separator.key-value.html" },
                 "3": { "name": "punctuation.definition.string.begin.html" }
             },
@@ -36,7 +40,9 @@
             "comment": "Fallback for JSX/TSX (`sz={{ ... }}`) where nothing above matched — color just the attribute name.",
             "match": "(?<![a-zA-Z0-9_$-])(sz)(?=\\s*=)",
             "captures": {
-                "1": { "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx" }
+                "1": {
+                    "name": "entity.other.attribute-name.sz.csszyx support.type.property-name.csszyx"
+                }
             }
         }
     ],
@@ -62,25 +68,19 @@
             "name": "string.quoted.single.csszyx",
             "begin": "'",
             "end": "'",
-            "patterns": [
-                { "match": "\\\\.", "name": "constant.character.escape.csszyx" }
-            ]
+            "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.csszyx" }]
         },
         "sz-string-double": {
             "name": "string.quoted.double.csszyx",
             "begin": "(?<!=)\"",
             "end": "\"",
-            "patterns": [
-                { "match": "\\\\.", "name": "constant.character.escape.csszyx" }
-            ]
+            "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.csszyx" }]
         },
         "sz-arbitrary": {
             "name": "string.other.arbitrary.csszyx",
             "begin": "\\[",
             "end": "\\]",
-            "patterns": [
-                { "match": "\\\\.", "name": "constant.character.escape.csszyx" }
-            ]
+            "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.csszyx" }]
         },
         "sz-variant-key": {
             "comment": "variant keys like hover:, focus:, sm:, dark: followed by an object { ... }",

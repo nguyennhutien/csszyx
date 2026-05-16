@@ -33,7 +33,10 @@ import type { CsszyxTodoMap } from '../src/migrate/variant-parser.js';
  * @param opts.customMap - Optional parsed .csszyx-todo.json map.
  * @returns TransformResult.
  */
-function migrate(source: string, opts: { injectTodos?: boolean; customMap?: CsszyxTodoMap } = {}): ReturnType<typeof transformSource> {
+function migrate(
+    source: string,
+    opts: { injectTodos?: boolean; customMap?: CsszyxTodoMap } = {},
+): ReturnType<typeof transformSource> {
     return transformSource(source, 'test.tsx', opts);
 }
 
@@ -313,7 +316,9 @@ describe('real-world SA scenarios', () => {
 `;
         const result = migrate(source);
         // Dialog.Panel — member expression → skip
-        expect(result.code).toContain('className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl"');
+        expect(result.code).toContain(
+            'className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl"',
+        );
         // Dialog.Title — member expression → skip
         expect(result.code).toContain('className="text-lg font-semibold leading-6 text-gray-900"');
         // div and button are lowercase → transformed
@@ -323,7 +328,8 @@ describe('real-world SA scenarios', () => {
 
     // ── Accessibility patterns ────────────────────────────────────────────────
     it('sr-only + focus:not-sr-only pattern', () => {
-        const source = '<a className="sr-only focus:not-sr-only focus:absolute focus:inset-0 focus:z-50 p-2" />';
+        const source =
+            '<a className="sr-only focus:not-sr-only focus:absolute focus:inset-0 focus:z-50 p-2" />';
         const result = migrate(source);
         expect(result.changed).toBe(true);
         expect(result.code).toContain('srOnly: true');
@@ -379,7 +385,8 @@ describe('real-world SA scenarios', () => {
     });
 
     it('has-[:checked] parent-selector pattern', () => {
-        const source = '<form className="has-[:invalid]:ring-2 has-[:invalid]:ring-red-500 p-4 rounded" />';
+        const source =
+            '<form className="has-[:invalid]:ring-2 has-[:invalid]:ring-red-500 p-4 rounded" />';
         const result = migrate(source);
         expect(result.changed).toBe(true);
         expect(result.code).toContain('has');
@@ -403,7 +410,8 @@ describe('real-world SA scenarios', () => {
     });
 
     it('container query + responsive mixed', () => {
-        const source = '<div className="@container flex flex-col @md:flex-row @lg:gap-8 md:p-8 lg:p-12" />';
+        const source =
+            '<div className="@container flex flex-col @md:flex-row @lg:gap-8 md:p-8 lg:p-12" />';
         const result = migrate(source);
         expect(result.changed).toBe(true);
         // @container (standalone) is a TW v4 container declaration class — not a sz prop;
@@ -494,7 +502,8 @@ describe('real-world SA scenarios', () => {
     });
 
     it('Catalyst Divider: responsive + spacing', () => {
-        const source = '<hr className="w-full border-t border-zinc-950/10 dark:border-white/10 my-6 sm:my-10" />';
+        const source =
+            '<hr className="w-full border-t border-zinc-950/10 dark:border-white/10 my-6 sm:my-10" />';
         const result = migrate(source);
         expect(result.changed).toBe(true);
         expect(result.code).toContain('my: 6');

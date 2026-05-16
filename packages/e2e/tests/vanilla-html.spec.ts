@@ -34,7 +34,9 @@ test.describe('csszyx/browser — vanilla HTML IIFE runtime', () => {
         await page.locator('body.sz-ready').waitFor({ timeout: 5000 });
     });
 
-    test('processes static sz attributes into Tailwind class names and removes the sz attribute', async ({ page }) => {
+    test('processes static sz attributes into Tailwind class names and removes the sz attribute', async ({
+        page,
+    }) => {
         const body = page.locator('body');
         const cls = (await body.getAttribute('class')) ?? '';
 
@@ -67,7 +69,9 @@ test.describe('csszyx/browser — vanilla HTML IIFE runtime', () => {
         expect(cls).toContain('text-white');
     });
 
-    test('MutationObserver picks up dynamically added elements with object syntax', async ({ page }) => {
+    test('MutationObserver picks up dynamically added elements with object syntax', async ({
+        page,
+    }) => {
         await page.evaluate(() => {
             const div = document.createElement('div');
             div.id = 'observer-test';
@@ -93,7 +97,8 @@ test.describe('csszyx/browser — vanilla HTML IIFE runtime', () => {
             const wrapper = document.createElement('section');
             wrapper.id = 'subtree-parent';
             wrapper.setAttribute('sz', '{ p: 2 }');
-            wrapper.innerHTML = '<span id="subtree-child" sz="{ color: \'pink-400\' }">child</span>';
+            wrapper.innerHTML =
+                '<span id="subtree-child" sz="{ color: \'pink-400\' }">child</span>';
             document.body.appendChild(wrapper);
         });
 

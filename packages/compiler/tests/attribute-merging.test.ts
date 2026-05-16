@@ -5,7 +5,8 @@ import { transformSourceCode } from '../src/transform.js';
 describe('Attribute Merging (transformSourceCode)', () => {
     describe('className attribute merging', () => {
         it('should merge static className with static sz at compile time', () => {
-            const source = 'const App = () => <div className="existing-class" sz={{ p: 4, bg: \'red-500\' }} />';
+            const source =
+                'const App = () => <div className="existing-class" sz={{ p: 4, bg: \'red-500\' }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('className="existing-class p-4 bg-red-500"');
@@ -13,11 +14,14 @@ describe('Attribute Merging (transformSourceCode)', () => {
         });
 
         it('should merge expression className with static sz using _szMerge', () => {
-            const source = 'const App = () => <div className={isActive ? "active" : "inactive"} sz={{ p: 4, bg: \'red-500\' }} />';
+            const source =
+                'const App = () => <div className={isActive ? "active" : "inactive"} sz={{ p: 4, bg: \'red-500\' }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             // Babel does not wrap ternary in extra parens — direct args to _szMerge
-            expect(result.code).toContain('_szMerge(isActive ? "active" : "inactive", "p-4 bg-red-500")');
+            expect(result.code).toContain(
+                '_szMerge(isActive ? "active" : "inactive", "p-4 bg-red-500")',
+            );
             expect(result.usesMerge).toBe(true);
         });
 
@@ -60,7 +64,8 @@ describe('Attribute Merging (transformSourceCode)', () => {
         });
 
         it('should merge CSS variables into existing style object natively', () => {
-            const source = 'const App = () => <div style={{ color: "red", marginTop: 10 }} sz={{ p: padVal }} />';
+            const source =
+                'const App = () => <div style={{ color: "red", marginTop: 10 }} sz={{ p: padVal }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             // Existing style props preserved; CSS var added alongside
@@ -72,7 +77,8 @@ describe('Attribute Merging (transformSourceCode)', () => {
 
         it('should parse existing style string and merge into an object when injecting variables', () => {
             // React does not support string styles — compiler converts to object so SSR does not crash.
-            const source = 'const App = () => <div style="color: red; margin-top: 10px;" sz={{ p: padVal }} />';
+            const source =
+                'const App = () => <div style="color: red; margin-top: 10px;" sz={{ p: padVal }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             // parseStyleStringToObjectExpr converts kebab-case to camelCase identifier keys

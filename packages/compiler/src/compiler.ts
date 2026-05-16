@@ -1,4 +1,4 @@
-import { init, transform_sz, version as getWasmVersion } from '@csszyx/core';
+import { version as getWasmVersion, init, transform_sz } from '@csszyx/core';
 
 import { stripInvalidColorStrings } from './color-validation.js';
 import type { SzObject } from './transform.js';
@@ -37,7 +37,9 @@ export class CsszyxCompiler {
      * @returns {Promise<void>} Resolves when WASM is ready.
      */
     public async init(): Promise<void> {
-        if (this.wasmLoaded) {return;}
+        if (this.wasmLoaded) {
+            return;
+        }
 
         try {
             // Named init call for @csszyx/core
@@ -68,10 +70,7 @@ export class CsszyxCompiler {
             try {
                 return transform_sz(cleaned);
             } catch (error) {
-                console.warn(
-                    '[csszyx] WASM transformation failed, using JS fallback',
-                    error,
-                );
+                console.warn('[csszyx] WASM transformation failed, using JS fallback', error);
                 // JS path handles its own warnings internally
                 return jsTransform(sz).className;
             }
@@ -102,13 +101,13 @@ export class CsszyxCompiler {
      * @returns {string} The generated token
      */
     public generateRecoveryToken(metadata: {
-    component: string;
-    filePath: string;
-    line: number;
-    column: number;
-    mode: 'csr' | 'dev-only';
-    buildId: string;
-  }): string {
+        component: string;
+        filePath: string;
+        line: number;
+        column: number;
+        mode: 'csr' | 'dev-only';
+        buildId: string;
+    }): string {
         if (this.wasmLoaded) {
             try {
                 const { generate_token } = require('@csszyx/core');

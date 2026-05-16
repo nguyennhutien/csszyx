@@ -31,7 +31,8 @@ const SPECIAL_CASE_EXEMPT = new Set([
     // bgImg uses a nested object syntax { gradient, dir } — tested in backgrounds.test.ts
     'bgImg',
     // group and peer are structural modifiers tested via KNOWN_VARIANTS
-    'group', 'peer',
+    'group',
+    'peer',
     // @container is tested via advanced-variants
     '@container',
 ]);

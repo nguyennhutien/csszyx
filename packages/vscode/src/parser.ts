@@ -75,20 +75,26 @@ function findSzStart(text: string): SzStart | null {
     const dq = text.lastIndexOf('sz="');
     if (dq !== -1 && beat(dq)) {
         let j = dq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) { j++; }
-        const start: SzStart = text[j] === '{'
-            ? { bodyStart: j, explicit: true, terminator: null }
-            : { bodyStart: dq + 4, explicit: false, terminator: '"' };
+        while (j < text.length && /\s/.test(text[j] ?? '')) {
+            j++;
+        }
+        const start: SzStart =
+            text[j] === '{'
+                ? { bodyStart: j, explicit: true, terminator: null }
+                : { bodyStart: dq + 4, explicit: false, terminator: '"' };
         best = { idx: dq, start };
     }
 
     const sq = text.lastIndexOf("sz='");
     if (sq !== -1 && beat(sq)) {
         let j = sq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) { j++; }
-        const start: SzStart = text[j] === '{'
-            ? { bodyStart: j, explicit: true, terminator: null }
-            : { bodyStart: sq + 4, explicit: false, terminator: "'" };
+        while (j < text.length && /\s/.test(text[j] ?? '')) {
+            j++;
+        }
+        const start: SzStart =
+            text[j] === '{'
+                ? { bodyStart: j, explicit: true, terminator: null }
+                : { bodyStart: sq + 4, explicit: false, terminator: "'" };
         best = { idx: sq, start };
     }
 
@@ -102,14 +108,20 @@ function findSzStart(text: string): SzStart | null {
  */
 export function parseSzContext(text: string): SzContext {
     const start = findSzStart(text);
-    if (start === null) { return NONE; }
+    if (start === null) {
+        return NONE;
+    }
 
     const afterOpen = text.slice(start.bodyStart);
 
     // Implicit forms start "inside" the virtual object at depth 1.
     let depth = start.explicit ? 0 : 1;
     const segStart: number[] = [];
-    if (start.explicit) { segStart[0] = 0; } else { segStart[1] = 0; }
+    if (start.explicit) {
+        segStart[0] = 0;
+    } else {
+        segStart[1] = 0;
+    }
 
     let lastColon = -1;
     let keyAtColon = '';
@@ -119,7 +131,9 @@ export function parseSzContext(text: string): SzContext {
 
         // Implicit: hitting the attribute's closing quote at depth 1 means
         // the cursor is past the sz expression entirely.
-        if (!start.explicit && c === start.terminator && depth === 1) { return NONE; }
+        if (!start.explicit && c === start.terminator && depth === 1) {
+            return NONE;
+        }
 
         if (c === '{') {
             depth++;
@@ -127,7 +141,9 @@ export function parseSzContext(text: string): SzContext {
             lastColon = -1;
             keyAtColon = '';
         } else if (c === '}') {
-            if (depth === 0) { return NONE; }
+            if (depth === 0) {
+                return NONE;
+            }
             segStart.length = depth;
             depth--;
             lastColon = -1;
@@ -146,21 +162,29 @@ export function parseSzContext(text: string): SzContext {
             const q = c;
             i++;
             while (i < afterOpen.length && afterOpen[i] !== q) {
-                if (afterOpen[i] === '\\') { i++; }
+                if (afterOpen[i] === '\\') {
+                    i++;
+                }
                 i++;
             }
         } else if (c === '[' && depth >= 1) {
             let brackets = 1;
             i++;
             while (i < afterOpen.length && brackets > 0) {
-                if (afterOpen[i] === '[') { brackets++; } else if (afterOpen[i] === ']') { brackets--; }
+                if (afterOpen[i] === '[') {
+                    brackets++;
+                } else if (afterOpen[i] === ']') {
+                    brackets--;
+                }
                 i++;
             }
             i--;
         }
     }
 
-    if (depth <= 0) { return NONE; }
+    if (depth <= 0) {
+        return NONE;
+    }
 
     if (lastColon >= (segStart[depth] ?? 0)) {
         return {
@@ -216,20 +240,26 @@ function findNextSz(text: string, from: number): MarkerHit | null {
     const dq = text.indexOf('sz="', from);
     if (dq !== -1 && beat(dq)) {
         let j = dq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) { j++; }
-        const start: SzStart = text[j] === '{'
-            ? { bodyStart: j, explicit: true, terminator: null }
-            : { bodyStart: dq + 4, explicit: false, terminator: '"' };
+        while (j < text.length && /\s/.test(text[j] ?? '')) {
+            j++;
+        }
+        const start: SzStart =
+            text[j] === '{'
+                ? { bodyStart: j, explicit: true, terminator: null }
+                : { bodyStart: dq + 4, explicit: false, terminator: '"' };
         earliest = { idx: dq, start };
     }
 
     const sq = text.indexOf("sz='", from);
     if (sq !== -1 && beat(sq)) {
         let j = sq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) { j++; }
-        const start: SzStart = text[j] === '{'
-            ? { bodyStart: j, explicit: true, terminator: null }
-            : { bodyStart: sq + 4, explicit: false, terminator: "'" };
+        while (j < text.length && /\s/.test(text[j] ?? '')) {
+            j++;
+        }
+        const start: SzStart =
+            text[j] === '{'
+                ? { bodyStart: j, explicit: true, terminator: null }
+                : { bodyStart: sq + 4, explicit: false, terminator: "'" };
         earliest = { idx: sq, start };
     }
 
@@ -249,7 +279,9 @@ export function findSzExpressions(text: string): SzExpression[] {
 
     while (searchFrom < text.length) {
         const hit = findNextSz(text, searchFrom);
-        if (hit === null) { break; }
+        if (hit === null) {
+            break;
+        }
 
         const { start } = hit;
 
@@ -263,7 +295,9 @@ export function findSzExpressions(text: string): SzExpression[] {
                     const q = c;
                     i++;
                     while (i < text.length && text[i] !== q) {
-                        if (text[i] === '\\') { i++; }
+                        if (text[i] === '\\') {
+                            i++;
+                        }
                         i++;
                     }
                     continue;
@@ -272,7 +306,10 @@ export function findSzExpressions(text: string): SzExpression[] {
                     depth++;
                 } else if (c === '}') {
                     depth--;
-                    if (depth === 0) { objEnd = i + 1; break; }
+                    if (depth === 0) {
+                        objEnd = i + 1;
+                        break;
+                    }
                 }
             }
             if (objEnd !== -1) {
@@ -290,12 +327,17 @@ export function findSzExpressions(text: string): SzExpression[] {
             let end = -1;
             for (let i = start.bodyStart; i < text.length; i++) {
                 const c = text[i];
-                if (c === terminator) { end = i; break; }
+                if (c === terminator) {
+                    end = i;
+                    break;
+                }
                 if (c === '"' || c === "'") {
                     const q = c;
                     i++;
                     while (i < text.length && text[i] !== q) {
-                        if (text[i] === '\\') { i++; }
+                        if (text[i] === '\\') {
+                            i++;
+                        }
                         i++;
                     }
                 }
@@ -321,10 +363,7 @@ export function findSzExpressions(text: string): SzExpression[] {
  * @param cursorOffset - Cursor offset relative to `text`.
  * @returns The enclosing expression, or null.
  */
-export function findSzExpressionAt(
-    text: string,
-    cursorOffset: number,
-): SzExpression | null {
+export function findSzExpressionAt(text: string, cursorOffset: number): SzExpression | null {
     for (const expr of findSzExpressions(text)) {
         const end = expr.startOffset + expr.objText.length;
         if (cursorOffset >= expr.startOffset && cursorOffset <= end) {
@@ -344,6 +383,8 @@ export function findSzExpressionAt(
  */
 export function extractSzObjectAt(text: string, cursorOffset: number): string | null {
     const expr = findSzExpressionAt(text, cursorOffset);
-    if (expr === null) { return null; }
+    if (expr === null) {
+        return null;
+    }
     return expr.needsWrap ? `{ ${expr.objText} }` : expr.objText;
 }

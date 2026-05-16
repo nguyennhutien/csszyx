@@ -107,21 +107,28 @@ describe('html-transformer', () => {
         });
 
         it('should inject inline mode (attribute only)', () => {
-            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, { mode: 'inline' });
+            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
+                mode: 'inline',
+            });
             expect(result).toContain('data-sz-checksum');
             expect(result).toContain('data-sz-map');
             expect(result).not.toContain('window.__csszyx=');
         });
 
         it('should inject both modes', () => {
-            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, { mode: 'both' });
+            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
+                mode: 'both',
+            });
             expect(result).toContain('data-sz-checksum');
             expect(result).toContain('data-sz-map');
             expect(result).toContain('window.__csszyx=');
         });
 
         it('should support minify option', () => {
-            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, { mode: 'both', minify: true });
+            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
+                mode: 'both',
+                minify: true,
+            });
             expect(result).toContain('data-sz-cs=');
             expect(result).toContain('data-sz-m=');
         });

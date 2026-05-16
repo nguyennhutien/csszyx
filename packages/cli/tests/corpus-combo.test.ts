@@ -38,7 +38,9 @@ function readComboFile(filename: string): string[] {
 }
 
 const comboFiles = existsSync(COMBO_DIR)
-    ? readdirSync(COMBO_DIR).filter(f => f.endsWith('.txt')).sort()
+    ? readdirSync(COMBO_DIR)
+          .filter(f => f.endsWith('.txt'))
+          .sort()
     : [];
 
 describe('corpus combo: real element className strings → one sz object', () => {
@@ -71,14 +73,18 @@ describe('corpus combo: real element className strings → one sz object', () =>
                     }
 
                     // All classes unrecognized → known coverage gap, skip without failing
-                    if (unrecognizedSet.size === classes.length) { return; }
+                    if (unrecognizedSet.size === classes.length) {
+                        return;
+                    }
 
                     // Transform the ONE merged sz object
                     const result = transform(mergedSz as SzObject);
 
                     // Empty output means all recognized classes used unsupported
                     // variants (e.g. group-data-[disabled]:) → skip, not a failure
-                    if (result.className === '') { return; }
+                    if (result.className === '') {
+                        return;
+                    }
 
                     // No phantom classes: every output class must come from the input,
                     // be a known self-consistent upgrade, or be a compiler shorthand
@@ -88,12 +94,17 @@ describe('corpus combo: real element className strings → one sz object', () =>
                     const inputSet = new Set(classes);
 
                     for (const outCls of outputClasses) {
-                        if (inputSet.has(outCls)) { continue; } // exact match — OK
+                        if (inputSet.has(outCls)) {
+                            continue;
+                        } // exact match — OK
 
-                        const { szObject: outSz, unrecognized: outUnrec } = classNameToSzObject(outCls);
+                        const { szObject: outSz, unrecognized: outUnrec } =
+                            classNameToSzObject(outCls);
 
                         // Compiler-canonical form with no reverse parse path — known upgrade
-                        if (outUnrec.length > 0 && outUnrec[0] === outCls) { continue; }
+                        if (outUnrec.length > 0 && outUnrec[0] === outCls) {
+                            continue;
+                        }
 
                         // Shorthand of input-derived props: all sz props in the output
                         // class must have been contributed by the merged input sz object
@@ -106,7 +117,9 @@ describe('corpus combo: real element className strings → one sz object', () =>
                         // Self-consistent upgrade: recompile and check identity
                         if (outUnrec.length === 0) {
                             const recompiled = transform(outSz as SzObject).className;
-                            if (recompiled === outCls) { continue; }
+                            if (recompiled === outCls) {
+                                continue;
+                            }
                         }
 
                         // Not in input, not a shorthand, not a known upgrade — phantom class

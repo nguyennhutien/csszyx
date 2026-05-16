@@ -9,50 +9,50 @@ export type RecoveryMode = 'csr' | 'dev-only';
  * Metadata for a recovery token.
  */
 export interface TokenMetadata {
-  /**
-   * The recovery mode ('csr' or 'dev-only')
-   */
-  mode: RecoveryMode;
+    /**
+     * The recovery mode ('csr' or 'dev-only')
+     */
+    mode: RecoveryMode;
 
-  /**
-   * Component name where szRecover is used
-   */
-  component: string;
+    /**
+     * Component name where szRecover is used
+     */
+    component: string;
 
-  /**
-   * Absolute file path
-   */
-  filePath: string;
+    /**
+     * Absolute file path
+     */
+    filePath: string;
 
-  /**
-   * Line number in source file
-   */
-  line: number;
+    /**
+     * Line number in source file
+     */
+    line: number;
 
-  /**
-   * Column number in source file
-   */
-  column: number;
+    /**
+     * Column number in source file
+     */
+    column: number;
 
-  /**
-   * Build ID (git hash or timestamp)
-   */
-  buildId: string;
+    /**
+     * Build ID (git hash or timestamp)
+     */
+    buildId: string;
 }
 
 /**
  * Generated recovery token with metadata.
  */
 export interface RecoveryToken {
-  /**
-   * The generated token string
-   */
-  token: string;
+    /**
+     * The generated token string
+     */
+    token: string;
 
-  /**
-   * Token metadata
-   */
-  metadata: TokenMetadata;
+    /**
+     * Token metadata
+     */
+    metadata: TokenMetadata;
 }
 
 /**

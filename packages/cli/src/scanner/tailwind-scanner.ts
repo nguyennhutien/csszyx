@@ -29,28 +29,28 @@ import resolveConfig from 'tailwindcss/resolveConfig.js';
  * Resolved Tailwind theme structure.
  */
 export interface ResolvedTheme {
-  colors: Record<string, string | Record<string, string>>;
-  spacing: Record<string, string>;
-  screens: Record<string, string>;
-  fontFamily: Record<string, string[]>;
-  fontSize: Record<string, string | [string, Record<string, string>]>;
-  fontWeight: Record<string, string>;
-  borderRadius: Record<string, string>;
-  boxShadow: Record<string, string>;
-  opacity: Record<string, string>;
-  zIndex: Record<string, string>;
-  // Add more as needed
-  [key: string]: unknown;
+    colors: Record<string, string | Record<string, string>>;
+    spacing: Record<string, string>;
+    screens: Record<string, string>;
+    fontFamily: Record<string, string[]>;
+    fontSize: Record<string, string | [string, Record<string, string>]>;
+    fontWeight: Record<string, string>;
+    borderRadius: Record<string, string>;
+    boxShadow: Record<string, string>;
+    opacity: Record<string, string>;
+    zIndex: Record<string, string>;
+    // Add more as needed
+    [key: string]: unknown;
 }
 
 /**
  * Scanner result containing resolved theme and metadata.
  */
 export interface ScanResult {
-  theme: ResolvedTheme;
-  configPath: string;
-  hasCustomColors: boolean;
-  hasCustomSpacing: boolean;
+    theme: ResolvedTheme;
+    configPath: string;
+    hasCustomColors: boolean;
+    hasCustomSpacing: boolean;
 }
 
 /**
@@ -91,9 +91,7 @@ export function findConfigFile(cwd: string): string | null {
  * console.log(result.theme.colors);
  * ```
  */
-export async function scanTailwindConfig(
-    configPath: string,
-): Promise<ScanResult> {
+export async function scanTailwindConfig(configPath: string): Promise<ScanResult> {
     // Convert to absolute path
     const absolutePath = resolve(configPath);
 
@@ -106,7 +104,7 @@ export async function scanTailwindConfig(
     let userConfig: Config;
 
     try {
-    // Use file URL for cross-platform compatibility
+        // Use file URL for cross-platform compatibility
         const fileUrl = pathToFileURL(absolutePath).href;
         const module = await import(fileUrl);
         userConfig = module.default || module;
@@ -121,9 +119,7 @@ export async function scanTailwindConfig(
     const theme = resolvedConfig.theme as unknown as ResolvedTheme;
 
     // Check for customizations
-    const hasCustomColors = Boolean(
-        userConfig.theme?.colors || userConfig.theme?.extend?.colors,
-    );
+    const hasCustomColors = Boolean(userConfig.theme?.colors || userConfig.theme?.extend?.colors);
     const hasCustomSpacing = Boolean(
         userConfig.theme?.spacing || userConfig.theme?.extend?.spacing,
     );
@@ -148,13 +144,11 @@ export async function scanTailwindConfig(
  * flattenColors(colors); // ['red-500', 'red-600', 'white']
  * ```
  */
-export function flattenColors(
-    colors: Record<string, string | Record<string, string>>,
-): string[] {
+export function flattenColors(colors: Record<string, string | Record<string, string>>): string[] {
     const result: string[] = [];
 
     for (const [key, value] of Object.entries(colors)) {
-    // Skip special keys
+        // Skip special keys
         if (key === 'inherit' || key === 'current' || key === 'transparent') {
             result.push(key);
             continue;
@@ -187,15 +181,19 @@ export function flattenColors(
  */
 export function extractSpacingKeys(spacing: Record<string, string>): string[] {
     return Object.keys(spacing).sort((a, b) => {
-    // Sort numbers first, then strings
+        // Sort numbers first, then strings
         const aNum = parseFloat(a);
         const bNum = parseFloat(b);
 
-        if (!isNaN(aNum) && !isNaN(bNum)) {
+        if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
             return aNum - bNum;
         }
-        if (!isNaN(aNum)) {return -1;}
-        if (!isNaN(bNum)) {return 1;}
+        if (!Number.isNaN(aNum)) {
+            return -1;
+        }
+        if (!Number.isNaN(bNum)) {
+            return 1;
+        }
         return a.localeCompare(b);
     });
 }

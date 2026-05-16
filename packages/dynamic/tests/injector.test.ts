@@ -30,7 +30,9 @@ let _adoptedSheets: MockCSSStyleSheet[] = [];
 const mockAdoptedSheets: MockCSSStyleSheet[] = [];
 
 const mockDocument = {
-    get adoptedStyleSheets() { return _adoptedSheets; },
+    get adoptedStyleSheets() {
+        return _adoptedSheets;
+    },
     set adoptedStyleSheets(val: MockCSSStyleSheet[]) {
         _adoptedSheets = val;
         // Keep mockAdoptedSheets in sync so tests can reference it

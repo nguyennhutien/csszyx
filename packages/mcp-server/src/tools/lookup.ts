@@ -52,7 +52,10 @@ for (const szKey of Object.keys(PROPERTY_MAP)) {
 // Extract the first token as the primary sz key.
 for (const [cssAlias, szTarget] of Object.entries(SUGGESTION_MAP)) {
     const primaryKey = szTarget.split(/[\s/(]/)[0];
-    if (primaryKey && (PROPERTY_MAP[primaryKey] !== undefined || BOOLEAN_SHORTHANDS.has(primaryKey))) {
+    if (
+        primaryKey &&
+        (PROPERTY_MAP[primaryKey] !== undefined || BOOLEAN_SHORTHANDS.has(primaryKey))
+    ) {
         addSearch(cssAlias, primaryKey);
         addSearch(toKebab(cssAlias), primaryKey);
     }
@@ -72,8 +75,10 @@ const EXAMPLES: Record<string, string[]> = {
     bg: ["{ bg: 'blue-500' }", "{ bg: { color: 'blue-500', op: 50 } }"],
     p: ['{ p: 4 }', "{ p: '5px' }"],
     m: ['{ m: 4 }', "{ m: 'auto' }"],
-    px: ['{ px: 4 }'], py: ['{ py: 2 }'],
-    mx: ["{ mx: 'auto' }"], my: ['{ my: 4 }'],
+    px: ['{ px: 4 }'],
+    py: ['{ py: 2 }'],
+    mx: ["{ mx: 'auto' }"],
+    my: ['{ my: 4 }'],
     w: ['{ w: 64 }', "{ w: 'full' }"],
     h: ['{ h: 16 }', "{ h: 'screen' }"],
     text: ["{ text: 'lg' }", "{ text: '2xl' }"],
@@ -112,9 +117,11 @@ const EXAMPLES: Record<string, string[]> = {
 // ============================================================================
 
 export const lookupSchema = z.object({
-    query: z.string().describe(
-        'CSS property name, sz key, or search term. Examples: "background-color", "bg", "padding", "flex-direction"',
-    ),
+    query: z
+        .string()
+        .describe(
+            'CSS property name, sz key, or search term. Examples: "background-color", "bg", "padding", "flex-direction"',
+        ),
 });
 
 /** Validated input type for the csszyx_lookup tool. */
@@ -125,7 +132,9 @@ export type LookupInput = z.infer<typeof lookupSchema>;
  * @param input - The validated input object.
  * @returns MCP tool response with matching sz keys and usage examples.
  */
-export function handleLookup(input: LookupInput): { content: Array<{ type: 'text'; text: string }> } {
+export function handleLookup(input: LookupInput): {
+    content: Array<{ type: 'text'; text: string }>;
+} {
     const query = input.query.trim().toLowerCase();
 
     const seen = new Set<string>();
@@ -136,7 +145,9 @@ export function handleLookup(input: LookupInput): { content: Array<{ type: 'text
      * @param szKey - The sz key to add.
      */
     function pushResult(szKey: string): void {
-        if (seen.has(szKey)) { return; }
+        if (seen.has(szKey)) {
+            return;
+        }
         seen.add(szKey);
         results.push({
             szKey,
@@ -147,13 +158,19 @@ export function handleLookup(input: LookupInput): { content: Array<{ type: 'text
 
     // 1. Exact match in search index.
     const exact = SEARCH_INDEX.get(query);
-    if (exact) { exact.forEach(pushResult); }
+    if (exact) {
+        exact.forEach(pushResult);
+    }
 
     // 2. Fuzzy match if no exact hit (limited to 5 to avoid context bloat).
     if (results.length === 0) {
         for (const [term, szKeys] of SEARCH_INDEX.entries()) {
-            if (results.length >= 5) { break; }
-            if (term.includes(query)) { szKeys.forEach(pushResult); }
+            if (results.length >= 5) {
+                break;
+            }
+            if (term.includes(query)) {
+                szKeys.forEach(pushResult);
+            }
         }
     }
 
@@ -161,13 +178,22 @@ export function handleLookup(input: LookupInput): { content: Array<{ type: 'text
         content: [
             {
                 type: 'text' as const,
-                text: results.length > 0
-                    ? JSON.stringify({ query: input.query, results: results.slice(0, 8) }, null, 2)
-                    : JSON.stringify({
-                        query: input.query,
-                        results: [],
-                        message: `No mapping found for "${input.query}". Try a CSS property name (e.g. "padding") or sz key (e.g. "p").`,
-                    }, null, 2),
+                text:
+                    results.length > 0
+                        ? JSON.stringify(
+                              { query: input.query, results: results.slice(0, 8) },
+                              null,
+                              2,
+                          )
+                        : JSON.stringify(
+                              {
+                                  query: input.query,
+                                  results: [],
+                                  message: `No mapping found for "${input.query}". Try a CSS property name (e.g. "padding") or sz key (e.g. "p").`,
+                              },
+                              null,
+                              2,
+                          ),
             },
         ],
     };

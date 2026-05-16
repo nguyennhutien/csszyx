@@ -93,7 +93,11 @@ export function unescapeTailwindClass(escapedName: string): string {
             if (/[0-9a-fA-F]/.test(char)) {
                 // Collect up to 6 hex digits
                 let hexStr = '';
-                while (i < escapedName.length && /[0-9a-fA-F]/.test(escapedName[i]) && hexStr.length < 6) {
+                while (
+                    i < escapedName.length &&
+                    /[0-9a-fA-F]/.test(escapedName[i]) &&
+                    hexStr.length < 6
+                ) {
                     hexStr += escapedName[i];
                     i++;
                 }
@@ -142,7 +146,7 @@ export function escapeCSSClassName(className: string): string {
         if (i === 0) {
             // If starts with digit, escape it
             if (/[0-9]/.test(char)) {
-                result += '\\3' + char + ' ';
+                result += `\\3${char} `;
                 continue;
             }
             // If starts with hyphen followed by digit or another hyphen
@@ -157,7 +161,7 @@ export function escapeCSSClassName(className: string): string {
 
         // Characters that need escaping in CSS identifiers
         if (/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/.test(char)) {
-            result += '\\' + char;
+            result += `\\${char}`;
         } else if (code >= 0x80) {
             // Non-ASCII characters don't need escaping in modern CSS
             result += char;
@@ -182,10 +186,10 @@ function createSelectorProcessor(
     mangleMap: MangleMap,
     mangledClasses: Set<string>,
     unmangledClasses: Set<string>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
 ): any {
-    return selectorParser((selectors) => {
-        selectors.walkClasses((classNode) => {
+    return selectorParser(selectors => {
+        selectors.walkClasses(classNode => {
             // Get the class value (already unescaped by postcss-selector-parser)
             const originalValue = classNode.value;
 
@@ -193,8 +197,7 @@ function createSelectorProcessor(
             const unescapedValue = unescapeTailwindClass(originalValue);
 
             // Check both values against the mangle map
-            let mangledValue: string | undefined,
-                matchedKey: string | undefined;
+            let mangledValue: string | undefined, matchedKey: string | undefined;
 
             if (mangleMap[unescapedValue]) {
                 mangledValue = mangleMap[unescapedValue];
@@ -237,11 +240,7 @@ export async function mangleCSS(
     let transformedCount = 0;
 
     // Create the selector processor
-    const selectorProcessor = createSelectorProcessor(
-        mangleMap,
-        mangledClasses,
-        unmangledClasses,
-    );
+    const selectorProcessor = createSelectorProcessor(mangleMap, mangledClasses, unmangledClasses);
 
     // Create PostCSS plugin
     const csszyxManglerPlugin = {
@@ -258,7 +257,6 @@ export async function mangleCSS(
             } catch (error) {
                 // Log but don't fail on selector parsing errors
                 if (options.debug) {
-
                     console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
                 }
             }
@@ -271,11 +269,11 @@ export async function mangleCSS(
     });
 
     if (options.debug) {
-        // eslint-disable-next-line no-console
+         
         console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
-        // eslint-disable-next-line no-console
+         
         console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
-        // eslint-disable-next-line no-console
+         
         console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
     }
 
@@ -305,17 +303,13 @@ export function mangleCSSSync(
     let transformedCount = 0;
 
     // Create the selector processor
-    const selectorProcessor = createSelectorProcessor(
-        mangleMap,
-        mangledClasses,
-        unmangledClasses,
-    );
+    const selectorProcessor = createSelectorProcessor(mangleMap, mangledClasses, unmangledClasses);
 
     // Parse CSS
     const root: Root = postcss.parse(css, { from: options.from });
 
     // Walk all rules
-    root.walkRules((rule) => {
+    root.walkRules(rule => {
         try {
             const originalSelector = rule.selector;
             const newSelector = selectorProcessor.processSync(originalSelector);
@@ -326,18 +320,17 @@ export function mangleCSSSync(
             }
         } catch (error) {
             if (options.debug) {
-
                 console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
             }
         }
     });
 
     if (options.debug) {
-        // eslint-disable-next-line no-console
+         
         console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
-        // eslint-disable-next-line no-console
+         
         console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
-        // eslint-disable-next-line no-console
+         
         console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
     }
 
@@ -375,11 +368,7 @@ export function createPostCSSPlugin(
     const mangledClasses = new Set<string>();
     const unmangledClasses = new Set<string>();
 
-    const selectorProcessor = createSelectorProcessor(
-        mangleMap,
-        mangledClasses,
-        unmangledClasses,
-    );
+    const selectorProcessor = createSelectorProcessor(mangleMap, mangledClasses, unmangledClasses);
 
     return {
         postcssPlugin: 'csszyx-css-mangler',
@@ -399,7 +388,7 @@ export function createPostCSSPlugin(
         },
         OnceExit() {
             if (options.debug) {
-                // eslint-disable-next-line no-console
+                 
                 console.log(`[csszyx] Mangled ${mangledClasses.size} unique classes`);
             }
         },

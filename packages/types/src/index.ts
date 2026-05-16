@@ -12,46 +12,6 @@
  */
 export const VERSION = '0.0.0';
 
-// Re-export all config types
-export type {
-    BuildConfig,
-    CsszyxConfig,
-    DevelopmentConfig,
-    Environment,
-    HydrationConfig,
-    PartialCsszyxConfig,
-    PerformanceConfig,
-    ProductionConfig,
-} from './config.js';
-export {
-    DEFAULT_BUILD_CONFIG,
-    DEFAULT_CSSZYX_CONFIG,
-    DEFAULT_DEVELOPMENT_CONFIG,
-    DEFAULT_HYDRATION_CONFIG,
-    DEFAULT_PERFORMANCE_CONFIG,
-    DEFAULT_PRODUCTION_CONFIG,
-    getCurrentEnvironment,
-} from './config.js';
-
-// Re-export all runtime types
-export type {
-    AuditLogEntry,
-    ComponentPropsWithSz,
-    CsszyxWindow,
-    HydrationError,
-    HydrationErrorType,
-    MangleMap,
-    MangleMapMetadata,
-    PerformanceMetrics,
-    RecoveryManifest,
-    RecoveryMode,
-    RuntimeState,
-    SzProp,
-    TokenData,
-    VerificationResult,
-} from './runtime.js';
-export { isCsszyxWindow } from './runtime.js';
-
 // Re-export all compiler types
 export type {
     BuildPhase,
@@ -74,9 +34,45 @@ export type {
     ValidationError,
     ValidationResult,
 } from './compiler.js';
-
+// Re-export all config types
+export type {
+    BuildConfig,
+    CsszyxConfig,
+    DevelopmentConfig,
+    Environment,
+    HydrationConfig,
+    PartialCsszyxConfig,
+    PerformanceConfig,
+    ProductionConfig,
+} from './config.js';
+export {
+    DEFAULT_BUILD_CONFIG,
+    DEFAULT_CSSZYX_CONFIG,
+    DEFAULT_DEVELOPMENT_CONFIG,
+    DEFAULT_HYDRATION_CONFIG,
+    DEFAULT_PERFORMANCE_CONFIG,
+    DEFAULT_PRODUCTION_CONFIG,
+    getCurrentEnvironment,
+} from './config.js';
 // Re-export core WASM contract
 export type { CsszyxCorePkg, CsszyxCoreWasm } from './core.js';
-
 // Export JSX types (also auto-augments React namespace)
 export type { SzProps, SzPropValue } from './jsx.js';
+// Re-export all runtime types
+export type {
+    AuditLogEntry,
+    ComponentPropsWithSz,
+    CsszyxWindow,
+    HydrationError,
+    HydrationErrorType,
+    MangleMap,
+    MangleMapMetadata,
+    PerformanceMetrics,
+    RecoveryManifest,
+    RecoveryMode,
+    RuntimeState,
+    SzProp,
+    TokenData,
+    VerificationResult,
+} from './runtime.js';
+export { isCsszyxWindow } from './runtime.js';

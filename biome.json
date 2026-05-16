@@ -133,11 +133,7 @@
             }
         },
         {
-            "includes": [
-                "scripts/**",
-                "packages/*/scripts/**",
-                "**/*.mjs"
-            ],
+            "includes": ["scripts/**", "packages/*/scripts/**", "**/*.mjs"],
             "linter": {
                 "rules": {
                     "suspicious": {
@@ -150,11 +146,7 @@
             }
         },
         {
-            "includes": [
-                "packages/cli/**",
-                "packages/dev-tools/**",
-                "packages/e2e/**"
-            ],
+            "includes": ["packages/cli/**", "packages/dev-tools/**", "packages/e2e/**"],
             "linter": {
                 "rules": {
                     "suspicious": {

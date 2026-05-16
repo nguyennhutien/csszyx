@@ -18,7 +18,11 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 import { transform, transformSourceCode } from '../packages/compiler/src/transform.js';
-import { PROPERTY_MAP, type SzObject, type SzValue } from '../packages/compiler/src/transform-core.js';
+import {
+    PROPERTY_MAP,
+    type SzObject,
+    type SzValue,
+} from '../packages/compiler/src/transform-core.js';
 
 /**
  * CLI options for the profiler.
@@ -88,7 +92,17 @@ interface QuietTransformResult {
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SOURCE_EXTS = new Set(['.tsx', '.ts', '.jsx', '.js']);
-const IGNORE_DIRS = new Set(['node_modules', 'dist', 'build', '.next', '.turbo', '.git', 'pkg', 'pkg-node', 'target']);
+const IGNORE_DIRS = new Set([
+    'node_modules',
+    'dist',
+    'build',
+    '.next',
+    '.turbo',
+    '.git',
+    'pkg',
+    'pkg-node',
+    'target',
+]);
 const DEFAULT_SOURCE_ROOTS = ['playground', 'apps/docs/src', 'packages'];
 const DEFAULT_CORPUS = ['flowbite', 'shadcn', 'tremor', 'radix', 'catalyst'];
 
@@ -117,9 +131,15 @@ function readOptions(): CliOptions {
         if (arg === '--iterations') {
             options.iterations = Math.max(1, Number(args[++i] ?? '3'));
         } else if (arg === '--corpus') {
-            options.corpus = (args[++i] ?? '').split(',').map(s => s.trim()).filter(Boolean);
+            options.corpus = (args[++i] ?? '')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
         } else if (arg === '--source-roots') {
-            options.sourceRoots = (args[++i] ?? '').split(',').map(s => s.trim()).filter(Boolean);
+            options.sourceRoots = (args[++i] ?? '')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
         }
     }
 
@@ -282,7 +302,9 @@ function profileSourceFiles(files: string[], iterations: number): TransformTimin
         const start = performance.now();
         let transformed = false;
         for (let i = 0; i < iterations; i++) {
-            transformed = withSilencedWarnings(() => transformSourceCode(code, file).transformed) || transformed;
+            transformed =
+                withSilencedWarnings(() => transformSourceCode(code, file).transformed) ||
+                transformed;
         }
         const ms = (performance.now() - start) / iterations;
         timings.push({
@@ -398,7 +420,9 @@ function baseClassToEntry(twClass: string): { key: string; value: SzValue } | nu
             if (!result.warned && result.className === twClass) {
                 return { key: twClass, value: true };
             }
-        } catch { /* not a boolean key */ }
+        } catch {
+            /* not a boolean key */
+        }
     }
 
     for (const prefix of sortedPrefixes) {
@@ -455,7 +479,10 @@ function assignEntry(target: SzObject, pathParts: string[], value: SzValue): boo
     for (let i = 0; i < pathParts.length - 1; i++) {
         const key = pathParts[i];
         const existing = node[key];
-        if (existing !== undefined && (typeof existing !== 'object' || existing === null || Array.isArray(existing))) {
+        if (
+            existing !== undefined &&
+            (typeof existing !== 'object' || existing === null || Array.isArray(existing))
+        ) {
             return false;
         }
         if (existing === undefined) {
@@ -502,7 +529,11 @@ function profileCorpusFixtures(fixtures: CorpusFixture[], iterations: number): T
             const start = performance.now();
             let transformed = false;
             for (let i = 0; i < iterations; i++) {
-                transformed = withSilencedWarnings(() => transformSourceCode(fixture.source, `${fixture.name}.tsx`).transformed) || transformed;
+                transformed =
+                    withSilencedWarnings(
+                        () =>
+                            transformSourceCode(fixture.source, `${fixture.name}.tsx`).transformed,
+                    ) || transformed;
             }
             return {
                 file: `corpus-combo/${fixture.name}`,
@@ -543,7 +574,7 @@ function summarize(timings: TransformTiming[]): {
         p95Ms: percentile(sorted, 95),
         occurrences,
         uniquePatterns,
-        estimatedHitRate: occurrences > 0 ? 1 - (uniquePatterns / occurrences) : 0,
+        estimatedHitRate: occurrences > 0 ? 1 - uniquePatterns / occurrences : 0,
     };
 }
 
@@ -557,7 +588,10 @@ function percentile(sorted: number[], pct: number): number {
     if (sorted.length === 0) {
         return 0;
     }
-    const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((pct / 100) * sorted.length) - 1));
+    const index = Math.min(
+        sorted.length - 1,
+        Math.max(0, Math.ceil((pct / 100) * sorted.length) - 1),
+    );
     return sorted[index];
 }
 
@@ -624,7 +658,9 @@ function printSummary(label: string, timings: TransformTiming[]): void {
     console.log(`Files/fixtures:       ${summary.files}`);
     console.log(`Transformed:          ${summary.transformed}`);
     console.log(`Transform wall time:  ${fmtMs(summary.totalMs)}`);
-    console.log(`Avg / p50 / p95:      ${fmtMs(summary.avgMs)} / ${fmtMs(summary.p50Ms)} / ${fmtMs(summary.p95Ms)}`);
+    console.log(
+        `Avg / p50 / p95:      ${fmtMs(summary.avgMs)} / ${fmtMs(summary.p50Ms)} / ${fmtMs(summary.p95Ms)}`,
+    );
     console.log(`sz occurrences:       ${summary.occurrences}`);
     console.log(`Unique patterns:      ${summary.uniquePatterns}`);
     console.log(`Est. cache hit rate:  ${fmtPct(summary.estimatedHitRate)}`);
@@ -654,7 +690,9 @@ printSummary('Synthetic corpus-combo sz objects', corpusTimings);
 console.log('\nCorpus conversion');
 console.log('=================');
 for (const fixture of fixtures) {
-    console.log(`${fixture.name}: ${fixture.patterns.length}/${fixture.sourceLines} converted, ${fixture.skippedLines} skipped`);
+    console.log(
+        `${fixture.name}: ${fixture.patterns.length}/${fixture.sourceLines} converted, ${fixture.skippedLines} skipped`,
+    );
 }
 
 const combined = summarize([...sourceTimings, ...corpusTimings]);
@@ -662,8 +700,12 @@ console.log('\nDecision gate');
 console.log('=============');
 console.log(`Combined estimated hit rate: ${fmtPct(combined.estimatedHitRate)}`);
 console.log(`Combined transform wall:     ${fmtMs(combined.totalMs)}`);
-if (combined.estimatedHitRate < 0.30) {
-    console.log('Recommendation: drop memoization unless a larger real-app corpus shows materially higher reuse.');
+if (combined.estimatedHitRate < 0.3) {
+    console.log(
+        'Recommendation: drop memoization unless a larger real-app corpus shows materially higher reuse.',
+    );
 } else {
-    console.log('Recommendation: memoization may be worth a Phase B spike; benchmark JSON/stringify key cost first.');
+    console.log(
+        'Recommendation: memoization may be worth a Phase B spike; benchmark JSON/stringify key cost first.',
+    );
 }

@@ -158,9 +158,5 @@ export function CsszyxProvider({ manifest, children }: CsszyxProviderProps): Rea
         preloadManifest(manifest);
     }, [manifest]);
 
-    return createElement(
-        CsszyxContext.Provider,
-        { value: { manifestUrl: manifest } },
-        children,
-    );
+    return createElement(CsszyxContext.Provider, { value: { manifestUrl: manifest } }, children);
 }

@@ -139,7 +139,7 @@ describe('effects — masking', () => {
         expect(t({ maskShape: 'circle' })).toBe('mask-circle');
     });
 
-    it('{ mask: "url(\'/img.png\')" } → mask-[url(\'/img.png\')] (arbitrary)', () => {
+    it("{ mask: \"url('/img.png')\" } → mask-[url('/img.png')] (arbitrary)", () => {
         expect(t({ mask: "url('/img.png')" })).toBe("mask-[url('/img.png')]");
     });
 

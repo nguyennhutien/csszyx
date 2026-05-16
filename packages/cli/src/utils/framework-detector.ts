@@ -75,9 +75,15 @@ export function detectFramework(cwd: string): Framework {
 
         // Vite detection
         if (deps.vite) {
-            if (deps.react || deps['react-dom']) {return 'vite-react';}
-            if (deps.vue) {return 'vite-vue';}
-            if (deps.svelte) {return 'vite-svelte';}
+            if (deps.react || deps['react-dom']) {
+                return 'vite-react';
+            }
+            if (deps.vue) {
+                return 'vite-vue';
+            }
+            if (deps.svelte) {
+                return 'vite-svelte';
+            }
         }
 
         return 'unknown';
@@ -92,9 +98,15 @@ export function detectFramework(cwd: string): Framework {
  * @returns The detected package manager name
  */
 export function detectPackageManager(cwd: string): PackageManager {
-    if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {return 'pnpm';}
-    if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {return 'yarn';}
-    if (fs.existsSync(path.join(cwd, 'bun.lockb'))) {return 'bun';}
+    if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
+        return 'pnpm';
+    }
+    if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
+        return 'yarn';
+    }
+    if (fs.existsSync(path.join(cwd, 'bun.lockb'))) {
+        return 'bun';
+    }
     return 'npm';
 }
 
@@ -106,7 +118,9 @@ export function detectPackageManager(cwd: string): PackageManager {
 export function hasTailwindInstalled(cwd: string): boolean {
     try {
         const pkgPath = path.join(cwd, 'package.json');
-        if (!fs.existsSync(pkgPath)) {return false;}
+        if (!fs.existsSync(pkgPath)) {
+            return false;
+        }
 
         const pkg = fs.readJSONSync(pkgPath);
         const deps = { ...pkg.dependencies, ...pkg.devDependencies };

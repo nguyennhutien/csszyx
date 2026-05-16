@@ -149,8 +149,9 @@ export function createRSCModuleRecord(code: string, id: string): RSCModuleRecord
         imports: findLocalImportSources(code)
             .map(source => resolveLocalModule(normalized, source))
             .filter((resolved): resolved is string => resolved !== null),
-        runtimeImports: findRuntimeImports(code)
-            .filter(imported => imported.symbols.some(symbol => FORBIDDEN_SYMBOLS.has(symbol))),
+        runtimeImports: findRuntimeImports(code).filter(imported =>
+            imported.symbols.some(symbol => FORBIDDEN_SYMBOLS.has(symbol)),
+        ),
     };
 }
 
@@ -162,7 +163,9 @@ export function createRSCModuleRecord(code: string, id: string): RSCModuleRecord
  * @param records module graph records keyed by normalized module ID
  * @returns first graph violation, or null when the graph is allowed
  */
-export function findRSCGraphViolation(records: Map<string, RSCModuleRecord>): RSCBoundaryViolation | null {
+export function findRSCGraphViolation(
+    records: Map<string, RSCModuleRecord>,
+): RSCBoundaryViolation | null {
     for (const root of records.values()) {
         if (!root.isServer) {
             continue;
@@ -203,7 +206,9 @@ export function assertNoRSCGraphViolation(records: Map<string, RSCModuleRecord>)
  */
 function isNextAppRouterEntry(id: string): boolean {
     const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
-    return /(^|\/)app\/.*\/?(?:page|layout|template|loading|error|not-found|global-error|default|route)\.[cm]?[tj]sx?$/.test(clean);
+    return /(^|\/)app\/.*\/?(?:page|layout|template|loading|error|not-found|global-error|default|route)\.[cm]?[tj]sx?$/.test(
+        clean,
+    );
 }
 
 /**
@@ -229,8 +234,10 @@ export function assertNoRSCBoundaryViolation(code: string, id: string): void {
  * @returns fatal build error message
  */
 function formatRSCViolation(violation: RSCBoundaryViolation): string {
-    return `csszyxRSCViolation: ${violation.symbol} imported in Server Component ${violation.path}\n` +
-        `  Import chain: ${violation.importChain.join(' -> ')}`;
+    return (
+        `csszyxRSCViolation: ${violation.symbol} imported in Server Component ${violation.path}\n` +
+        `  Import chain: ${violation.importChain.join(' -> ')}`
+    );
 }
 
 /**
@@ -288,7 +295,7 @@ function walkRSCGraph(
  */
 function readDirectivePrologue(code: string): string[] {
     const out: string[] = [];
-    let i = code.charCodeAt(0) === 0xFEFF ? 1 : 0;
+    let i = code.charCodeAt(0) === 0xfeff ? 1 : 0;
 
     while (i < code.length) {
         i = skipWhitespaceAndComments(code, i);
@@ -444,9 +451,7 @@ function normalizeModuleId(id: string): string {
  * @returns normalized resolved module ID, or null when unsupported/missing
  */
 function resolveLocalModule(importer: string, source: string): string | null {
-    const base = source.startsWith('/')
-        ? source
-        : path.resolve(path.dirname(importer), source);
+    const base = source.startsWith('/') ? source : path.resolve(path.dirname(importer), source);
     const candidates = [
         base,
         `${base}.tsx`,
@@ -485,7 +490,10 @@ function readImportedSymbols(clause: string): string[] {
             if (!trimmed || trimmed.startsWith('type ')) {
                 continue;
             }
-            const sourceName = trimmed.replace(/^type\s+/, '').split(/\s+as\s+/)[0]?.trim();
+            const sourceName = trimmed
+                .replace(/^type\s+/, '')
+                .split(/\s+as\s+/)[0]
+                ?.trim();
             if (sourceName) {
                 symbols.push(sourceName);
             }

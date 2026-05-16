@@ -14,13 +14,7 @@ import fg from 'fast-glob';
 
 import { transformHtmlSourceSimple, transformSource } from '../migrate/ast-transformer.js';
 import type { CsszyxTodoMap } from '../migrate/variant-parser.js';
-import {
-    printHeader,
-    printInfo,
-    printSuccess,
-    printWarn,
-    spinner,
-} from '../utils/terminal-ui.js';
+import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /**
  *
@@ -57,7 +51,11 @@ export interface MigrateOptions {
  * @param cwd - Project root directory.
  * @returns Object with writeLine, filePath, and flush helpers.
  */
-function createLogFile(cwd: string): { writeLine: (line: string) => void; filePath: string; flush: () => void } {
+function createLogFile(cwd: string): {
+    writeLine: (line: string) => void;
+    filePath: string;
+    flush: () => void;
+} {
     const now = new Date();
     // Format: 2026-04-12_14-05-30
     const ts = now.toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
@@ -68,7 +66,7 @@ function createLogFile(cwd: string): { writeLine: (line: string) => void; filePa
     return {
         filePath,
         writeLine: (line: string) => lines.push(line),
-        flush: () => fs.writeFileSync(filePath, lines.join('\n') + '\n', 'utf-8'),
+        flush: () => fs.writeFileSync(filePath, `${lines.join('\n')}\n`, 'utf-8'),
     };
 }
 
@@ -83,7 +81,7 @@ function isGitignored(cwd: string, pattern: string): boolean {
         const content = fs.readFileSync(path.join(cwd, '.gitignore'), 'utf-8');
         return content.split('\n').some(l => {
             const t = l.trim();
-            return t === pattern || t === pattern + '/' || t === '/' + pattern;
+            return t === pattern || t === `${pattern}/` || t === `/${pattern}`;
         });
     } catch {
         return false;
@@ -152,7 +150,9 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
             customMap = JSON.parse(content);
             printInfo(`Loaded resolution map from ${resolveTodosPath}`);
         } catch {
-            printWarn(`Could not load resolve map from ${resolveTodosPath}. Ensure the file exists and is valid JSON.`);
+            printWarn(
+                `Could not load resolve map from ${resolveTodosPath}. Ensure the file exists and is valid JSON.`,
+            );
             return;
         }
     }
@@ -165,19 +165,21 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
     // ── Create log file ─────────────────────────────────────────────────────
     const log = createLogFile(cwd);
-    log.writeLine(`Mode: ${audit ? 'audit' : dryRun ? 'dry-run' : 'migrate'}${resolveTodosPath ? ` (resolve-todos: ${resolveTodosPath})` : ''}`);
+    log.writeLine(
+        `Mode: ${audit ? 'audit' : dryRun ? 'dry-run' : 'migrate'}${resolveTodosPath ? ` (resolve-todos: ${resolveTodosPath})` : ''}`,
+    );
     log.writeLine(`injectTodos: ${injectTodos}`);
     log.writeLine('');
 
     // Warn if .csszyx directory is not gitignored
     if (!isGitignored(cwd, '.csszyx')) {
-        printWarn('Tip: add .csszyx/ to your .gitignore to exclude migration logs from version control.');
+        printWarn(
+            'Tip: add .csszyx/ to your .gitignore to exclude migration logs from version control.',
+        );
     }
 
     // Find JSX/TSX/HTML files
-    const patterns = options.pattern
-        ? [options.pattern]
-        : ['**/*.{jsx,tsx,html}'];
+    const patterns = options.pattern ? [options.pattern] : ['**/*.{jsx,tsx,html}'];
 
     const ignore = [
         '**/node_modules/**',
@@ -200,9 +202,11 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     s.succeed(`Found ${files.length} files`);
 
     if (files.length === 0) {
-        printWarn(options.pattern
-            ? `No files found matching pattern: ${options.pattern}`
-            : 'No JSX/TSX/HTML files found');
+        printWarn(
+            options.pattern
+                ? `No files found matching pattern: ${options.pattern}`
+                : 'No JSX/TSX/HTML files found',
+        );
         log.writeLine('No files found.');
         log.flush();
         return;
@@ -237,12 +241,12 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
         const result = isHtml
             ? transformHtmlSourceSimple(processSource, filePath, {
-                braces: options.braces,
-                injectFouc: options.injectFouc,
-                injectRuntime: options.injectRuntime,
-                cdnUrl: options.cdnUrl,
-                localPath: options.localPath,
-            })
+                  braces: options.braces,
+                  injectFouc: options.injectFouc,
+                  injectRuntime: options.injectRuntime,
+                  cdnUrl: options.cdnUrl,
+                  localPath: options.localPath,
+              })
             : transformSource(processSource, filePath, { injectTodos, customMap });
 
         // Collect warnings from every scanned file — not just changed ones.
@@ -268,7 +272,9 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
                     fs.writeFileSync(filePath, result.code, 'utf-8');
                 } catch (err) {
                     const rel = path.relative(cwd, filePath);
-                    printWarn(`Could not write ${rel}: ${err instanceof Error ? err.message : String(err)}`);
+                    printWarn(
+                        `Could not write ${rel}: ${err instanceof Error ? err.message : String(err)}`,
+                    );
                     log.writeLine(`  Write error: ${rel}`);
                     continue;
                 }
@@ -299,7 +305,9 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     }
     if (allUnrecognized.length > 0) {
         const unique = [...new Set(allUnrecognized)];
-        printWarn(`Unrecognized classes (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`);
+        printWarn(
+            `Unrecognized classes (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
+        );
         log.writeLine(`Unrecognized classes (${unique.length}): ${unique.join(', ')}`);
     }
     if (allWarnings.length > 0) {
@@ -328,7 +336,9 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         console.info();
 
         if (unique.length === 0) {
-            printSuccess('Audit complete. 100% of your classes are perfectly recognized by csszyx!');
+            printSuccess(
+                'Audit complete. 100% of your classes are perfectly recognized by csszyx!',
+            );
             log.writeLine('Audit: 100% recognized.');
         } else {
             const todoObj: Record<string, unknown> = {};
@@ -338,13 +348,21 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
             try {
                 fs.writeFileSync(todoPath, JSON.stringify(todoObj, null, 2));
             } catch (err) {
-                printWarn(`Could not write ${path.relative(cwd, todoPath)}: ${err instanceof Error ? err.message : String(err)}`);
+                printWarn(
+                    `Could not write ${path.relative(cwd, todoPath)}: ${err instanceof Error ? err.message : String(err)}`,
+                );
                 log.flush();
                 return;
             }
-            printSuccess(`Audit complete. Exported ${unique.length} unrecognized classes to ${path.relative(cwd, todoPath)}.`);
-            printInfo('Edit this file to map custom classes, then run: npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json');
-            log.writeLine(`Audit: ${unique.length} unrecognized classes written to ${path.relative(cwd, todoPath)}`);
+            printSuccess(
+                `Audit complete. Exported ${unique.length} unrecognized classes to ${path.relative(cwd, todoPath)}.`,
+            );
+            printInfo(
+                'Edit this file to map custom classes, then run: npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json',
+            );
+            log.writeLine(
+                `Audit: ${unique.length} unrecognized classes written to ${path.relative(cwd, todoPath)}`,
+            );
         }
     }
 
@@ -353,7 +371,9 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         const unique = [...new Set(allUnrecognized)];
         if (unique.length > 0) {
             console.info();
-            printWarn(`Still unresolved after this pass (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`);
+            printWarn(
+                `Still unresolved after this pass (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
+            );
             printInfo('Re-run --audit to generate a fresh snapshot when ready.');
             log.writeLine(`Still unresolved (${unique.length}): ${unique.join(', ')}`);
         }

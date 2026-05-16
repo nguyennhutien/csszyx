@@ -20,29 +20,29 @@ export type InjectionMode = 'inline' | 'script' | 'both';
  * HTML injection options.
  */
 export interface HtmlInjectionOptions {
-  /**
-   * How to inject the mangle map.
-   * - 'inline': As data-sz-map attribute on <html>
-   * - 'script': As <script id="__CSSZYX_MANGLE_MAP__"> in <head>
-   * - 'both': Both methods
-   *
-   * @default 'script'
-   */
-  mode?: InjectionMode;
+    /**
+     * How to inject the mangle map.
+     * - 'inline': As data-sz-map attribute on <html>
+     * - 'script': As <script id="__CSSZYX_MANGLE_MAP__"> in <head>
+     * - 'both': Both methods
+     *
+     * @default 'script'
+     */
+    mode?: InjectionMode;
 
-  /**
-   * Whether to pretty-print JSON in script tag.
-   *
-   * @default false
-   */
-  prettyPrint?: boolean;
+    /**
+     * Whether to pretty-print JSON in script tag.
+     *
+     * @default false
+     */
+    prettyPrint?: boolean;
 
-  /**
-   * Minify attributes (use short names).
-   *
-   * @default true in production
-   */
-  minify?: boolean;
+    /**
+     * Minify attributes (use short names).
+     *
+     * @default true in production
+     */
+    minify?: boolean;
 }
 
 /**
@@ -60,11 +60,7 @@ export interface HtmlInjectionOptions {
  * // <html lang="en" data-sz-checksum="a1b2c3d4e5f67890"><head></head></html>
  * ```
  */
-export function injectChecksum(
-    html: string,
-    checksum: string,
-    minify = false,
-): string {
+export function injectChecksum(html: string, checksum: string, minify = false): string {
     const attrName = minify ? 'data-sz-cs' : 'data-sz-checksum';
 
     // Find <html> tag and inject checksum
@@ -72,7 +68,7 @@ export function injectChecksum(
     const match = html.match(htmlTagPattern);
 
     if (!match) {
-    // No <html> tag found, return unchanged
+        // No <html> tag found, return unchanged
         return html;
     }
 
@@ -80,10 +76,7 @@ export function injectChecksum(
     const checksumAttr = ` ${attrName}="${checksum}"`;
 
     // Replace <html...> with <html data-sz-checksum="..." ...>
-    return html.replace(
-        htmlTagPattern,
-        `<html${checksumAttr}${existingAttrs}>`,
-    );
+    return html.replace(htmlTagPattern, `<html${checksumAttr}${existingAttrs}>`);
 }
 
 /**
@@ -315,7 +308,9 @@ export function buildRecoveryManifest(
     const sortedKeys = [...tokens.keys()].sort();
     for (const key of sortedKeys) {
         const data = tokens.get(key);
-        if (!data) {continue;}
+        if (!data) {
+            continue;
+        }
         if (stripped && data.mode === 'dev-only') {
             strippedDevOnlyPaths.push(data.path);
             continue;
@@ -326,9 +321,7 @@ export function buildRecoveryManifest(
         // from a public manifest. The runtime never reads `path` for
         // verification — it's purely a devtools hint — so we strip it
         // in production. Dev builds keep the path for hover-to-source.
-        sorted[key] = stripped
-            ? { mode: data.mode, component: data.component, path: '' }
-            : data;
+        sorted[key] = stripped ? { mode: data.mode, component: data.component, path: '' } : data;
     }
 
     const serialised = JSON.stringify(sorted);
@@ -354,10 +347,7 @@ export function buildRecoveryManifest(
  * @param manifest Manifest produced by {@link buildRecoveryManifest}.
  * @returns Modified HTML, or unchanged if there are no tokens.
  */
-export function injectRecoveryManifest(
-    html: string,
-    manifest: RecoveryManifest,
-): string {
+export function injectRecoveryManifest(html: string, manifest: RecoveryManifest): string {
     if (Object.keys(manifest.tokens).length === 0) {
         return html;
     }

@@ -104,7 +104,9 @@ describe('Color Opacity Object Form', () => {
         });
 
         it('should wrap CSS variable color in () for borderColor', () => {
-            const result = transform({ borderColor: { color: '--border-color', op: 40 } } as SzObject);
+            const result = transform({
+                borderColor: { color: '--border-color', op: 40 },
+            } as SzObject);
             expect(result.className).toBe('border-(--border-color)/40');
         });
     });
@@ -155,12 +157,16 @@ describe('Color Opacity Object Form', () => {
 
     describe('shadow/ring color opacity objects', () => {
         it('should transform insetShadowColor with opacity', () => {
-            const result = transform({ insetShadowColor: { color: 'blue-500', op: 30 } } as SzObject);
+            const result = transform({
+                insetShadowColor: { color: 'blue-500', op: 30 },
+            } as SzObject);
             expect(result.className).toBe('inset-shadow-blue-500/30');
         });
 
         it('should transform insetShadowColor with CSS variable opacity', () => {
-            const result = transform({ insetShadowColor: { color: 'black', op: '--alpha' } } as SzObject);
+            const result = transform({
+                insetShadowColor: { color: 'black', op: '--alpha' },
+            } as SzObject);
             expect(result.className).toBe('inset-shadow-black/(--alpha)');
         });
 
@@ -175,7 +181,9 @@ describe('Color Opacity Object Form', () => {
         });
 
         it('should transform textShadowColor with opacity', () => {
-            const result = transform({ textShadowColor: { color: 'gray-900', op: 60 } } as SzObject);
+            const result = transform({
+                textShadowColor: { color: 'gray-900', op: 60 },
+            } as SzObject);
             expect(result.className).toBe('text-shadow-gray-900/60');
         });
 
@@ -216,7 +224,9 @@ describe('Color Opacity Object Form', () => {
         });
 
         it('{ hover: { color: { color: "red-500", op: 40 } } } → hover:text-red-500/40', () => {
-            const result = transform({ hover: { color: { color: 'red-500', op: 40 } } } as SzObject);
+            const result = transform({
+                hover: { color: { color: 'red-500', op: 40 } },
+            } as SzObject);
             expect(result.className).toBe('hover:text-red-500/40');
         });
 

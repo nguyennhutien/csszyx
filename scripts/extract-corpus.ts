@@ -95,7 +95,9 @@ const CSS_FN_RE = /^(?:calc|var|url|rgb|rgba|hsl|hsla|oklch|color|env|min|max|cl
  * @returns True if the token matches the Tailwind class pattern
  */
 function isValidTwToken(token: string): boolean {
-    if (token === '-' || token === '/' || CSS_FN_RE.test(token)) { return false; }
+    if (token === '-' || token === '/' || CSS_FN_RE.test(token)) {
+        return false;
+    }
     return TW_TOKEN_RE.test(token) && token.length >= 1 && token.length <= 120;
 }
 
@@ -147,20 +149,30 @@ function extractClassStrings(content: string): string[] {
         let match;
         while ((match = re.exec(content)) !== null) {
             const value = match[1];
-            if (!value) { continue; }
+            if (!value) {
+                continue;
+            }
 
             const tokens = value.split(/\s+/).filter(Boolean);
-            if (tokens.length < 2) { continue; } // single-class elements uninteresting for combo
+            if (tokens.length < 2) {
+                continue;
+            } // single-class elements uninteresting for combo
 
             // Keep only tokens that look like TW classes; require ≥80% valid
             const valid = tokens.filter(isValidTwToken);
-            if (valid.length < 2 || valid.length / tokens.length < 0.8) { continue; }
+            if (valid.length < 2 || valid.length / tokens.length < 0.8) {
+                continue;
+            }
 
             // Generic patterns: require at least one token with a TW-specific
             // character (hyphen, colon, slash) to filter out English prose
             if (isGeneric) {
-                const hasTwSpecific = valid.some(t => t.includes('-') || t.includes(':') || t.includes('/'));
-                if (!hasTwSpecific) { continue; }
+                const hasTwSpecific = valid.some(
+                    t => t.includes('-') || t.includes(':') || t.includes('/'),
+                );
+                if (!hasTwSpecific) {
+                    continue;
+                }
             }
 
             results.push(valid.join(' '));
@@ -179,15 +191,22 @@ function findSourceFiles(dir: string): string[] {
     const files: string[] = [];
     try {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith('.') || entry.name === 'node_modules') { continue; }
+            if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+                continue;
+            }
             const full = join(dir, entry.name);
             if (entry.isDirectory()) {
                 files.push(...findSourceFiles(full));
-            } else if (entry.isFile() && SOURCE_EXTS.has(entry.name.slice(entry.name.lastIndexOf('.')))) {
+            } else if (
+                entry.isFile() &&
+                SOURCE_EXTS.has(entry.name.slice(entry.name.lastIndexOf('.')))
+            ) {
                 files.push(full);
             }
         }
-    } catch { /* dir not found — try next */ }
+    } catch {
+        /* dir not found — try next */
+    }
     return files;
 }
 
@@ -208,9 +227,8 @@ function processFramework(config: FrameworkConfig, tmpDir: string, dryRun: boole
     const allClassStrings: string[] = [];
     let scannedFiles = 0;
 
-    const dirsToScan = config.sourceDirs.length > 0
-        ? config.sourceDirs.map(d => join(repoDir, d))
-        : [repoDir];
+    const dirsToScan =
+        config.sourceDirs.length > 0 ? config.sourceDirs.map(d => join(repoDir, d)) : [repoDir];
 
     for (const dir of dirsToScan) {
         const files = findSourceFiles(dir);
@@ -219,14 +237,18 @@ function processFramework(config: FrameworkConfig, tmpDir: string, dryRun: boole
             try {
                 const content = readFileSync(file, 'utf-8');
                 allClassStrings.push(...extractClassStrings(content));
-            } catch { /* skip unreadable */ }
+            } catch {
+                /* skip unreadable */
+            }
         }
     }
 
     // Deduplicate, preserve order
     const seen = new Set<string>();
     const unique = allClassStrings.filter(s => {
-        if (seen.has(s)) { return false; }
+        if (seen.has(s)) {
+            return false;
+        }
         seen.add(s);
         return true;
     });
@@ -234,7 +256,9 @@ function processFramework(config: FrameworkConfig, tmpDir: string, dryRun: boole
     console.log(`  Scanned ${scannedFiles} files → ${unique.length} unique className strings`);
 
     if (dryRun) {
-        console.log(`  [dry-run] Would write corpus-combo/${config.name}.txt and corpus/${config.name}.txt`);
+        console.log(
+            `  [dry-run] Would write corpus-combo/${config.name}.txt and corpus/${config.name}.txt`,
+        );
         return;
     }
 
@@ -256,7 +280,9 @@ function processFramework(config: FrameworkConfig, tmpDir: string, dryRun: boole
     const allIndividual = new Set<string>();
     for (const s of unique) {
         for (const cls of s.split(' ')) {
-            if (cls) { allIndividual.add(cls); }
+            if (cls) {
+                allIndividual.add(cls);
+            }
         }
     }
     const individualLines = [
@@ -281,9 +307,8 @@ const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const targets = args.filter(a => !a.startsWith('--'));
 
-const frameworks = targets.length > 0
-    ? FRAMEWORKS.filter(f => targets.includes(f.name))
-    : FRAMEWORKS;
+const frameworks =
+    targets.length > 0 ? FRAMEWORKS.filter(f => targets.includes(f.name)) : FRAMEWORKS;
 
 if (frameworks.length === 0) {
     console.error(`Unknown framework(s): ${targets.join(', ')}`);
@@ -304,11 +329,14 @@ try {
             failed++;
         }
     }
-    console.log(failed > 0
-        ? `\n⚠ Corpus extraction done with ${failed} failure(s).\n`
-        : '\n✓ Corpus extraction complete.\n',
+    console.log(
+        failed > 0
+            ? `\n⚠ Corpus extraction done with ${failed} failure(s).\n`
+            : '\n✓ Corpus extraction complete.\n',
     );
 } finally {
     rmSync(tmpDir, { recursive: true, force: true });
 }
-if (failed > 0) { process.exit(1); }
+if (failed > 0) {
+    process.exit(1);
+}

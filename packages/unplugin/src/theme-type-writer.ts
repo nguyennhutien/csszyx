@@ -40,8 +40,7 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
     const timestamp = new Date().toISOString();
     const sources = sourceFiles.join(', ');
 
-    const toUnion = (tokens: string[]): string =>
-        tokens.map(t => `'${t}'`).join(' | ');
+    const toUnion = (tokens: string[]): string => tokens.map(t => `'${t}'`).join(' | ');
 
     const entries: string[] = [];
     if (theme.colors.length > 0) {
@@ -65,7 +64,7 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
         `// Source: ${sources}`,
         `// Updated: ${timestamp}`,
         '',
-        'declare module \'@csszyx/compiler\' {',
+        "declare module '@csszyx/compiler' {",
         '    /**',
         '     * Custom design tokens extracted from @theme blocks.',
         '     * These tokens are surfaced in sz prop IntelliSense.',
