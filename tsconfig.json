@@ -3,19 +3,20 @@
         "module": "ESNext",
         "moduleResolution": "Bundler",
         "target": "ESNext",
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
         "strict": true,
         "skipLibCheck": true,
         "esModuleInterop": true,
-        "baseUrl": ".",
+        // TS 6: paths resolve from tsconfig.json directory; baseUrl deprecated.
         "paths": {
-            "@csszyx/core": ["packages/core/pkg"],
-            "@csszyx/compiler": ["packages/compiler/src"],
-            "@csszyx/types": ["packages/types/src"],
-            "@csszyx/runtime": ["packages/runtime/src"],
-            "@csszyx/cli": ["packages/cli/src"],
-            "@csszyx/unplugin": ["packages/unplugin/src"],
-            "@csszyx/dynamic": ["packages/dynamic/src/index.ts"],
-            "@csszyx/dynamic/react": ["packages/dynamic/src/react.ts"]
+            "@csszyx/core": ["./packages/core/pkg"],
+            "@csszyx/compiler": ["./packages/compiler/src"],
+            "@csszyx/types": ["./packages/types/src"],
+            "@csszyx/runtime": ["./packages/runtime/src"],
+            "@csszyx/cli": ["./packages/cli/src"],
+            "@csszyx/unplugin": ["./packages/unplugin/src"],
+            "@csszyx/dynamic": ["./packages/dynamic/src/index.ts"],
+            "@csszyx/dynamic/react": ["./packages/dynamic/src/react.ts"]
         }
     },
     "include": [

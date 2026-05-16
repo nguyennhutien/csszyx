@@ -4,13 +4,13 @@
   "private": true,
   "description": "Svelte preprocessor for csszyx - transforms sz props into Tailwind CSS classes",
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts",
       "require": "./dist/index.cjs"
     }
   },
@@ -18,8 +18,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "build": "unbuild",
+    "dev": "unbuild --stub",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -36,8 +36,8 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "svelte": "^5.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1"
   },
   "keywords": [
     "csszyx",

@@ -20,18 +20,18 @@
     "url": "https://github.com/nguyennhutien/csszyx/issues"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
     "./lite": {
-      "types": "./dist/lite.d.ts",
-      "import": "./dist/lite.js",
+      "types": "./dist/lite.d.mts",
+      "import": "./dist/lite.mjs",
       "require": "./dist/lite.cjs"
     }
   },
@@ -39,8 +39,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "unbuild",
+    "dev": "unbuild --stub",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit"
@@ -52,10 +52,10 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "jsdom": "^23.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.3",
+    "typescript": "^6.0.3",
     "vite-plugin-wasm": "^3.3.0",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "unbuild": "^3.6.1"
   },
   "optionalDependencies": {
     "@esbuild/linux-arm64": "^0.19.0"
