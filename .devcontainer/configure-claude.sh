@@ -10,6 +10,19 @@
 # the container settings — bypass is scoped to the devcontainer.
 set -euo pipefail
 
+# --wrapper-only flag: rebuild ONLY the /root/.local/bin/claude wrapper
+# script. Skip symlinks, settings.json overlay, and rc-file edits. Use
+# when Claude may be running — touching symlinks under
+# /root/.claude-devcontainer/.credentials.json while Claude has the
+# file open creates a race that splits the symlink into a real file
+# and forces the user to re-log-in.
+WRAPPER_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --wrapper-only) WRAPPER_ONLY=1 ;;
+    esac
+done
+
 HOST_CLAUDE_HOME="/root/.claude"
 DEV_CLAUDE_HOME="${DEV_CLAUDE_HOME:-/root/.claude-devcontainer}"
 CLAUDE_WRAPPER="/root/.local/bin/claude"
@@ -27,50 +40,66 @@ fi
 
 mkdir -p "$DEV_CLAUDE_HOME"
 
-# Symlink every entry from host EXCEPT settings.json — we own settings.json
-# so the host machine's Claude continues to honor its own permission policy.
-shopt -s dotglob nullglob
-for src in "$HOST_CLAUDE_HOME"/*; do
-    name="$(basename "$src")"
-    case "$name" in
-        settings.json) continue ;;
-        .|..) continue ;;
-    esac
-    dest="$DEV_CLAUDE_HOME/$name"
-    if [ -L "$dest" ] || [ -e "$dest" ]; then
-        rm -rf "$dest"
-    fi
-    ln -s "$src" "$dest"
-done
-shopt -u dotglob nullglob
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    # Symlink every entry from host EXCEPT settings.json — we own
+    # settings.json so the host machine's Claude continues to honor its
+    # own permission policy. SAFE FOR FIRST-TIME SETUP ONLY: if Claude
+    # is already running, the rm + ln -s window is a race that can split
+    # .credentials.json from a symlink into a real file. Self-heal uses
+    # --wrapper-only to avoid this.
+    shopt -s dotglob nullglob
+    for src in "$HOST_CLAUDE_HOME"/*; do
+        name="$(basename "$src")"
+        case "$name" in
+            settings.json) continue ;;
+            .|..) continue ;;
+        esac
+        dest="$DEV_CLAUDE_HOME/$name"
+        # Skip if already a correctly-pointing symlink to avoid the race.
+        if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+            continue
+        fi
+        if [ -L "$dest" ] || [ -e "$dest" ]; then
+            rm -rf "$dest"
+        fi
+        ln -s "$src" "$dest"
+    done
+    shopt -u dotglob nullglob
 
-# /root/.claude.json (project trust + user prefs) lives at $HOME, not inside
-# /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects it at
-# $CLAUDE_CONFIG_DIR/.claude.json. Symlink it back to the host file so login
-# state, project trust, and tips history survive without reinitialization.
-HOST_CLAUDE_JSON="/root/.claude.json"
-DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
-if [ -f "$HOST_CLAUDE_JSON" ]; then
-    if [ -L "$DEV_CLAUDE_JSON" ] || [ -e "$DEV_CLAUDE_JSON" ]; then
-        rm -rf "$DEV_CLAUDE_JSON"
+    # /root/.claude.json (project trust + user prefs) lives at $HOME, not
+    # inside /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects
+    # it at $CLAUDE_CONFIG_DIR/.claude.json. Symlink it back to the host
+    # file so login state, project trust, and tips history survive without
+    # reinitialization.
+    HOST_CLAUDE_JSON="/root/.claude.json"
+    DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
+    if [ -f "$HOST_CLAUDE_JSON" ]; then
+        if ! { [ -L "$DEV_CLAUDE_JSON" ] && [ "$(readlink "$DEV_CLAUDE_JSON")" = "$HOST_CLAUDE_JSON" ]; }; then
+            if [ -L "$DEV_CLAUDE_JSON" ] || [ -e "$DEV_CLAUDE_JSON" ]; then
+                rm -rf "$DEV_CLAUDE_JSON"
+            fi
+            ln -s "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
+        fi
     fi
-    ln -s "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
 fi
 
-# Container settings.json = host settings + bypass permissions mode.
-# Merge with jq so user-managed keys (model, theme, permissions.allow) survive.
-DEV_SETTINGS="$DEV_CLAUDE_HOME/settings.json"
-HOST_SETTINGS="$HOST_CLAUDE_HOME/settings.json"
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    # Container settings.json = host settings + bypass permissions mode.
+    # Merge with jq so user-managed keys (model, theme, permissions.allow)
+    # survive.
+    DEV_SETTINGS="$DEV_CLAUDE_HOME/settings.json"
+    HOST_SETTINGS="$HOST_CLAUDE_HOME/settings.json"
 
-OVERLAY='{
-    "permissions": ((.permissions // {}) + {"defaultMode": "bypassPermissions"}),
-    "skipDangerousModePermissionPrompt": true
-}'
+    OVERLAY='{
+        "permissions": ((.permissions // {}) + {"defaultMode": "bypassPermissions"}),
+        "skipDangerousModePermissionPrompt": true
+    }'
 
-if [ -f "$HOST_SETTINGS" ]; then
-    jq ". + $OVERLAY" "$HOST_SETTINGS" > "$DEV_SETTINGS"
-else
-    jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
+    if [ -f "$HOST_SETTINGS" ]; then
+        jq ". + $OVERLAY" "$HOST_SETTINGS" > "$DEV_SETTINGS"
+    else
+        jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
+    fi
 fi
 
 # Make the devcontainer Claude env available even when Claude is launched by
@@ -218,6 +247,59 @@ ensure_path_override /root/.bashrc
 ensure_path_override /root/.zshrc
 ensure_alias_override /root/.bashrc
 ensure_alias_override /root/.zshrc
+
+# Self-healing guard. The devcontainer's postStartCommand only fires when
+# the container actually restarts — closing/reopening the IDE just reattaches
+# without firing it. If /root/.local/bin/claude has been wiped between
+# sessions (e.g. container update, manual cleanup, build script), an
+# interactive shell rebuilds it on first launch via this guard.
+#
+# Placed at the TOP of the rc files (before everything else) so the wrapper
+# exists before mise activates and shadows PATH.
+ensure_self_heal() {
+    local rcfile="$1"
+    local marker="# csszyx-ai-self-heal"
+
+    if [ ! -f "$rcfile" ]; then
+        return
+    fi
+
+    if grep -qF "$marker" "$rcfile"; then
+        return
+    fi
+
+    # Prepend (not append) so it runs before mise activate further down.
+    local guard
+    guard=$(cat <<'EOF'
+# csszyx-ai-self-heal
+# Re-create the Claude/Codex wrapper if a previous session wiped it.
+# postStartCommand only fires on container restart; IDE reopen alone
+# does not. This is a no-op on the fast path (single stat call).
+#
+# Calls --wrapper-only so we do NOT touch /root/.claude-devcontainer/
+# symlinks while Claude may be running — that path is fragile because
+# Claude keeps .credentials.json open and a rm + ln -s window races
+# Claude's writes, splitting the symlink into a real file.
+if [ ! -x /root/.local/bin/claude ] || [ ! -x /root/.local/bin/codex ]; then
+    if [ -f /workspaces/csszyx/.devcontainer/configure-claude.sh ]; then
+        bash /workspaces/csszyx/.devcontainer/configure-claude.sh --wrapper-only >/dev/null 2>&1
+    fi
+    if [ -f /workspaces/csszyx/.devcontainer/configure-codex.sh ]; then
+        bash /workspaces/csszyx/.devcontainer/configure-codex.sh >/dev/null 2>&1
+    fi
+fi
+
+EOF
+)
+    local tmp
+    tmp=$(mktemp)
+    printf '%s\n' "$guard" > "$tmp"
+    cat "$rcfile" >> "$tmp"
+    mv "$tmp" "$rcfile"
+}
+
+ensure_self_heal /root/.bashrc
+ensure_self_heal /root/.zshrc
 
 echo "[claude] Container CLAUDE_CONFIG_DIR: $DEV_CLAUDE_HOME"
 echo "[claude] Shared state symlinked from $HOST_CLAUDE_HOME (settings.json overridden)"
