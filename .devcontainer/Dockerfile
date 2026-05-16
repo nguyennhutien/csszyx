@@ -28,6 +28,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install wasm-pack --locked
 RUN cargo install wasm-bindgen-cli --locked --version 0.2.93
+RUN cargo install cocogitto --locked --version 7.0.0
 
 # Build-time validation — fail the image build if any required tool is
 # missing. Without this, a silent failure in any RUN step above would ship
@@ -35,7 +36,7 @@ RUN cargo install wasm-bindgen-cli --locked --version 0.2.93
 # would have to repair it on every container start. This is the cheapest
 # place to catch image-level brokenness.
 RUN set -e \
-    && for tool in mise cargo rustc wasm-pack wasm-bindgen; do \
+    && for tool in mise cargo rustc wasm-pack wasm-bindgen cog; do \
         command -v $tool >/dev/null 2>&1 || (echo "FATAL: $tool not on PATH after Dockerfile RUN steps" && exit 1); \
     done \
     && echo "[image-build] All required tools present."
