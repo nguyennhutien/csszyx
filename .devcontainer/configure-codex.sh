@@ -5,12 +5,40 @@
 # separate CODEX_HOME so danger-full-access defaults do not leak back to the host.
 set -euo pipefail
 
+# --wrapper-only flag: rebuild only /root/.local/bin/codex. This is used by
+# shell self-heal paths where Codex may already be running; avoid touching
+# auth/config/state symlinks while a process could have them open.
+WRAPPER_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --wrapper-only) WRAPPER_ONLY=1 ;;
+    esac
+done
+
 HOST_CODEX_HOME="${HOST_CODEX_HOME:-/root/.codex}"
 DEV_CODEX_HOME="${CODEX_HOME:-/root/.codex-devcontainer}"
 CODEX_WRAPPER="/root/.local/bin/codex"
 REAL_CODEX="/root/.local/share/mise/installs/node/22.22.1/bin/codex"
 
 mkdir -p "$DEV_CODEX_HOME"
+
+link_entry() {
+    local src="$1"
+    local dest="$2"
+
+    if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+        return
+    fi
+
+    # Atomic for files and existing symlinks. GNU ln cannot overwrite a real
+    # non-empty directory with -T, so fall back to rm only for that setup case.
+    if [ -d "$dest" ] && [ ! -L "$dest" ]; then
+        rm -rf "$dest"
+        ln -s "$src" "$dest"
+    else
+        ln -sfT "$src" "$dest"
+    fi
+}
 
 sync_entry() {
     local name="$1"
@@ -21,43 +49,46 @@ sync_entry() {
         return
     fi
 
-    rm -rf "$dest"
-    ln -s "$src" "$dest"
+    link_entry "$src" "$dest"
 }
 
-for entry in \
-    auth.json \
-    cache \
-    installation_id \
-    memories \
-    models_cache.json \
-    skills \
-    version.json; do
-    sync_entry "$entry"
-done
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    for entry in \
+        auth.json \
+        cache \
+        installation_id \
+        memories \
+        models_cache.json \
+        skills \
+        version.json; do
+        sync_entry "$entry"
+    done
+fi
 
 CONFIG="$DEV_CODEX_HOME/config.toml"
 
-cat > "$CONFIG" <<'EOF'
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    cat > "$CONFIG" <<'EOF'
 # Devcontainer-only Codex permissions. The devcontainer firewall provides the
 # network boundary, so local Codex can run without its own filesystem sandbox.
 sandbox_mode = "danger-full-access"
 approval_policy = "never"
 EOF
 
-if [ -f "$HOST_CODEX_HOME/config.toml" ]; then
-    awk '
-        /^[[:space:]]*(approval_policy|approvals_reviewer|sandbox_mode)[[:space:]]*=/ { next }
-        { print }
-    ' "$HOST_CODEX_HOME/config.toml" >> "$CONFIG"
-fi
+    if [ -f "$HOST_CODEX_HOME/config.toml" ]; then
+        awk '
+            /^[[:space:]]*(approval_policy|approvals_reviewer|sandbox_mode)[[:space:]]*=/ { next }
+            { print }
+        ' "$HOST_CODEX_HOME/config.toml" >> "$CONFIG"
+    fi
 
-if ! grep -qF '[projects."/workspaces/csszyx"]' "$CONFIG"; then
-    {
-        echo
-        echo '[projects."/workspaces/csszyx"]'
-        echo 'trust_level = "trusted"'
-    } >> "$CONFIG"
+    if ! grep -qF '[projects."/workspaces/csszyx"]' "$CONFIG"; then
+        {
+            echo
+            echo '[projects."/workspaces/csszyx"]'
+            echo 'trust_level = "trusted"'
+        } >> "$CONFIG"
+    fi
 fi
 
 if [ -x "$REAL_CODEX" ]; then

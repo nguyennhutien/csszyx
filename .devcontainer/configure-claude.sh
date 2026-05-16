@@ -287,7 +287,7 @@ if [ ! -x /root/.local/bin/claude ] || [ ! -x /root/.local/bin/codex ]; then
         bash /workspaces/csszyx/.devcontainer/configure-claude.sh --wrapper-only >/dev/null 2>&1
     fi
     if [ -f /workspaces/csszyx/.devcontainer/configure-codex.sh ]; then
-        bash /workspaces/csszyx/.devcontainer/configure-codex.sh >/dev/null 2>&1
+        bash /workspaces/csszyx/.devcontainer/configure-codex.sh --wrapper-only >/dev/null 2>&1
     fi
 fi
 
