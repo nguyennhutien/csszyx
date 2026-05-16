@@ -24,7 +24,7 @@
         "apps/*"
     ],
     "scripts": {
-        "prepare": "husky",
+        "prepare": "lefthook install",
         "postinstall": "[ -f .agent/fix-linux-arm64-binaries.sh ] && bash .agent/fix-linux-arm64-binaries.sh || true",
         "gen:llms": "node scripts/gen-llms.mjs",
         "build": "pnpm run gen:llms && turbo run build",
@@ -61,9 +61,8 @@
         "eslint-plugin-react": "^7.37.5",
         "eslint-plugin-react-hooks": "^4.6.0",
         "eslint-plugin-simple-import-sort": "^12.0.0",
-        "husky": "^9.0.10",
         "jsonc-eslint-parser": "^2.4.2",
-        "lint-staged": "^15.2.0",
+        "lefthook": "^2.1.6",
         "markdownlint-cli": "^0.47.0",
         "oxlint": "^1.63.0",
         "prettier": "^3.8.0",

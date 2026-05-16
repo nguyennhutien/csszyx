@@ -1,0 +1,61 @@
+# Lefthook replaces Husky + lint-staged for local git hooks.
+# Keep commit validation separate from release generation: commit-msg calls
+# the Cocogitto wrapper, while release-please remains the only changelog owner.
+
+pre-commit:
+  parallel: false
+  commands:
+    oxlint:
+      glob: "*.{js,jsx,ts,tsx}"
+      run: pnpm exec oxlint --fix {staged_files}
+      stage_fixed: true
+
+    eslint-ts:
+      glob: "*.{js,jsx,ts,tsx}"
+      run: pnpm exec eslint --fix {staged_files}
+      stage_fixed: true
+
+    typecheck-ts:
+      glob: "*.{js,jsx,ts,tsx}"
+      run: pnpm exec tsc --noEmit
+
+    prettier-json:
+      glob: "*.{json,jsonc,json5}"
+      exclude:
+        - "package.json"
+        - "**/package.json"
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+
+    rustfmt:
+      glob: "*.rs"
+      run: rustfmt --edition 2021 {staged_files}
+      stage_fixed: true
+
+    cargo-clippy:
+      glob: "*.rs"
+      run: cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+      stage_fixed: true
+
+    markdownlint:
+      glob: "*.md"
+      run: pnpm exec markdownlint --fix {staged_files}
+      stage_fixed: true
+
+    prettier-md:
+      glob: "*.md"
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+
+    prettier-css:
+      glob: "*.css"
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+
+    sync-lockfile:
+      run: node scripts/sync-lockfile-if-needed.mjs
+
+commit-msg:
+  commands:
+    validate:
+      run: scripts/verify-commit-message.sh {1}

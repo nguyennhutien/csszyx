@@ -56,7 +56,7 @@
 /turbo.json          @nguyennhutien
 /eslint.config.js    @nguyennhutien
 /.oxlintrc.json      @nguyennhutien
-/.lintstagedrc       @nguyennhutien
+/lefthook.yml        @nguyennhutien
 /tsconfig*.json      @nguyennhutien
 
 # ----- Compiler public API -----

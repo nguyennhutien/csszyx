@@ -80,7 +80,7 @@ jobs:
               - 'turbo.json'
               - 'biome.json'
               - 'cog.toml'
-              - '.lintstagedrc'
+              - 'lefthook.yml'
               - '.eslintrc*'
               - 'eslint.config.*'
             code_rust:

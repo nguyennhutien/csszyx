@@ -119,6 +119,6 @@ pnpm test          # vitest + turbo orchestration
 pnpm test:e2e      # Playwright
 ```
 
-The pre-commit hook runs lint-staged on changed files. The commit-msg
-hook runs `scripts/verify-commit-message.sh`, which calls
+Lefthook runs pre-commit checks on changed files and the commit-msg
+validator. The commit-msg hook runs `scripts/verify-commit-message.sh`, which calls
 `cog verify --file` and then enforces csszyx's release-please rules.
