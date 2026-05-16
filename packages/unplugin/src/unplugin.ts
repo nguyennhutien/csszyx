@@ -13,6 +13,7 @@ import type { PluginOption } from 'vite';
 import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
+import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
     buildRecoveryManifest,
     transformIndexHtml as injectHydrationData,
@@ -75,15 +76,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     if (!scanCss) {
         return;
     }
-    const patterns = Array.isArray(scanCss) ? scanCss : [scanCss];
-    const sourceFiles: string[] = [];
-    for (const pattern of patterns) {
-        const resolved = path.isAbsolute(pattern) ? pattern : path.join(rootDir, pattern);
-        // Simple literal path — no glob expansion needed for MVP (no glob dep)
-        if (fs.existsSync(resolved)) {
-            sourceFiles.push(resolved);
-        }
-    }
+    const sourceFiles = expandFilePatterns(rootDir, scanCss).filter(file => file.endsWith('.css'));
     if (sourceFiles.length === 0) {
         return;
     }
@@ -430,6 +423,67 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
 
     /**
+     * User exclude filters must run before any parser call. This is the escape
+     * hatch for large generated source files that contain an incidental `sz`
+     * marker and would otherwise trip the AST budget guard.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when user config excludes this file.
+     */
+    function isUserExcluded(id: string): boolean {
+        return matchesAnyPattern(id, options.exclude, state.rootDir);
+    }
+
+    /**
+     * Checks the optional user include filter for source transforms.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when the file is allowed by include config.
+     */
+    function isUserIncluded(id: string): boolean {
+        return !options.include || matchesAnyPattern(id, options.include, state.rootDir);
+    }
+
+    /**
+     * Checks built-in directories that csszyx never transforms.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when the file should be skipped regardless of user filters.
+     */
+    function isHardIgnored(id: string): boolean {
+        return (
+            id.includes('node_modules') ||
+            id.includes('/packages/') ||
+            (id.includes('.next') && !id.includes('static'))
+        );
+    }
+
+    /**
+     * Checks whether a source module should enter the csszyx AST transform.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when csszyx should parse and transform the source file.
+     */
+    function shouldProcessSource(id: string): boolean {
+        return (
+            !isHardIgnored(id) &&
+            !isUserExcluded(id) &&
+            isUserIncluded(id) &&
+            (/\.[tj]sx?(\?.*)?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte'))
+        );
+    }
+
+    /**
+     * Checks whether a CSS module should receive Tailwind safelist injection.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when csszyx should process the CSS file.
+     */
+    function shouldProcessCss(id: string): boolean {
+        return !isHardIgnored(id) && !isUserExcluded(id) && /\.css(\?.*)?$/.test(id);
+    }
+
+    /**
      * Writes the safelist manifest (csszyx-classes.html) from the given class set.
      * No-ops if the file content is already up to date.
      *
@@ -495,6 +549,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
                     const filePath = path.join(dir, entry.name);
+                    if (!shouldProcessSource(filePath)) {
+                        continue;
+                    }
                     try {
                         const content = fs.readFileSync(filePath, 'utf-8');
                         if (!content.includes('sz=') && !content.includes('sz:')) {
@@ -739,19 +796,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns true if the file should be transformed, false otherwise
              */
             transformInclude(id) {
-                if (
-                    id.includes('node_modules') ||
-                    id.includes('/packages/') ||
-                    (id.includes('.next') && !id.includes('static'))
-                ) {
-                    return false;
-                }
                 // Handle CSS files to inject discovered classes as @source inline()
-                if (/\.css(\?.*)?$/.test(id)) {
+                if (shouldProcessCss(id)) {
                     return true;
                 }
                 // Only handle source files in PRE phase
-                return /\.[tj]sx?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte');
+                return shouldProcessSource(id);
             },
 
             /**
@@ -762,6 +812,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns transformed code with source map, or null if no changes were made
              */
             transform(code, id) {
+                if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
+                    return null;
+                }
+
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
                     assertNoRSCBoundaryViolation(code, id);
                 }
@@ -990,18 +1044,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
                 if (options.build?.scanCss) {
-                    const patterns = Array.isArray(options.build.scanCss)
-                        ? options.build.scanCss
-                        : [options.build.scanCss];
                     compiler.hooks.thisCompilation.tap('csszyx:theme-deps', compilation => {
                         const root = compiler.context || process.cwd();
-                        for (const pattern of patterns) {
-                            const resolved = path.isAbsolute(pattern)
-                                ? pattern
-                                : path.join(root, pattern);
-                            if (fs.existsSync(resolved)) {
-                                compilation.fileDependencies.add(resolved);
-                            }
+                        for (const file of expandFilePatterns(root, options.build?.scanCss ?? [])) {
+                            compilation.fileDependencies.add(file);
                         }
                     });
                 }
@@ -1031,13 +1077,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // Theme scan for @theme CSS blocks
                     const scanCss = options.build?.scanCss;
                     if (scanCss) {
-                        const patterns = Array.isArray(scanCss) ? scanCss : [scanCss];
                         const root = ctx.server.config.root || process.cwd();
-                        const isWatched = patterns.some(p => {
-                            const resolved = path.isAbsolute(p) ? p : path.join(root, p);
-                            return ctx.file === resolved;
-                        });
-                        if (isWatched) {
+                        if (matchesAnyPattern(ctx.file, scanCss, root)) {
                             runThemeScan(root, scanCss);
                         }
                     }
@@ -1047,10 +1088,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // This ensures Tailwind generates CSS for new sz props without a dev restart.
                     // handleHotUpdate fires before the module is re-transformed, so we must
                     // read and transform the file ourselves to discover any new classes.
-                    if (!SOURCE_EXTENSIONS.has(path.extname(ctx.file))) {
-                        return;
-                    }
-                    if (ctx.file.includes('node_modules')) {
+                    if (!shouldProcessSource(ctx.file)) {
                         return;
                     }
 

@@ -76,6 +76,7 @@ Import `PartialCsszyxConfig` for full type safety:
 import type { PartialCsszyxConfig } from "@csszyx/types";
 
 const csszyxOptions: PartialCsszyxConfig = {
+  exclude: ["src/generated/**"],
   development: {
     debug: true,
   },
@@ -139,6 +140,7 @@ interface BuildConfig {
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
   astBudgetLimit?: number; // Max AST nodes per file before warning
+  scanCss?: string | string[]; // CSS files/globs with @theme blocks
 }
 ```
 
@@ -149,6 +151,17 @@ interface BuildConfig {
 - `outputDir`: `'.csszyx'`
 - `cacheDir`: `'.csszyx/cache'`
 - `astBudgetLimit`: `50000`
+
+### File Filters
+
+Top-level `include` / `exclude` control which source files csszyx parses. Use
+`exclude` for large generated files that contain an incidental `sz` marker:
+
+```ts
+csszyx({
+  exclude: ["src/generated/**", /icon-dump\.tsx$/],
+});
+```
 
 ### Hydration
 

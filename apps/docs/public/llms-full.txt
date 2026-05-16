@@ -3471,13 +3471,17 @@ need:
 ...csszyx({ build: { astBudgetLimit: 100_000 } })
 ```
 
-Or exclude the file from csszyx processing entirely via the bundler's
-`exclude` filter.
+Or exclude the file from csszyx processing entirely before parsing:
+
+```js
+...csszyx({ exclude: ['src/generated/**', /icon-dump\.tsx$/] })
+```
 
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 
 When using Tailwind v4 `@theme` blocks for custom design tokens, enable `build.scanCss`
-to generate `.csszyx/theme.d.ts` — surfaces custom tokens in `sz` prop IntelliSense:
+to generate `.csszyx/theme.d.ts` — surfaces custom tokens in `sz` prop IntelliSense.
+Literal paths and simple globs are supported:
 
 ```ts
 // vite.config.ts

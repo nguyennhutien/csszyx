@@ -89,6 +89,7 @@ scans them to generate CSS.
 import type { PartialCsszyxConfig } from '@csszyx/types';
 
 const csszyxOptions: PartialCsszyxConfig = {
+  exclude: ['src/generated/**'],
   development: { debug: true },
   production: { mangle: true },
 };
@@ -159,8 +160,20 @@ interface BuildConfig {
 | `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path |
 | `outputDir` | `'.csszyx'` | Plugin output directory |
 | `cacheDir` | `'.csszyx/cache'` | Incremental build cache |
-| `astBudgetLimit` | `50000` | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via the bundler's filter. |
-| `scanCss` | `undefined` | CSS files to scan for `@theme` blocks (see below) |
+| `astBudgetLimit` | `50000` | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`. |
+| `scanCss` | `undefined` | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported. |
+
+### File Filters
+
+Use top-level `include` / `exclude` to control which source files csszyx parses.
+Filters accept literal paths, simple globs, or RegExp patterns. Excludes run before
+AST parsing, so large generated files can be skipped without hitting the AST budget.
+
+```ts
+csszyx({
+  exclude: ['src/generated/**', /icon-dump\.tsx$/],
+});
+```
 
 #### Theme Auto-Scan (`scanCss`)
 

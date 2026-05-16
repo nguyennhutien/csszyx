@@ -117,6 +117,15 @@ export interface BuildConfig {
 }
 
 /**
+ * File patterns accepted by csszyx plugin filters.
+ *
+ * String patterns may be literal paths (`src/generated/icon-dump.tsx`) or
+ * simple globs such as `src/generated/**` or any TSX file. RegExp patterns are matched
+ * against both absolute paths and paths relative to the project root.
+ */
+export type FilePattern = string | RegExp;
+
+/**
  * Hydration safety configuration.
  */
 export interface HydrationConfig {
@@ -210,6 +219,23 @@ export interface CsszyxConfig {
  * All fields are optional and will be merged with defaults.
  */
 export type PartialCsszyxConfig = {
+    /**
+     * Restrict source files that csszyx transforms.
+     *
+     * CSS files used for Tailwind class discovery are still processed unless
+     * excluded explicitly, so narrow source includes do not accidentally disable
+     * CSS safelist injection.
+     */
+    include?: FilePattern | FilePattern[];
+
+    /**
+     * Exclude files from csszyx processing before parsing.
+     *
+     * Use this for large generated source files that happen to contain an `sz`
+     * marker and would otherwise hit the AST budget guard.
+     */
+    exclude?: FilePattern | FilePattern[];
+
     development?: Partial<DevelopmentConfig>;
     production?: Partial<ProductionConfig>;
     build?: Partial<BuildConfig>;
