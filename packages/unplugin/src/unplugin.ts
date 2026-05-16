@@ -482,7 +482,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param dir - the directory path to scan recursively
          */
         function scanDir(dir: string): void {
-            let entries;
+            let entries: fs.Dirent[];
             try {
                 entries = fs.readdirSync(dir, { withFileTypes: true });
             } catch {
@@ -527,10 +527,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // to Tailwind's content scanner. Extract them here.
                         if (result.usesRuntime) {
                             const szCallRe = /_sz\(\s*\{/g;
-                            let szMatch;
-                            while ((szMatch = szCallRe.exec(result.code)) !== null) {
+                            for (const szMatch of result.code.matchAll(szCallRe)) {
                                 let depth = 1;
-                                let idx = szMatch.index + szMatch[0].length;
+                                let idx = (szMatch.index ?? 0) + szMatch[0].length;
                                 while (idx < result.code.length && depth > 0) {
                                     if (result.code[idx] === '{') {
                                         depth++;
@@ -540,13 +539,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     idx++;
                                 }
                                 const objStr = result.code.slice(
-                                    szMatch.index + szMatch[0].length,
+                                    (szMatch.index ?? 0) + szMatch[0].length,
                                     idx - 1,
                                 );
                                 // Extract key: 'string' or "string" pairs
                                 const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
-                                let kv;
-                                while ((kv = strKv.exec(objStr)) !== null) {
+                                for (const kv of objStr.matchAll(strKv)) {
                                     try {
                                         const val = kv[2] ?? kv[3];
                                         const r = transform({ [kv[1]]: val });
@@ -559,7 +557,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                 }
                                 // Extract key: number pairs
                                 const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
-                                while ((kv = numKv.exec(objStr)) !== null) {
+                                for (const kv of objStr.matchAll(numKv)) {
                                     try {
                                         const r = transform({ [kv[1]]: parseFloat(kv[2]) });
                                         for (const c of r.className.split(/\s+/).filter(Boolean)) {
@@ -571,7 +569,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                 }
                                 // Extract key: true/false pairs
                                 const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
-                                while ((kv = boolKv.exec(objStr)) !== null) {
+                                for (const kv of objStr.matchAll(boolKv)) {
                                     try {
                                         const r = transform({ [kv[1]]: kv[2] === 'true' });
                                         for (const c of r.className.split(/\s+/).filter(Boolean)) {
@@ -618,9 +616,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // fully from double-quoted strings, and vice versa.
         const dqPattern = /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g;
         const sqPattern = /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g;
-        let match;
         for (const classPattern of [dqPattern, sqPattern]) {
-            while ((match = classPattern.exec(code)) !== null) {
+            for (const match of code.matchAll(classPattern)) {
                 const classes = match[1].split(/\s+/).filter(Boolean);
                 for (const cls of classes) {
                     state.classes.add(cls);
@@ -632,9 +629,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // This handles pre-compiled ternary expressions like:
         // className={cond ? "text-6xl font-bold" : "text-6xl text-sm"}
         const exprStart = /className=\{/g;
-        while ((match = exprStart.exec(code)) !== null) {
+        for (const match of code.matchAll(exprStart)) {
             let depth = 1;
-            let i = match.index + match[0].length;
+            let i = (match.index ?? 0) + match[0].length;
             while (i < code.length && depth > 0) {
                 if (code[i] === '{') {
                     depth++;
@@ -643,11 +640,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
                 i++;
             }
-            const expr = code.slice(match.index + match[0].length, i - 1);
+            const expr = code.slice((match.index ?? 0) + match[0].length, i - 1);
             // Extract all quoted strings within the expression
             const strPattern = /"([^"]+)"|'([^']+)'/g;
-            let strMatch;
-            while ((strMatch = strPattern.exec(expr)) !== null) {
+            for (const strMatch of expr.matchAll(strPattern)) {
                 const str = strMatch[1] || strMatch[2];
                 const classes = str.split(/\s+/).filter(Boolean);
                 for (const cls of classes) {
@@ -1160,7 +1156,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Determine stage - default to optimize size to encompass most transformations
                 const stage =
                     compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
-                     
                     (compilation.constructor as any).PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
 
                 compilation.hooks.processAssets.tap(

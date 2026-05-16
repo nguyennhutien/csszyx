@@ -145,9 +145,7 @@ function extractClassStrings(content: string): string[] {
     for (let pi = 0; pi < patterns.length; pi++) {
         const re = patterns[pi];
         const isGeneric = pi >= GENERIC_PATTERN_START;
-        re.lastIndex = 0;
-        let match;
-        while ((match = re.exec(content)) !== null) {
+        for (const match of content.matchAll(re)) {
             const value = match[1];
             if (!value) {
                 continue;

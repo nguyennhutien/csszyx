@@ -154,7 +154,6 @@ export function initRuntime(config: Partial<RuntimeConfig> = {}): void {
     }
 
     if (runtimeState.config.debug) {
-         
         console.log('[csszyx] Runtime initialized', runtimeState.config);
     }
 

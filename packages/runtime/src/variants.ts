@@ -53,7 +53,7 @@ function deepMerge(target: SzObject, source: SzObject): SzObject {
             tv !== null &&
             tv !== undefined &&
             typeof tv === 'object' &&
-            !Array.isArray(tv)  
+            !Array.isArray(tv)
         ) {
             result[key] = deepMerge(tv as SzObject, sv as SzObject);
         } else {

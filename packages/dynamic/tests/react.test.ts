@@ -144,7 +144,9 @@ describe('useSz()', () => {
         useSz();
         const cleanups = runCapturedEffects();
         // Run all cleanup functions (simulate unmount)
-        cleanups.forEach(fn => fn());
+        cleanups.forEach(fn => {
+            fn();
+        });
         // Cleanup should NOT have fired yet (timer pending)
         expect(mockInjectorCleanup).not.toHaveBeenCalled();
         expect(mockResetManifest).not.toHaveBeenCalled();
@@ -160,7 +162,9 @@ describe('useSz()', () => {
         const firstCleanups = runCapturedEffects();
 
         // StrictMode unmount — schedules cleanup timer
-        firstCleanups.forEach(fn => fn());
+        firstCleanups.forEach(fn => {
+            fn();
+        });
         expect(mockInjectorCleanup).not.toHaveBeenCalled();
 
         // StrictMode remount — second useSz() call, effect runs again, cancels timer
@@ -177,7 +181,9 @@ describe('useSz()', () => {
     it('runs cleanup after true unmount (no remount)', () => {
         useSz();
         const cleanups = runCapturedEffects();
-        cleanups.forEach(fn => fn());
+        cleanups.forEach(fn => {
+            fn();
+        });
         // No remount — timer fires
         vi.runAllTimers();
         expect(mockInjectorCleanup).toHaveBeenCalledOnce();

@@ -376,8 +376,7 @@ function findRuntimeImports(code: string): Array<{ source: string; symbols: stri
     const sideEffectImportRe = /import\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-    let match;
-    while ((match = staticImportRe.exec(code)) !== null) {
+    for (const match of code.matchAll(staticImportRe)) {
         const clause = match[1];
         const source = match[2];
         if (!RUNTIME_MODULES.has(source)) {
@@ -386,14 +385,14 @@ function findRuntimeImports(code: string): Array<{ source: string; symbols: stri
         imports.push({ source, symbols: readImportedSymbols(clause) });
     }
 
-    while ((match = sideEffectImportRe.exec(code)) !== null) {
+    for (const match of code.matchAll(sideEffectImportRe)) {
         const source = match[1];
         if (RUNTIME_MODULES.has(source)) {
             imports.push({ source, symbols: [] });
         }
     }
 
-    while ((match = dynamicImportRe.exec(code)) !== null) {
+    for (const match of code.matchAll(dynamicImportRe)) {
         const source = match[1];
         if (RUNTIME_MODULES.has(source)) {
             imports.push({ source, symbols: Array.from(FORBIDDEN_SYMBOLS) });
@@ -415,9 +414,8 @@ function findLocalImportSources(code: string): string[] {
     const exportFromRe = /export\s+(?!type\b)(?:[\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-    let match;
     for (const re of [staticImportRe, exportFromRe, dynamicImportRe]) {
-        while ((match = re.exec(code)) !== null) {
+        for (const match of code.matchAll(re)) {
             const source = match[1];
             if (source.startsWith('.') || source.startsWith('/')) {
                 out.push(source);

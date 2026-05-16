@@ -12,7 +12,7 @@
  *   pnpm compiler:profile-hotpath -- --iterations 5 --corpus flowbite,shadcn
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
@@ -159,7 +159,7 @@ function listSourceFiles(roots: string[]): string[] {
      * @param dir directory to walk
      */
     function walk(dir: string): void {
-        let entries;
+        let entries: Dirent[];
         try {
             entries = readdirSync(dir, { withFileTypes: true });
         } catch {
@@ -197,9 +197,8 @@ function listSourceFiles(roots: string[]): string[] {
 function extractSzPatterns(code: string): string[] {
     const patterns: string[] = [];
     const re = /\bsz\s*=/g;
-    let match;
-    while ((match = re.exec(code)) !== null) {
-        let i = match.index + match[0].length;
+    for (const match of code.matchAll(re)) {
+        let i = (match.index ?? 0) + match[0].length;
         while (i < code.length && /\s/.test(code[i])) {
             i++;
         }

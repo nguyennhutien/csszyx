@@ -143,7 +143,7 @@ export function transformSource(
     let hasCvaImport = false;
 
     // ── Step 1: Parse ────────────────────────────────────────────────────
-    let ast;
+    let ast: ReturnType<typeof parse>;
     try {
         ast = parse(source, {
             sourceType: 'module',

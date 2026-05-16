@@ -133,7 +133,6 @@ export function transformTemplate(
         count++;
 
         if (options.debug) {
-             
             console.log(`[csszyx/vue] Transformed: ${objStr} -> "${className}"`);
         }
 

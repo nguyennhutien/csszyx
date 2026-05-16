@@ -20,7 +20,7 @@ import { type SzObject, transform } from '../src/transform.js';
 /** Shorthand: transform and return className string.
  * @param obj - The sz object to transform.
  * @returns {string} The resulting className string. */
- 
+
 const t = (obj: any): string => transform(obj as SzObject).className;
 
 // ===========================================================================

@@ -186,7 +186,6 @@ function createSelectorProcessor(
     mangleMap: MangleMap,
     mangledClasses: Set<string>,
     unmangledClasses: Set<string>,
-     
 ): any {
     return selectorParser(selectors => {
         selectors.walkClasses(classNode => {
@@ -269,11 +268,10 @@ export async function mangleCSS(
     });
 
     if (options.debug) {
-         
         console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
-         
+
         console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
-         
+
         console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
     }
 
@@ -326,11 +324,10 @@ export function mangleCSSSync(
     });
 
     if (options.debug) {
-         
         console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
-         
+
         console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
-         
+
         console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
     }
 
@@ -388,7 +385,6 @@ export function createPostCSSPlugin(
         },
         OnceExit() {
             if (options.debug) {
-                 
                 console.log(`[csszyx] Mangled ${mangledClasses.size} unique classes`);
             }
         },

@@ -43,7 +43,8 @@ export async function generateTypes(options: GenerateTypesOptions = {}): Promise
     const error = options.silent ? () => {} : console.error;
 
     // Find or use provided config path
-    let configPath: string, scanResult;
+    let configPath: string;
+    let scanResult: Awaited<ReturnType<typeof scanTailwindConfig>>;
 
     if (options.config) {
         configPath = resolve(cwd, options.config);

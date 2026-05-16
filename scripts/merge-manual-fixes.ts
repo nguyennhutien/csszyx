@@ -8,7 +8,6 @@ const files = fs
     .readdirSync(generatedDir)
     .filter(f => f.endsWith('.tests.json') && f !== 'spec-tests.json');
 
- 
 let allTests: any[] = [];
 
 console.log('Merging the following files:');

@@ -400,8 +400,7 @@ describe('unplugin class extraction & mangling', () => {
     function extractClasses(code: string): Set<string> {
         const classes = new Set<string>();
         const classPattern = /(?:class(?:Name)?|sz)[:=]\s*["']([^"']*)["']/g;
-        let match;
-        while ((match = classPattern.exec(code)) !== null) {
+        for (const match of code.matchAll(classPattern)) {
             const parts = match[1].split(/\s+/).filter(Boolean);
             for (const cls of parts) {
                 classes.add(cls);

@@ -93,8 +93,7 @@ function extractThemeBlocks(css: string): string[] {
     const blocks: string[] = [];
     // Match @theme (optional "inline" keyword) followed by {
     const themeStart = /@theme\s+(?:inline\s+)?\{|@theme\{/g;
-    let match: RegExpExecArray | null;
-    while ((match = themeStart.exec(css)) !== null) {
+    for (const match of css.matchAll(themeStart)) {
         const openPos = css.indexOf('{', match.index);
         let depth = 0;
         let j = openPos;
@@ -166,14 +165,12 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
     const propPattern = /--([a-z][a-z0-9-]*)(?:\s*:[^;]+)?;/g;
 
     for (const block of blocks) {
-        let match: RegExpExecArray | null;
-        while ((match = propPattern.exec(block)) !== null) {
+        for (const match of block.matchAll(propPattern)) {
             const categorized = categorizeProperty(match[1]);
             if (categorized) {
                 result[categorized.category].add(categorized.token);
             }
         }
-        propPattern.lastIndex = 0; // reset for next block
     }
 
     return {

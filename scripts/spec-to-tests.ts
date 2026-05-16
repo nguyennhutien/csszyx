@@ -891,8 +891,7 @@ function parseCommaSeparatedRow(
     // Extract all sz objects from the cell
     const szObjects: string[] = [];
     const objPattern = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-    let match;
-    while ((match = objPattern.exec(szCell)) !== null) {
+    for (const match of szCell.matchAll(objPattern)) {
         szObjects.push(match[0]);
     }
 

@@ -102,7 +102,6 @@ test.describe('Edge Case Tests (Next.js)', () => {
 
         // window.__csszyx helper should be available after script execution
         const helper = await page.evaluate(() => {
-             
             const h = (window as Record<string, any>).__csszyx;
             if (!h) {
                 return null;

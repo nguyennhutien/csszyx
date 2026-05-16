@@ -101,7 +101,6 @@ export function transformMarkup(
         count++;
 
         if (options.debug) {
-             
             console.log(`[csszyx/svelte] Transformed: ${objStr} -> "${className}"`);
         }
 
@@ -125,7 +124,6 @@ export function transformMarkup(
         count++;
 
         if (options.debug) {
-             
             console.log(`[csszyx/svelte] Transformed binding: ${objStr} -> "${className}"`);
         }
 
@@ -209,7 +207,6 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
             }
 
             if (options.debug && filename) {
-                 
                 console.log(`[csszyx/svelte] Processing: ${filename}`);
             }
 
@@ -224,7 +221,6 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
             const mergedContent = mergeClassAttributes(transformResult.code);
 
             if (options.debug) {
-                 
                 console.log(`[csszyx/svelte] Transformed ${transformResult.count} sz props`);
             }
 
