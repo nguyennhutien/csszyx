@@ -19,12 +19,19 @@
             "@csszyx/dynamic/react": ["./packages/dynamic/src/react.ts"]
         }
     },
-    "include": [
-        "packages/**/*",
-        "scripts/**/*",
-        "tests/**/*",
-        "playwright.config.ts",
-        "vitest.config.ts"
-    ],
-    "exclude": ["node_modules", "**/dist", "**/target", "**/pkg"]
+    "files": [],
+    "references": [
+        { "path": "./packages/compiler" },
+        { "path": "./packages/runtime" },
+        { "path": "./packages/types" },
+        { "path": "./packages/dynamic" },
+        { "path": "./packages/cli" },
+        { "path": "./packages/svelte-adapter" },
+        { "path": "./packages/vue-adapter" },
+        { "path": "./packages/unplugin" },
+        { "path": "./packages/csszyx" },
+        { "path": "./packages/mcp-server" },
+        { "path": "./packages/vscode" },
+        { "path": "./packages/vars" }
+    ]
 }

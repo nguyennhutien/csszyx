@@ -8,7 +8,7 @@
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 
-export const COLOR_STRING_KEYWORDS = new Set([
+export const COLOR_STRING_KEYWORDS: Set<string> = new Set([
     'inherit',
     'current',
     'transparent',

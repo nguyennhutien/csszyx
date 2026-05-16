@@ -37,7 +37,7 @@
     "lint:fast": "biome check",
     "lint": "biome check --write && eslint . --fix",
     "lint:check": "biome check && eslint .",
-    "type-check": "turbo run type-check",
+    "type-check": "tsc -b",
     "clean": "rm -rf node_modules .turbo packages/*/node_modules packages/*/dist playground/*/node_modules playground/*/dist playground/*/.next playground/*/out",
     "reset": "pnpm clean && pnpm install && turbo run build --filter='./packages/*'",
     "corpus:check": "node --import tsx/esm scripts/check-corpus.ts",

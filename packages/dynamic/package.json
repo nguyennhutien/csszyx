@@ -1,60 +1,60 @@
 {
-    "name": "@csszyx/dynamic",
-    "version": "0.7.0",
-    "description": "Runtime CSS injection engine for @csszyx — injects only CSS not already in the pre-built stylesheet",
-    "type": "module",
-    "main": "./dist/index.mjs",
-    "module": "./dist/index.mjs",
-    "types": "./dist/index.d.mts",
-    "sideEffects": false,
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.mts",
-            "import": "./dist/index.mjs"
-        },
-        "./react": {
-            "types": "./dist/react.d.mts",
-            "import": "./dist/react.mjs"
-        }
+  "name": "@csszyx/dynamic",
+  "version": "0.7.0",
+  "description": "Runtime CSS injection engine for @csszyx — injects only CSS not already in the pre-built stylesheet",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     },
-    "files": [
-        "dist"
-    ],
-    "keywords": [
-        "csszyx",
-        "css-in-js",
-        "runtime-css",
-        "delta-injection",
-        "tailwind",
-        "form-renderer"
-    ],
-    "license": "MIT",
-    "engines": {
-        "node": ">=22.12.0"
-    },
-    "scripts": {
-        "build": "unbuild",
-        "dev": "unbuild --stub",
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "type-check": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@csszyx/compiler": "workspace:*"
-    },
-    "peerDependencies": {
-        "react": ">=18.0.0"
-    },
-    "peerDependenciesMeta": {
-        "react": {
-            "optional": true
-        }
-    },
-    "devDependencies": {
-        "@types/node": "^20.19.37",
-        "@types/react": "^18.0.0",
-        "typescript": "^6.0.3",
-        "unbuild": "^3.6.1",
-        "vitest": "^4.1.6"
+    "./react": {
+      "types": "./dist/react.d.mts",
+      "import": "./dist/react.mjs"
     }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "csszyx",
+    "css-in-js",
+    "runtime-css",
+    "delta-injection",
+    "tailwind",
+    "form-renderer"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "unbuild",
+    "dev": "unbuild --stub",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@csszyx/compiler": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "@types/react": "^18.0.0",
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.6"
+  }
 }

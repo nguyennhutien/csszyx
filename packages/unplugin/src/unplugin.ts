@@ -1389,7 +1389,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
 // Export a single instance for default use (compatibility)
 const defaultInstance = createCsszyxPlugins();
-export const unplugin = defaultInstance.prePlugin; // Fallback
+export const unplugin: UnpluginInstance<PartialCsszyxConfig, boolean> = defaultInstance.prePlugin; // Fallback
 
 /**
  * Creates a Vite plugin array with both pre-transform and post-mangle plugins.

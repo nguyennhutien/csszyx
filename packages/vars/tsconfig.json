@@ -6,16 +6,10 @@
         "isolatedDeclarations": true,
         "declaration": true,
         "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
-        "outDir": "dist",
-        "rootDir": "src",
-        "types": ["node"]
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "types": ["node", "react"]
     },
-    "references": [
-        { "path": "../compiler" },
-        { "path": "../svelte-adapter" },
-        { "path": "../types" },
-        { "path": "../vue-adapter" }
-    ],
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"]
 }

@@ -20,7 +20,7 @@ pre-commit:
 
     typecheck-ts:
       glob: "*.{ts,tsx}"
-      run: sh -c 'pnpm exec tsc --noEmit' -- {staged_files}
+      run: pnpm exec tsc -b --pretty false
 
     prettier-json:
       glob: "*.{json,jsonc,json5}"

@@ -1,10 +1,16 @@
 {
     "extends": "../../tsconfig.json",
     "compilerOptions": {
+        "composite": true,
+        "incremental": true,
+        "isolatedDeclarations": true,
+        "declaration": true,
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
         "rootDir": "./src",
         "outDir": "./dist",
         "types": ["vitest/globals", "node"]
     },
+    "references": [{ "path": "../compiler" }],
     "include": ["src/**/*"],
     "exclude": ["dist", "node_modules"]
 }

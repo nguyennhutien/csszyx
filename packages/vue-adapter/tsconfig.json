@@ -1,4 +1,5 @@
 {
+    "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "target": "ES2022",
         "module": "ESNext",
@@ -7,11 +8,18 @@
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
+        "composite": true,
+        "incremental": true,
+        "isolatedDeclarations": true,
         "declaration": true,
         "declarationMap": true,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
         "outDir": "./dist",
         "rootDir": "./src"
     },
+    "references": [{ "path": "../compiler" }],
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"]
 }

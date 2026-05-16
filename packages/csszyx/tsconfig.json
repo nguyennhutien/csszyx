@@ -6,16 +6,17 @@
         "isolatedDeclarations": true,
         "declaration": true,
         "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
-        "outDir": "dist",
-        "rootDir": "src",
+        "outDir": "./dist",
+        "rootDir": "./src",
         "types": ["node"]
     },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist"],
     "references": [
         { "path": "../compiler" },
-        { "path": "../svelte-adapter" },
+        { "path": "../runtime" },
         { "path": "../types" },
-        { "path": "../vue-adapter" }
-    ],
-    "include": ["src/**/*"],
-    "exclude": ["node_modules", "dist"]
+        { "path": "../dynamic" },
+        { "path": "../unplugin" }
+    ]
 }

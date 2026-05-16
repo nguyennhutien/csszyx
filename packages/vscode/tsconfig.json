@@ -3,14 +3,19 @@
     "compilerOptions": {
         // VS Code extension host runs CommonJS, not ESM
         "module": "CommonJS",
+        "composite": true,
+        "incremental": true,
+        "isolatedDeclarations": true,
         "outDir": "./dist",
         "rootDir": "./src",
-        "declaration": false,
-        "declarationMap": false,
+        "declaration": true,
+        "declarationMap": true,
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
         // VS Code extension needs the vscode + node typings; DOM globals
         // (setTimeout etc) come from node.
         "types": ["node", "vscode"]
     },
+    "references": [{ "path": "../compiler" }],
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"]
 }

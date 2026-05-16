@@ -568,7 +568,7 @@ export const VARIANT_MAP: Record<string, string> = {
 // ============================================================================
 // KNOWN_VARIANTS: All known variant names for disambiguation
 // ============================================================================
-export const KNOWN_VARIANTS = new Set([
+export const KNOWN_VARIANTS: Set<string> = new Set([
     // Responsive
     'sm',
     'md',
@@ -693,7 +693,7 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
-export const BOOLEAN_SHORTHANDS = new Set([
+export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // Display
     'block',
     'inline',
