@@ -5,14 +5,20 @@
   "description": "Model Context Protocol (MCP) server for csszyx — enables AI agents to understand and generate sz props",
   "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
   "bin": {
-    "csszyx-mcp": "dist/index.js"
+    "csszyx-mcp": "./dist/index.mjs"
   },
   "scripts": {
     "build": "unbuild",
-    "start": "node dist/index.js",
+    "start": "node dist/index.mjs",
     "dev": "unbuild --stub",
     "test": "vitest run"
   },
