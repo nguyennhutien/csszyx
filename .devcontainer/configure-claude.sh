@@ -55,14 +55,19 @@ if [ "$WRAPPER_ONLY" -ne 1 ]; then
             .|..) continue ;;
         esac
         dest="$DEV_CLAUDE_HOME/$name"
-        # Skip if already a correctly-pointing symlink to avoid the race.
+        # Skip if already a correctly-pointing symlink to avoid even the
+        # ln -sfT call when nothing needs to change.
         if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
             continue
         fi
-        if [ -L "$dest" ] || [ -e "$dest" ]; then
-            rm -rf "$dest"
-        fi
-        ln -s "$src" "$dest"
+        # ln -sfT replaces the destination atomically. Using rm + ln -s
+        # raced with Antigravity launching Claude before postStartCommand
+        # finished: rm unlinked the file, Claude rewrote it via atomic
+        # tmp+rename, then plain ln -s failed because the path was
+        # repopulated. The -f flag forces overwrite; -T treats dest as
+        # a non-directory so ln does not descend if dest happens to be
+        # a directory entry from an in-flight write.
+        ln -sfT "$src" "$dest"
     done
     shopt -u dotglob nullglob
 
@@ -75,10 +80,7 @@ if [ "$WRAPPER_ONLY" -ne 1 ]; then
     DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
     if [ -f "$HOST_CLAUDE_JSON" ]; then
         if ! { [ -L "$DEV_CLAUDE_JSON" ] && [ "$(readlink "$DEV_CLAUDE_JSON")" = "$HOST_CLAUDE_JSON" ]; }; then
-            if [ -L "$DEV_CLAUDE_JSON" ] || [ -e "$DEV_CLAUDE_JSON" ]; then
-                rm -rf "$DEV_CLAUDE_JSON"
-            fi
-            ln -s "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
+            ln -sfT "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
         fi
     fi
 fi
