@@ -11,6 +11,9 @@
             "packages/**/*.tsx",
             "packages/**/*.js",
             "packages/**/*.jsx",
+            "packages/**/*.css",
+            "apps/**/*.css",
+            "playground/**/*.css",
             "packages/**/*.json",
             "packages/**/*.jsonc",
             "scripts/**/*.ts",
@@ -39,7 +42,8 @@
             "!**/*.cjs",
             "!**/llms*.txt",
             "!**/CHANGELOG.md",
-            "!**/*.benchmark.json"
+            "!**/*.benchmark.json",
+            "!apps/docs/src/styles/landing.css"
         ]
     },
     "formatter": {
@@ -63,6 +67,17 @@
         "formatter": {
             "indentWidth": 4,
             "trailingCommas": "none"
+        }
+    },
+    "css": {
+        "parser": {
+            "tailwindDirectives": true
+        },
+        "formatter": {
+            "enabled": true
+        },
+        "linter": {
+            "enabled": false
         }
     },
     "linter": {

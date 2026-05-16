@@ -6,10 +6,11 @@ pre-commit:
   parallel: false
   commands:
     biome:
-      glob: "*.{js,jsx,ts,tsx,json,jsonc,json5}"
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,json5,css}"
       exclude:
         - "package.json"
         - "**/package.json"
+        - "apps/docs/src/styles/landing.css"
       run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
 
@@ -52,11 +53,6 @@ pre-commit:
 
     prettier-md:
       glob: "*.md"
-      run: pnpm exec prettier --write {staged_files}
-      stage_fixed: true
-
-    prettier-css:
-      glob: "*.css"
       run: pnpm exec prettier --write {staged_files}
       stage_fixed: true
 

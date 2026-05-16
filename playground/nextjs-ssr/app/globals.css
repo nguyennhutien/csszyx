@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-csszyx-primary: #6366f1;
-  --color-csszyx-secondary: #8b5cf6;
-  --color-csszyx-accent: #ec4899;
-  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    --color-csszyx-primary: #6366f1;
+    --color-csszyx-secondary: #8b5cf6;
+    --color-csszyx-accent: #ec4899;
+    --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 :root {
@@ -23,11 +23,7 @@
 
 body {
     color: rgb(var(--foreground-rgb));
-    background: linear-gradient(
-            to bottom,
-            transparent,
-            rgb(var(--background-end-rgb))
-        )
+    background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb)))
         rgb(var(--background-start-rgb));
 }
 
