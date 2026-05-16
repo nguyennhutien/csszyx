@@ -5,25 +5,33 @@
 pre-commit:
   parallel: false
   commands:
-    oxlint:
-      glob: "*.{js,jsx,ts,tsx}"
-      run: pnpm exec oxlint --fix {staged_files}
+    biome:
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,json5}"
+      exclude:
+        - "package.json"
+        - "**/package.json"
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
 
     eslint-ts:
-      glob: "*.{js,jsx,ts,tsx}"
-      run: pnpm exec eslint --fix {staged_files}
+      glob: "*.{ts,tsx}"
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
 
     typecheck-ts:
-      glob: "*.{js,jsx,ts,tsx}"
-      run: pnpm exec tsc --noEmit
+      glob: "*.{ts,tsx}"
+      run: sh -c 'pnpm exec tsc --noEmit' -- {staged_files}
 
     prettier-json:
       glob: "*.{json,jsonc,json5}"
       exclude:
         - "package.json"
         - "**/package.json"
+        - "biome.json"
+        - "tsconfig.json"
+        - "tsconfig.eslint.json"
+        - "packages/**/*.json"
+        - "packages/**/*.jsonc"
       run: pnpm exec prettier --write {staged_files}
       stage_fixed: true
 

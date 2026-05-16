@@ -5,7 +5,7 @@ import { init, transform_sz, WasmCollisionDetector } from '../pkg-node/csszyx_co
 /**
  * Pure JavaScript implementation of the transformer (from @csszyx/compiler).
  */
-function transformJS(szProp: any, prefix = ''): string {
+function transformJS(szProp: Record<string, unknown>, prefix = ''): string {
     const classes: string[] = [];
 
     for (const [key, value] of Object.entries(szProp)) {
@@ -15,7 +15,7 @@ function transformJS(szProp: any, prefix = ''): string {
 
         if (typeof value === 'object' && !Array.isArray(value)) {
             const nestedPrefix = prefix ? `${prefix}${key}:` : `${key}:`;
-            classes.push(transformJS(value, nestedPrefix));
+            classes.push(transformJS(value as Record<string, unknown>, nestedPrefix));
             continue;
         }
 

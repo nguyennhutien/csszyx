@@ -8,14 +8,18 @@ const files = fs
     .readdirSync(generatedDir)
     .filter(f => f.endsWith('.tests.json') && f !== 'spec-tests.json');
 
-let allTests: any[] = [];
+interface GeneratedTestFile {
+    tests?: unknown;
+}
+
+let allTests: unknown[] = [];
 
 console.log('Merging the following files:');
 for (const file of files) {
     console.log(`- ${file}`);
     const content = fs.readFileSync(path.join(generatedDir, file), 'utf-8');
     try {
-        const json = JSON.parse(content);
+        const json = JSON.parse(content) as GeneratedTestFile;
         if (json.tests && Array.isArray(json.tests)) {
             allTests = allTests.concat(json.tests);
         }

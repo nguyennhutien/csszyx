@@ -186,7 +186,7 @@ function createSelectorProcessor(
     mangleMap: MangleMap,
     mangledClasses: Set<string>,
     unmangledClasses: Set<string>,
-): any {
+): selectorParser.Processor<void> {
     return selectorParser(selectors => {
         selectors.walkClasses(classNode => {
             // Get the class value (already unescaped by postcss-selector-parser)

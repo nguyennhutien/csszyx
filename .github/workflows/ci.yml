@@ -116,14 +116,14 @@ jobs:
       - name: Validate release-please config + manifest
         run: node .github/scripts/validate-release-please-config.mjs
 
-  # Fast oxlint preflight. Runs the same `pnpm lint:fast` script as
-  # local dev (oxlint only, no ESLint, no Rust toolchain) so most
-  # correctness issues surface in <30 s — well before the heavier
-  # `lint` job's WASM cache restore + ESLint pass would. The `lint`
-  # job below depends on this, so a failed oxlint run skips the
-  # slower lint stage entirely.
+  # Fast Biome preflight. Runs the same `pnpm lint:fast` script as
+  # local dev (Biome only, no ESLint, no Rust toolchain) so most
+  # formatting, import-order, and syntax lint issues surface before
+  # the heavier `lint` job's WASM cache restore + ESLint pass would.
+  # The `lint` job below depends on this, so a failed Biome run skips
+  # the slower lint stage entirely.
   lint-fast:
-    name: Lint (oxlint preflight)
+    name: Lint (Biome preflight)
     needs: detect-changes
     if: |
       needs.detect-changes.outputs.release_please != 'true' &&
@@ -145,12 +145,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run oxlint
+      - name: Run Biome
         run: pnpm lint:fast
 
   lint:
     name: Lint
-    # Gated on lint-fast so oxlint failures fail the gate fast and
+    # Gated on lint-fast so Biome failures fail the gate fast and
     # skip the heavier ESLint + type-check pass.
     needs: [detect-changes, lint-fast]
     # Skip when:
@@ -195,9 +195,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ESLint only — oxlint already ran in the lint-fast preflight.
-      # Running it again here would just duplicate the ~500 ms oxlint
-      # pass for no signal.
+      # ESLint only — Biome already ran in the lint-fast preflight.
+      # Running it again here would duplicate formatting/import/basic
+      # lint work for no extra signal.
       - name: Lint (eslint)
         run: pnpm exec eslint .
 

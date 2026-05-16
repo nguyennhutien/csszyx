@@ -28,6 +28,8 @@ import type * as CSS from 'csstype';
  *     spacings: 'xl' | '2xs';
  *   }
  * }
+ *
+ * biome-ignore lint/complexity/noBannedTypes: this empty object type is the module-augmentation anchor.
  */
 export type CustomTheme = {};
 

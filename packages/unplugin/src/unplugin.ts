@@ -1156,7 +1156,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Determine stage - default to optimize size to encompass most transformations
                 const stage =
                     compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
-                    (compilation.constructor as any).PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
+                    (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE?: number })
+                        .PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
 
                 compilation.hooks.processAssets.tap(
                     {
