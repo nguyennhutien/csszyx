@@ -929,7 +929,20 @@ function evaluatePartialObject(
 
     for (const propRaw of node.properties) {
         if (propRaw.type === 'SpreadElement') {
-            return null;
+            const spread = propRaw as SpreadElementNode;
+            const objectNode = resolveObjectExpression(spread.argument, bindings);
+            if (!objectNode) {
+                return null;
+            }
+            try {
+                Object.assign(staticProps, astObjectToSzObject(objectNode, filename, bindings));
+                continue;
+            } catch (err) {
+                if (err instanceof OxcNotImplementedError) {
+                    return null;
+                }
+                throw err;
+            }
         }
         if (propRaw.type !== 'Property') {
             return null;

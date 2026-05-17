@@ -111,8 +111,18 @@ const fixtures: readonly CorpusFixture[] = [
             "const base = { rounded: 'lg', p: 4 };",
             'const A = ({ color }) => <div sz={{ ...base, bg: color }} />;',
         ].join('\n'),
+        expected: 'surgical-parity',
+        note: 'partial CSS-variable compile can merge local static spreads first',
+    },
+    {
+        name: 'conditional object spread',
+        source: [
+            "const active = { bg: 'blue-500', color: 'white' };",
+            "const inactive = { bg: 'gray-100', color: 'gray-600' };",
+            'const A = ({ isActive }) => <div sz={{ ...(isActive ? active : inactive), p: 4 }} />;',
+        ].join('\n'),
         expected: 'class-divergence',
-        note: 'partial CSS-variable compile after local spreads is still a later D5 slice',
+        note: 'conditional object-spread hoisting is still a later D5 slice',
     },
     {
         name: 'conditional object value',

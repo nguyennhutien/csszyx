@@ -161,6 +161,15 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'dynamic-call.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-local-spread-dynamic-css-var',
+        source: [
+            'const BASE = { rounded: "lg", p: 4 } as const;',
+            'const X = ({ color }) => <div sz={{ ...BASE, bg: color }} />;',
+        ].join('\n'),
+        filename: 'local-spread-dynamic.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {
