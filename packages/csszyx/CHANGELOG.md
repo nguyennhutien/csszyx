@@ -1,5 +1,21 @@
 # csszyx
 
+## [0.8.0](https://github.com/nguyennhutien/csszyx/compare/v0.7.0...v0.8.0) (2026-05-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* The default source parser is now oxc-parser + magic-string (was Babel). No action needed for most projects — produced class names and source maps are byte-identical to Babel output. Two operator-visible behavior changes:
+
+### Features
+
+* default source parser to oxc + build pipeline modernization ([#23](https://github.com/nguyennhutien/csszyx/issues/23)) ([64f32ae](https://github.com/nguyennhutien/csszyx/commit/64f32ae58a1ba1f7eb234c256db370d5c85c6366))
+
+
+### Bug Fixes
+
+* post-merge CI failures (types dts bundling + Lint job pre-build) ([#24](https://github.com/nguyennhutien/csszyx/issues/24)) ([d0e7a40](https://github.com/nguyennhutien/csszyx/commit/d0e7a40561d58a830d81d158df9321b0514c0486))
+
 ## [0.7.0](https://github.com/nguyennhutien/csszyx/compare/v0.6.2...v0.7.0) (2026-05-15)
 
   ### Features
