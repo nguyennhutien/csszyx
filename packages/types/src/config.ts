@@ -98,6 +98,13 @@ export interface BuildConfig {
     cacheDir?: string;
 
     /**
+     * Enable the per-file transform cache.
+     *
+     * @default true
+     */
+    cache?: boolean;
+
+    /**
      * Maximum AST nodes per file before warning.
      *
      * @default 50000

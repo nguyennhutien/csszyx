@@ -1,5 +1,7 @@
 import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { type TokenData, transform, transformOxc, transformSourceCode } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
@@ -27,6 +29,12 @@ import {
 } from './rsc-boundary.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
+import {
+    evictOldTransformCacheEntries,
+    readTransformCache,
+    resolveTransformCacheDir,
+    writeTransformCache,
+} from './transform-cache.js';
 import {
     createChecksumModule,
     createMangleMapModule,
@@ -65,8 +73,12 @@ interface PluginState {
  */
 const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
+const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 let _hasWarnedTsConfig = false;
+const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
+const PLUGIN_VERSION = findPackageVersionFromFile(fileURLToPath(import.meta.url), '0.0.0');
+const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', '0.0.0');
 
 /**
  * Scans CSS files for Tailwind v4 @theme blocks and writes .csszyx/theme.d.ts.
@@ -121,6 +133,50 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
         } catch {
             // Ignore file read errors
         }
+    }
+}
+
+/**
+ * Resolve a package entry and read the nearest package.json version.
+ *
+ * @param specifier Package specifier to resolve.
+ * @param fallback Version used when package metadata is unavailable.
+ * @returns Package version string.
+ */
+function findPackageVersionFromModule(specifier: string, fallback: string): string {
+    try {
+        return findPackageVersionFromFile(requireFromHere.resolve(specifier), fallback);
+    } catch {
+        return fallback;
+    }
+}
+
+/**
+ * Walk upward from a file until a package.json version is found.
+ *
+ * @param file File path inside a package.
+ * @param fallback Version used when no package.json can be read.
+ * @returns Package version string.
+ */
+function findPackageVersionFromFile(file: string, fallback: string): string {
+    let dir = path.dirname(file);
+    while (true) {
+        const packageJson = path.join(dir, 'package.json');
+        try {
+            const parsed = JSON.parse(fs.readFileSync(packageJson, 'utf8')) as {
+                version?: unknown;
+            };
+            if (typeof parsed.version === 'string') {
+                return parsed.version;
+            }
+        } catch {
+            // Keep walking up until the filesystem root.
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            return fallback;
+        }
+        dir = parent;
     }
 }
 
@@ -410,11 +466,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    const cacheEnabled = options.build?.cache !== false;
     const parserOverride = process.env.CSSZYX_PARSER;
     const parserMode =
         parserOverride === 'babel' || parserOverride === 'oxc'
             ? parserOverride
             : (options.build?.parser ?? 'oxc');
+    let evictedCacheRoot: string | null = null;
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -502,20 +560,55 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
         const compilerOptions = { astBudget: astBudgetOverride };
-        if (parserMode !== 'oxc') {
-            return transformSourceCode(source, filename, compilerOptions);
+        const cacheInput = {
+            pluginVersion: PLUGIN_VERSION,
+            compilerVersion: COMPILER_VERSION,
+            parserMode,
+            astBudget: astBudgetOverride,
+            filename,
+            source,
+        };
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+
+        if (cacheEnabled) {
+            const cached = readTransformCache(cacheRoot, cacheInput);
+            if (cached) {
+                return cached;
+            }
         }
 
-        try {
-            return transformOxc(source, filename, compilerOptions);
-        } catch (err) {
-            const result = transformSourceCode(source, filename, compilerOptions);
-            const reason = err instanceof Error ? err.message : String(err);
-            result.diagnostics.push(
-                `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
-            );
-            return result;
+        let result: SourceTransformResult;
+        if (parserMode !== 'oxc') {
+            result = transformSourceCode(source, filename, compilerOptions);
+        } else {
+            try {
+                result = transformOxc(source, filename, compilerOptions);
+            } catch (err) {
+                result = transformSourceCode(source, filename, compilerOptions);
+                const reason = err instanceof Error ? err.message : String(err);
+                result.diagnostics.push(
+                    `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
+                );
+            }
         }
+
+        if (cacheEnabled) {
+            writeTransformCache(cacheRoot, cacheInput, result);
+        }
+        return result;
+    }
+
+    /** Runs transform-cache eviction once per resolved project cache root. */
+    function evictTransformCacheOnce(): void {
+        if (!cacheEnabled) {
+            return;
+        }
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+        if (evictedCacheRoot === cacheRoot) {
+            return;
+        }
+        evictedCacheRoot = cacheRoot;
+        evictOldTransformCacheEntries(cacheRoot, TRANSFORM_CACHE_MAX_AGE_MS);
     }
 
     /**
@@ -1067,6 +1160,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    evictTransformCacheOnce();
                     if (state.classes.size === 0) {
                         prescanAndWriteClasses();
                     }
@@ -1093,6 +1187,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 configResolved(config) {
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
                     // Generate theme type augmentation from @theme CSS blocks
