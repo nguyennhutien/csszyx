@@ -170,6 +170,16 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'local-spread-dynamic.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-conditional-local-spread',
+        source: [
+            'const ON = { opacity: 100 } as const;',
+            'const OFF = { opacity: 0 } as const;',
+            'const X = ({ show }) => <div sz={{ ...(show ? ON : OFF), transition: "opacity" }} />;',
+        ].join('\n'),
+        filename: 'conditional-spread.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

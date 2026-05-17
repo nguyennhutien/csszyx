@@ -30,9 +30,9 @@ interface ExtractedSnippet {
 
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
     parity: 6,
-    'surgical-parity': 86,
+    'surgical-parity': 90,
     'oxc-throws': 1,
-    'class-divergence': 14,
+    'class-divergence': 10,
     'diagnostics-divergence': 11,
     'metadata-divergence': 0,
 };

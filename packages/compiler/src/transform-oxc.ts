@@ -344,6 +344,27 @@ export function transformOxc(
                 );
             } catch (err) {
                 if (err instanceof OxcNotImplementedError) {
+                    const conditionalSpreadClassExpr = buildConditionalSpreadClassExpression(
+                        expression as ObjectExpressionNode,
+                        effectiveFilename,
+                        objectBindings,
+                        source,
+                        classes,
+                    );
+                    if (conditionalSpreadClassExpr) {
+                        if (classNameAttr || szAttrs.length > 1) {
+                            runtimeFallbackExpr = expression;
+                            runtimeFallbackAttr = szAttr;
+                            break;
+                        }
+                        edits.overwrite(
+                            szAttr.start,
+                            szAttr.end,
+                            `className={${conditionalSpreadClassExpr}}`,
+                        );
+                        transformed = true;
+                        return;
+                    }
                     const partial = buildPartialObjectTransform(
                         expression as ObjectExpressionNode,
                         effectiveFilename,
@@ -849,6 +870,104 @@ function resolveObjectExpression(
         return bindings.get(String((unwrapped as IdentifierNode).name)) ?? null;
     }
     return null;
+}
+
+/**
+ * Build a className ternary for `{ ...(cond ? a : b), static: true }`.
+ *
+ * @param node Object expression used as the sz value.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for test expression slicing.
+ * @param classes Class set to populate.
+ * @returns Ternary className expression source, or null when unsupported.
+ */
+function buildConditionalSpreadClassExpression(
+    node: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+    classes: Set<string>,
+): string | null {
+    let conditionalSpread: ConditionalExpressionNode | null = null;
+    const otherProps: OxcNode[] = [];
+    for (const prop of node.properties) {
+        if (prop.type !== 'SpreadElement') {
+            otherProps.push(prop);
+            continue;
+        }
+        const spread = prop as SpreadElementNode;
+        const spreadArgument = unwrapExpression(spread.argument);
+        if (spreadArgument.type !== 'ConditionalExpression' || conditionalSpread) {
+            return null;
+        }
+        conditionalSpread = spreadArgument as ConditionalExpressionNode;
+    }
+    if (!conditionalSpread) {
+        return null;
+    }
+
+    const consequent = compileConditionalSpreadBranch(
+        conditionalSpread.consequent,
+        otherProps,
+        node,
+        filename,
+        bindings,
+    );
+    const alternate = compileConditionalSpreadBranch(
+        conditionalSpread.alternate,
+        otherProps,
+        node,
+        filename,
+        bindings,
+    );
+    if (consequent === null || alternate === null) {
+        return null;
+    }
+    for (const cls of `${consequent} ${alternate}`.split(/\s+/)) {
+        if (cls) {
+            classes.add(cls);
+        }
+    }
+    const testSource = source.slice(conditionalSpread.test.start, conditionalSpread.test.end);
+    return `${testSource} ? ${JSON.stringify(consequent)} : ${JSON.stringify(alternate)}`;
+}
+
+/**
+ * Compile one branch of a conditional object spread plus the static overrides.
+ *
+ * @param branch Conditional branch expression.
+ * @param otherProps Static properties outside the spread.
+ * @param sourceNode Source object node used for span fields.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @returns Compiled class string, or null when unsupported.
+ */
+function compileConditionalSpreadBranch(
+    branch: OxcNode,
+    otherProps: OxcNode[],
+    sourceNode: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): string | null {
+    const branchObject = resolveObjectExpression(branch, bindings);
+    if (!branchObject) {
+        return null;
+    }
+    try {
+        const branchValue = astObjectToSzObject(branchObject, filename, bindings);
+        const overrides = astObjectToSzObject(
+            { ...sourceNode, properties: otherProps },
+            filename,
+            bindings,
+        );
+        return compileSzObject({ ...branchValue, ...overrides }).className;
+    } catch (err) {
+        if (err instanceof OxcNotImplementedError) {
+            return null;
+        }
+        throw err;
+    }
 }
 
 /**
@@ -1375,7 +1494,8 @@ function unwrapExpression(node: OxcNode): OxcNode {
     while (
         current.type === 'TSAsExpression' ||
         current.type === 'TSSatisfiesExpression' ||
-        current.type === 'TSNonNullExpression'
+        current.type === 'TSNonNullExpression' ||
+        current.type === 'ParenthesizedExpression'
     ) {
         const next = (current as unknown as { expression?: OxcNode }).expression;
         if (!next) {

@@ -82,6 +82,12 @@ const fixtures: readonly CorpusFixture[] = [
         note: 'fully static arrays compile without runtime',
     },
     {
+        name: 'array logical object element',
+        source: 'const A = ({ isActive }) => <div sz={[{ flex: true }, isActive && { bg: "blue-500" }]} />;',
+        expected: 'class-divergence',
+        note: 'logical object array elements are still a later D5 slice',
+    },
+    {
         name: 'dynamic css var value',
         source: 'const A = () => <div sz={{ p: padVal }} />;',
         expected: 'surgical-parity',
@@ -121,8 +127,8 @@ const fixtures: readonly CorpusFixture[] = [
             "const inactive = { bg: 'gray-100', color: 'gray-600' };",
             'const A = ({ isActive }) => <div sz={{ ...(isActive ? active : inactive), p: 4 }} />;',
         ].join('\n'),
-        expected: 'class-divergence',
-        note: 'conditional object-spread hoisting is still a later D5 slice',
+        expected: 'surgical-parity',
+        note: 'single conditional object-spread hoists to static class branches',
     },
     {
         name: 'conditional object value',
