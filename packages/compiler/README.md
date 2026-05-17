@@ -81,9 +81,34 @@ const manifest = builder.build();
 
 ### Transform
 
-#### `transform(szProp: SzObject, prefix?: string): string`
+Two layers — a pure object compile (`transform`) and two source-string
+transforms (`transformSourceCode` for the Babel path, `transformOxc` for
+the oxc-parser + magic-string path).
 
-Transforms a CSSzyx sz object into a Tailwind CSS className string.
+#### `transform(szProp: SzObject, prefix?: string, mangleMap?: Record<string, string>): TransformResult`
+
+Pure compile from a sz object to `{ className, attributes }`. Browser-safe
+(no parser dependency); also exposed at `@csszyx/compiler/browser` for
+runtime consumers like `@csszyx/dynamic`.
+
+#### `transformSourceCode(source: string, filename?: string, options?: TransformSourceCodeOptions): { code, transformed, usesRuntime, usesMerge, usesColorVar, classes, rawClassNames, diagnostics, recoveryTokens }`
+
+Babel-based source transform. Parses TSX/JSX, walks the AST, rewrites
+`sz`/`szRecover`/`_sz` constructs, emits the new source via Babel's
+code generator. Source of truth before v0.8.0; retained as the fallback
+path in v0.8.0+.
+
+#### `transformOxc(source: string, filename?: string, options?: TransformSourceCodeOptions): TransformOxcResult` _(since v0.8.0)_
+
+oxc-parser + magic-string source transform. Same return shape as
+`transformSourceCode` so consumers (and the parity harness) can diff
+both implementations cleanly. Throws `OxcNotImplementedError` only for
+patterns that fall outside the curated Phase D coverage; the unplugin
+catches that error and routes to `transformSourceCode` as the fallback.
+
+Surgical edits preserve every byte the user wrote outside the touched
+`sz`/`szRecover` ranges — Babel's pretty-printer would have collapsed
+or expanded surrounding whitespace.
 
 #### `isValidSzProp(szProp: unknown): boolean`
 

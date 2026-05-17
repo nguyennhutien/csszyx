@@ -114,11 +114,18 @@ If a specific version is required, use a `Release-As: x.y.z` footer.
 ## Local checks
 
 ```bash
-pnpm lint:check    # eslint
+pnpm lint:check    # biome + slim eslint (jsdoc + type-aware rules)
+pnpm lint          # same, auto-fix where possible
 pnpm test          # vitest + turbo orchestration
 pnpm test:e2e      # Playwright
+pnpm type-check    # tsc -b across workspace project references
 ```
 
+Formatting is owned by Biome (including CSS as of v0.8.0); ESLint stays
+for JSDoc enforcement and TypeScript type-aware rules that need full
+TS inference. See `eslint.config.js` for the split.
+
 Lefthook runs pre-commit checks on changed files and the commit-msg
-validator. The commit-msg hook runs `scripts/verify-commit-message.sh`, which calls
-`cog verify --file` and then enforces csszyx's release-please rules.
+validator. The commit-msg hook runs `scripts/verify-commit-message.sh`,
+which calls `cog verify --file` and then enforces csszyx's release-please
+rules.
