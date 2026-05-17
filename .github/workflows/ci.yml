@@ -201,6 +201,19 @@ jobs:
       - name: Lint (eslint)
         run: pnpm exec eslint .
 
+      # Build the workspace before type-checking. `tsc -b` resolves
+      # workspace deps (`@csszyx/core`, `@csszyx/compiler/browser`,
+      # `@csszyx/cli`, …) through `node_modules` → `dist/*.d.mts`.
+      # `@csszyx/core` is Rust/WASM (outside the TS project graph) and
+      # the `./browser` subpath emits via `unbuild` (also outside the
+      # TS graph), so `tsc -b` cannot synthesise those `.d.mts` files
+      # on its own. Locally the dist is cached between runs; CI is a
+      # fresh checkout and must produce them explicitly.
+      # turbo caches build outputs (see "Cache turbo" above), so this
+      # step is fast on cache hit and avoids re-running wasm-pack.
+      - name: Build workspace (populate dist for tsc -b)
+        run: pnpm build
+
       - name: Type check
         run: pnpm type-check
 
