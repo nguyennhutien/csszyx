@@ -116,6 +116,7 @@ export function transformOxc(
     }
 
     const edits = new MagicString(source);
+    const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     let transformed = false;
     let usesRuntime = false;
 
@@ -245,10 +246,26 @@ export function transformOxc(
                 );
             }
             const expression = (value as unknown as { expression: OxcNode }).expression;
+            if (expression.type === 'Identifier') {
+                const bound = objectBindings.get(String((expression as IdentifierNode).name));
+                if (bound) {
+                    const result = compileSzObject(
+                        astObjectToSzObject(bound, effectiveFilename, objectBindings),
+                    );
+                    for (const c of result.className.split(/\s+/)) {
+                        if (c) {
+                            szDerived.push(c);
+                            classes.add(c);
+                        }
+                    }
+                    continue;
+                }
+            }
             if (expression.type === 'ArrayExpression') {
                 const arrayClasses = astArrayToStaticClasses(
                     expression as ArrayExpressionNode,
                     effectiveFilename,
+                    objectBindings,
                 );
                 if (arrayClasses === null) {
                     runtimeFallbackExpr = expression;
@@ -268,7 +285,11 @@ export function transformOxc(
             }
             let szObj: SzObject;
             try {
-                szObj = astObjectToSzObject(expression as ObjectExpressionNode, effectiveFilename);
+                szObj = astObjectToSzObject(
+                    expression as ObjectExpressionNode,
+                    effectiveFilename,
+                    objectBindings,
+                );
             } catch (err) {
                 if (err instanceof OxcNotImplementedError) {
                     runtimeFallbackExpr = expression;
@@ -451,6 +472,12 @@ interface OxcNode {
     [key: string]: unknown;
 }
 
+/** oxc shape for an identifier expression or binding. */
+interface IdentifierNode extends OxcNode {
+    type: 'Identifier';
+    name: string;
+}
+
 /** oxc shape for a JSX attribute (`sz={...}`, `className="..."`, etc). */
 interface JsxAttributeNode extends OxcNode {
     type: 'JSXAttribute';
@@ -487,6 +514,12 @@ interface PropertyNode extends OxcNode {
     shorthand: boolean;
 }
 
+/** oxc shape for object spread (`{ ...base }`). */
+interface SpreadElementNode extends OxcNode {
+    type: 'SpreadElement';
+    argument: OxcNode;
+}
+
 /**
  * Convert an oxc `ObjectExpression` AST node into a plain {@link SzObject}
  * the browser-pure `transform()` helper can consume. Throws
@@ -495,14 +528,33 @@ interface PropertyNode extends OxcNode {
  *
  * @param node The oxc ObjectExpression node.
  * @param filename Filename for diagnostic offsets.
+ * @param bindings Local object-literal bindings available for spread resolution.
  * @returns Plain JS object with literal values.
  */
-function astObjectToSzObject(node: ObjectExpressionNode, filename: string): SzObject {
+function astObjectToSzObject(
+    node: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): SzObject {
     const result: Record<string, SzValue> = {};
     for (const propRaw of node.properties) {
+        if (propRaw.type === 'SpreadElement') {
+            const spread = propRaw as SpreadElementNode;
+            if (spread.argument.type === 'Identifier') {
+                const bound = bindings.get(String((spread.argument as IdentifierNode).name));
+                if (bound) {
+                    Object.assign(result, astObjectToSzObject(bound, filename, bindings));
+                    continue;
+                }
+            }
+            throw new OxcNotImplementedError(
+                'D5',
+                `unsupported object spread in sz object at ${filename}:${propRaw.start}`,
+            );
+        }
         if (propRaw.type !== 'Property') {
             throw new OxcNotImplementedError(
-                'D2.1',
+                'D5',
                 `non-Property in sz object (e.g. SpreadElement) at ${filename}:${propRaw.start}`,
             );
         }
@@ -520,7 +572,7 @@ function astObjectToSzObject(node: ObjectExpressionNode, filename: string): SzOb
                 `unsupported key shape ${prop.key.type} at ${filename}:${prop.key.start}`,
             );
         }
-        result[key] = astValueToSzValue(prop.value, filename);
+        result[key] = astValueToSzValue(prop.value, filename, bindings);
     }
     return result as SzObject;
 }
@@ -534,22 +586,31 @@ function astObjectToSzObject(node: ObjectExpressionNode, filename: string): SzOb
  *
  * @param node The oxc ArrayExpression node.
  * @param filename Filename for diagnostic offsets.
+ * @param bindings Local object-literal bindings available for identifier/spread resolution.
  * @returns Static class tokens, or null when runtime handling is required.
  */
-function astArrayToStaticClasses(node: ArrayExpressionNode, filename: string): string[] | null {
+function astArrayToStaticClasses(
+    node: ArrayExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): string[] | null {
     const out: string[] = [];
     for (const element of node.elements) {
         if (!element || isFalsyLiteral(element)) {
             continue;
         }
-        if (element.type !== 'ObjectExpression') {
+        let objectNode: ObjectExpressionNode | null = null;
+        if (element.type === 'ObjectExpression') {
+            objectNode = element as ObjectExpressionNode;
+        } else if (element.type === 'Identifier') {
+            objectNode = bindings.get(String((element as IdentifierNode).name)) ?? null;
+        }
+        if (!objectNode) {
             return null;
         }
         let result: ReturnType<typeof compileSzObject>;
         try {
-            result = compileSzObject(
-                astObjectToSzObject(element as ObjectExpressionNode, filename),
-            );
+            result = compileSzObject(astObjectToSzObject(objectNode, filename, bindings));
         } catch (err) {
             if (err instanceof OxcNotImplementedError) {
                 return null;
@@ -605,9 +666,14 @@ function extractKeyName(key: OxcNode): string | null {
  *
  * @param node The value AST node.
  * @param filename Filename for diagnostic offsets.
+ * @param bindings Local object-literal bindings available for nested spread resolution.
  * @returns Plain JS value usable by `transform()`.
  */
-function astValueToSzValue(node: OxcNode, filename: string): SzValue {
+function astValueToSzValue(
+    node: OxcNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): SzValue {
     if (node.type === 'Literal') {
         const value = (node as unknown as { value: unknown }).value;
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -635,7 +701,7 @@ function astValueToSzValue(node: OxcNode, filename: string): SzValue {
         );
     }
     if (node.type === 'ObjectExpression') {
-        return astObjectToSzObject(node as ObjectExpressionNode, filename);
+        return astObjectToSzObject(node as ObjectExpressionNode, filename, bindings);
     }
     if (node.type === 'Identifier' || node.type === 'MemberExpression') {
         throw new OxcNotImplementedError(
@@ -653,6 +719,58 @@ function astValueToSzValue(node: OxcNode, filename: string): SzValue {
         'D2.1',
         `unsupported value node type ${node.type} at ${filename}:${node.start}`,
     );
+}
+
+/**
+ * Collect local object-literal bindings for the minimal D5 scope surface.
+ *
+ * This intentionally captures only direct variable declarators whose init
+ * unwraps to an object expression. It is enough for common `const base = {}`
+ * patterns while avoiding import/call/computed cases that need fuller scope
+ * semantics.
+ *
+ * @param root Program AST root.
+ * @returns Identifier name to object-expression initializer.
+ */
+function collectObjectBindings(root: OxcNode): Map<string, ObjectExpressionNode> {
+    const bindings = new Map<string, ObjectExpressionNode>();
+    walk(root, node => {
+        if (node.type !== 'VariableDeclarator') {
+            return;
+        }
+        const id = (node as unknown as { id?: OxcNode }).id;
+        const init = (node as unknown as { init?: OxcNode | null }).init;
+        if (!id || id.type !== 'Identifier' || !init) {
+            return;
+        }
+        const unwrapped = unwrapExpression(init);
+        if (unwrapped.type === 'ObjectExpression') {
+            bindings.set(String((id as IdentifierNode).name), unwrapped as ObjectExpressionNode);
+        }
+    });
+    return bindings;
+}
+
+/**
+ * Remove TypeScript wrappers around expression initializers.
+ *
+ * @param node Expression node.
+ * @returns Inner runtime expression node.
+ */
+function unwrapExpression(node: OxcNode): OxcNode {
+    let current = node;
+    while (
+        current.type === 'TSAsExpression' ||
+        current.type === 'TSSatisfiesExpression' ||
+        current.type === 'TSNonNullExpression'
+    ) {
+        const next = (current as unknown as { expression?: OxcNode }).expression;
+        if (!next) {
+            break;
+        }
+        current = next;
+    }
+    return current;
 }
 
 /**

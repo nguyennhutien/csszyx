@@ -113,6 +113,23 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'spread.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-direct-local-object',
+        source: ['const BASE = { p: 4 } as const;', 'const X = () => <div sz={BASE} />;'].join(
+            '\n',
+        ),
+        filename: 'direct-local.tsx',
+        expected: 'surgical-parity',
+    },
+    {
+        name: 'sz-local-object-spread',
+        source: [
+            'const BASE = { p: 4 } as const;',
+            'const X = () => <div sz={{ ...BASE, mt: 2 }} />;',
+        ].join('\n'),
+        filename: 'local-spread.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

@@ -96,14 +96,14 @@ const fixtures: readonly CorpusFixture[] = [
     {
         name: 'local object direct variable',
         source: 'const base = { p: 4 }; const A = () => <div sz={base} />;',
-        expected: 'class-divergence',
-        note: 'requires D5 scope analysis',
+        expected: 'surgical-parity',
+        note: 'minimal D5 local object binding resolves direct identifiers',
     },
     {
         name: 'local object spread',
         source: 'const base = { p: 4 }; const A = () => <div sz={{ ...base }} />;',
-        expected: 'class-divergence',
-        note: 'requires D5 scope analysis',
+        expected: 'surgical-parity',
+        note: 'minimal D5 local object binding resolves spread identifiers',
     },
     {
         name: 'conditional object value',
