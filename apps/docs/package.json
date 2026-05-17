@@ -25,5 +25,8 @@
         "expressive-code-twoslash": "^0.6.1",
         "sharp": "^0.34.5",
         "tailwindcss": "^4.2.2"
+    },
+    "devDependencies": {
+        "wrangler": "^4.92.0"
     }
 }
