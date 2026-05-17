@@ -175,4 +175,21 @@ describe('AST budget guard', () => {
             ASTBudgetExceededError,
         );
     });
+
+    it('throws ASTBudgetExceededError on an over-budget oxc file', () => {
+        const source = wideArraySource(60_000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
+
+        let caught: ASTBudgetExceededError | undefined;
+        try {
+            transformOxc(source, 'src/generated/huge-oxc.tsx');
+        } catch (e) {
+            caught = e as ASTBudgetExceededError;
+        }
+
+        expect(caught).toBeInstanceOf(ASTBudgetExceededError);
+        expect(caught?.filename).toBe('src/generated/huge-oxc.tsx');
+        expect(caught?.nodeCount).toBeGreaterThan(AST_BUDGET);
+        expect(caught?.budget).toBe(AST_BUDGET);
+        expect(caught?.message).toContain('src/generated/huge-oxc.tsx');
+    });
 });
