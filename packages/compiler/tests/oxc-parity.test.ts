@@ -33,31 +33,31 @@ const fixtures: readonly ParityFixture[] = [
         name: 'no-sz-fast-path',
         source: 'const X = () => <div id="a">hello</div>;',
         filename: 'no-sz.tsx',
-        expected: 'classes-only-parity',
+        expected: 'parity',
     },
     {
         name: 'static-single-prop',
         source: 'const X = () => <div sz={{ p: 4 }} />;',
         filename: 'single.tsx',
-        expected: 'classes-only-parity',
+        expected: 'parity',
     },
     {
         name: 'static-multi-prop',
         source: 'const X = () => <div sz={{ p: 4, bg: "blue-500", text: "white" }} />;',
         filename: 'multi.tsx',
-        expected: 'classes-only-parity',
+        expected: 'parity',
     },
     {
         name: 'static-variant-hover',
         source: 'const X = () => <div sz={{ p: 4, hover: { bg: "blue-600" } }} />;',
         filename: 'variant.tsx',
-        expected: 'classes-only-parity',
+        expected: 'parity',
     },
     {
         name: 'static-responsive-sm',
         source: 'const X = () => <div sz={{ p: 4, sm: { p: 6 } }} />;',
         filename: 'responsive.tsx',
-        expected: 'classes-only-parity',
+        expected: 'parity',
     },
     {
         name: 'multi-element-static',
@@ -69,15 +69,13 @@ const fixtures: readonly ParityFixture[] = [
             ');',
         ].join('\n'),
         filename: 'multi-element.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.2 — multi-attribute pass with magic-string overwrite',
+        expected: 'surgical-parity',
     },
     {
         name: 'sz-with-existing-classname',
         source: 'const X = () => <div className="existing" sz={{ p: 4 }} />;',
         filename: 'merge.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.2 — merge with existing className attribute',
+        expected: 'parity',
     },
     {
         name: 'sz-recover-csr',
@@ -120,7 +118,7 @@ describe('Phase D — Babel vs oxc parity', () => {
         const summary = summarise(fixtures);
         console.log(`\n  ${summary}\n`);
         expect(summary).toMatch(
-            /Phase D parity: \d+% — \d+ full, \d+ classes-only, \d+ pending \(\d+ total\)/,
+            /Phase D parity: \d+% — \d+ full, \d+ surgical, \d+ classes-only, \d+ pending \(\d+ total\)/,
         );
     });
 });

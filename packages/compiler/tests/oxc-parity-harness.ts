@@ -118,10 +118,16 @@ export interface ParityFixture {
      * - `classes-only-parity`: oxc must extract the same class set, but
      *   may leave `code` unchanged (read-only D2.1). Babel rewrites,
      *   oxc just reports — `codeEqual` is intentionally skipped.
+     * - `surgical-parity`: classes match Babel; code DIFFERS because
+     *   magic-string surgical edits preserve formatting (parens,
+     *   indentation) that Babel's code generator strips during
+     *   pretty-print. This divergence is INTENDED — surgical preservation
+     *   is the whole point of pairing oxc-parser with magic-string per
+     *   `.agent/workflows/future-roadmap.md` § Phase D.
      * - `parity`: full match — classes + code + diagnostics + transformed.
      *   D2.2+ once the magic-string rewrite path lands.
      */
-    expected: 'pending' | 'classes-only-parity' | 'parity';
+    expected: 'pending' | 'classes-only-parity' | 'surgical-parity' | 'parity';
     /** Why this fixture is pending — link to the slice that lands it. */
     pendingReason?: string;
 }
@@ -161,6 +167,27 @@ export function assertExpectedParity(fixture: ParityFixture, comparison: ParityC
     if (fixture.expected === 'classes-only-parity') {
         // codeEqual + transformedEqual intentionally NOT asserted —
         // D2.1 extracts classes only, magic-string rewrite is D2.2.
+        // But warn upgrade-eligible: if codeEqual is also true, the
+        // fixture should be flipped to full `parity` so a future
+        // regression in the rewrite path is caught.
+        if (comparison.codeEqual) {
+            throw new Error(
+                `Fixture "${fixture.name}" marked as classes-only-parity but code also matches Babel. ` +
+                    'Flip its `expected` to "parity".',
+            );
+        }
+        return;
+    }
+    if (fixture.expected === 'surgical-parity') {
+        // Codes MUST differ — that is the assertion. If they match
+        // byte-for-byte, the fixture is full parity and the label is
+        // misleading; flip to "parity".
+        if (comparison.codeEqual) {
+            throw new Error(
+                `Fixture "${fixture.name}" marked as surgical-parity but code matches Babel byte-for-byte. ` +
+                    'Flip its `expected` to "parity".',
+            );
+        }
         return;
     }
     if (!comparison.codeEqual) {
@@ -181,12 +208,13 @@ export function assertExpectedParity(fixture: ParityFixture, comparison: ParityC
 export function summarise(fixtures: readonly ParityFixture[]): string {
     const total = fixtures.length;
     const parity = fixtures.filter(f => f.expected === 'parity').length;
+    const surgical = fixtures.filter(f => f.expected === 'surgical-parity').length;
     const classesOnly = fixtures.filter(f => f.expected === 'classes-only-parity').length;
     const pending = fixtures.filter(f => f.expected === 'pending').length;
-    const pct = total === 0 ? 0 : Math.round(((parity + classesOnly) / total) * 100);
+    const pct = total === 0 ? 0 : Math.round(((parity + surgical + classesOnly) / total) * 100);
     return (
-        `Phase D parity: ${pct}% — ${parity} full, ${classesOnly} classes-only, ` +
-        `${pending} pending (${total} total)`
+        `Phase D parity: ${pct}% — ${parity} full, ${surgical} surgical, ` +
+        `${classesOnly} classes-only, ${pending} pending (${total} total)`
     );
 }
 

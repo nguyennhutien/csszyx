@@ -23,6 +23,7 @@
  * API mapping referenced throughout this file.
  */
 
+import MagicString from 'magic-string';
 import { parseSync } from 'oxc-parser';
 
 import type { TokenData } from './manifest.js';
@@ -72,7 +73,7 @@ export class OxcNotImplementedError extends Error {
 }
 
 /**
- * Transform a TSX/JSX source string using oxc-parser.
+ * Transform a TSX/JSX source string using oxc-parser + magic-string.
  *
  * @param source The source code to transform.
  * @param filename Optional filename, drives JSX detection in oxc-parser.
@@ -113,36 +114,111 @@ export function transformOxc(
         );
     }
 
+    const edits = new MagicString(source);
+    let transformed = false;
+
     walk(parsed.program, node => {
-        if (!isSzJsxAttribute(node)) {
+        if (node.type !== 'JSXOpeningElement') {
             return;
         }
-        const value = node.value;
-        if (!value || value.type !== 'JSXExpressionContainer') {
-            throw new OxcNotImplementedError(
-                'D2.1',
-                `sz attribute without object expression at ${effectiveFilename}:${node.start}`,
-            );
-        }
-        const expression = (value as unknown as { expression: OxcNode }).expression;
-        if (expression.type !== 'ObjectExpression') {
-            throw new OxcNotImplementedError(
-                'D2.1',
-                `sz expression is not an inline object literal at ${effectiveFilename}:${expression.start}`,
-            );
-        }
-        const szObj = astObjectToSzObject(expression as ObjectExpressionNode, effectiveFilename);
-        const result = compileSzObject(szObj);
-        for (const c of result.className.split(/\s+/)) {
-            if (c) {
-                classes.add(c);
+        const openingNode = node as unknown as JsxOpeningElementNode;
+        const attrs = openingNode.attributes ?? [];
+        const szAttrs: JsxAttributeNode[] = [];
+        let classNameAttr: JsxAttributeNode | null = null;
+
+        for (const attrRaw of attrs) {
+            if (attrRaw.type !== 'JSXAttribute') {
+                continue;
+            }
+            const attr = attrRaw as JsxAttributeNode;
+            const name = attr.name?.name;
+            if (name === 'sz') {
+                szAttrs.push(attr);
+            } else if (name === 'className' || name === 'class') {
+                classNameAttr = attr;
             }
         }
+
+        if (classNameAttr) {
+            const rawValue = stringLiteralValue(classNameAttr.value);
+            if (rawValue !== null) {
+                for (const c of rawValue.split(/\s+/)) {
+                    if (c) {
+                        rawClassNames.add(c);
+                    }
+                }
+            }
+        }
+
+        if (szAttrs.length === 0) {
+            return;
+        }
+
+        const szDerived: string[] = [];
+        for (const szAttr of szAttrs) {
+            const value = szAttr.value;
+            if (!value || value.type !== 'JSXExpressionContainer') {
+                throw new OxcNotImplementedError(
+                    'D2.1',
+                    `sz attribute without object expression at ${effectiveFilename}:${szAttr.start}`,
+                );
+            }
+            const expression = (value as unknown as { expression: OxcNode }).expression;
+            if (expression.type !== 'ObjectExpression') {
+                throw new OxcNotImplementedError(
+                    'D2.1',
+                    `sz expression is not an inline object literal at ${effectiveFilename}:${expression.start}`,
+                );
+            }
+            const szObj = astObjectToSzObject(
+                expression as ObjectExpressionNode,
+                effectiveFilename,
+            );
+            const result = compileSzObject(szObj);
+            for (const c of result.className.split(/\s+/)) {
+                if (c) {
+                    szDerived.push(c);
+                    classes.add(c);
+                }
+            }
+        }
+
+        // Merge classes: existing className value first, then sz-derived.
+        // This matches the order Babel produces in `transform.ts:228-371`.
+        const existingRaw = classNameAttr ? stringLiteralValue(classNameAttr.value) : null;
+        const mergedClasses = [
+            ...(existingRaw ? existingRaw.split(/\s+/).filter(Boolean) : []),
+            ...szDerived,
+        ];
+        const mergedAttr = `className="${mergedClasses.join(' ')}"`;
+
+        if (classNameAttr) {
+            // Replace className value (or whole attribute) in place, then
+            // delete each sz attribute + the whitespace preceding it.
+            edits.overwrite(classNameAttr.start, classNameAttr.end, mergedAttr);
+            for (const szAttr of szAttrs) {
+                const deleteStart = whitespaceStart(source, szAttr.start);
+                edits.remove(deleteStart, szAttr.end);
+            }
+        } else {
+            // No existing className — first sz becomes the className,
+            // subsequent sz attributes (rare) are deleted with whitespace.
+            const [firstSz, ...rest] = szAttrs;
+            if (!firstSz) {
+                return;
+            }
+            edits.overwrite(firstSz.start, firstSz.end, mergedAttr);
+            for (const szAttr of rest) {
+                const deleteStart = whitespaceStart(source, szAttr.start);
+                edits.remove(deleteStart, szAttr.end);
+            }
+        }
+        transformed = true;
     });
 
     return {
-        code: source,
-        transformed: false,
+        code: transformed ? edits.toString() : source,
+        transformed,
         usesRuntime: false,
         usesMerge: false,
         usesColorVar: false,
@@ -151,6 +227,42 @@ export function transformOxc(
         diagnostics,
         recoveryTokens,
     };
+}
+
+/**
+ * Extract the string value of a JSXAttribute when it is a plain
+ * string literal (`className="foo"`). Returns null for expression
+ * containers, missing values, or non-string literals.
+ *
+ * @param value The attribute value AST node.
+ * @returns The raw string content, or null.
+ */
+function stringLiteralValue(value: OxcNode | null): string | null {
+    if (!value) {
+        return null;
+    }
+    if (value.type === 'Literal') {
+        const v = (value as unknown as { value: unknown }).value;
+        return typeof v === 'string' ? v : null;
+    }
+    return null;
+}
+
+/**
+ * Walk back from `attrStart` over whitespace characters so a deleted
+ * attribute also removes the space that preceded it (`<div a b/>` →
+ * `<div a/>`, not `<div a  />`).
+ *
+ * @param source The full source string.
+ * @param attrStart Start offset of the attribute node.
+ * @returns Earliest offset such that everything up to attrStart is whitespace.
+ */
+function whitespaceStart(source: string, attrStart: number): number {
+    let idx = attrStart;
+    while (idx > 0 && /\s/.test(source.charAt(idx - 1))) {
+        idx--;
+    }
+    return idx;
 }
 
 /** Minimum surface of an oxc AST node we rely on in this file. */
@@ -168,6 +280,13 @@ interface JsxAttributeNode extends OxcNode {
     value: OxcNode | null;
 }
 
+/** oxc shape for a JSX opening element (`<div ...>` or `<div ... />`). */
+interface JsxOpeningElementNode extends OxcNode {
+    type: 'JSXOpeningElement';
+    attributes: OxcNode[];
+    selfClosing: boolean;
+}
+
 /** oxc shape for an object literal expression (`{ p: 4 }`). */
 interface ObjectExpressionNode extends OxcNode {
     type: 'ObjectExpression';
@@ -181,20 +300,6 @@ interface PropertyNode extends OxcNode {
     value: OxcNode;
     computed: boolean;
     shorthand: boolean;
-}
-
-/**
- * Narrow a generic oxc node to a JSXAttribute named `sz`.
- *
- * @param node Any oxc AST node.
- * @returns True if the node is `sz={...}` on a JSX element.
- */
-function isSzJsxAttribute(node: OxcNode): node is JsxAttributeNode {
-    if (node.type !== 'JSXAttribute') {
-        return false;
-    }
-    const name = (node as JsxAttributeNode).name;
-    return name?.type === 'JSXIdentifier' && name.name === 'sz';
 }
 
 /**
