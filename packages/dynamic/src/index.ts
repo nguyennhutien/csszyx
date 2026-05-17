@@ -27,12 +27,17 @@ import { transform } from '@csszyx/compiler/browser';
 
 import { generateCSSRule } from './css-generator.js';
 import { cleanup as injectorCleanup, injectRule, resolveTier } from './injector.js';
-import { ensureManifest, lookupManifest, preloadManifest as manifestPreload, resetManifest } from './manifest.js';
+import {
+    ensureManifest,
+    lookupManifest,
+    preloadManifest as manifestPreload,
+    resetManifest,
+} from './manifest.js';
 import { isServer } from './ssr.js';
 
+export type { ReadonlySzObject, SzObject } from '@csszyx/compiler/browser';
 export type { Tier } from './css-generator.js';
 export type { CSSManifest } from './manifest.js';
-export type { ReadonlySzObject, SzObject } from '@csszyx/compiler/browser';
 
 /**
  * Transforms sz props at runtime and injects CSS only for classes not already
@@ -49,7 +54,9 @@ export type { ReadonlySzObject, SzObject } from '@csszyx/compiler/browser';
  */
 export function dynamic(szProps: SzObject | ReadonlySzObject): string {
     const { className } = transform(szProps as SzObject);
-    if (!className) {return '';}
+    if (!className) {
+        return '';
+    }
 
     if (isServer) {
         // SSR: apply the mangle map if the Vite plugin exposed it via globalThis.
@@ -57,9 +64,13 @@ export function dynamic(szProps: SzObject | ReadonlySzObject): string {
         // SSG rendering (Astro, Next.js) in the same Node.js process. Without this,
         // dynamic() returns unmangled names (e.g. "p-4") while built CSS only has
         // mangled selectors (e.g. ".q0"), so styles silently don't apply in SSR HTML.
-        const ssrMangleMap = (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map as Record<string, string> | undefined;
+        const ssrMangleMap = (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map as
+            | Record<string, string>
+            | undefined;
         if (ssrMangleMap) {
-            return className.split(' ').filter(Boolean)
+            return className
+                .split(' ')
+                .filter(Boolean)
                 .map(c => ssrMangleMap[c] ?? c)
                 .join(' ');
         }

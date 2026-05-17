@@ -61,7 +61,7 @@ const CsszyxContext = createContext<CsszyxContextValue>({
  * Runtime alias for dynamic(). Use in React files for consistency with
  * the build-time `sz` prop: `sz={{ p: 4 }}` at build, `sz({ p: 4 })` at runtime.
  */
-export const sz = dynamic;
+export const sz: typeof dynamic = dynamic;
 
 // ── useSz hook ────────────────────────────────────────────────────────────────
 
@@ -158,9 +158,5 @@ export function CsszyxProvider({ manifest, children }: CsszyxProviderProps): Rea
         preloadManifest(manifest);
     }, [manifest]);
 
-    return createElement(
-        CsszyxContext.Provider,
-        { value: { manifestUrl: manifest } },
-        children,
-    );
+    return createElement(CsszyxContext.Provider, { value: { manifestUrl: manifest } }, children);
 }

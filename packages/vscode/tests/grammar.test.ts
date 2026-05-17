@@ -38,8 +38,8 @@ describe('sz attribute name', () => {
 describe('sz="..." attribute body — explicit form', () => {
     it('establishes the meta.attribute.sz scope across the value', async () => {
         const tokens = await tokenizeLine('<div sz="{ p: 4 }">');
-        const inside = tokens.filter(t =>
-            'p4:{ }'.includes(t.text.trim()) && t.text.trim().length > 0,
+        const inside = tokens.filter(
+            t => 'p4:{ }'.includes(t.text.trim()) && t.text.trim().length > 0,
         );
         expect(inside.length).toBeGreaterThan(0);
         for (const t of inside) {
@@ -57,7 +57,9 @@ describe('sz="..." attribute body — explicit form', () => {
         const tokens = await tokenizeLine('<div sz="{ bg: \'red\' }">');
         const redToken = tokens.find(t => t.text.includes('red'));
         expect(redToken).toBeDefined();
-        if (!redToken) { return; }
+        if (!redToken) {
+            return;
+        }
         expect(hasScope(redToken.scopes, 'string.quoted.single.csszyx')).toBe(true);
     });
 

@@ -32,34 +32,31 @@ declare global {
  * Mangle map structure loaded from the DOM.
  */
 export interface MangleMap {
-  [originalClass: string]: string;
+    [originalClass: string]: string;
 }
 
 /**
  * Hydration error types.
  */
-export type HydrationErrorType =
-  | 'checksum_mismatch'
-  | 'map_missing'
-  | 'invalid_token';
+export type HydrationErrorType = 'checksum_mismatch' | 'map_missing' | 'invalid_token';
 
 /**
  * Hydration error details.
  */
 export interface HydrationError {
-  type: HydrationErrorType;
-  message: string;
-  element?: HTMLElement;
-  timestamp: number;
+    type: HydrationErrorType;
+    message: string;
+    element?: HTMLElement;
+    timestamp: number;
 }
 
 /**
  * Global hydration state.
  */
 interface HydrationState {
-  errors: HydrationError[];
-  abortedSubtrees: Set<HTMLElement>;
-  recoveryAllowed: boolean;
+    errors: HydrationError[];
+    abortedSubtrees: Set<HTMLElement>;
+    recoveryAllowed: boolean;
 }
 
 /**
@@ -253,10 +250,7 @@ export function verifyMangleMapIntegrity(): boolean {
  * });
  * ```
  */
-export function abortHydration(
-    element: HTMLElement,
-    error: HydrationError,
-): void {
+export function abortHydration(element: HTMLElement, error: HydrationError): void {
     // Step 1: Mark subtree as aborted
     state.abortedSubtrees.add(element);
 
@@ -264,10 +258,7 @@ export function abortHydration(
     // React/framework-specific implementation would go here
 
     // Step 3: Log audit message
-    console.error(
-        `[csszyx] Hydration aborted at ${element.tagName}:`,
-        error.message,
-    );
+    console.error(`[csszyx] Hydration aborted at ${element.tagName}:`, error.message);
 
     // Step 4: Inject abort attribute
     element.setAttribute('data-sz-hydration-aborted', error.timestamp.toString());
@@ -298,10 +289,7 @@ export function abortHydration(
  * ```
  */
 export function isHydrationAborted(element: HTMLElement): boolean {
-    return (
-        state.abortedSubtrees.has(element) ||
-    element.hasAttribute('data-sz-hydration-aborted')
-    );
+    return state.abortedSubtrees.has(element) || element.hasAttribute('data-sz-hydration-aborted');
 }
 
 /**
@@ -433,25 +421,25 @@ export function getAbortedSubtreeCount(): number {
  * SSR context structure embedded in the HTML.
  */
 export interface SSRContext {
-  /**
-   * Build ID for cache invalidation.
-   */
-  buildId: string;
+    /**
+     * Build ID for cache invalidation.
+     */
+    buildId: string;
 
-  /**
-   * Checksum of the mangle map.
-   */
-  checksum: string;
+    /**
+     * Checksum of the mangle map.
+     */
+    checksum: string;
 
-  /**
-   * Timestamp when the page was rendered.
-   */
-  timestamp: number;
+    /**
+     * Timestamp when the page was rendered.
+     */
+    timestamp: number;
 
-  /**
-   * Whether recovery tokens are present.
-   */
-  hasRecoveryTokens: boolean;
+    /**
+     * Whether recovery tokens are present.
+     */
+    hasRecoveryTokens: boolean;
 }
 
 /**
@@ -489,7 +477,9 @@ export function isSSREnvironment(): boolean {
  * ```
  */
 export function isHydrating(): boolean {
-    if (typeof window === 'undefined') {return false;}
+    if (typeof window === 'undefined') {
+        return false;
+    }
 
     // Check for csszyx hydration flag
     if (window.__SZ_HYDRATING__ !== undefined) {
@@ -498,7 +488,7 @@ export function isHydrating(): boolean {
 
     // Check for React hydration (common pattern)
     if (window.__NEXT_DATA__ || window.__REMIX_CONTEXT__) {
-    // These frameworks set hydration state
+        // These frameworks set hydration state
         return document.documentElement.hasAttribute('data-sz-checksum');
     }
 
@@ -538,8 +528,7 @@ export function getSSRContext(): SSRContext | null {
     const timestampAttr = htmlElement.getAttribute('data-sz-timestamp');
     const timestamp = timestampAttr ? parseInt(timestampAttr, 10) : 0;
 
-    const hasRecoveryTokens =
-    document.querySelector('[data-sz-recovery-token]') !== null;
+    const hasRecoveryTokens = document.querySelector('[data-sz-recovery-token]') !== null;
 
     return {
         buildId,
@@ -569,13 +558,9 @@ export function getSSRContext(): SSRContext | null {
  * }
  * ```
  */
-export function validateHydrationClass(
-    className: string,
-    expectedClassName: string,
-): boolean {
+export function validateHydrationClass(className: string, expectedClassName: string): boolean {
     // Normalize both class strings for comparison
-    const normalize = (s: string): string =>
-        s.split(/\s+/).filter(Boolean).sort().join(' ');
+    const normalize = (s: string): string => s.split(/\s+/).filter(Boolean).sort().join(' ');
 
     return normalize(className) === normalize(expectedClassName);
 }

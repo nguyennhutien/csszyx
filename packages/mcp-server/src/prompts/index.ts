@@ -9,11 +9,16 @@
  * Return all prompts served by this MCP server.
  * @returns Array of prompt definitions with name, description, and arguments.
  */
-export function listPrompts(): Array<{ name: string; description: string; arguments: Array<{ name: string; description: string; required: boolean }> }> {
+export function listPrompts(): Array<{
+    name: string;
+    description: string;
+    arguments: Array<{ name: string; description: string; required: boolean }>;
+}> {
     return [
         {
             name: 'migrate_component',
-            description: 'Migrate a Tailwind CSS component to use csszyx sz props. Paste your component code and get a transformed version with sz syntax.',
+            description:
+                'Migrate a Tailwind CSS component to use csszyx sz props. Paste your component code and get a transformed version with sz syntax.',
             arguments: [
                 {
                     name: 'code',
@@ -24,11 +29,13 @@ export function listPrompts(): Array<{ name: string; description: string; argume
         },
         {
             name: 'create_component',
-            description: 'Create a UI component using csszyx sz props. Describe the component you want and get production-ready code with proper sz syntax.',
+            description:
+                'Create a UI component using csszyx sz props. Describe the component you want and get production-ready code with proper sz syntax.',
             arguments: [
                 {
                     name: 'description',
-                    description: 'Description of the component to create (e.g., "a responsive card with hover effects")',
+                    description:
+                        'Description of the component to create (e.g., "a responsive card with hover effects")',
                     required: true,
                 },
             ],
@@ -42,7 +49,10 @@ export function listPrompts(): Array<{ name: string; description: string; argume
  * @param args - Key-value map of prompt arguments supplied by the caller.
  * @returns Prompt message array with interpolated argument values.
  */
-export function getPrompt(name: string, args: Record<string, string>): { messages: Array<{ role: 'user'; content: { type: 'text'; text: string } }> } {
+export function getPrompt(
+    name: string,
+    args: Record<string, string>,
+): { messages: Array<{ role: 'user'; content: { type: 'text'; text: string } }> } {
     switch (name) {
         case 'migrate_component':
             return {

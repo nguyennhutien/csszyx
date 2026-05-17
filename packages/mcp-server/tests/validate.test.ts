@@ -35,18 +35,25 @@ describe('csszyx_validate', () => {
     });
 
     it('accepts variant keys (hover, focus, dark, sm, md, ...)', () => {
-        const data = JSON.parse(handleValidate({ sz: { hover: { bg: 'blue-600' }, dark: { color: 'white' } } }).content[0].text);
+        const data = JSON.parse(
+            handleValidate({ sz: { hover: { bg: 'blue-600' }, dark: { color: 'white' } } })
+                .content[0].text,
+        );
         expect(data.valid).toBe(true);
         expect(data.errors).toBeUndefined();
     });
 
     it('accepts the css escape-hatch key', () => {
-        const data = JSON.parse(handleValidate({ sz: { p: 4, css: { writingMode: 'vertical-lr' } } }).content[0].text);
+        const data = JSON.parse(
+            handleValidate({ sz: { p: 4, css: { writingMode: 'vertical-lr' } } }).content[0].text,
+        );
         expect(data.valid).toBe(true);
     });
 
     it('reports multiple errors in a single pass', () => {
-        const data = JSON.parse(handleValidate({ sz: { padding: 4, margin: 2, fakeKey: true } }).content[0].text);
+        const data = JSON.parse(
+            handleValidate({ sz: { padding: 4, margin: 2, fakeKey: true } }).content[0].text,
+        );
         expect(data.valid).toBe(false);
         expect(data.errors.length).toBeGreaterThanOrEqual(3);
     });

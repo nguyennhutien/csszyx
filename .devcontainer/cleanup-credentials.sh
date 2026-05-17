@@ -1,39 +1,20 @@
 #!/usr/bin/env bash
-# Remove any SSH private keys that may have leaked into the container image
-# or overlay filesystem. The devcontainer is treated as an untrusted execution
-# environment (AI agents have root + bypass-permissions inside), so any
-# long-lived credential stored on disk is a compromise vector.
+# Container security health check.
 #
-# Replacement: SSH agent forwarding from the host. Host runs ssh-agent with
-# the real key; devcontainer.json mounts the agent socket; container processes
-# use the forwarded agent. Container has no key files on disk.
+# Policy (Option C, decided 2026-05-15 via Tier-1 council debate):
+# In-container security is defense-in-depth, not the primary barrier. The real
+# barrier is GitHub-side: branch protection ruleset 16158734 + CODEOWNERS +
+# npm-publish environment gate. AI in container has roughly user-level access
+# (gh OAuth token leak, firewall absent under Antigravity); pretending otherwise
+# is theatre. Stop deleting on-disk SSH keys — let `git commit`, `git tag`,
+# `git push` work without workarounds, and rely on GitHub to block code from
+# reaching main / npm.
 #
-# Idempotent — safe to re-run on every container start.
+# This script now only warns when the host SSH agent is not forwarded — that
+# warning still matters because terminal git push fails closed when no
+# credential source is available (no key file + no agent).
 set -euo pipefail
 
-SSH_DIR="/root/.ssh"
-
-# Delete private keys (anything matching id_* without a .pub extension).
-# Keep public keys, known_hosts, allowed_signers, config — those are not
-# credentials and are useful to retain.
-if [ -d "$SSH_DIR" ]; then
-    deleted=0
-    for f in "$SSH_DIR"/id_*; do
-        [ -e "$f" ] || continue
-        case "$f" in
-            *.pub) continue ;;
-        esac
-        rm -f "$f"
-        deleted=$((deleted + 1))
-        echo "[cleanup-credentials] removed private key: $f"
-    done
-    [ "$deleted" -gt 0 ] && echo "[cleanup-credentials] $deleted private key(s) removed — use SSH agent forwarding from host instead"
-fi
-
-# Warn loudly if the host did not forward an SSH agent. Without the agent,
-# terminal git push from inside the container will also fail — the dev needs
-# to set up ssh-agent + ssh-add on the host before reopening the container.
-#
 # Check both paths because the container runtime decides which one wins:
 #   - VS Code Dev Containers: uses our remoteEnv → /tmp/host-ssh-agent.sock
 #   - Antigravity: injects its own at /root/.antigravity-server/.*.sock
@@ -44,21 +25,27 @@ for sock in /tmp/host-ssh-agent.sock /root/.antigravity-server/.*-ssh-auth.sock;
     break
 done
 
-if [ "$agent_ok" -eq 0 ]; then
+# Container may also have a local key file under /root/.ssh/ — that's another
+# valid credential source for terminal git ops.
+key_file_present=0
+if [ -f /root/.ssh/id_ed25519 ] || [ -f /root/.ssh/id_rsa ] || [ -f /root/.ssh/id_ecdsa ]; then
+    key_file_present=1
+fi
+
+if [ "$agent_ok" -eq 0 ] && [ "$key_file_present" -eq 0 ]; then
     cat <<'WARN'
 
-⚠️  [cleanup-credentials] SSH agent socket NOT forwarded from host.
-    Terminal git push inside this container will fail until you fix this.
+⚠️  [cleanup-credentials] No SSH credential source available.
+    Terminal `git push` will fail with "Permission denied (publickey)".
 
-    On macOS host (1-time setup):
+    Fix options:
+    - macOS host (1-time setup):
         ssh-add --apple-use-keychain ~/.ssh/id_ed25519
         # Then Reopen in Container — agent persists via Keychain.
-
-    On Linux host (each shell session):
+    - Linux host (each shell session):
         eval $(ssh-agent)
         ssh-add ~/.ssh/id_ed25519
-        # Then launch the IDE from this shell so SSH_AUTH_SOCK is set
-        # when devcontainer.json reads ${localEnv:SSH_AUTH_SOCK}.
+    - Copy a key file directly to /root/.ssh/ (least preferred)
 
 WARN
 fi

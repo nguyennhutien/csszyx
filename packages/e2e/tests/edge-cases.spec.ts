@@ -102,9 +102,10 @@ test.describe('Edge Case Tests (Next.js)', () => {
 
         // window.__csszyx helper should be available after script execution
         const helper = await page.evaluate(() => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const h = (window as Record<string, any>).__csszyx;
-            if (!h) {return null;}
+            if (!h) {
+                return null;
+            }
             return {
                 mangleMap: h.mangleMap,
                 checksum: h.checksum,

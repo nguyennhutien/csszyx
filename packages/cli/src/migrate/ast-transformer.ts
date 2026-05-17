@@ -26,12 +26,13 @@ import {
     isClsxLikeName,
 } from './dynamic-patterns.js';
 import { generateSzExpression, generateSzHtmlValue } from './sz-codegen.js';
-import { classNameToSzObject, type CsszyxTodoMap } from './variant-parser.js';
+import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
 
 // ESM/CJS interop for @babel/traverse
-const traverse = (typeof _traverse === 'function'
-    ? _traverse
-    : (_traverse as unknown as { default: typeof _traverse }).default
+const traverse = (
+    typeof _traverse === 'function'
+        ? _traverse
+        : (_traverse as unknown as { default: typeof _traverse }).default
 ) as typeof _traverse;
 
 // ============================================================================
@@ -85,8 +86,12 @@ function injectTodoComment(
     options: { injectTodos?: boolean },
     replacements: Replacement[],
 ): void {
-    if (!options.injectTodos || unrecognized.length === 0) { return; }
-    if (!t.isJSXOpeningElement(parent) || parent.start === null || parent.start === undefined) { return; }
+    if (!options.injectTodos || unrecognized.length === 0) {
+        return;
+    }
+    if (!t.isJSXOpeningElement(parent) || parent.start === null || parent.start === undefined) {
+        return;
+    }
     replacements.push({
         start: parent.start,
         end: parent.start,
@@ -117,7 +122,11 @@ export interface TransformOptions {
  * @param options - Transformation options.
  * @returns {TransformResult} Transformed code and stats.
  */
-export function transformSource(source: string, filePath: string, options: TransformOptions = {}): TransformResult {
+export function transformSource(
+    source: string,
+    filePath: string,
+    options: TransformOptions = {},
+): TransformResult {
     const warnings: string[] = [];
     let classNamesTransformed = 0;
     let classNamesSkipped = 0;
@@ -134,7 +143,7 @@ export function transformSource(source: string, filePath: string, options: Trans
     let hasCvaImport = false;
 
     // ── Step 1: Parse ────────────────────────────────────────────────────
-    let ast;
+    let ast: ReturnType<typeof parse>;
     try {
         ast = parse(source, {
             sourceType: 'module',
@@ -160,12 +169,12 @@ export function transformSource(source: string, filePath: string, options: Trans
             const src = path.node.source.value;
             // Common clsx/cn packages
             const clsxPackages = ['clsx', 'clsx/lite', 'classnames', 'tailwind-merge'];
-            const isClsxPkg = clsxPackages.some(p => src === p || src.startsWith(p + '/'));
+            const isClsxPkg = clsxPackages.some(p => src === p || src.startsWith(`${p}/`));
 
             // CVA (class-variance-authority or the 'cva' package) — cannot auto-migrate;
             // caller should use szv() from @csszyx/runtime for type-safe variants.
             const cvaPkgs = ['cva', 'class-variance-authority'];
-            if (cvaPkgs.some(p => src === p || src.startsWith(p + '/'))) {
+            if (cvaPkgs.some(p => src === p || src.startsWith(`${p}/`))) {
                 hasCvaImport = true;
             }
 
@@ -182,9 +191,10 @@ export function transformSource(source: string, filePath: string, options: Trans
             if (t.isIdentifier(path.node.callee) && clsxImportNames.has(path.node.callee.name)) {
                 // Check if this call is inside a className JSXAttribute
                 const inClassName = path.findParent(
-                    p => t.isJSXAttribute(p.node) &&
-                         t.isJSXIdentifier(p.node.name) &&
-                         p.node.name.name === 'className',
+                    p =>
+                        t.isJSXAttribute(p.node) &&
+                        t.isJSXIdentifier(p.node.name) &&
+                        p.node.name.name === 'className',
                 );
                 if (!inClassName) {
                     clsxUsedOutsideClassName = true;
@@ -196,7 +206,9 @@ export function transformSource(source: string, filePath: string, options: Trans
         JSXAttribute(path) {
             // Only process className attributes
             const attrName = path.node.name;
-            if (!t.isJSXIdentifier(attrName) || attrName.name !== 'className') {return;}
+            if (!t.isJSXIdentifier(attrName) || attrName.name !== 'className') {
+                return;
+            }
 
             // Skip className on custom (capitalized) components — they accept className
             // as a prop to pass down; we cannot replace it with sz on the call site.
@@ -216,9 +228,10 @@ export function transformSource(source: string, filePath: string, options: Trans
             // Skip if sibling sz attribute already exists
             if (t.isJSXOpeningElement(parent)) {
                 const hasSz = parent.attributes.some(
-                    attr => t.isJSXAttribute(attr) &&
-                            t.isJSXIdentifier(attr.name) &&
-                            attr.name.name === 'sz',
+                    attr =>
+                        t.isJSXAttribute(attr) &&
+                        t.isJSXIdentifier(attr.name) &&
+                        attr.name.name === 'sz',
                 );
                 if (hasSz) {
                     classNamesSkipped++;
@@ -229,7 +242,14 @@ export function transformSource(source: string, filePath: string, options: Trans
             const value = path.node.value;
             const attrStart = path.node.start;
             const attrEnd = path.node.end;
-            if (attrStart === null || attrStart === undefined || attrEnd === null || attrEnd === undefined) {return;}
+            if (
+                attrStart === null ||
+                attrStart === undefined ||
+                attrEnd === null ||
+                attrEnd === undefined
+            ) {
+                return;
+            }
 
             // ─── CASE 1: StringLiteral — className="..." ──────────────
             if (t.isStringLiteral(value)) {
@@ -253,7 +273,11 @@ export function transformSource(source: string, filePath: string, options: Trans
                 if (t.isStringLiteral(expr)) {
                     const result = processStaticString(expr.value, options.customMap);
                     if (result) {
-                        replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
+                        replacements.push({
+                            start: attrStart,
+                            end: attrEnd,
+                            text: result.replacement,
+                        });
                         classNamesTransformed++;
                         classesUnrecognized.push(...result.unrecognized);
                         injectTodoComment(result.unrecognized, path.parent, options, replacements);
@@ -267,7 +291,11 @@ export function transformSource(source: string, filePath: string, options: Trans
                 if (t.isTemplateLiteral(expr)) {
                     const result = handleTemplateLiteral(expr, source, t, options.customMap);
                     if (result.migrated) {
-                        replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
+                        replacements.push({
+                            start: attrStart,
+                            end: attrEnd,
+                            text: result.replacement,
+                        });
                         classNamesTransformed += result.converted;
                         classesUnrecognized.push(...result.unrecognized);
                     } else {
@@ -279,12 +307,18 @@ export function transformSource(source: string, filePath: string, options: Trans
                 }
 
                 // 2c: Call expression — className={clsx(...)} / cn(...)
-                if (t.isCallExpression(expr) &&
+                if (
+                    t.isCallExpression(expr) &&
                     t.isIdentifier(expr.callee) &&
-                    isClsxLikeName(expr.callee.name)) {
+                    isClsxLikeName(expr.callee.name)
+                ) {
                     const result = handleClsxCall(expr, source, t, options.customMap);
                     if (result.migrated) {
-                        replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
+                        replacements.push({
+                            start: attrStart,
+                            end: attrEnd,
+                            text: result.replacement,
+                        });
                         classNamesTransformed += result.converted;
                         classesUnrecognized.push(...result.unrecognized);
                         if (expr.start !== null && expr.start !== undefined) {
@@ -302,7 +336,11 @@ export function transformSource(source: string, filePath: string, options: Trans
                 if (t.isConditionalExpression(expr)) {
                     const result = handleTernary(expr, source, t, options.customMap);
                     if (result.migrated) {
-                        replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
+                        replacements.push({
+                            start: attrStart,
+                            end: attrEnd,
+                            text: result.replacement,
+                        });
                         classNamesTransformed += result.converted;
                         classesUnrecognized.push(...result.unrecognized);
                     } else {
@@ -317,7 +355,11 @@ export function transformSource(source: string, filePath: string, options: Trans
                 if (t.isLogicalExpression(expr) && expr.operator === '&&') {
                     const result = handleLogicalAnd(expr, source, t, options.customMap);
                     if (result.migrated) {
-                        replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
+                        replacements.push({
+                            start: attrStart,
+                            end: attrEnd,
+                            text: result.replacement,
+                        });
                         classNamesTransformed += result.converted;
                         classesUnrecognized.push(...result.unrecognized);
                     } else {
@@ -407,10 +449,14 @@ interface StaticResult {
  */
 function processStaticString(classNameStr: string, customMap?: CsszyxTodoMap): StaticResult | null {
     const trimmed = classNameStr.trim();
-    if (!trimmed) {return null;}
+    if (!trimmed) {
+        return null;
+    }
 
     const { szObject, unrecognized, keepInClassName } = classNameToSzObject(trimmed, customMap);
-    if (Object.keys(szObject).length === 0) {return null;}
+    if (Object.keys(szObject).length === 0) {
+        return null;
+    }
 
     const szExpr = generateSzExpression(szObject);
 

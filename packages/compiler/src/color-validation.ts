@@ -8,8 +8,13 @@
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 
-export const COLOR_STRING_KEYWORDS = new Set([
-    'inherit', 'current', 'transparent', 'black', 'white', 'none',
+export const COLOR_STRING_KEYWORDS: Set<string> = new Set([
+    'inherit',
+    'current',
+    'transparent',
+    'black',
+    'white',
+    'none',
 ]);
 
 /**
@@ -22,18 +27,32 @@ export const COLOR_STRING_KEYWORDS = new Set([
  * @returns True if the value matches a known color pattern.
  */
 export function isValidColorString(value: string): boolean {
-    if (COLOR_STRING_KEYWORDS.has(value)) {return true;}
-    if (value.startsWith('--')) {return true;} // CSS var: --my-color
-    if (value.startsWith('#')) {return true;} // Hex: #ff0000
-    if (value.startsWith('[') && value.endsWith(']')) {return true;} // Pre-bracketed
+    if (COLOR_STRING_KEYWORDS.has(value)) {
+        return true;
+    }
+    if (value.startsWith('--')) {
+        return true;
+    } // CSS var: --my-color
+    if (value.startsWith('#')) {
+        return true;
+    } // Hex: #ff0000
+    if (value.startsWith('[') && value.endsWith(']')) {
+        return true;
+    } // Pre-bracketed
     // Color functions (auto-bracketed downstream)
-    if (/^(rgb|hsl|oklch|color|hwb|lab|lch|oklab)\(/.test(value)) {return true;}
+    if (/^(rgb|hsl|oklch|color|hwb|lab|lch|oklab)\(/.test(value)) {
+        return true;
+    }
     // Color scale: blue-500, brand-500, brand-primary-500 — any word-number pattern
-    if (/^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*-\d+$/.test(value)) {return true;}
+    if (/^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*-\d+$/.test(value)) {
+        return true;
+    }
     // Tailwind v4 semantic tokens: single-word or hyphenated identifiers without trailing number.
     // Any CSS identifier is a potential semantic token (e.g. 'primary', 'muted-foreground').
     // We accept these rather than falsely rejecting valid theme tokens.
-    if (/^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z][a-zA-Z0-9]*)*$/.test(value)) {return true;}
+    if (/^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z][a-zA-Z0-9]*)*$/.test(value)) {
+        return true;
+    }
     return false;
 }
 
@@ -48,7 +67,9 @@ export function isValidColorString(value: string): boolean {
  */
 export function hasSlashOpacity(value: string): boolean {
     const slashIdx = value.indexOf('/');
-    if (slashIdx === -1) {return false;}
+    if (slashIdx === -1) {
+        return false;
+    }
     return slashIdx > 0 && /\d$/.test(value.slice(0, slashIdx));
 }
 
@@ -62,9 +83,7 @@ export function hasSlashOpacity(value: string): boolean {
  * @param sz - The sz prop object to sanitize.
  * @returns A new object with invalid color strings removed.
  */
-export function stripInvalidColorStrings(
-    sz: Record<string, unknown>,
-): Record<string, unknown> {
+export function stripInvalidColorStrings(sz: Record<string, unknown>): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(sz)) {
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -72,29 +91,26 @@ export function stripInvalidColorStrings(
             result[key] = stripInvalidColorStrings(value as Record<string, unknown>);
             continue;
         }
-        if (
-            typeof value === 'string' &&
-            PROPERTY_CATEGORY_MAP[key] === PropertyCategory.COLOR
-        ) {
+        if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[key] === PropertyCategory.COLOR) {
             const strVal = value.replace(/!$/, '');
             if (hasSlashOpacity(strVal)) {
-                if (process.env['NODE_ENV'] !== 'production' && typeof window === 'undefined') {
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
                     const slashIdx = strVal.indexOf('/');
                     const colorPart = strVal.slice(0, slashIdx);
                     const opPart = strVal.slice(slashIdx + 1);
                     console.warn(
                         `[csszyx] "${key}: '${strVal}'" — string slash opacity is not supported. ` +
-                        `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
+                            `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
                     );
                 }
                 continue; // strip from result
             }
             if (!isValidColorString(strVal)) {
-                if (process.env['NODE_ENV'] !== 'production' && typeof window === 'undefined') {
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
                     console.warn(
                         `[csszyx] "${key}: '${strVal}'" is not a recognized color value and will be ignored. ` +
-                        'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                        'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+                            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+                            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
                     );
                 }
                 continue; // strip from result

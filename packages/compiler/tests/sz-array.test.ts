@@ -37,7 +37,8 @@ describe('sz array syntax', () => {
 
     describe('conditional arrays', () => {
         it('condition && szObject → _szMerge with compiled string', () => {
-            const source = 'const A = () => <div sz={[{ flex: true }, isActive && { bg: "blue-500" }]} />';
+            const source =
+                'const A = () => <div sz={[{ flex: true }, isActive && { bg: "blue-500" }]} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('_szMerge');

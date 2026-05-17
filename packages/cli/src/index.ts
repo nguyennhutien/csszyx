@@ -28,12 +28,11 @@ const cli = cac('csszyx');
 const VERSION = '0.0.0';
 
 // init command
-cli
-    .command('init', 'Setup csszyx in your project')
+cli.command('init', 'Setup csszyx in your project')
     .option('--framework <name>', 'Specify framework')
     .option('--yes', 'Skip prompts (use defaults)')
     .option('--cwd <dir>', 'Current working directory')
-    .action(async (options) => {
+    .action(async options => {
         await init({
             framework: options.framework,
             yes: options.yes,
@@ -42,11 +41,10 @@ cli
     });
 
 // doctor command
-cli
-    .command('doctor', 'Diagnose mangling issues')
+cli.command('doctor', 'Diagnose mangling issues')
     .option('--verbose', 'Show detailed output')
     .option('--cwd <dir>', 'Current working directory')
-    .action(async (options) => {
+    .action(async options => {
         await doctor({
             verbose: options.verbose,
             cwd: options.cwd,
@@ -54,13 +52,12 @@ cli
     });
 
 // audit command
-cli
-    .command('audit', 'Analyze mangling performance')
+cli.command('audit', 'Analyze mangling performance')
     .option('--json', 'Output as JSON')
     .option('--watch', 'Live updates')
     .option('--compare <dir>', 'Compare with previous build')
     .option('--cwd <dir>', 'Current working directory')
-    .action(async (options) => {
+    .action(async options => {
         await audit({
             json: options.json,
             watch: options.watch,
@@ -70,16 +67,12 @@ cli
     });
 
 // generate-types command
-cli
-    .command(
-        'generate-types',
-        'Generate TypeScript declarations from tailwind.config.js',
-    )
+cli.command('generate-types', 'Generate TypeScript declarations from tailwind.config.js')
     .option('-c, --config <path>', 'Path to tailwind.config.js')
     .option('-o, --output <path>', 'Output file path (default: ./csszyx.d.ts)')
     .option('--cwd <dir>', 'Current working directory')
     .option('--silent', 'Silent mode (no output)')
-    .action(async (options) => {
+    .action(async options => {
         await generateTypes({
             config: options.config,
             output: options.output,
@@ -89,8 +82,7 @@ cli
     });
 
 // migrate command
-cli
-    .command('migrate [dir]', 'Convert Tailwind className to sz prop')
+cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     .option('--dry-run', 'Show changes without modifying files')
     .option('--ignore <patterns>', 'Glob patterns to ignore (comma-separated)')
     .option('--pattern <glob>', 'Custom glob pattern for file discovery')
@@ -99,7 +91,10 @@ cli
     .option('--no-fouc', 'Skip FOUC-prevention CSS injection into HTML files')
     .option('--inject-runtime <mode>', 'Inject runtime script into HTML: local | cdn')
     .option('--cdn-url <url>', 'Custom CDN URL for --inject-runtime cdn')
-    .option('--local-path <path>', 'Local script path for --inject-runtime local (default: csszyx-runtime.js)')
+    .option(
+        '--local-path <path>',
+        'Local script path for --inject-runtime local (default: csszyx-runtime.js)',
+    )
     .option('--audit', 'Scan without modifying files and output .csszyx-todo.json')
     .option('--inject-todos', 'Inject {/* @sz-todo */} comments above unrecognized classes')
     .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz properties')
@@ -111,9 +106,12 @@ cli
             cwd: dir || options.cwd,
             braces: options.braces,
             injectFouc: options.fouc !== false,
-            injectRuntime: options.injectRuntime === 'local' ? 'local'
-            : options.injectRuntime === 'cdn' ? 'cdn'
-            : false,
+            injectRuntime:
+                options.injectRuntime === 'local'
+                    ? 'local'
+                    : options.injectRuntime === 'cdn'
+                      ? 'cdn'
+                      : false,
             cdnUrl: options.cdnUrl,
             localPath: options.localPath,
             audit: options.audit,
@@ -143,6 +141,11 @@ export {
     generateTypeDeclarations,
     writeDeclarationFile,
 } from './generator/type-generator.js';
+// Migrate utilities — used by @csszyx/mcp-server
+export type { TransformResult as MigrateResult } from './migrate/ast-transformer.js';
+export { transformSource as migrateSource } from './migrate/ast-transformer.js';
+export type { CsszyxTodoEntry, CsszyxTodoMap } from './migrate/variant-parser.js';
+export { classNameToSzObject } from './migrate/variant-parser.js';
 export type { ResolvedTheme, ScanResult } from './scanner/tailwind-scanner.js';
 export {
     extractScreenKeys,
@@ -151,9 +154,3 @@ export {
     flattenColors,
     scanTailwindConfig,
 } from './scanner/tailwind-scanner.js';
-
-// Migrate utilities — used by @csszyx/mcp-server
-export type { TransformResult as MigrateResult } from './migrate/ast-transformer.js';
-export { transformSource as migrateSource } from './migrate/ast-transformer.js';
-export type { CsszyxTodoEntry, CsszyxTodoMap } from './migrate/variant-parser.js';
-export { classNameToSzObject } from './migrate/variant-parser.js';

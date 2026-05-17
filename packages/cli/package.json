@@ -20,23 +20,23 @@
   },
   "type": "module",
   "bin": {
-    "csszyx": "./dist/index.js"
+    "csszyx": "./dist/index.mjs"
   },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean",
-    "dev": "tsup src/index.ts --format esm --dts --watch"
+    "build": "unbuild",
+    "dev": "unbuild --stub"
   },
   "dependencies": {
     "@csszyx/types": "workspace:*",
@@ -59,8 +59,12 @@
     "@types/node": "^20.11.5",
     "@types/prompts": "^2.4.9",
     "@types/fs-extra": "^11.0.4",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.3",
-    "vitest": "^1.0.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6",
+    "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

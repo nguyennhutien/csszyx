@@ -55,8 +55,8 @@ test.describe('Vite-React Playground', () => {
     });
 
     test('should have sz-checksum meta or data attribute', async ({ page }) => {
-    // Check if the checksum is injected
-    // We might need to refresh once the map is populated
+        // Check if the checksum is injected
+        // We might need to refresh once the map is populated
         const htmlEl = page.locator('html');
         let checksum = await htmlEl.getAttribute('data-sz-checksum');
 
@@ -68,7 +68,7 @@ test.describe('Vite-React Playground', () => {
         console.log('Mangle Checksum:', checksum);
 
         if (checksum) {
-        // e3b0c44298fc1c14 is the empty checksum, we want something else
+            // e3b0c44298fc1c14 is the empty checksum, we want something else
             expect(checksum).not.toBe('e3b0c44298fc1c14');
             expect(checksum).toHaveLength(16);
         }

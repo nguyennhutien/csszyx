@@ -5,7 +5,7 @@
  * which maps recovery tokens to their metadata for runtime verification.
  */
 
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 
 import type { RecoveryMode, TokenMetadata } from './recovery.js';
 
@@ -13,20 +13,20 @@ import type { RecoveryMode, TokenMetadata } from './recovery.js';
  * Token data stored in the manifest.
  */
 export interface TokenData {
-  /**
-   * Recovery mode ('csr' or 'dev-only')
-   */
-  mode: RecoveryMode;
+    /**
+     * Recovery mode ('csr' or 'dev-only')
+     */
+    mode: RecoveryMode;
 
-  /**
-   * Component name
-   */
-  component: string;
+    /**
+     * Component name
+     */
+    component: string;
 
-  /**
-   * File path (relative to project root)
-   */
-  path: string;
+    /**
+     * File path (relative to project root)
+     */
+    path: string;
 }
 
 /**
@@ -35,20 +35,20 @@ export interface TokenData {
  * Embedded in the build output as a JSON script tag.
  */
 export interface RecoveryManifest {
-  /**
-   * Build ID (git hash or timestamp)
-   */
-  buildId: string;
+    /**
+     * Build ID (git hash or timestamp)
+     */
+    buildId: string;
 
-  /**
-   * SHA-256 checksum of the tokens object
-   */
-  checksum: string;
+    /**
+     * SHA-256 checksum of the tokens object
+     */
+    checksum: string;
 
-  /**
-   * Map of token → token data
-   */
-  tokens: Record<string, TokenData>;
+    /**
+     * Map of token → token data
+     */
+    tokens: Record<string, TokenData>;
 }
 
 /**
@@ -91,7 +91,7 @@ export class ManifestBuilder {
      * ```
      */
     addToken(token: string, metadata: TokenMetadata): void {
-    // Convert absolute path to relative for manifest
+        // Convert absolute path to relative for manifest
         const relativePath = this.toRelativePath(metadata.filePath);
 
         this.tokens.set(token, {
@@ -108,13 +108,13 @@ export class ManifestBuilder {
      * @returns {string} Relative path
      */
     private toRelativePath(absolutePath: string): string {
-    // Simple implementation - in production, this would use
-    // the project root to compute relative paths
+        // Simple implementation - in production, this would use
+        // the project root to compute relative paths
         if (absolutePath.startsWith('/')) {
             const parts = absolutePath.split('/');
             // Return path relative to assumed project root
             const rootIndex = parts.findIndex(
-                (p) => p === 'src' || p === 'app' || p === 'components',
+                p => p === 'src' || p === 'app' || p === 'components',
             );
             if (rootIndex > 0) {
                 return parts.slice(rootIndex).join('/');
@@ -130,7 +130,7 @@ export class ManifestBuilder {
      * @returns {string} SHA-256 checksum
      */
     private computeChecksum(tokens: Record<string, TokenData>): string {
-    // Sort tokens by key for deterministic checksum
+        // Sort tokens by key for deterministic checksum
         const sortedKeys = Object.keys(tokens).sort();
         const sortedTokens: Record<string, TokenData> = {};
 
@@ -208,10 +208,7 @@ export class ManifestBuilder {
  * const json = serializeManifest(manifest, true);
  * ```
  */
-export function serializeManifest(
-    manifest: RecoveryManifest,
-    pretty = false,
-): string {
+export function serializeManifest(manifest: RecoveryManifest, pretty = false): string {
     return JSON.stringify(manifest, null, pretty ? 2 : 0);
 }
 
@@ -251,8 +248,8 @@ export function parseManifest(json: string): RecoveryManifest {
  * ```
  */
 export function validateManifest(manifest: unknown): {
-  valid: boolean;
-  error?: string;
+    valid: boolean;
+    error?: string;
 } {
     if (!manifest || typeof manifest !== 'object') {
         return { valid: false, error: 'Manifest must be an object' };

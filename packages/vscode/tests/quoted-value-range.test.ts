@@ -19,14 +19,24 @@ import { describe, expect, it } from 'vitest';
  */
 function computeRange(line: string, cursor: number): [number, number] | null {
     let start = cursor - 1;
-    while (start >= 0 && /[a-zA-Z0-9_-]/.test(line[start] ?? '')) { start--; }
-    if (start < 0) { return null; }
+    while (start >= 0 && /[a-zA-Z0-9_-]/.test(line[start] ?? '')) {
+        start--;
+    }
+    if (start < 0) {
+        return null;
+    }
     const opener = line[start];
-    if (opener !== "'" && opener !== '"') { return null; }
+    if (opener !== "'" && opener !== '"') {
+        return null;
+    }
 
     let end = cursor;
-    while (end < line.length && /[a-zA-Z0-9_-]/.test(line[end] ?? '')) { end++; }
-    if (line[end] === opener) { end++; }
+    while (end < line.length && /[a-zA-Z0-9_-]/.test(line[end] ?? '')) {
+        end++;
+    }
+    if (line[end] === opener) {
+        end++;
+    }
 
     return [start, end];
 }
@@ -38,25 +48,25 @@ describe('quoted value replacement range', () => {
     });
 
     it('covers a lone opening quote typed by the user', () => {
-        const line = '{ textAlign: \'';
+        const line = "{ textAlign: '";
         // cursor right after the typed `'`
         expect(computeRange(line, line.length)).toEqual([line.length - 1, line.length]);
     });
 
     it('covers an auto-paired quote pair with cursor in between', () => {
-        const line = '{ textAlign: \'\'';
+        const line = "{ textAlign: ''";
         // cursor between the pair (HTML LS auto-inserted the closing `'`)
         const cursor = line.length - 1;
         expect(computeRange(line, cursor)).toEqual([cursor - 1, cursor + 1]);
     });
 
     it('covers opening quote + partial word', () => {
-        const line = '{ textAlign: \'ce';
+        const line = "{ textAlign: 'ce";
         expect(computeRange(line, line.length)).toEqual([line.length - 3, line.length]);
     });
 
     it('covers opening quote + partial word + auto-paired closing quote', () => {
-        const line = '{ textAlign: \'ce\'';
+        const line = "{ textAlign: 'ce'";
         const cursor = line.length - 1; // cursor before the closing `'`
         expect(computeRange(line, cursor)).toEqual([cursor - 3, cursor + 1]);
     });
@@ -72,7 +82,7 @@ describe('quoted value replacement range', () => {
     });
 
     it('handles hyphenated values in Tailwind-style tokens', () => {
-        const line = '{ bg: \'slate-9';
+        const line = "{ bg: 'slate-9";
         expect(computeRange(line, line.length)).toEqual([line.length - 8, line.length]);
     });
 });

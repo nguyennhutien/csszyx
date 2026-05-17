@@ -1,17 +1,21 @@
 {
+    "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "target": "ES2020",
+        // VS Code extension host runs CommonJS, not ESM
         "module": "CommonJS",
-        "lib": ["ES2020"],
+        "composite": true,
+        "incremental": true,
+        "isolatedDeclarations": true,
         "outDir": "./dist",
         "rootDir": "./src",
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "resolveJsonModule": true,
-        "declaration": false,
-        "sourceMap": true
+        "declaration": true,
+        "declarationMap": true,
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+        // VS Code extension needs the vscode + node typings; DOM globals
+        // (setTimeout etc) come from node.
+        "types": ["node", "vscode"]
     },
+    "references": [{ "path": "../compiler" }],
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"]
 }

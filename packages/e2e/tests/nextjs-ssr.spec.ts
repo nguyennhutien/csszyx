@@ -10,7 +10,7 @@ test.describe('Next.js SSR Playground', () => {
     });
 
     test('should have mangled classes on server-rendered elements', async ({ page }) => {
-    // Use .first() since there are multiple server-card elements
+        // Use .first() since there are multiple server-card elements
         const serverCard = page.locator('[data-testid="server-card"]').first();
         await expect(serverCard).toBeVisible();
 
@@ -31,7 +31,7 @@ test.describe('Next.js SSR Playground', () => {
         await page.waitForTimeout(500);
 
         const countRaw = await counter.textContent();
-        const count = parseInt(countRaw || '0');
+        const count = parseInt(countRaw || '0', 10);
 
         // Click the Increase button
         await page.click('button:has-text("Increase")');

@@ -23,28 +23,84 @@ describe('PropertyCategory enum', () => {
 
 describe('PROPERTY_CATEGORY_MAP', () => {
     it('should categorize spacing properties', () => {
-        const spacingProps = ['p', 'pt', 'pr', 'pb', 'pl', 'px', 'py', 'ps', 'pe',
-            'm', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me',
-            'gap', 'gapX', 'gapY', 'inset', 'top', 'right', 'bottom', 'left',
-            'w', 'h', 'size', 'basis', 'indent', 'translateX', 'translateY'];
+        const spacingProps = [
+            'p',
+            'pt',
+            'pr',
+            'pb',
+            'pl',
+            'px',
+            'py',
+            'ps',
+            'pe',
+            'm',
+            'mt',
+            'mr',
+            'mb',
+            'ml',
+            'mx',
+            'my',
+            'ms',
+            'me',
+            'gap',
+            'gapX',
+            'gapY',
+            'inset',
+            'top',
+            'right',
+            'bottom',
+            'left',
+            'w',
+            'h',
+            'size',
+            'basis',
+            'indent',
+            'translateX',
+            'translateY',
+        ];
         for (const prop of spacingProps) {
             expect(PROPERTY_CATEGORY_MAP[prop]).toBe(PropertyCategory.SPACING);
         }
     });
 
     it('should categorize color properties', () => {
-        const colorProps = ['bg', 'color', 'borderColor',
-            'divideColor', 'outlineColor', 'ringColor', 'ringOffsetColor',
-            'shadowColor', 'textShadowColor', 'decorationColor', 'accent', 'caret', 'fill', 'stroke',
-            'from', 'via', 'to', 'dropShadowColor'];
+        const colorProps = [
+            'bg',
+            'color',
+            'borderColor',
+            'divideColor',
+            'outlineColor',
+            'ringColor',
+            'ringOffsetColor',
+            'shadowColor',
+            'textShadowColor',
+            'decorationColor',
+            'accent',
+            'caret',
+            'fill',
+            'stroke',
+            'from',
+            'via',
+            'to',
+            'dropShadowColor',
+        ];
         for (const prop of colorProps) {
             expect(PROPERTY_CATEGORY_MAP[prop]).toBe(PropertyCategory.COLOR);
         }
     });
 
     it('should categorize unitless properties', () => {
-        const unitlessProps = ['opacity', 'z', 'order', 'columns',
-            'scale', 'scaleX', 'scaleY', 'brightness', 'contrast'];
+        const unitlessProps = [
+            'opacity',
+            'z',
+            'order',
+            'columns',
+            'scale',
+            'scaleX',
+            'scaleY',
+            'brightness',
+            'contrast',
+        ];
         for (const prop of unitlessProps) {
             expect(PROPERTY_CATEGORY_MAP[prop]).toBe(PropertyCategory.UNITLESS);
         }
@@ -148,21 +204,29 @@ describe('PROPERTY_CATEGORY_MAP edge cases', () => {
     });
 
     it('should categorize border-related as UNITLESS', () => {
-        const borderProps = ['border', 'borderT', 'borderR', 'borderB', 'borderL', 'borderX', 'borderY'];
+        const borderProps = [
+            'border',
+            'borderT',
+            'borderR',
+            'borderB',
+            'borderL',
+            'borderX',
+            'borderY',
+        ];
         for (const prop of borderProps) {
             expect(PROPERTY_CATEGORY_MAP[prop]).toBe(PropertyCategory.UNITLESS);
         }
     });
 
     it('should categorize gridCols/gridRows as UNITLESS', () => {
-        expect(PROPERTY_CATEGORY_MAP['gridCols']).toBe(PropertyCategory.UNITLESS);
-        expect(PROPERTY_CATEGORY_MAP['gridRows']).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.gridCols).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.gridRows).toBe(PropertyCategory.UNITLESS);
     });
 
     it('should categorize scale as UNITLESS', () => {
-        expect(PROPERTY_CATEGORY_MAP['scale']).toBe(PropertyCategory.UNITLESS);
-        expect(PROPERTY_CATEGORY_MAP['scaleX']).toBe(PropertyCategory.UNITLESS);
-        expect(PROPERTY_CATEGORY_MAP['scaleY']).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.scale).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.scaleX).toBe(PropertyCategory.UNITLESS);
+        expect(PROPERTY_CATEGORY_MAP.scaleY).toBe(PropertyCategory.UNITLESS);
     });
 });
 

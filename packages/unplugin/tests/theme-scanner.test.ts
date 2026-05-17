@@ -181,7 +181,13 @@ describe('mergeThemes', () => {
 
     it('merges tokens from multiple themes', () => {
         const a = { colors: ['brand'], spacings: ['xl'], fonts: [], radii: [], shadows: [] };
-        const b = { colors: ['accent'], spacings: ['xl'], fonts: ['display'], radii: [], shadows: [] };
+        const b = {
+            colors: ['accent'],
+            spacings: ['xl'],
+            fonts: ['display'],
+            radii: [],
+            shadows: [],
+        };
         const result = mergeThemes([a, b]);
         expect(result.colors).toEqual(['accent', 'brand']);
         expect(result.spacings).toEqual(['xl']); // deduped
@@ -189,7 +195,13 @@ describe('mergeThemes', () => {
     });
 
     it('returns sorted output after merge', () => {
-        const a = { colors: ['z-color', 'a-color'], spacings: [], fonts: [], radii: [], shadows: [] };
+        const a = {
+            colors: ['z-color', 'a-color'],
+            spacings: [],
+            fonts: [],
+            radii: [],
+            shadows: [],
+        };
         const b = { colors: ['m-color'], spacings: [], fonts: [], radii: [], shadows: [] };
         const result = mergeThemes([a, b]);
         expect(result.colors).toEqual(['a-color', 'm-color', 'z-color']);
@@ -198,11 +210,17 @@ describe('mergeThemes', () => {
 
 describe('hasTokens', () => {
     it('returns false for empty theme', () => {
-        expect(hasTokens({ colors: [], spacings: [], fonts: [], radii: [], shadows: [] })).toBe(false);
+        expect(hasTokens({ colors: [], spacings: [], fonts: [], radii: [], shadows: [] })).toBe(
+            false,
+        );
     });
 
     it('returns true when any category has tokens', () => {
-        expect(hasTokens({ colors: ['brand'], spacings: [], fonts: [], radii: [], shadows: [] })).toBe(true);
-        expect(hasTokens({ colors: [], spacings: [], fonts: [], radii: [], shadows: ['card'] })).toBe(true);
+        expect(
+            hasTokens({ colors: ['brand'], spacings: [], fonts: [], radii: [], shadows: [] }),
+        ).toBe(true);
+        expect(
+            hasTokens({ colors: [], spacings: [], fonts: [], radii: [], shadows: ['card'] }),
+        ).toBe(true);
     });
 });

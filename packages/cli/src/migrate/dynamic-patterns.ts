@@ -18,7 +18,7 @@
 import type * as BabelTypes from '@babel/types';
 
 import { generateSzExpression, generateSzObjectLiteral } from './sz-codegen.js';
-import { classNameToSzObject, type CsszyxTodoMap } from './variant-parser.js';
+import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
 
 // ============================================================================
 // TYPES
@@ -43,9 +43,7 @@ export interface PatternResult {
 // ============================================================================
 
 /** Function names recognized as className composition utilities. */
-export const CLSX_LIKE_NAMES = new Set([
-    'clsx', 'cn', 'cx', 'twMerge', 'classNames', 'classnames',
-]);
+export const CLSX_LIKE_NAMES = new Set(['clsx', 'cn', 'cx', 'twMerge', 'classNames', 'classnames']);
 
 /**
  * Checks if a name is a recognized className composition utility.
@@ -305,7 +303,11 @@ export function handleTemplateLiteral(
     for (const expr of node.expressions) {
         // Expression must be an Expression (not TSType)
         if (!isExpression(expr, t)) {
-            const exprSrc = safeSlice(source, (expr as BabelTypes.Node).start, (expr as BabelTypes.Node).end);
+            const exprSrc = safeSlice(
+                source,
+                (expr as BabelTypes.Node).start,
+                (expr as BabelTypes.Node).end,
+            );
             warnings.push(`Cannot migrate template expression: ${exprSrc}`);
             return skip(allUnrecognized, warnings);
         }
@@ -428,9 +430,13 @@ function handleTernaryInner(
 
     // Handle empty alternate: cond ? 'classes' : ''
     if (altValue === '') {
-        if (!conValue) {return null;} // both empty → nothing to do
+        if (!conValue) {
+            return null;
+        } // both empty → nothing to do
         const conResult = migrateString(conValue, customMap);
-        if (!conResult || conResult.unrecognized.length > 0) {return null;}
+        if (!conResult || conResult.unrecognized.length > 0) {
+            return null;
+        }
         return {
             exprStr: `${condSource} && ${conResult.objectStr}`,
             unrecognized: [],
@@ -440,7 +446,9 @@ function handleTernaryInner(
     // Handle empty consequent: cond ? '' : 'classes'
     if (conValue === '') {
         const altResult = migrateString(altValue, customMap);
-        if (!altResult || altResult.unrecognized.length > 0) {return null;}
+        if (!altResult || altResult.unrecognized.length > 0) {
+            return null;
+        }
         return {
             exprStr: `!${wrapCondition(condSource)} && ${altResult.objectStr}`,
             unrecognized: [],
@@ -506,9 +514,14 @@ function handleLogicalAndInner(
  * @param customMap - Optional parsed .csszyx-todo.json resolution map.
  * @returns Object literal string and unrecognized classes, or null.
  */
-function migrateString(className: string, customMap?: CsszyxTodoMap): { objectStr: string; unrecognized: string[] } | null {
+function migrateString(
+    className: string,
+    customMap?: CsszyxTodoMap,
+): { objectStr: string; unrecognized: string[] } | null {
     const trimmed = className.trim();
-    if (!trimmed) {return null;}
+    if (!trimmed) {
+        return null;
+    }
 
     const { szObject, unrecognized } = classNameToSzObject(trimmed, customMap);
     if (Object.keys(szObject).length === 0) {
@@ -544,8 +557,14 @@ function skip(unrecognized: string[], warnings: string[]): PatternResult {
  * @param end - End position (nullable).
  * @returns The sliced string, or '<unknown>' if positions are null.
  */
-function safeSlice(source: string, start: number | null | undefined, end: number | null | undefined): string {
-    if (start === null || start === undefined || end === null || end === undefined) {return '<unknown>';}
+function safeSlice(
+    source: string,
+    start: number | null | undefined,
+    end: number | null | undefined,
+): string {
+    if (start === null || start === undefined || end === null || end === undefined) {
+        return '<unknown>';
+    }
     return source.slice(start, end);
 }
 

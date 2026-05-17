@@ -112,7 +112,7 @@ const b = <span sz="text-lg" />;
 
 // ─── Mangle map used by post-plugin pass tests ───────────────────────────────
 const TEST_MANGLE: Record<string, string> = {
-    'flex': 'z',
+    flex: 'z',
     'items-center': 'h',
     'flex-row': 'a',
     'flex-col': 'b',
@@ -125,19 +125,21 @@ const TEST_MANGLE: Record<string, string> = {
     'scale-100': 'j',
     // After compiler fix: content: '""' → before:content-[''] (single-quote form, no escapes needed)
     "before:content-['']": 'k',
-    'relative': 'l',
+    relative: 'l',
     'after:absolute': 'm',
 };
 
 describe('mangleCodeClassesSync — Pass 1 (direct static className strings)', () => {
     it('mangles a simple double-quoted className', () => {
-        expect(mangleCodeClassesSync('className="flex items-center"', TEST_MANGLE))
-            .toBe('className="z h"');
+        expect(mangleCodeClassesSync('className="flex items-center"', TEST_MANGLE)).toBe(
+            'className="z h"',
+        );
     });
 
     it('mangles a simple single-quoted className', () => {
-        expect(mangleCodeClassesSync("className='flex items-center'", TEST_MANGLE))
-            .toBe("className='z h'");
+        expect(mangleCodeClassesSync("className='flex items-center'", TEST_MANGLE)).toBe(
+            "className='z h'",
+        );
     });
 
     it('leaves non-className strings untouched', () => {
@@ -165,7 +167,8 @@ describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', 
 
     it('mangles multiple quasi segments (between several interpolations)', () => {
         // className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`
-        const code = 'className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`';
+        const code =
+            'className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         expect(result).toBe('className:`z ${c1?"a":"b"} h ${c2?"i":"j"}`');
     });
@@ -204,7 +207,8 @@ describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', 
     it('mangles chained ternary inside interpolation (size/variant pattern)', () => {
         // sz={{ flex: true, size: s==="sm" ? "rounded-xl" : s==="md" ? "rounded-full" : "p-4", items: "center" }}
         // Non-class strings ("sm", "md") are values of a comparison, not class names — preserved.
-        const code = 'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`';
+        const code =
+            'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         expect(result).toBe('className:`z ${s==="sm"?"d":s==="md"?"e":"c"} h`');
     });
@@ -255,7 +259,8 @@ describe('mangleCodeClassesSync — Pass 2 (ternary className expressions)', () 
 
     it('handles multiple className: blocks in same line (minified multi-component)', () => {
         // Minified bundle often has many JSX elements on a single line.
-        const code = '{className:isA?"flex":"items-center"},{className:isRow?"flex-row":"flex-col"}';
+        const code =
+            '{className:isA?"flex":"items-center"},{className:isRow?"flex-row":"flex-col"}';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         expect(result).toBe('{className:isA?"z":"h"},{className:isRow?"a":"b"}');
     });
@@ -319,18 +324,24 @@ describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => 
     //   size === 'lg' ? { scale: 100 } : { scale: 75 }]}
     // Minified bundle: className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")
     it('Button — static base + && variant + size ternary (minified)', () => {
-        const code = 'className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")';
+        const code =
+            'className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         // Pass 2 sees ternary → mangles all "..." including the && string and ternary branches
         // Pass 3 is then a no-op (already-mangled tokens not in map)
-        expect(result).toBe('className:_szMerge("z h e",variant==="primary"&&"g",size==="lg"?"j":"i")');
+        expect(result).toBe(
+            'className:_szMerge("z h e",variant==="primary"&&"g",size==="lg"?"j":"i")',
+        );
     });
 
     it('Button — SSR unminified form (spaces after colon + operators)', () => {
-        const code = 'className: _szMerge("flex items-center rounded-full", variant === "primary" && "bg-violet-500", size === "lg" ? "scale-100" : "scale-75")';
+        const code =
+            'className: _szMerge("flex items-center rounded-full", variant === "primary" && "bg-violet-500", size === "lg" ? "scale-100" : "scale-75")';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         // Pass 2: space after colon is accepted; expression mangled in full
-        expect(result).toBe('className: _szMerge("z h e", variant === "primary" && "g", size === "lg" ? "j" : "i")');
+        expect(result).toBe(
+            'className: _szMerge("z h e", variant === "primary" && "g", size === "lg" ? "j" : "i")',
+        );
     });
 
     it('Avatar — all-ternary _szMerge, no static base (size variant)', () => {
@@ -343,16 +354,20 @@ describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => 
     it('Modal — 4-arg _szMerge: static + two && booleans + ternary', () => {
         // sz={[{ flex: true, items: 'center' }, open && { p: 4 }, active && { rounded: 'xl' },
         //       full ? { rounded: 'full' } : { scale: 75 }]}
-        const code = 'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")';
+        const code =
+            'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         expect(result).toBe('className:_szMerge("z h",open&&"c",active&&"d",full?"e":"i")');
     });
 
     it('full minified JSX line with two sibling elements', () => {
         // Two React.createElement calls on one line, as produced by esbuild
-        const code = 'n.createElement("div",{className:isA?"flex":"items-center"},n.createElement("span",{className:isRow?"flex-row":"flex-col"}))';
+        const code =
+            'n.createElement("div",{className:isA?"flex":"items-center"},n.createElement("span",{className:isRow?"flex-row":"flex-col"}))';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('n.createElement("div",{className:isA?"z":"h"},n.createElement("span",{className:isRow?"a":"b"}))');
+        expect(result).toBe(
+            'n.createElement("div",{className:isA?"z":"h"},n.createElement("span",{className:isRow?"a":"b"}))',
+        );
     });
 
     it('Pass 2 then Pass 3 — no double-mangling on already-mangled strings', () => {
@@ -360,7 +375,8 @@ describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => 
         // _szMerge, Pass 3's lookbehind still runs but must not corrupt the result.
         // "flex items-center" is static (no ternary alone), so if we include a ternary
         // the whole expression goes through Pass 2 first.
-        const code = 'className:_szMerge("flex items-center",pe&&"p-4",cond?"rounded-xl":"rounded-full")';
+        const code =
+            'className:_szMerge("flex items-center",pe&&"p-4",cond?"rounded-xl":"rounded-full")';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         // Run a second time — idempotent
         const result2 = mangleCodeClassesSync(result, TEST_MANGLE);
@@ -384,8 +400,7 @@ describe('unplugin class extraction & mangling', () => {
     function extractClasses(code: string): Set<string> {
         const classes = new Set<string>();
         const classPattern = /(?:class(?:Name)?|sz)[:=]\s*["']([^"']*)["']/g;
-        let match;
-        while ((match = classPattern.exec(code)) !== null) {
+        for (const match of code.matchAll(classPattern)) {
             const parts = match[1].split(/\s+/).filter(Boolean);
             for (const cls of parts) {
                 classes.add(cls);

@@ -36,13 +36,29 @@ import { BREAKPOINTS, type Tier } from './css-generator.js';
 export const TIER_ORDER: readonly Tier[] = [
     'base',
     // viewport min-width (ascending — sm wins over base, lg wins over md)
-    'sm', 'md', 'lg', 'xl', '2xl',
+    'sm',
+    'md',
+    'lg',
+    'xl',
+    '2xl',
     // viewport max-width (descending size — max-sm is most restrictive, must win)
-    'max-2xl', 'max-xl', 'max-lg', 'max-md', 'max-sm',
+    'max-2xl',
+    'max-xl',
+    'max-lg',
+    'max-md',
+    'max-sm',
     // container query min (ascending)
-    '@sm', '@md', '@lg', '@xl', '@2xl',
+    '@sm',
+    '@md',
+    '@lg',
+    '@xl',
+    '@2xl',
     // container query max (descending)
-    '@max-2xl', '@max-xl', '@max-lg', '@max-md', '@max-sm',
+    '@max-2xl',
+    '@max-xl',
+    '@max-lg',
+    '@max-md',
+    '@max-sm',
 ] as const;
 
 const TIER_SET = new Set<string>(TIER_ORDER);
@@ -53,9 +69,11 @@ const TIER_SET = new Set<string>(TIER_ORDER);
  * @returns true when CSSStyleSheet and adoptedStyleSheets are both supported
  */
 function supportsConstructableSheets(): boolean {
-    return typeof document !== 'undefined' &&
+    return (
+        typeof document !== 'undefined' &&
         typeof CSSStyleSheet !== 'undefined' &&
-        'adoptedStyleSheets' in document;
+        'adoptedStyleSheets' in document
+    );
 }
 
 // ── Module state ──────────────────────────────────────────────────────────────
@@ -79,26 +97,28 @@ const injected = new Set<string>();
  * @returns wrapped CSS string (e.g. "@media (min-width: 40rem) { .p-4 { padding: 1rem } }")
  */
 function wrapForTier(cssRule: string, tier: Tier): string {
-    if (tier === 'base') {return cssRule;}
+    if (tier === 'base') {
+        return cssRule;
+    }
 
     // Container query tiers: @sm, @md, @lg, @xl, @2xl, @max-*
     if (tier.startsWith('@')) {
         const bp = tier.slice(1); // '@sm' → 'sm', '@max-sm' → 'max-sm'
         const bpValue = BREAKPOINTS[bp];
-        if (!bpValue) {return cssRule;}
-        const query = bp.startsWith('max-')
-            ? `(width <= ${bpValue})`
-            : `(width >= ${bpValue})`;
+        if (!bpValue) {
+            return cssRule;
+        }
+        const query = bp.startsWith('max-') ? `(width <= ${bpValue})` : `(width >= ${bpValue})`;
         return `@container ${query} { ${cssRule} }`;
     }
 
     // Viewport tiers: sm, md, lg, xl, 2xl, max-sm, max-md, ...
     const bpValue = BREAKPOINTS[tier];
-    if (!bpValue) {return cssRule;}
+    if (!bpValue) {
+        return cssRule;
+    }
 
-    const query = tier.startsWith('max-')
-        ? `(max-width: ${bpValue})`
-        : `(min-width: ${bpValue})`;
+    const query = tier.startsWith('max-') ? `(max-width: ${bpValue})` : `(min-width: ${bpValue})`;
     return `@media ${query} { ${cssRule} }`;
 }
 
@@ -146,7 +166,9 @@ function initFallbackStyle(): HTMLStyleElement {
  */
 export function resolveTier(className: string): Tier {
     const colonIdx = className.indexOf(':');
-    if (colonIdx === -1) {return 'base';}
+    if (colonIdx === -1) {
+        return 'base';
+    }
 
     const prefix = className.slice(0, colonIdx);
     // Container query variants start with @
@@ -169,15 +191,23 @@ export function resolveTier(className: string): Tier {
  * @param tier      - which tier sheet to inject into
  */
 export function injectRule(className: string, cssRule: string, tier: Tier = 'base'): void {
-    if (injected.has(className)) {return;}
+    if (injected.has(className)) {
+        return;
+    }
     injected.add(className);
 
-    if (!cssRule) {return;} // unknown class — still mark as "seen" to avoid repeat lookups
+    if (!cssRule) {
+        return;
+    } // unknown class — still mark as "seen" to avoid repeat lookups
 
     if (supportsConstructableSheets()) {
-        if (!sheets) {sheets = initSheets();}
+        if (!sheets) {
+            sheets = initSheets();
+        }
         const resolved = sheets.get(tier) ?? sheets.get('base');
-        if (!resolved) {return;}
+        if (!resolved) {
+            return;
+        }
         const sheet = resolved;
         const rule = wrapForTier(cssRule, tier);
         try {
@@ -187,7 +217,9 @@ export function injectRule(className: string, cssRule: string, tier: Tier = 'bas
         }
     } else {
         // Fallback: append to a <style> element
-        if (!fallbackStyle) {fallbackStyle = initFallbackStyle();}
+        if (!fallbackStyle) {
+            fallbackStyle = initFallbackStyle();
+        }
         const rule = wrapForTier(cssRule, tier);
         fallbackStyle.sheet?.insertRule(rule, fallbackStyle.sheet.cssRules.length);
     }
@@ -211,9 +243,7 @@ export function isInjected(className: string): boolean {
 export function cleanup(): void {
     if (sheets) {
         const tierSheets = new Set(sheets.values());
-        document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
-            s => !tierSheets.has(s),
-        );
+        document.adoptedStyleSheets = document.adoptedStyleSheets.filter(s => !tierSheets.has(s));
         sheets = null;
     }
 

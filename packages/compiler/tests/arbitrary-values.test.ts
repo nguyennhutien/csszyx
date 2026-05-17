@@ -137,4 +137,3 @@ describe('arbitrary values — negative units in before:/after: variants', () =>
         expect(result).toContain('after:right-[-1px]');
     });
 });
-

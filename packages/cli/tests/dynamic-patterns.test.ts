@@ -84,7 +84,9 @@ describe('clsx/cn calls', () => {
     });
 
     it('string + ternary inside clsx', () => {
-        const result = migrate('<div className={clsx("px-4", isLarge ? "text-2xl" : "text-sm")} />');
+        const result = migrate(
+            '<div className={clsx("px-4", isLarge ? "text-2xl" : "text-sm")} />',
+        );
         expect(result.changed).toBe(true);
         expect(result.code).toContain('sz={[');
         expect(result.code).toContain('px: 4');
@@ -223,9 +225,7 @@ describe('template literals', () => {
     });
 
     it('template with logical AND expression', () => {
-        const result = migrate(
-            '<div className={`px-4 ${isActive && "bg-blue-500"}`} />',
-        );
+        const result = migrate('<div className={`px-4 ${isActive && "bg-blue-500"}`} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('sz={[');
         expect(result.code).toContain('px: 4');

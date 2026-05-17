@@ -9,7 +9,6 @@ import { transformSourceCode } from '../src/transform.js';
  * dynamic()'s runtime CSS injection never executes.
  */
 describe('dynamic() class extraction (Layer-1 prescan)', () => {
-
     // ─── 1. Inline literal object ─────────────────────────────────────────────
 
     describe('dynamic({ ... }) — inline literal arg', () => {

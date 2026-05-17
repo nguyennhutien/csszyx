@@ -20,7 +20,7 @@ import { type SzObject, transform } from '../src/transform.js';
 /** Shorthand: transform and return className string.
  * @param obj - The sz object to transform.
  * @returns {string} The resulting className string. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const t = (obj: any): string => transform(obj as SzObject).className;
 
 // ===========================================================================
@@ -101,19 +101,18 @@ describe('group variant', () => {
 
     // --- Named group ---
     it('named group: group-hover/sidebar', () => {
-        expect(t({ group: { sidebar: { hover: { bg: 'blue-500' } } } }))
-            .toBe('group-hover/sidebar:bg-blue-500');
+        expect(t({ group: { sidebar: { hover: { bg: 'blue-500' } } } })).toBe(
+            'group-hover/sidebar:bg-blue-500',
+        );
     });
 
     it('named group: group-focus/card', () => {
-        expect(t({ group: { card: { focus: { ring: 2 } } } }))
-            .toBe('group-focus/card:ring-2');
+        expect(t({ group: { card: { focus: { ring: 2 } } } })).toBe('group-focus/card:ring-2');
     });
 
     // --- Group with has ---
     it('group-has-[a]', () => {
-        expect(t({ group: { has: { a: { block: true } } } }))
-            .toBe('group-has-[a]:block');
+        expect(t({ group: { has: { a: { block: true } } } })).toBe('group-has-[a]:block');
     });
 
     it('group-has with multiple selectors', () => {
@@ -124,18 +123,19 @@ describe('group variant', () => {
 
     // --- Arbitrary selector ---
     it('arbitrary: group-[.is-published]', () => {
-        expect(t({ group: { '.is-published': { block: true } } }))
-            .toBe('group-[.is-published]:block');
+        expect(t({ group: { '.is-published': { block: true } } })).toBe(
+            'group-[.is-published]:block',
+        );
     });
 
     it('arbitrary: group-[#main]', () => {
-        expect(t({ group: { '#main': { flex: true } } }))
-            .toBe('group-[#main]:flex');
+        expect(t({ group: { '#main': { flex: true } } })).toBe('group-[#main]:flex');
     });
 
     it('arbitrary: group-[[data-active]]', () => {
-        expect(t({ group: { '[data-active]': { bg: 'green-500' } } }))
-            .toBe('group-[[data-active]]:bg-green-500');
+        expect(t({ group: { '[data-active]': { bg: 'green-500' } } })).toBe(
+            'group-[[data-active]]:bg-green-500',
+        );
     });
 
     // --- group-data-* (attribute presence) ---
@@ -146,82 +146,97 @@ describe('group variant', () => {
     // by the migration CLI and normalized to the same sz object — output always uses [].
 
     it('group-data-[active]: presence check', () => {
-        expect(t({ group: { data: { active: { bg: 'blue-500' } } } }))
-            .toBe('group-data-[active]:bg-blue-500');
+        expect(t({ group: { data: { active: { bg: 'blue-500' } } } })).toBe(
+            'group-data-[active]:bg-blue-500',
+        );
     });
 
     it('group-data-[open]: common Radix/Headless UI attribute', () => {
-        expect(t({ group: { data: { open: { bg: 'blue-500' } } } }))
-            .toBe('group-data-[open]:bg-blue-500');
+        expect(t({ group: { data: { open: { bg: 'blue-500' } } } })).toBe(
+            'group-data-[open]:bg-blue-500',
+        );
     });
 
     it('group-data-[closed]: closed state', () => {
-        expect(t({ group: { data: { closed: { hidden: true } } } }))
-            .toBe('group-data-[closed]:hidden');
+        expect(t({ group: { data: { closed: { hidden: true } } } })).toBe(
+            'group-data-[closed]:hidden',
+        );
     });
 
     it('group-data-[disabled]: disabled state', () => {
-        expect(t({ group: { data: { disabled: { opacity: 50 } } } }))
-            .toBe('group-data-[disabled]:opacity-50');
+        expect(t({ group: { data: { disabled: { opacity: 50 } } } })).toBe(
+            'group-data-[disabled]:opacity-50',
+        );
     });
 
     it('group-data-[highlighted]: highlighted state', () => {
-        expect(t({ group: { data: { highlighted: { bg: 'blue-100' } } } }))
-            .toBe('group-data-[highlighted]:bg-blue-100');
+        expect(t({ group: { data: { highlighted: { bg: 'blue-100' } } } })).toBe(
+            'group-data-[highlighted]:bg-blue-100',
+        );
     });
 
     // --- group-data-* (attribute value match, brackets required) ---
     it('group-data-[state=open]: value match', () => {
-        expect(t({ group: { data: { 'state=open': { text: 'lg' } } } }))
-            .toBe('group-data-[state=open]:text-lg');
+        expect(t({ group: { data: { 'state=open': { text: 'lg' } } } })).toBe(
+            'group-data-[state=open]:text-lg',
+        );
     });
 
     it("group-data-[active='true']: quoted value match", () => {
-        expect(t({ group: { data: { "active='true'": { color: 'blue-600' } } } }))
-            .toBe("group-data-[active='true']:text-blue-600");
+        expect(t({ group: { data: { "active='true'": { color: 'blue-600' } } } })).toBe(
+            "group-data-[active='true']:text-blue-600",
+        );
     });
 
     it('group-data-[orientation=horizontal]: Radix orientation', () => {
-        expect(t({ group: { data: { 'orientation=horizontal': { flex: true } } } }))
-            .toBe('group-data-[orientation=horizontal]:flex');
+        expect(t({ group: { data: { 'orientation=horizontal': { flex: true } } } })).toBe(
+            'group-data-[orientation=horizontal]:flex',
+        );
     });
 
     // --- group-data-* with named group (/name) ---
     it('group-data-[active]/card: named group', () => {
-        expect(t({ group: { card: { data: { active: { color: 'blue-600' } } } } }))
-            .toBe('group-data-[active]/card:text-blue-600');
+        expect(t({ group: { card: { data: { active: { color: 'blue-600' } } } } })).toBe(
+            'group-data-[active]/card:text-blue-600',
+        );
     });
 
     it("group-data-[active='true']/dialog: value match + named group", () => {
-        expect(t({ group: { dialog: { data: { "active='true'": { color: 'blue-600' } } } } }))
-            .toBe("group-data-[active='true']/dialog:text-blue-600");
+        expect(t({ group: { dialog: { data: { "active='true'": { color: 'blue-600' } } } } })).toBe(
+            "group-data-[active='true']/dialog:text-blue-600",
+        );
     });
 
     // --- group-aria-* ---
     it('group-aria-checked', () => {
-        expect(t({ group: { aria: { checked: { bg: 'blue-500' } } } }))
-            .toBe('group-aria-checked:bg-blue-500');
+        expect(t({ group: { aria: { checked: { bg: 'blue-500' } } } })).toBe(
+            'group-aria-checked:bg-blue-500',
+        );
     });
 
     it('group-aria-expanded', () => {
-        expect(t({ group: { aria: { expanded: { block: true } } } }))
-            .toBe('group-aria-expanded:block');
+        expect(t({ group: { aria: { expanded: { block: true } } } })).toBe(
+            'group-aria-expanded:block',
+        );
     });
 
     it('group-aria-[current=page]: arbitrary aria value', () => {
-        expect(t({ group: { aria: { 'current=page': { color: 'blue-600' } } } }))
-            .toBe('group-aria-[current=page]:text-blue-600');
+        expect(t({ group: { aria: { 'current=page': { color: 'blue-600' } } } })).toBe(
+            'group-aria-[current=page]:text-blue-600',
+        );
     });
 
     // --- peer-data-* (same pattern as group-data but for peer) ---
     it('peer-data-[active]: presence check', () => {
-        expect(t({ peer: { data: { active: { color: 'blue-500' } } } }))
-            .toBe('peer-data-[active]:text-blue-500');
+        expect(t({ peer: { data: { active: { color: 'blue-500' } } } })).toBe(
+            'peer-data-[active]:text-blue-500',
+        );
     });
 
     it('peer-data-[state=open]: value match', () => {
-        expect(t({ peer: { data: { 'state=open': { block: true } } } }))
-            .toBe('peer-data-[state=open]:block');
+        expect(t({ peer: { data: { 'state=open': { block: true } } } })).toBe(
+            'peer-data-[state=open]:block',
+        );
     });
 
     // --- Skips ---
@@ -248,18 +263,17 @@ describe('peer variant', () => {
     });
 
     it('named peer: peer-focus/email', () => {
-        expect(t({ peer: { email: { focus: { ring: 2 } } } }))
-            .toBe('peer-focus/email:ring-2');
+        expect(t({ peer: { email: { focus: { ring: 2 } } } })).toBe('peer-focus/email:ring-2');
     });
 
     it('arbitrary: peer-[[data-active]]', () => {
-        expect(t({ peer: { '[data-active]': { bg: 'green-500' } } }))
-            .toBe('peer-[[data-active]]:bg-green-500');
+        expect(t({ peer: { '[data-active]': { bg: 'green-500' } } })).toBe(
+            'peer-[[data-active]]:bg-green-500',
+        );
     });
 
     it('peer-has-[a]', () => {
-        expect(t({ peer: { has: { a: { underline: true } } } }))
-            .toBe('peer-has-[a]:underline');
+        expect(t({ peer: { has: { a: { underline: true } } } })).toBe('peer-has-[a]:underline');
     });
 });
 
@@ -290,8 +304,9 @@ describe('not variant', () => {
 
     // --- Nested supports ---
     it('not-supports-[display:grid]', () => {
-        expect(t({ not: { supports: { 'display:grid': { block: true } } } }))
-            .toBe('not-supports-[display:grid]:block');
+        expect(t({ not: { supports: { 'display:grid': { block: true } } } })).toBe(
+            'not-supports-[display:grid]:block',
+        );
     });
 
     // --- Skips ---
@@ -322,7 +337,9 @@ describe('data variant', () => {
     });
 
     it('data-[theme=dark]', () => {
-        expect(t({ data: { 'theme=dark': { bg: 'gray-900' } } })).toBe('data-[theme=dark]:bg-gray-900');
+        expect(t({ data: { 'theme=dark': { bg: 'gray-900' } } })).toBe(
+            'data-[theme=dark]:bg-gray-900',
+        );
     });
 
     it('multiple data attributes', () => {
@@ -371,16 +388,22 @@ describe('aria variant', () => {
     });
 
     it('aria-required', () => {
-        expect(t({ aria: { required: { borderColor: 'red-500' } } })).toBe('aria-required:border-red-500');
+        expect(t({ aria: { required: { borderColor: 'red-500' } } })).toBe(
+            'aria-required:border-red-500',
+        );
     });
 
     // --- Arbitrary aria (aria-[*] syntax) ---
     it('arbitrary: aria-[current=page]', () => {
-        expect(t({ aria: { 'current=page': { fontWeight: 'bold' } } })).toBe('aria-[current=page]:font-bold');
+        expect(t({ aria: { 'current=page': { fontWeight: 'bold' } } })).toBe(
+            'aria-[current=page]:font-bold',
+        );
     });
 
     it('arbitrary: aria-[sort=ascending]', () => {
-        expect(t({ aria: { 'sort=ascending': { bg: 'blue-50' } } })).toBe('aria-[sort=ascending]:bg-blue-50');
+        expect(t({ aria: { 'sort=ascending': { bg: 'blue-50' } } })).toBe(
+            'aria-[sort=ascending]:bg-blue-50',
+        );
     });
 
     // --- Skips ---
@@ -399,8 +422,9 @@ describe('aria variant', () => {
 
 describe('supports variant', () => {
     it('supports-[display:grid]', () => {
-        expect(t({ supports: { 'display:grid': { grid: true } } }))
-            .toBe('supports-[display:grid]:grid');
+        expect(t({ supports: { 'display:grid': { grid: true } } })).toBe(
+            'supports-[display:grid]:grid',
+        );
     });
 
     it('supports-[backdrop-filter:blur(0)]', () => {
@@ -409,8 +433,7 @@ describe('supports variant', () => {
     });
 
     it('supports-[gap:1rem]', () => {
-        expect(t({ supports: { 'gap:1rem': { gap: 4 } } }))
-            .toBe('supports-[gap:1rem]:gap-4');
+        expect(t({ supports: { 'gap:1rem': { gap: 4 } } })).toBe('supports-[gap:1rem]:gap-4');
     });
 
     it('skips null', () => {

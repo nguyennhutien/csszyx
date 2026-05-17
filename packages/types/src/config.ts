@@ -9,200 +9,219 @@
  * Development mode configuration options.
  */
 export interface DevelopmentConfig {
-  /**
-   * Enable strict mode - fail build on warnings.
-   * When enabled, warnings are treated as errors.
-   *
-   * @default false
-   */
-  strictMode: boolean;
+    /**
+     * Enable strict mode - fail build on warnings.
+     * When enabled, warnings are treated as errors.
+     *
+     * @default false
+     */
+    strictMode: boolean;
 
-  /**
-   * Enable debug logging during build.
-   *
-   * @default false
-   */
-  debug: boolean;
+    /**
+     * Enable debug logging during build.
+     *
+     * @default false
+     */
+    debug: boolean;
 }
 
 /**
  * Production mode configuration options.
  */
 export interface ProductionConfig {
-  /**
-   * Enable global class name mangling.
-   * Minifies class names to single characters (a, b, c, etc.).
-   *
-   * @default true
-   */
-  mangle: boolean;
+    /**
+     * Enable global class name mangling.
+     * Minifies class names to single characters (a, b, c, etc.).
+     *
+     * @default true
+     */
+    mangle: boolean;
 
-  /**
-   * Enable content hashing for immutable caching.
-   *
-   * @default true
-   */
-  contentHashing: boolean;
+    /**
+     * Enable content hashing for immutable caching.
+     *
+     * @default true
+     */
+    contentHashing: boolean;
 
-  /**
-   * Inject checksum for SSR hydration validation.
-   *
-   * @default true
-   */
-  injectChecksum: boolean;
+    /**
+     * Inject checksum for SSR hydration validation.
+     *
+     * @default true
+     */
+    injectChecksum: boolean;
 
-  /**
-   * Enable incremental build caching.
-   *
-   * @default true
-   */
-  incrementalBuild: boolean;
+    /**
+     * Enable incremental build caching.
+     *
+     * @default true
+     */
+    incrementalBuild: boolean;
 
-  /**
-   * Minify output (class names and attributes).
-   *
-   * @default true in production
-   */
-  minify: boolean;
+    /**
+     * Minify output (class names and attributes).
+     *
+     * @default true in production
+     */
+    minify: boolean;
 }
 
 /**
  * Build pipeline configuration.
  */
 export interface BuildConfig {
-  /**
-   * Build ID (git hash or timestamp).
-   * Auto-generated if not provided.
-   */
-  buildId?: string;
+    /**
+     * Build ID (git hash or timestamp).
+     * Auto-generated if not provided.
+     */
+    buildId?: string;
 
-  /**
-   * Path to Tailwind config file.
-   *
-   * @default "tailwind.config.js"
-   */
-  tailwindConfig?: string;
+    /**
+     * Path to Tailwind config file.
+     *
+     * @default "tailwind.config.js"
+     */
+    tailwindConfig?: string;
 
-  /**
-   * Output directory for generated files.
-   *
-   * @default ".csszyx"
-   */
-  outputDir?: string;
+    /**
+     * Output directory for generated files.
+     *
+     * @default ".csszyx"
+     */
+    outputDir?: string;
 
-  /**
-   * Cache directory for incremental builds.
-   *
-   * @default ".csszyx/cache"
-   */
-  cacheDir?: string;
+    /**
+     * Cache directory for incremental builds.
+     *
+     * @default ".csszyx/cache"
+     */
+    cacheDir?: string;
 
-  /**
-   * Maximum AST nodes per file before warning.
-   *
-   * @default 50000
-   */
-  astBudgetLimit?: number;
+    /**
+     * Maximum AST nodes per file before warning.
+     *
+     * @default 50000
+     */
+    astBudgetLimit?: number;
 
-  /**
-   * CSS file(s) to scan for Tailwind v4 @theme blocks.
-   * When set, the plugin generates .csszyx/theme.d.ts with TypeScript augmentation
-   * for custom design tokens, enabling IntelliSense for user-defined colors, spacings, etc.
-   *
-   * Accepts a single glob/path or an array of globs/paths.
-   *
-   * @example ['src/styles/theme.css', 'src/styles/tokens.css']
-   */
-  scanCss?: string | string[];
+    /**
+     * Source parser used for JSX/TSX sz transforms.
+     *
+     * `oxc` is the default parser. `babel` remains available as a compatibility
+     * fallback while the migration keeps Babel dependencies installed.
+     *
+     * @default "oxc"
+     */
+    parser?: 'babel' | 'oxc';
+
+    /**
+     * CSS file(s) to scan for Tailwind v4 @theme blocks.
+     * When set, the plugin generates .csszyx/theme.d.ts with TypeScript augmentation
+     * for custom design tokens, enabling IntelliSense for user-defined colors, spacings, etc.
+     *
+     * Accepts a single glob/path or an array of globs/paths.
+     *
+     * @example ['src/styles/theme.css', 'src/styles/tokens.css']
+     */
+    scanCss?: string | string[];
 }
+
+/**
+ * File patterns accepted by csszyx plugin filters.
+ *
+ * String patterns may be literal paths (`src/generated/icon-dump.tsx`) or
+ * simple globs such as `src/generated/**` or any TSX file. RegExp patterns are matched
+ * against both absolute paths and paths relative to the project root.
+ */
+export type FilePattern = string | RegExp;
 
 /**
  * Hydration safety configuration.
  */
 export interface HydrationConfig {
-  /**
-   * Enable strict hydration checks.
-   * When enabled, hydration mismatches trigger abort protocol.
-   *
-   * @default true
-   */
-  strict: boolean;
+    /**
+     * Enable strict hydration checks.
+     * When enabled, hydration mismatches trigger abort protocol.
+     *
+     * @default true
+     */
+    strict: boolean;
 
-  /**
-   * Default recovery mode for components without explicit szRecover.
-   *
-   * @default null (no recovery)
-   */
-  defaultRecoveryMode?: 'csr' | 'dev-only' | null;
+    /**
+     * Default recovery mode for components without explicit szRecover.
+     *
+     * @default null (no recovery)
+     */
+    defaultRecoveryMode?: 'csr' | 'dev-only' | null;
 
-  /**
-   * Enable hydration audit logging.
-   *
-   * @default true
-   */
-  auditLog: boolean;
+    /**
+     * Enable hydration audit logging.
+     *
+     * @default true
+     */
+    auditLog: boolean;
 }
 
 /**
  * Performance optimization configuration.
  */
 export interface PerformanceConfig {
-  /**
-   * Enable parallel processing during build.
-   *
-   * @default true
-   */
-  parallel: boolean;
+    /**
+     * Enable parallel processing during build.
+     *
+     * @default true
+     */
+    parallel: boolean;
 
-  /**
-   * Number of worker threads for parallel processing.
-   * Auto-detected if not provided.
-   */
-  workers?: number;
+    /**
+     * Number of worker threads for parallel processing.
+     * Auto-detected if not provided.
+     */
+    workers?: number;
 
-  /**
-   * Enable CSS variable optimization.
-   *
-   * @default true
-   */
-  optimizeVariables: boolean;
+    /**
+     * Enable CSS variable optimization.
+     *
+     * @default true
+     */
+    optimizeVariables: boolean;
 
-  /**
-   * Enable zero-runtime optimization for static cases.
-   *
-   * @default true
-   */
-  zeroRuntime: boolean;
+    /**
+     * Enable zero-runtime optimization for static cases.
+     *
+     * @default true
+     */
+    zeroRuntime: boolean;
 }
 
 /**
  * Main csszyx configuration.
  */
 export interface CsszyxConfig {
-  /**
-   * Development mode configuration.
-   */
-  development: DevelopmentConfig;
+    /**
+     * Development mode configuration.
+     */
+    development: DevelopmentConfig;
 
-  /**
-   * Production mode configuration.
-   */
-  production: ProductionConfig;
+    /**
+     * Production mode configuration.
+     */
+    production: ProductionConfig;
 
-  /**
-   * Build pipeline configuration.
-   */
-  build: BuildConfig;
+    /**
+     * Build pipeline configuration.
+     */
+    build: BuildConfig;
 
-  /**
-   * Hydration safety configuration.
-   */
-  hydration: HydrationConfig;
+    /**
+     * Hydration safety configuration.
+     */
+    hydration: HydrationConfig;
 
-  /**
-   * Performance optimization configuration.
-   */
-  performance: PerformanceConfig;
+    /**
+     * Performance optimization configuration.
+     */
+    performance: PerformanceConfig;
 }
 
 /**
@@ -210,11 +229,28 @@ export interface CsszyxConfig {
  * All fields are optional and will be merged with defaults.
  */
 export type PartialCsszyxConfig = {
-  development?: Partial<DevelopmentConfig>;
-  production?: Partial<ProductionConfig>;
-  build?: Partial<BuildConfig>;
-  hydration?: Partial<HydrationConfig>;
-  performance?: Partial<PerformanceConfig>;
+    /**
+     * Restrict source files that csszyx transforms.
+     *
+     * CSS files used for Tailwind class discovery are still processed unless
+     * excluded explicitly, so narrow source includes do not accidentally disable
+     * CSS safelist injection.
+     */
+    include?: FilePattern | FilePattern[];
+
+    /**
+     * Exclude files from csszyx processing before parsing.
+     *
+     * Use this for large generated source files that happen to contain an `sz`
+     * marker and would otherwise hit the AST budget guard.
+     */
+    exclude?: FilePattern | FilePattern[];
+
+    development?: Partial<DevelopmentConfig>;
+    production?: Partial<ProductionConfig>;
+    build?: Partial<BuildConfig>;
+    hydration?: Partial<HydrationConfig>;
+    performance?: Partial<PerformanceConfig>;
 };
 
 /**
@@ -244,6 +280,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
     astBudgetLimit: 50000,
+    parser: 'oxc',
 };
 
 /**
@@ -287,7 +324,11 @@ export type Environment = 'development' | 'production' | 'test';
  */
 export function getCurrentEnvironment(): Environment {
     const env = process.env.NODE_ENV;
-    if (env === 'production') {return 'production';}
-    if (env === 'test') {return 'test';}
+    if (env === 'production') {
+        return 'production';
+    }
+    if (env === 'test') {
+        return 'test';
+    }
     return 'development';
 }

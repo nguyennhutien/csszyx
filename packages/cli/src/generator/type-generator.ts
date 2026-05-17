@@ -22,30 +22,30 @@ import {
  * Type generation options.
  */
 export interface GeneratorOptions {
-  /** Output file path (default: ./csszyx.d.ts) */
-  output?: string;
-  /** Include comments in generated file */
-  includeComments?: boolean;
-  /** Include deprecated/legacy properties */
-  includeLegacy?: boolean;
+    /** Output file path (default: ./csszyx.d.ts) */
+    output?: string;
+    /** Include comments in generated file */
+    includeComments?: boolean;
+    /** Include deprecated/legacy properties */
+    includeLegacy?: boolean;
 }
 
 /**
  * Property mapping from sz shorthand to Tailwind utility.
  */
 interface PropertyMapping {
-  /** Property name in sz object */
-  prop: string;
-  /** Tailwind utility prefix */
-  prefix: string;
-  /** Value type: 'colors', 'spacing', 'screens', etc. */
-  valueType: string;
-  /** Whether this property supports responsive variants */
-  responsive?: boolean;
-  /** Whether this property supports state variants (hover, focus) */
-  stateful?: boolean;
-  /** JSDoc description */
-  description?: string;
+    /** Property name in sz object */
+    prop: string;
+    /** Tailwind utility prefix */
+    prefix: string;
+    /** Value type: 'colors', 'spacing', 'screens', etc. */
+    valueType: string;
+    /** Whether this property supports responsive variants */
+    responsive?: boolean;
+    /** Whether this property supports state variants (hover, focus) */
+    stateful?: boolean;
+    /** JSDoc description */
+    description?: string;
 }
 
 /**
@@ -464,41 +464,11 @@ const STATIC_VALUE_TYPES: Record<string, string[]> = {
         'y-scroll',
     ],
     flexDirection: ['row', 'row-reverse', 'col', 'col-reverse'],
-    justify: [
-        'normal',
-        'start',
-        'end',
-        'center',
-        'between',
-        'around',
-        'evenly',
-        'stretch',
-    ],
+    justify: ['normal', 'start', 'end', 'center', 'between', 'around', 'evenly', 'stretch'],
     items: ['start', 'end', 'center', 'baseline', 'stretch'],
     flex: ['1', 'auto', 'initial', 'none'],
-    grid: [
-        'flow-row',
-        'flow-col',
-        'flow-dense',
-        'flow-row-dense',
-        'flow-col-dense',
-    ],
-    gridCols: [
-        '1',
-        '2',
-        '3',
-        '4',
-        '5',
-        '6',
-        '7',
-        '8',
-        '9',
-        '10',
-        '11',
-        '12',
-        'none',
-        'subgrid',
-    ],
+    grid: ['flow-row', 'flow-col', 'flow-dense', 'flow-row-dense', 'flow-col-dense'],
+    gridCols: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'none', 'subgrid'],
     gridRows: ['1', '2', '3', '4', '5', '6', 'none', 'subgrid'],
     col: [
         'auto',
@@ -593,8 +563,10 @@ const STATIC_VALUE_TYPES: Record<string, string[]> = {
  * @returns {string} Union type string (e.g. "'val1' | 'val2'")
  */
 function generateUnionType(values: string[]): string {
-    if (values.length === 0) {return 'string';}
-    return values.map((v) => `'${v}'`).join(' | ');
+    if (values.length === 0) {
+        return 'string';
+    }
+    return values.map(v => `'${v}'`).join(' | ');
 }
 
 /**
@@ -661,42 +633,40 @@ export function generateTypeDeclarations(
         opacity: theme.opacity
             ? Object.keys(theme.opacity)
             : [
-                '0',
-                '5',
-                '10',
-                '20',
-                '25',
-                '30',
-                '40',
-                '50',
-                '60',
-                '70',
-                '75',
-                '80',
-                '90',
-                '95',
-                '100',
-            ],
+                  '0',
+                  '5',
+                  '10',
+                  '20',
+                  '25',
+                  '30',
+                  '40',
+                  '50',
+                  '60',
+                  '70',
+                  '75',
+                  '80',
+                  '90',
+                  '95',
+                  '100',
+              ],
         fontSize: theme.fontSize
             ? Object.keys(theme.fontSize)
             : [
-                'xs',
-                'sm',
-                'base',
-                'lg',
-                'xl',
-                '2xl',
-                '3xl',
-                '4xl',
-                '5xl',
-                '6xl',
-                '7xl',
-                '8xl',
-                '9xl',
-            ],
-        fontFamily: theme.fontFamily
-            ? Object.keys(theme.fontFamily)
-            : ['sans', 'serif', 'mono'],
+                  'xs',
+                  'sm',
+                  'base',
+                  'lg',
+                  'xl',
+                  '2xl',
+                  '3xl',
+                  '4xl',
+                  '5xl',
+                  '6xl',
+                  '7xl',
+                  '8xl',
+                  '9xl',
+              ],
+        fontFamily: theme.fontFamily ? Object.keys(theme.fontFamily) : ['sans', 'serif', 'mono'],
         lineHeight: [
             'none',
             'tight',
@@ -741,29 +711,8 @@ export function generateTypeDeclarations(
             'screen-xl',
             'screen-2xl',
         ],
-        minHeight: [
-            '0',
-            'full',
-            'screen',
-            'svh',
-            'lvh',
-            'dvh',
-            'min',
-            'max',
-            'fit',
-        ],
-        maxHeight: [
-            '0',
-            'none',
-            'full',
-            'screen',
-            'svh',
-            'lvh',
-            'dvh',
-            'min',
-            'max',
-            'fit',
-        ],
+        minHeight: ['0', 'full', 'screen', 'svh', 'lvh', 'dvh', 'min', 'max', 'fit'],
+        maxHeight: ['0', 'none', 'full', 'screen', 'svh', 'lvh', 'dvh', 'min', 'max', 'fit'],
         scale: ['0', '50', '75', '90', '95', '100', '105', '110', '125', '150'],
         rotate: ['0', '1', '2', '3', '6', '12', '45', '90', '180'],
         translate: spacing,
@@ -816,9 +765,7 @@ export function generateTypeDeclarations(
     const responsiveProps: string[] = [];
     for (const screen of screens) {
         if (includeComments) {
-            responsiveProps.push(
-                `    /** Styles applied at ${screen} breakpoint and above */`,
-            );
+            responsiveProps.push(`    /** Styles applied at ${screen} breakpoint and above */`);
         }
         responsiveProps.push(`    ${screen}?: SzVariantObject;`);
     }
@@ -893,10 +840,7 @@ export {};
  * @param {string} content - Generated TypeScript content
  * @param {string} outputPath - Output file path
  */
-export async function writeDeclarationFile(
-    content: string,
-    outputPath: string,
-): Promise<void> {
+export async function writeDeclarationFile(content: string, outputPath: string): Promise<void> {
     const absolutePath = resolve(outputPath);
     const dir = dirname(absolutePath);
 

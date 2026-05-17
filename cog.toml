@@ -1,0 +1,25 @@
+# Cocogitto is used only for Conventional Commit validation.
+# release-please remains the sole owner of version bumps, tags, releases,
+# and CHANGELOG generation.
+from_latest_tag = true
+ignore_merge_commits = true
+ignore_fixup_commits = true
+disable_bump_commit = true
+disable_changelog = true
+tag_prefix = "v"
+
+[commit_types]
+feat = { changelog_title = "Features", order = 0 }
+fix = { changelog_title = "Bug Fixes", order = 1 }
+perf = { changelog_title = "Performance", order = 2 }
+revert = { changelog_title = "Reverts", order = 3 }
+docs = { omit_from_changelog = true }
+style = { omit_from_changelog = true }
+refactor = { omit_from_changelog = true }
+test = { omit_from_changelog = true }
+chore = { omit_from_changelog = true }
+ci = { omit_from_changelog = true }
+build = { omit_from_changelog = true }
+
+[git_hooks.commit-msg]
+script = "scripts/verify-commit-message.sh $1"

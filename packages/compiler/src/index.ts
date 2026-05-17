@@ -10,23 +10,29 @@
 
 // Export transform functionality
 export { CsszyxCompiler } from './compiler.js';
+// Export hoisting utilities
 export {
-    isValidSzProp,
-    normalizeClassName,
-    type SzObject,
-    type SzValue,
-    transform,
-    transformSourceCode,
-} from './transform.js';
-
-// Export transform-core constants needed by MCP and CLI
+    buildParentMap,
+    type CSSVarUsage,
+    hoistCSSVariables,
+} from './hoisting.js';
+// Export manifest generation
 export {
-    BOOLEAN_SHORTHANDS,
-    KNOWN_VARIANTS,
-    PROPERTY_MAP,
-    SUGGESTION_MAP,
-} from './transform-core.js';
-
+    ManifestBuilder,
+    parseManifest,
+    type RecoveryManifest,
+    serializeManifest,
+    type TokenData,
+    validateManifest,
+} from './manifest.js';
+// Export property type system (for CSS Variable Auto-Compile)
+export {
+    COLOR_PROPERTIES,
+    getCSSVariableName,
+    getPropertyCategory,
+    PROPERTY_CATEGORY_MAP,
+    PropertyCategory,
+} from './property-types.js';
 // Export recovery token system
 export {
     createRecoveryToken,
@@ -38,32 +44,26 @@ export {
     type TokenMetadata,
     validateSzRecover,
 } from './recovery.js';
-
-// Export manifest generation
 export {
-    ManifestBuilder,
-    parseManifest,
-    type RecoveryManifest,
-    serializeManifest,
-    type TokenData,
-    validateManifest,
-} from './manifest.js';
-
-// Export property type system (for CSS Variable Auto-Compile)
+    isValidSzProp,
+    normalizeClassName,
+    type SzObject,
+    type SzValue,
+    transform,
+    transformSourceCode,
+} from './transform.js';
+// Export transform-core constants needed by MCP and CLI
 export {
-    COLOR_PROPERTIES,
-    getCSSVariableName,
-    getPropertyCategory,
-    PROPERTY_CATEGORY_MAP,
-    PropertyCategory,
-} from './property-types.js';
-
-// Export hoisting utilities
+    BOOLEAN_SHORTHANDS,
+    KNOWN_VARIANTS,
+    PROPERTY_MAP,
+    SUGGESTION_MAP,
+} from './transform-core.js';
 export {
-    buildParentMap,
-    type CSSVarUsage,
-    hoistCSSVariables,
-} from './hoisting.js';
+    OxcNotImplementedError,
+    type TransformOxcResult,
+    transformOxc,
+} from './transform-oxc.js';
 
 // Export sz prop types (for IntelliSense and type safety)
 // CustomTheme is the augmentable interface — exported so users and plugins can
@@ -111,20 +111,20 @@ export const VERSION = '0.0.0';
  * Compiler configuration options.
  */
 export interface CompilerOptions {
-  /**
-   * Build ID (git hash or timestamp)
-   */
-  buildId?: string;
+    /**
+     * Build ID (git hash or timestamp)
+     */
+    buildId?: string;
 
-  /**
-   * Enable development mode features
-   */
-  development?: boolean;
+    /**
+     * Enable development mode features
+     */
+    development?: boolean;
 
-  /**
-   * Strict mode - fail build on warnings
-   */
-  strictMode?: boolean;
+    /**
+     * Strict mode - fail build on warnings
+     */
+    strictMode?: boolean;
 }
 
 /**
@@ -147,9 +147,7 @@ export const DEFAULT_COMPILER_OPTIONS: Required<CompilerOptions> = {
  * const options = mergeOptions({ development: true });
  * ```
  */
-export function mergeOptions(
-    options: Partial<CompilerOptions> = {},
-): Required<CompilerOptions> {
+export function mergeOptions(options: Partial<CompilerOptions> = {}): Required<CompilerOptions> {
     return {
         ...DEFAULT_COMPILER_OPTIONS,
         ...options,

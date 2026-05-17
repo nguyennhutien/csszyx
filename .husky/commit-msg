@@ -1,4 +1,0 @@
-# Load mise shims if they exist to ensure node/npx are available in GUI git clients (like Fork)
-export PATH="$HOME/.local/share/mise/shims:/opt/homebrew/bin:$PATH"
-
-npx --no -- commitlint --edit ${1}

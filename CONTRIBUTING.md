@@ -6,7 +6,7 @@ deeper guides, see the README and `docs/`.
 ## Conventional Commits
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
-The format is enforced by commitlint via the `commit-msg` hook.
+The format is enforced by Cocogitto via the `commit-msg` hook.
 
 ```
 <type>(<scope>): <subject>
@@ -42,7 +42,7 @@ convention — release-please is configured with `bump-minor-pre-major: true`.
 
 ### Scopes
 
-Scopes are **free-form** — commitlint doesn't validate them against a
+Scopes are **free-form** — Cocogitto doesn't validate them against a
 fixed list. Use whatever describes the change clearly. The list below is
 recommended for consistency, not enforced.
 
@@ -107,13 +107,25 @@ Releases are automated via [release-please](https://github.com/googleapis/releas
 You don't author CHANGELOG entries by hand. release-please derives them
 from commit messages — write commit subjects accordingly.
 
+Do not mention target versions in `feat:` or `fix:` commit subjects or
+message bodies. release-please decides versions from the commit history.
+If a specific version is required, use a `Release-As: x.y.z` footer.
+
 ## Local checks
 
 ```bash
-pnpm lint:check    # eslint
+pnpm lint:check    # biome + slim eslint (jsdoc + type-aware rules)
+pnpm lint          # same, auto-fix where possible
 pnpm test          # vitest + turbo orchestration
 pnpm test:e2e      # Playwright
+pnpm type-check    # tsc -b across workspace project references
 ```
 
-The pre-commit hook runs lint-staged on changed files. The commit-msg
-hook runs commitlint against the message.
+Formatting is owned by Biome (including CSS as of v0.8.0); ESLint stays
+for JSDoc enforcement and TypeScript type-aware rules that need full
+TS inference. See `eslint.config.js` for the split.
+
+Lefthook runs pre-commit checks on changed files and the commit-msg
+validator. The commit-msg hook runs `scripts/verify-commit-message.sh`,
+which calls `cog verify --file` and then enforces csszyx's release-please
+rules.

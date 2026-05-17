@@ -19,25 +19,25 @@
     "url": "https://github.com/nguyennhutien/csszyx/issues"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     },
     "./config": {
-      "types": "./dist/config.d.ts",
-      "import": "./dist/config.js"
+      "types": "./dist/config.d.mts",
+      "import": "./dist/config.mjs"
     },
     "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
+      "types": "./dist/runtime.d.mts",
+      "import": "./dist/runtime.mjs"
     },
     "./compiler": {
-      "types": "./dist/compiler.d.ts",
-      "import": "./dist/compiler.js"
+      "types": "./dist/compiler.d.mts",
+      "import": "./dist/compiler.mjs"
     },
     "./jsx": {
       "types": "./dist/jsx.d.ts"
@@ -47,14 +47,18 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/config.ts src/runtime.ts src/compiler.ts --format esm --dts && cp src/jsx.d.ts dist/jsx.d.ts",
-    "dev": "tsup src/index.ts src/config.ts src/runtime.ts src/compiler.ts --format esm --dts --watch",
+    "build": "unbuild",
+    "dev": "unbuild --stub",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
     "@csszyx/compiler": "workspace:*",
     "@types/node": "^20.11.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

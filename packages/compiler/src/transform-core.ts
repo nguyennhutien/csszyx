@@ -20,7 +20,7 @@ export type SzValue = string | number | boolean | SzObject;
  * Keys are CSS property abbreviations, values can be primitives or nested objects.
  */
 export interface SzObject {
-  [key: string]: SzValue;
+    [key: string]: SzValue;
 }
 
 /**
@@ -33,7 +33,7 @@ export type ReadonlySzValue = string | number | boolean | ReadonlySzObject;
  * Use this as the parameter type for functions that accept but do not mutate sz objects.
  */
 export interface ReadonlySzObject {
-  readonly [key: string]: ReadonlySzValue;
+    readonly [key: string]: ReadonlySzValue;
 }
 
 // ============================================================================
@@ -416,14 +416,27 @@ export const SUGGESTION_MAP: Record<string, string> = {
     // Border
     borderWidth: 'border',
     // Spacing
-    padding: 'p', paddingTop: 'pt', paddingRight: 'pr',
-    paddingBottom: 'pb', paddingLeft: 'pl', paddingX: 'px', paddingY: 'py',
-    margin: 'm', marginTop: 'mt', marginRight: 'mr',
-    marginBottom: 'mb', marginLeft: 'ml', marginX: 'mx', marginY: 'my',
+    padding: 'p',
+    paddingTop: 'pt',
+    paddingRight: 'pr',
+    paddingBottom: 'pb',
+    paddingLeft: 'pl',
+    paddingX: 'px',
+    paddingY: 'py',
+    margin: 'm',
+    marginTop: 'mt',
+    marginRight: 'mr',
+    marginBottom: 'mb',
+    marginLeft: 'ml',
+    marginX: 'mx',
+    marginY: 'my',
     // Sizing
-    width: 'w', height: 'h',
-    minWidth: 'minW', maxWidth: 'maxW',
-    minHeight: 'minH', maxHeight: 'maxH',
+    width: 'w',
+    height: 'h',
+    minWidth: 'minW',
+    maxWidth: 'maxW',
+    minHeight: 'minH',
+    maxHeight: 'maxH',
     // Layout
     aspectRatio: 'aspect',
     boxSizing: 'box',
@@ -555,79 +568,204 @@ export const VARIANT_MAP: Record<string, string> = {
 // ============================================================================
 // KNOWN_VARIANTS: All known variant names for disambiguation
 // ============================================================================
-export const KNOWN_VARIANTS = new Set([
+export const KNOWN_VARIANTS: Set<string> = new Set([
     // Responsive
-    'sm', 'md', 'lg', 'xl', '2xl',
+    'sm',
+    'md',
+    'lg',
+    'xl',
+    '2xl',
     // Container queries
-    '@sm', '@md', '@lg', '@xl', '@2xl',
+    '@sm',
+    '@md',
+    '@lg',
+    '@xl',
+    '@2xl',
     // Dark mode
-    'dark', 'light',
+    'dark',
+    'light',
     // Print/Media
-    'print', 'portrait', 'landscape',
+    'print',
+    'portrait',
+    'landscape',
     // Motion
-    'motion-reduce', 'motion-safe', 'motionReduce', 'motionSafe',
+    'motion-reduce',
+    'motion-safe',
+    'motionReduce',
+    'motionSafe',
     // Contrast
-    'contrast-more', 'contrast-less', 'contrastMore', 'contrastLess',
+    'contrast-more',
+    'contrast-less',
+    'contrastMore',
+    'contrastLess',
     // States
-    'hover', 'focus', 'focus-within', 'focus-visible', 'focusWithin', 'focusVisible',
-    'active', 'visited', 'target', 'disabled', 'enabled',
-    'checked', 'indeterminate', 'default', 'required', 'valid', 'invalid',
-    'in-range', 'out-of-range', 'inRange', 'outOfRange',
-    'placeholder-shown', 'placeholderShown', 'autofill', 'read-only', 'readOnly',
+    'hover',
+    'focus',
+    'focus-within',
+    'focus-visible',
+    'focusWithin',
+    'focusVisible',
+    'active',
+    'visited',
+    'target',
+    'disabled',
+    'enabled',
+    'checked',
+    'indeterminate',
+    'default',
+    'required',
+    'valid',
+    'invalid',
+    'in-range',
+    'out-of-range',
+    'inRange',
+    'outOfRange',
+    'placeholder-shown',
+    'placeholderShown',
+    'autofill',
+    'read-only',
+    'readOnly',
     // Structure
-    'first', 'last', 'only', 'odd', 'even', 'empty',
-    'first-of-type', 'last-of-type', 'only-of-type',
-    'firstOfType', 'lastOfType', 'onlyOfType',
-    'first-child', 'last-child', 'only-child',
-    'firstChild', 'lastChild', 'onlyChild',
+    'first',
+    'last',
+    'only',
+    'odd',
+    'even',
+    'empty',
+    'first-of-type',
+    'last-of-type',
+    'only-of-type',
+    'firstOfType',
+    'lastOfType',
+    'onlyOfType',
+    'first-child',
+    'last-child',
+    'only-child',
+    'firstChild',
+    'lastChild',
+    'onlyChild',
     // Pseudo-elements
-    'before', 'after', 'placeholder', 'file', 'marker', 'selection',
-    'first-line', 'first-letter', 'firstLine', 'firstLetter', 'backdrop',
+    'before',
+    'after',
+    'placeholder',
+    'file',
+    'marker',
+    'selection',
+    'first-line',
+    'first-letter',
+    'firstLine',
+    'firstLetter',
+    'backdrop',
     // Pointer
-    'pointer-fine', 'pointer-coarse', 'pointer-none',
-    'pointerFine', 'pointerCoarse', 'pointerNone',
+    'pointer-fine',
+    'pointer-coarse',
+    'pointer-none',
+    'pointerFine',
+    'pointerCoarse',
+    'pointerNone',
     // Open
     'open',
     // RTL/LTR
-    'ltr', 'rtl',
+    'ltr',
+    'rtl',
 ]);
 
 // ============================================================================
 // ARIA_STATES: Standard aria boolean states (vs arbitrary aria-[*] syntax)
 // ============================================================================
 const ARIA_STATES = new Set([
-    'checked', 'disabled', 'expanded', 'hidden', 'pressed',
-    'readonly', 'required', 'selected', 'busy', 'current',
-    'invalid', 'live', 'atomic', 'modal',
+    'checked',
+    'disabled',
+    'expanded',
+    'hidden',
+    'pressed',
+    'readonly',
+    'required',
+    'selected',
+    'busy',
+    'current',
+    'invalid',
+    'live',
+    'atomic',
+    'modal',
 ]);
 
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
-export const BOOLEAN_SHORTHANDS = new Set([
+export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // Display
-    'block', 'inline', 'inlineBlock', 'flex', 'inlineFlex', 'grid', 'inlineGrid',
-    'hidden', 'contents', 'table', 'tableRow', 'tableCell', 'flowRoot', 'listItem',
+    'block',
+    'inline',
+    'inlineBlock',
+    'flex',
+    'inlineFlex',
+    'grid',
+    'inlineGrid',
+    'hidden',
+    'contents',
+    'table',
+    'tableRow',
+    'tableCell',
+    'flowRoot',
+    'listItem',
     // Position
-    'static', 'fixed', 'absolute', 'relative', 'sticky',
+    'static',
+    'fixed',
+    'absolute',
+    'relative',
+    'sticky',
     // Visibility
-    'visible', 'invisible', 'collapse',
+    'visible',
+    'invisible',
+    'collapse',
     // Typography
-    'truncate', 'uppercase', 'lowercase', 'capitalize', 'normalCase',
-    'underline', 'overline', 'lineThrough', 'noUnderline',
-    'italic', 'notItalic', 'antialiased', 'subpixelAntialiased',
+    'truncate',
+    'uppercase',
+    'lowercase',
+    'capitalize',
+    'normalCase',
+    'underline',
+    'overline',
+    'lineThrough',
+    'noUnderline',
+    'italic',
+    'notItalic',
+    'antialiased',
+    'subpixelAntialiased',
     // Flexbox (grow/shrink only — flexWrap uses string values)
-    'grow', 'shrink',
+    'grow',
+    'shrink',
     // Filters (default values)
-    'blur', 'grayscale', 'invert', 'sepia',
-    'backdropBlur', 'backdropGrayscale', 'backdropInvert', 'backdropSepia',
+    'blur',
+    'grayscale',
+    'invert',
+    'sepia',
+    'backdropBlur',
+    'backdropGrayscale',
+    'backdropInvert',
+    'backdropSepia',
     // Misc
-    'container', 'prose', 'proseInvert', 'srOnly', 'notSrOnly', 'isolate', 'ordinal', 'slashedZero',
+    'container',
+    'prose',
+    'proseInvert',
+    'srOnly',
+    'notSrOnly',
+    'isolate',
+    'ordinal',
+    'slashedZero',
     // Font variant numeric
-    'liningNums', 'oldstyleNums', 'proportionalNums', 'tabularNums',
-    'diagonalFractions', 'stackedFractions',
+    'liningNums',
+    'oldstyleNums',
+    'proportionalNums',
+    'tabularNums',
+    'diagonalFractions',
+    'stackedFractions',
     // Divide/Space reverse
-    'divideXReverse', 'divideYReverse', 'spaceXReverse', 'spaceYReverse',
+    'divideXReverse',
+    'divideYReverse',
+    'spaceXReverse',
+    'spaceYReverse',
     // Ring (v3 future)
     'ring',
     // Outline
@@ -704,19 +842,62 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 // NEGATIVE_ALLOWED: Properties that support negative values
 // ============================================================================
 const NEGATIVE_ALLOWED = new Set([
-    'm', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me', 'mbs', 'mbe',
-    'top', 'right', 'bottom', 'left', 'inset', 'inset-x', 'inset-y',
+    'm',
+    'mt',
+    'mr',
+    'mb',
+    'ml',
+    'mx',
+    'my',
+    'ms',
+    'me',
+    'mbs',
+    'mbe',
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'inset',
+    'inset-x',
+    'inset-y',
     // TW v4.2: start/end now map to inset-s/inset-e
-    'inset-s', 'inset-e', 'inset-bs', 'inset-be',
-    'z', 'order', 'col', 'col-start', 'col-end', 'row', 'row-start', 'row-end',
-    'rotate', 'rotate-x', 'rotate-y', 'rotate-z',
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
+    'z',
+    'order',
+    'col',
+    'col-start',
+    'col-end',
+    'row',
+    'row-start',
+    'row-end',
+    'rotate',
+    'rotate-x',
+    'rotate-y',
+    'rotate-z',
     'scale-z',
-    'skew-x', 'skew-y',
-    'translate', 'translate-x', 'translate-y', 'translate-z',
+    'skew-x',
+    'skew-y',
+    'translate',
+    'translate-x',
+    'translate-y',
+    'translate-z',
     'mask',
-    'space-x', 'space-y', 'tracking', 'indent',
-    'scroll-m', 'scroll-mx', 'scroll-my', 'scroll-mt', 'scroll-mr', 'scroll-mb', 'scroll-ml',
-    'hue-rotate', 'backdrop-hue-rotate',
+    'space-x',
+    'space-y',
+    'tracking',
+    'indent',
+    'scroll-m',
+    'scroll-mx',
+    'scroll-my',
+    'scroll-mt',
+    'scroll-mr',
+    'scroll-mb',
+    'scroll-ml',
+    'hue-rotate',
+    'backdrop-hue-rotate',
 ]);
 
 // ============================================================================
@@ -771,11 +952,15 @@ function formatOpacity(op: number | string): string {
     if (typeof op === 'number') {
         // Integers and half-step decimals (×2 is integer: 0, 0.5, 1, 50, 75.5, …) → plain "/50", "/0.5"
         // Other decimals (e.g. 0.05, 0.02) are fraction-scale → arbitrary "/[0.05]"
-        if (Number.isInteger(op * 2)) {return String(op);}
+        if (Number.isInteger(op * 2)) {
+            return String(op);
+        }
         return `[${op}]`;
     }
     if (typeof op === 'string') {
-        if (op.startsWith('--')) {return `(${op})`;}
+        if (op.startsWith('--')) {
+            return `(${op})`;
+        }
         return `[${op}]`;
     }
     return String(op);
@@ -815,15 +1000,45 @@ export function normalizeArbitraryValue(value: string): string {
 // Properties that support native fraction values (e.g. w-1/2) without brackets
 const FRACTION_SUPPORTED_PROPS = new Set([
     // Sizing (both rawKey and resolved key forms)
-    'w', 'width', 'min-w', 'minW', 'minWidth', 'max-w', 'maxW', 'maxWidth',
-    'h', 'height', 'min-h', 'minH', 'minHeight', 'max-h', 'maxH', 'maxHeight', 'size',
+    'w',
+    'width',
+    'min-w',
+    'minW',
+    'minWidth',
+    'max-w',
+    'maxW',
+    'maxWidth',
+    'h',
+    'height',
+    'min-h',
+    'minH',
+    'minHeight',
+    'max-h',
+    'maxH',
+    'maxHeight',
+    'size',
     // Flex
-    'basis', 'flexBasis', 'flex',
+    'basis',
+    'flexBasis',
+    'flex',
     // Inset
-    'inset', 'inset-x', 'insetX', 'inset-y', 'insetY',
-    'top', 'right', 'bottom', 'left', 'start', 'end',
+    'inset',
+    'inset-x',
+    'insetX',
+    'inset-y',
+    'insetY',
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'start',
+    'end',
     // Translate
-    'translate', 'translate-x', 'translateX', 'translate-y', 'translateY',
+    'translate',
+    'translate-x',
+    'translateX',
+    'translate-y',
+    'translateY',
     // Aspect
     'aspect',
 ]);
@@ -837,8 +1052,12 @@ function needsArbitraryBrackets(value: string): boolean {
     // Strip user-provided outer brackets before detection so '[100px]' is treated as '100px'
     const v = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
     return (
-        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(v) || // Positive units
-        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(v) || // Negative units like -1px, -2rem
+        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(
+            v,
+        ) || // Positive units
+        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(
+            v,
+        ) || // Negative units like -1px, -2rem
         /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Values starting with . like .25em
         /^-\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Negative values starting with -. like -.25em
         v.startsWith('#') || // Hex colors
@@ -860,8 +1079,15 @@ function needsArbitraryBrackets(value: string): boolean {
 const LIST_STYLE_STANDARD = new Set(['none', 'disc', 'decimal']);
 // Tailwind v4: gradient positions are fully dynamic for integer %, no static scale needed
 const FONT_STRETCH_KEYWORDS = new Set([
-    'ultra-condensed', 'extra-condensed', 'condensed', 'semi-condensed',
-    'normal', 'semi-expanded', 'expanded', 'extra-expanded', 'ultra-expanded',
+    'ultra-condensed',
+    'extra-condensed',
+    'condensed',
+    'semi-condensed',
+    'normal',
+    'semi-expanded',
+    'expanded',
+    'extra-expanded',
+    'ultra-expanded',
 ]);
 
 // Known Tailwind utility properties - these should use standard utility syntax
@@ -917,7 +1143,9 @@ const FONT_STRETCH_KEYWORDS = new Set([
  * @returns kebab-case string (e.g. "writing-mode", "touch-action")
  */
 function camelToKebab(prop: string): string {
-    if (prop.startsWith('--')) { return prop; }
+    if (prop.startsWith('--')) {
+        return prop;
+    }
     return prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
@@ -945,11 +1173,7 @@ export function getVariantPrefix(key: string): string {
  * @param prefix - the current class name prefix
  * @returns array of generated class names
  */
-function handleGroupPeer(
-    type: 'group' | 'peer',
-    nestedObj: SzObject,
-    prefix: string,
-): string[] {
+function handleGroupPeer(type: 'group' | 'peer', nestedObj: SzObject, prefix: string): string[] {
     const classes: string[] = [];
 
     // Helper to standardise arbitrary values (space to underscore)
@@ -967,12 +1191,18 @@ function handleGroupPeer(
         // { group: { has: { a: { block: true }}}} → group-has-[a]:block
         if (nestedKey === 'has' && typeof nestedValue === 'object') {
             for (const [selector, selectorValue] of Object.entries(nestedValue as SzObject)) {
-                if (selectorValue === null || selectorValue === undefined || selectorValue === false) {
+                if (
+                    selectorValue === null ||
+                    selectorValue === undefined ||
+                    selectorValue === false
+                ) {
                     continue;
                 }
                 const variantPrefix = `${prefix}${type}-has-[${selector}]:`;
                 const result = transform(selectorValue as SzObject, variantPrefix);
-                if (result.className) {classes.push(result.className);}
+                if (result.className) {
+                    classes.push(result.className);
+                }
             }
             continue;
         }
@@ -982,10 +1212,14 @@ function handleGroupPeer(
         // { group: { data: { 'state=open': { text: 'lg' }}}} → group-data-[state=open]:text-lg
         if (nestedKey === 'data' && typeof nestedValue === 'object') {
             for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
-                if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                if (attrValue === null || attrValue === undefined || attrValue === false) {
+                    continue;
+                }
                 const variantPrefix = `${prefix}${type}-data-[${attr}]:`;
                 const result = transform(attrValue as SzObject, variantPrefix);
-                if (result.className) {classes.push(result.className);}
+                if (result.className) {
+                    classes.push(result.className);
+                }
             }
             continue;
         }
@@ -995,33 +1229,45 @@ function handleGroupPeer(
         // { group: { aria: { 'current=page': { ... }}}} → group-aria-[current=page]:
         if (nestedKey === 'aria' && typeof nestedValue === 'object') {
             for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
-                if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                if (attrValue === null || attrValue === undefined || attrValue === false) {
+                    continue;
+                }
                 const variantPrefix = ARIA_STATES.has(attr)
                     ? `${prefix}${type}-aria-${attr}:`
                     : `${prefix}${type}-aria-[${attr}]:`;
                 const result = transform(attrValue as SzObject, variantPrefix);
-                if (result.className) {classes.push(result.className);}
+                if (result.className) {
+                    classes.push(result.className);
+                }
             }
             continue;
         }
 
         // Check if nestedKey is a known variant
-        const isVariant = KNOWN_VARIANTS.has(nestedKey) || KNOWN_VARIANTS.has(getVariantPrefix(nestedKey));
+        const isVariant =
+            KNOWN_VARIANTS.has(nestedKey) || KNOWN_VARIANTS.has(getVariantPrefix(nestedKey));
         // Check if it starts with arbitrary selector syntax
-        const isArbitrary = nestedKey.startsWith('.') || nestedKey.startsWith('#') ||
-                          nestedKey.startsWith('[') || nestedKey.startsWith(':');
+        const isArbitrary =
+            nestedKey.startsWith('.') ||
+            nestedKey.startsWith('#') ||
+            nestedKey.startsWith('[') ||
+            nestedKey.startsWith(':');
 
         if (isArbitrary) {
             // { group: { ".is-published": { block: true }}} → group-[.is-published]:block
             const variantPrefix = `${prefix}${type}-[${nestedKey}]:`;
             const result = transform(nestedValue as SzObject, variantPrefix);
-            if (result.className) {classes.push(result.className);}
+            if (result.className) {
+                classes.push(result.className);
+            }
         } else if (isVariant) {
             // { group: { hover: { ... }}} → group-hover:
             const mappedVariant = getVariantPrefix(nestedKey);
             const variantPrefix = `${prefix}${type}-${mappedVariant}:`;
             const result = transform(nestedValue as SzObject, variantPrefix);
-            if (result.className) {classes.push(result.className);}
+            if (result.className) {
+                classes.push(result.className);
+            }
         } else if (typeof nestedValue === 'object' && nestedValue !== null) {
             // { group: { name: { hover: { ... }}}} → group-hover/name:
             // Also handles data/aria inside named group:
@@ -1033,28 +1279,40 @@ function handleGroupPeer(
                 // data inside named group
                 if (state === 'data' && typeof stateValue === 'object') {
                     for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
-                        if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
+                        if (attrValue === null || attrValue === undefined || attrValue === false) {
+                            continue;
+                        }
                         const variantPrefix = `${prefix}${type}-data-[${attr}]/${nestedKey}:`;
                         const result = transform(attrValue as SzObject, variantPrefix);
-                        if (result.className) {classes.push(result.className);}
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
                     }
                     continue;
                 }
                 // aria inside named group
                 if (state === 'aria' && typeof stateValue === 'object') {
                     for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
-                        if (attrValue === null || attrValue === undefined || attrValue === false) {continue;}
-                        const ariaSegment = ARIA_STATES.has(attr) ? `aria-${attr}` : `aria-[${attr}]`;
+                        if (attrValue === null || attrValue === undefined || attrValue === false) {
+                            continue;
+                        }
+                        const ariaSegment = ARIA_STATES.has(attr)
+                            ? `aria-${attr}`
+                            : `aria-[${attr}]`;
                         const variantPrefix = `${prefix}${type}-${ariaSegment}/${nestedKey}:`;
                         const result = transform(attrValue as SzObject, variantPrefix);
-                        if (result.className) {classes.push(result.className);}
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
                     }
                     continue;
                 }
                 const mappedState = getVariantPrefix(state);
                 const variantPrefix = `${prefix}${type}-${mappedState}/${nestedKey}:`;
                 const result = transform(stateValue as SzObject, variantPrefix);
-                if (result.className) {classes.push(result.className);}
+                if (result.className) {
+                    classes.push(result.className);
+                }
             }
         }
     }
@@ -1089,7 +1347,9 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
 
         const variantPrefix = `${prefix}has-[${selectorStr}]:`;
         const result = transform(value as SzObject, variantPrefix);
-        if (result.className) {classes.push(result.className);}
+        if (result.className) {
+            classes.push(result.className);
+        }
     }
 
     return classes;
@@ -1116,14 +1376,18 @@ function handleNot(notObj: SzObject, prefix: string): string[] {
             for (const [condition, condValue] of Object.entries(value as SzObject)) {
                 const variantPrefix = `${prefix}not-supports-[${condition}]:`;
                 const result = transform(condValue as SzObject, variantPrefix);
-                if (result.className) {classes.push(result.className);}
+                if (result.className) {
+                    classes.push(result.className);
+                }
             }
         } else {
             // Simple not variant
             const mappedVariant = getVariantPrefix(key);
             const variantPrefix = `${prefix}not-${mappedVariant}:`;
             const result = transform(value as SzObject, variantPrefix);
-            if (result.className) {classes.push(result.className);}
+            if (result.className) {
+                classes.push(result.className);
+            }
         }
     }
 
@@ -1147,7 +1411,9 @@ function handleData(dataObj: SzObject, prefix: string): string[] {
 
         const variantPrefix = `${prefix}data-[${key}]:`;
         const result = transform(value as SzObject, variantPrefix);
-        if (result.className) {classes.push(result.className);}
+        if (result.className) {
+            classes.push(result.className);
+        }
     }
 
     return classes;
@@ -1179,7 +1445,9 @@ function handleAria(ariaObj: SzObject, prefix: string): string[] {
         }
 
         const result = transform(value as SzObject, variantPrefix);
-        if (result.className) {classes.push(result.className);}
+        if (result.className) {
+            classes.push(result.className);
+        }
     }
 
     return classes;
@@ -1202,7 +1470,9 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
 
         const variantPrefix = `${prefix}supports-[${condition}]:`;
         const result = transform(value as SzObject, variantPrefix);
-        if (result.className) {classes.push(result.className);}
+        if (result.className) {
+            classes.push(result.className);
+        }
     }
 
     return classes;
@@ -1220,7 +1490,11 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
  * @param {Record<string, string>} [mangleMap] - Optional map for property name mangling
  * @returns {TransformResult} The transformation result
  */
-export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<string, string>): TransformResult {
+export function transform(
+    szProp: SzObject,
+    prefix = '',
+    mangleMap?: Record<string, string>,
+): TransformResult {
     // Input validation
     if (!szProp || typeof szProp !== 'object') {
         return { className: '', attributes: {} };
@@ -1258,7 +1532,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         if (rawKey === 'css') {
             if (value && typeof value === 'object' && !Array.isArray(value)) {
                 for (const [cssProp, cssVal] of Object.entries(value as Record<string, unknown>)) {
-                    if (cssVal === null || cssVal === undefined) { continue; }
+                    if (cssVal === null || cssVal === undefined) {
+                        continue;
+                    }
                     const kebab = camelToKebab(cssProp);
                     classes.push(`${prefix}[${kebab}:${normalizeArbitraryValue(String(cssVal))}]`);
                 }
@@ -1277,10 +1553,17 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         // HANDLE bgImg OBJECT SYNTAX (before variant nesting)
         // { bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } } → bg-linear-to-r/hsl
         // ================================================================
-        if (rawKey === 'bgImg' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        if (
+            rawKey === 'bgImg' &&
+            typeof value === 'object' &&
+            value !== null &&
+            !Array.isArray(value)
+        ) {
             const grad = value as { gradient?: string; dir?: string | number; in?: string };
             const gradType = grad.gradient;
-            if (!gradType) {continue;}
+            if (!gradType) {
+                continue;
+            }
 
             let cls = '';
             if (gradType === 'linear') {
@@ -1354,15 +1637,24 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         // HANDLE COLOR OBJECT SYNTAX (before variant nesting)
         // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
         // ================================================================
-        if (typeof value === 'object' && value !== null && !Array.isArray(value) && rawKey in PROPERTY_MAP && 'color' in (value as Record<string, unknown>)) {
+        if (
+            typeof value === 'object' &&
+            value !== null &&
+            !Array.isArray(value) &&
+            rawKey in PROPERTY_MAP &&
+            'color' in (value as Record<string, unknown>)
+        ) {
             const colorObj = value as { color: string; op?: number | string };
-            const twPrefix = PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+            const twPrefix =
+                PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
             const rawColorBase = String(colorObj.color);
             // CSS variables use (--var) syntax; hex/rgb/hsl/units need [bracket] wrapping;
             // named colors (e.g. 'blue-500') pass through as-is.
             const colorBase = rawColorBase.startsWith('--')
                 ? `(${rawColorBase})`
-                : needsArbitraryBrackets(rawColorBase) ? `[${normalizeArbitraryValue(rawColorBase)}]` : normalizeArbitraryValue(rawColorBase);
+                : needsArbitraryBrackets(rawColorBase)
+                  ? `[${normalizeArbitraryValue(rawColorBase)}]`
+                  : normalizeArbitraryValue(rawColorBase);
 
             if (colorObj.op !== undefined) {
                 const opStr = formatOpacity(colorObj.op);
@@ -1384,24 +1676,24 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             const strVal = (value as string).replace(/!$/, '');
 
             if (hasSlashOpacity(strVal)) {
-                if (process.env['NODE_ENV'] !== 'production' && typeof window === 'undefined') {
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
                     const slashIdx = strVal.indexOf('/');
                     const colorPart = strVal.slice(0, slashIdx);
                     const opPart = strVal.slice(slashIdx + 1);
                     console.warn(
                         `[csszyx] "${rawKey}: '${strVal}'" — string slash opacity is not supported. ` +
-                        `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
+                            `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
                     );
                 }
                 continue;
             }
 
             if (!isValidColorString(strVal)) {
-                if (process.env['NODE_ENV'] !== 'production' && typeof window === 'undefined') {
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
                     console.warn(
                         `[csszyx] "${rawKey}: '${strVal}'" is not a recognized color value and will be ignored. ` +
-                        'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                        'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+                            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+                            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
                     );
                 }
                 continue;
@@ -1463,7 +1755,11 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             if (rawKey === 'min' || rawKey === 'max') {
                 const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
                 for (const [breakpoint, breakpointValue] of Object.entries(value as SzObject)) {
-                    if (breakpointValue === null || breakpointValue === undefined || breakpointValue === false) {
+                    if (
+                        breakpointValue === null ||
+                        breakpointValue === undefined ||
+                        breakpointValue === false
+                    ) {
                         continue;
                     }
                     let bpStr: string;
@@ -1479,7 +1775,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     }
                     const nestedPrefix = `${prefix}${bpStr}:`;
                     const result = transform(breakpointValue as SzObject, nestedPrefix);
-                    if (result.className) {classes.push(result.className);}
+                    if (result.className) {
+                        classes.push(result.className);
+                    }
                 }
                 continue;
             }
@@ -1500,41 +1798,68 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
 
                 const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
                 for (const [nestedKey, nestedValue] of Object.entries(value as SzObject)) {
-                    if (nestedValue === null || nestedValue === undefined || nestedValue === false) {
+                    if (
+                        nestedValue === null ||
+                        nestedValue === undefined ||
+                        nestedValue === false
+                    ) {
                         continue;
                     }
                     // Check if it's an arbitrary value like [475px] (legacy bracket keys)
                     if (isArbitraryVariant(nestedKey)) {
                         const nestedPrefix = `${prefix}${mappedKey}-${nestedKey}:`;
                         const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {classes.push(result.className);}
-                    } else if ((mappedKey === '@min' || mappedKey === '@max') &&
-                             typeof nestedValue === 'object' && nestedValue !== null &&
-                             !KNOWN_BP.has(nestedKey) &&
-                             !PROPERTY_MAP[nestedKey] && !BOOLEAN_SHORTHANDS.has(nestedKey)) {
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
+                    } else if (
+                        (mappedKey === '@min' || mappedKey === '@max') &&
+                        typeof nestedValue === 'object' &&
+                        nestedValue !== null &&
+                        !KNOWN_BP.has(nestedKey) &&
+                        !PROPERTY_MAP[nestedKey] &&
+                        !BOOLEAN_SHORTHANDS.has(nestedKey)
+                    ) {
                         // Auto-wrap arbitrary breakpoint values in brackets
                         // { '@min': { '475px': { ... }}} → @min-[475px]:...
                         const nestedPrefix = `${prefix}${mappedKey}-[${nestedKey}]:`;
                         const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {classes.push(result.className);}
-                    } else if (PROPERTY_MAP[nestedKey] || BOOLEAN_SHORTHANDS.has(nestedKey) ||
-                             nestedKey.startsWith('@')) {
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
+                    } else if (
+                        PROPERTY_MAP[nestedKey] ||
+                        BOOLEAN_SHORTHANDS.has(nestedKey) ||
+                        nestedKey.startsWith('@')
+                    ) {
                         // Check if nestedKey is a property (not a container name)
                         // Properties are in PROPERTY_MAP or BOOLEAN_SHORTHANDS
                         // It's a direct property or another @ query
                         const nestedPrefix = `${prefix}${mappedKey}:`;
-                        const result = transform({ [nestedKey]: nestedValue } as SzObject, nestedPrefix);
-                        if (result.className) {classes.push(result.className);}
+                        const result = transform(
+                            { [nestedKey]: nestedValue } as SzObject,
+                            nestedPrefix,
+                        );
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
                     } else if (typeof nestedValue === 'object' && nestedValue !== null) {
                         // It's a named container: @md/sidebar
                         const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
                         const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {classes.push(result.className);}
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
                     } else {
                         // Fallback: treat as property
                         const nestedPrefix = `${prefix}${mappedKey}:`;
-                        const result = transform({ [nestedKey]: nestedValue } as SzObject, nestedPrefix);
-                        if (result.className) {classes.push(result.className);}
+                        const result = transform(
+                            { [nestedKey]: nestedValue } as SzObject,
+                            nestedPrefix,
+                        );
+                        if (result.className) {
+                            classes.push(result.className);
+                        }
                     }
                 }
                 continue;
@@ -1690,7 +2015,10 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         // HANDLE fromPos/viaPos/toPos NUMBER VALUES
         // { fromPos: 50 } → from-50%, { viaPos: 30 } → via-30%, { toPos: 100 } → to-100%
         // ================================================================
-        if ((rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') && typeof value === 'number') {
+        if (
+            (rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') &&
+            typeof value === 'number'
+        ) {
             const gradPrefix = rawKey.replace('Pos', '');
             classes.push(`${prefix}${gradPrefix}-${value}%`);
             continue;
@@ -1702,7 +2030,11 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
         if (typeof value === 'string') {
             // decoration: 'underline' | 'overline' | 'line-through' | 'no-underline' → direct output
             if (rawKey === 'decoration') {
-                if (['underline', 'overline', 'line-through', 'no-underline', 'none'].includes(value)) {
+                if (
+                    ['underline', 'overline', 'line-through', 'no-underline', 'none'].includes(
+                        value,
+                    )
+                ) {
                     className += value === 'none' ? 'no-underline' : value;
                     classes.push(className);
                     continue;
@@ -1721,8 +2053,15 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             // fontVariant: 'normal-nums' | 'ordinal' | etc → direct output
             if (rawKey === 'fontVariant') {
                 const FONT_VARIANT_CLASSES = new Set([
-                    'normal-nums', 'ordinal', 'slashed-zero', 'lining-nums', 'oldstyle-nums',
-                    'proportional-nums', 'tabular-nums', 'diagonal-fractions', 'stacked-fractions',
+                    'normal-nums',
+                    'ordinal',
+                    'slashed-zero',
+                    'lining-nums',
+                    'oldstyle-nums',
+                    'proportional-nums',
+                    'tabular-nums',
+                    'diagonal-fractions',
+                    'stacked-fractions',
                 ]);
                 if (FONT_VARIANT_CLASSES.has(value)) {
                     className += value;
@@ -1741,10 +2080,12 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             // break: 'normal' | 'all' | 'keep' → break-normal, break-all, break-keep
             if (rawKey === 'break') {
                 const wbMap: Record<string, string> = {
-                    'normal': 'break-normal',
-                    'all': 'break-all', 'keep': 'break-keep',
+                    normal: 'break-normal',
+                    all: 'break-all',
+                    keep: 'break-keep',
                     'break-normal': 'break-normal',
-                    'break-all': 'break-all', 'break-keep': 'break-keep',
+                    'break-all': 'break-all',
+                    'break-keep': 'break-keep',
                 };
                 className += wbMap[value] || `break-${value}`;
                 classes.push(className);
@@ -1754,9 +2095,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             // wrap: 'normal' | 'break-word' | 'anywhere' → wrap-normal, wrap-break-word, wrap-anywhere
             if (rawKey === 'wrap') {
                 const owMap: Record<string, string> = {
-                    'normal': 'wrap-normal',
+                    normal: 'wrap-normal',
                     'break-word': 'wrap-break-word',
-                    'anywhere': 'wrap-anywhere',
+                    anywhere: 'wrap-anywhere',
                     'wrap-normal': 'wrap-normal',
                     'wrap-break-word': 'wrap-break-word',
                     'wrap-anywhere': 'wrap-anywhere',
@@ -1784,7 +2125,7 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 } else {
                     // Tailwind v4: line-clamp accepts any number dynamically
                     const numVal = Number(sValue);
-                    if (!isNaN(numVal) && Number.isInteger(numVal)) {
+                    if (!Number.isNaN(numVal) && Number.isInteger(numVal)) {
                         className += `line-clamp-${sValue}`;
                     } else {
                         className += `line-clamp-[${sValue}]`;
@@ -1902,8 +2243,15 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
             }
 
             // Fix 2: Brightness/Contrast/Saturate/Scale — strings are NEVER parsed as numbers
-            if (rawKey === 'brightness' || rawKey === 'contrast' || rawKey === 'saturate' || rawKey === 'scale' ||
-                rawKey === 'backdropBrightness' || rawKey === 'backdropContrast' || rawKey === 'backdropSaturate') {
+            if (
+                rawKey === 'brightness' ||
+                rawKey === 'contrast' ||
+                rawKey === 'saturate' ||
+                rawKey === 'scale' ||
+                rawKey === 'backdropBrightness' ||
+                rawKey === 'backdropContrast' ||
+                rawKey === 'backdropSaturate'
+            ) {
                 const prop = rawKey.startsWith('backdrop')
                     ? `backdrop-${rawKey.slice(8).toLowerCase()}`
                     : rawKey;
@@ -1973,8 +2321,15 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     classes.push(`${prefix}bg-[${normalizeArbitraryValue(v)}]`);
                     continue;
                 }
-                if (vNorm.startsWith('linear-') || vNorm.startsWith('radial') || vNorm.startsWith('conic') || vNorm.startsWith('gradient-to-')) {
-                    const vMapped = vNorm.startsWith('gradient-to-') ? vNorm.replace('gradient-to-', 'linear-to-') : vNorm;
+                if (
+                    vNorm.startsWith('linear-') ||
+                    vNorm.startsWith('radial') ||
+                    vNorm.startsWith('conic') ||
+                    vNorm.startsWith('gradient-to-')
+                ) {
+                    const vMapped = vNorm.startsWith('gradient-to-')
+                        ? vNorm.replace('gradient-to-', 'linear-to-')
+                        : vNorm;
                     if (v.startsWith('-')) {
                         classes.push(`${prefix}-bg-${vMapped}`);
                     } else {
@@ -2115,9 +2470,10 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     // Tailwind convention: content arbitrary values use single quotes → content-['hello'].
                     // Normalize double-quote CSS strings to single-quote so both forms produce a
                     // consistent class name that Tailwind JIT actually generates CSS for.
-                    const inner = value.startsWith('"') && value.endsWith('"') && value.length >= 2
-                        ? `'${value.slice(1, -1)}'`
-                        : value;
+                    const inner =
+                        value.startsWith('"') && value.endsWith('"') && value.length >= 2
+                            ? `'${value.slice(1, -1)}'`
+                            : value;
                     className += `content-[${inner}]`;
                 }
                 classes.push(className);
@@ -2176,11 +2532,22 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
 
             // Fix 10: Properties that need arbitrary brackets for complex values
             // (contains parens, underscores, % in multi-part values, etc.)
-            if (rawKey === 'origin' || rawKey === 'ease' || rawKey === 'animate' ||
-                rawKey === 'filter' || rawKey === 'backdropFilter' || rawKey === 'dropShadow') {
+            if (
+                rawKey === 'origin' ||
+                rawKey === 'ease' ||
+                rawKey === 'animate' ||
+                rawKey === 'filter' ||
+                rawKey === 'backdropFilter' ||
+                rawKey === 'dropShadow'
+            ) {
                 const sVal = String(value);
                 const prop = PROPERTY_MAP[rawKey] || rawKey;
-                if (needsArbitraryBrackets(sVal) || sVal.includes('(') || sVal.includes('_') || sVal.includes('%')) {
+                if (
+                    needsArbitraryBrackets(sVal) ||
+                    sVal.includes('(') ||
+                    sVal.includes('_') ||
+                    sVal.includes('%')
+                ) {
                     classes.push(`${className}${prop}-[${normalizeArbitraryValue(sVal)}]`);
                     continue;
                 }
@@ -2211,7 +2578,17 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
 
             // perspectiveOrigin: 'center' | '33%_75%' → perspective-origin-center, perspective-origin-[33%_75%]
             if (rawKey === 'perspectiveOrigin') {
-                const STANDARD_ORIGINS = new Set(['center', 'top', 'right', 'bottom', 'left', 'top-left', 'top-right', 'bottom-left', 'bottom-right']);
+                const STANDARD_ORIGINS = new Set([
+                    'center',
+                    'top',
+                    'right',
+                    'bottom',
+                    'left',
+                    'top-left',
+                    'top-right',
+                    'bottom-left',
+                    'bottom-right',
+                ]);
                 if (STANDARD_ORIGINS.has(value)) {
                     className += `perspective-origin-${value}`;
                 } else {
@@ -2241,17 +2618,25 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                 PROPERTY_MAP[rawKey] ||
                 BOOLEAN_SHORTHANDS.has(rawKey) ||
                 SNAP_DIRECT_MAP[rawKey] ||
-                rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos' ||
+                rawKey === 'fromPos' ||
+                rawKey === 'viaPos' ||
+                rawKey === 'toPos' ||
                 rawKey.startsWith('--') ||
                 rawKey.startsWith('[') ||
                 rawKey.startsWith('@') ||
                 // Variants that fell through (e.g. empty object)
                 KNOWN_VARIANTS.has(rawKey) ||
                 // Groups/Peers
-                rawKey === 'group' || rawKey === 'peer' ||
+                rawKey === 'group' ||
+                rawKey === 'peer' ||
                 // Special variant objects
-                rawKey === 'has' || rawKey === 'not' || rawKey === 'data' || rawKey === 'aria' || rawKey === 'supports' ||
-                rawKey === 'min' || rawKey === 'max';
+                rawKey === 'has' ||
+                rawKey === 'not' ||
+                rawKey === 'data' ||
+                rawKey === 'aria' ||
+                rawKey === 'supports' ||
+                rawKey === 'min' ||
+                rawKey === 'max';
 
             if (!isKnown) {
                 const suggestion = SUGGESTION_MAP[rawKey];
@@ -2263,7 +2648,7 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     // Object.entries guarantees unique keys, so each rawKey is visited once per call.
                     console.warn(
                         `[csszyx] Unknown property "${rawKey}" in sz prop. ` +
-                        'This will be ignored. Check for typos.',
+                            'This will be ignored. Check for typos.',
                     );
                 }
             }
@@ -2338,8 +2723,16 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
                     finalValue = `[${finalValue}]`;
                 }
                 // else: allowed bare fraction (w-1/2, basis-1/3)
-            } else if (key === 'aspect' && /^[0-9]+(?:\.[0-9]+)?\/[0-9]+(?:\.[0-9]+)?$/.test(finalValue)) {
-                if (finalValue === 'auto' || finalValue === 'square' || finalValue === 'video' || /^\d+\/\d+$/.test(finalValue)) {
+            } else if (
+                key === 'aspect' &&
+                /^[0-9]+(?:\.[0-9]+)?\/[0-9]+(?:\.[0-9]+)?$/.test(finalValue)
+            ) {
+                if (
+                    finalValue === 'auto' ||
+                    finalValue === 'square' ||
+                    finalValue === 'video' ||
+                    /^\d+\/\d+$/.test(finalValue)
+                ) {
                     // standard
                 } else {
                     finalValue = `[${finalValue}]`;
@@ -2373,16 +2766,21 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
     // Only font-size suffixes are valid merge targets: xs, sm, base, lg, [2-9]?xl,
     // arbitrary [...], or CSS variable (...).
     let mergedClasses = classes;
-    const textSizePattern = /^((?:[a-z0-9\-[\]@/:]*:)*)text-(xs|sm|base|lg|[2-9]?xl|\[.+\]|\(.+\))$/;
+    const textSizePattern =
+        /^((?:[a-z0-9\-[\]@/:]*:)*)text-(xs|sm|base|lg|[2-9]?xl|\[.+\]|\(.+\))$/;
     const leadingPattern = /^((?:[a-z0-9\-[\]@/:]*:)*)leading-(.+)$/;
     const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
     const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
         const tm = textSizePattern.exec(cls);
-        if (tm) {textEntries.push({ index: i, prefix: tm[1], size: tm[2] });}
+        if (tm) {
+            textEntries.push({ index: i, prefix: tm[1], size: tm[2] });
+        }
         const lm = leadingPattern.exec(cls);
-        if (lm) {leadingEntries.push({ index: i, prefix: lm[1], value: lm[2] });}
+        if (lm) {
+            leadingEntries.push({ index: i, prefix: lm[1], value: lm[2] });
+        }
     }
     if (textEntries.length > 0 && leadingEntries.length > 0) {
         const removeIndices = new Set<number>();
@@ -2430,9 +2828,9 @@ export function transform(szProp: SzObject, prefix = '', mangleMap?: Record<stri
 export function isValidSzProp(szProp: unknown): szProp is SzObject {
     return (
         szProp !== null &&
-    szProp !== undefined &&
-    typeof szProp === 'object' &&
-    !Array.isArray(szProp)
+        szProp !== undefined &&
+        typeof szProp === 'object' &&
+        !Array.isArray(szProp)
     );
 }
 

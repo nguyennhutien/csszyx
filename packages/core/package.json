@@ -41,6 +41,6 @@
     "prepublishOnly": "node scripts/ensure-build.mjs --strict"
   },
   "devDependencies": {
-    "vitest": "^1.2.0"
+    "vitest": "^4.1.6"
   }
 }

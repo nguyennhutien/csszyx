@@ -4,7 +4,9 @@ import { handleBatch } from '../src/tools/batch';
 
 describe('csszyx_batch', () => {
     it('expands multiple sz objects', () => {
-        const data = JSON.parse(handleBatch({ items: [{ p: 4 }, { m: 2, bg: 'red-500' }] }).content[0].text);
+        const data = JSON.parse(
+            handleBatch({ items: [{ p: 4 }, { m: 2, bg: 'red-500' }] }).content[0].text,
+        );
         expect(data.results[0].className).toBe('p-4');
         expect(data.results[1].className).toContain('m-2');
         expect(data.results[1].className).toContain('bg-red-500');
@@ -29,7 +31,9 @@ describe('csszyx_batch', () => {
     });
 
     it('includes index in each result for stable ordering', () => {
-        const data = JSON.parse(handleBatch({ items: [{ m: 1 }, { m: 2 }, { m: 3 }] }).content[0].text);
+        const data = JSON.parse(
+            handleBatch({ items: [{ m: 1 }, { m: 2 }, { m: 3 }] }).content[0].text,
+        );
         expect(data.results.map((r: { index: number }) => r.index)).toEqual([0, 1, 2]);
     });
 });

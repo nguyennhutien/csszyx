@@ -70,7 +70,9 @@ function fileExists(name: string): boolean {
  */
 function listLogFiles(): string[] {
     const logsDir = path.join(tmpDir, '.csszyx', 'logs');
-    if (!fs.existsSync(logsDir)) {return [];}
+    if (!fs.existsSync(logsDir)) {
+        return [];
+    }
     return fs.readdirSync(logsDir);
 }
 
@@ -88,13 +90,16 @@ beforeEach(() => {
 
 describe('audit mode', () => {
     it('generates .csszyx-todo.json with "sz:todo" for unrecognized classes', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default function App() {
     return (
         <div className="p-4 flex ds-surface ds-card" />
     );
 }
-`);
+`,
+        );
         await migrate({ cwd: tmpDir, audit: true });
 
         expect(fileExists('.csszyx-todo.json')).toBe(true);
@@ -108,11 +113,14 @@ export default function App() {
     });
 
     it('does NOT write null — always uses "sz:todo"', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default function App() {
     return <div className="custom-a custom-b p-4" />;
 }
-`);
+`,
+        );
         await migrate({ cwd: tmpDir, audit: true });
 
         const todo = JSON.parse(readFile('.csszyx-todo.json'));
@@ -134,13 +142,23 @@ export default function App() {
     it('audit always produces a fresh snapshot — overwrites any prior file', async () => {
         // Prior run produced a file with user edits. Running audit again creates
         // a clean snapshot of what is currently unrecognized — not a merge.
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'old-class': { bg: 'red-500' }, // from a previous audit, user-edited
-        }, null, 2));
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'old-class': { bg: 'red-500' }, // from a previous audit, user-edited
+                },
+                null,
+                2,
+            ),
+        );
 
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 ds-new-class" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, audit: true });
 
@@ -152,9 +170,12 @@ export default () => <div className="p-4 ds-new-class" />;
     });
 
     it('all-recognized code produces no todo file entry', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 flex bg-blue-500 hover:bg-blue-600 md:p-8" />;
-`);
+`,
+        );
         await migrate({ cwd: tmpDir, audit: true });
 
         // No unrecognized → file either not created or empty object
@@ -182,12 +203,22 @@ export default () => <div className="p-4 flex bg-blue-500 hover:bg-blue-600 md:p
 
 describe('--resolve-todos mode', () => {
     it('object route: resolves custom class to sz, removes className', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'btn-primary': { bg: 'blue-500', color: 'white', px: 4, py: 2 },
-        }, null, 2));
-        writeFile('src/App.tsx', `
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'btn-primary': { bg: 'blue-500', color: 'white', px: 4, py: 2 },
+                },
+                null,
+                2,
+            ),
+        );
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <button className="btn-primary rounded-lg">Click</button>;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -199,12 +230,22 @@ export default () => <button className="btn-primary rounded-lg">Click</button>;
     });
 
     it('sz:keep: class stays in className alongside sz', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'sprite-icon': 'sz:keep',
-        }, null, 2));
-        writeFile('src/App.tsx', `
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'sprite-icon': 'sz:keep',
+                },
+                null,
+                2,
+            ),
+        );
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="flex items-center sprite-icon" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -215,12 +256,22 @@ export default () => <div className="flex items-center sprite-icon" />;
     });
 
     it('sz:remove: class disappears from output', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'legacy-wrapper': 'sz:remove',
-        }, null, 2));
-        writeFile('src/App.tsx', `
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'legacy-wrapper': 'sz:remove',
+                },
+                null,
+                2,
+            ),
+        );
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 legacy-wrapper flex" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -230,12 +281,22 @@ export default () => <div className="p-4 legacy-wrapper flex" />;
     });
 
     it('sz:todo: still-pending class stays in className with @sz-todo comment', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'pending-token': 'sz:todo',
-        }, null, 2));
-        writeFile('src/App.tsx', `
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'pending-token': 'sz:todo',
+                },
+                null,
+                2,
+            ),
+        );
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 pending-token" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -246,12 +307,22 @@ export default () => <div className="p-4 pending-token" />;
     });
 
     it('TW string route: auto-converts to sz', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'focus-ring': 'ring-2 ring-blue-500 ring-offset-2 focus:outline-none',
-        }, null, 2));
-        writeFile('src/App.tsx', `
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'focus-ring': 'ring-2 ring-blue-500 ring-offset-2 focus:outline-none',
+                },
+                null,
+                2,
+            ),
+        );
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <button className="px-4 focus-ring">Submit</button>;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -262,13 +333,20 @@ export default () => <button className="px-4 focus-ring">Submit</button>;
     });
 
     it('partial TW string with unknowns: todo file untouched, unknowns reported in log', async () => {
-        const originalTodo = JSON.stringify({
-            'btn-fancy': 'px-4 figma-shadow-token', // figma-shadow-token is unknown
-        }, null, 2);
+        const originalTodo = JSON.stringify(
+            {
+                'btn-fancy': 'px-4 figma-shadow-token', // figma-shadow-token is unknown
+            },
+            null,
+            2,
+        );
         writeFile('.csszyx-todo.json', originalTodo);
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <button className="btn-fancy" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -283,14 +361,24 @@ export default () => <button className="btn-fancy" />;
     });
 
     it('strips @sz-todo comments before re-processing', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'ds-card': { rounded: 'lg', shadow: 'sm' },
-        }, null, 2));
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    'ds-card': { rounded: 'lg', shadow: 'sm' },
+                },
+                null,
+                2,
+            ),
+        );
         // File has an existing @sz-todo comment from previous audit pass
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 {/* @sz-todo: ds-card */}
 <div className="ds-card p-4" />
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -301,13 +389,23 @@ export default () => <button className="btn-fancy" />;
     });
 
     it('preserves @sz-todo for still-unresolved classes', async () => {
-        writeFile('.csszyx-todo.json', JSON.stringify({
-            'resolved': { bg: 'blue-500' },
-            'still-pending': 'sz:todo',
-        }, null, 2));
-        writeFile('src/App.tsx', `
+        writeFile(
+            '.csszyx-todo.json',
+            JSON.stringify(
+                {
+                    resolved: { bg: 'blue-500' },
+                    'still-pending': 'sz:todo',
+                },
+                null,
+                2,
+            ),
+        );
+        writeFile(
+            'src/App.tsx',
+            `
 <div className="resolved still-pending p-4" />
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, resolveTodos: '.csszyx-todo.json' });
 
@@ -326,9 +424,12 @@ export default () => <button className="btn-fancy" />;
 
 describe('log file', () => {
     it('creates a log file in .csszyx/logs/', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 flex" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir });
 
@@ -338,49 +439,52 @@ export default () => <div className="p-4 flex" />;
     });
 
     it('log file contains transformation count', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => (
     <div className="p-4 flex">
         <span className="text-sm font-bold" />
     </div>
 );
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir });
 
         const logs = listLogFiles();
-        const logContent = fs.readFileSync(
-            path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8',
-        );
+        const logContent = fs.readFileSync(path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8');
         expect(logContent).toContain('classNames converted');
         expect(logContent).toContain('Files modified');
     });
 
     it('log file records unrecognized classes', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 my-custom-token" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir });
 
         const logs = listLogFiles();
-        const logContent = fs.readFileSync(
-            path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8',
-        );
+        const logContent = fs.readFileSync(path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8');
         expect(logContent).toContain('my-custom-token');
     });
 
     it('log file includes mode info', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => <div className="p-4 custom-class" />;
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir, audit: true });
 
         const logs = listLogFiles();
-        const logContent = fs.readFileSync(
-            path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8',
-        );
+        const logContent = fs.readFileSync(path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8');
         expect(logContent.toLowerCase()).toContain('audit');
     });
 
@@ -456,14 +560,17 @@ describe('dry run', () => {
 
 describe('capital component className preserved end-to-end', () => {
     it('Button className survives migration', async () => {
-        writeFile('src/App.tsx', `
+        writeFile(
+            'src/App.tsx',
+            `
 export default () => (
     <div className="flex gap-4">
         <Button className="btn-primary px-6 py-3">Primary</Button>
         <Button className="btn-secondary px-6 py-3" variant="outline">Secondary</Button>
     </div>
 );
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir });
 
@@ -482,7 +589,9 @@ export default () => (
 
 describe('CVA warning in full migrate', () => {
     it('emits CVA warning to log when file uses cva()', async () => {
-        writeFile('src/Button.tsx', `
+        writeFile(
+            'src/Button.tsx',
+            `
 import { cva } from 'cva';
 
 const buttonVariants = cva('px-4 py-2 rounded-md', {
@@ -501,14 +610,13 @@ const buttonVariants = cva('px-4 py-2 rounded-md', {
 export const Button = ({ intent, size, ...props }) => (
     <button className={buttonVariants({ intent, size })} {...props} />
 );
-`);
+`,
+        );
 
         await migrate({ cwd: tmpDir });
 
         const logs = listLogFiles();
-        const logContent = fs.readFileSync(
-            path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8',
-        );
+        const logContent = fs.readFileSync(path.join(tmpDir, '.csszyx', 'logs', logs[0]), 'utf-8');
         // The warning should be in the log
         expect(logContent).toContain('szv()');
     });

@@ -39,7 +39,9 @@ function extractSzObjectText(
 
     const cursorOffset = document.offsetAt(position) - document.offsetAt(windowStart);
     const obj = extractSzObjectAt(text, cursorOffset);
-    if (!obj) { return null; }
+    if (!obj) {
+        return null;
+    }
     return obj.length <= MAX_OBJ_LEN ? obj : null;
 }
 
@@ -77,13 +79,19 @@ export class SzHoverProvider implements vscode.HoverProvider {
         position: vscode.Position,
     ): vscode.Hover | undefined {
         const ctx = getSzContext(document, position);
-        if (ctx.type === 'none') { return undefined; }
+        if (ctx.type === 'none') {
+            return undefined;
+        }
 
         const objText = extractSzObjectText(document, position);
-        if (!objText) { return undefined; }
+        if (!objText) {
+            return undefined;
+        }
 
         const szObj = evalObject(objText);
-        if (!szObj) { return undefined; }
+        if (!szObj) {
+            return undefined;
+        }
 
         let result: ReturnType<typeof transform>;
         try {

@@ -1,38 +1,71 @@
 {
-    "compilerOptions": {
-        "target": "ES2020",
-        "lib": ["ES2020", "DOM"],
-        "module": "ESNext",
-        "moduleResolution": "bundler",
-        "resolveJsonModule": true,
-        "allowJs": false,
-        "checkJs": false,
-        "jsx": "react-jsx",
-        "declaration": true,
-        "declarationMap": true,
-        "sourceMap": true,
-        "outDir": "./dist",
-        "removeComments": false,
-        "noEmit": false,
-        "importHelpers": true,
-        "isolatedModules": true,
-        "allowSyntheticDefaultImports": true,
-        "esModuleInterop": true,
-        "forceConsistentCasingInFileNames": true,
-        "strict": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "noImplicitReturns": true,
-        "noFallthroughCasesInSwitch": true,
-        "skipLibCheck": true
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@csszyx/core": ["./packages/core/pkg"],
+      "@csszyx/compiler": ["./packages/compiler/src"],
+      "@csszyx/compiler/browser": ["./packages/compiler/src/transform-core.ts"],
+      "@csszyx/compiler/color-var": ["./packages/compiler/src/color-var.ts"],
+      "@csszyx/types": ["./packages/types/src"],
+      "@csszyx/runtime": ["./packages/runtime/src"],
+      "@csszyx/runtime/lite": ["./packages/runtime/src/lite.ts"],
+      "@csszyx/cli": ["./packages/cli/src"],
+      "@csszyx/unplugin": ["./packages/unplugin/src"],
+      "@csszyx/unplugin/css-mangler": [
+        "./packages/unplugin/src/css-mangler.ts"
+      ],
+      "@csszyx/svelte-adapter": ["./packages/svelte-adapter/src"],
+      "@csszyx/vue-adapter": ["./packages/vue-adapter/src"],
+      "@csszyx/dynamic": ["./packages/dynamic/src/index.ts"],
+      "@csszyx/dynamic/react": ["./packages/dynamic/src/react.ts"],
+      "csszyx": ["./packages/csszyx/src/index.ts"],
+      "csszyx/lite": ["./packages/csszyx/src/lite.ts"],
+      "csszyx/vite": ["./packages/csszyx/src/vite.ts"],
+      "csszyx/webpack": ["./packages/csszyx/src/webpack.ts"],
+      "csszyx/dynamic": ["./packages/csszyx/src/dynamic.ts"],
+      "csszyx/dynamic/react": ["./packages/csszyx/src/dynamic-react.ts"]
     },
-    "exclude": [
-        "node_modules",
-        "dist",
-        "lib",
-        "pkg",
-        "coverage",
-        "**/*.spec.ts",
-        "**/*.test.ts"
-    ]
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "checkJs": false,
+    "jsx": "react-jsx",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "removeComments": false,
+    "noEmit": false,
+    "importHelpers": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    // TS 6 deprecates baseUrl. tsup 8.5.1 still injects it during DTS
+    // generation, so silence the deprecation warning here until tsup
+    // ships a TS 6-clean release. Revisit when tsup 8.6+ lands.
+    "ignoreDeprecations": "6.0",
+    // TS 6 default is types:[] (was: auto-include all @types). csszyx
+    // packages need node globals (process, Buffer) in many places,
+    // plus vitest globals in tests. Per-package overrides can add
+    // more (e.g., @types/react in dynamic/runtime).
+    "types": ["node"]
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "lib",
+    "pkg",
+    "coverage",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
 }

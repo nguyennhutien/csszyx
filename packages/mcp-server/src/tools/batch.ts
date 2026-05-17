@@ -8,9 +8,11 @@ import { transform } from '@csszyx/compiler';
 import { z } from 'zod';
 
 export const batchSchema = z.object({
-    items: z.array(z.record(z.any())).describe(
-        "Array of sz prop objects to expand. Example: [{ p: 4 }, { m: 2, bg: 'red-500' }]",
-    ),
+    items: z
+        .array(z.record(z.any()))
+        .describe(
+            "Array of sz prop objects to expand. Example: [{ p: 4 }, { m: 2, bg: 'red-500' }]",
+        ),
 });
 
 /** Validated input type for the csszyx_batch tool. */
@@ -28,7 +30,8 @@ export function handleBatch(input: BatchInput): { content: Array<{ type: 'text';
             return {
                 index,
                 className: result.className,
-                attributes: Object.keys(result.attributes).length > 0 ? result.attributes : undefined,
+                attributes:
+                    Object.keys(result.attributes).length > 0 ? result.attributes : undefined,
             };
         } catch (err) {
             return {
@@ -42,11 +45,15 @@ export function handleBatch(input: BatchInput): { content: Array<{ type: 'text';
         content: [
             {
                 type: 'text' as const,
-                text: JSON.stringify({
-                    results,
-                    totalItems: input.items.length,
-                    successful: results.filter(r => !('error' in r)).length,
-                }, null, 2),
+                text: JSON.stringify(
+                    {
+                        results,
+                        totalItems: input.items.length,
+                        successful: results.filter(r => !('error' in r)).length,
+                    },
+                    null,
+                    2,
+                ),
             },
         ],
     };

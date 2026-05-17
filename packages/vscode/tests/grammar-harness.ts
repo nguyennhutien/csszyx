@@ -48,9 +48,21 @@ let registryPromise: Promise<tmgrammar.Registry> | null = null;
  * @returns The shared Registry instance.
  */
 async function getRegistry(): Promise<tmgrammar.Registry> {
-    if (registryPromise) { return registryPromise; }
+    if (registryPromise) {
+        return registryPromise;
+    }
     registryPromise = (async (): Promise<tmgrammar.Registry> => {
-        const wasm = await readFile(path.join(pkgRoot, '..', '..', 'node_modules', 'vscode-oniguruma', 'release', 'onig.wasm'));
+        const wasm = await readFile(
+            path.join(
+                pkgRoot,
+                '..',
+                '..',
+                'node_modules',
+                'vscode-oniguruma',
+                'release',
+                'onig.wasm',
+            ),
+        );
         await oniguruma.loadWASM(wasm.buffer);
         const onigLib = Promise.resolve({
             /**
@@ -75,7 +87,9 @@ async function getRegistry(): Promise<tmgrammar.Registry> {
              */
             loadGrammar: async (scopeName: string) => {
                 const filePath = GRAMMAR_PATHS[scopeName];
-                if (!filePath) { return null; }
+                if (!filePath) {
+                    return null;
+                }
                 const json = await readFile(filePath, 'utf8');
                 return tmgrammar.parseRawGrammar(json, filePath);
             },
@@ -86,9 +100,14 @@ async function getRegistry(): Promise<tmgrammar.Registry> {
              * @returns Array of scope selectors this grammar injects into.
              */
             getInjections: (scopeName: string): string[] | undefined => {
-                if (scopeName === 'text.html.basic' || scopeName === 'text.html.derivative'
-                    || scopeName.startsWith('source.')) {
-                    return SZ_INJECT_TARGETS.includes(scopeName) ? ['source.sz.injection'] : undefined;
+                if (
+                    scopeName === 'text.html.basic' ||
+                    scopeName === 'text.html.derivative' ||
+                    scopeName.startsWith('source.')
+                ) {
+                    return SZ_INJECT_TARGETS.includes(scopeName)
+                        ? ['source.sz.injection']
+                        : undefined;
                 }
                 return undefined;
             },
@@ -121,7 +140,9 @@ export async function tokenizeLine(
 ): Promise<TokenAssertion[]> {
     const registry = await getRegistry();
     const grammar = await registry.loadGrammar(topScopeName);
-    if (!grammar) { throw new Error(`Failed to load host grammar ${topScopeName}`); }
+    if (!grammar) {
+        throw new Error(`Failed to load host grammar ${topScopeName}`);
+    }
 
     const result = grammar.tokenizeLine(input, tmgrammar.INITIAL);
     return result.tokens.map(t => ({
@@ -138,15 +159,14 @@ export async function tokenizeLine(
  * @param needle - Exact token text to find.
  * @returns The matching token.
  */
-export function findToken(
-    tokens: TokenAssertion[],
-    needle: string,
-): TokenAssertion {
+export function findToken(tokens: TokenAssertion[], needle: string): TokenAssertion {
     const found = tokens.find(t => t.text === needle);
     if (!found) {
-        throw new Error(`Token ${JSON.stringify(needle)} not found. Present: ${
-            tokens.map(t => JSON.stringify(t.text)).join(', ')
-        }`);
+        throw new Error(
+            `Token ${JSON.stringify(needle)} not found. Present: ${tokens
+                .map(t => JSON.stringify(t.text))
+                .join(', ')}`,
+        );
     }
     return found;
 }

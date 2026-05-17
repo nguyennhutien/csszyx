@@ -25,35 +25,35 @@
   },
   "private": false,
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "unpkg": "./dist/browser.iife.js",
   "jsdelivr": "./dist/browser.iife.js",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     },
     "./lite": {
-      "types": "./dist/lite.d.ts",
-      "import": "./dist/lite.js"
+      "types": "./dist/lite.d.mts",
+      "import": "./dist/lite.mjs"
     },
     "./vite": {
-      "types": "./dist/vite.d.ts",
-      "import": "./dist/vite.js"
+      "types": "./dist/vite.d.mts",
+      "import": "./dist/vite.mjs"
     },
     "./webpack": {
-      "types": "./dist/webpack.d.ts",
-      "import": "./dist/webpack.js"
+      "types": "./dist/webpack.d.mts",
+      "import": "./dist/webpack.mjs"
     },
     "./dynamic": {
-      "types": "./dist/dynamic.d.ts",
-      "import": "./dist/dynamic.js"
+      "types": "./dist/dynamic.d.mts",
+      "import": "./dist/dynamic.mjs"
     },
     "./dynamic/react": {
-      "types": "./dist/dynamic-react.d.ts",
-      "import": "./dist/dynamic-react.js"
+      "types": "./dist/dynamic-react.d.mts",
+      "import": "./dist/dynamic-react.mjs"
     },
     "./browser": "./dist/browser.iife.js"
   },
@@ -61,8 +61,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts src/dynamic.ts src/dynamic-react.ts --format esm --dts && esbuild src/browser.ts --bundle --outfile=dist/browser.iife.js --minify --platform=browser --format=iife --define:process.env.NODE_ENV='\"production\"' && echo '/// <reference types=\"@csszyx/types/jsx\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
-    "dev": "tsup src/index.ts src/lite.ts src/vite.ts src/webpack.ts src/dynamic.ts src/dynamic-react.ts --format esm --dts --watch"
+    "build": "unbuild",
+    "dev": "unbuild --stub"
   },
   "dependencies": {
     "@csszyx/core": "workspace:*",
@@ -74,7 +74,11 @@
   },
   "devDependencies": {
     "esbuild": "^0.20.0",
-    "tsup": "^8.0.2",
-    "typescript": "^5.4.5"
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

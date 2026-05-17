@@ -48,7 +48,12 @@ function findLCA(
 
     current = nodeB;
     while (current) {
-        if (ancestorsA.has(current) && t.isJSXOpeningElement(current) && current !== nodeA && current !== nodeB) {
+        if (
+            ancestorsA.has(current) &&
+            t.isJSXOpeningElement(current) &&
+            current !== nodeA &&
+            current !== nodeB
+        ) {
             return current;
         }
         current = parentMap.get(current);
@@ -80,22 +85,36 @@ function isFragment(node: t.JSXOpeningElement): boolean {
  */
 function removeStyleVar(element: t.JSXOpeningElement, varName: string): void {
     for (const attr of element.attributes) {
-        if (!t.isJSXAttribute(attr)) {continue;}
-        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {continue;}
-        if (!t.isJSXExpressionContainer(attr.value)) {continue;}
+        if (!t.isJSXAttribute(attr)) {
+            continue;
+        }
+        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {
+            continue;
+        }
+        if (!t.isJSXExpressionContainer(attr.value)) {
+            continue;
+        }
         const styleObj = attr.value.expression;
-        if (!t.isObjectExpression(styleObj)) {continue;}
+        if (!t.isObjectExpression(styleObj)) {
+            continue;
+        }
 
         styleObj.properties = styleObj.properties.filter(prop => {
-            if (!t.isObjectProperty(prop)) {return true;}
-            if (t.isStringLiteral(prop.key)) {return prop.key.value !== varName;}
+            if (!t.isObjectProperty(prop)) {
+                return true;
+            }
+            if (t.isStringLiteral(prop.key)) {
+                return prop.key.value !== varName;
+            }
             return true;
         });
 
         // If style object is empty, remove the entire style attribute
         if (styleObj.properties.length === 0) {
             const idx = element.attributes.indexOf(attr);
-            if (idx !== -1) {element.attributes.splice(idx, 1);}
+            if (idx !== -1) {
+                element.attributes.splice(idx, 1);
+            }
         }
         break;
     }
@@ -112,22 +131,29 @@ function removeStyleVar(element: t.JSXOpeningElement, varName: string): void {
 function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t.Expression): void {
     // Find existing style attribute
     for (const attr of element.attributes) {
-        if (!t.isJSXAttribute(attr)) {continue;}
-        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {continue;}
-        if (!t.isJSXExpressionContainer(attr.value)) {continue;}
+        if (!t.isJSXAttribute(attr)) {
+            continue;
+        }
+        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {
+            continue;
+        }
+        if (!t.isJSXExpressionContainer(attr.value)) {
+            continue;
+        }
         const styleObj = attr.value.expression;
-        if (!t.isObjectExpression(styleObj)) {continue;}
+        if (!t.isObjectExpression(styleObj)) {
+            continue;
+        }
 
         // Check if variable already exists
-        const existing = styleObj.properties.find(prop =>
-            t.isObjectProperty(prop) &&
-            t.isStringLiteral(prop.key) &&
-            prop.key.value === varName,
+        const existing = styleObj.properties.find(
+            prop =>
+                t.isObjectProperty(prop) &&
+                t.isStringLiteral(prop.key) &&
+                prop.key.value === varName,
         );
         if (!existing) {
-            styleObj.properties.push(
-                t.objectProperty(t.stringLiteral(varName), valueExpr),
-            );
+            styleObj.properties.push(t.objectProperty(t.stringLiteral(varName), valueExpr));
         }
         return;
     }
@@ -137,9 +163,7 @@ function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t
         t.jsxAttribute(
             t.jsxIdentifier('style'),
             t.jsxExpressionContainer(
-                t.objectExpression([
-                    t.objectProperty(t.stringLiteral(varName), valueExpr),
-                ]),
+                t.objectExpression([t.objectProperty(t.stringLiteral(varName), valueExpr)]),
             ),
         ),
     );
@@ -152,16 +176,17 @@ function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t
  * @param usages - All CSS variable usages collected during transform
  * @param parentMap - Map of child-to-parent relationships in the AST
  */
-export function hoistCSSVariables(
-    usages: CSSVarUsage[],
-    parentMap: Map<t.Node, t.Node>,
-): void {
-    if (usages.length < 2) {return;}
+export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, t.Node>): void {
+    if (usages.length < 2) {
+        return;
+    }
 
     // Group by varName + serializedValue (identical pairs)
     const groups = new Map<string, CSSVarUsage[]>();
     for (const usage of usages) {
-        if (usage.serializedValue === null) {continue;} // Can't hoist dynamic values
+        if (usage.serializedValue === null) {
+            continue;
+        } // Can't hoist dynamic values
         const groupKey = `${usage.varName}::${usage.serializedValue}`;
         const group = groups.get(groupKey) || [];
         group.push(usage);
@@ -170,7 +195,9 @@ export function hoistCSSVariables(
 
     // For each group with 2+ elements, find LCA and hoist
     for (const [, group] of groups) {
-        if (group.length < 2) {continue;}
+        if (group.length < 2) {
+            continue;
+        }
 
         // Find LCA of all elements in the group
         let lca = group[0].element;
@@ -183,7 +210,9 @@ export function hoistCSSVariables(
             lca = newLca;
         }
 
-        if (!lca) {continue;} // No valid LCA (Fragment or no common ancestor)
+        if (!lca) {
+            continue;
+        } // No valid LCA (Fragment or no common ancestor)
 
         // Hoist: add variable to LCA, remove from each child
         addStyleVar(lca, group[0].varName, group[0].valueExpr);

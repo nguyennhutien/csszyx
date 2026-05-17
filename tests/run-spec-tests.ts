@@ -70,8 +70,7 @@ console.time('transform-all');
 
 for (const test of specTests.tests) {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = transform(test.szInput as any);
+        const result = transform(test.szInput as Parameters<typeof transform>[0]);
         // Handle both string return and object return
         const actual = typeof result === 'string' ? result : result.className;
 

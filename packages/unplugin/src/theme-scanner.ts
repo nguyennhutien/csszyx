@@ -59,7 +59,9 @@ function stripLayerWrappers(css: string): string {
         let depth = 0;
         let j = openBrace;
         while (j < css.length) {
-            if (css[j] === '{') { depth++; }
+            if (css[j] === '{') {
+                depth++;
+            }
             if (css[j] === '}') {
                 depth--;
                 if (depth === 0) {
@@ -91,13 +93,14 @@ function extractThemeBlocks(css: string): string[] {
     const blocks: string[] = [];
     // Match @theme (optional "inline" keyword) followed by {
     const themeStart = /@theme\s+(?:inline\s+)?\{|@theme\{/g;
-    let match: RegExpExecArray | null;
-    while ((match = themeStart.exec(css)) !== null) {
+    for (const match of css.matchAll(themeStart)) {
         const openPos = css.indexOf('{', match.index);
         let depth = 0;
         let j = openPos;
         while (j < css.length) {
-            if (css[j] === '{') { depth++; }
+            if (css[j] === '{') {
+                depth++;
+            }
             if (css[j] === '}') {
                 depth--;
                 if (depth === 0) {
@@ -132,7 +135,9 @@ function categorizeProperty(prop: string): { category: keyof ParsedTheme; token:
             let token = prop.slice(prefix.length);
             // Strip trailing numeric shade suffix: "brand-500" → "brand", "brand-dark" → "brand-dark"
             token = token.replace(/-\d+$/, '');
-            if (token) { return { category, token }; }
+            if (token) {
+                return { category, token };
+            }
         }
     }
     return null;
@@ -160,14 +165,12 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
     const propPattern = /--([a-z][a-z0-9-]*)(?:\s*:[^;]+)?;/g;
 
     for (const block of blocks) {
-        let match: RegExpExecArray | null;
-        while ((match = propPattern.exec(block)) !== null) {
+        for (const match of block.matchAll(propPattern)) {
             const categorized = categorizeProperty(match[1]);
             if (categorized) {
                 result[categorized.category].add(categorized.token);
             }
         }
-        propPattern.lastIndex = 0; // reset for next block
     }
 
     return {
@@ -186,7 +189,9 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
  * @returns Merged theme with unique tokens per category
  */
 export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
-    if (themes.length === 0) { return { ...EMPTY_THEME }; }
+    if (themes.length === 0) {
+        return { ...EMPTY_THEME };
+    }
     const merged: { [K in keyof ParsedTheme]: Set<string> } = {
         colors: new Set(),
         spacings: new Set(),
@@ -196,7 +201,9 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
     };
     for (const theme of themes) {
         for (const cat of Object.keys(merged) as (keyof ParsedTheme)[]) {
-            for (const token of theme[cat]) { merged[cat].add(token); }
+            for (const token of theme[cat]) {
+                merged[cat].add(token);
+            }
         }
     }
     return {

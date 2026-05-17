@@ -179,8 +179,12 @@ const SIZE_KEYWORDS: Record<string, string> = {
  * @returns CSS value string (e.g. "calc(var(--spacing) * 4)", "1px", "auto")
  */
 function resolveSpacingValue(v: string, prop?: string): string {
-    if (v === '0') {return '0';}
-    if (v === 'px') {return '1px';}
+    if (v === '0') {
+        return '0';
+    }
+    if (v === 'px') {
+        return '1px';
+    }
 
     // Height screen → 100vh, width screen → 100vw
     if (v === 'screen') {
@@ -190,7 +194,9 @@ function resolveSpacingValue(v: string, prop?: string): string {
         return '100vw';
     }
 
-    if (v in SIZE_KEYWORDS) {return SIZE_KEYWORDS[v];}
+    if (v in SIZE_KEYWORDS) {
+        return SIZE_KEYWORDS[v];
+    }
 
     // Arbitrary value: [13px], [calc(100%-2rem)], etc.
     if (v.startsWith('[') && v.endsWith(']')) {
@@ -207,19 +213,19 @@ function resolveSpacingValue(v: string, prop?: string): string {
         const slash = v.indexOf('/');
         const num = parseFloat(v.slice(0, slash));
         const den = parseFloat(v.slice(slash + 1));
-        if (!isNaN(num) && !isNaN(den) && den !== 0) {
+        if (!Number.isNaN(num) && !Number.isNaN(den) && den !== 0) {
             const pct = (num / den) * 100;
             return `${parseFloat(pct.toFixed(6))}%`;
         }
     }
 
     // Negative numeric: -4 → calc(var(--spacing) * -4)
-    if (v.startsWith('-') && !isNaN(parseFloat(v.slice(1)))) {
+    if (v.startsWith('-') && !Number.isNaN(parseFloat(v.slice(1)))) {
         return `calc(var(--spacing) * ${v})`;
     }
 
     // Numeric: 4 → calc(var(--spacing) * 4)
-    if (!isNaN(parseFloat(v))) {
+    if (!Number.isNaN(parseFloat(v))) {
         return `calc(var(--spacing) * ${v})`;
     }
 
@@ -260,7 +266,12 @@ const COLOR_PROPS: Record<string, string> = {
 
 /** Colors that don't use CSS custom properties in Tailwind v4. */
 const DIRECT_COLOR_KEYWORDS = new Set([
-    'white', 'black', 'transparent', 'inherit', 'current', 'currentColor',
+    'white',
+    'black',
+    'transparent',
+    'inherit',
+    'current',
+    'currentColor',
 ]);
 
 /**
@@ -272,14 +283,18 @@ const DIRECT_COLOR_KEYWORDS = new Set([
  */
 function resolveColorValue(v: string): string {
     if (DIRECT_COLOR_KEYWORDS.has(v)) {
-        if (v === 'current') {return 'currentColor';}
+        if (v === 'current') {
+            return 'currentColor';
+        }
         return v;
     }
 
     // Arbitrary: [#ff6b35], [color:var(--my)]
     if (v.startsWith('[') && v.endsWith(']')) {
         const inner = v.slice(1, -1).replace(/_/g, ' ');
-        if (inner.startsWith('color:')) {return inner.slice(6);}
+        if (inner.startsWith('color:')) {
+            return inner.slice(6);
+        }
         return inner;
     }
 
@@ -307,7 +322,19 @@ function resolveColorValue(v: string): string {
 
 /** Named Tailwind v4 text sizes → CSS var. */
 const TEXT_SIZES = new Set([
-    'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl',
+    'xs',
+    'sm',
+    'base',
+    'lg',
+    'xl',
+    '2xl',
+    '3xl',
+    '4xl',
+    '5xl',
+    '6xl',
+    '7xl',
+    '8xl',
+    '9xl',
 ]);
 
 // ── Keyword class lookup ──────────────────────────────────────────────────────
@@ -441,7 +468,7 @@ const KEYWORD_RULES: Record<string, string> = {
     'font-extrabold': 'font-weight: 800',
     'font-black': 'font-weight: 900',
     // Font style
-    'italic': 'font-style: italic',
+    italic: 'font-style: italic',
     'not-italic': 'font-style: normal',
     // Text align
     'text-left': 'text-align: left',
@@ -451,13 +478,13 @@ const KEYWORD_RULES: Record<string, string> = {
     'text-start': 'text-align: start',
     'text-end': 'text-align: end',
     // Text transform
-    'uppercase': 'text-transform: uppercase',
-    'lowercase': 'text-transform: lowercase',
-    'capitalize': 'text-transform: capitalize',
+    uppercase: 'text-transform: uppercase',
+    lowercase: 'text-transform: lowercase',
+    capitalize: 'text-transform: capitalize',
     'normal-case': 'text-transform: none',
     // Text decoration
-    'underline': 'text-decoration-line: underline',
-    'overline': 'text-decoration-line: overline',
+    underline: 'text-decoration-line: underline',
+    overline: 'text-decoration-line: overline',
     'line-through': 'text-decoration-line: line-through',
     'no-underline': 'text-decoration-line: none',
     // Text wrap
@@ -507,19 +534,19 @@ const KEYWORD_RULES: Record<string, string> = {
     'object-none': 'object-fit: none',
     'object-scale-down': 'object-fit: scale-down',
     // Truncate
-    'truncate': 'overflow: hidden; text-overflow: ellipsis; white-space: nowrap',
+    truncate: 'overflow: hidden; text-overflow: ellipsis; white-space: nowrap',
     'text-ellipsis': 'text-overflow: ellipsis',
     'text-clip': 'text-overflow: clip',
     // Grow / shrink
-    'grow': 'flex-grow: 1',
+    grow: 'flex-grow: 1',
     'grow-0': 'flex-grow: 0',
-    'shrink': 'flex-shrink: 1',
+    shrink: 'flex-shrink: 1',
     'shrink-0': 'flex-shrink: 0',
     // Appearance
     'appearance-none': 'appearance: none',
     'appearance-auto': 'appearance: auto',
     // Isolate
-    'isolate': 'isolation: isolate',
+    isolate: 'isolation: isolate',
     'isolation-auto': 'isolation: auto',
     // List style
     'list-none': 'list-style-type: none',
@@ -539,25 +566,42 @@ const KEYWORD_RULES: Record<string, string> = {
     'clear-both': 'clear: both',
     'clear-none': 'clear: none',
     // SR only
-    'sr-only': 'position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border-width: 0',
-    'not-sr-only': 'position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal',
+    'sr-only':
+        'position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border-width: 0',
+    'not-sr-only':
+        'position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal',
 };
 
 // ── Opacity utilities ─────────────────────────────────────────────────────────
 
 /** Named opacity values (Tailwind uses 0-100 scale). */
 const OPACITY_NAMED: Record<string, string> = {
-    0: '0', 5: '0.05', 10: '0.1', 15: '0.15', 20: '0.2', 25: '0.25',
-    30: '0.3', 35: '0.35', 40: '0.4', 45: '0.45', 50: '0.5',
-    55: '0.55', 60: '0.6', 65: '0.65', 70: '0.7', 75: '0.75',
-    80: '0.8', 85: '0.85', 90: '0.9', 95: '0.95', 100: '1',
+    0: '0',
+    5: '0.05',
+    10: '0.1',
+    15: '0.15',
+    20: '0.2',
+    25: '0.25',
+    30: '0.3',
+    35: '0.35',
+    40: '0.4',
+    45: '0.45',
+    50: '0.5',
+    55: '0.55',
+    60: '0.6',
+    65: '0.65',
+    70: '0.7',
+    75: '0.75',
+    80: '0.8',
+    85: '0.85',
+    90: '0.9',
+    95: '0.95',
+    100: '1',
 };
 
 // ── Border radius utilities ───────────────────────────────────────────────────
 
-const RADIUS_SIZES = new Set([
-    'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl',
-]);
+const RADIUS_SIZES = new Set(['sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl']);
 
 // ── CSS escaping ──────────────────────────────────────────────────────────────
 
@@ -583,10 +627,26 @@ const CONTAINER_MAX = new Set(['@max-sm', '@max-md', '@max-lg', '@max-xl', '@max
  */
 export type Tier =
     | 'base'
-    | 'sm' | 'md' | 'lg' | 'xl' | '2xl'
-    | 'max-2xl' | 'max-xl' | 'max-lg' | 'max-md' | 'max-sm'
-    | '@sm' | '@md' | '@lg' | '@xl' | '@2xl'
-    | '@max-2xl' | '@max-xl' | '@max-lg' | '@max-md' | '@max-sm';
+    | 'sm'
+    | 'md'
+    | 'lg'
+    | 'xl'
+    | '2xl'
+    | 'max-2xl'
+    | 'max-xl'
+    | 'max-lg'
+    | 'max-md'
+    | 'max-sm'
+    | '@sm'
+    | '@md'
+    | '@lg'
+    | '@xl'
+    | '@2xl'
+    | '@max-2xl'
+    | '@max-xl'
+    | '@max-lg'
+    | '@max-md'
+    | '@max-sm';
 
 /**
  *
@@ -663,7 +723,9 @@ export function parseVariants(cls: string): ParsedVariants {
  */
 export function generateDeclarations(utility: string): string {
     // ── 1. Keyword lookup (fastest path) ───────────────────────────────────
-    if (utility in KEYWORD_RULES) {return KEYWORD_RULES[utility];}
+    if (utility in KEYWORD_RULES) {
+        return KEYWORD_RULES[utility];
+    }
 
     // ── 2. Opacity ──────────────────────────────────────────────────────────
     if (utility.startsWith('opacity-')) {
@@ -672,7 +734,7 @@ export function generateDeclarations(utility: string): string {
             return `opacity: ${val.slice(1, -1)}`;
         }
         const n = parseInt(val, 10);
-        if (!isNaN(n)) {
+        if (!Number.isNaN(n)) {
             const v = OPACITY_NAMED[n] ?? String(n / 100);
             return `opacity: ${v}`;
         }
@@ -681,22 +743,36 @@ export function generateDeclarations(utility: string): string {
     // ── 3. Z-index ──────────────────────────────────────────────────────────
     if (utility.startsWith('z-')) {
         const val = utility.slice(2);
-        if (val === 'auto') {return 'z-index: auto';}
-        if (val.startsWith('[') && val.endsWith(']')) {return `z-index: ${val.slice(1, -1)}`;}
-        if (!isNaN(parseInt(val, 10))) {return `z-index: ${val}`;}
+        if (val === 'auto') {
+            return 'z-index: auto';
+        }
+        if (val.startsWith('[') && val.endsWith(']')) {
+            return `z-index: ${val.slice(1, -1)}`;
+        }
+        if (!Number.isNaN(parseInt(val, 10))) {
+            return `z-index: ${val}`;
+        }
     }
 
     // ── 4. Border width ──────────────────────────────────────────────────────
-    if (utility === 'border') {return 'border-width: 1px';}
+    if (utility === 'border') {
+        return 'border-width: 1px';
+    }
     if (/^border-[trblxyse]$/.test(utility)) {
         const side = utility.slice(7);
         const cssSide: Record<string, string> = {
-            t: 'border-top-width', r: 'border-right-width',
-            b: 'border-bottom-width', l: 'border-left-width',
-            x: 'border-inline-width', y: 'border-block-width',
-            s: 'border-inline-start-width', e: 'border-inline-end-width',
+            t: 'border-top-width',
+            r: 'border-right-width',
+            b: 'border-bottom-width',
+            l: 'border-left-width',
+            x: 'border-inline-width',
+            y: 'border-block-width',
+            s: 'border-inline-start-width',
+            e: 'border-inline-end-width',
         };
-        if (side in cssSide) {return `${cssSide[side]}: 1px`;}
+        if (side in cssSide) {
+            return `${cssSide[side]}: 1px`;
+        }
     }
     if (/^border-\d+$/.test(utility)) {
         const n = utility.slice(7);
@@ -707,21 +783,35 @@ export function generateDeclarations(utility: string): string {
     if (borderSideWidth) {
         const [, side, n] = borderSideWidth;
         const cssSide: Record<string, string> = {
-            t: 'border-top-width', r: 'border-right-width',
-            b: 'border-bottom-width', l: 'border-left-width',
-            x: 'border-inline-width', y: 'border-block-width',
-            s: 'border-inline-start-width', e: 'border-inline-end-width',
+            t: 'border-top-width',
+            r: 'border-right-width',
+            b: 'border-bottom-width',
+            l: 'border-left-width',
+            x: 'border-inline-width',
+            y: 'border-block-width',
+            s: 'border-inline-start-width',
+            e: 'border-inline-end-width',
         };
-        if (side in cssSide) {return `${cssSide[side]}: ${n}px`;}
+        if (side in cssSide) {
+            return `${cssSide[side]}: ${n}px`;
+        }
     }
 
     // ── 5. Border radius ────────────────────────────────────────────────────
-    if (utility === 'rounded') {return 'border-radius: var(--radius)';}
+    if (utility === 'rounded') {
+        return 'border-radius: var(--radius)';
+    }
     if (utility.startsWith('rounded-')) {
         const val = utility.slice(8);
-        if (val === 'none') {return 'border-radius: 0';}
-        if (val === 'full') {return 'border-radius: calc(infinity * 1px)';}
-        if (RADIUS_SIZES.has(val)) {return `border-radius: var(--radius-${val})`;}
+        if (val === 'none') {
+            return 'border-radius: 0';
+        }
+        if (val === 'full') {
+            return 'border-radius: calc(infinity * 1px)';
+        }
+        if (RADIUS_SIZES.has(val)) {
+            return `border-radius: var(--radius-${val})`;
+        }
         // Directional: rounded-t, rounded-b, etc.
         const roundedDir: Record<string, string> = {
             t: 'border-top-left-radius: var(--radius); border-top-right-radius: var(--radius)',
@@ -733,14 +823,20 @@ export function generateDeclarations(utility: string): string {
             bl: 'border-bottom-left-radius: var(--radius)',
             br: 'border-bottom-right-radius: var(--radius)',
         };
-        if (val in roundedDir) {return roundedDir[val];}
+        if (val in roundedDir) {
+            return roundedDir[val];
+        }
         // rounded-t-lg, rounded-tr-sm, etc.
         const m = val.match(/^([trblse]+)-(.+)$/);
         if (m) {
             const [, dir, size] = m;
             const sizeVal = RADIUS_SIZES.has(size)
                 ? `var(--radius-${size})`
-                : size === 'full' ? 'calc(infinity * 1px)' : size === 'none' ? '0' : size;
+                : size === 'full'
+                  ? 'calc(infinity * 1px)'
+                  : size === 'none'
+                    ? '0'
+                    : size;
             if (dir in roundedDir) {
                 return roundedDir[dir].replace(/var\(--radius\)/g, sizeVal);
             }
@@ -748,7 +844,9 @@ export function generateDeclarations(utility: string): string {
         if (val.startsWith('[') && val.endsWith(']')) {
             return `border-radius: ${val.slice(1, -1)}`;
         }
-        if (RADIUS_SIZES.has(val)) {return `border-radius: var(--radius-${val})`;}
+        if (RADIUS_SIZES.has(val)) {
+            return `border-radius: var(--radius-${val})`;
+        }
     }
 
     // ── 6. Text size ────────────────────────────────────────────────────────
@@ -770,12 +868,22 @@ export function generateDeclarations(utility: string): string {
     if (utility.startsWith('leading-')) {
         const val = utility.slice(8);
         const named: Record<string, string> = {
-            none: '1', tight: '1.25', snug: '1.375', normal: '1.5',
-            relaxed: '1.625', loose: '2',
+            none: '1',
+            tight: '1.25',
+            snug: '1.375',
+            normal: '1.5',
+            relaxed: '1.625',
+            loose: '2',
         };
-        if (val in named) {return `line-height: ${named[val]}`;}
-        if (val.startsWith('[') && val.endsWith(']')) {return `line-height: ${val.slice(1, -1)}`;}
-        if (!isNaN(parseFloat(val))) {return `line-height: calc(var(--spacing) * ${val})`;}
+        if (val in named) {
+            return `line-height: ${named[val]}`;
+        }
+        if (val.startsWith('[') && val.endsWith(']')) {
+            return `line-height: ${val.slice(1, -1)}`;
+        }
+        if (!Number.isNaN(parseFloat(val))) {
+            return `line-height: calc(var(--spacing) * ${val})`;
+        }
     }
 
     // ── 8. Tracking (letter-spacing) ───────────────────────────────────────
@@ -789,8 +897,12 @@ export function generateDeclarations(utility: string): string {
             wider: 'var(--tracking-wider)',
             widest: 'var(--tracking-widest)',
         };
-        if (val in named) {return `letter-spacing: ${named[val]}`;}
-        if (val.startsWith('[') && val.endsWith(']')) {return `letter-spacing: ${val.slice(1, -1)}`;}
+        if (val in named) {
+            return `letter-spacing: ${named[val]}`;
+        }
+        if (val.startsWith('[') && val.endsWith(']')) {
+            return `letter-spacing: ${val.slice(1, -1)}`;
+        }
     }
 
     // ── 9. Font family ──────────────────────────────────────────────────────
@@ -801,14 +913,18 @@ export function generateDeclarations(utility: string): string {
             serif: 'var(--font-serif, ui-serif, Georgia, serif)',
             mono: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
         };
-        if (val in familyNames) {return `font-family: ${familyNames[val]}`;}
+        if (val in familyNames) {
+            return `font-family: ${familyNames[val]}`;
+        }
         if (val.startsWith('[') && val.endsWith(']')) {
             return `font-family: ${val.slice(1, -1).replace(/_/g, ' ')}`;
         }
     }
 
     // ── 10. Shadow ──────────────────────────────────────────────────────────
-    if (utility === 'shadow') {return 'box-shadow: var(--shadow)';}
+    if (utility === 'shadow') {
+        return 'box-shadow: var(--shadow)';
+    }
     if (utility.startsWith('shadow-')) {
         const val = utility.slice(7);
         if (val.startsWith('[') && val.endsWith(']')) {
@@ -821,52 +937,84 @@ export function generateDeclarations(utility: string): string {
     }
 
     // ── 11. Outline ─────────────────────────────────────────────────────────
-    if (utility === 'outline-none') {return 'outline: 2px solid transparent; outline-offset: 2px';}
+    if (utility === 'outline-none') {
+        return 'outline: 2px solid transparent; outline-offset: 2px';
+    }
     if (utility.startsWith('outline-')) {
         const val = utility.slice(8);
-        if (/^\d+$/.test(val)) {return `outline-width: ${val}px`;}
+        if (/^\d+$/.test(val)) {
+            return `outline-width: ${val}px`;
+        }
     }
 
     // ── 12. Ring ────────────────────────────────────────────────────────────
-    if (utility === 'ring') {return '--tw-ring-shadow: 0 0 0 3px var(--tw-ring-color, #3b82f680)';}
+    if (utility === 'ring') {
+        return '--tw-ring-shadow: 0 0 0 3px var(--tw-ring-color, #3b82f680)';
+    }
     if (utility.startsWith('ring-')) {
         const val = utility.slice(5);
-        if (/^\d+$/.test(val)) {return `--tw-ring-shadow: 0 0 0 ${val}px var(--tw-ring-color, #3b82f680)`;}
+        if (/^\d+$/.test(val)) {
+            return `--tw-ring-shadow: 0 0 0 ${val}px var(--tw-ring-color, #3b82f680)`;
+        }
     }
 
     // ── 13. Grow / shrink numbers ───────────────────────────────────────────
-    if (utility.startsWith('grow-')) {return `flex-grow: ${utility.slice(5)}`;}
-    if (utility.startsWith('shrink-')) {return `flex-shrink: ${utility.slice(7)}`;}
+    if (utility.startsWith('grow-')) {
+        return `flex-grow: ${utility.slice(5)}`;
+    }
+    if (utility.startsWith('shrink-')) {
+        return `flex-shrink: ${utility.slice(7)}`;
+    }
 
     // ── 14. Order ───────────────────────────────────────────────────────────
     if (utility.startsWith('order-')) {
         const val = utility.slice(6);
-        if (val === 'first') {return 'order: -9999';}
-        if (val === 'last') {return 'order: 9999';}
-        if (val === 'none') {return 'order: 0';}
+        if (val === 'first') {
+            return 'order: -9999';
+        }
+        if (val === 'last') {
+            return 'order: 9999';
+        }
+        if (val === 'none') {
+            return 'order: 0';
+        }
         return `order: ${val}`;
     }
 
     // ── 15. Columns ─────────────────────────────────────────────────────────
     if (utility.startsWith('columns-')) {
         const val = utility.slice(8);
-        if (!isNaN(parseInt(val))) {return `columns: ${val}`;}
+        if (!Number.isNaN(parseInt(val, 10))) {
+            return `columns: ${val}`;
+        }
         return `columns: var(--container-${val})`;
     }
 
     // ── 16. Grid cols/rows ──────────────────────────────────────────────────
     if (utility.startsWith('grid-cols-')) {
         const val = utility.slice(10);
-        if (val === 'none') {return 'grid-template-columns: none';}
-        if (val === 'subgrid') {return 'grid-template-columns: subgrid';}
-        if (val.startsWith('[')) {return `grid-template-columns: ${val.slice(1, -1).replace(/_/g, ' ')}`;}
+        if (val === 'none') {
+            return 'grid-template-columns: none';
+        }
+        if (val === 'subgrid') {
+            return 'grid-template-columns: subgrid';
+        }
+        if (val.startsWith('[')) {
+            return `grid-template-columns: ${val.slice(1, -1).replace(/_/g, ' ')}`;
+        }
         return `grid-template-columns: repeat(${val}, minmax(0, 1fr))`;
     }
     if (utility.startsWith('grid-rows-')) {
         const val = utility.slice(10);
-        if (val === 'none') {return 'grid-template-rows: none';}
-        if (val === 'subgrid') {return 'grid-template-rows: subgrid';}
-        if (val.startsWith('[')) {return `grid-template-rows: ${val.slice(1, -1).replace(/_/g, ' ')}`;}
+        if (val === 'none') {
+            return 'grid-template-rows: none';
+        }
+        if (val === 'subgrid') {
+            return 'grid-template-rows: subgrid';
+        }
+        if (val.startsWith('[')) {
+            return `grid-template-rows: ${val.slice(1, -1).replace(/_/g, ' ')}`;
+        }
         return `grid-template-rows: repeat(${val}, minmax(0, 1fr))`;
     }
 
@@ -896,7 +1044,9 @@ export function generateDeclarations(utility: string): string {
     }
     if (utility.startsWith('rotate-')) {
         const val = utility.slice(7);
-        if (val.startsWith('[')) {return `rotate: ${val.slice(1, -1)}`;}
+        if (val.startsWith('[')) {
+            return `rotate: ${val.slice(1, -1)}`;
+        }
         return `rotate: ${val}deg`;
     }
     if (utility.startsWith('translate-x-')) {
@@ -917,24 +1067,34 @@ export function generateDeclarations(utility: string): string {
     if (utility === 'transition-all') {
         return 'transition-property: all; transition-timing-function: var(--tw-ease, ease); transition-duration: var(--tw-duration, 150ms)';
     }
-    if (utility === 'transition-none') {return 'transition-property: none';}
+    if (utility === 'transition-none') {
+        return 'transition-property: none';
+    }
     if (utility.startsWith('duration-')) {
         const val = utility.slice(9);
-        if (val.startsWith('[')) {return `transition-duration: ${val.slice(1, -1)}`;}
+        if (val.startsWith('[')) {
+            return `transition-duration: ${val.slice(1, -1)}`;
+        }
         return `transition-duration: ${val}ms`;
     }
     if (utility.startsWith('ease-')) {
         const eases: Record<string, string> = {
-            linear: 'linear', in: 'cubic-bezier(0.4, 0, 1, 1)',
-            out: 'cubic-bezier(0, 0, 0.2, 1)', 'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+            linear: 'linear',
+            in: 'cubic-bezier(0.4, 0, 1, 1)',
+            out: 'cubic-bezier(0, 0, 0.2, 1)',
+            'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
         };
         const val = utility.slice(5);
-        if (val in eases) {return `transition-timing-function: ${eases[val]}`;}
+        if (val in eases) {
+            return `transition-timing-function: ${eases[val]}`;
+        }
         return `transition-timing-function: var(--ease-${val})`;
     }
     if (utility.startsWith('delay-')) {
         const val = utility.slice(6);
-        if (val.startsWith('[')) {return `transition-delay: ${val.slice(1, -1)}`;}
+        if (val.startsWith('[')) {
+            return `transition-delay: ${val.slice(1, -1)}`;
+        }
         return `transition-delay: ${val}ms`;
     }
 
@@ -942,10 +1102,14 @@ export function generateDeclarations(utility: string): string {
     // Try all color prefixes, longest match first to avoid partial matches
     const colorPrefixes = Object.keys(COLOR_PROPS).sort((a, b) => b.length - a.length);
     for (const prefix of colorPrefixes) {
-        if (utility === prefix || utility.startsWith(prefix + '-')) {
+        if (utility === prefix || utility.startsWith(`${prefix}-`)) {
             const rest = utility.slice(prefix.length + 1);
-            if (!rest && utility !== prefix) {continue;} // prefix without value
-            if (!rest && utility === prefix) {continue;} // bare prefix, no color value
+            if (!rest && utility !== prefix) {
+                continue;
+            } // prefix without value
+            if (!rest && utility === prefix) {
+                continue;
+            } // bare prefix, no color value
             const cssProp = COLOR_PROPS[prefix];
             const colorVal = resolveColorValue(rest);
             return `${cssProp}: ${colorVal}`;
@@ -956,7 +1120,7 @@ export function generateDeclarations(utility: string): string {
     // Try all spacing prefixes, longest match first
     const spacingPrefixes = Object.keys(SPACING_PROPS).sort((a, b) => b.length - a.length);
     for (const prefix of spacingPrefixes) {
-        const dashPrefix = prefix + '-';
+        const dashPrefix = `${prefix}-`;
         if (utility.startsWith(dashPrefix)) {
             const val = utility.slice(dashPrefix.length);
             // Handle negative: -m-4 → the class name would be "-m-4"
@@ -965,7 +1129,9 @@ export function generateDeclarations(utility: string): string {
             const props = SPACING_PROPS[prefix];
 
             const resolved = resolveSpacingValue(negative ? `-${rawVal}` : rawVal, props[0]);
-            if (!resolved) {continue;}
+            if (!resolved) {
+                continue;
+            }
 
             return props.map(p => `${p}: ${resolved}`).join('; ');
         }
@@ -995,7 +1161,9 @@ export function generateCSSRule(className: string): string {
     const { utility, pseudoSuffix, selectorPrefix } = parseVariants(className);
     const declarations = generateDeclarations(utility);
 
-    if (!declarations) {return '';}
+    if (!declarations) {
+        return '';
+    }
 
     const escapedClass = escapeCSSSelector(className);
     const selector = `${selectorPrefix}.${escapedClass}${pseudoSuffix}`;

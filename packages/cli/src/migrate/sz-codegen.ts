@@ -29,10 +29,16 @@ export function generateSzExpression(obj: Record<string, unknown>): string {
  */
 export function generateSzHtmlValue(obj: Record<string, unknown>, braces = false): string {
     const s = objectToString(obj);
-    if (braces) {return s;}
+    if (braces) {
+        return s;
+    }
     // Strip outermost braces: "{ ... }" → "..."
-    if (s.startsWith('{ ') && s.endsWith(' }')) {return s.slice(2, -2);}
-    if (s.startsWith('{') && s.endsWith('}')) {return s.slice(1, -1).trim();}
+    if (s.startsWith('{ ') && s.endsWith(' }')) {
+        return s.slice(2, -2);
+    }
+    if (s.startsWith('{') && s.endsWith('}')) {
+        return s.slice(1, -1).trim();
+    }
     return s;
 }
 
@@ -59,7 +65,9 @@ export function generateSzObjectLiteral(obj: Record<string, unknown>): string {
  */
 function objectToString(obj: Record<string, unknown>, indent = 0): string {
     const entries = Object.entries(obj);
-    if (entries.length === 0) {return '{}';}
+    if (entries.length === 0) {
+        return '{}';
+    }
 
     const spaces = ' '.repeat(indent);
     const innerSpaces = ' '.repeat(indent + 2);
@@ -71,7 +79,9 @@ function objectToString(obj: Record<string, unknown>, indent = 0): string {
     }
 
     // Multiple entries: multi-line
-    const lines = entries.map(([k, v]) => `${innerSpaces}${formatKey(k)}: ${formatValue(v, indent + 2)},`);
+    const lines = entries.map(
+        ([k, v]) => `${innerSpaces}${formatKey(k)}: ${formatValue(v, indent + 2)},`,
+    );
     return `{\n${lines.join('\n')}\n${spaces}}`;
 }
 
@@ -81,8 +91,8 @@ function objectToString(obj: Record<string, unknown>, indent = 0): string {
  * @returns True if any value is a nested plain object
  */
 function hasDeepNesting(obj: Record<string, unknown>): boolean {
-    return Object.values(obj).some(v =>
-        typeof v === 'object' && v !== null && !isColorOpacityObj(v) && !isGradientObj(v),
+    return Object.values(obj).some(
+        v => typeof v === 'object' && v !== null && !isColorOpacityObj(v) && !isGradientObj(v),
     );
 }
 
@@ -125,11 +135,21 @@ function formatKey(key: string): string {
  * @returns Formatted JS expression string
  */
 function formatValue(value: unknown, indent: number): string {
-    if (value === true) {return 'true';}
-    if (value === false) {return 'false';}
-    if (value === null) {return 'null';}
-    if (typeof value === 'number') {return String(value);}
-    if (typeof value === 'string') {return `'${escapeString(value)}'`;}
+    if (value === true) {
+        return 'true';
+    }
+    if (value === false) {
+        return 'false';
+    }
+    if (value === null) {
+        return 'null';
+    }
+    if (typeof value === 'number') {
+        return String(value);
+    }
+    if (typeof value === 'string') {
+        return `'${escapeString(value)}'`;
+    }
 
     if (Array.isArray(value)) {
         const items = value.map(v => formatValue(v, indent));

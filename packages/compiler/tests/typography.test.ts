@@ -17,7 +17,7 @@ describe('typography — font family', () => {
         expect(t({ fontFamily: 'mono' })).toBe('font-mono');
     });
 
-    it('{ fontFamily: "\'My Font\'" } → font-[\'My_Font\'] (arbitrary)', () => {
+    it("{ fontFamily: \"'My Font'\" } → font-['My_Font'] (arbitrary)", () => {
         expect(t({ fontFamily: "'My Font'" })).toBe("font-['My_Font']");
     });
 
@@ -312,17 +312,17 @@ describe('typography — text overflow & whitespace', () => {
         expect(t({ content: 'none' })).toBe('content-none');
     });
 
-    it('{ content: "\'hello\'" } → content-[\'hello\'] (arbitrary, single-quote CSS string)', () => {
+    it("{ content: \"'hello'\" } → content-['hello'] (arbitrary, single-quote CSS string)", () => {
         expect(t({ content: "'hello'" })).toBe("content-['hello']");
     });
 
     // Double-quote CSS string style is normalized to single-quote (Tailwind convention).
     // content: '""' → content-[''] so Tailwind JIT generates CSS for the class.
-    it('{ content: \'""\'  } → content-[\'\'} (empty string — double-quote normalized to single-quote)', () => {
+    it("{ content: '\"\"'  } → content-[''} (empty string — double-quote normalized to single-quote)", () => {
         expect(t({ content: '""' })).toBe("content-['']");
     });
 
-    it('{ content: \'"hello"\' } → content-[\'hello\'] (double-quote normalized to single-quote)', () => {
+    it("{ content: '\"hello\"' } → content-['hello'] (double-quote normalized to single-quote)", () => {
         expect(t({ content: '"hello"' })).toBe("content-['hello']");
     });
 
@@ -364,7 +364,7 @@ describe('typography — list style', () => {
         expect(t({ listImg: 'none' })).toBe('list-image-none');
     });
 
-    it('{ listImg: "url(\'/img.png\')" } → list-image-[url(\'/img.png\')] (arbitrary)', () => {
+    it("{ listImg: \"url('/img.png')\" } → list-image-[url('/img.png')] (arbitrary)", () => {
         expect(t({ listImg: "url('/img.png')" })).toBe("list-image-[url('/img.png')]");
     });
 

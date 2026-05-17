@@ -1,0 +1,175 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+    "vcs": {
+        "enabled": true,
+        "clientKind": "git",
+        "useIgnoreFile": true
+    },
+    "files": {
+        "includes": [
+            "packages/**/*.ts",
+            "packages/**/*.tsx",
+            "packages/**/*.js",
+            "packages/**/*.jsx",
+            "packages/**/*.css",
+            "apps/**/*.css",
+            "playground/**/*.css",
+            "packages/**/*.json",
+            "packages/**/*.jsonc",
+            "scripts/**/*.ts",
+            "scripts/**/*.mjs",
+            "scripts/**/*.js",
+            "eslint.config.js",
+            "vitest.config.ts",
+            "biome.json",
+            "tsconfig.json",
+            "tsconfig.eslint.json",
+            "!**/dist",
+            "!**/build",
+            "!**/node_modules",
+            "!**/pkg",
+            "!**/pkg-node",
+            "!**/target",
+            "!**/.turbo",
+            "!**/.next",
+            "!**/.astro",
+            "!**/coverage",
+            "!**/test-results",
+            "!**/playwright-report",
+            "!packages/core/core",
+            "!**/csszyx-classes.html",
+            "!**/next-env.d.ts",
+            "!**/*.cjs",
+            "!**/llms*.txt",
+            "!**/CHANGELOG.md",
+            "!**/*.benchmark.json",
+            "!apps/docs/src/styles/landing.css"
+        ]
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 100,
+        "lineEnding": "lf"
+    },
+    "javascript": {
+        "formatter": {
+            "quoteStyle": "single",
+            "trailingCommas": "all",
+            "semicolons": "always",
+            "arrowParentheses": "asNeeded",
+            "bracketSpacing": true,
+            "jsxQuoteStyle": "double"
+        }
+    },
+    "json": {
+        "formatter": {
+            "indentWidth": 4,
+            "trailingCommas": "none"
+        }
+    },
+    "css": {
+        "parser": {
+            "tailwindDirectives": true
+        },
+        "formatter": {
+            "enabled": true
+        },
+        "linter": {
+            "enabled": false
+        }
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": true,
+            "complexity": {
+                "noUselessSwitchCase": "warn",
+                "useArrowFunction": "warn",
+                "useLiteralKeys": "warn",
+                "useOptionalChain": "warn"
+            },
+            "correctness": {
+                "noUnusedFunctionParameters": "off",
+                "noUnusedImports": "error",
+                "useParseIntRadix": "warn"
+            },
+            "style": {
+                "useNodejsImportProtocol": "warn",
+                "useTemplate": "warn",
+                "useImportType": "warn"
+            },
+            "suspicious": {
+                "noAssignInExpressions": "error",
+                "noConfusingVoidType": "warn",
+                "noEmptyInterface": "warn",
+                "noExplicitAny": "warn",
+                "noGlobalIsNan": "warn",
+                "noImplicitAnyLet": "error",
+                "noTemplateCurlyInString": "off"
+            }
+        }
+    },
+    "assist": {
+        "enabled": true,
+        "actions": {
+            "source": {
+                "organizeImports": "on"
+            }
+        }
+    },
+    "overrides": [
+        {
+            "includes": ["**/package.json"],
+            "json": {
+                "formatter": {
+                    "indentWidth": 2
+                }
+            }
+        },
+        {
+            "includes": [
+                "**/tests/**/*.ts",
+                "**/tests/**/*.tsx",
+                "**/*.test.ts",
+                "**/*.test.tsx",
+                "**/*.spec.ts"
+            ],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off",
+                        "noConsole": "off"
+                    },
+                    "style": {
+                        "useTemplate": "off"
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["scripts/**", "packages/*/scripts/**", "**/*.mjs"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noConsole": "off"
+                    },
+                    "style": {
+                        "useNodejsImportProtocol": "off"
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["packages/cli/**", "packages/dev-tools/**", "packages/e2e/**"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noConsole": "off"
+                    }
+                }
+            }
+        }
+    ]
+}

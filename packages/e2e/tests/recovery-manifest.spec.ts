@@ -90,13 +90,21 @@ test.describe('Recovery manifest pipeline (vite-react fixture)', () => {
     });
 
     test('manifest entries match the tokens written into the DOM', async ({ page }) => {
-        const csrToken = await page.locator('[data-testid="csr-section"]').getAttribute('data-sz-recovery-token');
-        const devToken = await page.locator('[data-testid="dev-only-section"]').getAttribute('data-sz-recovery-token');
+        const csrToken = await page
+            .locator('[data-testid="csr-section"]')
+            .getAttribute('data-sz-recovery-token');
+        const devToken = await page
+            .locator('[data-testid="dev-only-section"]')
+            .getAttribute('data-sz-recovery-token');
         if (csrToken === null || devToken === null) {
-            throw new Error('Recovery tokens missing from fixture DOM — earlier tests should have caught this.');
+            throw new Error(
+                'Recovery tokens missing from fixture DOM — earlier tests should have caught this.',
+            );
         }
 
-        const manifest = parseManifest(await page.locator('script#__SZ_RECOVERY_MANIFEST__').textContent());
+        const manifest = parseManifest(
+            await page.locator('script#__SZ_RECOVERY_MANIFEST__').textContent(),
+        );
 
         // Each DOM token must have a matching manifest entry whose mode lines up.
         expect(manifest.tokens[csrToken]?.mode).toBe('csr');
@@ -111,7 +119,9 @@ test.describe('Recovery manifest pipeline (vite-react fixture)', () => {
         // a real browser context.
         const found = await page.evaluate(() => {
             const el = document.getElementById('__SZ_RECOVERY_MANIFEST__');
-            if (!el) {return null;}
+            if (!el) {
+                return null;
+            }
             try {
                 return JSON.parse(el.textContent ?? '{}');
             } catch {
@@ -130,7 +140,7 @@ test.describe('Recovery manifest pipeline (vite-react fixture)', () => {
         // can reach the manifest the same way (no special escaping).
         const probe = page.locator('[data-testid="manifest-probe"]');
         await expect(probe).not.toHaveText('pending');
-        const reported = JSON.parse(await probe.textContent() ?? '{}');
+        const reported = JSON.parse((await probe.textContent()) ?? '{}');
         expect(reported.buildId).toBe(true);
         expect(reported.checksum).toBe(true);
         expect(reported.tokenCount).toBeGreaterThanOrEqual(2);

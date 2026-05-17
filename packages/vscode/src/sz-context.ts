@@ -21,14 +21,9 @@ const SCAN_WINDOW = 2000;
  * @param position - The current cursor position
  * @returns SzContext describing whether cursor is in a sz prop, and if so at key or value position
  */
-export function getSzContext(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-): SzContext {
+export function getSzContext(document: vscode.TextDocument, position: vscode.Position): SzContext {
     const offset = document.offsetAt(position);
     const scanStart = Math.max(0, offset - SCAN_WINDOW);
-    const text = document.getText(
-        new vscode.Range(document.positionAt(scanStart), position),
-    );
+    const text = document.getText(new vscode.Range(document.positionAt(scanStart), position));
     return parseSzContext(text);
 }

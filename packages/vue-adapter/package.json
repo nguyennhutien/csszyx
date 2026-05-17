@@ -1,50 +1,50 @@
 {
-    "name": "@csszyx/vue-adapter",
-    "version": "0.7.0",
-    "private": true,
-    "description": "Vue SFC preprocessor for csszyx - transform sz props to className",
-    "license": "MIT",
-    "type": "module",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "require": "./dist/index.cjs"
-        }
-    },
-    "scripts": {
-        "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-        "dev": "tsup src/index.ts --format esm --dts --watch",
-        "type-check": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@csszyx/compiler": "workspace:*"
-    },
-    "peerDependencies": {
-        "vue": "^3.0.0"
-    },
-    "peerDependenciesMeta": {
-        "vue": {
-            "optional": true
-        }
-    },
-    "devDependencies": {
-        "@types/node": "^20.11.0",
-        "tsup": "^8.0.0",
-        "typescript": "^5.3.3",
-        "vite": "^5.0.8",
-        "vue": "^3.4.0"
-    },
-    "files": [
-        "dist"
-    ],
-    "keywords": [
-        "csszyx",
-        "vue",
-        "sfc",
-        "preprocessor",
-        "tailwind"
-    ]
+  "name": "@csszyx/vue-adapter",
+  "version": "0.7.0",
+  "private": true,
+  "description": "Vue SFC preprocessor for csszyx - transform sz props to className",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "unbuild",
+    "dev": "unbuild --stub",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@csszyx/compiler": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13",
+    "vue": "^3.4.0",
+    "unbuild": "^3.6.1"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "csszyx",
+    "vue",
+    "sfc",
+    "preprocessor",
+    "tailwind"
+  ]
 }

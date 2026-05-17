@@ -46,10 +46,14 @@ function deepMerge(target: SzObject, source: SzObject): SzObject {
         const sv = source[key];
         const tv = target[key];
         if (
-            sv !== null && sv !== undefined &&
-            typeof sv === 'object' && !Array.isArray(sv) &&
-            tv !== null && tv !== undefined &&
-            typeof tv === 'object' && !Array.isArray(tv)  // eslint-disable-line
+            sv !== null &&
+            sv !== undefined &&
+            typeof sv === 'object' &&
+            !Array.isArray(sv) &&
+            tv !== null &&
+            tv !== undefined &&
+            typeof tv === 'object' &&
+            !Array.isArray(tv)
         ) {
             result[key] = deepMerge(tv as SzObject, sv as SzObject);
         } else {
@@ -116,13 +120,17 @@ export function szv<V extends VariantSchema>(
         if (selection) {
             for (const key of Object.keys(selection)) {
                 const val = (selection as Record<string, unknown>)[key];
-                if (val !== null && val !== undefined) {resolved[key] = val;}
+                if (val !== null && val !== undefined) {
+                    resolved[key] = val;
+                }
             }
         }
 
         for (const variantKey of Object.keys(config.variants)) {
             const selectedValue = resolved[variantKey];
-            if (selectedValue === null || selectedValue === undefined) {continue;}
+            if (selectedValue === null || selectedValue === undefined) {
+                continue;
+            }
 
             const variantObj = config.variants[variantKey][selectedValue as string];
             if (variantObj) {

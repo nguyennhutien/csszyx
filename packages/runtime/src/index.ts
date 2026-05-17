@@ -12,29 +12,10 @@
 // Internal imports for use in initRuntime
 import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 
+// Export SzInput type from concatenate
+export type { SzInput } from './concatenate.js';
 // Export concatenation helpers
 export { _sz, _sz2, _sz3, _szIf, _szMerge, _szSwitch } from './concatenate.js';
-
-// Export variant authoring helper
-export { szv } from './variants.js';
-
-// Re-export lite helpers so consumers can import everything from @csszyx/runtime
-export { __szColorVar } from './lite.js';
-
-// Export verification functions
-export {
-    getRecoveryMode,
-    hasRecoveryToken,
-    isValidManifest,
-    loadManifestFromDOM,
-    type RecoveryManifest,
-    type RecoveryMode,
-    type TokenData,
-    type VerificationResult,
-    verifyAllTokens,
-    verifyRecoveryToken,
-} from './verify.js';
-
 // Export hydration functions
 export {
     abortHydration,
@@ -61,9 +42,23 @@ export {
     verifyMangleChecksum,
     verifyMangleMapIntegrity,
 } from './hydration.js';
-
-// Export SzInput type from concatenate
-export type { SzInput } from './concatenate.js';
+// Re-export lite helpers so consumers can import everything from @csszyx/runtime
+export { __szColorVar } from './lite.js';
+// Export variant authoring helper
+export { szv } from './variants.js';
+// Export verification functions
+export {
+    getRecoveryMode,
+    hasRecoveryToken,
+    isValidManifest,
+    loadManifestFromDOM,
+    type RecoveryManifest,
+    type RecoveryMode,
+    type TokenData,
+    type VerificationResult,
+    verifyAllTokens,
+    verifyRecoveryToken,
+} from './verify.js';
 
 /**
  * Runtime version.
@@ -74,25 +69,25 @@ export const VERSION = '0.0.0';
  * Runtime configuration options.
  */
 export interface RuntimeConfig {
-  /**
-   * Enable development mode features
-   */
-  development?: boolean;
+    /**
+     * Enable development mode features
+     */
+    development?: boolean;
 
-  /**
-   * Allow CSR recovery in development
-   */
-  allowCSRRecovery?: boolean;
+    /**
+     * Allow CSR recovery in development
+     */
+    allowCSRRecovery?: boolean;
 
-  /**
-   * Enable strict hydration checks
-   */
-  strictHydration?: boolean;
+    /**
+     * Enable strict hydration checks
+     */
+    strictHydration?: boolean;
 
-  /**
-   * Enable debug logging
-   */
-  debug?: boolean;
+    /**
+     * Enable debug logging
+     */
+    debug?: boolean;
 }
 
 /**
@@ -109,8 +104,8 @@ export const DEFAULT_RUNTIME_CONFIG: Required<RuntimeConfig> = {
  * Global runtime state.
  */
 interface RuntimeState {
-  config: Required<RuntimeConfig>;
-  initialized: boolean;
+    config: Required<RuntimeConfig>;
+    initialized: boolean;
 }
 
 /**
@@ -159,7 +154,6 @@ export function initRuntime(config: Partial<RuntimeConfig> = {}): void {
     }
 
     if (runtimeState.config.debug) {
-        // eslint-disable-next-line no-console
         console.log('[csszyx] Runtime initialized', runtimeState.config);
     }
 

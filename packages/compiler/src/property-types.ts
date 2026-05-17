@@ -215,7 +215,7 @@ export function getPropertyCategory(property: string): PropertyCategory {
  * Set of all properties that are color-type.
  * Used for quick lookup to determine if __szColorVar import is needed.
  */
-export const COLOR_PROPERTIES = new Set(
+export const COLOR_PROPERTIES: Set<string> = new Set(
     Object.entries(PROPERTY_CATEGORY_MAP)
         .filter(([, cat]) => cat === PropertyCategory.COLOR)
         .map(([key]) => key),

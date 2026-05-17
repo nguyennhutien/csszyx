@@ -85,8 +85,9 @@ describe('css: {} — arbitrary CSS sub-prop', () => {
 
     describe('value normalisation', () => {
         it('spaces in values are replaced by underscores', () => {
-            expect(t({ css: { gridTemplateColumns: 'repeat(3, 1fr)' } }))
-                .toBe('[grid-template-columns:repeat(3,_1fr)]');
+            expect(t({ css: { gridTemplateColumns: 'repeat(3, 1fr)' } })).toBe(
+                '[grid-template-columns:repeat(3,_1fr)]',
+            );
         });
 
         it('numeric values are converted to strings', () => {
@@ -100,7 +101,9 @@ describe('css: {} — arbitrary CSS sub-prop', () => {
         });
 
         it('null/undefined values inside css are skipped', () => {
-            const result = t({ css: { writingMode: 'vertical-lr', touchAction: null as unknown as string } });
+            const result = t({
+                css: { writingMode: 'vertical-lr', touchAction: null as unknown as string },
+            });
             expect(result).toBe('[writing-mode:vertical-lr]');
         });
     });

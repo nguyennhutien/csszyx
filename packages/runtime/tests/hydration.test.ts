@@ -40,8 +40,7 @@ describe('CSR Recovery', () => {
 });
 
 describe('abortHydration', () => {
-    let element: HTMLElement,
-        error: HydrationError;
+    let element: HTMLElement, error: HydrationError;
 
     beforeEach(() => {
         element = document.createElement('div');
@@ -65,9 +64,7 @@ describe('abortHydration', () => {
 
     it('should add abort reason', () => {
         abortHydration(element, error);
-        expect(element.getAttribute('data-sz-abort-reason')).toBe(
-            'checksum_mismatch',
-        );
+        expect(element.getAttribute('data-sz-abort-reason')).toBe('checksum_mismatch');
     });
 
     it('should add interactive marker', () => {

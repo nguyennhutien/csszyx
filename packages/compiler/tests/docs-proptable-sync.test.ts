@@ -12,9 +12,9 @@
  * the MDX rows ARE the source of truth.
  */
 
-import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform.js';
@@ -57,8 +57,7 @@ function extractRows(content: string): DocRow[] {
     const rows: DocRow[] = [];
     // sz is always double-quoted; tw can be double- or single-quoted.
     const re = /\{\s*sz:\s*"((?:[^"\\]|\\.)*)"\s*,\s*tw:\s*(?:"([^"]*)"|'([^']*)')/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(content)) !== null) {
+    for (const m of content.matchAll(re)) {
         rows.push({ sz: m[1], tw: m[2] ?? m[3] });
     }
     return rows;

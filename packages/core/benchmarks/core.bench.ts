@@ -1,11 +1,11 @@
-import { bench, describe } from 'vitest';
-import { transform_sz, init, WasmCollisionDetector } from '../pkg-node/csszyx_core.js';
 import crypto from 'node:crypto';
+import { bench, describe } from 'vitest';
+import { init, transform_sz, WasmCollisionDetector } from '../pkg-node/csszyx_core.js';
 
 /**
  * Pure JavaScript implementation of the transformer (from @csszyx/compiler).
  */
-function transformJS(szProp: any, prefix = ''): string {
+function transformJS(szProp: Record<string, unknown>, prefix = ''): string {
     const classes: string[] = [];
 
     for (const [key, value] of Object.entries(szProp)) {
@@ -15,7 +15,7 @@ function transformJS(szProp: any, prefix = ''): string {
 
         if (typeof value === 'object' && !Array.isArray(value)) {
             const nestedPrefix = prefix ? `${prefix}${key}:` : `${key}:`;
-            classes.push(transformJS(value, nestedPrefix));
+            classes.push(transformJS(value as Record<string, unknown>, nestedPrefix));
             continue;
         }
 
@@ -64,15 +64,15 @@ describe('Core Performance Analysis', async () => {
             text: 'white',
             focus: {
                 ring: 2,
-                ringColor: 'blue-400'
-            }
+                ringColor: 'blue-400',
+            },
         },
         md: {
             p: 8,
             lg: {
-                m: 0
-            }
-        }
+                m: 0,
+            },
+        },
     };
 
     describe('Transformer: Complex Object', () => {

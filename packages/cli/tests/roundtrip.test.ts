@@ -24,18 +24,30 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('spacing', () => {
         it.each([
-            'p-4', 'p-0', 'p-0.5', 'p-px',
-            'pt-4', 'pr-2', 'pb-8', 'pl-1', 'px-6', 'py-3',
-            'm-4', 'm-auto', 'mt-2', 'mx-auto',
-            'gap-4', 'gap-x-2', 'gap-y-8',
-            'space-x-4', 'space-y-2',
-        ])('%s', (cls) => {
+            'p-4',
+            'p-0',
+            'p-0.5',
+            'p-px',
+            'pt-4',
+            'pr-2',
+            'pb-8',
+            'pl-1',
+            'px-6',
+            'py-3',
+            'm-4',
+            'm-auto',
+            'mt-2',
+            'mx-auto',
+            'gap-4',
+            'gap-x-2',
+            'gap-y-8',
+            'space-x-4',
+            'space-y-2',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
 
-        it.each([
-            '-mt-4', '-ml-2', '-m-1', '-space-x-4',
-        ])('negative: %s', (cls) => {
+        it.each(['-mt-4', '-ml-2', '-m-1', '-space-x-4'])('negative: %s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -45,11 +57,19 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('sizing', () => {
         it.each([
-            'w-4', 'w-full', 'w-screen', 'w-auto',
-            'h-16', 'h-full', 'h-screen',
-            'min-w-0', 'min-h-screen', 'max-h-full',
-            'size-4', 'size-full',
-        ])('%s', (cls) => {
+            'w-4',
+            'w-full',
+            'w-screen',
+            'w-auto',
+            'h-16',
+            'h-full',
+            'h-screen',
+            'min-w-0',
+            'min-h-screen',
+            'max-h-full',
+            'size-4',
+            'size-full',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -59,14 +79,30 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('typography', () => {
         it.each([
-            'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl',
-            'text-left', 'text-center', 'text-right', 'text-justify',
-            'text-red-500', 'text-blue-600', 'text-white',
-            'font-bold', 'font-semibold', 'font-normal',
-            'font-sans', 'font-serif', 'font-mono',
-            'leading-6', 'leading-tight', 'leading-none',
-            'tracking-tight', 'tracking-wide',
-        ])('%s', (cls) => {
+            'text-sm',
+            'text-base',
+            'text-lg',
+            'text-xl',
+            'text-2xl',
+            'text-left',
+            'text-center',
+            'text-right',
+            'text-justify',
+            'text-red-500',
+            'text-blue-600',
+            'text-white',
+            'font-bold',
+            'font-semibold',
+            'font-normal',
+            'font-sans',
+            'font-serif',
+            'font-mono',
+            'leading-6',
+            'leading-tight',
+            'leading-none',
+            'tracking-tight',
+            'tracking-wide',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -76,14 +112,25 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('background', () => {
         it.each([
-            'bg-blue-500', 'bg-white', 'bg-red-600',
-            'bg-center', 'bg-top', 'bg-bottom',
-            'bg-cover', 'bg-contain', 'bg-auto',
-            'bg-repeat', 'bg-no-repeat',
-            'bg-fixed', 'bg-local', 'bg-scroll',
-            'bg-clip-text', 'bg-clip-border',
-            'bg-origin-border', 'bg-origin-padding',
-        ])('%s', (cls) => {
+            'bg-blue-500',
+            'bg-white',
+            'bg-red-600',
+            'bg-center',
+            'bg-top',
+            'bg-bottom',
+            'bg-cover',
+            'bg-contain',
+            'bg-auto',
+            'bg-repeat',
+            'bg-no-repeat',
+            'bg-fixed',
+            'bg-local',
+            'bg-scroll',
+            'bg-clip-text',
+            'bg-clip-border',
+            'bg-origin-border',
+            'bg-origin-padding',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -93,15 +140,25 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('borders', () => {
         it.each([
-            'border-0', 'border-2', 'border-4', 'border-8',
-            'border-solid', 'border-dashed', 'border-dotted',
-            'border-red-500', 'border-gray-200',
-            'rounded-lg', 'rounded-full', 'rounded-none',
-            'rounded-t-lg', 'rounded-tl-md',
+            'border-0',
+            'border-2',
+            'border-4',
+            'border-8',
+            'border-solid',
+            'border-dashed',
+            'border-dotted',
+            'border-red-500',
+            'border-gray-200',
+            'rounded-lg',
+            'rounded-full',
+            'rounded-none',
+            'rounded-t-lg',
+            'rounded-tl-md',
             'ring-2',
-            'outline-2', 'outline-dashed',
+            'outline-2',
+            'outline-dashed',
             'outline-offset-2',
-        ])('%s', (cls) => {
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -111,14 +168,22 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('layout', () => {
         it.each([
-            'z-10', 'z-50',
-            'inset-0', 'inset-x-4', 'inset-y-0',
-            'top-0', 'right-4',
-            'overflow-hidden', 'overflow-auto',
-            'overflow-x-auto', 'overflow-y-scroll',
-            'object-cover', 'object-contain',
-            'aspect-square', 'aspect-video',
-        ])('%s', (cls) => {
+            'z-10',
+            'z-50',
+            'inset-0',
+            'inset-x-4',
+            'inset-y-0',
+            'top-0',
+            'right-4',
+            'overflow-hidden',
+            'overflow-auto',
+            'overflow-x-auto',
+            'overflow-y-scroll',
+            'object-cover',
+            'object-contain',
+            'aspect-square',
+            'aspect-video',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -128,13 +193,26 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('boolean classes', () => {
         it.each([
-            'block', 'flex', 'grid', 'hidden', 'inline',
-            'static', 'fixed', 'absolute', 'relative', 'sticky',
-            'visible', 'invisible',
-            'truncate', 'uppercase', 'lowercase', 'capitalize',
-            'underline', 'italic',
+            'block',
+            'flex',
+            'grid',
+            'hidden',
+            'inline',
+            'static',
+            'fixed',
+            'absolute',
+            'relative',
+            'sticky',
+            'visible',
+            'invisible',
+            'truncate',
+            'uppercase',
+            'lowercase',
+            'capitalize',
+            'underline',
+            'italic',
             'container',
-        ])('%s', (cls) => {
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -144,16 +222,26 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('flexbox & grid', () => {
         it.each([
-            'flex-row', 'flex-col', 'flex-row-reverse',
-            'justify-center', 'justify-between',
-            'items-center', 'items-start',
+            'flex-row',
+            'flex-col',
+            'flex-row-reverse',
+            'justify-center',
+            'justify-between',
+            'items-center',
+            'items-start',
             'self-end',
-            'grid-cols-3', 'grid-cols-12', 'grid-rows-4',
-            'col-span-3', 'col-start-2', 'col-end-4',
+            'grid-cols-3',
+            'grid-cols-12',
+            'grid-rows-4',
+            'col-span-3',
+            'col-start-2',
+            'col-end-4',
             'row-span-2',
-            'gap-4', 'gap-x-2',
-            'place-content-center', 'place-items-center',
-        ])('%s', (cls) => {
+            'gap-4',
+            'gap-x-2',
+            'place-content-center',
+            'place-items-center',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -163,10 +251,14 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('effects & filters', () => {
         it.each([
-            'shadow-sm', 'shadow-lg', 'shadow-none',
-            'opacity-50', 'opacity-0', 'opacity-100',
+            'shadow-sm',
+            'shadow-lg',
+            'shadow-none',
+            'opacity-50',
+            'opacity-0',
+            'opacity-100',
             'hue-rotate-90',
-        ])('%s', (cls) => {
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -176,14 +268,18 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('transforms', () => {
         it.each([
-            'scale-50', 'scale-100',
-            'rotate-45', 'rotate-90',
+            'scale-50',
+            'scale-100',
+            'rotate-45',
+            'rotate-90',
             '-rotate-45',
             'translate-x-4',
             '-translate-x-4',
-            'skew-x-3', 'skew-y-6',
-            'origin-center', 'origin-top',
-        ])('%s', (cls) => {
+            'skew-x-3',
+            'skew-y-6',
+            'origin-center',
+            'origin-top',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -193,11 +289,17 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('transitions', () => {
         it.each([
-            'transition-all', 'transition-colors', 'transition-none',
-            'duration-150', 'duration-300',
-            'ease-in', 'ease-out', 'ease-in-out',
-            'delay-100', 'delay-500',
-        ])('%s', (cls) => {
+            'transition-all',
+            'transition-colors',
+            'transition-none',
+            'duration-150',
+            'duration-300',
+            'ease-in',
+            'ease-out',
+            'ease-in-out',
+            'delay-100',
+            'delay-500',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -207,10 +309,13 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     describe('interactivity', () => {
         it.each([
-            'cursor-pointer', 'cursor-default',
-            'select-none', 'select-text',
-            'pointer-events-none', 'pointer-events-auto',
-        ])('%s', (cls) => {
+            'cursor-pointer',
+            'cursor-default',
+            'select-none',
+            'select-text',
+            'pointer-events-none',
+            'pointer-events-auto',
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -242,12 +347,16 @@ describe('round-trip: TW → migrate → compile', () => {
     describe('color + opacity', () => {
         it.each([
             // Integer opacity (no brackets) — already worked
-            'bg-white/90', 'border-black/5', 'text-black/50',
+            'bg-white/90',
+            'border-black/5',
+            'text-black/50',
             // Decimal opacity in brackets — was broken (op stayed as string)
-            'border-black/[0.05]', 'bg-white/[0.02]', 'bg-white/[0.04]',
+            'border-black/[0.05]',
+            'bg-white/[0.02]',
+            'bg-white/[0.04]',
             'hover:border-black/[0.08]',
             'dark:bg-white/[0.02]',
-        ])('%s', (cls) => {
+        ])('%s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });

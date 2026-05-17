@@ -1,15 +1,21 @@
 {
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
+        "composite": true,
+        "incremental": true,
+        "isolatedDeclarations": true,
+        "declaration": true,
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
         "outDir": "dist",
         "rootDir": "src",
         "types": ["node"]
     },
-    "include": [
-        "src/index.ts",
-        "src/unplugin.ts",
-        "src/vite.ts",
-        "src/webpack.ts"
+    "references": [
+        { "path": "../compiler" },
+        { "path": "../svelte-adapter" },
+        { "path": "../types" },
+        { "path": "../vue-adapter" }
     ],
+    "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"]
 }

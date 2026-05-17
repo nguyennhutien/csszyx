@@ -9,6 +9,14 @@
  * - TypeScript types
  */
 
+// === Compiler ===
+export {
+    type SzObject,
+    serializeManifest,
+    transform,
+    transformSourceCode,
+    validateSzRecover,
+} from '@csszyx/compiler';
 // === Core WASM ===
 export {
     compute_mangle_checksum,
@@ -16,8 +24,9 @@ export {
     transform_sz,
     verify_mangle_checksum,
 } from '@csszyx/core';
-
 // === Runtime Helpers ===
+// === Variant Authoring ===
+// === Hydration & SSR ===
 export {
     _sz,
     _sz2,
@@ -25,43 +34,17 @@ export {
     _szIf,
     _szMerge,
     _szSwitch,
-} from '@csszyx/runtime';
-
-// === Variant Authoring ===
-export { szv } from '@csszyx/runtime';
-
-// === Runtime Lite (minimal bundle) ===
-export { _szIf as _szIfLite, _sz as _szLite } from '@csszyx/runtime/lite';
-
-// === Hydration & SSR ===
-export {
     abortHydration,
     endHydration,
     getSSRContext,
     isHydrating,
     isSSREnvironment,
     startHydration,
+    szv,
     verifyMangleMapIntegrity,
 } from '@csszyx/runtime';
-
-// === Compiler ===
-export {
-    serializeManifest,
-    type SzObject,
-    transform,
-    transformSourceCode,
-    validateSzRecover,
-} from '@csszyx/compiler';
-
-// === Unplugin ===
-export {
-    esbuildPlugin,
-    rollupPlugin,
-    unplugin,
-    vitePlugin,
-    webpackPlugin,
-} from '@csszyx/unplugin';
-
+// === Runtime Lite (minimal bundle) ===
+export { _sz as _szLite, _szIf as _szIfLite } from '@csszyx/runtime/lite';
 // === Types ===
 export type {
     CsszyxConfig,
@@ -72,6 +55,14 @@ export type {
     SzProp,
     SzProps,
 } from '@csszyx/types';
+// === Unplugin ===
+export {
+    esbuildPlugin,
+    rollupPlugin,
+    unplugin,
+    vitePlugin,
+    webpackPlugin,
+} from '@csszyx/unplugin';
 
 // === JSX Type Augmentation ===
 // Triple-slash reference: extends React.HTMLAttributes and React.SVGAttributes

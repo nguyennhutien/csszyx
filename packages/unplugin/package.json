@@ -25,35 +25,55 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./vite": {
-      "types": "./dist/vite.d.ts",
-      "import": "./dist/vite.js",
-      "require": "./dist/vite.cjs"
+      "import": {
+        "types": "./dist/vite.d.mts",
+        "default": "./dist/vite.mjs"
+      },
+      "require": {
+        "types": "./dist/vite.d.cts",
+        "default": "./dist/vite.cjs"
+      }
     },
     "./webpack": {
-      "types": "./dist/webpack.d.ts",
-      "import": "./dist/webpack.js",
-      "require": "./dist/webpack.cjs"
+      "import": {
+        "types": "./dist/webpack.d.mts",
+        "default": "./dist/webpack.mjs"
+      },
+      "require": {
+        "types": "./dist/webpack.d.cts",
+        "default": "./dist/webpack.cjs"
+      }
     },
     "./css-mangler": {
-      "types": "./dist/css-mangler.d.ts",
-      "import": "./dist/css-mangler.js",
-      "require": "./dist/css-mangler.cjs"
+      "import": {
+        "types": "./dist/css-mangler.d.mts",
+        "default": "./dist/css-mangler.mjs"
+      },
+      "require": {
+        "types": "./dist/css-mangler.d.cts",
+        "default": "./dist/css-mangler.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/vite.ts src/webpack.ts src/css-mangler.ts --format esm,cjs --dts --clean",
-    "dev": "tsup src/index.ts src/vite.ts src/webpack.ts src/css-mangler.ts --format esm --dts --watch",
+    "build": "unbuild",
+    "dev": "unbuild --stub",
     "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -72,10 +92,14 @@
     "@types/node": "^20.11.0",
     "esbuild": "^0.27.2",
     "rollup": "^4.56.0",
-    "tsup": "^8.0.2",
-    "typescript": "^5.4.5",
-    "vite": "^7.3.1",
-    "vitest": "^1.2.0",
-    "webpack": "^5.104.1"
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13",
+    "vitest": "^4.1.6",
+    "webpack": "^5.104.1",
+    "unbuild": "^3.6.1"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

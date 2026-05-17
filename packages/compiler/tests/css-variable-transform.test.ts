@@ -30,7 +30,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
     describe('mixed static + dynamic', () => {
         it('should handle mixed static and dynamic props', () => {
-            const source = 'const App = () => <div sz={{ p: dynamicValue, bg: \'blue-500\' }} />';
+            const source = "const App = () => <div sz={{ p: dynamicValue, bg: 'blue-500' }} />";
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('bg-blue-500');
@@ -99,7 +99,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
     describe('static objects still work', () => {
         it('should compile fully static objects normally', () => {
-            const source = 'const App = () => <div sz={{ p: 4, bg: \'blue-500\' }} />';
+            const source = "const App = () => <div sz={{ p: 4, bg: 'blue-500' }} />";
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-4 bg-blue-500');
@@ -140,7 +140,8 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('should compile three dynamic props of mixed categories', () => {
-            const source = 'const App = () => <div sz={{ p: padVal, bg: colorVal, opacity: opVal }} />';
+            const source =
+                'const App = () => <div sz={{ p: padVal, bg: colorVal, opacity: opVal }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-(--_sz-p)');
@@ -159,7 +160,8 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
     describe('mixed static + dynamic with variants', () => {
         it('should handle static variant + dynamic base', () => {
-            const source = 'const App = () => <div sz={{ p: dynamicPad, hover: { bg: \'blue-500\' } }} />';
+            const source =
+                "const App = () => <div sz={{ p: dynamicPad, hover: { bg: 'blue-500' } }} />";
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('hover:bg-blue-500');
@@ -167,7 +169,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('should handle all-static object (no CSS vars needed)', () => {
-            const source = 'const App = () => <div sz={{ p: 4, m: 2, bg: \'red-500\' }} />';
+            const source = "const App = () => <div sz={{ p: 4, m: 2, bg: 'red-500' }} />";
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).not.toContain('(--_sz');
@@ -175,7 +177,8 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('should keep static hover + dynamic dark', () => {
-            const source = 'const App = () => <div sz={{ hover: { bg: \'blue-500\' }, dark: { bg: darkBg } }} />';
+            const source =
+                "const App = () => <div sz={{ hover: { bg: 'blue-500' }, dark: { bg: darkBg } }} />";
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('hover:bg-blue-500');
@@ -268,7 +271,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('should handle dynamic width and height together', () => {
-            const source = 'const App = () => <div sz={{ w: w, h: h, bg: \'blue-500\' }} />';
+            const source = "const App = () => <div sz={{ w: w, h: h, bg: 'blue-500' }} />";
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('bg-blue-500');

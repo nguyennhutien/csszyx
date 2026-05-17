@@ -51,12 +51,18 @@ describe('class-parser', () => {
             expect(parseClass('italic')).toEqual({ prop: 'italic', value: true });
             expect(parseClass('not-italic')).toEqual({ prop: 'notItalic', value: true });
             expect(parseClass('antialiased')).toEqual({ prop: 'antialiased', value: true });
-            expect(parseClass('subpixel-antialiased')).toEqual({ prop: 'subpixelAntialiased', value: true });
+            expect(parseClass('subpixel-antialiased')).toEqual({
+                prop: 'subpixelAntialiased',
+                value: true,
+            });
         });
 
         it('flexbox booleans', () => {
             expect(parseClass('flex-wrap')).toEqual({ prop: 'flexWrap', value: 'wrap' });
-            expect(parseClass('flex-wrap-reverse')).toEqual({ prop: 'flexWrap', value: 'wrap-reverse' });
+            expect(parseClass('flex-wrap-reverse')).toEqual({
+                prop: 'flexWrap',
+                value: 'wrap-reverse',
+            });
             expect(parseClass('flex-nowrap')).toEqual({ prop: 'flexWrap', value: 'nowrap' });
         });
 
@@ -78,8 +84,14 @@ describe('class-parser', () => {
             expect(parseClass('snap-y')).toEqual({ prop: 'snapType', value: 'y' });
             expect(parseClass('snap-both')).toEqual({ prop: 'snapType', value: 'both' });
             expect(parseClass('snap-none')).toEqual({ prop: 'snapType', value: 'none' });
-            expect(parseClass('snap-mandatory')).toEqual({ prop: 'snapStrictness', value: 'mandatory' });
-            expect(parseClass('snap-proximity')).toEqual({ prop: 'snapStrictness', value: 'proximity' });
+            expect(parseClass('snap-mandatory')).toEqual({
+                prop: 'snapStrictness',
+                value: 'mandatory',
+            });
+            expect(parseClass('snap-proximity')).toEqual({
+                prop: 'snapStrictness',
+                value: 'proximity',
+            });
             expect(parseClass('snap-start')).toEqual({ prop: 'snapAlign', value: 'start' });
             expect(parseClass('snap-end')).toEqual({ prop: 'snapAlign', value: 'end' });
             expect(parseClass('snap-center')).toEqual({ prop: 'snapAlign', value: 'center' });
@@ -93,8 +105,14 @@ describe('class-parser', () => {
         it('font variant booleans', () => {
             expect(parseClass('ordinal')).toEqual({ prop: 'ordinal', value: true });
             expect(parseClass('slashed-zero')).toEqual({ prop: 'slashedZero', value: true });
-            expect(parseClass('tabular-nums')).toEqual({ prop: 'fontVariant', value: 'tabular-nums' });
-            expect(parseClass('lining-nums')).toEqual({ prop: 'fontVariant', value: 'lining-nums' });
+            expect(parseClass('tabular-nums')).toEqual({
+                prop: 'fontVariant',
+                value: 'tabular-nums',
+            });
+            expect(parseClass('lining-nums')).toEqual({
+                prop: 'fontVariant',
+                value: 'lining-nums',
+            });
         });
     });
 
@@ -202,7 +220,10 @@ describe('class-parser', () => {
         });
 
         it('text overflow', () => {
-            expect(parseClass('text-ellipsis')).toEqual({ prop: 'textOverflow', value: 'ellipsis' });
+            expect(parseClass('text-ellipsis')).toEqual({
+                prop: 'textOverflow',
+                value: 'ellipsis',
+            });
             expect(parseClass('text-clip')).toEqual({ prop: 'textOverflow', value: 'clip' });
         });
 
@@ -251,7 +272,10 @@ describe('class-parser', () => {
 
         it('font stretch', () => {
             expect(parseClass('font-stretch-50%')).toEqual({ prop: 'fontStretch', value: '50%' });
-            expect(parseClass('font-condensed')).toEqual({ prop: 'fontStretch', value: 'condensed' });
+            expect(parseClass('font-condensed')).toEqual({
+                prop: 'fontStretch',
+                value: 'condensed',
+            });
         });
 
         it('leading (line-height)', () => {
@@ -418,7 +442,10 @@ describe('class-parser', () => {
             expect(parseClass('border-[3px]')).toEqual({ prop: 'border', value: '3px' });
             expect(parseClass('border-[0.5rem]')).toEqual({ prop: 'border', value: '0.5rem' });
             // Arbitrary colors still → borderColor
-            expect(parseClass('border-[#50d71e]')).toEqual({ prop: 'borderColor', value: '#50d71e' });
+            expect(parseClass('border-[#50d71e]')).toEqual({
+                prop: 'borderColor',
+                value: '#50d71e',
+            });
         });
 
         it('border style', () => {
@@ -431,7 +458,10 @@ describe('class-parser', () => {
 
         it('border color', () => {
             expect(parseClass('border-red-500')).toEqual({ prop: 'borderColor', value: 'red-500' });
-            expect(parseClass('border-gray-200')).toEqual({ prop: 'borderColor', value: 'gray-200' });
+            expect(parseClass('border-gray-200')).toEqual({
+                prop: 'borderColor',
+                value: 'gray-200',
+            });
         });
 
         it('border sides', () => {
@@ -466,7 +496,10 @@ describe('class-parser', () => {
         it('outline', () => {
             expect(parseClass('outline-2')).toEqual({ prop: 'outline', value: 2 });
             expect(parseClass('outline-dashed')).toEqual({ prop: 'outlineStyle', value: 'dashed' });
-            expect(parseClass('outline-blue-500')).toEqual({ prop: 'outlineColor', value: 'blue-500' });
+            expect(parseClass('outline-blue-500')).toEqual({
+                prop: 'outlineColor',
+                value: 'blue-500',
+            });
             expect(parseClass('outline-offset-2')).toEqual({ prop: 'outlineOffset', value: 2 });
         });
 
@@ -533,8 +566,14 @@ describe('class-parser', () => {
         it('flex direction', () => {
             expect(parseClass('flex-row')).toEqual({ prop: 'flexDir', value: 'row' });
             expect(parseClass('flex-col')).toEqual({ prop: 'flexDir', value: 'col' });
-            expect(parseClass('flex-row-reverse')).toEqual({ prop: 'flexDir', value: 'row-reverse' });
-            expect(parseClass('flex-col-reverse')).toEqual({ prop: 'flexDir', value: 'col-reverse' });
+            expect(parseClass('flex-row-reverse')).toEqual({
+                prop: 'flexDir',
+                value: 'row-reverse',
+            });
+            expect(parseClass('flex-col-reverse')).toEqual({
+                prop: 'flexDir',
+                value: 'col-reverse',
+            });
         });
 
         it('flex shorthand', () => {
@@ -583,10 +622,19 @@ describe('class-parser', () => {
         });
 
         it('place/justify items', () => {
-            expect(parseClass('place-content-center')).toEqual({ prop: 'placeContent', value: 'center' });
-            expect(parseClass('place-items-center')).toEqual({ prop: 'placeItems', value: 'center' });
+            expect(parseClass('place-content-center')).toEqual({
+                prop: 'placeContent',
+                value: 'center',
+            });
+            expect(parseClass('place-items-center')).toEqual({
+                prop: 'placeItems',
+                value: 'center',
+            });
             expect(parseClass('place-self-auto')).toEqual({ prop: 'placeSelf', value: 'auto' });
-            expect(parseClass('justify-items-center')).toEqual({ prop: 'justifyItems', value: 'center' });
+            expect(parseClass('justify-items-center')).toEqual({
+                prop: 'justifyItems',
+                value: 'center',
+            });
             expect(parseClass('justify-self-end')).toEqual({ prop: 'justifySelf', value: 'end' });
         });
 
@@ -616,7 +664,10 @@ describe('class-parser', () => {
         });
 
         it('shadow color', () => {
-            expect(parseClass('shadow-blue-500')).toEqual({ prop: 'shadowColor', value: 'blue-500' });
+            expect(parseClass('shadow-blue-500')).toEqual({
+                prop: 'shadowColor',
+                value: 'blue-500',
+            });
         });
 
         it('opacity', () => {
@@ -648,7 +699,10 @@ describe('class-parser', () => {
 
         it('backdrop filters', () => {
             expect(parseClass('backdrop-blur-sm')).toEqual({ prop: 'backdropBlur', value: 'sm' });
-            expect(parseClass('backdrop-brightness-50')).toEqual({ prop: 'backdropBrightness', value: 50 });
+            expect(parseClass('backdrop-brightness-50')).toEqual({
+                prop: 'backdropBrightness',
+                value: 50,
+            });
         });
     });
 
@@ -693,8 +747,14 @@ describe('class-parser', () => {
     describe('transitions & animation', () => {
         it('transition', () => {
             expect(parseClass('transition-all')).toEqual({ prop: 'transition', value: 'all' });
-            expect(parseClass('transition-colors')).toEqual({ prop: 'transition', value: 'colors' });
-            expect(parseClass('transition-opacity')).toEqual({ prop: 'transition', value: 'opacity' });
+            expect(parseClass('transition-colors')).toEqual({
+                prop: 'transition',
+                value: 'colors',
+            });
+            expect(parseClass('transition-opacity')).toEqual({
+                prop: 'transition',
+                value: 'opacity',
+            });
             expect(parseClass('transition-none')).toEqual({ prop: 'transition', value: 'none' });
         });
 
@@ -730,7 +790,10 @@ describe('class-parser', () => {
         it('cursor', () => {
             expect(parseClass('cursor-pointer')).toEqual({ prop: 'cursor', value: 'pointer' });
             expect(parseClass('cursor-default')).toEqual({ prop: 'cursor', value: 'default' });
-            expect(parseClass('cursor-not-allowed')).toEqual({ prop: 'cursor', value: 'not-allowed' });
+            expect(parseClass('cursor-not-allowed')).toEqual({
+                prop: 'cursor',
+                value: 'not-allowed',
+            });
         });
 
         it('user select', () => {
@@ -746,8 +809,14 @@ describe('class-parser', () => {
         });
 
         it('pointer events', () => {
-            expect(parseClass('pointer-events-none')).toEqual({ prop: 'pointerEvents', value: 'none' });
-            expect(parseClass('pointer-events-auto')).toEqual({ prop: 'pointerEvents', value: 'auto' });
+            expect(parseClass('pointer-events-none')).toEqual({
+                prop: 'pointerEvents',
+                value: 'none',
+            });
+            expect(parseClass('pointer-events-auto')).toEqual({
+                prop: 'pointerEvents',
+                value: 'auto',
+            });
         });
 
         it('caret', () => {
@@ -760,7 +829,10 @@ describe('class-parser', () => {
 
         it('will-change', () => {
             expect(parseClass('will-change-auto')).toEqual({ prop: 'willChange', value: 'auto' });
-            expect(parseClass('will-change-transform')).toEqual({ prop: 'willChange', value: 'transform' });
+            expect(parseClass('will-change-transform')).toEqual({
+                prop: 'willChange',
+                value: 'transform',
+            });
         });
     });
 
@@ -894,7 +966,10 @@ describe('class-parser', () => {
             expect(parseClass('bg-clip-text')).toEqual({ prop: 'bgClip', value: 'text' });
             expect(parseClass('col-span-3')).toEqual({ prop: 'colSpan', value: 3 });
             expect(parseClass('grid-cols-3')).toEqual({ prop: 'gridCols', value: 3 });
-            expect(parseClass('place-content-center')).toEqual({ prop: 'placeContent', value: 'center' });
+            expect(parseClass('place-content-center')).toEqual({
+                prop: 'placeContent',
+                value: 'center',
+            });
             expect(parseClass('underline-offset-4')).toEqual({ prop: 'underlineOffset', value: 4 });
         });
 

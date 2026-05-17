@@ -33,12 +33,18 @@ export const RESOURCE_URIS = [
  * Return metadata for all resources served by this MCP server.
  * @returns Array of resource descriptors with URI, name, description, and mimeType.
  */
-export function listResources(): Array<{ uri: string; name: string; description: string; mimeType: string }> {
+export function listResources(): Array<{
+    uri: string;
+    name: string;
+    description: string;
+    mimeType: string;
+}> {
     return [
         {
             uri: 'csszyx://reference',
             name: 'CSSzyx Full Reference',
-            description: 'Complete sz prop API reference — all property mappings, variant syntax, and examples',
+            description:
+                'Complete sz prop API reference — all property mappings, variant syntax, and examples',
             mimeType: 'text/plain',
         },
         {
@@ -61,10 +67,13 @@ export function listResources(): Array<{ uri: string; name: string; description:
  * @param uri - The resource URI to read (e.g. "csszyx://reference").
  * @returns MCP resource response with content array.
  */
-export function readResource(uri: string): { contents: Array<{ uri: string; mimeType: string; text: string }> } {
+export function readResource(uri: string): {
+    contents: Array<{ uri: string; mimeType: string; text: string }>;
+} {
     switch (uri) {
         case 'csszyx://reference': {
-            let content = 'CSSzyx Full Reference — llms-full.txt not found. Use csszyx_lookup tool instead.';
+            let content =
+                'CSSzyx Full Reference — llms-full.txt not found. Use csszyx_lookup tool instead.';
             try {
                 content = fs.readFileSync(LLMS_FULL_PATH, 'utf-8');
             } catch {
@@ -77,20 +86,24 @@ export function readResource(uri: string): { contents: Array<{ uri: string; mime
 
         case 'csszyx://property-map':
             return {
-                contents: [{
-                    uri,
-                    mimeType: 'application/json',
-                    text: JSON.stringify(PROPERTY_MAP, null, 2),
-                }],
+                contents: [
+                    {
+                        uri,
+                        mimeType: 'application/json',
+                        text: JSON.stringify(PROPERTY_MAP, null, 2),
+                    },
+                ],
             };
 
         case 'csszyx://variants':
             return {
-                contents: [{
-                    uri,
-                    mimeType: 'application/json',
-                    text: JSON.stringify([...KNOWN_VARIANTS].sort(), null, 2),
-                }],
+                contents: [
+                    {
+                        uri,
+                        mimeType: 'application/json',
+                        text: JSON.stringify([...KNOWN_VARIANTS].sort(), null, 2),
+                    },
+                ],
             };
 
         default:

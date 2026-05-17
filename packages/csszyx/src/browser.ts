@@ -45,7 +45,9 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
     let pos = 0;
 
     const skipWhitespace = (): void => {
-        while (pos < input.length && /\s/.test(input[pos])) {pos++;}
+        while (pos < input.length && /\s/.test(input[pos])) {
+            pos++;
+        }
     };
 
     const parseString = (quote: string): string => {
@@ -54,7 +56,9 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
         while (pos < input.length && input[pos] !== quote) {
             if (input[pos] === '\\') {
                 pos++;
-                if (pos < input.length) {result += input[pos];}
+                if (pos < input.length) {
+                    result += input[pos];
+                }
             } else {
                 result += input[pos];
             }
@@ -74,11 +78,17 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
             // Arbitrary variant key like [&>span] — track bracket depth.
             let depth = 0;
             while (pos < input.length) {
-                if (input[pos] === '[') {depth++;}
-                if (input[pos] === ']') {depth--;}
+                if (input[pos] === '[') {
+                    depth++;
+                }
+                if (input[pos] === ']') {
+                    depth--;
+                }
                 key += input[pos];
                 pos++;
-                if (depth === 0) {break;}
+                if (depth === 0) {
+                    break;
+                }
             }
             return key;
         }
@@ -109,12 +119,20 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
             pos++;
         }
 
-        if (token === 'true') {return true;}
-        if (token === 'false') {return false;}
-        if (token === 'null') {return null;}
+        if (token === 'true') {
+            return true;
+        }
+        if (token === 'false') {
+            return false;
+        }
+        if (token === 'null') {
+            return null;
+        }
 
         const num = Number(token);
-        if (!isNaN(num) && token !== '') {return num;}
+        if (!Number.isNaN(num) && token !== '') {
+            return num;
+        }
 
         return token;
     };
@@ -126,7 +144,9 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
         while (pos < input.length && input[pos] !== ']') {
             arr.push(parseValue());
             skipWhitespace();
-            if (input[pos] === ',') {pos++;}
+            if (input[pos] === ',') {
+                pos++;
+            }
             skipWhitespace();
         }
         pos++; // skip ]
@@ -141,11 +161,15 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
         while (pos < input.length && input[pos] !== '}') {
             const key = parseKey();
             skipWhitespace();
-            if (input[pos] === ':') {pos++;} // skip :
+            if (input[pos] === ':') {
+                pos++;
+            } // skip :
             const value = parseValue();
             obj[key] = value;
             skipWhitespace();
-            if (input[pos] === ',') {pos++;}
+            if (input[pos] === ',') {
+                pos++;
+            }
             skipWhitespace();
         }
         pos++; // skip }
@@ -167,9 +191,13 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
  */
 function processElement(el: Element): void {
     const rawValue = el.getAttribute('sz');
-    if (!rawValue) {return;}
+    if (!rawValue) {
+        return;
+    }
 
-    if (el.hasAttribute('data-sz-processed')) {return;}
+    if (el.hasAttribute('data-sz-processed')) {
+        return;
+    }
     el.setAttribute('data-sz-processed', '');
 
     try {
@@ -179,14 +207,18 @@ function processElement(el: Element): void {
 
         if (className) {
             className.split(' ').forEach(c => {
-                if (c) {el.classList.add(c);}
+                if (c) {
+                    el.classList.add(c);
+                }
             });
         }
     } catch (e) {
         // Fallback: treat raw value as plain Tailwind class string when not object-shaped.
         if (rawValue.trim() && !rawValue.includes('{')) {
             rawValue.split(/\s+/).forEach(c => {
-                if (c) {el.classList.add(c);}
+                if (c) {
+                    el.classList.add(c);
+                }
             });
         } else {
             console.error('[csszyx] Parsing error:', rawValue, e);
@@ -220,7 +252,7 @@ function processSubtree(root: HTMLElement): void {
     root.querySelectorAll('[sz]:not([data-sz-processed])').forEach(processElement);
 }
 
-const observer = new MutationObserver((mutations) => {
+const observer = new MutationObserver(mutations => {
     for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
             if (node instanceof HTMLElement) {

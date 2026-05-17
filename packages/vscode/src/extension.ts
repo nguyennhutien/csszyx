@@ -41,15 +41,18 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.languages.registerCompletionItemProvider(
             SZ_LANGUAGES,
             completionProvider,
-            '{', '"', "'", ':', ',', ' ',
+            '{',
+            '"',
+            "'",
+            ':',
+            ',',
+            ' ',
         ),
     );
 
     // ── Hover ────────────────────────────────────────────────────────────────
     const hoverProvider = new SzHoverProvider();
-    context.subscriptions.push(
-        vscode.languages.registerHoverProvider(SZ_LANGUAGES, hoverProvider),
-    );
+    context.subscriptions.push(vscode.languages.registerHoverProvider(SZ_LANGUAGES, hoverProvider));
 
     // ── Diagnostics ──────────────────────────────────────────────────────────
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('csszyx');
@@ -59,21 +62,29 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Validate already-open documents on activation
     for (const doc of vscode.workspace.textDocuments) {
-        if (isSzDocument(doc)) {validateDocument(doc, diagnosticCollection);}
+        if (isSzDocument(doc)) {
+            validateDocument(doc, diagnosticCollection);
+        }
     }
 
     context.subscriptions.push(
         // Validate immediately when a document opens
         vscode.workspace.onDidOpenTextDocument(doc => {
-            if (isSzDocument(doc)) {validateDocument(doc, diagnosticCollection);}
+            if (isSzDocument(doc)) {
+                validateDocument(doc, diagnosticCollection);
+            }
         }),
         // Debounced validation while editing
         vscode.workspace.onDidChangeTextDocument(e => {
-            if (isSzDocument(e.document)) {debouncedValidate(e.document);}
+            if (isSzDocument(e.document)) {
+                debouncedValidate(e.document);
+            }
         }),
         // Immediate validation on save
         vscode.workspace.onDidSaveTextDocument(doc => {
-            if (isSzDocument(doc)) {validateDocument(doc, diagnosticCollection);}
+            if (isSzDocument(doc)) {
+                validateDocument(doc, diagnosticCollection);
+            }
         }),
         // Clean up diagnostics when file is closed
         vscode.workspace.onDidCloseTextDocument(doc => {

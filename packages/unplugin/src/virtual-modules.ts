@@ -15,7 +15,7 @@ export const VIRTUAL_MODULE_ID = 'virtual:csszyx/mangle-map';
 /**
  * Resolved virtual module ID (with null byte prefix for unplugin).
  */
-export const RESOLVED_VIRTUAL_MODULE_ID = '\0' + VIRTUAL_MODULE_ID;
+export const RESOLVED_VIRTUAL_MODULE_ID: string = `\0${VIRTUAL_MODULE_ID}`;
 
 /**
  * Virtual module ID for checksum only.
@@ -25,7 +25,7 @@ export const VIRTUAL_CHECKSUM_ID = 'virtual:csszyx/checksum';
 /**
  * Resolved virtual checksum module ID.
  */
-export const RESOLVED_VIRTUAL_CHECKSUM_ID = '\0' + VIRTUAL_CHECKSUM_ID;
+export const RESOLVED_VIRTUAL_CHECKSUM_ID: string = `\0${VIRTUAL_CHECKSUM_ID}`;
 
 /**
  * Creates the mangle map virtual module content.
@@ -45,10 +45,7 @@ export const RESOLVED_VIRTUAL_CHECKSUM_ID = '\0' + VIRTUAL_CHECKSUM_ID;
  * // export const checksum = "a1b2c3d4e5f67890";
  * ```
  */
-export function createMangleMapModule(
-    mangleMap: Record<string, string>,
-    checksum: string,
-): string {
+export function createMangleMapModule(mangleMap: Record<string, string>, checksum: string): string {
     return `/**
  * Auto-generated mangle map for csszyx.
  * This module is generated at build time and contains the mapping

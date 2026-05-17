@@ -17,7 +17,7 @@ function computeChecksumPureJS(map: Record<string, string>): string {
     // without using native C++ modules like node:crypto.
     let h = 0;
     for (let i = 0; i < result.length; i++) {
-        h = Math.imul(31, h) + result.charCodeAt(i) | 0;
+        h = (Math.imul(31, h) + result.charCodeAt(i)) | 0;
     }
     return h.toString(16).padStart(16, '0');
 }

@@ -15,11 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-    escapeCSSClassName,
-    mangleCSSSync,
-    unescapeTailwindClass,
-} from '../src/css-mangler';
+import { escapeCSSClassName, mangleCSSSync, unescapeTailwindClass } from '../src/css-mangler';
 
 // Test mangle map - simulates real-world usage
 const testMangleMap = {
@@ -41,9 +37,9 @@ const testMangleMap = {
     'bg-[#123456]': 'p',
     'text-[14px]': 'q',
     '!p-4': 'r',
-    'flex': 's',
-    'hidden': 't',
-    'grid': 'u',
+    flex: 's',
+    hidden: 't',
+    grid: 'u',
     'items-center': 'v',
     'justify-between': 'w',
     'space-x-4': 'x',
@@ -250,7 +246,8 @@ describe('Media Queries and @rules', () => {
     });
 
     it('should preserve @keyframes', () => {
-        const css = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        const css =
+            '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.css).toBe(css);
         expect(result.transformedCount).toBe(0);
@@ -475,7 +472,8 @@ describe('Edge Cases and Stress Tests', () => {
     });
 
     it('should handle very long selector', () => {
-        const css = '.dark .group:hover .flex > .items-center.justify-between:first-child .p-4 { opacity: 1; }';
+        const css =
+            '.dark .group:hover .flex > .items-center.justify-between:first-child .p-4 { opacity: 1; }';
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.css).toBe('.dark .group:hover .s > .v.w:first-child .a { opacity: 1; }');
     });
@@ -557,7 +555,8 @@ describe('Unescape/Escape Functions', () => {
 // ============================================================================
 describe('Additional Coverage', () => {
     it('should handle gradient classes', () => {
-        const css = '.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }';
+        const css =
+            '.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }';
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.css).toContain('.ak {');
     });

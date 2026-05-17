@@ -4,11 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-    isValidSzProp,
-    normalizeClassName,
-    transform,
-} from '../src/transform.js';
+import { isValidSzProp, normalizeClassName, transform } from '../src/transform.js';
 
 describe('transform', () => {
     it('should transform simple properties', () => {
@@ -32,7 +28,11 @@ describe('transform', () => {
     });
 
     it('should skip null and undefined values', () => {
-        const result = transform({ p: 4, m: null as unknown as number, gap: undefined as unknown as number });
+        const result = transform({
+            p: 4,
+            m: null as unknown as number,
+            gap: undefined as unknown as number,
+        });
         expect(result.className).toBe('p-4');
     });
 
@@ -66,9 +66,7 @@ describe('transform', () => {
                 text: 'white',
             },
         });
-        expect(result.className).toBe(
-            'p-4 bg-red-500 flex hover:bg-blue-600 hover:text-white',
-        );
+        expect(result.className).toBe('p-4 bg-red-500 flex hover:bg-blue-600 hover:text-white');
     });
 
     it('should handle empty object', () => {

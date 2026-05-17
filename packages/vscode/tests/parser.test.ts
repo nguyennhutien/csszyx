@@ -167,7 +167,7 @@ describe('parseSzContext — HTML attribute form (single quote)', () => {
     });
 
     it('handles double-quoted string values inside a single-quoted attribute', () => {
-        const ctx = parseSzContext("<div sz='{ bg: \"blue-500\", ");
+        const ctx = parseSzContext('<div sz=\'{ bg: "blue-500", ');
         expect(ctx.type).toBe('key');
     });
 });
@@ -221,7 +221,7 @@ describe('findSzExpressions', () => {
     it('handles nested variant objects inside HTML attribute', () => {
         const res = findSzExpressions('<div sz="{ hover: { bg: \'red\' } }">');
         expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe('{ hover: { bg: \'red\' } }');
+        expect(res[0].objText).toBe("{ hover: { bg: 'red' } }");
     });
 
     it('skips braces inside string values', () => {

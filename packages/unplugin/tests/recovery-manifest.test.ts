@@ -8,10 +8,7 @@
 import type { TokenData } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
-import {
-    buildRecoveryManifest,
-    injectRecoveryManifest,
-} from '../src/html-transformer.js';
+import { buildRecoveryManifest, injectRecoveryManifest } from '../src/html-transformer.js';
 
 /**
  * Helper: build a token map seeded with one or more entries.
@@ -25,7 +22,9 @@ function tokenMap(...entries: Array<[string, TokenData]>): Map<string, TokenData
 
 describe('buildRecoveryManifest', () => {
     it('produces empty tokens object for empty input', () => {
-        const { manifest } = buildRecoveryManifest(new Map(), { mangleChecksum: 'mangle1234567890' });
+        const { manifest } = buildRecoveryManifest(new Map(), {
+            mangleChecksum: 'mangle1234567890',
+        });
         expect(manifest.tokens).toEqual({});
         expect(manifest.buildId).toMatch(/^[0-9a-z]+-[0-9a-f]{6}$/);
         expect(manifest.checksum).toMatch(/^[0-9a-f]{16}$/);
@@ -33,14 +32,20 @@ describe('buildRecoveryManifest', () => {
     });
 
     it('serialises tokens in alphabetical order for stable checksums', () => {
-        const a = buildRecoveryManifest(tokenMap(
-            ['zzz', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }],
-            ['aaa', { mode: 'csr', component: 'span', path: 'a.tsx:2:0' }],
-        ), { mangleChecksum: 'mangle1234567890' });
-        const b = buildRecoveryManifest(tokenMap(
-            ['aaa', { mode: 'csr', component: 'span', path: 'a.tsx:2:0' }],
-            ['zzz', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }],
-        ), { mangleChecksum: 'mangle1234567890' });
+        const a = buildRecoveryManifest(
+            tokenMap(
+                ['zzz', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }],
+                ['aaa', { mode: 'csr', component: 'span', path: 'a.tsx:2:0' }],
+            ),
+            { mangleChecksum: 'mangle1234567890' },
+        );
+        const b = buildRecoveryManifest(
+            tokenMap(
+                ['aaa', { mode: 'csr', component: 'span', path: 'a.tsx:2:0' }],
+                ['zzz', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }],
+            ),
+            { mangleChecksum: 'mangle1234567890' },
+        );
         // Same logical content — checksums must match regardless of insertion order.
         expect(a.manifest.checksum).toBe(b.manifest.checksum);
         expect(Object.keys(a.manifest.tokens)).toEqual(['aaa', 'zzz']);
@@ -52,20 +57,21 @@ describe('buildRecoveryManifest', () => {
             component: 'Button',
             path: 'src/Button.tsx:5:8',
         };
-        const { manifest } = buildRecoveryManifest(
-            tokenMap(['abc123def456', data]),
-            { mangleChecksum: 'mangle1234567890' },
-        );
-        expect(manifest.tokens['abc123def456']).toEqual(data);
+        const { manifest } = buildRecoveryManifest(tokenMap(['abc123def456', data]), {
+            mangleChecksum: 'mangle1234567890',
+        });
+        expect(manifest.tokens.abc123def456).toEqual(data);
     });
 
     it('changes checksum when token contents change', () => {
-        const a = buildRecoveryManifest(tokenMap(
-            ['t1', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }],
-        ), { mangleChecksum: 'mangle1234567890' });
-        const b = buildRecoveryManifest(tokenMap(
-            ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
-        ), { mangleChecksum: 'mangle1234567890' });
+        const a = buildRecoveryManifest(
+            tokenMap(['t1', { mode: 'csr', component: 'div', path: 'a.tsx:1:0' }]),
+            { mangleChecksum: 'mangle1234567890' },
+        );
+        const b = buildRecoveryManifest(
+            tokenMap(['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }]),
+            { mangleChecksum: 'mangle1234567890' },
+        );
         expect(a.manifest.checksum).not.toBe(b.manifest.checksum);
     });
 
@@ -81,10 +87,13 @@ describe('buildRecoveryManifest', () => {
     });
 
     it('keeps dev-only tokens by default (development build)', () => {
-        const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(tokenMap(
-            ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
-            ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
-        ), { mangleChecksum: 'mangle1234567890' });
+        const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
+            tokenMap(
+                ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
+                ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
+            ),
+            { mangleChecksum: 'mangle1234567890' },
+        );
         expect(Object.keys(manifest.tokens)).toEqual(['t1', 't2']);
         expect(strippedDevOnlyPaths).toEqual([]);
     });
@@ -129,10 +138,13 @@ describe('buildRecoveryManifest', () => {
     });
 
     it('checksum reflects post-strip token set in production', () => {
-        const dev = buildRecoveryManifest(tokenMap(
-            ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
-            ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
-        ), { mangleChecksum: 'mangle1234567890' });
+        const dev = buildRecoveryManifest(
+            tokenMap(
+                ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
+                ['t2', { mode: 'csr', component: 'span', path: 'b.tsx:2:0' }],
+            ),
+            { mangleChecksum: 'mangle1234567890' },
+        );
         const prod = buildRecoveryManifest(
             tokenMap(
                 ['t1', { mode: 'dev-only', component: 'div', path: 'a.tsx:1:0' }],
@@ -165,9 +177,13 @@ describe('injectRecoveryManifest', () => {
     it('embeds the full manifest as JSON in the script body', () => {
         const html = '<html><head></head></html>';
         const out = injectRecoveryManifest(html, sampleManifest);
-        const scriptMatch = out.match(/<script id="__SZ_RECOVERY_MANIFEST__"[^>]*>([^<]+)<\/script>/);
+        const scriptMatch = out.match(
+            /<script id="__SZ_RECOVERY_MANIFEST__"[^>]*>([^<]+)<\/script>/,
+        );
         expect(scriptMatch).not.toBeNull();
-        if (!scriptMatch) {return;}
+        if (!scriptMatch) {
+            return;
+        }
         const parsed = JSON.parse(scriptMatch[1]);
         expect(parsed).toEqual(sampleManifest);
     });

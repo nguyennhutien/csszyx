@@ -21,48 +21,70 @@
     "url": "https://github.com/nguyennhutien/csszyx/issues"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./browser": {
-      "import": "./src/transform-core.ts",
-      "types": "./src/transform-core.ts"
+      "import": {
+        "types": "./dist/transform-core.d.mts",
+        "default": "./dist/transform-core.mjs"
+      },
+      "require": {
+        "types": "./dist/transform-core.d.cts",
+        "default": "./dist/transform-core.cjs"
+      }
     },
     "./color-var": {
-      "types": "./dist/color-var.d.ts",
-      "import": "./dist/color-var.js",
-      "require": "./dist/color-var.cjs"
+      "import": {
+        "types": "./dist/color-var.d.mts",
+        "default": "./dist/color-var.mjs"
+      },
+      "require": {
+        "types": "./dist/color-var.d.cts",
+        "default": "./dist/color-var.cjs"
+      }
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/color-var.ts --format esm,cjs --dts",
-    "dev": "tsup src/index.ts src/color-var.ts --format esm --dts --watch",
+    "build": "unbuild",
+    "dev": "unbuild --stub",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@babel/core": "^7.23.7",
-    "@babel/types": "^7.23.6",
     "@babel/traverse": "^7.23.7",
-    "@csszyx/core": "workspace:*"
+    "@babel/types": "^7.23.6",
+    "@csszyx/core": "workspace:*",
+    "magic-string": "0.30.21",
+    "oxc-parser": "0.131.0"
   },
   "devDependencies": {
     "@types/babel__core": "^7.20.5",
     "@types/babel__traverse": "^7.20.5",
     "@types/node": "^20.11.0",
     "csstype": "^3.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.3",
-    "vitest": "^1.2.0"
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.6"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

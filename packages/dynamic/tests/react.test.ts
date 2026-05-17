@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  *
  */
-type EffectFn = () => (() => void) | void;
+type EffectFn = () => (() => void) | undefined;
 
 let capturedEffects: EffectFn[] = [];
 let capturedCallback: ((...args: unknown[]) => unknown) | null = null;
@@ -31,10 +31,16 @@ let contextValue = { manifestUrl: '/csszyx-manifest.json' };
 // ── Mock react ────────────────────────────────────────────────────────────────
 
 vi.mock('react', () => ({
-    createContext: vi.fn((defaultValue: unknown) => ({ _default: defaultValue, Provider: 'CsszyxContext.Provider' })),
+    createContext: vi.fn((defaultValue: unknown) => ({
+        _default: defaultValue,
+        Provider: 'CsszyxContext.Provider',
+    })),
     createElement: vi.fn(
-        (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) =>
-            ({ type, props, children }),
+        (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => ({
+            type,
+            props,
+            children,
+        }),
     ),
     useCallback: vi.fn((fn: (...args: unknown[]) => unknown) => {
         capturedCallback = fn;
@@ -74,9 +80,7 @@ const { sz, useSz, CsszyxProvider } = await import('../src/react.js');
  * @returns array of cleanup functions returned by each effect (undefined entries filtered)
  */
 function runCapturedEffects(): Array<() => void> {
-    return capturedEffects
-        .map(fn => fn())
-        .filter((r): r is () => void => typeof r === 'function');
+    return capturedEffects.map(fn => fn()).filter((r): r is () => void => typeof r === 'function');
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -140,7 +144,9 @@ describe('useSz()', () => {
         useSz();
         const cleanups = runCapturedEffects();
         // Run all cleanup functions (simulate unmount)
-        cleanups.forEach(fn => fn());
+        cleanups.forEach(fn => {
+            fn();
+        });
         // Cleanup should NOT have fired yet (timer pending)
         expect(mockInjectorCleanup).not.toHaveBeenCalled();
         expect(mockResetManifest).not.toHaveBeenCalled();
@@ -156,7 +162,9 @@ describe('useSz()', () => {
         const firstCleanups = runCapturedEffects();
 
         // StrictMode unmount — schedules cleanup timer
-        firstCleanups.forEach(fn => fn());
+        firstCleanups.forEach(fn => {
+            fn();
+        });
         expect(mockInjectorCleanup).not.toHaveBeenCalled();
 
         // StrictMode remount — second useSz() call, effect runs again, cancels timer
@@ -173,7 +181,9 @@ describe('useSz()', () => {
     it('runs cleanup after true unmount (no remount)', () => {
         useSz();
         const cleanups = runCapturedEffects();
-        cleanups.forEach(fn => fn());
+        cleanups.forEach(fn => {
+            fn();
+        });
         // No remount — timer fires
         vi.runAllTimers();
         expect(mockInjectorCleanup).toHaveBeenCalledOnce();

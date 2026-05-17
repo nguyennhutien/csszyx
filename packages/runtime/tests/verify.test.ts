@@ -87,8 +87,7 @@ describe('isValidManifest', () => {
 });
 
 describe('verifyRecoveryToken', () => {
-    let element: HTMLElement,
-        manifest: RecoveryManifest;
+    let element: HTMLElement, manifest: RecoveryManifest;
 
     beforeEach(() => {
         element = document.createElement('div');

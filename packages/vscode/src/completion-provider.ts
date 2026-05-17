@@ -46,15 +46,25 @@ function getQuotedValueRange(
 
     // Walk backward across word-identifier chars to find the opening quote.
     let start = position.character - 1;
-    while (start >= 0 && /[a-zA-Z0-9_-]/.test(line[start] ?? '')) { start--; }
-    if (start < 0) { return null; }
+    while (start >= 0 && /[a-zA-Z0-9_-]/.test(line[start] ?? '')) {
+        start--;
+    }
+    if (start < 0) {
+        return null;
+    }
     const opener = line[start];
-    if (opener !== "'" && opener !== '"') { return null; }
+    if (opener !== "'" && opener !== '"') {
+        return null;
+    }
 
     // Walk forward from the cursor across word chars to find a matching closer.
     let end = position.character;
-    while (end < line.length && /[a-zA-Z0-9_-]/.test(line[end] ?? '')) { end++; }
-    if (line[end] === opener) { end++; }
+    while (end < line.length && /[a-zA-Z0-9_-]/.test(line[end] ?? '')) {
+        end++;
+    }
+    if (line[end] === opener) {
+        end++;
+    }
 
     return new vscode.Range(
         new vscode.Position(position.line, start),
@@ -87,7 +97,9 @@ export class SzCompletionProvider implements vscode.CompletionItemProvider {
 
             case 'value':
             case 'variant-value': {
-                if (!ctx.currentKey) { return undefined; }
+                if (!ctx.currentKey) {
+                    return undefined;
+                }
                 const items = getValueCompletions(ctx.currentKey);
                 const quoteRange = getQuotedValueRange(document, position);
                 if (quoteRange) {

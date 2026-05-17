@@ -1,11 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { type TokenData, transform, transformSourceCode } from '@csszyx/compiler';
+import { type TokenData, transform, transformOxc, transformSourceCode } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
-import { preprocess as sveltePreprocess, type SvelteAdapterOptions } from '@csszyx/svelte-adapter';
+import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import type { PartialCsszyxConfig } from '@csszyx/types';
-import { preprocess as vuePreprocess, type VueAdapterOptions } from '@csszyx/vue-adapter';
+import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
@@ -13,7 +13,12 @@ import type { PluginOption } from 'vite';
 import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
-import { buildRecoveryManifest, injectRecoveryManifest, transformIndexHtml as injectHydrationData } from './html-transformer.js';
+import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
+import {
+    buildRecoveryManifest,
+    transformIndexHtml as injectHydrationData,
+    injectRecoveryManifest,
+} from './html-transformer.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -31,24 +36,27 @@ import {
     resolveVirtualModule,
 } from './virtual-modules.js';
 
+/** Compiler source-transform result shared by Babel and oxc paths. */
+type SourceTransformResult = ReturnType<typeof transformSourceCode>;
+
 /**
  * Plugin state for mangle map management.
  */
 interface PluginState {
-  classes: Set<string>;
-  mangleMap: Record<string, string>;
-  checksum: string;
-  finalized: boolean;
-  rootDir: string;
-  /**
-   * Recovery tokens collected from szRecover JSX attributes across all
-   * transformed files. Aggregated by the `transform` hook (compiler emits
-   * the data-sz-recovery-token attribute and returns the per-file map),
-   * then serialised into the manifest script tag injected into SSR HTML.
-   */
-  recoveryTokens: Map<string, TokenData>;
-  /** RSC graph records collected from transformed TS/JS modules. */
-  rscModules: Map<string, RSCModuleRecord>;
+    classes: Set<string>;
+    mangleMap: Record<string, string>;
+    checksum: string;
+    finalized: boolean;
+    rootDir: string;
+    /**
+     * Recovery tokens collected from szRecover JSX attributes across all
+     * transformed files. Aggregated by the `transform` hook (compiler emits
+     * the data-sz-recovery-token attribute and returns the per-file map),
+     * then serialised into the manifest script tag injected into SSR HTML.
+     */
+    recoveryTokens: Map<string, TokenData>;
+    /** RSC graph records collected from transformed TS/JS modules. */
+    rscModules: Map<string, RSCModuleRecord>;
 }
 
 /**
@@ -68,24 +76,22 @@ let _hasWarnedTsConfig = false;
  * @param scanCss - path or glob patterns to CSS files (from BuildConfig.scanCss)
  */
 function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): void {
-    if (!scanCss) {return;}
-    const patterns = Array.isArray(scanCss) ? scanCss : [scanCss];
-    const sourceFiles: string[] = [];
-    for (const pattern of patterns) {
-        const resolved = path.isAbsolute(pattern) ? pattern : path.join(rootDir, pattern);
-        // Simple literal path — no glob expansion needed for MVP (no glob dep)
-        if (fs.existsSync(resolved)) {
-            sourceFiles.push(resolved);
-        }
+    if (!scanCss) {
+        return;
     }
-    if (sourceFiles.length === 0) {return;}
-    const themes = sourceFiles.map(f => {
-        try {
-            return parseThemeBlocks(fs.readFileSync(f, 'utf-8'));
-        } catch {
-            return null;
-        }
-    }).filter((t): t is NonNullable<typeof t> => t !== null);
+    const sourceFiles = expandFilePatterns(rootDir, scanCss).filter(file => file.endsWith('.css'));
+    if (sourceFiles.length === 0) {
+        return;
+    }
+    const themes = sourceFiles
+        .map(f => {
+            try {
+                return parseThemeBlocks(fs.readFileSync(f, 'utf-8'));
+            } catch {
+                return null;
+            }
+        })
+        .filter((t): t is NonNullable<typeof t> => t !== null);
     const merged = mergeThemes(themes);
     const outputPath = path.join(rootDir, '.csszyx', 'theme.d.ts');
     writeThemeDts({ outputPath, theme: merged, sourceFiles });
@@ -98,7 +104,9 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
                 if (fs.existsSync(cfgPath)) {
                     const content = fs.readFileSync(cfgPath, 'utf-8');
                     if (!content.includes('.csszyx')) {
-                        console.warn('\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n');
+                        console.warn(
+                            '\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n',
+                        );
                     }
                     return true;
                 }
@@ -163,12 +171,16 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     let result = code
         .replace(/(?:class(?:Name)?|sz)[:=]\s*"((?:[^"\\]|\\.)*)"/g, (match, classes) => {
             const mangled = mangleClassString(classes);
-            if (mangled === classes) { return match; }
+            if (mangled === classes) {
+                return match;
+            }
             return match.replace(classes, mangled);
         })
         .replace(/(?:class(?:Name)?|sz)[:=]\s*'((?:[^'\\]|\\.)*)'/g, (match, classes) => {
             const mangled = mangleClassString(classes);
-            if (mangled === classes) { return match; }
+            if (mangled === classes) {
+                return match;
+            }
             return match.replace(classes, mangled);
         });
 
@@ -223,8 +235,13 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             let j = interStart + 2;
             let depth = 0;
             while (j < tplContent.length) {
-                if (tplContent[j] === '{') { depth++; } else if (tplContent[j] === '}') {
-                    if (depth === 0) { j++; break; }
+                if (tplContent[j] === '{') {
+                    depth++;
+                } else if (tplContent[j] === '}') {
+                    if (depth === 0) {
+                        j++;
+                        break;
+                    }
                     depth--;
                 }
                 j++;
@@ -232,16 +249,20 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             const interInner = tplContent.slice(interStart + 2, j - 1);
             const mangledInner = interInner.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
                 const parts = inner.split(/\s+/).filter(Boolean);
-                if (parts.length === 0) { return qm; }
+                if (parts.length === 0) {
+                    return qm;
+                }
                 const m = parts.map((p: string) => mangleMap[p] || p).join(' ');
-                if (m === inner) { return qm; }
+                if (m === inner) {
+                    return qm;
+                }
                 changed = true;
-                return '"' + m + '"';
+                return `"${m}"`;
             });
-            out += '${' + mangledInner + '}';
+            out += `\${${mangledInner}}`;
             i = j;
         }
-        return changed ? 'className:`' + out + '`' : fullMatch;
+        return changed ? `className:\`${out}\`` : fullMatch;
     });
 
     // Pass 2: className:EXPR with ternary operators containing quoted strings.
@@ -272,7 +293,9 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             const afterColon = idx + marker.length;
             // Skip optional space (unminified SSR form: "className: `...")
             let exprStart = afterColon;
-            while (exprStart < result.length && result[exprStart] === ' ') { exprStart++; }
+            while (exprStart < result.length && result[exprStart] === ' ') {
+                exprStart++;
+            }
             const firstChar = result[exprStart];
             // Static string or template literal → Pass 1/1.5 territory, leave untouched
             if (firstChar === '"' || firstChar === "'" || firstChar === '`') {
@@ -289,8 +312,12 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             let j = afterColon;
             while (j < result.length) {
                 const ch = result[j];
-                if (ch === '(' || ch === '[') { depth++; } else if (ch === ')' || ch === ']') {
-                    if (depth === 0) { break; }
+                if (ch === '(' || ch === '[') {
+                    depth++;
+                } else if (ch === ')' || ch === ']') {
+                    if (depth === 0) {
+                        break;
+                    }
                     depth--;
                 } else if (depth === 0 && (ch === ',' || ch === ';' || ch === '\n' || ch === '}')) {
                     break;
@@ -309,11 +336,13 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             let changed = false;
             const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
                 const parts = inner.split(/\s+/).filter(Boolean);
-                if (parts.length === 0) { return qm; }
+                if (parts.length === 0) {
+                    return qm;
+                }
                 const mangledStr = parts.map((p: string) => mangleMap[p] || p).join(' ');
                 if (mangledStr !== inner) {
                     changed = true;
-                    return '"' + mangledStr + '"';
+                    return `"${mangledStr}"`;
                 }
                 return qm;
             });
@@ -343,17 +372,25 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // sz-array path (condition && "class-string") are mangled correctly.
     result = result.replace(/(?<=(?:[,(]|&&)\s*)"([^"]+)"/g, (match, inner) => {
         const tokens = inner.split(/\s+/).filter(Boolean);
-        if (tokens.length === 0) { return match; }
+        if (tokens.length === 0) {
+            return match;
+        }
         let changed = false;
         const mangled: string[] = [];
         for (const t of tokens) {
             const m = mangleMap[t];
-            if (m === undefined) { return match; } // any unknown token → skip whole string
-            if (m !== t) { changed = true; }
+            if (m === undefined) {
+                return match;
+            } // any unknown token → skip whole string
+            if (m !== t) {
+                changed = true;
+            }
             mangled.push(m);
         }
-        if (!changed) { return match; }
-        return '"' + mangled.join(' ') + '"';
+        if (!changed) {
+            return match;
+        }
+        return `"${mangled.join(' ')}"`;
     });
 
     return result;
@@ -373,6 +410,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    const parserOverride = process.env.CSSZYX_PARSER;
+    const parserMode =
+        parserOverride === 'babel' || parserOverride === 'oxc'
+            ? parserOverride
+            : (options.build?.parser ?? 'oxc');
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -389,6 +431,94 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
 
     /**
+     * User exclude filters must run before any parser call. This is the escape
+     * hatch for large generated source files that contain an incidental `sz`
+     * marker and would otherwise trip the AST budget guard.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when user config excludes this file.
+     */
+    function isUserExcluded(id: string): boolean {
+        return matchesAnyPattern(id, options.exclude, state.rootDir);
+    }
+
+    /**
+     * Checks the optional user include filter for source transforms.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when the file is allowed by include config.
+     */
+    function isUserIncluded(id: string): boolean {
+        return !options.include || matchesAnyPattern(id, options.include, state.rootDir);
+    }
+
+    /**
+     * Checks built-in directories that csszyx never transforms.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when the file should be skipped regardless of user filters.
+     */
+    function isHardIgnored(id: string): boolean {
+        return (
+            id.includes('node_modules') ||
+            id.includes('/packages/') ||
+            (id.includes('.next') && !id.includes('static'))
+        );
+    }
+
+    /**
+     * Checks whether a source module should enter the csszyx AST transform.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when csszyx should parse and transform the source file.
+     */
+    function shouldProcessSource(id: string): boolean {
+        return (
+            !isHardIgnored(id) &&
+            !isUserExcluded(id) &&
+            isUserIncluded(id) &&
+            (/\.[tj]sx?(\?.*)?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte'))
+        );
+    }
+
+    /**
+     * Checks whether a CSS module should receive Tailwind safelist injection.
+     *
+     * @param id - Bundler file id or filesystem path.
+     * @returns True when csszyx should process the CSS file.
+     */
+    function shouldProcessCss(id: string): boolean {
+        return !isHardIgnored(id) && !isUserExcluded(id) && /\.css(\?.*)?$/.test(id);
+    }
+
+    /**
+     * Runs the configured source transform. Oxc is the default parser after the
+     * Phase D corpus pass; Babel remains as an explicit compatibility fallback
+     * and as the safety net for unexpected oxc parser/compiler failures.
+     *
+     * @param source Source module contents.
+     * @param filename Source filename for parser diagnostics.
+     * @returns Compiler transform result.
+     */
+    function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
+        const compilerOptions = { astBudget: astBudgetOverride };
+        if (parserMode !== 'oxc') {
+            return transformSourceCode(source, filename, compilerOptions);
+        }
+
+        try {
+            return transformOxc(source, filename, compilerOptions);
+        } catch (err) {
+            const result = transformSourceCode(source, filename, compilerOptions);
+            const reason = err instanceof Error ? err.message : String(err);
+            result.diagnostics.push(
+                `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
+            );
+            return result;
+        }
+    }
+
+    /**
      * Writes the safelist manifest (csszyx-classes.html) from the given class set.
      * No-ops if the file content is already up to date.
      *
@@ -401,7 +531,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param classes - the full set of discovered classes to write
      */
     function writeSafelistFile(classes: Set<string>): void {
-        if (classes.size === 0) { return; }
+        if (classes.size === 0) {
+            return;
+        }
         const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
         const classList = Array.from(classes).join(' ');
         const content =
@@ -412,7 +544,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             `<div class="${classList}">x</div>` +
             '</div>\n';
         try {
-            const existing = fs.existsSync(safelistPath) ? fs.readFileSync(safelistPath, 'utf-8') : '';
+            const existing = fs.existsSync(safelistPath)
+                ? fs.readFileSync(safelistPath, 'utf-8')
+                : '';
             if (existing !== content) {
                 fs.writeFileSync(safelistPath, content);
             }
@@ -437,8 +571,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param dir - the directory path to scan recursively
          */
         function scanDir(dir: string): void {
-            let entries;
-            try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+            let entries: fs.Dirent[];
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true });
+            } catch {
+                return;
+            }
             for (const entry of entries) {
                 if (entry.isDirectory()) {
                     if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
@@ -446,11 +584,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
                     const filePath = path.join(dir, entry.name);
+                    if (!shouldProcessSource(filePath)) {
+                        continue;
+                    }
                     try {
                         const content = fs.readFileSync(filePath, 'utf-8');
-                        if (!content.includes('sz=') && !content.includes('sz:')) {continue;}
-                        const result = transformSourceCode(content, filePath, { astBudget: astBudgetOverride });
-                        if (!result.transformed) {continue;}
+                        if (!content.includes('sz=') && !content.includes('sz:')) {
+                            continue;
+                        }
+                        const result = transformConfiguredSource(content, filePath);
+                        if (!result.transformed) {
+                            continue;
+                        }
                         // Piggyback: use classes collected inside the Babel JSXAttribute visitor.
                         // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
                         // comments, and string literals in other positions never produce false
@@ -472,40 +617,57 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // to Tailwind's content scanner. Extract them here.
                         if (result.usesRuntime) {
                             const szCallRe = /_sz\(\s*\{/g;
-                            let szMatch;
-                            while ((szMatch = szCallRe.exec(result.code)) !== null) {
+                            for (const szMatch of result.code.matchAll(szCallRe)) {
                                 let depth = 1;
-                                let idx = szMatch.index + szMatch[0].length;
+                                let idx = (szMatch.index ?? 0) + szMatch[0].length;
                                 while (idx < result.code.length && depth > 0) {
-                                    if (result.code[idx] === '{') {depth++;} else if (result.code[idx] === '}') {depth--;}
+                                    if (result.code[idx] === '{') {
+                                        depth++;
+                                    } else if (result.code[idx] === '}') {
+                                        depth--;
+                                    }
                                     idx++;
                                 }
-                                const objStr = result.code.slice(szMatch.index + szMatch[0].length, idx - 1);
+                                const objStr = result.code.slice(
+                                    (szMatch.index ?? 0) + szMatch[0].length,
+                                    idx - 1,
+                                );
                                 // Extract key: 'string' or "string" pairs
                                 const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
-                                let kv;
-                                while ((kv = strKv.exec(objStr)) !== null) {
+                                for (const kv of objStr.matchAll(strKv)) {
                                     try {
                                         const val = kv[2] ?? kv[3];
                                         const r = transform({ [kv[1]]: val });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) { discoveredClasses.add(c); }
-                                    } catch { /* skip invalid */ }
+                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
+                                            discoveredClasses.add(c);
+                                        }
+                                    } catch {
+                                        /* skip invalid */
+                                    }
                                 }
                                 // Extract key: number pairs
                                 const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
-                                while ((kv = numKv.exec(objStr)) !== null) {
+                                for (const kv of objStr.matchAll(numKv)) {
                                     try {
                                         const r = transform({ [kv[1]]: parseFloat(kv[2]) });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) { discoveredClasses.add(c); }
-                                    } catch { /* skip invalid */ }
+                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
+                                            discoveredClasses.add(c);
+                                        }
+                                    } catch {
+                                        /* skip invalid */
+                                    }
                                 }
                                 // Extract key: true/false pairs
                                 const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
-                                while ((kv = boolKv.exec(objStr)) !== null) {
+                                for (const kv of objStr.matchAll(boolKv)) {
                                     try {
                                         const r = transform({ [kv[1]]: kv[2] === 'true' });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) { discoveredClasses.add(c); }
-                                    } catch { /* skip invalid */ }
+                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
+                                            discoveredClasses.add(c);
+                                        }
+                                    } catch {
+                                        /* skip invalid */
+                                    }
                                 }
                             }
                         }
@@ -544,9 +706,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // fully from double-quoted strings, and vice versa.
         const dqPattern = /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g;
         const sqPattern = /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g;
-        let match;
         for (const classPattern of [dqPattern, sqPattern]) {
-            while ((match = classPattern.exec(code)) !== null) {
+            for (const match of code.matchAll(classPattern)) {
                 const classes = match[1].split(/\s+/).filter(Boolean);
                 for (const cls of classes) {
                     state.classes.add(cls);
@@ -558,18 +719,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // This handles pre-compiled ternary expressions like:
         // className={cond ? "text-6xl font-bold" : "text-6xl text-sm"}
         const exprStart = /className=\{/g;
-        while ((match = exprStart.exec(code)) !== null) {
+        for (const match of code.matchAll(exprStart)) {
             let depth = 1;
-            let i = match.index + match[0].length;
+            let i = (match.index ?? 0) + match[0].length;
             while (i < code.length && depth > 0) {
-                if (code[i] === '{') {depth++;} else if (code[i] === '}') {depth--;}
+                if (code[i] === '{') {
+                    depth++;
+                } else if (code[i] === '}') {
+                    depth--;
+                }
                 i++;
             }
-            const expr = code.slice(match.index + match[0].length, i - 1);
+            const expr = code.slice((match.index ?? 0) + match[0].length, i - 1);
             // Extract all quoted strings within the expression
             const strPattern = /"([^"]+)"|'([^']+)'/g;
-            let strMatch;
-            while ((strMatch = strPattern.exec(expr)) !== null) {
+            for (const strMatch of expr.matchAll(strPattern)) {
                 const str = strMatch[1] || strMatch[2];
                 const classes = str.split(/\s+/).filter(Boolean);
                 for (const cls of classes) {
@@ -624,376 +788,424 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return result;
     }
 
-    const prePlugin = createUnplugin<PartialCsszyxConfig, boolean>((_pluginOptions: PartialCsszyxConfig) => ({
-        name: 'csszyx:pre',
-        enforce: 'pre',
+    const prePlugin = createUnplugin<PartialCsszyxConfig, boolean>(
+        (_pluginOptions: PartialCsszyxConfig) => ({
+            name: 'csszyx:pre',
+            enforce: 'pre',
 
-        /**
-         * Resolves virtual module IDs for csszyx mangle-map and checksum modules.
-         * @param id - the module ID to resolve
-         * @returns resolved ID if virtual, null otherwise
-         */
-        resolveId(id) {
-            if (isVirtualModule(id)) {
-                return resolveVirtualModule(id);
-            }
-            return null;
-        },
+            /**
+             * Resolves virtual module IDs for csszyx mangle-map and checksum modules.
+             * @param id - the module ID to resolve
+             * @returns resolved ID if virtual, null otherwise
+             */
+            resolveId(id) {
+                if (isVirtualModule(id)) {
+                    return resolveVirtualModule(id);
+                }
+                return null;
+            },
 
-        /**
-         * Loads virtual module content — generates mangle map or checksum module code.
-         * @param id - the resolved module ID to load
-         * @returns generated module source if virtual, null otherwise
-         */
-        load(id) {
-            if (id === RESOLVED_VIRTUAL_MODULE_ID) {
-                finalizeMangleMap();
-                return createMangleMapModule(state.mangleMap, state.checksum);
-            }
-            if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
-                finalizeMangleMap();
-                return createChecksumModule(state.checksum);
-            }
-            return null;
-        },
+            /**
+             * Loads virtual module content — generates mangle map or checksum module code.
+             * @param id - the resolved module ID to load
+             * @returns generated module source if virtual, null otherwise
+             */
+            load(id) {
+                if (id === RESOLVED_VIRTUAL_MODULE_ID) {
+                    finalizeMangleMap();
+                    return createMangleMapModule(state.mangleMap, state.checksum);
+                }
+                if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
+                    finalizeMangleMap();
+                    return createChecksumModule(state.checksum);
+                }
+                return null;
+            },
 
-        /**
-         * Filters files for the pre-transform phase — source files plus CSS files.
-         * CSS files need special handling to inject @source inline() for Tailwind class discovery.
-         * @param id - the file path to check for inclusion
-         * @returns true if the file should be transformed, false otherwise
-         */
-        transformInclude(id) {
-            if (id.includes('node_modules') || id.includes('/packages/') || (id.includes('.next') && !id.includes('static'))) {
-                return false;
-            }
-            // Handle CSS files to inject discovered classes as @source inline()
-            if (/\.css(\?.*)?$/.test(id)) {return true;}
-            // Only handle source files in PRE phase
-            return /\.[tj]sx?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte');
-        },
+            /**
+             * Filters files for the pre-transform phase — source files plus CSS files.
+             * CSS files need special handling to inject @source inline() for Tailwind class discovery.
+             * @param id - the file path to check for inclusion
+             * @returns true if the file should be transformed, false otherwise
+             */
+            transformInclude(id) {
+                // Handle CSS files to inject discovered classes as @source inline()
+                if (shouldProcessCss(id)) {
+                    return true;
+                }
+                // Only handle source files in PRE phase
+                return shouldProcessSource(id);
+            },
 
-        /**
-         * Core transform: detects sz prop, compiles to className, injects runtime, collects classes.
-         * For CSS files: injects @source inline() so Tailwind generates CSS for sz-derived classes.
-         * @param code - the source code to transform
-         * @param id - the file path of the module being transformed
-         * @returns transformed code with source map, or null if no changes were made
-         */
-        transform(code, id) {
-            if (/\.[tj]sx?(\?.*)?$/.test(id)) {
-                assertNoRSCBoundaryViolation(code, id);
-            }
+            /**
+             * Core transform: detects sz prop, compiles to className, injects runtime, collects classes.
+             * For CSS files: injects @source inline() so Tailwind generates CSS for sz-derived classes.
+             * @param code - the source code to transform
+             * @param id - the file path of the module being transformed
+             * @returns transformed code with source map, or null if no changes were made
+             */
+            transform(code, id) {
+                if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
+                    return null;
+                }
 
-            // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
-            // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
-            // is not imported anywhere, so it's invisible to Tailwind. Injecting @source
-            // directly into the CSS that imports tailwindcss is the only reliable way to ensure
-            // Tailwind generates CSS for the classes that csszyx transforms sz props into.
-            if (/\.css(\?.*)?$/.test(id)) {
-                const hasTailwindImport = code.includes('@import "tailwindcss') ||
-                    code.includes("@import 'tailwindcss");
-                if (hasTailwindImport && state.classes.size > 0) {
-                    // Only include classes that look like real Tailwind candidates:
-                    // at least 2 chars, starts with a letter, not pure mangled symbols.
-                    const candidates = Array.from(state.classes)
-                        .filter(c => c.length >= 2 && /^[a-z]/.test(c))
-                        .join(' ');
-                    if (candidates) {
-                        const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME).replace(/\\/g, '/');
-                        const cssDir = path.dirname(id).replace(/\\/g, '/');
-                        let relPath = path.posix.relative(cssDir, safelistPath);
-                        if (!relPath.startsWith('.')) {relPath = './' + relPath;}
-                        const sourceDirective = `@source "${relPath}";\n`;
-                        const transformed = code.replace(
-                            /(@import\s+["']tailwindcss[^"']*["'];)/,
-                            `$1\n${sourceDirective}`,
-                        );
-                        if (transformed !== code) {
-                            return { code: transformed, map: null };
+                if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                    assertNoRSCBoundaryViolation(code, id);
+                }
+
+                // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
+                // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
+                // is not imported anywhere, so it's invisible to Tailwind. Injecting @source
+                // directly into the CSS that imports tailwindcss is the only reliable way to ensure
+                // Tailwind generates CSS for the classes that csszyx transforms sz props into.
+                if (/\.css(\?.*)?$/.test(id)) {
+                    const hasTailwindImport =
+                        code.includes('@import "tailwindcss') ||
+                        code.includes("@import 'tailwindcss");
+                    if (hasTailwindImport && state.classes.size > 0) {
+                        // Only include classes that look like real Tailwind candidates:
+                        // at least 2 chars, starts with a letter, not pure mangled symbols.
+                        const candidates = Array.from(state.classes)
+                            .filter(c => c.length >= 2 && /^[a-z]/.test(c))
+                            .join(' ');
+                        if (candidates) {
+                            const safelistPath = path
+                                .join(state.rootDir, SAFELIST_FILENAME)
+                                .replace(/\\/g, '/');
+                            const cssDir = path.dirname(id).replace(/\\/g, '/');
+                            let relPath = path.posix.relative(cssDir, safelistPath);
+                            if (!relPath.startsWith('.')) {
+                                relPath = `./${relPath}`;
+                            }
+                            const sourceDirective = `@source "${relPath}";\n`;
+                            const transformed = code.replace(
+                                /(@import\s+["']tailwindcss[^"']*["'];)/,
+                                `$1\n${sourceDirective}`,
+                            );
+                            if (transformed !== code) {
+                                return { code: transformed, map: null };
+                            }
+                        }
+                    }
+                    return null;
+                }
+
+                let transformedCode = code;
+                let usesRuntime = false;
+                let usesMerge = false;
+                let usesColorVar = false;
+                let transformed = false;
+                let szClasses: Set<string> | undefined;
+
+                // Detect sz prop in both JSX (sz="...", sz={{...}}) and JS/JSX-transformed (sz: "...", sz: {...}) formats
+                const hasSzProp =
+                    code.includes('sz=') || /\bsz\s*:\s*["'{]/.test(code) || code.includes('sz: "');
+
+                if (hasSzProp) {
+                    if (id.endsWith('.vue')) {
+                        const result = vuePreprocess(code, options as VueAdapterOptions);
+                        if (result.transformed) {
+                            transformedCode = result.code;
+                            transformed = true;
+                        }
+                    } else if (id.endsWith('.svelte')) {
+                        const result = sveltePreprocess(code, options as SvelteAdapterOptions);
+                        if (result) {
+                            transformedCode = result.code;
+                            transformed = true;
+                        }
+                    } else {
+                        const result = transformConfiguredSource(code, id);
+                        transformedCode = result.code;
+                        usesRuntime = result.usesRuntime;
+                        usesMerge = result.usesMerge;
+                        usesColorVar = result.usesColorVar;
+                        transformed = result.transformed;
+                        szClasses = result.classes;
+                        // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
+                        // Suppressed in production to avoid leaking source paths into build output.
+                        if (
+                            result.diagnostics.length > 0 &&
+                            process.env.NODE_ENV !== 'production'
+                        ) {
+                            for (const msg of result.diagnostics) {
+                                this.warn(`[csszyx] ${id}\n  ${msg}`);
+                            }
+                        }
+                        for (const [token, data] of result.recoveryTokens) {
+                            state.recoveryTokens.set(token, data);
                         }
                     }
                 }
-                return null;
-            }
 
-            let transformedCode = code;
-            let usesRuntime = false;
-            let usesMerge = false;
-            let usesColorVar = false;
-            let transformed = false;
-            let szClasses: Set<string> | undefined;
+                // Layout injection (SSR frameworks like Next.js)
+                // Uses placeholders that are replaced in processAssets after all classes are collected
+                if (
+                    transformedCode.includes('<html') &&
+                    /layout|Root|Document|app\\.tsx?$/i.test(id)
+                ) {
+                    const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
+                    transformedCode = transformedCode.replace(
+                        /<html([^>]*)>/i,
+                        `<html$1 ${attrName}="${CHECKSUM_PLACEHOLDER}">`,
+                    );
 
-            // Detect sz prop in both JSX (sz="...", sz={{...}}) and JS/JSX-transformed (sz: "...", sz: {...}) formats
-            const hasSzProp = code.includes('sz=') || /\bsz\s*:\s*["'{]/.test(code) || code.includes('sz: "');
-
-            if (hasSzProp) {
-                if (id.endsWith('.vue')) {
-                    const result = vuePreprocess(code, options as VueAdapterOptions);
-                    if (result.transformed) {
-                        transformedCode = result.code;
-                        transformed = true;
+                    // Inject mangle map debug script with placeholders
+                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var r={};for(var k in m)r[m[k]]=k;window.__csszyx={mangleMap:m,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+                    if (transformedCode.includes('<body')) {
+                        transformedCode = transformedCode.replace(
+                            /(<body[^>]*>)/i,
+                            `$1${debugScript}`,
+                        );
                     }
-                } else if (id.endsWith('.svelte')) {
-                    const result = sveltePreprocess(code, options as SvelteAdapterOptions);
-                    if (result) {
-                        transformedCode = result.code;
-                        transformed = true;
+                    transformed = true;
+                }
+
+                // Runtime + color var import injection
+                {
+                    const imports: string[] = [];
+                    if (usesRuntime) {
+                        imports.push('_sz');
                     }
-                } else {
-                    const result = transformSourceCode(code, id, { astBudget: astBudgetOverride });
-                    transformedCode = result.code;
-                    usesRuntime = result.usesRuntime;
-                    usesMerge = result.usesMerge;
-                    usesColorVar = result.usesColorVar;
-                    transformed = result.transformed;
-                    szClasses = result.classes;
-                    // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
-                    // Suppressed in production to avoid leaking source paths into build output.
-                    if (result.diagnostics.length > 0 && process.env.NODE_ENV !== 'production') {
-                        for (const msg of result.diagnostics) {
-                            this.warn(`[csszyx] ${id}\n  ${msg}`);
+                    if (usesMerge) {
+                        imports.push('_szMerge');
+                    }
+                    if (usesColorVar) {
+                        imports.push('__szColorVar');
+                    }
+                    // Filter out helpers already imported from @csszyx/runtime
+                    const needed = imports.filter(
+                        name =>
+                            !new RegExp(
+                                `\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]@csszyx/runtime['"]`,
+                            ).test(transformedCode),
+                    );
+                    if (needed.length > 0) {
+                        const existingImport = transformedCode.match(
+                            /^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m,
+                        );
+                        if (existingImport) {
+                            // Append to the existing @csszyx/runtime import
+                            transformedCode = transformedCode.replace(
+                                existingImport[0],
+                                `${existingImport[1]}, ${needed.join(', ')} } from '@csszyx/runtime'`,
+                            );
+                        } else {
+                            const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
+                            const directiveMatch = transformedCode.match(
+                                /^['"]use (client|server)['"];?\s*/,
+                            );
+                            if (directiveMatch) {
+                                const directive = directiveMatch[0];
+                                transformedCode = transformedCode.replace(
+                                    directive,
+                                    `${directive}${importStmt}`,
+                                );
+                            } else {
+                                transformedCode = `${importStmt}${transformedCode}`;
+                            }
                         }
+                        transformed = true;
+                    }
+                }
+
+                if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                    assertNoRSCBoundaryViolation(transformedCode, id);
+                    const record = createRSCModuleRecord(transformedCode, id);
+                    state.rscModules.set(record.id, record);
+                }
+
+                // Extract classes for the mangle map but DON'T mangle yet.
+                // Mangling is deferred to processAssets/generateBundle where we have the complete map.
+                if (
+                    transformed ||
+                    transformedCode.includes('class=') ||
+                    transformedCode.includes('className=')
+                ) {
+                    if (szClasses !== undefined) {
+                        // TSX/JSX sz file: use piggyback classes from Babel JSXAttribute visitor.
+                        // No regex needed — classes were collected during the existing Babel traverse
+                        // at zero extra cost, with no false positives from text content or JSDoc.
+                        // Only sz-generated classes go into state.classes (the mangle map).
+                        // Raw className attribute values (szRawClassNames) are intentionally excluded:
+                        // they are custom CSS classes (e.g. reveal-item, glow-card) defined in raw CSS
+                        // files, not TW utilities. Mangling them would break JS that references them by
+                        // name (querySelectorAll, classList.add) without updating those call sites.
+                        for (const cls of szClasses) {
+                            state.classes.add(cls);
+                        }
+                    } else {
+                        // Non-sz file (fast-path, no Babel ran) or Vue/Svelte adapter:
+                        // fall back to regex for existing className attributes.
+                        extractClasses(transformedCode);
+                    }
+                    return { code: transformedCode, map: null };
+                }
+                return null;
+            },
+
+            /** Finalizes the mangle map after all source modules have been processed. */
+            buildEnd() {
+                finalizeMangleMap();
+                assertNoRSCGraphViolation(state.rscModules);
+                // Expose the mangle map as a Node.js global so that dynamic() SSR calls
+                // (which run in the same process during Astro/Next.js SSG) can resolve
+                // original class names to their mangled equivalents. Without this, dynamic()
+                // in SSR returns unmangled names (e.g. "p-4") while the built CSS only has
+                // mangled selectors (e.g. ".q0"), causing styles to silently not apply.
+                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                    (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map =
+                        state.mangleMap;
+                }
+            },
+
+            /**
+             * Webpack hook: pre-scans source files before compilation for Tailwind class discovery.
+             * @param compiler - the Webpack compiler instance
+             */
+            webpack(compiler: WebpackCompiler) {
+                compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
+                    const root = compiler.context || process.cwd();
+                    state.rootDir = root;
+                    if (state.classes.size === 0) {
+                        prescanAndWriteClasses();
+                    }
+                    // Generate theme type augmentation from @theme CSS blocks
+                    runThemeScan(root, options.build?.scanCss);
+                });
+                // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
+                if (options.build?.scanCss) {
+                    compiler.hooks.thisCompilation.tap('csszyx:theme-deps', compilation => {
+                        const root = compiler.context || process.cwd();
+                        for (const file of expandFilePatterns(root, options.build?.scanCss ?? [])) {
+                            compilation.fileDependencies.add(file);
+                        }
+                    });
+                }
+            },
+
+            vite: {
+                /**
+                 * Vite hook: pre-scans source files when config is resolved.
+                 * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
+                 * @param config - the resolved Vite configuration object
+                 */
+                configResolved(config) {
+                    const root = config.root || process.cwd();
+                    state.rootDir = root;
+                    // Pre-scan source files so Tailwind can discover classes
+                    prescanAndWriteClasses();
+                    // Generate theme type augmentation from @theme CSS blocks
+                    runThemeScan(root, options.build?.scanCss);
+                },
+
+                /**
+                 * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
+                 * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
+                 * @param ctx - HMR context containing the changed file
+                 */
+                handleHotUpdate(ctx) {
+                    // Theme scan for @theme CSS blocks
+                    const scanCss = options.build?.scanCss;
+                    if (scanCss) {
+                        const root = ctx.server.config.root || process.cwd();
+                        if (matchesAnyPattern(ctx.file, scanCss, root)) {
+                            runThemeScan(root, scanCss);
+                        }
+                    }
+
+                    // Incremental sz class discovery: when a source file changes, scan it
+                    // immediately and update csszyx-classes.html if new classes are found.
+                    // This ensures Tailwind generates CSS for new sz props without a dev restart.
+                    // handleHotUpdate fires before the module is re-transformed, so we must
+                    // read and transform the file ourselves to discover any new classes.
+                    if (!shouldProcessSource(ctx.file)) {
+                        return;
+                    }
+
+                    let fileContent: string, result: SourceTransformResult;
+                    try {
+                        fileContent = fs.readFileSync(ctx.file, 'utf-8');
+                    } catch {
+                        return;
+                    }
+
+                    if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) {
+                        return;
+                    }
+
+                    try {
+                        result = transformConfiguredSource(fileContent, ctx.file);
+                    } catch {
+                        return;
+                    }
+
+                    if (!result.transformed) {
+                        return;
+                    }
+
+                    const sizeBefore = state.classes.size;
+                    for (const cls of result.classes) {
+                        state.classes.add(cls);
                     }
                     for (const [token, data] of result.recoveryTokens) {
                         state.recoveryTokens.set(token, data);
                     }
-                }
-            }
 
-            // Layout injection (SSR frameworks like Next.js)
-            // Uses placeholders that are replaced in processAssets after all classes are collected
-            if (transformedCode.includes('<html') && /layout|Root|Document|app\\.tsx?$/i.test(id)) {
-                const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
-                transformedCode = transformedCode.replace(/<html([^>]*)>/i, `<html$1 ${attrName}="${CHECKSUM_PLACEHOLDER}">`);
-
-                // Inject mangle map debug script with placeholders
-                const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var r={};for(var k in m)r[m[k]]=k;window.__csszyx={mangleMap:m,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
-                if (transformedCode.includes('<body')) {
-                    transformedCode = transformedCode.replace(
-                        /(<body[^>]*>)/i,
-                        `$1${debugScript}`,
-                    );
-                }
-                transformed = true;
-            }
-
-            // Runtime + color var import injection
-            {
-                const imports: string[] = [];
-                if (usesRuntime) {imports.push('_sz');}
-                if (usesMerge) {imports.push('_szMerge');}
-                if (usesColorVar) {imports.push('__szColorVar');}
-                // Filter out helpers already imported from @csszyx/runtime
-                const needed = imports.filter(
-                    name => !new RegExp(`\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]@csszyx/runtime['"]`).test(transformedCode),
-                );
-                if (needed.length > 0) {
-                    const existingImport = transformedCode.match(/^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m);
-                    if (existingImport) {
-                        // Append to the existing @csszyx/runtime import
-                        transformedCode = transformedCode.replace(
-                            existingImport[0],
-                            `${existingImport[1]}, ${needed.join(', ')} } from '@csszyx/runtime'`,
-                        );
-                    } else {
-                        const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
-                        const directiveMatch = transformedCode.match(/^['"]use (client|server)['"];?\s*/);
-                        if (directiveMatch) {
-                            const directive = directiveMatch[0];
-                            transformedCode = transformedCode.replace(directive, `${directive}${importStmt}`);
-                        } else {
-                            transformedCode = `${importStmt}${transformedCode}`;
-                        }
+                    if (state.classes.size > sizeBefore) {
+                        // New classes found — update manifest so Tailwind regenerates CSS
+                        writeSafelistFile(state.classes);
+                        // Emit a synthetic watcher event on the manifest file so Tailwind's
+                        // internal file scanner (which listens on ctx.server.watcher) picks up
+                        // the change immediately, even if the OS fs event arrives with a delay.
+                        const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
+                        ctx.server.watcher.emit('change', safelistPath);
                     }
-                    transformed = true;
-                }
-            }
-
-            if (/\.[tj]sx?(\?.*)?$/.test(id)) {
-                assertNoRSCBoundaryViolation(transformedCode, id);
-                const record = createRSCModuleRecord(transformedCode, id);
-                state.rscModules.set(record.id, record);
-            }
-
-            // Extract classes for the mangle map but DON'T mangle yet.
-            // Mangling is deferred to processAssets/generateBundle where we have the complete map.
-            if (transformed || transformedCode.includes('class=') || transformedCode.includes('className=')) {
-                if (szClasses !== undefined) {
-                    // TSX/JSX sz file: use piggyback classes from Babel JSXAttribute visitor.
-                    // No regex needed — classes were collected during the existing Babel traverse
-                    // at zero extra cost, with no false positives from text content or JSDoc.
-                    // Only sz-generated classes go into state.classes (the mangle map).
-                    // Raw className attribute values (szRawClassNames) are intentionally excluded:
-                    // they are custom CSS classes (e.g. reveal-item, glow-card) defined in raw CSS
-                    // files, not TW utilities. Mangling them would break JS that references them by
-                    // name (querySelectorAll, classList.add) without updating those call sites.
-                    for (const cls of szClasses) {state.classes.add(cls);}
-                } else {
-                    // Non-sz file (fast-path, no Babel ran) or Vue/Svelte adapter:
-                    // fall back to regex for existing className attributes.
-                    extractClasses(transformedCode);
-                }
-                return { code: transformedCode, map: null };
-            }
-            return null;
-        },
-
-        /** Finalizes the mangle map after all source modules have been processed. */
-        buildEnd() {
-            finalizeMangleMap();
-            assertNoRSCGraphViolation(state.rscModules);
-            // Expose the mangle map as a Node.js global so that dynamic() SSR calls
-            // (which run in the same process during Astro/Next.js SSG) can resolve
-            // original class names to their mangled equivalents. Without this, dynamic()
-            // in SSR returns unmangled names (e.g. "p-4") while the built CSS only has
-            // mangled selectors (e.g. ".q0"), causing styles to silently not apply.
-            if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map = state.mangleMap;
-            }
-        },
-
-        /**
-         * Webpack hook: pre-scans source files before compilation for Tailwind class discovery.
-         * @param compiler - the Webpack compiler instance
-         */
-        webpack(compiler: WebpackCompiler) {
-            compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
-                const root = compiler.context || process.cwd();
-                state.rootDir = root;
-                if (state.classes.size === 0) {
-                    prescanAndWriteClasses();
-                }
-                // Generate theme type augmentation from @theme CSS blocks
-                runThemeScan(root, options.build?.scanCss);
-            });
-            // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
-            if (options.build?.scanCss) {
-                const patterns = Array.isArray(options.build.scanCss)
-                    ? options.build.scanCss
-                    : [options.build.scanCss];
-                compiler.hooks.thisCompilation.tap('csszyx:theme-deps', (compilation) => {
-                    const root = compiler.context || process.cwd();
-                    for (const pattern of patterns) {
-                        const resolved = path.isAbsolute(pattern) ? pattern : path.join(root, pattern);
-                        if (fs.existsSync(resolved)) {
-                            compilation.fileDependencies.add(resolved);
-                        }
-                    }
-                });
-            }
-        },
-
-        vite: {
-            /**
-             * Vite hook: pre-scans source files when config is resolved.
-             * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
-             * @param config - the resolved Vite configuration object
-             */
-            configResolved(config) {
-                const root = config.root || process.cwd();
-                state.rootDir = root;
-                // Pre-scan source files so Tailwind can discover classes
-                prescanAndWriteClasses();
-                // Generate theme type augmentation from @theme CSS blocks
-                runThemeScan(root, options.build?.scanCss);
-            },
-
-            /**
-             * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
-             * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
-             * @param ctx - HMR context containing the changed file
-             */
-            handleHotUpdate(ctx) {
-                // Theme scan for @theme CSS blocks
-                const scanCss = options.build?.scanCss;
-                if (scanCss) {
-                    const patterns = Array.isArray(scanCss) ? scanCss : [scanCss];
-                    const root = ctx.server.config.root || process.cwd();
-                    const isWatched = patterns.some(p => {
-                        const resolved = path.isAbsolute(p) ? p : path.join(root, p);
-                        return ctx.file === resolved;
-                    });
-                    if (isWatched) {
-                        runThemeScan(root, scanCss);
-                    }
-                }
-
-                // Incremental sz class discovery: when a source file changes, scan it
-                // immediately and update csszyx-classes.html if new classes are found.
-                // This ensures Tailwind generates CSS for new sz props without a dev restart.
-                // handleHotUpdate fires before the module is re-transformed, so we must
-                // read and transform the file ourselves to discover any new classes.
-                if (!SOURCE_EXTENSIONS.has(path.extname(ctx.file))) { return; }
-                if (ctx.file.includes('node_modules')) { return; }
-
-                let fileContent: string, result: ReturnType<typeof transformSourceCode>;
-                try { fileContent = fs.readFileSync(ctx.file, 'utf-8'); } catch { return; }
-
-                if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) { return; }
-
-                try { result = transformSourceCode(fileContent, ctx.file, { astBudget: astBudgetOverride }); } catch { return; }
-
-                if (!result.transformed) { return; }
-
-                const sizeBefore = state.classes.size;
-                for (const cls of result.classes) { state.classes.add(cls); }
-                for (const [token, data] of result.recoveryTokens) {
-                    state.recoveryTokens.set(token, data);
-                }
-
-                if (state.classes.size > sizeBefore) {
-                    // New classes found — update manifest so Tailwind regenerates CSS
-                    writeSafelistFile(state.classes);
-                    // Emit a synthetic watcher event on the manifest file so Tailwind's
-                    // internal file scanner (which listens on ctx.server.watcher) picks up
-                    // the change immediately, even if the OS fs event arrives with a delay.
-                    const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
-                    ctx.server.watcher.emit('change', safelistPath);
-                }
-            },
-            transformIndexHtml: {
-                order: 'pre',
-                /**
-                 * Injects hydration data (mangle map + checksum) into the HTML document.
-                 * Also mangles class attributes in SSR-rendered HTML so they match mangled CSS selectors.
-                 * @param html - the raw HTML string to transform
-                 * @returns transformed HTML with injected hydration data
-                 */
-                handler(html) {
-                    finalizeMangleMap();
-                    let result = injectHydrationData(html, state.mangleMap, state.checksum, {
-                        mode: options.production?.injectChecksum === false ? 'script' : 'script',
-                        minify: process.env.NODE_ENV === 'production',
-                    });
-                    // Recovery manifest is a no-op when zero szRecover tokens were
-                    // emitted across the build, so pages without recovery sites get
-                    // no extra script tag. In production, dev-only tokens are stripped
-                    // and a single rolled-up warning lists the affected paths.
-                    if (state.recoveryTokens.size > 0) {
-                        const isProduction = process.env.NODE_ENV === 'production';
-                        const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
-                            state.recoveryTokens,
-                            {
-                                production: isProduction,
-                                mangleChecksum: state.checksum,
-                            },
-                        );
-                        if (strippedDevOnlyPaths.length > 0) {
-                            console.warn(
-                                `[csszyx] Stripped ${strippedDevOnlyPaths.length} ` +
-                                'szRecover="dev-only" token(s) from the production manifest. ' +
-                                'Recovery for these elements is disabled in production by design. ' +
-                                `Sites: ${strippedDevOnlyPaths.join(', ')}`,
+                },
+                transformIndexHtml: {
+                    order: 'pre',
+                    /**
+                     * Injects hydration data (mangle map + checksum) into the HTML document.
+                     * Also mangles class attributes in SSR-rendered HTML so they match mangled CSS selectors.
+                     * @param html - the raw HTML string to transform
+                     * @returns transformed HTML with injected hydration data
+                     */
+                    handler(html) {
+                        finalizeMangleMap();
+                        let result = injectHydrationData(html, state.mangleMap, state.checksum, {
+                            mode:
+                                options.production?.injectChecksum === false ? 'script' : 'script',
+                            minify: process.env.NODE_ENV === 'production',
+                        });
+                        // Recovery manifest is a no-op when zero szRecover tokens were
+                        // emitted across the build, so pages without recovery sites get
+                        // no extra script tag. In production, dev-only tokens are stripped
+                        // and a single rolled-up warning lists the affected paths.
+                        if (state.recoveryTokens.size > 0) {
+                            const isProduction = process.env.NODE_ENV === 'production';
+                            const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
+                                state.recoveryTokens,
+                                {
+                                    production: isProduction,
+                                    mangleChecksum: state.checksum,
+                                },
                             );
+                            if (strippedDevOnlyPaths.length > 0) {
+                                console.warn(
+                                    `[csszyx] Stripped ${strippedDevOnlyPaths.length} ` +
+                                        'szRecover="dev-only" token(s) from the production manifest. ' +
+                                        'Recovery for these elements is disabled in production by design. ' +
+                                        `Sites: ${strippedDevOnlyPaths.join(', ')}`,
+                                );
+                            }
+                            result = injectRecoveryManifest(result, manifest);
                         }
-                        result = injectRecoveryManifest(result, manifest);
-                    }
-                    return result;
+                        return result;
+                    },
                 },
             },
-        },
-    }));
+        }),
+    );
 
     const postPlugin = createUnplugin<PartialCsszyxConfig, boolean>(() => ({
         name: 'csszyx:post',
@@ -1007,18 +1219,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param compiler - the Webpack compiler instance
          */
         webpack(compiler: WebpackCompiler) {
-            compiler.hooks.compilation.tap('csszyx:post', (compilation) => {
+            compiler.hooks.compilation.tap('csszyx:post', compilation => {
                 // Determine stage - default to optimize size to encompass most transformations
-                const stage = compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              (compilation.constructor as any).PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
+                const stage =
+                    compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
+                    (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE?: number })
+                        .PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
 
                 compilation.hooks.processAssets.tap(
                     {
                         name: 'csszyx:post',
                         stage: stage || 400, // Fallback integer
                     },
-                    (assets) => {
+                    assets => {
                         finalizeMangleMap();
 
                         // Webpack dev mode wraps every module in eval("..."), which means
@@ -1041,7 +1254,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             buildId: state.checksum,
                             classes: Object.keys(state.mangleMap),
                         };
-                        if (manglingEnabled && !isWebpackDevMode && Object.keys(state.mangleMap).length > 0) {
+                        if (
+                            manglingEnabled &&
+                            !isWebpackDevMode &&
+                            Object.keys(state.mangleMap).length > 0
+                        ) {
                             manifestData.mangleMap = state.mangleMap;
                         }
                         compilation.emitAsset(
@@ -1053,7 +1270,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             const asset = assets[file];
                             const source = asset.source().toString();
 
-                            if (manglingEnabled && !isWebpackDevMode && Object.keys(state.mangleMap).length > 0) {
+                            if (
+                                manglingEnabled &&
+                                !isWebpackDevMode &&
+                                Object.keys(state.mangleMap).length > 0
+                            ) {
                                 if (file.endsWith('.css')) {
                                     try {
                                         const result = mangleCSSSync(source, state.mangleMap, {
@@ -1068,7 +1289,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                             continue;
                                         }
                                     } catch (e: unknown) {
-                                        if (e && typeof e === 'object' && 'name' in e && (e as { name: string }).name === 'CssSyntaxError') {
+                                        if (
+                                            e &&
+                                            typeof e === 'object' &&
+                                            'name' in e &&
+                                            (e as { name: string }).name === 'CssSyntaxError'
+                                        ) {
                                             // Ignore CSS syntax errors
                                         } else {
                                             throw e;
@@ -1077,16 +1303,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                 } else if (file.endsWith('.html')) {
                                     // Mangle class attributes in HTML assets (SSR-generated pages)
                                     const mangledHtml = source
-                                        .replace(/\bclass="([^"]*)"/g, (_m: string, cls: string) => {
-                                            const out = cls.split(/\s+/).filter(Boolean)
-                                                .map((c: string) => state.mangleMap[c] || c).join(' ');
-                                            return out !== cls ? `class="${out}"` : _m;
-                                        })
-                                        .replace(/\bclass='([^']*)'/g, (_m: string, cls: string) => {
-                                            const out = cls.split(/\s+/).filter(Boolean)
-                                                .map((c: string) => state.mangleMap[c] || c).join(' ');
-                                            return out !== cls ? `class='${out}'` : _m;
-                                        });
+                                        .replace(
+                                            /\bclass="([^"]*)"/g,
+                                            (_m: string, cls: string) => {
+                                                const out = cls
+                                                    .split(/\s+/)
+                                                    .filter(Boolean)
+                                                    .map((c: string) => state.mangleMap[c] || c)
+                                                    .join(' ');
+                                                return out !== cls ? `class="${out}"` : _m;
+                                            },
+                                        )
+                                        .replace(
+                                            /\bclass='([^']*)'/g,
+                                            (_m: string, cls: string) => {
+                                                const out = cls
+                                                    .split(/\s+/)
+                                                    .filter(Boolean)
+                                                    .map((c: string) => state.mangleMap[c] || c)
+                                                    .join(' ');
+                                                return out !== cls ? `class='${out}'` : _m;
+                                            },
+                                        );
                                     if (mangledHtml !== source) {
                                         compilation.updateAsset(
                                             file,
@@ -1110,7 +1348,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                             // Even when mangling is disabled, still replace placeholders
                             // (checksum + mangle map) in JS files
-                            if (file.endsWith('.js') && (source.includes(CHECKSUM_PLACEHOLDER) || source.includes(MANGLE_MAP_PLACEHOLDER))) {
+                            if (
+                                file.endsWith('.js') &&
+                                (source.includes(CHECKSUM_PLACEHOLDER) ||
+                                    source.includes(MANGLE_MAP_PLACEHOLDER))
+                            ) {
                                 const replaced = replacePlaceholders(source);
                                 if (replaced !== source) {
                                     compilation.updateAsset(
@@ -1171,7 +1413,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     chunk.source = result.css;
                                 }
                             } catch (e: unknown) {
-                                if (e && typeof e === 'object' && 'name' in e && (e as { name: string }).name === 'CssSyntaxError') {
+                                if (
+                                    e &&
+                                    typeof e === 'object' &&
+                                    'name' in e &&
+                                    (e as { name: string }).name === 'CssSyntaxError'
+                                ) {
                                     // Ignore CSS syntax errors
                                 } else {
                                     throw e;
@@ -1189,7 +1436,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     // Even when mangling is disabled, still replace placeholders in JS chunks
-                    if (chunk.type === 'chunk' && (chunk.code.includes(CHECKSUM_PLACEHOLDER) || chunk.code.includes(MANGLE_MAP_PLACEHOLDER))) {
+                    if (
+                        chunk.type === 'chunk' &&
+                        (chunk.code.includes(CHECKSUM_PLACEHOLDER) ||
+                            chunk.code.includes(MANGLE_MAP_PLACEHOLDER))
+                    ) {
                         const replaced = replacePlaceholders(chunk.code);
                         if (replaced !== chunk.code) {
                             chunk.code = replaced;
@@ -1205,7 +1456,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
 // Export a single instance for default use (compatibility)
 const defaultInstance = createCsszyxPlugins();
-export const unplugin = defaultInstance.prePlugin; // Fallback
+export const unplugin: UnpluginInstance<PartialCsszyxConfig, boolean> = defaultInstance.prePlugin; // Fallback
 
 /**
  * Creates a Vite plugin array with both pre-transform and post-mangle plugins.
@@ -1244,7 +1495,10 @@ export const webpackPlugin = (options: PartialCsszyxConfig = {}): WebpackPluginI
  */
 export const rollupPlugin = (options: PartialCsszyxConfig = {}): InputPluginOption[] => {
     const { prePlugin, postPlugin } = createCsszyxPlugins(options);
-    return [prePlugin.rollup(options), postPlugin.rollup(options)] as unknown as InputPluginOption[];
+    return [
+        prePlugin.rollup(options),
+        postPlugin.rollup(options),
+    ] as unknown as InputPluginOption[];
 };
 
 /**
@@ -1263,7 +1517,9 @@ export const esbuildPlugin = (options: PartialCsszyxConfig = {}): EsbuildPlugin 
         setup(build: PluginBuild) {
             // `unplugin` resolves esbuild via vite's hoisted esbuild@0.21.x while our
             // local peer is esbuild@0.27.x — type-incompatible but identical at runtime.
-            const b = build as unknown as Parameters<ReturnType<typeof prePlugin.esbuild>['setup']>[0];
+            const b = build as unknown as Parameters<
+                ReturnType<typeof prePlugin.esbuild>['setup']
+            >[0];
             prePlugin.esbuild(options).setup(b);
             postPlugin.esbuild(options).setup(b);
         },

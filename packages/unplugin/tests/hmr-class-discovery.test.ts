@@ -18,8 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * (transformSourceCode + fs) without spinning up a real Vite server.
  */
 describe('HMR incremental class discovery', () => {
-    let tmpDir: string,
-        safelistPath: string;
+    let tmpDir: string, safelistPath: string;
 
     beforeEach(() => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-hmr-'));
@@ -41,7 +40,9 @@ describe('HMR incremental class discovery', () => {
      * @returns true if the file was written, false if it was already up to date
      */
     function writeSafelistFile(classes: Set<string>, dir: string): boolean {
-        if (classes.size === 0) { return false; }
+        if (classes.size === 0) {
+            return false;
+        }
         const p = path.join(dir, 'csszyx-classes.html');
         const classList = Array.from(classes).join(' ');
         const content =
@@ -52,7 +53,9 @@ describe('HMR incremental class discovery', () => {
             `<div class="${classList}">x</div>` +
             '</div>\n';
         const existing = fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
-        if (existing === content) { return false; }
+        if (existing === content) {
+            return false;
+        }
         fs.writeFileSync(p, content);
         return true;
     }
@@ -75,19 +78,26 @@ describe('HMR incremental class discovery', () => {
         }
 
         let result: ReturnType<typeof transformSourceCode>;
-        try { result = transformSourceCode(fileContent); } catch { return { wrote: false, newClasses: [] }; }
-        if (!result.transformed) { return { wrote: false, newClasses: [] }; }
+        try {
+            result = transformSourceCode(fileContent);
+        } catch {
+            return { wrote: false, newClasses: [] };
+        }
+        if (!result.transformed) {
+            return { wrote: false, newClasses: [] };
+        }
 
         const sizeBefore = existingClasses.size;
         const added: string[] = [];
         for (const cls of result.classes) {
-            if (!existingClasses.has(cls)) { added.push(cls); }
+            if (!existingClasses.has(cls)) {
+                added.push(cls);
+            }
             existingClasses.add(cls);
         }
 
-        const wrote = existingClasses.size > sizeBefore
-            ? writeSafelistFile(existingClasses, dir)
-            : false;
+        const wrote =
+            existingClasses.size > sizeBefore ? writeSafelistFile(existingClasses, dir) : false;
 
         return { wrote, newClasses: added };
     }

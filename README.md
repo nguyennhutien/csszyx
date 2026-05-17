@@ -152,10 +152,11 @@ window.__csszyx.checksum; // SHA-256 hex
 
 ## Project Status
 
-- **Version:** 0.4.0 (pre-release)
-- **Tests:** ~2400 unit (vitest) + ~30 E2E (Playwright) across 8 packages
+- **Version:** 0.8.0 (pre-release)
+- **Tests:** 2444 unit (vitest) + 34 E2E (Playwright) across 14 workspace packages
 - **Tailwind:** v4 only (v3 planned)
-- **Release cadence:** managed via Changesets; see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
+- **Release cadence:** automated via [release-please](https://github.com/googleapis/release-please-action); see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
+- **Build pipeline:** source transform uses `oxc-parser` + `magic-string` for surgical edits that preserve developer formatting (default since v0.8.0). Babel remains as an automatic fallback for unexpected oxc failures; opt out per project with `build.parser: 'babel'` or per build with `CSSZYX_PARSER=babel`.
 
 ## Contributing
 

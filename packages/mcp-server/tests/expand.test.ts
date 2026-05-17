@@ -11,19 +11,25 @@ describe('csszyx_expand', () => {
     });
 
     it('expands hover variant', () => {
-        const data = JSON.parse(handleExpand({ sz: { p: 4, hover: { bg: 'blue-700' } } }).content[0].text);
+        const data = JSON.parse(
+            handleExpand({ sz: { p: 4, hover: { bg: 'blue-700' } } }).content[0].text,
+        );
         expect(data.className).toContain('hover:bg-blue-700');
         expect(data.classCount).toBe(2);
     });
 
     it('expands responsive variant (sm, md, lg)', () => {
-        const data = JSON.parse(handleExpand({ sz: { sm: { text: 'lg' }, lg: { text: '2xl' } } }).content[0].text);
+        const data = JSON.parse(
+            handleExpand({ sz: { sm: { text: 'lg' }, lg: { text: '2xl' } } }).content[0].text,
+        );
         expect(data.className).toContain('sm:text-lg');
         expect(data.className).toContain('lg:text-2xl');
     });
 
     it('expands boolean shorthand', () => {
-        const data = JSON.parse(handleExpand({ sz: { flex: true, items: 'center' } }).content[0].text);
+        const data = JSON.parse(
+            handleExpand({ sz: { flex: true, items: 'center' } }).content[0].text,
+        );
         expect(data.className).toContain('flex');
         expect(data.className).toContain('items-center');
     });
@@ -34,7 +40,9 @@ describe('csszyx_expand', () => {
     });
 
     it('expands css escape-hatch', () => {
-        const data = JSON.parse(handleExpand({ sz: { css: { writingMode: 'vertical-lr' } } }).content[0].text);
+        const data = JSON.parse(
+            handleExpand({ sz: { css: { writingMode: 'vertical-lr' } } }).content[0].text,
+        );
         expect(data.className).toContain('[writing-mode:vertical-lr]');
     });
 

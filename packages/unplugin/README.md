@@ -66,10 +66,32 @@ module.exports = {
 
 ## Features
 
-- **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings via Babel AST
+- **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings. Defaults to **oxc-parser + magic-string** (surgical edits, preserves source formatting) since v0.8.0; falls back to Babel automatically on unexpected oxc failures.
 - **HTML injection** -- Injects mangle maps and checksums for SSR hydration
 - **HMR support** -- Updates styles instantly during development
 - **CSS mangling** -- Compresses class names (e.g., `text-center` -> `z`) in production builds
+- **File filters** -- Top-level `include` / `exclude` (glob or RegExp) skip large generated files before the AST budget guard fires; see [Config Overview](https://csszyx.com/config/overview#file-filters)
+
+## Parser selection
+
+Per project:
+
+```ts
+csszyx({
+  build: { parser: "babel" }, // opt out of oxc default
+});
+```
+
+Per build:
+
+```bash
+CSSZYX_PARSER=babel pnpm build
+```
+
+Either path routes prescan, transform, and HMR discovery through the
+legacy Babel implementation. Both paths produce identical class output;
+the only difference is whether magic-string preserves your original
+formatting (oxc) or Babel's code generator pretty-prints it.
 
 ## License
 

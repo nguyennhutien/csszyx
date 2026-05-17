@@ -9,9 +9,7 @@
  */
 
 import { parseClass } from './class-parser.js';
-import {
-    REVERSE_VARIANT_MAP,
-} from './reverse-map.js';
+import { REVERSE_VARIANT_MAP } from './reverse-map.js';
 
 /**
  *
@@ -25,8 +23,20 @@ export interface ParsedToken {
  *
  */
 export interface VariantNode {
-    type: 'simple' | 'group' | 'peer' | 'has' | 'not' | 'data' | 'aria' |
-          'supports' | 'min' | 'max' | '@query' | '@container' | 'arbitrary';
+    type:
+        | 'simple'
+        | 'group'
+        | 'peer'
+        | 'has'
+        | 'not'
+        | 'data'
+        | 'aria'
+        | 'supports'
+        | 'min'
+        | 'max'
+        | '@query'
+        | '@container'
+        | 'arbitrary';
     key: string; // The sz object key
     nested?: VariantNode[]; // For group/peer with state inside
     name?: string; // For named group/peer/container
@@ -323,7 +333,13 @@ function parseGroupPeerVariant(variant: string): string[] {
 function findTopLevelSlash(s: string): number {
     let depth = 0;
     for (let i = 0; i < s.length; i++) {
-        if (s[i] === '[' || s[i] === '(') {depth++;} else if (s[i] === ']' || s[i] === ')') {depth--;} else if (s[i] === '/' && depth === 0) {return i;}
+        if (s[i] === '[' || s[i] === '(') {
+            depth++;
+        } else if (s[i] === ']' || s[i] === ')') {
+            depth--;
+        } else if (s[i] === '/' && depth === 0) {
+            return i;
+        }
     }
     return -1;
 }
@@ -341,7 +357,9 @@ function normalizeVariantKey(variant: string): string {
         return REVERSE_VARIANT_MAP[variant];
     }
     // @ prefixed variants stay as-is
-    if (variant.startsWith('@')) {return variant;}
+    if (variant.startsWith('@')) {
+        return variant;
+    }
     return variant;
 }
 
@@ -404,7 +422,9 @@ function resolveCustomMapEntry(
     // Returns both the recognized sz object and any unrecognized tokens from the string
     resolveString: (s: string) => { sz: Record<string, unknown>; cascade: string[] } | null,
 ): CustomMapAction | null {
-    if (!(token in customMap)) { return null; }
+    if (!(token in customMap)) {
+        return null;
+    }
 
     const val = customMap[token];
 
@@ -415,9 +435,15 @@ function resolveCustomMapEntry(
 
     // String values
     if (typeof val === 'string') {
-        if (val === TODO_KEEP) { return { action: 'keep' }; }
-        if (val === TODO_REMOVE) { return { action: 'remove' }; }
-        if (val === TODO_PENDING) { return { action: 'unresolved' }; }
+        if (val === TODO_KEEP) {
+            return { action: 'keep' };
+        }
+        if (val === TODO_REMOVE) {
+            return { action: 'remove' };
+        }
+        if (val === TODO_PENDING) {
+            return { action: 'unresolved' };
+        }
         // Any other string: treat as Tailwind class string, auto-convert.
         // Partially-recognized strings: recognized classes → sz, unrecognized → cascade
         // back to the caller as additional unrecognized tokens (written to todo file).
@@ -463,9 +489,11 @@ export function classNameToSzObject(
                 // Inline resolver: parse Tailwind string recursively (no customMap to avoid infinite loop).
                 // Returns both the sz object and any unrecognized tokens from the string value,
                 // so partially-valid strings cascade their unknowns back to the unrecognized list.
-                (twStr) => {
+                twStr => {
                     const inner = classNameToSzObject(twStr);
-                    if (Object.keys(inner.szObject).length === 0) {return null;}
+                    if (Object.keys(inner.szObject).length === 0) {
+                        return null;
+                    }
                     return { sz: inner.szObject, cascade: inner.unrecognized };
                 },
             );

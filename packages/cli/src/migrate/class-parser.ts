@@ -90,7 +90,10 @@ export function parseClass(cls: string): ParsedClass | null {
             }
             // For properties like "ring", "outline" — boolean true
             if (REVERSE_BOOLEAN_MAP[source]) {
-                return applyImportant({ prop: REVERSE_BOOLEAN_MAP[source], value: true }, important);
+                return applyImportant(
+                    { prop: REVERSE_BOOLEAN_MAP[source], value: true },
+                    important,
+                );
             }
             // For divide-x, divide-y without value → boolean
             if (prefix === 'divide-x' || prefix === 'divide-y') {
@@ -101,16 +104,29 @@ export function parseClass(cls: string): ParsedClass | null {
                 return applyImportant({ prop: 'border', value: true }, important);
             }
             // For border-t/r/b/l/x/y/s/e without value → boolean side border
-            if (['border-t', 'border-r', 'border-b', 'border-l', 'border-x', 'border-y', 'border-s', 'border-e'].includes(prefix)) {
+            if (
+                [
+                    'border-t',
+                    'border-r',
+                    'border-b',
+                    'border-l',
+                    'border-x',
+                    'border-y',
+                    'border-s',
+                    'border-e',
+                ].includes(prefix)
+            ) {
                 return applyImportant({ prop, value: true }, important);
             }
             continue;
         }
 
         // Class starts with prefix + "-"
-        if (source.startsWith(prefix + '-')) {
+        if (source.startsWith(`${prefix}-`)) {
             const rawValue = source.slice(prefix.length + 1); // strip prefix and "-"
-            if (!rawValue) {continue;}
+            if (!rawValue) {
+                continue;
+            }
 
             // Validate negative
             if (negative && !NEGATIVE_ALLOWED.has(prefix)) {
@@ -133,17 +149,22 @@ export function parseClass(cls: string): ParsedClass | null {
 
     // 4. Handle display/position shorthand values
     const displayResult = tryDisplay(input);
-    if (displayResult) {return applyImportant(displayResult, important);}
+    if (displayResult) {
+        return applyImportant(displayResult, important);
+    }
 
     // 5. Try CSS custom property declaration: [--var:value]
     if (input.startsWith('[') && input.endsWith(']') && input.includes(':')) {
         const inner = input.slice(1, -1);
         if (inner.startsWith('--')) {
             const colonIdx = inner.indexOf(':');
-            return applyImportant({
-                prop: inner.slice(0, colonIdx),
-                value: inner.slice(colonIdx + 1),
-            }, important);
+            return applyImportant(
+                {
+                    prop: inner.slice(0, colonIdx),
+                    value: inner.slice(colonIdx + 1),
+                },
+                important,
+            );
         }
     }
 
@@ -157,16 +178,18 @@ export function parseClass(cls: string): ParsedClass | null {
  * @returns {ParsedClass} Result with important modifier applied
  */
 function applyImportant(result: ParsedClass, important: boolean): ParsedClass {
-    if (!important) {return result;}
+    if (!important) {
+        return result;
+    }
     if (typeof result.value === 'string') {
-        return { prop: result.prop, value: result.value + '!' };
+        return { prop: result.prop, value: `${result.value}!` };
     }
     if (typeof result.value === 'boolean') {
         return { prop: result.prop, value: '!' };
     }
     // For numeric values, convert to string + !
     if (typeof result.value === 'number') {
-        return { prop: result.prop, value: String(result.value) + '!' };
+        return { prop: result.prop, value: `${String(result.value)}!` };
     }
     return result;
 }
@@ -199,14 +222,24 @@ function tryBooleanMatch(cls: string): ParsedClass | null {
 function tryDisplay(cls: string): ParsedClass | null {
     // Handle display-* not caught by booleans
     const displayValues = new Set([
-        'block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid',
-        'hidden', 'contents', 'table', 'table-row', 'table-cell', 'flow-root', 'list-item',
+        'block',
+        'inline',
+        'inline-block',
+        'flex',
+        'inline-flex',
+        'grid',
+        'inline-grid',
+        'hidden',
+        'contents',
+        'table',
+        'table-row',
+        'table-cell',
+        'flow-root',
+        'list-item',
     ]);
     // These are already handled by boolean map; this is a fallback
     if (displayValues.has(cls)) {
-        return REVERSE_BOOLEAN_MAP[cls]
-            ? { prop: REVERSE_BOOLEAN_MAP[cls], value: true }
-            : null;
+        return REVERSE_BOOLEAN_MAP[cls] ? { prop: REVERSE_BOOLEAN_MAP[cls], value: true } : null;
     }
     return null;
 }
@@ -240,7 +273,9 @@ function tryGradient(cls: string, negative: boolean): ParsedClass | null {
         input = input.slice('bg-conic'.length);
     }
 
-    if (!type) {return null;}
+    if (!type) {
+        return null;
+    }
 
     // Parse color interpolation (after /)
     let colorInterp: string | undefined;
@@ -289,7 +324,13 @@ function tryGradient(cls: string, negative: boolean): ParsedClass | null {
 function findTopLevelSlash(s: string): number {
     let depth = 0;
     for (let i = 0; i < s.length; i++) {
-        if (s[i] === '[' || s[i] === '(') {depth++;} else if (s[i] === ']' || s[i] === ')') {depth--;} else if (s[i] === '/' && depth === 0) {return i;}
+        if (s[i] === '[' || s[i] === '(') {
+            depth++;
+        } else if (s[i] === ']' || s[i] === ')') {
+            depth--;
+        } else if (s[i] === '/' && depth === 0) {
+            return i;
+        }
     }
     return -1;
 }
@@ -305,7 +346,11 @@ function findTopLevelSlash(s: string): number {
  * @param negative - Whether the class has a negative prefix
  * @returns {ParsedClass | null} Parsed result or null if invalid
  */
-function disambiguateAndParse(prefix: string, rawValue: string, negative: boolean): ParsedClass | null {
+function disambiguateAndParse(
+    prefix: string,
+    rawValue: string,
+    negative: boolean,
+): ParsedClass | null {
     // Handle color+opacity: value contains / at top level
     const slashIdx = findTopLevelSlash(rawValue);
     let opacity: string | number | undefined;
@@ -326,20 +371,26 @@ function disambiguateAndParse(prefix: string, rawValue: string, negative: boolea
                 // "0.05" → 0.05 (decimal fraction), "78%" stays as string (percentage).
                 if (!String(opacity).includes('%')) {
                     const opNum = Number(opacity);
-                    if (!isNaN(opNum)) {opacity = opNum;}
+                    if (!Number.isNaN(opNum)) {
+                        opacity = opNum;
+                    }
                 }
             } else if (opacity.startsWith('(') && opacity.endsWith(')')) {
                 opacity = opacity.slice(1, -1); // strip parens → "--alpha"
             } else {
                 const opNum = Number(opacity);
-                if (!isNaN(opNum)) {opacity = opNum;}
+                if (!Number.isNaN(opNum)) {
+                    opacity = opNum;
+                }
             }
         }
     }
 
     // Disambiguate ambiguous prefixes
     const result = disambiguate(prefix, value, negative);
-    if (!result) {return null;}
+    if (!result) {
+        return null;
+    }
 
     // Apply opacity
     if (opacity !== undefined && typeof result.value === 'string') {
@@ -412,7 +463,9 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return disambiguateDivide(value);
         case 'break':
             // break-words belongs to overflow-wrap (wrap), not word-break
-            if (value === 'words') {return { prop: 'wrap', value: 'break-word' };}
+            if (value === 'words') {
+                return { prop: 'wrap', value: 'break-word' };
+            }
             return { prop: 'break', value };
         case 'wrap':
             return { prop: 'wrap', value };
@@ -435,12 +488,22 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
  * @returns {ParsedClass | null} Parsed text property result
  */
 function disambiguateText(value: string): ParsedClass | null {
-    if (TEXT_SIZE_KEYWORDS.has(value)) {return { prop: 'text', value };}
-    if (TEXT_ALIGN_KEYWORDS.has(value)) {return { prop: 'textAlign', value };}
-    if (TEXT_WRAP_KEYWORDS.has(value)) {return { prop: 'textWrap', value };}
-    if (TEXT_OVERFLOW_KEYWORDS.has(value)) {return { prop: 'textOverflow', value };}
+    if (TEXT_SIZE_KEYWORDS.has(value)) {
+        return { prop: 'text', value };
+    }
+    if (TEXT_ALIGN_KEYWORDS.has(value)) {
+        return { prop: 'textAlign', value };
+    }
+    if (TEXT_WRAP_KEYWORDS.has(value)) {
+        return { prop: 'textWrap', value };
+    }
+    if (TEXT_OVERFLOW_KEYWORDS.has(value)) {
+        return { prop: 'textOverflow', value };
+    }
     // Arbitrary dimension → font size (e.g. text-[0.8rem], text-[16px])
-    if (isArbitraryDimension(value)) {return { prop: 'text', value: parseStringValue(value) };}
+    if (isArbitraryDimension(value)) {
+        return { prop: 'text', value: parseStringValue(value) };
+    }
     // Default: color
     return { prop: 'color', value: parseStringValue(value) };
 }
@@ -451,15 +514,23 @@ function disambiguateText(value: string): ParsedClass | null {
  * @returns {ParsedClass | null} Parsed font property result
  */
 function disambiguateFont(value: string): ParsedClass | null {
-    if (FONT_WEIGHT_KEYWORDS.has(value)) {return { prop: 'fontWeight', value };}
-    if (/^\d{3}$/.test(value)) {return { prop: 'fontWeight', value: parseInt(value, 10) };}
-    if (FONT_FAMILY_KEYWORDS.has(value)) {return { prop: 'fontFamily', value };}
+    if (FONT_WEIGHT_KEYWORDS.has(value)) {
+        return { prop: 'fontWeight', value };
+    }
+    if (/^\d{3}$/.test(value)) {
+        return { prop: 'fontWeight', value: parseInt(value, 10) };
+    }
+    if (FONT_FAMILY_KEYWORDS.has(value)) {
+        return { prop: 'fontFamily', value };
+    }
     // font-stretch-* is handled as a separate prefix
     if (value.startsWith('stretch-')) {
         const stretchVal = value.slice('stretch-'.length);
         return { prop: 'fontStretch', value: stretchVal };
     }
-    if (FONT_STRETCH_KEYWORDS.has(value)) {return { prop: 'fontStretch', value };}
+    if (FONT_STRETCH_KEYWORDS.has(value)) {
+        return { prop: 'fontStretch', value };
+    }
     // Arbitrary
     return { prop: 'fontFamily', value: parseStringValue(value) };
 }
@@ -470,10 +541,16 @@ function disambiguateFont(value: string): ParsedClass | null {
  * @returns Parsed border property result
  */
 function disambiguateBorder(value: string): ParsedClass | null {
-    if (BORDER_WIDTH_KEYWORDS.has(value) || value === 'px') {return { prop: 'border', value: parseNumericOrString('border', value, false) };}
-    if (BORDER_STYLE_KEYWORDS.has(value)) {return { prop: 'borderStyle', value };}
+    if (BORDER_WIDTH_KEYWORDS.has(value) || value === 'px') {
+        return { prop: 'border', value: parseNumericOrString('border', value, false) };
+    }
+    if (BORDER_STYLE_KEYWORDS.has(value)) {
+        return { prop: 'borderStyle', value };
+    }
     // Arbitrary dimension → width (e.g. border-[1.5px])
-    if (isArbitraryDimension(value)) {return { prop: 'border', value: parseStringValue(value) };}
+    if (isArbitraryDimension(value)) {
+        return { prop: 'border', value: parseStringValue(value) };
+    }
     // Default: color
     return { prop: 'borderColor', value: parseStringValue(value) };
 }
@@ -484,11 +561,21 @@ function disambiguateBorder(value: string): ParsedClass | null {
  * @returns Parsed background property result
  */
 function disambiguateBg(value: string): ParsedClass | null {
-    if (BG_POSITION_KEYWORDS.has(value)) {return { prop: 'bgPos', value };}
-    if (BG_SIZE_KEYWORDS.has(value)) {return { prop: 'bgSize', value };}
-    if (BG_REPEAT_KEYWORDS.has(value)) {return { prop: 'bgRepeat', value };}
-    if (BG_ATTACHMENT_KEYWORDS.has(value)) {return { prop: 'bgAttach', value };}
-    if (value === 'none') {return { prop: 'bgImg', value: 'none' };}
+    if (BG_POSITION_KEYWORDS.has(value)) {
+        return { prop: 'bgPos', value };
+    }
+    if (BG_SIZE_KEYWORDS.has(value)) {
+        return { prop: 'bgSize', value };
+    }
+    if (BG_REPEAT_KEYWORDS.has(value)) {
+        return { prop: 'bgRepeat', value };
+    }
+    if (BG_ATTACHMENT_KEYWORDS.has(value)) {
+        return { prop: 'bgAttach', value };
+    }
+    if (value === 'none') {
+        return { prop: 'bgImg', value: 'none' };
+    }
     // Default: color
     return { prop: 'bg', value: parseStringValue(value) };
 }
@@ -499,8 +586,12 @@ function disambiguateBg(value: string): ParsedClass | null {
  * @returns Parsed object-fit or object-position result
  */
 function disambiguateObject(value: string): ParsedClass | null {
-    if (OBJECT_FIT_KEYWORDS.has(value)) {return { prop: 'objectFit', value };}
-    if (OBJECT_POSITION_KEYWORDS.has(value)) {return { prop: 'objectPos', value };}
+    if (OBJECT_FIT_KEYWORDS.has(value)) {
+        return { prop: 'objectFit', value };
+    }
+    if (OBJECT_POSITION_KEYWORDS.has(value)) {
+        return { prop: 'objectPos', value };
+    }
     return { prop: 'objectPos', value: parseStringValue(value) };
 }
 
@@ -510,7 +601,9 @@ function disambiguateObject(value: string): ParsedClass | null {
  * @returns Parsed shadow property result
  */
 function disambiguateShadow(value: string): ParsedClass | null {
-    if (SHADOW_SIZE_KEYWORDS.has(value)) {return { prop: 'shadow', value };}
+    if (SHADOW_SIZE_KEYWORDS.has(value)) {
+        return { prop: 'shadow', value };
+    }
     // shadow with color
     return { prop: 'shadowColor', value: parseStringValue(value) };
 }
@@ -521,12 +614,18 @@ function disambiguateShadow(value: string): ParsedClass | null {
  * @returns Parsed outline property result
  */
 function disambiguateOutline(value: string): ParsedClass | null {
-    if (OUTLINE_STYLE_KEYWORDS.has(value)) {return { prop: 'outlineStyle', value };}
+    if (OUTLINE_STYLE_KEYWORDS.has(value)) {
+        return { prop: 'outlineStyle', value };
+    }
     // Check if it's a width (number)
     const num = Number(value);
-    if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'outline', value: num };}
+    if (!Number.isNaN(num) && Number.isInteger(num)) {
+        return { prop: 'outline', value: num };
+    }
     // Arbitrary dimension → width (e.g. outline-[3px])
-    if (isArbitraryDimension(value)) {return { prop: 'outline', value: parseStringValue(value) };}
+    if (isArbitraryDimension(value)) {
+        return { prop: 'outline', value: parseStringValue(value) };
+    }
     // Default: color
     return { prop: 'outlineColor', value: parseStringValue(value) };
 }
@@ -537,10 +636,14 @@ function disambiguateOutline(value: string): ParsedClass | null {
  * @returns Parsed decoration property result
  */
 function disambiguateDecoration(value: string): ParsedClass | null {
-    if (DECORATION_STYLE_KEYWORDS.has(value)) {return { prop: 'decorationStyle', value };}
+    if (DECORATION_STYLE_KEYWORDS.has(value)) {
+        return { prop: 'decorationStyle', value };
+    }
     if (DECORATION_THICKNESS_KEYWORDS.has(value)) {
         const num = Number(value);
-        if (!isNaN(num)) {return { prop: 'decorationThickness', value };}
+        if (!Number.isNaN(num)) {
+            return { prop: 'decorationThickness', value };
+        }
         return { prop: 'decorationThickness', value };
     }
     // Default: color
@@ -556,9 +659,13 @@ function disambiguateDecoration(value: string): ParsedClass | null {
 function disambiguateRing(value: string, negative: boolean): ParsedClass | null {
     // ring-0, ring-1, ring-2, ring-4, ring-8 → width
     const num = Number(value);
-    if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'ring', value: negative ? -num : num };}
+    if (!Number.isNaN(num) && Number.isInteger(num)) {
+        return { prop: 'ring', value: negative ? -num : num };
+    }
     // Arbitrary dimension → width (e.g. ring-[3px])
-    if (isArbitraryDimension(value)) {return { prop: 'ring', value: parseStringValue(value) };}
+    if (isArbitraryDimension(value)) {
+        return { prop: 'ring', value: parseStringValue(value) };
+    }
     // Default: color
     return { prop: 'ringColor', value: parseStringValue(value) };
 }
@@ -570,7 +677,9 @@ function disambiguateRing(value: string, negative: boolean): ParsedClass | null 
  */
 function disambiguateRingOffset(value: string): ParsedClass | null {
     const num = Number(value);
-    if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'ringOffset', value: num };}
+    if (!Number.isNaN(num) && Number.isInteger(num)) {
+        return { prop: 'ringOffset', value: num };
+    }
     return { prop: 'ringOffsetColor', value: parseStringValue(value) };
 }
 
@@ -583,8 +692,12 @@ function disambiguateRingOffset(value: string): ParsedClass | null {
  */
 function disambiguateInsetRing(value: string, negative: boolean): ParsedClass | null {
     const num = Number(value);
-    if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'insetRing', value: negative ? -num : num };}
-    if (isArbitraryDimension(value)) {return { prop: 'insetRing', value: parseStringValue(value) };}
+    if (!Number.isNaN(num) && Number.isInteger(num)) {
+        return { prop: 'insetRing', value: negative ? -num : num };
+    }
+    if (isArbitraryDimension(value)) {
+        return { prop: 'insetRing', value: parseStringValue(value) };
+    }
     return { prop: 'insetRingColor', value: parseStringValue(value) };
 }
 
@@ -596,8 +709,12 @@ function disambiguateInsetRing(value: string, negative: boolean): ParsedClass | 
  */
 function disambiguateInsetShadow(value: string): ParsedClass | null {
     const INSET_SHADOW_SIZE_KEYWORDS = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
-    if (INSET_SHADOW_SIZE_KEYWORDS.has(value)) {return { prop: 'insetShadow', value };}
-    if (isArbitraryDimension(value)) {return { prop: 'insetShadow', value: parseStringValue(value) };}
+    if (INSET_SHADOW_SIZE_KEYWORDS.has(value)) {
+        return { prop: 'insetShadow', value };
+    }
+    if (isArbitraryDimension(value)) {
+        return { prop: 'insetShadow', value: parseStringValue(value) };
+    }
     return { prop: 'insetShadowColor', value: parseStringValue(value) };
 }
 
@@ -608,7 +725,9 @@ function disambiguateInsetShadow(value: string): ParsedClass | null {
  */
 function disambiguateStroke(value: string): ParsedClass | null {
     const num = Number(value);
-    if (!isNaN(num) && Number.isInteger(num)) {return { prop: 'strokeWidth', value: num };}
+    if (!Number.isNaN(num) && Number.isInteger(num)) {
+        return { prop: 'strokeWidth', value: num };
+    }
     return { prop: 'stroke', value: parseStringValue(value) };
 }
 
@@ -618,7 +737,9 @@ function disambiguateStroke(value: string): ParsedClass | null {
  * @returns Parsed transition property result
  */
 function disambiguateTransition(value: string): ParsedClass | null {
-    if (TRANSITION_PROPERTY_KEYWORDS.has(value)) {return { prop: 'transition', value };}
+    if (TRANSITION_PROPERTY_KEYWORDS.has(value)) {
+        return { prop: 'transition', value };
+    }
     return { prop: 'transition', value: parseStringValue(value) };
 }
 
@@ -628,7 +749,9 @@ function disambiguateTransition(value: string): ParsedClass | null {
  * @returns Parsed list property result
  */
 function disambiguateList(value: string): ParsedClass | null {
-    if (value === 'inside' || value === 'outside') {return { prop: 'listPos', value };}
+    if (value === 'inside' || value === 'outside') {
+        return { prop: 'listPos', value };
+    }
     return { prop: 'list', value: parseStringValue(value) };
 }
 
@@ -651,10 +774,14 @@ function disambiguateSnap(_value: string): ParsedClass | null {
 function disambiguateFlex(value: string): ParsedClass | null {
     // flex-row, flex-col, flex-row-reverse, flex-col-reverse → flexDir
     const dirValues = new Set(['row', 'col', 'row-reverse', 'col-reverse']);
-    if (dirValues.has(value)) {return { prop: 'flexDir', value };}
+    if (dirValues.has(value)) {
+        return { prop: 'flexDir', value };
+    }
     // flex-wrap, flex-nowrap, flex-wrap-reverse → flexWrap (string-based)
     const wrapValues = new Set(['wrap', 'nowrap', 'wrap-reverse']);
-    if (wrapValues.has(value)) {return { prop: 'flexWrap', value };}
+    if (wrapValues.has(value)) {
+        return { prop: 'flexWrap', value };
+    }
     // flex-1, flex-auto, flex-initial, flex-none → flex shorthand
     if (value === '1' || value === 'auto' || value === 'initial' || value === 'none') {
         return { prop: 'flex', value: parseStringValue(value) };
@@ -668,7 +795,9 @@ function disambiguateFlex(value: string): ParsedClass | null {
  * @returns Parsed table layout result or null
  */
 function disambiguateTable(value: string): ParsedClass | null {
-    if (value === 'auto' || value === 'fixed') {return { prop: 'tableLayout', value };}
+    if (value === 'auto' || value === 'fixed') {
+        return { prop: 'tableLayout', value };
+    }
     return null;
 }
 
@@ -701,7 +830,9 @@ const CSS_DIMENSION_RE =
  * @returns True if the value is an arbitrary CSS dimension
  */
 function isArbitraryDimension(value: string): boolean {
-    if (!value.startsWith('[') || !value.endsWith(']')) {return false;}
+    if (!value.startsWith('[') || !value.endsWith(']')) {
+        return false;
+    }
     return CSS_DIMENSION_RE.test(value.slice(1, -1));
 }
 
@@ -716,22 +847,63 @@ function isArbitraryDimension(value: string): boolean {
  * @returns True if the value is valid for spacing properties
  */
 function isValidSpacingValue(value: string): boolean {
-    if (value.startsWith('[') && value.endsWith(']')) {return true;}
-    if (value.startsWith('(') && value.endsWith(')')) {return true;}
-    if (!isNaN(Number(value))) {return true;}
-    if (/^\d+\/\d+$/.test(value)) {return true;}
+    if (value.startsWith('[') && value.endsWith(']')) {
+        return true;
+    }
+    if (value.startsWith('(') && value.endsWith(')')) {
+        return true;
+    }
+    if (!Number.isNaN(Number(value))) {
+        return true;
+    }
+    if (/^\d+\/\d+$/.test(value)) {
+        return true;
+    }
     // Keywords valid for spacing/sizing props
-    if ([
-        'auto', 'full', 'screen', 'px', 'min', 'max', 'fit', 'none',
-        'dvh', 'dvw', 'svh', 'svw', 'lvh', 'lvw',
-        // Max-width size keywords
-        'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl',
-        'prose', 'screen-sm', 'screen-md', 'screen-lg', 'screen-xl', 'screen-2xl',
-        // Size keywords used in min-h, max-h
-        'content',
-    ].includes(value)) {return true;}
+    if (
+        [
+            'auto',
+            'full',
+            'screen',
+            'px',
+            'min',
+            'max',
+            'fit',
+            'none',
+            'dvh',
+            'dvw',
+            'svh',
+            'svw',
+            'lvh',
+            'lvw',
+            // Max-width size keywords
+            'xs',
+            'sm',
+            'md',
+            'lg',
+            'xl',
+            '2xl',
+            '3xl',
+            '4xl',
+            '5xl',
+            '6xl',
+            '7xl',
+            'prose',
+            'screen-sm',
+            'screen-md',
+            'screen-lg',
+            'screen-xl',
+            'screen-2xl',
+            // Size keywords used in min-h, max-h
+            'content',
+        ].includes(value)
+    ) {
+        return true;
+    }
     // Allow color values that happen to be on spacing borders (e.g. divide-blue-500 → divideColor)
-    if (value.includes('/')) {return true;} // fractions or opacity
+    if (value.includes('/')) {
+        return true;
+    } // fractions or opacity
     return false;
 }
 
@@ -750,7 +922,9 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
     // Arbitrary values: [10px], [calc(100%-1rem)]
     if (value.startsWith('[') && value.endsWith(']')) {
         const inner = value.slice(1, -1).replace(/_/g, ' ');
-        if (negative) {return '-' + inner;}
+        if (negative) {
+            return `-${inner}`;
+        }
         // content prefix: normalize CSS string literals to double-quote form so that
         // content-[''] and content-[""] both produce { content: '""' } for round-trip stability.
         if (prefix === 'content') {
@@ -767,7 +941,9 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
     // CSS variable sugar: (--spacing), (--my-var)
     if (value.startsWith('(') && value.endsWith(')')) {
         const inner = value.slice(1, -1);
-        if (negative) {return '-' + inner;}
+        if (negative) {
+            return `-${inner}`;
+        }
         return inner;
     }
 
@@ -777,26 +953,38 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
     }
 
     // Px keyword
-    if (value === 'px') {return negative ? '-px' : 'px';}
+    if (value === 'px') {
+        return negative ? '-px' : 'px';
+    }
 
     // Auto
-    if (value === 'auto') {return 'auto';}
+    if (value === 'auto') {
+        return 'auto';
+    }
 
     // Full
-    if (value === 'full') {return 'full';}
+    if (value === 'full') {
+        return 'full';
+    }
 
     // Screen
-    if (value === 'screen') {return 'screen';}
+    if (value === 'screen') {
+        return 'screen';
+    }
 
     // Numeric: integer or 0.5-step decimal
     const num = Number(value);
-    if (!isNaN(num)) {
-        if (negative) {return -num;}
+    if (!Number.isNaN(num)) {
+        if (negative) {
+            return -num;
+        }
         return num;
     }
 
     // String value
-    if (negative) {return '-' + value;}
+    if (negative) {
+        return `-${value}`;
+    }
     return value;
 }
 
@@ -808,9 +996,13 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
  * @returns Numeric value or string
  */
 function parseNumericOrString(prefix: string, value: string, negative: boolean): unknown {
-    if (value === 'px') {return 'px';}
+    if (value === 'px') {
+        return 'px';
+    }
     const num = Number(value);
-    if (!isNaN(num)) {return negative ? -num : num;}
+    if (!Number.isNaN(num)) {
+        return negative ? -num : num;
+    }
     return value;
 }
 

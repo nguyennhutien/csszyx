@@ -20,44 +20,180 @@ const __dirname = path.dirname(__filename);
  * Represents a single test case for the compiler.
  */
 interface TestCase {
-  id: string;
-  szInput: Record<string, unknown>;
-  expectedClass: string;
-  tailwindVersion: '3' | '4';
-  category: string;
-  subcategory?: string;
+    id: string;
+    szInput: Record<string, unknown>;
+    expectedClass: string;
+    tailwindVersion: '3' | '4';
+    category: string;
+    subcategory?: string;
 }
 
 /**
  * Represents a collection of test cases (a test suite).
  */
 interface TestSuite {
-  version: string;
-  generatedAt: string;
-  totalTests: number;
-  tests: TestCase[];
+    version: string;
+    generatedAt: string;
+    totalTests: number;
+    tests: TestCase[];
 }
 
 /**
  * Defines a scale (e.g., spacing, colors) and which utilities use it.
  */
 interface ScaleDef {
-  values: (string | number)[];
-  negative?: boolean;
-  usedBy: string[];
+    values: (string | number)[];
+    negative?: boolean;
+    usedBy: string[];
 }
 
 // ─── Value Scales Reference ──────────────────────────────────────────────────
 
 const SCALES: Record<string, ScaleDef> = {
     spacing: {
-        values: [0, 'px', 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96],
+        values: [
+            0,
+            'px',
+            0.5,
+            1,
+            1.5,
+            2,
+            2.5,
+            3,
+            3.5,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            14,
+            16,
+            20,
+            24,
+            28,
+            32,
+            36,
+            40,
+            44,
+            48,
+            52,
+            56,
+            60,
+            64,
+            72,
+            80,
+            96,
+        ],
         negative: true,
-        usedBy: ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'ps', 'pe', 'm', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'ms', 'me', 'gap', 'gap-x', 'gap-y', 'space-x', 'space-y', 'w', 'h', 'size', 'inset', 'inset-x', 'inset-y', 'top', 'right', 'bottom', 'left', 'start', 'end', 'translate-x', 'translate-y', 'scroll-m', 'scroll-mx', 'scroll-my', 'scroll-mt', 'scroll-mr', 'scroll-mb', 'scroll-ml', 'scroll-p', 'scroll-px', 'scroll-py', 'scroll-pt', 'scroll-pr', 'scroll-pb', 'scroll-pl', 'indent', 'basis', 'min-w', 'max-w', 'min-h', 'max-h'],
+        usedBy: [
+            'p',
+            'px',
+            'py',
+            'pt',
+            'pr',
+            'pb',
+            'pl',
+            'ps',
+            'pe',
+            'm',
+            'mx',
+            'my',
+            'mt',
+            'mr',
+            'mb',
+            'ml',
+            'ms',
+            'me',
+            'gap',
+            'gap-x',
+            'gap-y',
+            'space-x',
+            'space-y',
+            'w',
+            'h',
+            'size',
+            'inset',
+            'inset-x',
+            'inset-y',
+            'top',
+            'right',
+            'bottom',
+            'left',
+            'start',
+            'end',
+            'translate-x',
+            'translate-y',
+            'scroll-m',
+            'scroll-mx',
+            'scroll-my',
+            'scroll-mt',
+            'scroll-mr',
+            'scroll-mb',
+            'scroll-ml',
+            'scroll-p',
+            'scroll-px',
+            'scroll-py',
+            'scroll-pt',
+            'scroll-pr',
+            'scroll-pb',
+            'scroll-pl',
+            'indent',
+            'basis',
+            'min-w',
+            'max-w',
+            'min-h',
+            'max-h',
+        ],
     },
     fractions: {
-        values: ['1/2', '1/3', '2/3', '1/4', '2/4', '3/4', '1/5', '2/5', '3/5', '4/5', '1/6', '2/6', '3/6', '4/6', '5/6', '1/12', '2/12', '3/12', '4/12', '5/12', '6/12', '7/12', '8/12', '9/12', '10/12', '11/12', 'full'],
-        usedBy: ['w', 'h', 'basis', 'translate-x', 'translate-y', 'inset', 'top', 'right', 'bottom', 'left', 'min-w', 'max-w', 'size'],
+        values: [
+            '1/2',
+            '1/3',
+            '2/3',
+            '1/4',
+            '2/4',
+            '3/4',
+            '1/5',
+            '2/5',
+            '3/5',
+            '4/5',
+            '1/6',
+            '2/6',
+            '3/6',
+            '4/6',
+            '5/6',
+            '1/12',
+            '2/12',
+            '3/12',
+            '4/12',
+            '5/12',
+            '6/12',
+            '7/12',
+            '8/12',
+            '9/12',
+            '10/12',
+            '11/12',
+            'full',
+        ],
+        usedBy: [
+            'w',
+            'h',
+            'basis',
+            'translate-x',
+            'translate-y',
+            'inset',
+            'top',
+            'right',
+            'bottom',
+            'left',
+            'min-w',
+            'max-w',
+            'size',
+        ],
     },
     opacity: {
         values: [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100],
@@ -70,18 +206,71 @@ const SCALES: Record<string, ScaleDef> = {
     },
     'border-width': {
         values: [0, 'DEFAULT', 2, 4, 8],
-        usedBy: ['border', 'border-t', 'border-r', 'border-b', 'border-l', 'border-x', 'border-y', 'divide-x', 'divide-y', 'ring', 'ring-offset', 'outline-offset'],
+        usedBy: [
+            'border',
+            'border-t',
+            'border-r',
+            'border-b',
+            'border-l',
+            'border-x',
+            'border-y',
+            'divide-x',
+            'divide-y',
+            'ring',
+            'ring-offset',
+            'outline-offset',
+        ],
     },
     'border-radius': {
         values: ['none', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', '3xl', 'full'],
-        usedBy: ['rounded', 'rounded-t', 'rounded-r', 'rounded-b', 'rounded-l', 'rounded-tl', 'rounded-tr', 'rounded-br', 'rounded-bl', 'rounded-s', 'rounded-e', 'rounded-ss', 'rounded-se', 'rounded-es', 'rounded-ee'],
+        usedBy: [
+            'rounded',
+            'rounded-t',
+            'rounded-r',
+            'rounded-b',
+            'rounded-l',
+            'rounded-tl',
+            'rounded-tr',
+            'rounded-br',
+            'rounded-bl',
+            'rounded-s',
+            'rounded-e',
+            'rounded-ss',
+            'rounded-se',
+            'rounded-es',
+            'rounded-ee',
+        ],
     },
     'font-size': {
-        values: ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl'],
+        values: [
+            'xs',
+            'sm',
+            'base',
+            'lg',
+            'xl',
+            '2xl',
+            '3xl',
+            '4xl',
+            '5xl',
+            '6xl',
+            '7xl',
+            '8xl',
+            '9xl',
+        ],
         usedBy: ['text'],
     },
     'font-weight': {
-        values: ['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black'],
+        values: [
+            'thin',
+            'extralight',
+            'light',
+            'normal',
+            'medium',
+            'semibold',
+            'bold',
+            'extrabold',
+            'black',
+        ],
         usedBy: ['font'],
     },
     'line-height': {
@@ -128,16 +317,44 @@ const SCALES: Record<string, ScaleDef> = {
         usedBy: ['order'],
     },
     'container-sizes': {
-        values: ['3xs', '2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl'],
+        values: [
+            '3xs',
+            '2xs',
+            'xs',
+            'sm',
+            'md',
+            'lg',
+            'xl',
+            '2xl',
+            '3xl',
+            '4xl',
+            '5xl',
+            '6xl',
+            '7xl',
+        ],
         usedBy: ['max-w'],
     },
     'filter-percentage': {
         values: [0, 50, 75, 90, 95, 100, 105, 110, 125, 150, 200],
-        usedBy: ['brightness', 'contrast', 'saturate', 'backdrop-brightness', 'backdrop-contrast', 'backdrop-saturate'],
+        usedBy: [
+            'brightness',
+            'contrast',
+            'saturate',
+            'backdrop-brightness',
+            'backdrop-contrast',
+            'backdrop-saturate',
+        ],
     },
     'filter-boolean': {
         values: [0, 'DEFAULT'],
-        usedBy: ['grayscale', 'invert', 'sepia', 'backdrop-grayscale', 'backdrop-invert', 'backdrop-sepia'],
+        usedBy: [
+            'grayscale',
+            'invert',
+            'sepia',
+            'backdrop-grayscale',
+            'backdrop-invert',
+            'backdrop-sepia',
+        ],
     },
     'hue-rotate': {
         values: [0, 15, 30, 60, 90, 180],
@@ -194,7 +411,9 @@ const SCALES: Record<string, ScaleDef> = {
 const PREFIX_TO_SCALES: Record<string, string[]> = {};
 for (const [scaleName, def] of Object.entries(SCALES)) {
     for (const prefix of def.usedBy) {
-        if (!PREFIX_TO_SCALES[prefix]) {PREFIX_TO_SCALES[prefix] = [];}
+        if (!PREFIX_TO_SCALES[prefix]) {
+            PREFIX_TO_SCALES[prefix] = [];
+        }
         PREFIX_TO_SCALES[prefix].push(scaleName);
     }
 }
@@ -226,7 +445,11 @@ function pickScale(prefix: string, startVal: string, endVal: string): string | n
     }
     if (isNumeric(startVal) || isNumeric(endVal)) {
         // Prefer 'spacing' or numeric scale
-        return scaleNames.find(s => s === 'spacing') || scaleNames.find(s => s !== 'fractions') || scaleNames[0];
+        return (
+            scaleNames.find(s => s === 'spacing') ||
+            scaleNames.find(s => s !== 'fractions') ||
+            scaleNames[0]
+        );
     }
     // Default: first scale
     return scaleNames[0];
@@ -268,11 +491,7 @@ function slugify(text: string): string {
  * @returns The stripped string.
  */
 function stripMarkdown(text: string): string {
-    return text
-        .replace(/`/g, '')
-        .replace(/\*\*/g, '')
-        .replace(/\*/g, '')
-        .trim();
+    return text.replace(/`/g, '').replace(/\*\*/g, '').replace(/\*/g, '').trim();
 }
 
 /**
@@ -283,8 +502,12 @@ function stripMarkdown(text: string): string {
 function splitTableRow(line: string): string[] {
     const trimmed = line.trim();
     let inner = trimmed;
-    if (inner.startsWith('|')) {inner = inner.slice(1);}
-    if (inner.endsWith('|')) {inner = inner.slice(0, -1);}
+    if (inner.startsWith('|')) {
+        inner = inner.slice(1);
+    }
+    if (inner.endsWith('|')) {
+        inner = inner.slice(0, -1);
+    }
     return inner.split('|').map(cell => cell.trim());
 }
 
@@ -354,7 +577,7 @@ function parseSzProp(raw: string): Record<string, unknown> | null {
 
     // Step 3: Restore string placeholders
     cleaned = cleaned.replace(/"__STR_(\d+)__"/g, (_match, idx: string) => {
-        return `"${strings[parseInt(idx)]}"`;
+        return `"${strings[parseInt(idx, 10)]}"`;
     });
 
     try {
@@ -393,8 +616,8 @@ function szKeyToPrefix(key: string): string {
  * Result of a range expansion attempt.
  */
 interface RangeExpansionResult {
-  tests: TestCase[];
-  expanded: boolean;
+    tests: TestCase[];
+    expanded: boolean;
 }
 
 /**
@@ -424,7 +647,11 @@ function tryExpandRange(
     // NOT: "mask-[url(...)]" or "{ mask: 'url(...)' }"
     const hasRangeDots = (s: string): boolean => {
         // Remove content inside [...] and (...) and '...' and "..."
-        const stripped = s.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/'[^']*'/g, '').replace(/"[^"]*"/g, '');
+        const stripped = s
+            .replace(/\[[^\]]*\]/g, '')
+            .replace(/\([^)]*\)/g, '')
+            .replace(/'[^']*'/g, '')
+            .replace(/"[^"]*"/g, '');
         return stripped.includes('...');
     };
 
@@ -444,7 +671,7 @@ function tryExpandRange(
 
     // Extract range endpoint values
     const startVal = firstTwClass.slice(prefix.length + 1); // after "prefix-"
-    const endVal = lastTwClass.startsWith(prefix + '-') ? lastTwClass.slice(prefix.length + 1) : '';
+    const endVal = lastTwClass.startsWith(`${prefix}-`) ? lastTwClass.slice(prefix.length + 1) : '';
 
     // Extract the sz prop key
     // e.g., "{ basis: 1 }...{ basis: 96 }" -> key = "basis"
@@ -456,12 +683,14 @@ function tryExpandRange(
         }
     }
     const szKey = szMatch ? szMatch[1] : '';
-    if (!szKey) {return { tests: [], expanded: false };}
+    if (!szKey) {
+        return { tests: [], expanded: false };
+    }
 
     // Look up scale by prefix, using range values to disambiguate
     const scaleName = pickScale(prefix, startVal, endVal);
     if (!scaleName) {
-    // Fallback: try the szKey converted to prefix
+        // Fallback: try the szKey converted to prefix
         const altPrefix = szKeyToPrefix(szKey);
         const altScale = pickScale(altPrefix, startVal, endVal);
         if (!altScale) {
@@ -495,7 +724,9 @@ function expandFromScale(
     idCounter: Map<string, number>,
 ): RangeExpansionResult {
     const scale = SCALES[scaleName];
-    if (!scale) {return { tests: [], expanded: false };}
+    if (!scale) {
+        return { tests: [], expanded: false };
+    }
 
     const tests: TestCase[] = [];
 
@@ -512,7 +743,7 @@ function expandFromScale(
         } else {
             // Try to parse as number if it looks numeric
             const num = Number(val);
-            szValue = isNaN(num) ? val : num;
+            szValue = Number.isNaN(num) ? val : num;
         }
 
         const id = generateId(category, subcategory, `${concept}-${val}`, undefined, idCounter);
@@ -548,12 +779,20 @@ function generateId(
     idCounter: Map<string, number>,
 ): string {
     const parts = [slugify(category)];
-    if (subcategory) {parts.push(slugify(subcategory));}
-    if (concept) {parts.push(slugify(concept));}
-    if (colLabel && colLabel !== 'default') {parts.push(slugify(colLabel));}
+    if (subcategory) {
+        parts.push(slugify(subcategory));
+    }
+    if (concept) {
+        parts.push(slugify(concept));
+    }
+    if (colLabel && colLabel !== 'default') {
+        parts.push(slugify(colLabel));
+    }
 
     let baseId = parts.filter(Boolean).join('-');
-    if (!baseId) {baseId = 'unknown';}
+    if (!baseId) {
+        baseId = 'unknown';
+    }
 
     const count = idCounter.get(baseId);
     if (count !== undefined) {
@@ -570,10 +809,10 @@ function generateId(
  * Information about relevant columns in a markdown table.
  */
 interface ColumnInfo {
-  tailwindIdx: number;
-  szIndices: { idx: number; label: string }[];
-  conceptIdx: number;
-  isUtilityTable: boolean;
+    tailwindIdx: number;
+    szIndices: { idx: number; label: string }[];
+    conceptIdx: number;
+    isUtilityTable: boolean;
 }
 
 /**
@@ -598,7 +837,13 @@ function detectColumns(headerCells: string[]): ColumnInfo {
         if (cell.includes('sz') || cell.includes('`sz`')) {
             const cellLower = cell;
             let label = 'default';
-            if (cellLower.includes('canonical')) {label = 'canonical';} else if (cellLower.includes('alias') || cellLower.includes('short')) {label = 'alias';} else if (cellLower.includes('boolean') || cellLower.includes('sugar')) {label = 'boolean';}
+            if (cellLower.includes('canonical')) {
+                label = 'canonical';
+            } else if (cellLower.includes('alias') || cellLower.includes('short')) {
+                label = 'alias';
+            } else if (cellLower.includes('boolean') || cellLower.includes('sugar')) {
+                label = 'boolean';
+            }
             szIndices.push({ idx: i, label });
         }
 
@@ -635,28 +880,40 @@ function parseCommaSeparatedRow(
     idCounter: Map<string, number>,
 ): TestCase[] | null {
     // Check for comma-separated Tailwind classes
-    const twClasses = twCell.split(',').map(c => stripMarkdown(c.trim())).filter(Boolean);
-    if (twClasses.length <= 1) {return null;}
+    const twClasses = twCell
+        .split(',')
+        .map(c => stripMarkdown(c.trim()))
+        .filter(Boolean);
+    if (twClasses.length <= 1) {
+        return null;
+    }
 
     // Extract all sz objects from the cell
     const szObjects: string[] = [];
     const objPattern = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-    let match;
-    while ((match = objPattern.exec(szCell)) !== null) {
+    for (const match of szCell.matchAll(objPattern)) {
         szObjects.push(match[0]);
     }
 
     // If no pairable objects found, try parsing as a single sz input for all classes
-    if (szObjects.length === 0) {return null;}
+    if (szObjects.length === 0) {
+        return null;
+    }
 
     const tests: TestCase[] = [];
 
     if (szObjects.length >= twClasses.length) {
-    // Pair each class with its corresponding sz object
+        // Pair each class with its corresponding sz object
         for (let i = 0; i < twClasses.length; i++) {
             const parsed = parseSzProp(szObjects[i]);
             if (parsed && twClasses[i]) {
-                const id = generateId(category, subcategory, `${concept}-${i + 1}`, undefined, idCounter);
+                const id = generateId(
+                    category,
+                    subcategory,
+                    `${concept}-${i + 1}`,
+                    undefined,
+                    idCounter,
+                );
                 tests.push({
                     id,
                     szInput: parsed,
@@ -668,11 +925,17 @@ function parseCommaSeparatedRow(
             }
         }
     } else {
-    // More classes than objects: pair what we can
+        // More classes than objects: pair what we can
         for (let i = 0; i < Math.min(twClasses.length, szObjects.length); i++) {
             const parsed = parseSzProp(szObjects[i]);
             if (parsed && twClasses[i]) {
-                const id = generateId(category, subcategory, `${concept}-${i + 1}`, undefined, idCounter);
+                const id = generateId(
+                    category,
+                    subcategory,
+                    `${concept}-${i + 1}`,
+                    undefined,
+                    idCounter,
+                );
                 tests.push({
                     id,
                     szInput: parsed,
@@ -697,7 +960,9 @@ function parseCommaSeparatedRow(
  */
 function parseHeading(line: string): { level: number; text: string } | null {
     const match = line.match(/^(#{2,4})\s+(.+)$/);
-    if (!match) {return null;}
+    if (!match) {
+        return null;
+    }
     return {
         level: match[1].length,
         text: stripMarkdown(match[2].trim()),
@@ -788,7 +1053,9 @@ function main(): void {
         }
 
         // Skip sections
-        if (skipCurrentCategory || skipCurrentSubsection) {continue;}
+        if (skipCurrentCategory || skipCurrentSubsection) {
+            continue;
+        }
 
         // Table detection
         if (isTableRow(line)) {
@@ -803,13 +1070,15 @@ function main(): void {
                 inTable = true;
 
                 if (columnInfo.isUtilityTable) {
-                    log(`  Table: ${cells.length} columns, tw=col${columnInfo.tailwindIdx}, sz=[${columnInfo.szIndices.map(s => `col${s.idx}(${s.label})`).join(', ')}]`);
+                    log(
+                        `  Table: ${cells.length} columns, tw=col${columnInfo.tailwindIdx}, sz=[${columnInfo.szIndices.map(s => `col${s.idx}(${s.label})`).join(', ')}]`,
+                    );
                 }
                 continue;
             }
 
             // Data row
-            if (!columnInfo || !columnInfo.isUtilityTable) {
+            if (!columnInfo?.isUtilityTable) {
                 continue; // Skip non-utility tables
             }
 
@@ -849,7 +1118,14 @@ function main(): void {
                 }
 
                 // Try range expansion first
-                const rangeResult = tryExpandRange(twCell, szRaw, currentCategory, currentSubcategory, concept, idCounter);
+                const rangeResult = tryExpandRange(
+                    twCell,
+                    szRaw,
+                    currentCategory,
+                    currentSubcategory,
+                    concept,
+                    idCounter,
+                );
                 if (rangeResult.expanded) {
                     for (const tc of rangeResult.tests) {
                         tests.push(tc);
@@ -859,7 +1135,14 @@ function main(): void {
                 }
 
                 // Try comma-separated list parsing
-                const commaSepTests = parseCommaSeparatedRow(twCell, szRaw, currentCategory, currentSubcategory, concept, idCounter);
+                const commaSepTests = parseCommaSeparatedRow(
+                    twCell,
+                    szRaw,
+                    currentCategory,
+                    currentSubcategory,
+                    concept,
+                    idCounter,
+                );
                 if (commaSepTests) {
                     for (const tc of commaSepTests) {
                         tests.push(tc);
@@ -886,7 +1169,13 @@ function main(): void {
                 }
 
                 const colLabel = columnInfo.szIndices.length > 1 ? szCol.label : undefined;
-                const id = generateId(currentCategory, currentSubcategory, concept, colLabel, idCounter);
+                const id = generateId(
+                    currentCategory,
+                    currentSubcategory,
+                    concept,
+                    colLabel,
+                    idCounter,
+                );
 
                 tests.push({
                     id,

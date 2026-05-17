@@ -10,6 +10,19 @@
 # the container settings — bypass is scoped to the devcontainer.
 set -euo pipefail
 
+# --wrapper-only flag: rebuild ONLY the /root/.local/bin/claude wrapper
+# script. Skip symlinks, settings.json overlay, and rc-file edits. Use
+# when Claude may be running — touching symlinks under
+# /root/.claude-devcontainer/.credentials.json while Claude has the
+# file open creates a race that splits the symlink into a real file
+# and forces the user to re-log-in.
+WRAPPER_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --wrapper-only) WRAPPER_ONLY=1 ;;
+    esac
+done
+
 HOST_CLAUDE_HOME="/root/.claude"
 DEV_CLAUDE_HOME="${DEV_CLAUDE_HOME:-/root/.claude-devcontainer}"
 CLAUDE_WRAPPER="/root/.local/bin/claude"
@@ -27,50 +40,68 @@ fi
 
 mkdir -p "$DEV_CLAUDE_HOME"
 
-# Symlink every entry from host EXCEPT settings.json — we own settings.json
-# so the host machine's Claude continues to honor its own permission policy.
-shopt -s dotglob nullglob
-for src in "$HOST_CLAUDE_HOME"/*; do
-    name="$(basename "$src")"
-    case "$name" in
-        settings.json) continue ;;
-        .|..) continue ;;
-    esac
-    dest="$DEV_CLAUDE_HOME/$name"
-    if [ -L "$dest" ] || [ -e "$dest" ]; then
-        rm -rf "$dest"
-    fi
-    ln -s "$src" "$dest"
-done
-shopt -u dotglob nullglob
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    # Symlink every entry from host EXCEPT settings.json — we own
+    # settings.json so the host machine's Claude continues to honor its
+    # own permission policy. SAFE FOR FIRST-TIME SETUP ONLY: if Claude
+    # is already running, the rm + ln -s window is a race that can split
+    # .credentials.json from a symlink into a real file. Self-heal uses
+    # --wrapper-only to avoid this.
+    shopt -s dotglob nullglob
+    for src in "$HOST_CLAUDE_HOME"/*; do
+        name="$(basename "$src")"
+        case "$name" in
+            settings.json) continue ;;
+            .|..) continue ;;
+        esac
+        dest="$DEV_CLAUDE_HOME/$name"
+        # Skip if already a correctly-pointing symlink to avoid even the
+        # ln -sfT call when nothing needs to change.
+        if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+            continue
+        fi
+        # ln -sfT replaces the destination atomically. Using rm + ln -s
+        # raced with Antigravity launching Claude before postStartCommand
+        # finished: rm unlinked the file, Claude rewrote it via atomic
+        # tmp+rename, then plain ln -s failed because the path was
+        # repopulated. The -f flag forces overwrite; -T treats dest as
+        # a non-directory so ln does not descend if dest happens to be
+        # a directory entry from an in-flight write.
+        ln -sfT "$src" "$dest"
+    done
+    shopt -u dotglob nullglob
 
-# /root/.claude.json (project trust + user prefs) lives at $HOME, not inside
-# /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects it at
-# $CLAUDE_CONFIG_DIR/.claude.json. Symlink it back to the host file so login
-# state, project trust, and tips history survive without reinitialization.
-HOST_CLAUDE_JSON="/root/.claude.json"
-DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
-if [ -f "$HOST_CLAUDE_JSON" ]; then
-    if [ -L "$DEV_CLAUDE_JSON" ] || [ -e "$DEV_CLAUDE_JSON" ]; then
-        rm -rf "$DEV_CLAUDE_JSON"
+    # /root/.claude.json (project trust + user prefs) lives at $HOME, not
+    # inside /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects
+    # it at $CLAUDE_CONFIG_DIR/.claude.json. Symlink it back to the host
+    # file so login state, project trust, and tips history survive without
+    # reinitialization.
+    HOST_CLAUDE_JSON="/root/.claude.json"
+    DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
+    if [ -f "$HOST_CLAUDE_JSON" ]; then
+        if ! { [ -L "$DEV_CLAUDE_JSON" ] && [ "$(readlink "$DEV_CLAUDE_JSON")" = "$HOST_CLAUDE_JSON" ]; }; then
+            ln -sfT "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
+        fi
     fi
-    ln -s "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
 fi
 
-# Container settings.json = host settings + bypass permissions mode.
-# Merge with jq so user-managed keys (model, theme, permissions.allow) survive.
-DEV_SETTINGS="$DEV_CLAUDE_HOME/settings.json"
-HOST_SETTINGS="$HOST_CLAUDE_HOME/settings.json"
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    # Container settings.json = host settings + bypass permissions mode.
+    # Merge with jq so user-managed keys (model, theme, permissions.allow)
+    # survive.
+    DEV_SETTINGS="$DEV_CLAUDE_HOME/settings.json"
+    HOST_SETTINGS="$HOST_CLAUDE_HOME/settings.json"
 
-OVERLAY='{
-    "permissions": ((.permissions // {}) + {"defaultMode": "bypassPermissions"}),
-    "skipDangerousModePermissionPrompt": true
-}'
+    OVERLAY='{
+        "permissions": ((.permissions // {}) + {"defaultMode": "bypassPermissions"}),
+        "skipDangerousModePermissionPrompt": true
+    }'
 
-if [ -f "$HOST_SETTINGS" ]; then
-    jq ". + $OVERLAY" "$HOST_SETTINGS" > "$DEV_SETTINGS"
-else
-    jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
+    if [ -f "$HOST_SETTINGS" ]; then
+        jq ". + $OVERLAY" "$HOST_SETTINGS" > "$DEV_SETTINGS"
+    else
+        jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
+    fi
 fi
 
 # Make the devcontainer Claude env available even when Claude is launched by
@@ -91,34 +122,27 @@ EOF
 chmod 0644 "$AI_ENV_FILE"
 
 # Wrapper: point Claude at the container settings dir + acknowledge sandbox
-# + strip host credentials so a prompt-injected AI cannot silently git push
-# or SSH-tunnel out via the developer's agent. Strip targets (audit
-# 2026-05-14):
-#   - SSH_AUTH_SOCK: SSH agent — would let AI use any SSH-auth git op
-#   - GIT_ASKPASS / VSCODE_GIT_ASKPASS_*: VS Code git credential helpers —
-#     would let AI auto-authenticate HTTPS git pushes
-#   - VSCODE_IPC_HOOK_CLI: IPC socket to the VS Code/Antigravity process —
-#     could expose IDE-level filesystem/extension APIs
-#   - VSCODE_GIT_IPC_HANDLE: Unix socket for VS Code's git extension IPC —
-#     AI could write to it to trigger git operations with the IDE's
-#     stored credentials (this was the gap discovered post-Phase-3a)
-# IS_SANDBOX=1 is also still exported as belt-and-suspenders: terminal-
-# launched claude works even if containerEnv hasn't refreshed yet.
+# + strip a small set of env vars as defense-in-depth (Option C, 2026-05-15).
+#
+# Strip is symbolic-not-enforced: naive AI `git push` fails because no agent
+# is in env, but AI with shell access can still read an on-disk key file or
+# use the `gh` CLI's stored OAuth token to push. The real defense for `main`
+# and `npm` lives on GitHub: branch protection ruleset 16158734 + CODEOWNERS
+# + npm-publish environment gate. See `.agent/workflows/security-roadmap.md`
+# § 2.0 for the threat-model audit and § 1 for the Option C decision.
+#
+# Strip targets:
+#   - SSH_AUTH_SOCK / GIT_ASKPASS / VSCODE_GIT_ASKPASS_*: default-deny for
+#     naive push attempts. Doesn't stop a determined AI but raises the bar.
+#   - VSCODE_IPC_HOOK_CLI / VSCODE_GIT_IPC_HANDLE: prevent AI from speaking
+#     to the IDE's git extension or extension-host APIs.
+#
+# GIT_CONFIG override sets commit.gpgsign=false for AI processes so AI commits
+# land unsigned (visible in `git log --show-signature` — separates AI commits
+# from human-signed commits without blocking the workflow).
 cat > "$CLAUDE_WRAPPER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-
-# Defense-in-depth: re-verify no SSH private key leaked back into the
-# container before launching the AI. postStartCommand only fires on
-# container rebuild (Antigravity's "Reopen in Container" is an attach,
-# not a restart), so this catches re-injection between rebuilds.
-for f in /root/.ssh/id_* /home/vscode/.ssh/id_*; do
-    [ -e "\$f" ] || continue
-    case "\$f" in
-        *.pub) continue ;;
-    esac
-    rm -f "\$f"
-done
 
 exec env \\
     -u SSH_AUTH_SOCK \\
@@ -130,7 +154,6 @@ exec env \\
     -u VSCODE_GIT_IPC_HANDLE \\
     CLAUDE_CONFIG_DIR="$DEV_CLAUDE_HOME" \\
     IS_SANDBOX=1 \\
-    GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -F /dev/null" \\
     GIT_CONFIG_COUNT=1 \\
     GIT_CONFIG_KEY_0=commit.gpgsign \\
     GIT_CONFIG_VALUE_0=false \\
@@ -226,6 +249,59 @@ ensure_path_override /root/.bashrc
 ensure_path_override /root/.zshrc
 ensure_alias_override /root/.bashrc
 ensure_alias_override /root/.zshrc
+
+# Self-healing guard. The devcontainer's postStartCommand only fires when
+# the container actually restarts — closing/reopening the IDE just reattaches
+# without firing it. If /root/.local/bin/claude has been wiped between
+# sessions (e.g. container update, manual cleanup, build script), an
+# interactive shell rebuilds it on first launch via this guard.
+#
+# Placed at the TOP of the rc files (before everything else) so the wrapper
+# exists before mise activates and shadows PATH.
+ensure_self_heal() {
+    local rcfile="$1"
+    local marker="# csszyx-ai-self-heal"
+
+    if [ ! -f "$rcfile" ]; then
+        return
+    fi
+
+    if grep -qF "$marker" "$rcfile"; then
+        return
+    fi
+
+    # Prepend (not append) so it runs before mise activate further down.
+    local guard
+    guard=$(cat <<'EOF'
+# csszyx-ai-self-heal
+# Re-create the Claude/Codex wrapper if a previous session wiped it.
+# postStartCommand only fires on container restart; IDE reopen alone
+# does not. This is a no-op on the fast path (single stat call).
+#
+# Calls --wrapper-only so we do NOT touch /root/.claude-devcontainer/
+# symlinks while Claude may be running — that path is fragile because
+# Claude keeps .credentials.json open and a rm + ln -s window races
+# Claude's writes, splitting the symlink into a real file.
+if [ ! -x /root/.local/bin/claude ] || [ ! -x /root/.local/bin/codex ]; then
+    if [ -f /workspaces/csszyx/.devcontainer/configure-claude.sh ]; then
+        bash /workspaces/csszyx/.devcontainer/configure-claude.sh --wrapper-only >/dev/null 2>&1
+    fi
+    if [ -f /workspaces/csszyx/.devcontainer/configure-codex.sh ]; then
+        bash /workspaces/csszyx/.devcontainer/configure-codex.sh --wrapper-only >/dev/null 2>&1
+    fi
+fi
+
+EOF
+)
+    local tmp
+    tmp=$(mktemp)
+    printf '%s\n' "$guard" > "$tmp"
+    cat "$rcfile" >> "$tmp"
+    mv "$tmp" "$rcfile"
+}
+
+ensure_self_heal /root/.bashrc
+ensure_self_heal /root/.zshrc
 
 echo "[claude] Container CLAUDE_CONFIG_DIR: $DEV_CLAUDE_HOME"
 echo "[claude] Shared state symlinked from $HOST_CLAUDE_HOME (settings.json overridden)"
