@@ -1,0 +1,129 @@
+/**
+ * Phase D parity test — tracks how many fixtures the oxc-based
+ * `transformOxc` matches `transformSourceCode` (Babel) on.
+ *
+ * Each fixture carries an `expected` field tracking its current parity
+ * state. Until D2.1 lands the real implementation, every fixture is
+ * `'pending'` (the oxc skeleton throws `OxcNotImplementedError`, and
+ * the harness counts that as the expected-pending state).
+ *
+ * Workflow per slice:
+ *   1. Land slice D2.N (extends `transformOxc` to handle more cases).
+ *   2. Flip the matching fixtures' `expected` from `'pending'` to
+ *      `'parity'`. Drop `pendingReason`.
+ *   3. Run `pnpm test oxc-parity` — failures point at fixtures the
+ *      slice was supposed to land but didn't (regression catch).
+ *
+ * If a `'pending'` fixture starts matching Babel exactly (e.g. an
+ * unrelated slice incidentally fixed it), the assertion in
+ * {@link assertExpectedParity} flags it so the dev can flip its
+ * status. Catches both directions of drift.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+    assertExpectedParity,
+    compareImpls,
+    type ParityFixture,
+    summarise,
+} from './oxc-parity-harness.js';
+
+const fixtures: readonly ParityFixture[] = [
+    {
+        name: 'no-sz-fast-path',
+        source: 'const X = () => <div id="a">hello</div>;',
+        filename: 'no-sz.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.1 — read-only extraction not yet wired',
+    },
+    {
+        name: 'static-single-prop',
+        source: 'const X = () => <div sz={{ p: 4 }} />;',
+        filename: 'single.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.1 — basic JSXAttribute sz extraction',
+    },
+    {
+        name: 'static-multi-prop',
+        source: 'const X = () => <div sz={{ p: 4, bg: "blue-500", text: "white" }} />;',
+        filename: 'multi.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.1 — multi-prop object literal',
+    },
+    {
+        name: 'static-variant-hover',
+        source: 'const X = () => <div sz={{ p: 4, hover: { bg: "blue-600" } }} />;',
+        filename: 'variant.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.1 — nested variant object',
+    },
+    {
+        name: 'static-responsive-sm',
+        source: 'const X = () => <div sz={{ p: 4, sm: { p: 6 } }} />;',
+        filename: 'responsive.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.1 — responsive variant',
+    },
+    {
+        name: 'multi-element-static',
+        source: [
+            'const X = () => (',
+            '    <section sz={{ p: 4 }}>',
+            '        <div sz={{ bg: "white" }} />',
+            '    </section>',
+            ');',
+        ].join('\n'),
+        filename: 'multi-element.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.2 — multi-attribute pass with magic-string overwrite',
+    },
+    {
+        name: 'sz-with-existing-classname',
+        source: 'const X = () => <div className="existing" sz={{ p: 4 }} />;',
+        filename: 'merge.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.2 — merge with existing className attribute',
+    },
+    {
+        name: 'sz-recover-csr',
+        source: 'const X = () => <div szRecover="csr" sz={{ p: 4 }} />;',
+        filename: 'recover.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.3 — szRecover token emission + data-attribute insertion',
+    },
+    {
+        name: 'sz-runtime-call',
+        source: [
+            "import { _sz } from '@csszyx/runtime';",
+            'const X = ({ active }) => <div className={_sz("base", active && "on")} />;',
+        ].join('\n'),
+        filename: 'runtime.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.4 — CallExpression visitor for _sz runtime helper',
+    },
+    {
+        name: 'sz-conditional-spread',
+        source: [
+            'const BASE = { p: 4 } as const;',
+            'const X = ({ big }) => <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
+        ].join('\n'),
+        filename: 'spread.tsx',
+        expected: 'pending',
+        pendingReason: 'D2.5 — spread/conditional hoisting fallback (hoisting.ts port)',
+    },
+];
+
+describe('Phase D — Babel vs oxc parity', () => {
+    for (const fixture of fixtures) {
+        it(`${fixture.name} [${fixture.expected}]`, () => {
+            const comparison = compareImpls(fixture.source, fixture.filename);
+            expect(() => assertExpectedParity(fixture, comparison)).not.toThrow();
+        });
+    }
+
+    it('progress tracker', () => {
+        const summary = summarise(fixtures);
+        console.log(`\n  ${summary}\n`);
+        expect(summary).toMatch(/Phase D parity: \d+\/\d+ fixtures \(\d+%\)/);
+    });
+});

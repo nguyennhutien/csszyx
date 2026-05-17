@@ -1,0 +1,211 @@
+/**
+ * Phase D parity harness — runs both `transformSourceCode` (Babel) and
+ * `transformOxc` (oxc-parser + magic-string) on the same input and
+ * reports where they diverge. Used by `oxc-parity.test.ts` to track
+ * how many fixtures each D2.x slice unlocks.
+ *
+ * The harness is intentionally tolerant of the oxc skeleton throwing
+ * `OxcNotImplementedError` — that is the expected state for any
+ * fixture marked `expected: 'pending'`. Real parity assertions kick
+ * in only when a fixture is marked `expected: 'parity'`.
+ */
+
+import { transformSourceCode } from '../src/transform.js';
+import {
+    OxcNotImplementedError,
+    type TransformOxcResult,
+    transformOxc,
+} from '../src/transform-oxc.js';
+
+/**
+ * Side-by-side comparison of Babel and oxc transform output for one
+ * fixture. Every field is populated even when one side errored, so the
+ * harness can log meaningful diffs without further branching.
+ */
+export interface ParityComparison {
+    /** Did both implementations agree on the class set? */
+    classesEqual: boolean;
+    /** Did both implementations agree on the rewritten source? */
+    codeEqual: boolean;
+    /** Did both implementations agree on the diagnostic strings? */
+    diagnosticsEqual: boolean;
+    /** Did both implementations agree on the `transformed` flag? */
+    transformedEqual: boolean;
+    /** Babel output (always populated unless Babel itself throws). */
+    babel: {
+        code: string;
+        classes: string[];
+        diagnostics: string[];
+        transformed: boolean;
+    };
+    /** oxc output — null when the oxc skeleton threw. */
+    oxc: TransformOxcResult | null;
+    /** Error message when oxc threw, otherwise null. */
+    oxcError: string | null;
+    /** True when the oxc error was the expected skeleton throw. */
+    oxcIsSkeleton: boolean;
+}
+
+/**
+ * Run both implementations on the same source and produce a
+ * {@link ParityComparison}. Never throws — Babel errors propagate via
+ * an empty comparison; oxc errors are captured in the result.
+ *
+ * @param source Source TSX/JSX text.
+ * @param filename Filename passed to both implementations.
+ * @returns Comparison of the two implementations' output.
+ */
+export function compareImpls(source: string, filename: string): ParityComparison {
+    const babel = transformSourceCode(source, filename);
+    const babelView = {
+        code: babel.code,
+        classes: [...babel.classes].sort(),
+        diagnostics: [...babel.diagnostics],
+        transformed: babel.transformed,
+    };
+
+    let oxc: TransformOxcResult | null = null;
+    let oxcError: string | null = null;
+    let oxcIsSkeleton = false;
+    try {
+        oxc = transformOxc(source, filename);
+    } catch (err) {
+        oxcError = err instanceof Error ? err.message : String(err);
+        oxcIsSkeleton = err instanceof OxcNotImplementedError;
+    }
+
+    if (!oxc) {
+        return {
+            classesEqual: false,
+            codeEqual: false,
+            diagnosticsEqual: false,
+            transformedEqual: false,
+            babel: babelView,
+            oxc: null,
+            oxcError,
+            oxcIsSkeleton,
+        };
+    }
+
+    const oxcClassesSorted = [...oxc.classes].sort();
+    return {
+        classesEqual: setsEqual(babelView.classes, oxcClassesSorted),
+        codeEqual: babelView.code === oxc.code,
+        diagnosticsEqual: arraysEqual(babelView.diagnostics, oxc.diagnostics),
+        transformedEqual: babelView.transformed === oxc.transformed,
+        babel: babelView,
+        oxc,
+        oxcError: null,
+        oxcIsSkeleton: false,
+    };
+}
+
+/**
+ * One fixture for the parity suite. `expected` tracks the state the
+ * fixture should currently produce, so D2.x slices flip entries from
+ * `pending` to `parity` as the oxc implementation grows.
+ */
+export interface ParityFixture {
+    /** Human-readable test name. */
+    name: string;
+    /** TSX/JSX source for the harness. */
+    source: string;
+    /** Filename passed to both parsers (drives JSX detection). */
+    filename: string;
+    /** Expected current parity state. */
+    expected: 'pending' | 'parity';
+    /** Why this fixture is pending — link to the slice that lands it. */
+    pendingReason?: string;
+}
+
+/**
+ * Assert that a comparison matches the fixture's expected state.
+ * Throws a descriptive error when the actual state differs.
+ *
+ * @param fixture The fixture under test.
+ * @param comparison Output from {@link compareImpls}.
+ */
+export function assertExpectedParity(fixture: ParityFixture, comparison: ParityComparison): void {
+    if (fixture.expected === 'pending') {
+        if (comparison.oxcError && comparison.oxcIsSkeleton) {
+            return;
+        }
+        if (!comparison.classesEqual || !comparison.codeEqual) {
+            return;
+        }
+        throw new Error(
+            `Fixture "${fixture.name}" marked as pending but oxc matched Babel exactly. ` +
+                'Flip its `expected` to "parity" and remove `pendingReason`.',
+        );
+    }
+    if (comparison.oxcError) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as parity but oxc threw: ${comparison.oxcError}`,
+        );
+    }
+    if (!comparison.classesEqual) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as parity but class sets differ.\n` +
+                `  babel: [${comparison.babel.classes.join(', ')}]\n` +
+                `  oxc:   [${comparison.oxc ? [...comparison.oxc.classes].sort().join(', ') : ''}]`,
+        );
+    }
+    if (!comparison.codeEqual) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as parity but rewritten code differs.\n` +
+                `  babel: ${JSON.stringify(comparison.babel.code)}\n` +
+                `  oxc:   ${JSON.stringify(comparison.oxc?.code ?? '')}`,
+        );
+    }
+}
+
+/**
+ * Compute a one-line parity progress summary across all fixtures.
+ *
+ * @param fixtures All fixtures the suite tracks.
+ * @returns Human-readable summary string for console output.
+ */
+export function summarise(fixtures: readonly ParityFixture[]): string {
+    const total = fixtures.length;
+    const parity = fixtures.filter(f => f.expected === 'parity').length;
+    const pct = total === 0 ? 0 : Math.round((parity / total) * 100);
+    return `Phase D parity: ${parity}/${total} fixtures (${pct}%)`;
+}
+
+/**
+ * Sorted-string array equality — sets after `[...set].sort()`.
+ *
+ * @param a First sorted array.
+ * @param b Second sorted array.
+ * @returns True iff arrays are element-wise equal.
+ */
+function setsEqual(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Array equality for string arrays (preserves order).
+ *
+ * @param a First array.
+ * @param b Second array.
+ * @returns True iff arrays are element-wise equal.
+ */
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
