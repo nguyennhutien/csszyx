@@ -130,6 +130,16 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'local-spread.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-direct-ternary-local-objects',
+        source: [
+            'const ON = { opacity: 100 } as const;',
+            'const OFF = { opacity: 0 } as const;',
+            'const X = ({ on }) => <div sz={on ? ON : OFF} />;',
+        ].join('\n'),
+        filename: 'direct-ternary.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

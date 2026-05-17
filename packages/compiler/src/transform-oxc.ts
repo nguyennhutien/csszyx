@@ -246,6 +246,29 @@ export function transformOxc(
                 );
             }
             const expression = (value as unknown as { expression: OxcNode }).expression;
+            if (expression.type === 'ConditionalExpression') {
+                const conditionalClassExpr = buildStaticConditionalClassExpression(
+                    expression as ConditionalExpressionNode,
+                    effectiveFilename,
+                    objectBindings,
+                    source,
+                    classes,
+                );
+                if (conditionalClassExpr) {
+                    if (classNameAttr || szAttrs.length > 1) {
+                        runtimeFallbackExpr = expression;
+                        runtimeFallbackAttr = szAttr;
+                        break;
+                    }
+                    edits.overwrite(
+                        szAttr.start,
+                        szAttr.end,
+                        `className={${conditionalClassExpr}}`,
+                    );
+                    transformed = true;
+                    return;
+                }
+            }
             if (expression.type === 'Identifier') {
                 const bound = objectBindings.get(String((expression as IdentifierNode).name));
                 if (bound) {
@@ -505,6 +528,14 @@ interface ArrayExpressionNode extends OxcNode {
     elements: Array<OxcNode | null>;
 }
 
+/** oxc shape for a ternary expression (`cond ? a : b`). */
+interface ConditionalExpressionNode extends OxcNode {
+    type: 'ConditionalExpression';
+    test: OxcNode;
+    consequent: OxcNode;
+    alternate: OxcNode;
+}
+
 /** oxc shape for a single property inside an ObjectExpression. */
 interface PropertyNode extends OxcNode {
     type: 'Property';
@@ -638,6 +669,70 @@ function isFalsyLiteral(node: OxcNode): boolean {
     }
     const value = (node as unknown as { value: unknown }).value;
     return value === false || value === null;
+}
+
+/**
+ * Build a className ternary from statically resolvable sz branches.
+ *
+ * @param node Conditional expression used as the sz value.
+ * @param filename Filename for diagnostic offsets.
+ * @param bindings Local object-literal bindings available for branch resolution.
+ * @param source Original source for slicing the test expression.
+ * @param classes Class set to populate for Tailwind/mangle discovery.
+ * @returns Source for a className expression, or null when a branch is dynamic.
+ */
+function buildStaticConditionalClassExpression(
+    node: ConditionalExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+    classes: Set<string>,
+): string | null {
+    const consequent = resolveStaticClassString(node.consequent, filename, bindings);
+    const alternate = resolveStaticClassString(node.alternate, filename, bindings);
+    if (consequent === null || alternate === null) {
+        return null;
+    }
+    for (const cls of `${consequent} ${alternate}`.split(/\s+/)) {
+        if (cls) {
+            classes.add(cls);
+        }
+    }
+    const testSource = source.slice(node.test.start, node.test.end);
+    return `${testSource} ? ${JSON.stringify(consequent)} : ${JSON.stringify(alternate)}`;
+}
+
+/**
+ * Resolve an expression that Babel's tryStaticTransformNode can turn into a class string.
+ *
+ * @param node Candidate expression.
+ * @param filename Filename for diagnostic offsets.
+ * @param bindings Local object-literal bindings.
+ * @returns Compiled class string, or null when dynamic.
+ */
+function resolveStaticClassString(
+    node: OxcNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): string | null {
+    const unwrapped = unwrapExpression(node);
+    let objectNode: ObjectExpressionNode | null = null;
+    if (unwrapped.type === 'ObjectExpression') {
+        objectNode = unwrapped as ObjectExpressionNode;
+    } else if (unwrapped.type === 'Identifier') {
+        objectNode = bindings.get(String((unwrapped as IdentifierNode).name)) ?? null;
+    }
+    if (!objectNode) {
+        return null;
+    }
+    try {
+        return compileSzObject(astObjectToSzObject(objectNode, filename, bindings)).className;
+    } catch (err) {
+        if (err instanceof OxcNotImplementedError) {
+            return null;
+        }
+        throw err;
+    }
 }
 
 /**

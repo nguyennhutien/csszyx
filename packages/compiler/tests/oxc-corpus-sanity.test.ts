@@ -118,8 +118,8 @@ const fixtures: readonly CorpusFixture[] = [
             'const OFF = { opacity: 0 };',
             'const A = ({ on }) => <div sz={on ? ON : OFF} />;',
         ].join('\n'),
-        expected: 'class-divergence',
-        note: 'requires D5 scope analysis plus ternary source emission',
+        expected: 'surgical-parity',
+        note: 'minimal D5 scope resolver emits static ternary class branches',
     },
     {
         name: 'inert runtime helper in className',
