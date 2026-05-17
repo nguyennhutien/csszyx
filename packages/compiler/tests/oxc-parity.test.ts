@@ -90,8 +90,7 @@ const fixtures: readonly ParityFixture[] = [
             'const X = ({ active }) => <div className={_sz("base", active && "on")} />;',
         ].join('\n'),
         filename: 'runtime.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.4 — CallExpression visitor for _sz runtime helper',
+        expected: 'surgical-parity',
     },
     {
         name: 'sz-conditional-spread',
