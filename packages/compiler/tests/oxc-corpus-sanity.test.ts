@@ -84,8 +84,8 @@ const fixtures: readonly CorpusFixture[] = [
     {
         name: 'dynamic css var value',
         source: 'const A = () => <div sz={{ p: padVal }} />;',
-        expected: 'class-divergence',
-        note: 'Babel emits CSS var helper classes; oxc currently runtime-fallbacks',
+        expected: 'surgical-parity',
+        note: 'oxc emits CSS variable helper classes for dynamic object values',
     },
     {
         name: 'dynamic value plus existing expression className',
@@ -106,10 +106,19 @@ const fixtures: readonly CorpusFixture[] = [
         note: 'minimal D5 local object binding resolves spread identifiers',
     },
     {
+        name: 'local spread plus dynamic value',
+        source: [
+            "const base = { rounded: 'lg', p: 4 };",
+            'const A = ({ color }) => <div sz={{ ...base, bg: color }} />;',
+        ].join('\n'),
+        expected: 'class-divergence',
+        note: 'partial CSS-variable compile after local spreads is still a later D5 slice',
+    },
+    {
         name: 'conditional object value',
         source: 'const A = ({ big }) => <div sz={{ p: big ? 8 : 4 }} />;',
-        expected: 'class-divergence',
-        note: 'Babel emits both branch classes; oxc currently runtime-fallbacks',
+        expected: 'surgical-parity',
+        note: 'oxc emits static branch classes for literal property ternaries',
     },
     {
         name: 'direct ternary variable branches',

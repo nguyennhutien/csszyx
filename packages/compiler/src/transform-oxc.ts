@@ -28,9 +28,22 @@ import { parseSync } from 'oxc-parser';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 import type { TokenData } from './manifest.js';
+import {
+    COLOR_PROPERTIES,
+    getCSSVariableName,
+    getPropertyCategory,
+    PropertyCategory,
+} from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import type { TransformSourceCodeOptions } from './transform.js';
-import { transform as compileSzObject, type SzObject, type SzValue } from './transform-core.js';
+import {
+    transform as compileSzObject,
+    getVariantPrefix,
+    KNOWN_VARIANTS,
+    PROPERTY_MAP,
+    type SzObject,
+    type SzValue,
+} from './transform-core.js';
 
 /**
  * Result shape returned by both `transformSourceCode` (Babel) and the
@@ -122,6 +135,7 @@ export function transformOxc(
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     let transformed = false;
     let usesRuntime = false;
+    let usesColorVar = false;
 
     walk(parsed.program, node => {
         if (node.type !== 'JSXOpeningElement') {
@@ -131,6 +145,7 @@ export function transformOxc(
         const attrs = openingNode.attributes ?? [];
         const szAttrs: JsxAttributeNode[] = [];
         let classNameAttr: JsxAttributeNode | null = null;
+        let styleAttr: JsxAttributeNode | null = null;
         let szRecoverAttr: JsxAttributeNode | null = null;
         let alreadyTagged = false;
         let lastAttr: JsxAttributeNode | null = null;
@@ -146,6 +161,8 @@ export function transformOxc(
                 szAttrs.push(attr);
             } else if (name === 'className' || name === 'class') {
                 classNameAttr = attr;
+            } else if (name === 'style') {
+                styleAttr = attr;
             } else if (name === 'szRecover') {
                 szRecoverAttr = attr;
             } else if (name === 'data-sz-recovery-token') {
@@ -318,6 +335,39 @@ export function transformOxc(
                 );
             } catch (err) {
                 if (err instanceof OxcNotImplementedError) {
+                    const partial = buildPartialObjectTransform(
+                        expression as ObjectExpressionNode,
+                        effectiveFilename,
+                        objectBindings,
+                        source,
+                    );
+                    if (
+                        partial &&
+                        szAttrs.length === 1 &&
+                        classNameAttr?.value?.type !== 'JSXExpressionContainer'
+                    ) {
+                        if (classNameAttr && stringLiteralValue(classNameAttr.value) !== null) {
+                            const existing = stringLiteralValue(classNameAttr.value);
+                            const merged = [existing, partial.className].filter(Boolean).join(' ');
+                            edits.overwrite(
+                                classNameAttr.start,
+                                classNameAttr.end,
+                                `className="${merged}"`,
+                            );
+                            edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
+                        } else {
+                            edits.overwrite(szAttr.start, szAttr.end, partial.classNameAttr);
+                        }
+                        applyStyleProps(edits, source, styleAttr, lastAttr, partial.styleProps);
+                        for (const c of partial.className.split(/\s+/)) {
+                            if (c) {
+                                classes.add(c);
+                            }
+                        }
+                        usesColorVar ||= partial.usesColorVar;
+                        transformed = true;
+                        return;
+                    }
                     runtimeFallbackExpr = expression;
                     runtimeFallbackAttr = szAttr;
                     break;
@@ -402,7 +452,7 @@ export function transformOxc(
         transformed,
         usesRuntime,
         usesMerge: false,
-        usesColorVar: false,
+        usesColorVar,
         classes,
         rawClassNames,
         diagnostics,
@@ -554,6 +604,38 @@ interface SpreadElementNode extends OxcNode {
     argument: OxcNode;
 }
 
+/** Dynamic CSS variable info produced by partial sz object analysis. */
+interface OxcDynamicPropInfo {
+    expression: OxcNode;
+    category: PropertyCategory;
+    varName: string;
+    twPrefix: string;
+    variantChain: string;
+}
+
+/** Conditional static class entry for a single property ternary. */
+interface OxcConditionalClassEntry {
+    test: OxcNode;
+    consequent: string;
+    alternate: string;
+}
+
+/** Result of partially evaluating an oxc object expression. */
+interface OxcPartialObjectResult {
+    staticProps: SzObject;
+    dynamicProps: Map<string, OxcDynamicPropInfo>;
+    conditionalClasses: OxcConditionalClassEntry[];
+    usesColorVar: boolean;
+}
+
+/** Ready-to-emit partial object transform fragments. */
+interface OxcPartialTransform {
+    className: string;
+    classNameAttr: string;
+    styleProps: string[];
+    usesColorVar: boolean;
+}
+
 /**
  * Convert an oxc `ObjectExpression` AST node into a plain {@link SzObject}
  * the browser-pure `transform()` helper can consume. Throws
@@ -689,6 +771,331 @@ function assertAstBudget(root: OxcNode, filename: string, astBudget: number): vo
             throw new ASTBudgetExceededError(filename, nodeCount, astBudget);
         }
     });
+}
+
+/**
+ * Build className/style fragments for a sz object with static and dynamic values.
+ *
+ * @param node Object expression used as the sz value.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for preserving runtime expressions.
+ * @returns Transform fragments, or null when the object needs runtime fallback.
+ */
+function buildPartialObjectTransform(
+    node: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+): OxcPartialTransform | null {
+    const partial = evaluatePartialObject(node, filename, bindings, source);
+    if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
+        return null;
+    }
+    if (
+        partial.conditionalClasses.length > 0 &&
+        (partial.conditionalClasses.length !== 1 ||
+            partial.dynamicProps.size > 0 ||
+            Object.keys(partial.staticProps).length > 0)
+    ) {
+        return null;
+    }
+
+    const classParts: string[] = [];
+    if (Object.keys(partial.staticProps).length > 0) {
+        const { className } = compileSzObject(partial.staticProps);
+        if (className) {
+            classParts.push(className);
+        }
+    }
+
+    for (const [, info] of partial.dynamicProps) {
+        classParts.push(buildCSSVarClassName(info));
+    }
+    for (const entry of partial.conditionalClasses) {
+        classParts.push(entry.consequent, entry.alternate);
+    }
+
+    const className = classParts.filter(Boolean).join(' ');
+    const classNameAttr =
+        partial.conditionalClasses.length > 0
+            ? `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`
+            : `className="${className}"`;
+    const styleProps = [...partial.dynamicProps.values()].map(
+        info => `${JSON.stringify(info.varName)}: ${generateStyleValueSource(info, source)}`,
+    );
+    return { className, classNameAttr, styleProps, usesColorVar: partial.usesColorVar };
+}
+
+/**
+ * Partially evaluate an object expression into static props and CSS-variable props.
+ *
+ * @param node Object expression to evaluate.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for preserving runtime expressions.
+ * @param variantChain Current nested variant chain.
+ * @returns Partial object result, or null for unsupported spread/computed cases.
+ */
+function evaluatePartialObject(
+    node: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+    variantChain = '',
+): OxcPartialObjectResult | null {
+    const staticProps: SzObject = {};
+    const dynamicProps = new Map<string, OxcDynamicPropInfo>();
+    const conditionalClasses: OxcConditionalClassEntry[] = [];
+    let usesColorVar = false;
+
+    for (const propRaw of node.properties) {
+        if (propRaw.type === 'SpreadElement') {
+            return null;
+        }
+        if (propRaw.type !== 'Property') {
+            return null;
+        }
+        const prop = propRaw as PropertyNode;
+        if (prop.computed) {
+            return null;
+        }
+        const key = extractKeyName(prop.key);
+        if (key === null) {
+            return null;
+        }
+
+        const value = unwrapExpression(prop.value);
+        try {
+            if (value.type === 'ObjectExpression') {
+                staticProps[key] = astObjectToSzObject(
+                    value as ObjectExpressionNode,
+                    filename,
+                    bindings,
+                );
+                continue;
+            }
+            staticProps[key] = astValueToSzValue(value, filename, bindings);
+            continue;
+        } catch (err) {
+            if (!(err instanceof OxcNotImplementedError)) {
+                throw err;
+            }
+        }
+
+        if (value.type === 'ObjectExpression' && isKnownVariant(key)) {
+            const nestedVariant = variantChain ? `${variantChain}-${key}` : key;
+            const nested = evaluatePartialObject(
+                value as ObjectExpressionNode,
+                filename,
+                bindings,
+                source,
+                nestedVariant,
+            );
+            if (!nested) {
+                return null;
+            }
+            if (Object.keys(nested.staticProps).length > 0) {
+                staticProps[key] = nested.staticProps;
+            }
+            for (const [nestedKey, nestedInfo] of nested.dynamicProps) {
+                dynamicProps.set(nestedKey, nestedInfo);
+            }
+            conditionalClasses.push(...nested.conditionalClasses);
+            usesColorVar ||= nested.usesColorVar;
+            continue;
+        }
+
+        if (value.type === 'ConditionalExpression') {
+            const conditional = value as ConditionalExpressionNode;
+            const consequent = extractStaticLiteralValue(conditional.consequent);
+            const alternate = extractStaticLiteralValue(conditional.alternate);
+            if (consequent !== null && alternate !== null) {
+                const { className: consequentClasses } = compileSzObject({ [key]: consequent });
+                const { className: alternateClasses } = compileSzObject({ [key]: alternate });
+                conditionalClasses.push({
+                    test: conditional.test,
+                    consequent: prefixVariantClasses(consequentClasses, variantChain),
+                    alternate: prefixVariantClasses(alternateClasses, variantChain),
+                });
+                continue;
+            }
+        }
+
+        if (!isRuntimeExpression(value)) {
+            return null;
+        }
+
+        const twPrefix =
+            PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        const category = getPropertyCategory(key);
+        const varName = getCSSVariableName(key, variantChain || undefined);
+        const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
+        if (COLOR_PROPERTIES.has(key)) {
+            usesColorVar = true;
+        }
+        dynamicProps.set(uniqueKey, {
+            expression: value,
+            category,
+            varName,
+            twPrefix,
+            variantChain,
+        });
+    }
+
+    return { staticProps, dynamicProps, conditionalClasses, usesColorVar };
+}
+
+/**
+ * Add or merge style props generated by CSS-variable auto-compile.
+ *
+ * @param edits MagicString instance to update.
+ * @param source Original source.
+ * @param styleAttr Existing style attribute, if any.
+ * @param lastAttr Last JSX attribute in the opening element.
+ * @param styleProps Object property source fragments.
+ */
+function applyStyleProps(
+    edits: MagicString,
+    source: string,
+    styleAttr: JsxAttributeNode | null,
+    lastAttr: JsxAttributeNode | null,
+    styleProps: string[],
+): void {
+    if (styleProps.length === 0) {
+        return;
+    }
+    const propsSource = styleProps.join(', ');
+    if (!styleAttr) {
+        if (lastAttr) {
+            edits.appendRight(lastAttr.end, ` style={{${propsSource}}}`);
+        }
+        return;
+    }
+    if (styleAttr.value?.type !== 'JSXExpressionContainer') {
+        return;
+    }
+    const expression = (styleAttr.value as unknown as { expression: OxcNode }).expression;
+    const styleSource = source.slice(expression.start, expression.end);
+    edits.overwrite(styleAttr.start, styleAttr.end, `style={{...${styleSource}, ${propsSource}}}`);
+}
+
+/**
+ * Generate a style value expression source for a dynamic CSS variable.
+ *
+ * @param info Dynamic prop metadata.
+ * @param source Original source for expression slicing.
+ * @returns JavaScript expression source.
+ */
+function generateStyleValueSource(info: OxcDynamicPropInfo, source: string): string {
+    const expressionSource = source.slice(info.expression.start, info.expression.end);
+    switch (info.category) {
+        case PropertyCategory.SPACING:
+            return `\`calc(\${${expressionSource}} * var(--spacing))\``;
+        case PropertyCategory.COLOR:
+            return `__szColorVar(${expressionSource})`;
+        case PropertyCategory.ANGLE:
+            return `\`\${${expressionSource}}deg\``;
+        case PropertyCategory.DURATION:
+            return `\`\${${expressionSource}}ms\``;
+        default:
+            return `\`\${${expressionSource}}\``;
+    }
+}
+
+/**
+ * Build Tailwind's CSS variable shorthand class for a dynamic property.
+ *
+ * @param info Dynamic prop metadata.
+ * @returns Class name such as `p-(--_sz-p)`.
+ */
+function buildCSSVarClassName(info: OxcDynamicPropInfo): string {
+    const variantPrefix = info.variantChain ? `${getVariantPrefix(info.variantChain)}:` : '';
+    return `${variantPrefix}${info.twPrefix}-(${info.varName})`;
+}
+
+/**
+ * Build the className expression when static property ternaries are present.
+ *
+ * @param classParts All class names for extraction.
+ * @param conditionals Conditional class entries.
+ * @param source Original source for test expression slicing.
+ * @returns JavaScript expression source.
+ */
+function buildConditionalClassSource(
+    classParts: string[],
+    conditionals: OxcConditionalClassEntry[],
+    source: string,
+): string {
+    if (conditionals.length === 1 && classParts.length === 2) {
+        const [entry] = conditionals;
+        return `${source.slice(entry.test.start, entry.test.end)} ? ${JSON.stringify(entry.consequent)} : ${JSON.stringify(entry.alternate)}`;
+    }
+    return JSON.stringify(classParts.filter(Boolean).join(' '));
+}
+
+/**
+ * Extract a primitive static literal for conditional property branches.
+ *
+ * @param node Candidate expression.
+ * @returns Literal value, or null when dynamic.
+ */
+function extractStaticLiteralValue(node: OxcNode): string | number | boolean | null {
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type !== 'Literal') {
+        return null;
+    }
+    const value = (unwrapped as unknown as { value: unknown }).value;
+    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? value
+        : null;
+}
+
+/**
+ * Check whether a property key is a known variant container.
+ *
+ * @param key sz object key.
+ * @returns True for known variants.
+ */
+function isKnownVariant(key: string): boolean {
+    return KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key));
+}
+
+/**
+ * Prefix static classes with the current variant chain.
+ *
+ * @param className Space-separated class list.
+ * @param variantChain Current variant chain.
+ * @returns Prefixed classes.
+ */
+function prefixVariantClasses(className: string, variantChain: string): string {
+    if (!variantChain) {
+        return className;
+    }
+    const prefix = `${getVariantPrefix(variantChain)}:`;
+    return className
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(cls => `${prefix}${cls}`)
+        .join(' ');
+}
+
+/**
+ * Check whether an oxc node can safely be preserved as a runtime style expression.
+ *
+ * @param node Candidate node.
+ * @returns True when source slicing can produce an expression.
+ */
+function isRuntimeExpression(node: OxcNode): boolean {
+    return (
+        node.type === 'Identifier' ||
+        node.type === 'MemberExpression' ||
+        node.type === 'CallExpression' ||
+        node.type === 'ConditionalExpression' ||
+        node.type === 'TemplateLiteral' ||
+        node.type === 'BinaryExpression' ||
+        node.type === 'LogicalExpression'
+    );
 }
 
 /**

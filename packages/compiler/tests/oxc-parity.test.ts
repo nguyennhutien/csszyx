@@ -140,6 +140,18 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'direct-ternary.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-dynamic-css-var',
+        source: 'const X = ({ pad }) => <div sz={{ p: pad, bg: "blue-500" }} />;',
+        filename: 'dynamic-css-var.tsx',
+        expected: 'surgical-parity',
+    },
+    {
+        name: 'sz-static-property-ternary',
+        source: 'const X = ({ big }) => <div sz={{ p: big ? 8 : 4 }} />;',
+        filename: 'property-ternary.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {
