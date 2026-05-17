@@ -107,10 +107,10 @@ export interface BuildConfig {
     /**
      * Source parser used for JSX/TSX sz transforms.
      *
-     * `babel` is the stable default. `oxc` is an opt-in Phase D migration path
-     * and may fall back to Babel for cases that are not ported yet.
+     * `oxc` is the default parser. `babel` remains available as a compatibility
+     * fallback while the migration keeps Babel dependencies installed.
      *
-     * @default "babel"
+     * @default "oxc"
      */
     parser?: 'babel' | 'oxc';
 
@@ -280,7 +280,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
     astBudgetLimit: 50000,
-    parser: 'babel',
+    parser: 'oxc',
 };
 
 /**

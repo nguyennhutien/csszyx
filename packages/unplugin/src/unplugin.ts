@@ -410,8 +410,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    const parserOverride = process.env.CSSZYX_PARSER;
     const parserMode =
-        process.env.CSSZYX_PARSER === 'oxc' ? 'oxc' : (options.build?.parser ?? 'babel');
+        parserOverride === 'babel' || parserOverride === 'oxc'
+            ? parserOverride
+            : (options.build?.parser ?? 'oxc');
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -489,9 +492,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Runs the configured source transform. Babel remains the stable default;
-     * the oxc path is opt-in and falls back to Babel for not-yet-ported syntax
-     * so enabling it cannot change build correctness during Phase D.
+     * Runs the configured source transform. Oxc is the default parser after the
+     * Phase D corpus pass; Babel remains as an explicit compatibility fallback
+     * and as the safety net for unexpected oxc parser/compiler failures.
      *
      * @param source Source module contents.
      * @param filename Source filename for parser diagnostics.
@@ -509,7 +512,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const result = transformSourceCode(source, filename, compilerOptions);
             const reason = err instanceof Error ? err.message : String(err);
             result.diagnostics.push(
-                `[csszyx] CSSZYX_PARSER=oxc fell back to Babel for ${filename}: ${reason}`,
+                `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
             );
             return result;
         }
