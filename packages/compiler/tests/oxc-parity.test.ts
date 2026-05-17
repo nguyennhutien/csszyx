@@ -152,6 +152,15 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'property-ternary.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'dynamic-call-static-object',
+        source: [
+            "import { dynamic } from '@csszyx/dynamic';",
+            'const X = () => <div className={dynamic({ p: 4, rounded: "md" })} />;',
+        ].join('\n'),
+        filename: 'dynamic-call.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

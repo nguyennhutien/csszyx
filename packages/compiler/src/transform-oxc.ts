@@ -138,6 +138,15 @@ export function transformOxc(
     let usesColorVar = false;
 
     walk(parsed.program, node => {
+        if (node.type === 'CallExpression') {
+            collectDynamicCallClasses(
+                node as CallExpressionNode,
+                effectiveFilename,
+                objectBindings,
+                classes,
+            );
+            return;
+        }
         if (node.type !== 'JSXOpeningElement') {
             return;
         }
@@ -589,6 +598,13 @@ interface ConditionalExpressionNode extends OxcNode {
     alternate: OxcNode;
 }
 
+/** oxc shape for a call expression (`dynamic({...})`). */
+interface CallExpressionNode extends OxcNode {
+    type: 'CallExpression';
+    callee: OxcNode;
+    arguments: OxcNode[];
+}
+
 /** oxc shape for a single property inside an ObjectExpression. */
 interface PropertyNode extends OxcNode {
     type: 'Property';
@@ -771,6 +787,68 @@ function assertAstBudget(root: OxcNode, filename: string, astBudget: number): vo
             throw new ASTBudgetExceededError(filename, nodeCount, astBudget);
         }
     });
+}
+
+/**
+ * Collect classes from static `dynamic({...})` calls without rewriting source.
+ *
+ * @param node Call expression to inspect.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param classes Class set to populate.
+ */
+function collectDynamicCallClasses(
+    node: CallExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    classes: Set<string>,
+): void {
+    if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'dynamic') {
+        return;
+    }
+    const [firstArg] = node.arguments;
+    if (!firstArg) {
+        return;
+    }
+    const objectNode = resolveObjectExpression(firstArg, bindings);
+    if (!objectNode) {
+        return;
+    }
+    let result: ReturnType<typeof compileSzObject>;
+    try {
+        result = compileSzObject(astObjectToSzObject(objectNode, filename, bindings));
+    } catch (err) {
+        if (err instanceof OxcNotImplementedError) {
+            return;
+        }
+        throw err;
+    }
+    for (const cls of result.className.split(/\s+/)) {
+        if (cls) {
+            classes.add(cls);
+        }
+    }
+}
+
+/**
+ * Resolve an expression to a local object literal when possible.
+ *
+ * @param node Candidate expression.
+ * @param bindings Local object-literal bindings.
+ * @returns Object expression, or null.
+ */
+function resolveObjectExpression(
+    node: OxcNode,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): ObjectExpressionNode | null {
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'ObjectExpression') {
+        return unwrapped as ObjectExpressionNode;
+    }
+    if (unwrapped.type === 'Identifier') {
+        return bindings.get(String((unwrapped as IdentifierNode).name)) ?? null;
+    }
+    return null;
 }
 
 /**
