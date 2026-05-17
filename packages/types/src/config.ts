@@ -286,6 +286,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     tailwindConfig: 'tailwind.config.js',
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
+    cache: true,
     astBudgetLimit: 50000,
     parser: 'oxc',
 };

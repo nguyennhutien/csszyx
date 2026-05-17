@@ -2,31 +2,15 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { TokenData } from '@csszyx/compiler';
+import type { SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 1;
+const CACHE_SCHEMA_VERSION = 2;
+
+/** Parser implementation that produced a cache entry. */
+export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc';
 
 /** Transform result shape that can be serialized into the on-disk cache. */
-export interface CacheableTransformResult {
-    /** Transformed source code. */
-    code: string;
-    /** Whether csszyx changed the source. */
-    transformed: boolean;
-    /** Whether the source needs the _sz runtime helper. */
-    usesRuntime: boolean;
-    /** Whether the source needs the _szMerge runtime helper. */
-    usesMerge: boolean;
-    /** Whether the source needs the color-var runtime helper. */
-    usesColorVar: boolean;
-    /** Classes generated from sz syntax. */
-    classes: Set<string>;
-    /** Raw className/class strings collected for Tailwind discovery only. */
-    rawClassNames: Set<string>;
-    /** Compiler diagnostics to replay on cache hit. */
-    diagnostics: string[];
-    /** Recovery tokens emitted by szRecover attributes. */
-    recoveryTokens: Map<string, TokenData>;
-}
+export type CacheableTransformResult = SourceTransformResult;
 
 /** JSON-safe transform result stored inside a cache entry. */
 interface SerializedTransformResult {
@@ -47,6 +31,7 @@ interface TransformCacheEntry {
     pluginVersion: string;
     compilerVersion: string;
     parserMode: string;
+    producer: TransformCacheProducer;
     astBudget: number | null;
     filename: string;
     inputSha256: string;
@@ -62,6 +47,8 @@ export interface TransformCacheKeyInput {
     compilerVersion: string;
     /** Active parser mode. */
     parserMode: string;
+    /** Parser implementation that must have produced the cached output. */
+    producer: TransformCacheProducer;
     /** Effective AST budget override, if configured. */
     astBudget?: number;
     /** Source filename; recovery tokens depend on it. */
@@ -102,8 +89,9 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `plugin=${input.pluginVersion}`,
         `compiler=${input.compilerVersion}`,
         `parser=${input.parserMode}`,
+        `producer=${input.producer}`,
         `astBudget=${input.astBudget ?? 'default'}`,
-        `filename=${normalizeFilename(input.filename)}`,
+        `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');
 
@@ -138,8 +126,9 @@ export function readTransformCache(
         entry.pluginVersion !== input.pluginVersion ||
         entry.compilerVersion !== input.compilerVersion ||
         entry.parserMode !== input.parserMode ||
+        entry.producer !== input.producer ||
         entry.astBudget !== (input.astBudget ?? null) ||
-        entry.filename !== normalizeFilename(input.filename) ||
+        entry.filename !== input.filename ||
         entry.inputSha256 !== inputSha256
     ) {
         return null;
@@ -172,8 +161,9 @@ export function writeTransformCache(
         pluginVersion: input.pluginVersion,
         compilerVersion: input.compilerVersion,
         parserMode: input.parserMode,
+        producer: input.producer,
         astBudget: input.astBudget ?? null,
-        filename: normalizeFilename(input.filename),
+        filename: input.filename,
         inputSha256,
         timestamp: new Date().toISOString(),
         result: serializeResult(result),
@@ -231,16 +221,6 @@ export function evictOldTransformCacheEntries(
  */
 function cacheEntryPath(cacheRoot: string, key: string): string {
     return path.join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
-}
-
-/**
- * Normalize path separators for cross-platform cache keys.
- *
- * @param filename Source filename.
- * @returns Filename with POSIX separators.
- */
-function normalizeFilename(filename: string): string {
-    return filename.replace(/\\/g, '/');
 }
 
 /**

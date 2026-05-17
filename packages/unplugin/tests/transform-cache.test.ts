@@ -48,6 +48,7 @@ describe('transform cache', () => {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
             parserMode: 'oxc',
+            producer: 'oxc',
             filename: '/repo/src/App.tsx',
             source: 'const App=()=> <div sz={{ p: 4 }} />;',
             ...overrides,
@@ -97,7 +98,7 @@ describe('transform cache', () => {
         expect(cached?.recoveryTokens.get('abc123')?.mode).toBe('csr');
     });
 
-    it('misses when source, version, parser, budget, or filename changes', () => {
+    it('misses when source, version, parser, producer, budget, or filename changes', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input({ astBudget: 50_000 }), result());
 
@@ -106,9 +107,13 @@ describe('transform cache', () => {
         expect(readTransformCache(cacheRoot, input({ pluginVersion: '0.8.1' }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ compilerVersion: '0.8.1' }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ parserMode: 'babel' }))).toBeNull();
+        expect(readTransformCache(cacheRoot, input({ producer: 'babel-fallback' }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ astBudget: 1_000 }))).toBeNull();
         expect(
             readTransformCache(cacheRoot, input({ filename: '/repo/src/Other.tsx' })),
+        ).toBeNull();
+        expect(
+            readTransformCache(cacheRoot, input({ filename: '\\repo\\src\\App.tsx' })),
         ).toBeNull();
     });
 
@@ -120,7 +125,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":1');
+        expect(content).toContain('"version":2');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 

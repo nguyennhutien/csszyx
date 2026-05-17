@@ -47,6 +47,7 @@ export {
 export {
     isValidSzProp,
     normalizeClassName,
+    type SourceTransformResult,
     type SzObject,
     type SzValue,
     transform,

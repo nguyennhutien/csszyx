@@ -3,10 +3,16 @@ import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { type TokenData, transform, transformOxc, transformSourceCode } from '@csszyx/compiler';
+import {
+    type SourceTransformResult,
+    type TokenData,
+    transform,
+    transformOxc,
+    transformSourceCode,
+} from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
-import type { PartialCsszyxConfig } from '@csszyx/types';
+import { DEFAULT_BUILD_CONFIG, type PartialCsszyxConfig } from '@csszyx/types';
 import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
@@ -44,9 +50,6 @@ import {
     resolveVirtualModule,
 } from './virtual-modules.js';
 
-/** Compiler source-transform result shared by Babel and oxc paths. */
-type SourceTransformResult = ReturnType<typeof transformSourceCode>;
-
 /**
  * Plugin state for mangle map management.
  */
@@ -73,12 +76,17 @@ interface PluginState {
  */
 const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
+const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 let _hasWarnedTsConfig = false;
+let _hasWarnedTransformCacheVersion = false;
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
-const PLUGIN_VERSION = findPackageVersionFromFile(fileURLToPath(import.meta.url), '0.0.0');
-const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', '0.0.0');
+const PLUGIN_VERSION = findPackageVersionFromFile(
+    fileURLToPath(import.meta.url),
+    UNKNOWN_PACKAGE_VERSION,
+);
+const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', UNKNOWN_PACKAGE_VERSION);
 
 /**
  * Scans CSS files for Tailwind v4 @theme blocks and writes .csszyx/theme.d.ts.
@@ -169,6 +177,7 @@ function findPackageVersionFromFile(file: string, fallback: string): string {
             if (typeof parsed.version === 'string') {
                 return parsed.version;
             }
+            return fallback;
         } catch {
             // Keep walking up until the filesystem root.
         }
@@ -178,6 +187,18 @@ function findPackageVersionFromFile(file: string, fallback: string): string {
         }
         dir = parent;
     }
+}
+
+/**
+ * Normalizes source filenames before compiler calls and cache-key derivation.
+ * Recovery tokens include the filename in their hash input, so cache identity
+ * and compiler token generation must see the same path spelling.
+ *
+ * @param filename Source filename from the bundler.
+ * @returns Filename with POSIX separators.
+ */
+function normalizeSourceFilename(filename: string): string {
+    return filename.replace(/\\/g, '/');
 }
 
 /**
@@ -466,7 +487,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
-    const cacheEnabled = options.build?.cache !== false;
+    const cacheRequested = (options.build?.cache ?? DEFAULT_BUILD_CONFIG.cache) !== false;
+    const cacheVersionsKnown =
+        PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
+    const cacheEnabled = cacheRequested && cacheVersionsKnown;
+    if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
+        _hasWarnedTransformCacheVersion = true;
+        console.warn(
+            '[csszyx] Transform cache disabled because package versions could not be resolved.',
+        );
+    }
     const parserOverride = process.env.CSSZYX_PARSER;
     const parserMode =
         parserOverride === 'babel' || parserOverride === 'oxc'
@@ -560,15 +590,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
         const compilerOptions = { astBudget: astBudgetOverride };
+        const effectiveFilename = normalizeSourceFilename(filename);
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+
+        if (cacheEnabled) {
+            evictTransformCacheOnce();
+        }
+
         const cacheInput = {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
             parserMode,
+            producer: parserMode === 'oxc' ? ('oxc' as const) : ('babel' as const),
             astBudget: astBudgetOverride,
-            filename,
+            filename: effectiveFilename,
             source,
         };
-        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
         if (cacheEnabled) {
             const cached = readTransformCache(cacheRoot, cacheInput);
@@ -579,16 +616,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         let result: SourceTransformResult;
         if (parserMode !== 'oxc') {
-            result = transformSourceCode(source, filename, compilerOptions);
+            result = transformSourceCode(source, effectiveFilename, compilerOptions);
         } else {
             try {
-                result = transformOxc(source, filename, compilerOptions);
+                result = transformOxc(source, effectiveFilename, compilerOptions);
             } catch (err) {
-                result = transformSourceCode(source, filename, compilerOptions);
+                result = transformSourceCode(source, effectiveFilename, compilerOptions);
                 const reason = err instanceof Error ? err.message : String(err);
                 result.diagnostics.push(
-                    `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
+                    `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
                 );
+                return result;
             }
         }
 
