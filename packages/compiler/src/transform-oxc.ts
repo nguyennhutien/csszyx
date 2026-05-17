@@ -459,6 +459,9 @@ export function transformOxc(
                 );
             }
             const exprSource = source.slice(runtimeFallbackExpr.start, runtimeFallbackExpr.end);
+            if (runtimeFallbackExpr.type !== 'ArrayExpression') {
+                diagnostics.push(buildRuntimeFallbackDiagnostic(runtimeFallbackExpr, source));
+            }
             edits.overwrite(
                 runtimeFallbackAttr.start,
                 runtimeFallbackAttr.end,
@@ -581,6 +584,50 @@ function offsetToLineColumn(source: string, offset: number): { line: number; col
         }
     }
     return { line, column };
+}
+
+/**
+ * Build the same dev diagnostic Babel emits when sz falls back to runtime.
+ *
+ * @param expression Runtime fallback expression.
+ * @param source Original source.
+ * @returns Diagnostic string.
+ */
+function buildRuntimeFallbackDiagnostic(expression: OxcNode, source: string): string {
+    const { line, column } = offsetToLineColumn(source, expression.start);
+    const lineCol = `${line}:${column + 1}`;
+    let reason: string;
+    let suggestion: string;
+    if (expression.type === 'CallExpression') {
+        const callee = (expression as CallExpressionNode).callee;
+        const name =
+            callee.type === 'Identifier'
+                ? (callee as IdentifierNode).name
+                : callee.type === 'MemberExpression' &&
+                    ((callee as unknown as { property?: OxcNode }).property?.type ?? '') ===
+                        'Identifier'
+                  ? String(
+                        ((callee as unknown as { property: OxcNode }).property as IdentifierNode)
+                            .name,
+                    )
+                  : '?';
+        reason = `function call \`${name}()\` result is unknown at build time`;
+        suggestion =
+            'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().';
+    } else if (expression.type === 'Identifier') {
+        reason = `identifier \`${(expression as IdentifierNode).name}\` could not be resolved to a static value`;
+        suggestion =
+            "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().";
+    } else if (expression.type === 'MemberExpression') {
+        reason = 'member expression is not statically resolvable';
+        suggestion =
+            'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().';
+    } else {
+        reason = `expression of type \`${expression.type}\` is not statically analyzable`;
+        suggestion =
+            'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().';
+    }
+    return `sz fallback at ${lineCol}: ${reason}.\n  Suggestion: ${suggestion}`;
 }
 
 /**
