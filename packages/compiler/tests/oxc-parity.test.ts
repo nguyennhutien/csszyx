@@ -99,8 +99,7 @@ const fixtures: readonly ParityFixture[] = [
             'const X = ({ big }) => <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
         ].join('\n'),
         filename: 'spread.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.5 — spread/conditional hoisting fallback (hoisting.ts port)',
+        expected: 'surgical-parity',
     },
 ];
 

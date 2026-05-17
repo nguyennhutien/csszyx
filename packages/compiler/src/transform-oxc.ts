@@ -117,6 +117,7 @@ export function transformOxc(
 
     const edits = new MagicString(source);
     let transformed = false;
+    let usesRuntime = false;
 
     walk(parsed.program, node => {
         if (node.type !== 'JSXOpeningElement') {
@@ -211,7 +212,14 @@ export function transformOxc(
             return;
         }
 
+        // Try to statically extract every sz attribute. The first
+        // attribute that can't be analysed (spread / identifier /
+        // ternary / etc.) flips this element into the runtime fallback
+        // path — Babel does the same at `transform.ts:745-786` via
+        // `tryStaticTransformNode()` → `_sz(...)` emission.
         const szDerived: string[] = [];
+        let runtimeFallbackExpr: OxcNode | null = null;
+        let runtimeFallbackAttr: JsxAttributeNode | null = null;
         for (const szAttr of szAttrs) {
             const value = szAttr.value;
             if (!value || value.type !== 'JSXExpressionContainer') {
@@ -222,15 +230,21 @@ export function transformOxc(
             }
             const expression = (value as unknown as { expression: OxcNode }).expression;
             if (expression.type !== 'ObjectExpression') {
-                throw new OxcNotImplementedError(
-                    'D2.1',
-                    `sz expression is not an inline object literal at ${effectiveFilename}:${expression.start}`,
-                );
+                runtimeFallbackExpr = expression;
+                runtimeFallbackAttr = szAttr;
+                break;
             }
-            const szObj = astObjectToSzObject(
-                expression as ObjectExpressionNode,
-                effectiveFilename,
-            );
+            let szObj: SzObject;
+            try {
+                szObj = astObjectToSzObject(expression as ObjectExpressionNode, effectiveFilename);
+            } catch (err) {
+                if (err instanceof OxcNotImplementedError) {
+                    runtimeFallbackExpr = expression;
+                    runtimeFallbackAttr = szAttr;
+                    break;
+                }
+                throw err;
+            }
             const result = compileSzObject(szObj);
             for (const c of result.className.split(/\s+/)) {
                 if (c) {
@@ -238,6 +252,37 @@ export function transformOxc(
                     classes.add(c);
                 }
             }
+        }
+
+        if (runtimeFallbackExpr && runtimeFallbackAttr) {
+            // Non-static sz value → emit `className={_sz(<original-expr>)}`
+            // by source-slicing the expression's original byte range. Babel
+            // does the equivalent at `transform.ts:745-786` via
+            // `_szMerge`/`_sz` wrappers. Existing className merging in this
+            // path is deferred to a later slice — the fixtures only
+            // exercise the single-sz / no-className case so far.
+            if (classNameAttr) {
+                throw new OxcNotImplementedError(
+                    'D2.5+',
+                    `runtime sz fallback combined with existing className at ${effectiveFilename}:${runtimeFallbackAttr.start}`,
+                );
+            }
+            const exprSource = source.slice(runtimeFallbackExpr.start, runtimeFallbackExpr.end);
+            edits.overwrite(
+                runtimeFallbackAttr.start,
+                runtimeFallbackAttr.end,
+                `className={_sz(${exprSource})}`,
+            );
+            // Delete any remaining sz attributes (rare — typically only
+            // one sz per element).
+            for (const szAttr of szAttrs) {
+                if (szAttr === runtimeFallbackAttr) continue;
+                const deleteStart = whitespaceStart(source, szAttr.start);
+                edits.remove(deleteStart, szAttr.end);
+            }
+            usesRuntime = true;
+            transformed = true;
+            return;
         }
 
         // Merge classes: existing className value first, then sz-derived.
@@ -276,7 +321,7 @@ export function transformOxc(
     return {
         code: transformed ? edits.toString() : source,
         transformed,
-        usesRuntime: false,
+        usesRuntime,
         usesMerge: false,
         usesColorVar: false,
         classes,
