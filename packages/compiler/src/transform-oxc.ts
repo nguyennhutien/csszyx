@@ -222,10 +222,26 @@ export function transformOxc(
         let runtimeFallbackAttr: JsxAttributeNode | null = null;
         for (const szAttr of szAttrs) {
             const value = szAttr.value;
-            if (!value || value.type !== 'JSXExpressionContainer') {
+            if (!value) {
                 throw new OxcNotImplementedError(
-                    'D2.1',
-                    `sz attribute without object expression at ${effectiveFilename}:${szAttr.start}`,
+                    'D3',
+                    `sz attribute without value at ${effectiveFilename}:${szAttr.start}`,
+                );
+            }
+            const stringValue = stringLiteralValue(value);
+            if (stringValue !== null) {
+                for (const c of stringValue.split(/\s+/)) {
+                    if (c) {
+                        szDerived.push(c);
+                        classes.add(c);
+                    }
+                }
+                continue;
+            }
+            if (value.type !== 'JSXExpressionContainer') {
+                throw new OxcNotImplementedError(
+                    'D3',
+                    `unsupported sz attribute value ${value.type} at ${effectiveFilename}:${szAttr.start}`,
                 );
             }
             const expression = (value as unknown as { expression: OxcNode }).expression;

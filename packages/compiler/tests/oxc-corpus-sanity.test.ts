@@ -72,8 +72,8 @@ const fixtures: readonly CorpusFixture[] = [
     {
         name: 'string sz attribute',
         source: 'const A = () => <div sz="p-4 bg-blue-500" />;',
-        expected: 'oxc-throws',
-        note: 'string-literal sz is not ported in transformOxc yet',
+        expected: 'parity',
+        note: 'string-literal sz rewrites directly to className',
     },
     {
         name: 'array sz attribute',

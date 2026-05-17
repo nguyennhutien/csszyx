@@ -42,6 +42,12 @@ const fixtures: readonly ParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'static-string-prop',
+        source: 'const X = () => <div sz="p-4 bg-blue-500" />;',
+        filename: 'string.tsx',
+        expected: 'parity',
+    },
+    {
         name: 'static-multi-prop',
         source: 'const X = () => <div sz={{ p: 4, bg: "blue-500", text: "white" }} />;',
         filename: 'multi.tsx',
