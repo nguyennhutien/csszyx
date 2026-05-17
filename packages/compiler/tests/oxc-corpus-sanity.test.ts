@@ -105,8 +105,8 @@ const fixtures: readonly CorpusFixture[] = [
     {
         name: 'dynamic value plus existing expression className',
         source: 'const A = () => <div className={getClasses()} sz={{ p: padVal }} />;',
-        expected: 'oxc-throws',
-        note: 'existing class expression + runtime fallback is not ported',
+        expected: 'surgical-parity',
+        note: 'expression className merges with dynamic CSS-var classes via _szMerge',
     },
     {
         name: 'local object direct variable',
@@ -191,7 +191,7 @@ describe('Phase D3 — oxc corpus sanity categories', () => {
             .join(', ');
         console.log(`\n  Phase D3 corpus sanity (${fixtures.length} fixtures) — ${summary}\n`);
 
-        expect(counts.get('oxc-throws')).toBeGreaterThan(0);
+        expect(counts.get('surgical-parity')).toBeGreaterThan(0);
         expect(counts.get('parity')).toBeGreaterThan(0);
     });
 });

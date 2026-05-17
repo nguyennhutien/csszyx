@@ -136,6 +136,7 @@ export function transformOxc(
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     let transformed = false;
     let usesRuntime = false;
+    let usesMerge = false;
     let usesColorVar = false;
 
     walk(parsed.program, node => {
@@ -403,11 +404,33 @@ export function transformOxc(
                         objectBindings,
                         source,
                     );
-                    if (
-                        partial &&
-                        szAttrs.length === 1 &&
-                        classNameAttr?.value?.type !== 'JSXExpressionContainer'
-                    ) {
+                    if (partial && szAttrs.length === 1) {
+                        if (classNameAttr?.value?.type === 'JSXExpressionContainer') {
+                            const classExpression = (
+                                classNameAttr.value as unknown as { expression: OxcNode }
+                            ).expression;
+                            const classExpressionSource = source.slice(
+                                classExpression.start,
+                                classExpression.end,
+                            );
+                            edits.overwrite(
+                                classNameAttr.start,
+                                classNameAttr.end,
+                                `className={_szMerge(${classExpressionSource}, ${JSON.stringify(partial.className)})}`,
+                            );
+                            edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
+                            applyStyleProps(edits, source, styleAttr, lastAttr, partial.styleProps);
+                            for (const c of partial.className.split(/\s+/)) {
+                                if (c) {
+                                    classes.add(c);
+                                }
+                            }
+                            usesRuntime = true;
+                            usesMerge = true;
+                            usesColorVar ||= partial.usesColorVar;
+                            transformed = true;
+                            return;
+                        }
                         if (classNameAttr && stringLiteralValue(classNameAttr.value) !== null) {
                             const existing = stringLiteralValue(classNameAttr.value);
                             const merged = [existing, partial.className].filter(Boolean).join(' ');
@@ -516,7 +539,7 @@ export function transformOxc(
         code: transformed ? edits.toString() : source,
         transformed,
         usesRuntime,
-        usesMerge: false,
+        usesMerge,
         usesColorVar,
         classes,
         rawClassNames,

@@ -30,8 +30,8 @@ interface ExtractedSnippet {
 
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
     parity: 6,
-    'surgical-parity': 111,
-    'oxc-throws': 1,
+    'surgical-parity': 112,
+    'oxc-throws': 0,
     'class-divergence': 0,
     'diagnostics-divergence': 0,
     'metadata-divergence': 0,
@@ -63,7 +63,7 @@ describe('Phase D3 — extracted compiler corpus categories', () => {
             }
         }
 
-        expect(summary.counts['oxc-throws']).toBeGreaterThan(0);
+        expect(summary.counts['surgical-parity']).toBeGreaterThan(0);
     });
 });
 

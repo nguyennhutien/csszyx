@@ -195,6 +195,12 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'conditional-binding.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-dynamic-css-var-existing-class-expression',
+        source: 'const X = ({ pad }) => <div className={getClasses()} sz={{ p: pad }} />;',
+        filename: 'dynamic-existing-class.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {
