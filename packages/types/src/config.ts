@@ -105,6 +105,16 @@ export interface BuildConfig {
     astBudgetLimit?: number;
 
     /**
+     * Source parser used for JSX/TSX sz transforms.
+     *
+     * `babel` is the stable default. `oxc` is an opt-in Phase D migration path
+     * and may fall back to Babel for cases that are not ported yet.
+     *
+     * @default "babel"
+     */
+    parser?: 'babel' | 'oxc';
+
+    /**
      * CSS file(s) to scan for Tailwind v4 @theme blocks.
      * When set, the plugin generates .csszyx/theme.d.ts with TypeScript augmentation
      * for custom design tokens, enabling IntelliSense for user-defined colors, spacings, etc.
@@ -270,6 +280,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
     astBudgetLimit: 50000,
+    parser: 'babel',
 };
 
 /**

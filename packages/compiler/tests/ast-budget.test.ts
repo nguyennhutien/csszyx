@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AST_BUDGET, ASTBudgetExceededError } from '../src/ast-budget.js';
 import { transformSourceCode } from '../src/transform.js';
+import { transformOxc } from '../src/transform-oxc.js';
 
 describe('AST budget guard', () => {
     /**
@@ -164,5 +165,14 @@ describe('AST budget guard', () => {
         }
         expect(caught?.budget).toBe(55_000);
         expect(caught?.message).toContain('55000');
+    });
+
+    it('applies the same budget contract to the oxc transform', () => {
+        const source = wideArraySource(3000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
+
+        expect(() => transformOxc(source, 'small.tsx')).not.toThrow();
+        expect(() => transformOxc(source, 'small.tsx', { astBudget: 1_000 })).toThrow(
+            ASTBudgetExceededError,
+        );
     });
 });

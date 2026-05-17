@@ -26,6 +26,7 @@
 import MagicString from 'magic-string';
 import { parseSync } from 'oxc-parser';
 
+import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 import type { TokenData } from './manifest.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import type { TransformSourceCodeOptions } from './transform.js';
@@ -78,14 +79,14 @@ export class OxcNotImplementedError extends Error {
  *
  * @param source The source code to transform.
  * @param filename Optional filename, drives JSX detection in oxc-parser.
- * @param _options Optional overrides; D2.1 ignores them (no AST budget yet).
+ * @param options Optional overrides such as the AST node budget.
  * @returns Transform result matching {@link TransformOxcResult}.
  * @throws {OxcNotImplementedError} when a fixture needs a later slice.
  */
 export function transformOxc(
     source: string,
     filename?: string,
-    _options?: TransformSourceCodeOptions,
+    options?: TransformSourceCodeOptions,
 ): TransformOxcResult {
     const classes = new Set<string>();
     const rawClassNames = new Set<string>();
@@ -107,6 +108,7 @@ export function transformOxc(
     }
 
     const effectiveFilename = filename ?? 'file.tsx';
+    const astBudget = options?.astBudget ?? AST_BUDGET;
     const parsed = parseSync(effectiveFilename, source);
     if (parsed.errors.length > 0) {
         throw new Error(
@@ -114,6 +116,7 @@ export function transformOxc(
                 parsed.errors.map(e => e.message).join('; '),
         );
     }
+    assertAstBudget(parsed.program as unknown as OxcNode, effectiveFilename, astBudget);
 
     const edits = new MagicString(source);
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
@@ -669,6 +672,23 @@ function isFalsyLiteral(node: OxcNode): boolean {
     }
     const value = (node as unknown as { value: unknown }).value;
     return value === false || value === null;
+}
+
+/**
+ * Enforce the same per-file traversal budget as the Babel transform.
+ *
+ * @param root Parsed program root.
+ * @param filename Source filename for diagnostics.
+ * @param astBudget Maximum node count.
+ */
+function assertAstBudget(root: OxcNode, filename: string, astBudget: number): void {
+    let nodeCount = 0;
+    walk(root, () => {
+        nodeCount++;
+        if (nodeCount > astBudget) {
+            throw new ASTBudgetExceededError(filename, nodeCount, astBudget);
+        }
+    });
 }
 
 /**

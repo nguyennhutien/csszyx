@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { type TokenData, transform, transformSourceCode } from '@csszyx/compiler';
+import { type TokenData, transform, transformOxc, transformSourceCode } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import type { PartialCsszyxConfig } from '@csszyx/types';
@@ -35,6 +35,9 @@ import {
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
 } from './virtual-modules.js';
+
+/** Compiler source-transform result shared by Babel and oxc paths. */
+type SourceTransformResult = ReturnType<typeof transformSourceCode>;
 
 /**
  * Plugin state for mangle map management.
@@ -407,6 +410,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    const parserMode =
+        process.env.CSSZYX_PARSER === 'oxc' ? 'oxc' : (options.build?.parser ?? 'babel');
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -484,6 +489,33 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Runs the configured source transform. Babel remains the stable default;
+     * the oxc path is opt-in and falls back to Babel for not-yet-ported syntax
+     * so enabling it cannot change build correctness during Phase D.
+     *
+     * @param source Source module contents.
+     * @param filename Source filename for parser diagnostics.
+     * @returns Compiler transform result.
+     */
+    function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
+        const compilerOptions = { astBudget: astBudgetOverride };
+        if (parserMode !== 'oxc') {
+            return transformSourceCode(source, filename, compilerOptions);
+        }
+
+        try {
+            return transformOxc(source, filename, compilerOptions);
+        } catch (err) {
+            const result = transformSourceCode(source, filename, compilerOptions);
+            const reason = err instanceof Error ? err.message : String(err);
+            result.diagnostics.push(
+                `[csszyx] CSSZYX_PARSER=oxc fell back to Babel for ${filename}: ${reason}`,
+            );
+            return result;
+        }
+    }
+
+    /**
      * Writes the safelist manifest (csszyx-classes.html) from the given class set.
      * No-ops if the file content is already up to date.
      *
@@ -557,9 +589,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         if (!content.includes('sz=') && !content.includes('sz:')) {
                             continue;
                         }
-                        const result = transformSourceCode(content, filePath, {
-                            astBudget: astBudgetOverride,
-                        });
+                        const result = transformConfiguredSource(content, filePath);
                         if (!result.transformed) {
                             continue;
                         }
@@ -882,9 +912,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             transformed = true;
                         }
                     } else {
-                        const result = transformSourceCode(code, id, {
-                            astBudget: astBudgetOverride,
-                        });
+                        const result = transformConfiguredSource(code, id);
                         transformedCode = result.code;
                         usesRuntime = result.usesRuntime;
                         usesMerge = result.usesMerge;
@@ -1092,7 +1120,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         return;
                     }
 
-                    let fileContent: string, result: ReturnType<typeof transformSourceCode>;
+                    let fileContent: string, result: SourceTransformResult;
                     try {
                         fileContent = fs.readFileSync(ctx.file, 'utf-8');
                     } catch {
@@ -1104,9 +1132,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     try {
-                        result = transformSourceCode(fileContent, ctx.file, {
-                            astBudget: astBudgetOverride,
-                        });
+                        result = transformConfiguredSource(fileContent, ctx.file);
                     } catch {
                         return;
                     }

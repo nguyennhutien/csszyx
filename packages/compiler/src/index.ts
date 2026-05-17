@@ -59,6 +59,11 @@ export {
     PROPERTY_MAP,
     SUGGESTION_MAP,
 } from './transform-core.js';
+export {
+    OxcNotImplementedError,
+    type TransformOxcResult,
+    transformOxc,
+} from './transform-oxc.js';
 
 // Export sz prop types (for IntelliSense and type safety)
 // CustomTheme is the augmentable interface — exported so users and plugins can
