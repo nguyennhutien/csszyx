@@ -81,8 +81,7 @@ const fixtures: readonly ParityFixture[] = [
         name: 'sz-recover-csr',
         source: 'const X = () => <div szRecover="csr" sz={{ p: 4 }} />;',
         filename: 'recover.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.3 — szRecover token emission + data-attribute insertion',
+        expected: 'parity',
     },
     {
         name: 'sz-runtime-call',

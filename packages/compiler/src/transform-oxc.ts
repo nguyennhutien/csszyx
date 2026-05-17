@@ -27,6 +27,7 @@ import MagicString from 'magic-string';
 import { parseSync } from 'oxc-parser';
 
 import type { TokenData } from './manifest.js';
+import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import type { TransformSourceCodeOptions } from './transform.js';
 import { transform as compileSzObject, type SzObject, type SzValue } from './transform-core.js';
 
@@ -125,17 +126,73 @@ export function transformOxc(
         const attrs = openingNode.attributes ?? [];
         const szAttrs: JsxAttributeNode[] = [];
         let classNameAttr: JsxAttributeNode | null = null;
+        let szRecoverAttr: JsxAttributeNode | null = null;
+        let alreadyTagged = false;
+        let lastAttr: JsxAttributeNode | null = null;
 
         for (const attrRaw of attrs) {
             if (attrRaw.type !== 'JSXAttribute') {
                 continue;
             }
             const attr = attrRaw as JsxAttributeNode;
+            lastAttr = attr;
             const name = attr.name?.name;
             if (name === 'sz') {
                 szAttrs.push(attr);
             } else if (name === 'className' || name === 'class') {
                 classNameAttr = attr;
+            } else if (name === 'szRecover') {
+                szRecoverAttr = attr;
+            } else if (name === 'data-sz-recovery-token') {
+                alreadyTagged = true;
+            }
+        }
+
+        // szRecover handling (mirrors transform.ts:152-219). Emits an
+        // inline recovery token + appends a `data-sz-recovery-token`
+        // attribute. Idempotent across HMR re-runs via `alreadyTagged`.
+        if (szRecoverAttr && !alreadyTagged) {
+            const recoverValue = stringLiteralValue(szRecoverAttr.value);
+            if (recoverValue === null) {
+                diagnostics.push(
+                    `[csszyx] szRecover at ${effectiveFilename}: ` +
+                        'only string-literal values ("csr" | "dev-only") are supported. ' +
+                        'Dynamic values disable token emission for this element.',
+                );
+            } else if (!isValidInlineRecoveryMode(recoverValue)) {
+                diagnostics.push(
+                    `[csszyx] szRecover at ${effectiveFilename}: ` +
+                        `unknown mode "${recoverValue}" — expected "csr" or "dev-only". ` +
+                        'Token emission skipped.',
+                );
+            } else {
+                const elementType = extractElementName(openingNode.name);
+                // Babel uses the szRecover attribute's loc (see
+                // `transform.ts:190` — `path.node.loc`), NOT the opening
+                // element's. Matching that ensures token hashes line up
+                // byte-for-byte with the existing manifest format.
+                const { line, column } = offsetToLineColumn(source, szRecoverAttr.start);
+                const token = generateInlineRecoveryToken(
+                    effectiveFilename,
+                    line,
+                    column,
+                    elementType,
+                );
+                // Insert the new attribute after the last existing one,
+                // before the (possibly self-closing) tag terminator. Use
+                // `appendRight` (not `appendLeft`) because a later
+                // `overwrite()` of the same range — when `sz` is the last
+                // attribute — wipes any prior `appendLeft` at its end
+                // boundary but leaves `appendRight` intact.
+                if (lastAttr) {
+                    edits.appendRight(lastAttr.end, ` data-sz-recovery-token="${token}"`);
+                }
+                recoveryTokens.set(token, {
+                    mode: recoverValue,
+                    component: elementType,
+                    path: `${effectiveFilename}:${line}:${column}`,
+                });
+                transformed = true;
             }
         }
 
@@ -265,6 +322,50 @@ function whitespaceStart(source: string, attrStart: number): number {
     return idx;
 }
 
+/**
+ * Convert a byte offset into a 1-based line + 0-based column pair,
+ * matching the signature of `generateInlineRecoveryToken`. Babel
+ * exposes `node.loc.start.{line,column}` for free; oxc-parser only
+ * gives offsets, so we count newlines on the fly.
+ *
+ * @param source The full source string.
+ * @param offset Zero-based byte offset.
+ * @returns 1-based line, 0-based column.
+ */
+function offsetToLineColumn(source: string, offset: number): { line: number; column: number } {
+    let line = 1;
+    let column = 0;
+    const limit = Math.min(offset, source.length);
+    for (let i = 0; i < limit; i++) {
+        if (source.charCodeAt(i) === 10) {
+            line++;
+            column = 0;
+        } else {
+            column++;
+        }
+    }
+    return { line, column };
+}
+
+/**
+ * Extract the element name from a JSXOpeningElement's `name` field.
+ * Mirrors the fallback chain used at `transform.ts:191-195`:
+ *   JSXIdentifier → its name; JSXMemberExpression → `<member>`;
+ *   anything else → `<unknown>`.
+ *
+ * @param nameNode The opening element's `name` AST node.
+ * @returns Display name used in the recovery-token hash input.
+ */
+function extractElementName(nameNode: OxcNode): string {
+    if (nameNode.type === 'JSXIdentifier') {
+        return String((nameNode as unknown as { name: string }).name);
+    }
+    if (nameNode.type === 'JSXMemberExpression') {
+        return '<member>';
+    }
+    return '<unknown>';
+}
+
 /** Minimum surface of an oxc AST node we rely on in this file. */
 interface OxcNode {
     type: string;
@@ -283,6 +384,7 @@ interface JsxAttributeNode extends OxcNode {
 /** oxc shape for a JSX opening element (`<div ...>` or `<div ... />`). */
 interface JsxOpeningElementNode extends OxcNode {
     type: 'JSXOpeningElement';
+    name: OxcNode;
     attributes: OxcNode[];
     selfClosing: boolean;
 }
