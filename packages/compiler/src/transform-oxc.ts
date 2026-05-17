@@ -133,6 +133,7 @@ export function transformOxc(
 
     const edits = new MagicString(source);
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
+    const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     let transformed = false;
     let usesRuntime = false;
     let usesColorVar = false;
@@ -299,7 +300,8 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'Identifier') {
-                const bound = objectBindings.get(String((expression as IdentifierNode).name));
+                const identifierName = String((expression as IdentifierNode).name);
+                const bound = objectBindings.get(identifierName);
                 if (bound) {
                     const result = compileSzObject(
                         astObjectToSzObject(bound, effectiveFilename, objectBindings),
@@ -312,6 +314,30 @@ export function transformOxc(
                     }
                     continue;
                 }
+                const conditional = conditionalBindings.get(identifierName);
+                if (conditional) {
+                    const conditionalClassExpr = buildStaticConditionalClassExpression(
+                        conditional,
+                        effectiveFilename,
+                        objectBindings,
+                        source,
+                        classes,
+                    );
+                    if (conditionalClassExpr) {
+                        if (classNameAttr || szAttrs.length > 1) {
+                            runtimeFallbackExpr = expression;
+                            runtimeFallbackAttr = szAttr;
+                            break;
+                        }
+                        edits.overwrite(
+                            szAttr.start,
+                            szAttr.end,
+                            `className={${conditionalClassExpr}}`,
+                        );
+                        transformed = true;
+                        return;
+                    }
+                }
             }
             if (expression.type === 'ArrayExpression') {
                 const arrayClasses = astArrayToStaticClasses(
@@ -320,6 +346,12 @@ export function transformOxc(
                     objectBindings,
                 );
                 if (arrayClasses === null) {
+                    collectArrayCandidateClasses(
+                        expression as ArrayExpressionNode,
+                        effectiveFilename,
+                        objectBindings,
+                        classes,
+                    );
                     runtimeFallbackExpr = expression;
                     runtimeFallbackAttr = szAttr;
                     break;
@@ -626,6 +658,14 @@ interface CallExpressionNode extends OxcNode {
     arguments: OxcNode[];
 }
 
+/** oxc shape for a logical expression (`cond && expr`). */
+interface LogicalExpressionNode extends OxcNode {
+    type: 'LogicalExpression';
+    operator: string;
+    left: OxcNode;
+    right: OxcNode;
+}
+
 /** oxc shape for a single property inside an ObjectExpression. */
 interface PropertyNode extends OxcNode {
     type: 'Property';
@@ -777,6 +817,67 @@ function astArrayToStaticClasses(
         }
     }
     return out;
+}
+
+/**
+ * Collect statically visible classes from an array that still needs runtime fallback.
+ *
+ * @param node Array expression used as the sz value.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param classes Class set to populate.
+ */
+function collectArrayCandidateClasses(
+    node: ArrayExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    classes: Set<string>,
+): void {
+    for (const element of node.elements) {
+        if (!element || isFalsyLiteral(element)) {
+            continue;
+        }
+        const candidate =
+            element.type === 'LogicalExpression' &&
+            (element as LogicalExpressionNode).operator === '&&'
+                ? (element as LogicalExpressionNode).right
+                : element;
+        collectStaticObjectCandidateClasses(candidate, filename, bindings, classes);
+    }
+}
+
+/**
+ * Collect classes from a statically resolvable object candidate.
+ *
+ * @param node Candidate node.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param classes Class set to populate.
+ */
+function collectStaticObjectCandidateClasses(
+    node: OxcNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    classes: Set<string>,
+): void {
+    const objectNode = resolveObjectExpression(node, bindings);
+    if (!objectNode) {
+        return;
+    }
+    let result: ReturnType<typeof compileSzObject>;
+    try {
+        result = compileSzObject(astObjectToSzObject(objectNode, filename, bindings));
+    } catch (err) {
+        if (err instanceof OxcNotImplementedError) {
+            return;
+        }
+        throw err;
+    }
+    for (const cls of result.className.split(/\s+/)) {
+        if (cls) {
+            classes.add(cls);
+        }
+    }
 }
 
 /**
@@ -1478,6 +1579,34 @@ function collectObjectBindings(root: OxcNode): Map<string, ObjectExpressionNode>
         const unwrapped = unwrapExpression(init);
         if (unwrapped.type === 'ObjectExpression') {
             bindings.set(String((id as IdentifierNode).name), unwrapped as ObjectExpressionNode);
+        }
+    });
+    return bindings;
+}
+
+/**
+ * Collect local bindings initialized to conditional expressions.
+ *
+ * @param root Program root.
+ * @returns Map from local identifier to conditional initializer.
+ */
+function collectConditionalBindings(root: OxcNode): Map<string, ConditionalExpressionNode> {
+    const bindings = new Map<string, ConditionalExpressionNode>();
+    walk(root, node => {
+        if (node.type !== 'VariableDeclarator') {
+            return;
+        }
+        const id = (node as unknown as { id?: OxcNode }).id;
+        const init = (node as unknown as { init?: OxcNode | null }).init;
+        if (!id || id.type !== 'Identifier' || !init) {
+            return;
+        }
+        const unwrapped = unwrapExpression(init);
+        if (unwrapped.type === 'ConditionalExpression') {
+            bindings.set(
+                String((id as IdentifierNode).name),
+                unwrapped as ConditionalExpressionNode,
+            );
         }
     });
     return bindings;

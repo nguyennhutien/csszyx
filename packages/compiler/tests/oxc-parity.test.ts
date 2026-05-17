@@ -180,6 +180,21 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'conditional-spread.tsx',
         expected: 'surgical-parity',
     },
+    {
+        name: 'sz-array-logical-object',
+        source: 'const X = ({ active }) => <div sz={[{ flex: true }, active && { bg: "blue-500" }]} />;',
+        filename: 'array-logical.tsx',
+        expected: 'surgical-parity',
+    },
+    {
+        name: 'sz-local-conditional-binding',
+        source: [
+            'const styles = active ? { p: 4 } : { p: 2 };',
+            'const X = () => <div sz={styles} />;',
+        ].join('\n'),
+        filename: 'conditional-binding.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

@@ -84,8 +84,17 @@ const fixtures: readonly CorpusFixture[] = [
     {
         name: 'array logical object element',
         source: 'const A = ({ isActive }) => <div sz={[{ flex: true }, isActive && { bg: "blue-500" }]} />;',
-        expected: 'class-divergence',
-        note: 'logical object array elements are still a later D5 slice',
+        expected: 'surgical-parity',
+        note: 'runtime array fallback still collects static logical object classes',
+    },
+    {
+        name: 'local conditional object binding',
+        source: [
+            'const styles = isActive ? { p: 4 } : { p: 2 };',
+            'const A = () => <div sz={styles} />;',
+        ].join('\n'),
+        expected: 'surgical-parity',
+        note: 'conditional local bindings resolve to static class branches',
     },
     {
         name: 'dynamic css var value',
@@ -182,7 +191,7 @@ describe('Phase D3 — oxc corpus sanity categories', () => {
             .join(', ');
         console.log(`\n  Phase D3 corpus sanity (${fixtures.length} fixtures) — ${summary}\n`);
 
-        expect(counts.get('class-divergence')).toBeGreaterThan(0);
+        expect(counts.get('oxc-throws')).toBeGreaterThan(0);
         expect(counts.get('parity')).toBeGreaterThan(0);
     });
 });
