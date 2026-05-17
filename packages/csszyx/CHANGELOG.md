@@ -2,50 +2,56 @@
 
 ## [0.8.0](https://github.com/nguyennhutien/csszyx/compare/v0.7.0...v0.8.0) (2026-05-17)
 
-
 ### ⚠ BREAKING CHANGES
 
-* The default source parser is now oxc-parser + magic-string (was Babel). No action needed for most projects — produced class names and source maps are byte-identical to Babel output. Two operator-visible behavior changes:
+- **The default source parser is now oxc-parser + magic-string** (was Babel). No action needed for most projects — produced class names and source maps are byte-identical to Babel output.
+
+  Two operator-visible behavior changes:
+  1. **Surgical source preservation.** Whitespace, parentheses, and JSX destructuring that Babel's code generator would have stripped are now preserved verbatim. First-build diffs after upgrade may show original formatting returning. This is intentional — see Phase D rationale in the project roadmap.
+  2. **Fallback engaged on unexpected oxc failures.** If oxc throws on a file (parser error, unsupported pattern), the unplugin logs `[csszyx] oxc parser fell back to Babel for ...` and re-runs through Babel. No build break — worth grepping CI logs after upgrade to surface coverage gaps.
+
+  **Opting out:**
+  - Per project: set `build.parser: 'babel'` in your csszyx config.
+  - Per build: set `CSSZYX_PARSER=babel` in the build environment.
+
+  Both paths route prescan, transform, and HMR discovery through Babel exactly as before this release. Babel removal is not in v0.8.0 scope — `@babel/*` packages remain shipped for the fallback path.
 
 ### Features
 
-* default source parser to oxc + build pipeline modernization ([#23](https://github.com/nguyennhutien/csszyx/issues/23)) ([64f32ae](https://github.com/nguyennhutien/csszyx/commit/64f32ae58a1ba1f7eb234c256db370d5c85c6366))
-
+- default source parser to oxc + build pipeline modernization ([#23](https://github.com/nguyennhutien/csszyx/issues/23)) ([64f32ae](https://github.com/nguyennhutien/csszyx/commit/64f32ae58a1ba1f7eb234c256db370d5c85c6366))
 
 ### Bug Fixes
 
-* post-merge CI failures (types dts bundling + Lint job pre-build) ([#24](https://github.com/nguyennhutien/csszyx/issues/24)) ([d0e7a40](https://github.com/nguyennhutien/csszyx/commit/d0e7a40561d58a830d81d158df9321b0514c0486))
+- post-merge CI failures (types dts bundling + Lint job pre-build) ([#24](https://github.com/nguyennhutien/csszyx/issues/24)) ([d0e7a40](https://github.com/nguyennhutien/csszyx/commit/d0e7a40561d58a830d81d158df9321b0514c0486))
 
 ## [0.7.0](https://github.com/nguyennhutien/csszyx/compare/v0.6.2...v0.7.0) (2026-05-15)
 
-  ### Features
-  
-  * **unplugin:** RSC boundary guard — fail build when csszyx runtime helpers leak into Server Components (direct imports + local import graph traversal) ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
-  * **compiler:** AST budget guard caps transform input at 50k nodes, fails fast on hostile payloads ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+### Features
 
-  ### Bug Fixes
-  
-  * **runtime:** separate recovery-manifest checksum from mangle-map checksum (fixes hydration verifier conflating the two) ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
-  
-  ### Security
-  
-  * devcontainer isolates AI credentials — SSH agent strip + GIT_SSH_COMMAND wrapper-only + filesystem cleanup of /root/.ssh/id_* ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
-  * AI commit policy — unsigned commits allowed, push remains the human checkpoint via host SSH agent forwarding ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
-  * CODEOWNERS routing + npm-publish environment gate ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+- **unplugin:** RSC boundary guard — fail build when csszyx runtime helpers leak into Server Components (direct imports + local import graph traversal) ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+- **compiler:** AST budget guard caps transform input at 50k nodes, fails fast on hostile payloads ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+
+### Bug Fixes
+
+- **runtime:** separate recovery-manifest checksum from mangle-map checksum (fixes hydration verifier conflating the two) ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+
+### Security
+
+- devcontainer isolates AI credentials — SSH agent strip + GIT*SSH_COMMAND wrapper-only + filesystem cleanup of /root/.ssh/id*\* ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+- AI commit policy — unsigned commits allowed, push remains the human checkpoint via host SSH agent forwarding ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
+- CODEOWNERS routing + npm-publish environment gate ([#21](https://github.com/nguyennhutien/csszyx/pull/21))
 
 ## [0.6.2](https://github.com/nguyennhutien/csszyx/compare/v0.6.1...v0.6.2) (2026-05-08)
 
-
 ### Bug Fixes
 
-* **release:** redirect changelog paths to umbrella + add node-workspace plugin ([#10](https://github.com/nguyennhutien/csszyx/issues/10)) ([91d2144](https://github.com/nguyennhutien/csszyx/commit/91d21447f76228f0beaf203c4d8e4d8b2239f9d3))
+- **release:** redirect changelog paths to umbrella + add node-workspace plugin ([#10](https://github.com/nguyennhutien/csszyx/issues/10)) ([91d2144](https://github.com/nguyennhutien/csszyx/commit/91d21447f76228f0beaf203c4d8e4d8b2239f9d3))
 
 ## [0.6.1](https://github.com/nguyennhutien/csszyx/compare/v0.6.0...v0.6.1) (2026-05-08)
 
-
 ### Bug Fixes
 
-* v0.6.1 — clean stale legacy recovery refs + backfill changelog ([#8](https://github.com/nguyennhutien/csszyx/issues/8)) ([8efe58f](https://github.com/nguyennhutien/csszyx/commit/8efe58f642b10ba2a573f2133c74fb5e5af55878))
+- v0.6.1 — clean stale legacy recovery refs + backfill changelog ([#8](https://github.com/nguyennhutien/csszyx/issues/8)) ([8efe58f](https://github.com/nguyennhutien/csszyx/commit/8efe58f642b10ba2a573f2133c74fb5e5af55878))
 
 ## 0.6.0
 
