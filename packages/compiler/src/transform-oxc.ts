@@ -245,6 +245,22 @@ export function transformOxc(
                 );
             }
             const expression = (value as unknown as { expression: OxcNode }).expression;
+            if (expression.type === 'ArrayExpression') {
+                const arrayClasses = astArrayToStaticClasses(
+                    expression as ArrayExpressionNode,
+                    effectiveFilename,
+                );
+                if (arrayClasses === null) {
+                    runtimeFallbackExpr = expression;
+                    runtimeFallbackAttr = szAttr;
+                    break;
+                }
+                for (const c of arrayClasses) {
+                    szDerived.push(c);
+                    classes.add(c);
+                }
+                continue;
+            }
             if (expression.type !== 'ObjectExpression') {
                 runtimeFallbackExpr = expression;
                 runtimeFallbackAttr = szAttr;
@@ -456,6 +472,12 @@ interface ObjectExpressionNode extends OxcNode {
     properties: OxcNode[];
 }
 
+/** oxc shape for an array literal expression (`[{ p: 4 }, false]`). */
+interface ArrayExpressionNode extends OxcNode {
+    type: 'ArrayExpression';
+    elements: Array<OxcNode | null>;
+}
+
 /** oxc shape for a single property inside an ObjectExpression. */
 interface PropertyNode extends OxcNode {
     type: 'Property';
@@ -501,6 +523,60 @@ function astObjectToSzObject(node: ObjectExpressionNode, filename: string): SzOb
         result[key] = astValueToSzValue(prop.value, filename);
     }
     return result as SzObject;
+}
+
+/**
+ * Compile a fully-static sz array into class tokens.
+ *
+ * Mirrors Babel's no-runtime fast path for arrays containing only object
+ * literals and falsy literal placeholders. Conditional/logical elements
+ * intentionally return null so a later slice can emit `_szMerge(...)`.
+ *
+ * @param node The oxc ArrayExpression node.
+ * @param filename Filename for diagnostic offsets.
+ * @returns Static class tokens, or null when runtime handling is required.
+ */
+function astArrayToStaticClasses(node: ArrayExpressionNode, filename: string): string[] | null {
+    const out: string[] = [];
+    for (const element of node.elements) {
+        if (!element || isFalsyLiteral(element)) {
+            continue;
+        }
+        if (element.type !== 'ObjectExpression') {
+            return null;
+        }
+        let result: ReturnType<typeof compileSzObject>;
+        try {
+            result = compileSzObject(
+                astObjectToSzObject(element as ObjectExpressionNode, filename),
+            );
+        } catch (err) {
+            if (err instanceof OxcNotImplementedError) {
+                return null;
+            }
+            throw err;
+        }
+        for (const c of result.className.split(/\s+/)) {
+            if (c) {
+                out.push(c);
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Checks array placeholders that Babel treats as static no-ops.
+ *
+ * @param node Array element node.
+ * @returns True for `false` and `null` literals.
+ */
+function isFalsyLiteral(node: OxcNode): boolean {
+    if (node.type !== 'Literal') {
+        return false;
+    }
+    const value = (node as unknown as { value: unknown }).value;
+    return value === false || value === null;
 }
 
 /**

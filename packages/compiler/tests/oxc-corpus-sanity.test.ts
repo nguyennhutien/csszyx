@@ -78,8 +78,8 @@ const fixtures: readonly CorpusFixture[] = [
     {
         name: 'array sz attribute',
         source: 'const A = () => <div sz={[{ flex: true }, { p: 4 }]} />;',
-        expected: 'class-divergence',
-        note: 'array static extraction is pending',
+        expected: 'parity',
+        note: 'fully static arrays compile without runtime',
     },
     {
         name: 'dynamic css var value',

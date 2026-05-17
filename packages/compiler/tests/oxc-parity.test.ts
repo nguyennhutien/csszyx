@@ -66,6 +66,12 @@ const fixtures: readonly ParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'static-array-prop',
+        source: 'const X = () => <div sz={[{ flex: true }, { p: 4 }]} />;',
+        filename: 'array.tsx',
+        expected: 'parity',
+    },
+    {
         name: 'multi-element-static',
         source: [
             'const X = () => (',
