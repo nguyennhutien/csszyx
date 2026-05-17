@@ -33,36 +33,31 @@ const fixtures: readonly ParityFixture[] = [
         name: 'no-sz-fast-path',
         source: 'const X = () => <div id="a">hello</div>;',
         filename: 'no-sz.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.1 — read-only extraction not yet wired',
+        expected: 'classes-only-parity',
     },
     {
         name: 'static-single-prop',
         source: 'const X = () => <div sz={{ p: 4 }} />;',
         filename: 'single.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.1 — basic JSXAttribute sz extraction',
+        expected: 'classes-only-parity',
     },
     {
         name: 'static-multi-prop',
         source: 'const X = () => <div sz={{ p: 4, bg: "blue-500", text: "white" }} />;',
         filename: 'multi.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.1 — multi-prop object literal',
+        expected: 'classes-only-parity',
     },
     {
         name: 'static-variant-hover',
         source: 'const X = () => <div sz={{ p: 4, hover: { bg: "blue-600" } }} />;',
         filename: 'variant.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.1 — nested variant object',
+        expected: 'classes-only-parity',
     },
     {
         name: 'static-responsive-sm',
         source: 'const X = () => <div sz={{ p: 4, sm: { p: 6 } }} />;',
         filename: 'responsive.tsx',
-        expected: 'pending',
-        pendingReason: 'D2.1 — responsive variant',
+        expected: 'classes-only-parity',
     },
     {
         name: 'multi-element-static',
@@ -124,6 +119,8 @@ describe('Phase D — Babel vs oxc parity', () => {
     it('progress tracker', () => {
         const summary = summarise(fixtures);
         console.log(`\n  ${summary}\n`);
-        expect(summary).toMatch(/Phase D parity: \d+\/\d+ fixtures \(\d+%\)/);
+        expect(summary).toMatch(
+            /Phase D parity: \d+% — \d+ full, \d+ classes-only, \d+ pending \(\d+ total\)/,
+        );
     });
 });

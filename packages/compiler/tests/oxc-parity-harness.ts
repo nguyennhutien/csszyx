@@ -112,8 +112,16 @@ export interface ParityFixture {
     source: string;
     /** Filename passed to both parsers (drives JSX detection). */
     filename: string;
-    /** Expected current parity state. */
-    expected: 'pending' | 'parity';
+    /**
+     * Expected current parity state:
+     * - `pending`: oxc skeleton throws OR diverges. D2.0 baseline.
+     * - `classes-only-parity`: oxc must extract the same class set, but
+     *   may leave `code` unchanged (read-only D2.1). Babel rewrites,
+     *   oxc just reports — `codeEqual` is intentionally skipped.
+     * - `parity`: full match — classes + code + diagnostics + transformed.
+     *   D2.2+ once the magic-string rewrite path lands.
+     */
+    expected: 'pending' | 'classes-only-parity' | 'parity';
     /** Why this fixture is pending — link to the slice that lands it. */
     pendingReason?: string;
 }
@@ -140,15 +148,20 @@ export function assertExpectedParity(fixture: ParityFixture, comparison: ParityC
     }
     if (comparison.oxcError) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as parity but oxc threw: ${comparison.oxcError}`,
+            `Fixture "${fixture.name}" marked as ${fixture.expected} but oxc threw: ${comparison.oxcError}`,
         );
     }
     if (!comparison.classesEqual) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as parity but class sets differ.\n` +
+            `Fixture "${fixture.name}" marked as ${fixture.expected} but class sets differ.\n` +
                 `  babel: [${comparison.babel.classes.join(', ')}]\n` +
                 `  oxc:   [${comparison.oxc ? [...comparison.oxc.classes].sort().join(', ') : ''}]`,
         );
+    }
+    if (fixture.expected === 'classes-only-parity') {
+        // codeEqual + transformedEqual intentionally NOT asserted —
+        // D2.1 extracts classes only, magic-string rewrite is D2.2.
+        return;
     }
     if (!comparison.codeEqual) {
         throw new Error(
@@ -168,8 +181,13 @@ export function assertExpectedParity(fixture: ParityFixture, comparison: ParityC
 export function summarise(fixtures: readonly ParityFixture[]): string {
     const total = fixtures.length;
     const parity = fixtures.filter(f => f.expected === 'parity').length;
-    const pct = total === 0 ? 0 : Math.round((parity / total) * 100);
-    return `Phase D parity: ${parity}/${total} fixtures (${pct}%)`;
+    const classesOnly = fixtures.filter(f => f.expected === 'classes-only-parity').length;
+    const pending = fixtures.filter(f => f.expected === 'pending').length;
+    const pct = total === 0 ? 0 : Math.round(((parity + classesOnly) / total) * 100);
+    return (
+        `Phase D parity: ${pct}% — ${parity} full, ${classesOnly} classes-only, ` +
+        `${pending} pending (${total} total)`
+    );
 }
 
 /**
