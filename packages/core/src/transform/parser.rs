@@ -310,16 +310,37 @@ fn static_object_from_object_expression(object: &ObjectExpression<'_>) -> Option
     let mut properties = Vec::with_capacity(object.properties.len());
 
     for property in &object.properties {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            return None;
-        };
-        if is_skippable_static_value(&property.value) {
-            continue;
+        match property {
+            ObjectPropertyKind::ObjectProperty(property) => {
+                if is_skippable_static_value(&property.value) {
+                    continue;
+                }
+                properties.push(static_property_from_object_property(property)?);
+            }
+            ObjectPropertyKind::SpreadProperty(spread) => {
+                properties.extend(static_object_from_spread_argument(&spread.argument)?.properties);
+            }
         }
-        properties.push(static_property_from_object_property(property)?);
     }
 
     Some(StaticSzObject { properties })
+}
+
+fn static_object_from_spread_argument(expression: &Expression<'_>) -> Option<StaticSzObject> {
+    match expression {
+        Expression::ObjectExpression(object) => static_object_from_object_expression(object),
+        Expression::ParenthesizedExpression(value) => {
+            static_object_from_spread_argument(&value.expression)
+        }
+        Expression::TSAsExpression(value) => static_object_from_spread_argument(&value.expression),
+        Expression::TSSatisfiesExpression(value) => {
+            static_object_from_spread_argument(&value.expression)
+        }
+        Expression::TSNonNullExpression(value) => {
+            static_object_from_spread_argument(&value.expression)
+        }
+        _ => None,
+    }
 }
 
 fn static_object_from_array_expression(array: &ArrayExpression<'_>) -> Option<StaticSzObject> {
@@ -685,6 +706,7 @@ mod tests {
                 "sz={{ p: (4 as const), m: (2 satisfies number) }}",
                 vec!["p-4", "m-2"],
             ),
+            ("sz={{ ...{ p: 4 }, m: 2 }}", vec!["p-4", "m-2"]),
             (
                 "sz={{ bgImg: 'url(/hero.png)' }}",
                 vec!["bg-[url(/hero.png)]"],

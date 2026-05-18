@@ -237,6 +237,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_static_object_literal_spreads() {
+        let source = "export const App = () => <div sz={{ ...{ p: 4 }, m: 2 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"p-4 m-2\" />;"
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_array_sz_attribute() {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
         let rewritten = rewrite(source).expect("rewritten");
