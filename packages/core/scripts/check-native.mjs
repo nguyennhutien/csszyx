@@ -11,12 +11,22 @@ const COMMANDS = [
   [
     "cargo",
     [
+      "check",
+      "--manifest-path",
+      "Cargo.toml",
+      "--features",
+      "native,native-engine",
+    ],
+  ],
+  [
+    "cargo",
+    [
       "clippy",
       "--manifest-path",
       "Cargo.toml",
       "--all-targets",
       "--features",
-      "native",
+      "native,native-engine",
       "--",
       "-D",
       "warnings",

@@ -29,20 +29,25 @@ risk.
 
 Native build tooling is pinned instead of ranged:
 
-| Dependency     | Pin     | Where                                                | Reason                                                    |
-| -------------- | ------- | ---------------------------------------------------- | --------------------------------------------------------- |
-| `@napi-rs/cli` | `3.6.2` | `packages/core/package.json`                         | Current stable CLI used only by core build/release tasks. |
-| `napi`         | `3.9.0` | `packages/core/Cargo.toml` optional `native` feature | N-API binding crate; not compiled by default WASM builds. |
-| `napi-derive`  | `3.5.6` | `packages/core/Cargo.toml` optional `native` feature | Procedural macros for future native exports.              |
+| Dependency      | Pin       | Where                                                       | Reason                                                                                     |
+| --------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.                                  |
+| `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.                                  |
+| `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for future native exports.                                               |
+| `oxc_parser`    | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; latest checked line compatible with rustc 1.92. |
+| `oxc_semantic`  | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the future semantic path; pinned with `oxc_parser`.             |
+| `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                                   |
+| `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Future span overwrite engine; still under exact review before default use.                 |
 
-The Cargo dependencies are behind `features.native`; default `cargo test` and
-the existing WASM build path must remain independent from napi. CI should check
-both:
+The N-API dependencies are behind `features.native`, while parser/rewrite
+dependencies are behind `features.native-engine`; default `cargo test` and the
+existing WASM build path must remain independent from both. CI should check both:
 
 ```bash
 cargo test --manifest-path packages/core/Cargo.toml
 cargo check --manifest-path packages/core/Cargo.toml --features native
-cargo clippy --manifest-path packages/core/Cargo.toml --all-targets --features native -- -D warnings
+cargo check --manifest-path packages/core/Cargo.toml --features native,native-engine
+cargo clippy --manifest-path packages/core/Cargo.toml --all-targets --features native,native-engine -- -D warnings
 ```
 
 Or run the package script:
