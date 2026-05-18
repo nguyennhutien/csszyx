@@ -4,7 +4,10 @@
 //! It is kept separate from rewrite so class-generation parity can be tested
 //! before any source mutation ships.
 
-use super::{StaticSzObject, StaticSzValue};
+use super::{
+    generated::tables::{boolean_class, is_boolean_shorthand, property_prefix, variant_prefix},
+    StaticSzObject, StaticSzValue,
+};
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
@@ -17,9 +20,10 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     for property in &object.properties {
         match &property.value {
             StaticSzValue::Object(nested) => {
+                let variant = variant_prefix(&property.key).unwrap_or(&property.key);
                 let mut next_prefix = String::with_capacity(prefix.len() + property.key.len() + 1);
                 next_prefix.push_str(prefix);
-                next_prefix.push_str(&property.key);
+                next_prefix.push_str(variant);
                 next_prefix.push(':');
                 lower_object_into(nested, &next_prefix, classes);
             }
@@ -46,10 +50,21 @@ fn false_boolean_class(key: &str) -> Option<&'static str> {
 }
 
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    let class_key = property_prefix(key).unwrap_or(key);
+
     match value {
-        StaticSzValue::Boolean(true) => Some(format!("{prefix}{key}")),
+        StaticSzValue::Boolean(true) => {
+            if !is_boolean_shorthand(key) {
+                return None;
+            }
+
+            Some(format!(
+                "{prefix}{}",
+                boolean_class(key).unwrap_or(class_key)
+            ))
+        }
         StaticSzValue::Boolean(false) | StaticSzValue::Object(_) => None,
-        StaticSzValue::Number(value) => Some(format_number_class(key, *value, prefix)),
+        StaticSzValue::Number(value) => Some(format_number_class(class_key, *value, prefix)),
         StaticSzValue::String(value) => {
             if has_slash_opacity(value) {
                 return None;
@@ -64,9 +79,9 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             };
 
             if is_negative {
-                Some(format!("{prefix}-{key}-{final_value}"))
+                Some(format!("{prefix}-{class_key}-{final_value}"))
             } else {
-                Some(format!("{prefix}{key}-{final_value}"))
+                Some(format!("{prefix}{class_key}-{final_value}"))
             }
         }
     }
@@ -171,6 +186,22 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&object),
             ["p-4", "bg-red-500", "italic"]
+        );
+    }
+
+    #[test]
+    fn uses_generated_property_and_boolean_maps() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("start", StaticSzValue::Number(4.0)),
+                property("inlineBlock", StaticSzValue::Boolean(true)),
+                property("bgImg", StaticSzValue::String("url(/hero.png)".to_string())),
+            ],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["inset-s-4", "inline-block", "bg-[url(/hero.png)]"]
         );
     }
 

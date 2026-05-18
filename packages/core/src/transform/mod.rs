@@ -6,6 +6,7 @@
 
 mod contract;
 pub(crate) mod fast_path;
+pub(crate) mod generated;
 mod ir;
 pub mod lower;
 #[cfg(feature = "native-engine")]

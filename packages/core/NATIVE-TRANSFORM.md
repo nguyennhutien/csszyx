@@ -160,6 +160,7 @@ packages/core/src/transform/
   contract.rs         # serde/napi-safe request and result structs
   ir.rs               # parser-neutral typed transform IR
   lower.rs            # ordered static IR to class-list lowering
+  generated/tables.rs # generated lookup tables from transform-core.ts
   fast_path.rs        # AST-free static sz path
   parser.rs           # oxc_parser path
   semantic.rs         # oxc_semantic path
