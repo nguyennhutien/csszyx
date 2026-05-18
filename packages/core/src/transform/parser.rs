@@ -1,8 +1,11 @@
 use oxc_allocator::Allocator;
-use oxc_ast::ast::{
-    ArrayExpression, ArrayExpressionElement, Expression, JSXAttribute, JSXAttributeItem,
-    JSXAttributeName, JSXAttributeValue, JSXExpression, JSXOpeningElement, ObjectExpression,
-    ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+use oxc_ast::{
+    ast::{
+        ArrayExpression, ArrayExpressionElement, Expression, JSXAttribute, JSXAttributeItem,
+        JSXAttributeName, JSXAttributeValue, JSXExpression, JSXOpeningElement, ObjectExpression,
+        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+    },
+    AstKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -13,6 +16,9 @@ use super::{
     StaticSzValue, SzAttributeIr, TextSpan, TransformFile,
 };
 
+/// Matches the TypeScript compiler AST budget guard.
+pub const AST_BUDGET: usize = 50_000;
+
 /// Parser shell output before AST walking is implemented.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedSourceShell {
@@ -22,6 +28,8 @@ pub struct ParsedSourceShell {
     pub diagnostics: Vec<String>,
     /// Whether the parser reported an unrecoverable panic.
     pub panicked: bool,
+    /// Whether native AST traversal exceeded the csszyx budget.
+    pub ast_budget_exceeded: bool,
 }
 
 /// Parse a source module with oxc and return an empty IR shell plus diagnostics.
@@ -35,13 +43,18 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
     let source_len = u32::try_from(file.source.len()).unwrap_or(u32::MAX);
     let mut ir = SourceIr::empty(file.filename.clone(), source_len);
 
-    if !parsed.panicked {
+    let ast_budget_exceeded = if parsed.panicked {
+        false
+    } else {
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
             ir: &mut ir,
+            node_count: 0,
+            ast_budget_exceeded: false,
         };
         visitor.visit_program(&parsed.program);
-    }
+        visitor.ast_budget_exceeded
+    };
 
     ParsedSourceShell {
         ir,
@@ -51,6 +64,7 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
             .map(std::string::ToString::to_string)
             .collect(),
         panicked: parsed.panicked,
+        ast_budget_exceeded,
     }
 }
 
@@ -61,10 +75,23 @@ fn source_type_for_path(filename: &str) -> SourceType {
 struct CsszyxIrVisitor<'source, 'ir> {
     source: &'source str,
     ir: &'ir mut SourceIr,
+    node_count: usize,
+    ast_budget_exceeded: bool,
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
+    fn enter_node(&mut self, _kind: AstKind<'a>) {
+        self.node_count = self.node_count.saturating_add(1);
+        if self.node_count > AST_BUDGET {
+            self.ast_budget_exceeded = true;
+        }
+    }
+
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
         let mut sz_attribute_indices = Vec::new();
         let mut class_attribute_index = None;
 

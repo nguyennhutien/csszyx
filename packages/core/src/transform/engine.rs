@@ -26,6 +26,12 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
     let lowered = lower_source_ir_classes(&parsed.ir);
     let mut diagnostics = parsed.diagnostics;
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
+    if parsed.ast_budget_exceeded {
+        diagnostics.push(format!(
+            "[csszyx] Rust native transform at {}: AST budget exceeded; leaving file unchanged for now.",
+            file.filename
+        ));
+    }
     let rewritten_code = if diagnostics.is_empty() {
         rewrite_static_sz_attributes(&file.source, &parsed.ir).ok()
     } else {
@@ -50,7 +56,7 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
             uses_merge: false,
             uses_color_var: false,
             producer: TransformProducer::Rust,
-            ast_budget_exceeded: false,
+            ast_budget_exceeded: parsed.ast_budget_exceeded,
         },
         parser_path: ParserPath::Static,
     }
@@ -196,5 +202,27 @@ mod tests {
         assert!(!result.metadata.transformed);
         assert_eq!(result.classes, ["p-4"]);
         assert_eq!(result.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn static_engine_reports_ast_budget_without_rewrite() {
+        let source = format!(
+            "export const App = () => <>{}</>;",
+            "<span />".repeat(crate::transform::parser::AST_BUDGET + 1)
+        );
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source,
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert!(result.metadata.ast_budget_exceeded);
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("AST budget exceeded")));
     }
 }
