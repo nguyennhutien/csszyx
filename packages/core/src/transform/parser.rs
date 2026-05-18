@@ -219,7 +219,7 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 #[cfg(test)]
 mod tests {
     use super::{parse_source_shell, source_type_for_path};
-    use crate::transform::TransformFile;
+    use crate::transform::{lower::lower_source_ir_classes, TransformFile};
 
     #[test]
     fn parser_shell_accepts_valid_tsx() {
@@ -282,6 +282,23 @@ mod tests {
             properties[1].value,
             super::StaticSzValue::Object(_)
         ));
+    }
+
+    #[test]
+    fn parser_shell_lowers_static_ir_to_classes() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const App = () => <div className=\"block\" sz={{ start: 4, inlineBlock: true }} />;"
+                    .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.raw_class_names, ["block"]);
+        assert_eq!(lowered.classes, ["inset-s-4", "inline-block"]);
     }
 
     #[test]

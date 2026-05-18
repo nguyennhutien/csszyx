@@ -6,8 +6,36 @@
 
 use super::{
     generated::tables::{boolean_class, property_prefix, variant_prefix},
-    StaticSzObject, StaticSzValue,
+    SourceIr, StaticSzObject, StaticSzValue,
 };
+
+/// Class data lowered from parser-neutral source IR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoweredSourceClasses {
+    /// Generated csszyx/Tailwind classes from static `sz` attributes.
+    pub classes: Vec<String>,
+    /// Static class/className strings discovered in source order.
+    pub raw_class_names: Vec<String>,
+}
+
+/// Lower parser-neutral source IR into class lists without rewriting source.
+pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
+    let classes = ir
+        .sz_attributes
+        .iter()
+        .flat_map(|attr| lower_static_sz_object(&attr.object))
+        .collect();
+    let raw_class_names = ir
+        .class_attributes
+        .iter()
+        .map(|attr| attr.value.clone())
+        .collect();
+
+    LoweredSourceClasses {
+        classes,
+        raw_class_names,
+    }
+}
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
@@ -156,8 +184,11 @@ fn needs_brackets(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::lower_static_sz_object;
-    use crate::transform::{StaticSzObject, StaticSzProperty, StaticSzValue, TextSpan};
+    use super::{lower_source_ir_classes, lower_static_sz_object};
+    use crate::transform::{
+        ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
+        TextSpan,
+    };
 
     fn property(key: &str, value: StaticSzValue) -> StaticSzProperty {
         StaticSzProperty {
@@ -239,5 +270,34 @@ mod tests {
         };
 
         assert_eq!(lower_static_sz_object(&object), ["w-[12px]"]);
+    }
+
+    #[test]
+    fn lowers_source_ir_classes_in_source_order() {
+        let ir = SourceIr {
+            filename: "/repo/src/App.tsx".to_string(),
+            source_span: TextSpan::new(0, 80).expect("valid span"),
+            sz_attributes: vec![SzAttributeIr {
+                attribute_span: TextSpan::new(10, 26).expect("valid span"),
+                value_span: TextSpan::new(14, 25).expect("valid span"),
+                object: StaticSzObject {
+                    properties: vec![StaticSzProperty {
+                        key: "start".to_string(),
+                        span: TextSpan::new(17, 25).expect("valid span"),
+                        value: StaticSzValue::Number(4.0),
+                    }],
+                },
+            }],
+            class_attributes: vec![ClassAttributeIr {
+                attribute_span: TextSpan::new(28, 46).expect("valid span"),
+                value_span: TextSpan::new(39, 44).expect("valid span"),
+                value: "block".to_string(),
+            }],
+        };
+
+        let lowered = lower_source_ir_classes(&ir);
+
+        assert_eq!(lowered.classes, ["inset-s-4"]);
+        assert_eq!(lowered.raw_class_names, ["block"]);
     }
 }
