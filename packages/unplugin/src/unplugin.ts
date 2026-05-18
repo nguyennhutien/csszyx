@@ -36,6 +36,7 @@ import {
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
+    createTransformCacheKey,
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
@@ -78,6 +79,8 @@ const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
 const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
+const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
 
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
@@ -503,6 +506,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             ? parserOverride
             : (options.build?.parser ?? 'oxc');
     let evictedCacheRoot: string | null = null;
+    const transformMemoryCache = new Map<string, SourceTransformResult>();
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -608,8 +612,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         };
 
         if (cacheEnabled) {
+            const { key } = createTransformCacheKey(cacheInput);
+            const memoryCached = transformMemoryCache.get(key);
+            if (memoryCached) {
+                transformMemoryCache.delete(key);
+                transformMemoryCache.set(key, memoryCached);
+                return memoryCached;
+            }
+
             const cached = readTransformCache(cacheRoot, cacheInput);
             if (cached) {
+                rememberTransformCacheEntry(key, cached);
                 return cached;
             }
         }
@@ -632,8 +645,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         if (cacheEnabled) {
             writeTransformCache(cacheRoot, cacheInput, result);
+            rememberTransformCacheEntry(createTransformCacheKey(cacheInput).key, result);
         }
         return result;
+    }
+
+    /**
+     * Stores one transform result in the in-process L1 cache with a small LRU cap.
+     *
+     * @param key Transform cache key.
+     * @param result Transform result.
+     */
+    function rememberTransformCacheEntry(key: string, result: SourceTransformResult): void {
+        transformMemoryCache.delete(key);
+        transformMemoryCache.set(key, result);
+        if (transformMemoryCache.size <= TRANSFORM_MEMORY_CACHE_MAX_ENTRIES) {
+            return;
+        }
+        const oldest = transformMemoryCache.keys().next().value;
+        if (oldest) {
+            transformMemoryCache.delete(oldest);
+        }
     }
 
     /** Runs transform-cache eviction once per resolved project cache root. */
@@ -646,7 +678,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         evictedCacheRoot = cacheRoot;
-        evictOldTransformCacheEntries(cacheRoot, TRANSFORM_CACHE_MAX_AGE_MS);
+        evictOldTransformCacheEntries(cacheRoot, {
+            maxAgeMs: TRANSFORM_CACHE_MAX_AGE_MS,
+            maxEntries: TRANSFORM_CACHE_MAX_ENTRIES,
+        });
     }
 
     /**

@@ -39,6 +39,16 @@ interface TransformCacheEntry {
     result: SerializedTransformResult;
 }
 
+/** Transform cache eviction settings. */
+export interface TransformCacheEvictionOptions {
+    /** Maximum entry age in milliseconds. */
+    maxAgeMs: number;
+    /** Maximum number of cache JSON entries to keep after age eviction. */
+    maxEntries?: number;
+    /** Current timestamp for deterministic tests. */
+    now?: number;
+}
+
 /** Inputs that affect transform cache identity. */
 export interface TransformCacheKeyInput {
     /** @csszyx/unplugin package version. */
@@ -183,32 +193,46 @@ export function writeTransformCache(
 }
 
 /**
- * Delete transform cache entries older than a threshold.
+ * Delete transform cache entries older than a threshold and trim oldest
+ * remaining entries beyond the optional max-entry cap.
  *
  * @param cacheRoot Absolute transform cache directory.
- * @param maxAgeMs Maximum entry age in milliseconds.
- * @param now Current timestamp for deterministic tests.
+ * @param options Eviction settings.
  * @returns Number of deleted files.
  */
 export function evictOldTransformCacheEntries(
     cacheRoot: string,
-    maxAgeMs: number,
-    now: number = Date.now(),
+    options: TransformCacheEvictionOptions,
 ): number {
     let deleted = 0;
+    const now = options.now ?? Date.now();
+    const survivors: Array<{ file: string; timestamp: number }> = [];
+
     for (const file of listJsonFiles(cacheRoot)) {
         try {
             const entry = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<TransformCacheEntry>;
             const timestamp = typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : 0;
-            if (!Number.isFinite(timestamp) || now - timestamp > maxAgeMs) {
+            if (!Number.isFinite(timestamp) || now - timestamp > options.maxAgeMs) {
                 fs.rmSync(file, { force: true });
                 deleted++;
+            } else {
+                survivors.push({ file, timestamp });
             }
         } catch {
             fs.rmSync(file, { force: true });
             deleted++;
         }
     }
+
+    const overflow = options.maxEntries ? survivors.length - options.maxEntries : 0;
+    if (overflow > 0) {
+        survivors.sort((a, b) => a.timestamp - b.timestamp);
+        for (const survivor of survivors.slice(0, overflow)) {
+            fs.rmSync(survivor.file, { force: true });
+            deleted++;
+        }
+    }
+
     return deleted;
 }
 

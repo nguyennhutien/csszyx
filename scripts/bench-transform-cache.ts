@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { transformSourceCode } from '../packages/compiler/src/transform.js';
 import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
 import {
+    createTransformCacheKey,
     readTransformCache,
     resolveTransformCacheDir,
     type TransformCacheKeyInput,
@@ -200,6 +201,32 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
         } finally {
             rmSync(warmRoot, { recursive: true, force: true });
         }
+
+        const memoryCache = new Map<string, ReturnType<typeof transformOxc>>();
+        for (const file of szFiles) {
+            const input = cacheInput(file.filename, file.source);
+            memoryCache.set(
+                createTransformCacheKey(input).key,
+                transformOxc(file.source, file.filename),
+            );
+        }
+        stats.push(
+            measureCase(
+                `cache/${size}/l1-memory-hit`,
+                size,
+                opts,
+                () => {
+                    for (const file of szFiles) {
+                        const input = cacheInput(file.filename, file.source);
+                        const cached = memoryCache.get(createTransformCacheKey(input).key);
+                        if (!cached) {
+                            throw new Error(`missing memory entry for ${file.filename}`);
+                        }
+                    }
+                },
+                'L1 memory cache: read every sz transform from an in-process Map.',
+            ),
+        );
 
         stats.push(
             measureCase(
@@ -517,10 +544,14 @@ function renderCacheReport(stats: BenchStats[]): string {
         .map(size => {
             const baseline = findStat(stats, `cache/${size}/no-cache-oxc-transform`);
             const warm = findStat(stats, `cache/${size}/warm-read-hit`);
+            const memory = findStat(stats, `cache/${size}/l1-memory-hit`);
             const cold = findStat(stats, `cache/${size}/cold-transform-and-write`);
             return `- ${size} sz files: warm cache is ${formatComparison(
                 baseline.medianMs,
                 warm.medianMs,
+            )} than no-cache oxc; L1 memory is ${formatComparison(
+                baseline.medianMs,
+                memory.medianMs,
             )} than no-cache oxc; cold write is ${formatRatio(
                 cold.medianMs / baseline.medianMs,
             )}x the no-cache baseline.`;
@@ -554,7 +585,7 @@ ${rows}
 - Warm cache should beat no-cache oxc by enough margin to justify disk serialization.
 - Cold cache may be slightly slower than no-cache because it transforms and writes JSON.
 - If no-sz gate timing is non-trivial, optimize the gate before adding cache work to no-sz paths.
-- These numbers measure disk cache only; they do not include the deferred L1 in-memory cache.
+- The L1 row measures the in-process Map layer now used before disk reads.
 `;
 }
 

@@ -143,14 +143,46 @@ describe('transform cache', () => {
         mkdirSync(corruptDir, { recursive: true });
         writeFileSync(corruptFile, '{bad json', 'utf8');
 
-        const deleted = evictOldTransformCacheEntries(
-            cacheRoot,
-            30 * 24 * 60 * 60 * 1000,
-            Date.parse('2026-05-17T00:00:00.000Z'),
-        );
+        const deleted = evictOldTransformCacheEntries(cacheRoot, {
+            maxAgeMs: 30 * 24 * 60 * 60 * 1000,
+            now: Date.parse('2026-05-17T00:00:00.000Z'),
+        });
 
         expect(deleted).toBe(2);
         expect(readTransformCache(cacheRoot, input())).toBeNull();
+    });
+
+    it('evicts oldest remaining entries when over the max-entry cap', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        for (let i = 0; i < 4; i++) {
+            const entryInput = input({ source: `const n = ${i}; <div sz={{ p: ${i} }} />;` });
+            writeTransformCache(cacheRoot, entryInput, result());
+            const { key } = createTransformCacheKey(entryInput);
+            const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+            const entry = JSON.parse(readFileSync(file, 'utf8')) as { timestamp: string };
+            entry.timestamp = new Date(`2026-05-17T00:00:0${i}.000Z`).toISOString();
+            writeFileSync(file, JSON.stringify(entry), 'utf8');
+        }
+
+        const deleted = evictOldTransformCacheEntries(cacheRoot, {
+            maxAgeMs: 30 * 24 * 60 * 60 * 1000,
+            maxEntries: 2,
+            now: Date.parse('2026-05-17T00:01:00.000Z'),
+        });
+
+        expect(deleted).toBe(2);
+        expect(
+            readTransformCache(cacheRoot, input({ source: 'const n = 0; <div sz={{ p: 0 }} />;' })),
+        ).toBeNull();
+        expect(
+            readTransformCache(cacheRoot, input({ source: 'const n = 1; <div sz={{ p: 1 }} />;' })),
+        ).toBeNull();
+        expect(
+            readTransformCache(cacheRoot, input({ source: 'const n = 2; <div sz={{ p: 2 }} />;' })),
+        ).not.toBeNull();
+        expect(
+            readTransformCache(cacheRoot, input({ source: 'const n = 3; <div sz={{ p: 3 }} />;' })),
+        ).not.toBeNull();
     });
 
     it('plugin wiring writes cache entries by default', () => {
@@ -182,5 +214,21 @@ describe('transform cache', () => {
         );
 
         expect(existsSync(resolveTransformCacheDir(root))).toBe(false);
+    });
+
+    it('plugin wiring reuses the in-memory transform cache before disk reads', () => {
+        const root = tempRoot();
+        const [prePlugin] = vitePlugin() as TransformHook[];
+        prePlugin.configResolved?.({ root });
+
+        const source = 'const App=()=> <div sz={{ p: 4 }} />;';
+        const id = join(root, 'src/App.tsx');
+        prePlugin.transform.call({ warn: () => undefined }, source, id);
+        const cacheRoot = resolveTransformCacheDir(root);
+        rmSync(cacheRoot, { recursive: true, force: true });
+
+        prePlugin.transform.call({ warn: () => undefined }, source, id);
+
+        expect(existsSync(cacheRoot)).toBe(false);
     });
 });
