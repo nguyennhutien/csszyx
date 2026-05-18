@@ -155,21 +155,21 @@ interface BuildConfig {
   cacheDir?: string; // Cache directory
   cache?: boolean; // Enable per-file transform cache
   astBudgetLimit?: number; // Max AST nodes per file before throwing
-  parser?: "babel" | "oxc"; // Source parser for JSX/TSX sz transforms
+  parser?: "babel" | "oxc" | "rust"; // Source parser for JSX/TSX sz transforms
   scanCss?: string | string[]; // CSS files with @theme blocks to auto-scan
 }
 ```
 
-| Option           | Default                | Description                                                                                                                                                                                                        |
-| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                            |
-| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                        |
-| `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                            |
-| `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                            |
-| `cache`          | `true`                 | Enable the per-file transform cache. Set to `false` when debugging parser output or isolating cache-related issues.                                                                                                |
-| `astBudgetLimit` | `50000`                | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`. |
-| `parser`         | `'oxc'`                | Source parser for JSX/TSX sz transforms. Use `'babel'` only as a compatibility escape hatch if an app hits an oxc parser edge case.                                                                                |
-| `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                               |
+| Option           | Default                | Description                                                                                                                                                                                                              |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                                  |
+| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                              |
+| `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                                  |
+| `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                                  |
+| `cache`          | `true`                 | Enable the per-file transform cache. Set to `false` when debugging parser output or isolating cache-related issues.                                                                                                      |
+| `astBudgetLimit` | `50000`                | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`.       |
+| `parser`         | `'oxc'`                | Source parser for JSX/TSX sz transforms. Use `'babel'` only as a compatibility escape hatch if an app hits an oxc parser edge case. `'rust'` is an experimental scaffold and currently throws until the Rust core lands. |
+| `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                     |
 
 ### File Filters
 

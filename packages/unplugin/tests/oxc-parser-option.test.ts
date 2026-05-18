@@ -69,4 +69,29 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('const App=()=>');
         expect(result.code).toContain('className="p-4"');
     });
+
+    it('lets build.parser opt into the Rust scaffold explicitly', () => {
+        const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+
+        expect(() =>
+            prePlugin.transform.call(
+                { warn: vi.fn() },
+                'const App=()=> <div sz={{ p: 4 }} />;',
+                '/repo/src/App.tsx',
+            ),
+        ).toThrow('transformRust: not implemented yet');
+    });
+
+    it('lets CSSZYX_PARSER=rust override build.parser=babel', () => {
+        process.env.CSSZYX_PARSER = 'rust';
+        const [prePlugin] = vitePlugin({ build: { parser: 'babel' } }) as TransformHook[];
+
+        expect(() =>
+            prePlugin.transform.call(
+                { warn: vi.fn() },
+                'const App=()=> <div sz={{ p: 4 }} />;',
+                '/repo/src/App.tsx',
+            ),
+        ).toThrow('transformRust: not implemented yet');
+    });
 });

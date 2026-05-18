@@ -65,6 +65,7 @@ export {
     type TransformOxcResult,
     transformOxc,
 } from './transform-oxc.js';
+export { OxcRustNotImplementedError, transformRust } from './transform-rust.js';
 
 // Export sz prop types (for IntelliSense and type safety)
 // CustomTheme is the augmentable interface — exported so users and plugins can

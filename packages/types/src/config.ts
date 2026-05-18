@@ -115,11 +115,12 @@ export interface BuildConfig {
      * Source parser used for JSX/TSX sz transforms.
      *
      * `oxc` is the default parser. `babel` remains available as a compatibility
-     * fallback while the migration keeps Babel dependencies installed.
+     * fallback while the migration keeps Babel dependencies installed. `rust`
+     * is an experimental maximum-speed scaffold and is not production-ready.
      *
      * @default "oxc"
      */
-    parser?: 'babel' | 'oxc';
+    parser?: 'babel' | 'oxc' | 'rust';
 
     /**
      * CSS file(s) to scan for Tailwind v4 @theme blocks.

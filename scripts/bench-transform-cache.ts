@@ -14,6 +14,7 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { transformSourceCode } from '../packages/compiler/src/transform.js';
 import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
+import { transformRust } from '../packages/compiler/src/transform-rust.js';
 import {
     createTransformCacheKey,
     readTransformCache,
@@ -50,6 +51,8 @@ interface BenchStats {
     filesPerSecond: number;
     /** Notes for report readers. */
     note: string;
+    /** Whether the row measured successfully or documents a scaffold state. */
+    status: 'measured' | 'not-implemented';
 }
 
 interface ParserFixture {
@@ -305,6 +308,14 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 'Default oxc-parser + magic-string path.',
             ),
         );
+        assertRustScaffoldThrows(files[0]?.source ?? '', files[0]?.filename ?? '/bench/rust.tsx');
+        stats.push(
+            notImplementedCase(
+                `parser/${size}/rust-transformRust`,
+                size,
+                'Rust maximum-speed parser path is wired as an explicit scaffold and currently throws.',
+            ),
+        );
     }
 
     for (const fixture of fixtureSet) {
@@ -330,9 +341,34 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 'Single-fixture oxc path timing.',
             ),
         );
+        stats.push(
+            notImplementedCase(
+                `parser/fixture/${fixture.name}/rust`,
+                1,
+                'Single-fixture Rust scaffold row; not measured until the Rust core lands.',
+            ),
+        );
     }
 
     return stats;
+}
+
+/**
+ * Assert that the Rust parser scaffold is still an explicit throw, not a silent fallback.
+ *
+ * @param source fixture source
+ * @param filename fixture filename
+ */
+function assertRustScaffoldThrows(source: string, filename: string): void {
+    try {
+        transformRust(source, filename);
+    } catch (err) {
+        if (err instanceof Error && err.name === 'OxcRustNotImplementedError') {
+            return;
+        }
+        throw err;
+    }
+    throw new Error('transformRust unexpectedly returned a result');
 }
 
 /**
@@ -373,6 +409,29 @@ function measureCase(
         maxMs: Math.max(...samples),
         filesPerSecond: (files / medianMs) * 1000,
         note,
+        status: 'measured',
+    };
+}
+
+/**
+ * Create a placeholder benchmark row for a parser path that is wired but not implemented.
+ *
+ * @param name case label
+ * @param files file count
+ * @param note report note
+ * @returns not-implemented benchmark stats
+ */
+function notImplementedCase(name: string, files: number, note: string): BenchStats {
+    return {
+        name,
+        files,
+        medianMs: 0,
+        meanMs: 0,
+        minMs: 0,
+        maxMs: 0,
+        filesPerSecond: 0,
+        note,
+        status: 'not-implemented',
     };
 }
 
@@ -576,8 +635,8 @@ The no-sz case measures the real pre-transform gate separately. Files with no sz
 
 ## Results
 
-| Case | Files | Median ms | Mean ms | Min ms | Max ms | Files/sec | Note |
-|---|---:|---:|---:|---:|---:|---:|---|
+| Case | Status | Files | Median ms | Mean ms | Min ms | Max ms | Files/sec | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---|
 ${rows}
 
 ## Interpretation
@@ -601,9 +660,10 @@ function renderParserReport(stats: BenchStats[]): string {
         .map(size => {
             const babel = findStat(stats, `parser/${size}/babel-transformSourceCode`);
             const oxc = findStat(stats, `parser/${size}/oxc-transformOxc`);
+            const rust = findStat(stats, `parser/${size}/rust-transformRust`);
             return `- ${size} mixed fixtures: oxc is ${formatRatio(
                 babel.medianMs / oxc.medianMs,
-            )}x faster than Babel by median batch time.`;
+            )}x faster than Babel by median batch time; ${rust.name} is ${rust.status}.`;
         })
         .join('\n');
 
@@ -621,12 +681,12 @@ Environment:
 
 ${speedups}
 
-The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path.
+The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path. Rust rows intentionally report not-implemented during the scaffold phase so the harness shape is ready before Rust timings exist.
 
 ## Results
 
-| Case | Files | Median ms | Mean ms | Min ms | Max ms | Files/sec | Note |
-|---|---:|---:|---:|---:|---:|---:|---|
+| Case | Status | Files | Median ms | Mean ms | Min ms | Max ms | Files/sec | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---|
 ${rows}
 
 ## Interpretation
@@ -659,11 +719,11 @@ function findStat(stats: BenchStats[], name: string): BenchStats {
  * @returns markdown table row
  */
 function tableRow(stat: BenchStats): string {
-    return `| \`${stat.name}\` | ${stat.files} | ${formatMs(stat.medianMs)} | ${formatMs(
-        stat.meanMs,
-    )} | ${formatMs(stat.minMs)} | ${formatMs(stat.maxMs)} | ${Math.round(
-        stat.filesPerSecond,
-    ).toLocaleString()} | ${stat.note} |`;
+    return `| \`${stat.name}\` | ${stat.status} | ${stat.files} | ${formatMs(
+        stat.medianMs,
+    )} | ${formatMs(stat.meanMs)} | ${formatMs(stat.minMs)} | ${formatMs(
+        stat.maxMs,
+    )} | ${Math.round(stat.filesPerSecond).toLocaleString()} | ${stat.note} |`;
 }
 
 /**

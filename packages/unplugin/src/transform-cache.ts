@@ -7,7 +7,7 @@ import type { SourceTransformResult, TokenData } from '@csszyx/compiler';
 const CACHE_SCHEMA_VERSION = 2;
 
 /** Parser implementation that produced a cache entry. */
-export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc';
+export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
 
 /** Transform result shape that can be serialized into the on-disk cache. */
 export type CacheableTransformResult = SourceTransformResult;

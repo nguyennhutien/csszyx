@@ -502,7 +502,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
     const parserOverride = process.env.CSSZYX_PARSER;
     const parserMode =
-        parserOverride === 'babel' || parserOverride === 'oxc'
+        parserOverride === 'babel' || parserOverride === 'oxc' || parserOverride === 'rust'
             ? parserOverride
             : (options.build?.parser ?? 'oxc');
     let evictedCacheRoot: string | null = null;
@@ -605,7 +605,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
             parserMode,
-            producer: parserMode === 'oxc' ? ('oxc' as const) : ('babel' as const),
+            producer: parserMode,
             astBudget: astBudgetOverride,
             filename: effectiveFilename,
             source,
@@ -628,8 +628,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         let result: SourceTransformResult;
-        if (parserMode !== 'oxc') {
+        if (parserMode === 'babel') {
             result = transformSourceCode(source, effectiveFilename, compilerOptions);
+        } else if (parserMode === 'rust') {
+            throw new Error(
+                'transformRust: not implemented yet - Rust core scaffold only; use parser "oxc" or "babel"',
+            );
         } else {
             try {
                 result = transformOxc(source, effectiveFilename, compilerOptions);
