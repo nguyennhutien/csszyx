@@ -151,6 +151,17 @@ This command builds with `features.native,native-engine`, calls
 and removes generated `.node`/`.d.ts` artifacts before exiting. The normal
 `native:smoke` command intentionally keeps validating the native-only scaffold.
 
+Current native-engine rewrite coverage is intentionally narrow:
+
+- Static `sz={{ ... }}`, `sz="..."`, and fully static `sz={[...]}` inputs can
+  rewrite to `className`.
+- Static string `class`/`className` attributes merge with static `sz` on the
+  same JSX opening element.
+- Unsupported dynamic `sz` attributes emit diagnostics and leave the entire file
+  unchanged to avoid partial rewrites before runtime fallback lands.
+- Traversal enforces the 50k-node AST budget and leaves oversized files
+  unchanged with `metadata.ast_budget_exceeded = true`.
+
 ## Rust Source Layout
 
 The existing crate keeps the shared Rust kernels:
