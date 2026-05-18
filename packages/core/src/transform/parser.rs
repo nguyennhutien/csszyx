@@ -1,15 +1,16 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Expression, JSXAttribute, JSXAttributeName, JSXAttributeValue, JSXExpression, ObjectExpression,
-    ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+    Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXExpression,
+    JSXOpeningElement, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
+    UnaryOperator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{SourceType, Span};
 
 use super::{
-    ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
-    TextSpan, TransformFile,
+    ClassAttributeIr, JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty,
+    StaticSzValue, SzAttributeIr, TextSpan, TransformFile,
 };
 
 /// Parser shell output before AST walking is implemented.
@@ -63,46 +64,71 @@ struct CsszyxIrVisitor<'source, 'ir> {
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
-    fn visit_jsx_attribute(&mut self, attr: &JSXAttribute<'a>) {
-        if let Some(name) = jsx_attribute_name(&attr.name) {
-            match name {
-                "sz" => self.collect_sz_attribute(attr),
-                "class" | "className" => self.collect_class_attribute(attr),
-                _ => {}
+    fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
+        let mut sz_attribute_indices = Vec::new();
+        let mut class_attribute_index = None;
+
+        for item in &element.attributes {
+            let JSXAttributeItem::Attribute(attr) = item else {
+                continue;
+            };
+            if let Some(name) = jsx_attribute_name(&attr.name) {
+                match name {
+                    "sz" => {
+                        if let Some(index) = self.collect_sz_attribute(attr) {
+                            sz_attribute_indices.push(index);
+                        }
+                    }
+                    "class" | "className" => {
+                        if let Some(index) = self.collect_class_attribute(attr) {
+                            class_attribute_index = Some(index);
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
 
-        walk::walk_jsx_attribute(self, attr);
+        if !sz_attribute_indices.is_empty() || class_attribute_index.is_some() {
+            self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
+                opening_span: text_span(element.span),
+                sz_attribute_indices,
+                class_attribute_index,
+            });
+        }
+
+        walk::walk_jsx_opening_element(self, element);
     }
 }
 
 impl CsszyxIrVisitor<'_, '_> {
-    fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) {
+    fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
         let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
-            return;
+            return None;
         };
-        let Some((object, value_span)) = static_object_from_jsx_expression(&container.expression)
-        else {
-            return;
-        };
+        let (object, value_span) = static_object_from_jsx_expression(&container.expression)?;
 
+        let index = self.ir.sz_attributes.len();
         self.ir.sz_attributes.push(SzAttributeIr {
             attribute_span: text_span(attr.span),
             value_span,
             object,
         });
+        Some(index)
     }
 
-    fn collect_class_attribute(&mut self, attr: &JSXAttribute<'_>) {
+    fn collect_class_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
         let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
-            return;
+            return None;
         };
 
+        let index = self.ir.class_attributes.len();
         self.ir.class_attributes.push(ClassAttributeIr {
             attribute_span: text_span(attr.span),
             value_span: string_value_span(value.span, self.source),
             value: value.value.to_string(),
         });
+        Some(index)
     }
 }
 
@@ -314,6 +340,33 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.raw_class_names, ["block"]);
         assert_eq!(lowered.classes, ["inset-s-4", "inline-block"]);
+    }
+
+    #[test]
+    fn parser_shell_groups_static_attributes_by_opening_element() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const App = () => <><div className=\"block\" sz={{ p: 4 }} /><span sz={{ m: 2 }} /></>;"
+                    .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.sz_attributes.len(), 2);
+        assert_eq!(parsed.ir.class_attributes.len(), 1);
+        assert_eq!(parsed.ir.jsx_opening_elements.len(), 2);
+        assert_eq!(parsed.ir.jsx_opening_elements[0].sz_attribute_indices, [0]);
+        assert_eq!(
+            parsed.ir.jsx_opening_elements[0].class_attribute_index,
+            Some(0)
+        );
+        assert_eq!(parsed.ir.jsx_opening_elements[1].sz_attribute_indices, [1]);
+        assert_eq!(
+            parsed.ir.jsx_opening_elements[1].class_attribute_index,
+            None
+        );
     }
 
     #[test]

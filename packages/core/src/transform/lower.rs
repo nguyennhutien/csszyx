@@ -293,6 +293,7 @@ mod tests {
                 value_span: TextSpan::new(39, 44).expect("valid span"),
                 value: "block".to_string(),
             }],
+            jsx_opening_elements: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);

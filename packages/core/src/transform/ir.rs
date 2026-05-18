@@ -45,6 +45,8 @@ pub struct SourceIr {
     pub sz_attributes: Vec<SzAttributeIr>,
     /// Static class/className attributes found in source order.
     pub class_attributes: Vec<ClassAttributeIr>,
+    /// JSX opening elements that contain csszyx-relevant static attributes.
+    pub jsx_opening_elements: Vec<JsxOpeningElementIr>,
 }
 
 impl SourceIr {
@@ -58,6 +60,7 @@ impl SourceIr {
             },
             sz_attributes: Vec::new(),
             class_attributes: Vec::new(),
+            jsx_opening_elements: Vec::new(),
         }
     }
 
@@ -65,6 +68,17 @@ impl SourceIr {
     pub const fn is_noop(&self) -> bool {
         self.sz_attributes.is_empty() && self.class_attributes.is_empty()
     }
+}
+
+/// JSX opening element with indices into source-level attribute collections.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JsxOpeningElementIr {
+    /// Full opening-element span.
+    pub opening_span: TextSpan,
+    /// Static `sz` attribute indices in [`SourceIr::sz_attributes`].
+    pub sz_attribute_indices: Vec<usize>,
+    /// Static class/className attribute index in [`SourceIr::class_attributes`].
+    pub class_attribute_index: Option<usize>,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -163,8 +177,8 @@ impl std::error::Error for IrError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
-        TextSpan,
+        ClassAttributeIr, JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty,
+        StaticSzValue, SzAttributeIr, TextSpan,
     };
 
     #[test]
@@ -224,6 +238,11 @@ mod tests {
                 attribute_span: TextSpan::new(54, 72).expect("valid span"),
                 value_span: TextSpan::new(65, 70).expect("valid span"),
                 value: "block".to_string(),
+            }],
+            jsx_opening_elements: vec![JsxOpeningElementIr {
+                opening_span: TextSpan::new(1, 73).expect("valid span"),
+                sz_attribute_indices: vec![0],
+                class_attribute_index: Some(0),
             }],
         };
 
