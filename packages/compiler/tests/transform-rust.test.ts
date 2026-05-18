@@ -9,6 +9,12 @@ describe('transformRust scaffold', () => {
         ).toThrow(OxcRustNotImplementedError);
     });
 
+    it('includes the native loader diagnostic in the scaffold error', () => {
+        expect(() =>
+            transformRust('const App = () => <div sz={{ p: 4 }} />;', '/repo/src/App.tsx'),
+        ).toThrow('Use build.parser: "oxc" or "babel"');
+    });
+
     it('names the scaffold error for callers and benchmarks', () => {
         const err = new OxcRustNotImplementedError('test detail');
 
