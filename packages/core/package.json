@@ -38,11 +38,15 @@
     "pkg",
     "pkg-node"
   ],
+  "napi": {
+    "binaryName": "csszyx-core"
+  },
   "scripts": {
     "build": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target bundler --out-dir pkg && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node && rm -f pkg/.gitignore pkg-node/.gitignore && node scripts/run-wasm-opt.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "native:check": "node scripts/check-native.mjs",
+    "native:build": "node scripts/build-native.mjs --release",
     "native:packages": "node scripts/validate-native-packages.mjs",
     "clean": "rm -rf pkg pkg-node target",
     "prepublishOnly": "node scripts/ensure-build.mjs --strict"

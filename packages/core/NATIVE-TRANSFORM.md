@@ -108,6 +108,16 @@ they are excluded from `pnpm-workspace.yaml` until the native publish matrix is
 ready. This avoids unsupported-platform warnings on every local pnpm command
 while keeping the metadata contract reviewable.
 
+To build the current host package locally:
+
+```bash
+pnpm --filter @csszyx/core native:build -- --clean
+```
+
+The script writes `csszyx-core.<platform>.node` into the matching
+`packages/core-*` directory and removes generated `.d.ts` noise from the
+platform package. Generated `.node` files are gitignored.
+
 ## Rust Source Layout
 
 The existing crate keeps the shared Rust kernels:
