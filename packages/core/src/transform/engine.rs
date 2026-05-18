@@ -4,8 +4,9 @@
 //! result contract without enabling source rewrite yet.
 
 use super::{
-    lower::lower_source_ir_classes, parser::parse_source_shell, rewrite::rewrite_single_static_sz,
-    ParserPath, TransformFile, TransformMetadata, TransformProducer, TransformResult,
+    lower::lower_source_ir_classes, parser::parse_source_shell,
+    rewrite::rewrite_static_sz_attributes, ParserPath, TransformFile, TransformMetadata,
+    TransformProducer, TransformResult,
 };
 
 /// Parse and lower a file into the native transform result shape without
@@ -15,7 +16,7 @@ pub(super) fn transform_static_classes(file: &TransformFile) -> TransformResult 
     let lowered = lower_source_ir_classes(&parsed.ir);
     let mut diagnostics = parsed.diagnostics;
     let rewritten_code = if diagnostics.is_empty() {
-        rewrite_single_static_sz(&file.source, &parsed.ir).ok()
+        rewrite_static_sz_attributes(&file.source, &parsed.ir).ok()
     } else {
         None
     };
@@ -82,8 +83,11 @@ mod tests {
 
         let result = transform_static_classes(&file);
 
-        assert_eq!(result.code, file.source);
-        assert!(!result.metadata.transformed);
+        assert_eq!(
+            result.code,
+            "export const App = () => <div className=\"block p-4\" />;"
+        );
+        assert!(result.metadata.transformed);
         assert_eq!(result.classes, ["p-4"]);
         assert_eq!(result.raw_class_names, ["block"]);
     }
