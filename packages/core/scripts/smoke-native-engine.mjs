@@ -103,6 +103,10 @@ function assertNativeEngineTransform(binding) {
         "const ArraySz = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;",
     },
     {
+      filename: path.join(repoRoot, "fixtures", "spread-sz.tsx"),
+      source: "const SpreadSz = () => <div sz={{ ...{ p: 4 }, m: 2 }} />;",
+    },
+    {
       filename: path.join(repoRoot, "fixtures", "empty-array-sz.tsx"),
       source:
         "const EmptyArraySz = () => <div sz={[false, null, undefined]} />;",
@@ -118,19 +122,28 @@ function assertNativeEngineTransform(binding) {
     },
   ]);
 
-  const [rewritten, noop, stringSz, arraySz, emptyArraySz, dynamicSz, recover] =
-    results;
+  const [
+    rewritten,
+    noop,
+    stringSz,
+    arraySz,
+    spreadSz,
+    emptyArraySz,
+    dynamicSz,
+    recover,
+  ] = results;
   if (
-    results.length !== 7 ||
+    results.length !== 8 ||
     !rewritten ||
     !noop ||
     !stringSz ||
     !arraySz ||
+    !spreadSz ||
     !emptyArraySz ||
     !dynamicSz ||
     !recover
   ) {
-    fail(`Expected 7 transform results, received ${results.length}.`);
+    fail(`Expected 8 transform results, received ${results.length}.`);
   }
 
   if (
@@ -178,6 +191,13 @@ function assertNativeEngineTransform(binding) {
   }
   if (JSON.stringify(arraySz.classes) !== JSON.stringify(["flex", "p-4"])) {
     fail(`Unexpected array sz classes: ${JSON.stringify(arraySz.classes)}`);
+  }
+
+  if (spreadSz.code !== 'const SpreadSz = () => <div className="p-4 m-2" />;') {
+    fail(`Unexpected spread sz code: ${spreadSz.code}`);
+  }
+  if (JSON.stringify(spreadSz.classes) !== JSON.stringify(["p-4", "m-2"])) {
+    fail(`Unexpected spread sz classes: ${JSON.stringify(spreadSz.classes)}`);
   }
 
   if (
