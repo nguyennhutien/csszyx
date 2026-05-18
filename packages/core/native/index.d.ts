@@ -70,6 +70,17 @@ export class CsszyxNativeUnavailableError extends Error {
     constructor(message?: string, packageName?: NativePlatformPackage | null);
 }
 
+/** Native binding shape exported by optional platform packages. */
+export interface NativeBinding {
+    /**
+     * Transforms source files with the native Rust core.
+     *
+     * @param files Source files to transform.
+     * @returns Native transform results in input order.
+     */
+    transformBatch(files: NativeTransformFile[]): NativeTransformResult[];
+}
+
 /**
  * Returns the optional native package name for the current platform.
  *
@@ -80,9 +91,12 @@ export function getNativePackageName(): NativePlatformPackage | null;
 /**
  * Loads the native binding once platform packages exist.
  *
+ * @param packageName Optional package name override for tests and platform probes.
  * @returns Native binding after platform packages are available.
  */
-export function loadNativeBinding(): never;
+export function loadNativeBinding(
+    packageName?: NativePlatformPackage | string | null,
+): NativeBinding;
 
 /**
  * Transforms a batch of files with the future native Rust core.

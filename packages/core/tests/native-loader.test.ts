@@ -37,4 +37,22 @@ describe('@csszyx/core/native scaffold', () => {
 
         throw new Error('transformBatch unexpectedly returned a result');
     });
+
+    it('throws the same stable error for a missing explicit native package', () => {
+        expect(() => loadNativeBinding('@csszyx/core-linux-x64-gnu')).toThrow(
+            CsszyxNativeUnavailableError,
+        );
+
+        try {
+            loadNativeBinding('@csszyx/core-linux-x64-gnu');
+        } catch (err) {
+            expect((err as CsszyxNativeUnavailableError).code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
+            expect((err as CsszyxNativeUnavailableError).packageName).toBe(
+                '@csszyx/core-linux-x64-gnu',
+            );
+            return;
+        }
+
+        throw new Error('loadNativeBinding unexpectedly returned a binding');
+    });
 });
