@@ -20,6 +20,9 @@ pub(crate) mod recovery;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod rewrite;
+#[cfg(feature = "native-engine")]
+#[allow(dead_code)]
+pub(crate) mod scope;
 
 #[cfg(not(feature = "native-engine"))]
 use fast_path::{triage_source, FastPathTriage};
