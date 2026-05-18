@@ -34,6 +34,8 @@ Native build tooling is pinned instead of ranged:
 | `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.                      |
 | `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.                      |
 | `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for future native exports.                                   |
+| `oxc_ast`       | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | AST node types used only inside the parser lowering module.                    |
+| `oxc_ast_visit` | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Visitor traversal for lowering JSX attributes into csszyx IR.                  |
 | `oxc_parser`    | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; requires rustc 1.93.                |
 | `oxc_semantic`  | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the future semantic path; pinned with `oxc_parser`. |
 | `oxc_span`      | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                        |
