@@ -14,6 +14,7 @@ const PACKAGE_BY_PLATFORM = new Map([
 ]);
 
 let cachedBinding;
+let cachedPackageName;
 
 export class CsszyxNativeUnavailableError extends Error {
     constructor(message, packageName = getNativePackageName()) {
@@ -50,7 +51,7 @@ export function getNativePackageName() {
 }
 
 export function loadNativeBinding(packageName = getNativePackageName()) {
-    if (cachedBinding) {
+    if (cachedBinding && cachedPackageName === packageName) {
         return cachedBinding;
     }
 
@@ -80,6 +81,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     }
 
     cachedBinding = binding;
+    cachedPackageName = packageName;
     return binding;
 }
 
