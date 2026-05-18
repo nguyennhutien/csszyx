@@ -48,6 +48,7 @@
     "native:check": "node scripts/check-native.mjs",
     "native:build": "node scripts/build-native.mjs --release",
     "native:packages": "node scripts/validate-native-packages.mjs",
+    "native:smoke": "node scripts/smoke-native.mjs",
     "clean": "rm -rf pkg pkg-node target",
     "prepublishOnly": "node scripts/ensure-build.mjs --strict"
   },

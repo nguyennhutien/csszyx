@@ -118,6 +118,16 @@ The script writes `csszyx-core.<platform>.node` into the matching
 `packages/core-*` directory and removes generated `.d.ts` noise from the
 platform package. Generated `.node` files are gitignored.
 
+To build and load-test the current host package through `@csszyx/core/native`:
+
+```bash
+pnpm --filter @csszyx/core native:smoke
+```
+
+The smoke command asserts that the generated addon exports `transformBatch()`,
+that the call reaches the Rust scaffold not-implemented error, and that
+generated `.node`/`.d.ts` artifacts are removed before the command exits.
+
 ## Rust Source Layout
 
 The existing crate keeps the shared Rust kernels:
