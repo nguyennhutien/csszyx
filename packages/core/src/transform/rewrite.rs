@@ -231,6 +231,18 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_typescript_wrapped_static_property_values() {
+        let source =
+            "export const App = () => <div sz={{ p: (4 as const), m: (2 satisfies number) }} />;";
+        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"p-4 m-2\" />;"
+        );
+    }
+
+    #[test]
     fn rejects_empty_class_list() {
         let source = "export const App = () => <div sz={{ bg: 'red-500/50' }} />;";
 

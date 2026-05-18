@@ -302,6 +302,9 @@ fn static_value_from_expression(expression: &Expression<'_>) -> Option<StaticSzV
         Expression::ParenthesizedExpression(value) => {
             static_value_from_expression(&value.expression)
         }
+        Expression::TSAsExpression(value) => static_value_from_expression(&value.expression),
+        Expression::TSSatisfiesExpression(value) => static_value_from_expression(&value.expression),
+        Expression::TSNonNullExpression(value) => static_value_from_expression(&value.expression),
         _ => None,
     }
 }
@@ -559,6 +562,10 @@ mod tests {
                 vec!["hover:bg-red-500"],
             ),
             ("sz={{ p: 4, gap: null, m: undefined }}", vec!["p-4"]),
+            (
+                "sz={{ p: (4 as const), m: (2 satisfies number) }}",
+                vec!["p-4", "m-2"],
+            ),
             (
                 "sz={{ bgImg: 'url(/hero.png)' }}",
                 vec!["bg-[url(/hero.png)]"],
