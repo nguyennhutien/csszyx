@@ -45,6 +45,12 @@ cargo check --manifest-path packages/core/Cargo.toml --features native
 cargo clippy --manifest-path packages/core/Cargo.toml --all-targets --features native -- -D warnings
 ```
 
+Or run the package script:
+
+```bash
+pnpm --filter @csszyx/core native:check
+```
+
 Do not use `cargo test --features native` as a local gate unless it runs inside
 a Node addon harness. The napi crate references Node-provided symbols that are
 not available when Cargo links a standalone Rust test binary.
