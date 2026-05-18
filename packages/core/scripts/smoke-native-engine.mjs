@@ -106,18 +106,24 @@ function assertNativeEngineTransform(binding) {
       filename: path.join(repoRoot, "fixtures", "empty-array-sz.tsx"),
       source: "const EmptyArraySz = () => <div sz={[false, null]} />;",
     },
+    {
+      filename: path.join(repoRoot, "fixtures", "dynamic-sz.tsx"),
+      source:
+        "const DynamicSz = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;",
+    },
   ]);
 
-  const [rewritten, noop, stringSz, arraySz, emptyArraySz] = results;
+  const [rewritten, noop, stringSz, arraySz, emptyArraySz, dynamicSz] = results;
   if (
-    results.length !== 5 ||
+    results.length !== 6 ||
     !rewritten ||
     !noop ||
     !stringSz ||
     !arraySz ||
-    !emptyArraySz
+    !emptyArraySz ||
+    !dynamicSz
   ) {
-    fail(`Expected 5 transform results, received ${results.length}.`);
+    fail(`Expected 6 transform results, received ${results.length}.`);
   }
 
   if (
@@ -175,6 +181,28 @@ function assertNativeEngineTransform(binding) {
   if (JSON.stringify(emptyArraySz.classes) !== JSON.stringify([])) {
     fail(
       `Unexpected empty array sz classes: ${JSON.stringify(emptyArraySz.classes)}`,
+    );
+  }
+
+  if (
+    dynamicSz.code !==
+    "const DynamicSz = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;"
+  ) {
+    fail(`Unexpected dynamic sz code: ${dynamicSz.code}`);
+  }
+  if (dynamicSz.metadata?.transformed !== false) {
+    fail("Expected dynamic sz result to stay untransformed.");
+  }
+  if (JSON.stringify(dynamicSz.classes) !== JSON.stringify(["p-4"])) {
+    fail(`Unexpected dynamic sz classes: ${JSON.stringify(dynamicSz.classes)}`);
+  }
+  if (
+    !dynamicSz.diagnostics?.some((diagnostic) =>
+      diagnostic.includes("unsupported dynamic sz attribute"),
+    )
+  ) {
+    fail(
+      `Expected unsupported dynamic sz diagnostic: ${dynamicSz.diagnostics}`,
     );
   }
 }
