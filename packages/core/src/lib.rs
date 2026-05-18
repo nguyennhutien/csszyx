@@ -67,6 +67,9 @@ pub mod token;
 /// High-performance sz prop transformation module.
 pub mod transformer;
 
+/// Native Rust transform contract.
+pub mod transform;
+
 /// Mangle map checksum module for SSR/CSR integrity.
 pub mod mangle;
 
@@ -75,6 +78,10 @@ pub use collision::{compute_dual_hash, CollisionDetector, WasmCollisionDetector}
 pub use encoder::encode;
 pub use mangle::{compute_checksum_internal, compute_mangle_checksum, verify_mangle_checksum};
 pub use token::{generate_token, verify_token, ComponentInfo};
+pub use transform::{
+    transform_batch, ParserPath, RecoveryMode, RecoveryToken, TransformError, TransformFile,
+    TransformMetadata, TransformProducer, TransformResult,
+};
 pub use transformer::transform_sz;
 
 use wasm_bindgen::prelude::*;

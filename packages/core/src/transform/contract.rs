@@ -1,0 +1,92 @@
+use serde::{Deserialize, Serialize};
+
+/// Source file passed to the Rust transform core.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransformFile {
+    /// Absolute or project-relative filename used for diagnostics and cache identity.
+    pub filename: String,
+    /// Source module contents.
+    pub source: String,
+}
+
+/// Recovery token emitted by a transform result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryToken {
+    /// Public token inserted into generated code.
+    pub token: String,
+    /// Recovery mode encoded in the token.
+    pub mode: RecoveryMode,
+    /// Component label associated with the token.
+    pub component: String,
+    /// Source path associated with the token.
+    pub path: String,
+}
+
+/// Recovery mode encoded in a token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RecoveryMode {
+    /// Client-side recovery token.
+    Csr,
+    /// Development-only recovery token.
+    DevOnly,
+}
+
+/// Metadata describing which runtime helpers a transform result needs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct TransformMetadata {
+    /// Whether source code changed.
+    pub transformed: bool,
+    /// Whether the result imports the runtime _sz helper.
+    pub uses_runtime: bool,
+    /// Whether the result imports the runtime _szMerge helper.
+    pub uses_merge: bool,
+    /// Whether the result imports the runtime color-var helper.
+    pub uses_color_var: bool,
+    /// Producer identity for cache safety.
+    pub producer: TransformProducer,
+    /// Whether native AST budget protection fired.
+    pub ast_budget_exceeded: bool,
+}
+
+/// Producer identity for native transform cache safety.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TransformProducer {
+    /// Rust core producer.
+    Rust,
+}
+
+/// Native parser lane used for a transformed file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ParserPath {
+    /// AST-free static JSX path.
+    FastRegex,
+    /// Static AST path.
+    Static,
+    /// Semantic binding-resolution path.
+    Semantic,
+}
+
+/// Transform output shape returned per source file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransformResult {
+    /// Rewritten source code.
+    pub code: String,
+    /// Source map payload once native rewriting lands.
+    pub map: Option<serde_json::Value>,
+    /// Generated csszyx/Tailwind classes.
+    pub classes: Vec<String>,
+    /// Static className/class strings discovered in the source.
+    pub raw_class_names: Vec<String>,
+    /// Non-fatal transform diagnostics.
+    pub diagnostics: Vec<String>,
+    /// Recovery token metadata emitted for hydration safety.
+    pub recovery_tokens: Vec<RecoveryToken>,
+    /// Native transform metadata used by unplugin and benchmarks.
+    pub metadata: TransformMetadata,
+    /// Native parser lane used for this file.
+    pub parser_path: ParserPath,
+}
