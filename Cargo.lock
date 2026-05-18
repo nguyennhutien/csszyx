@@ -163,6 +163,7 @@ dependencies = [
  "oxc_allocator",
  "oxc_parser",
  "oxc_semantic",
+ "oxc_span",
  "rayon",
  "serde",
  "serde-wasm-bindgen",

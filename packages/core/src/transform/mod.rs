@@ -7,6 +7,9 @@
 mod contract;
 pub(crate) mod fast_path;
 mod ir;
+#[cfg(feature = "native-engine")]
+#[allow(dead_code)]
+pub(crate) mod parser;
 
 use fast_path::{triage_source, FastPathTriage};
 

@@ -36,6 +36,7 @@ Native build tooling is pinned instead of ranged:
 | `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for future native exports.                                               |
 | `oxc_parser`    | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; latest checked line compatible with rustc 1.92. |
 | `oxc_semantic`  | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the future semantic path; pinned with `oxc_parser`.             |
+| `oxc_span`      | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                                    |
 | `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                                   |
 | `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Future span overwrite engine; still under exact review before default use.                 |
 
