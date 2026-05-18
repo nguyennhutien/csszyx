@@ -243,6 +243,9 @@ fn static_object_from_object_expression(object: &ObjectExpression<'_>) -> Option
         let ObjectPropertyKind::ObjectProperty(property) = property else {
             return None;
         };
+        if is_skippable_static_value(&property.value) {
+            continue;
+        }
         properties.push(static_property_from_object_property(property)?);
     }
 
@@ -300,6 +303,18 @@ fn static_value_from_expression(expression: &Expression<'_>) -> Option<StaticSzV
             static_value_from_expression(&value.expression)
         }
         _ => None,
+    }
+}
+
+fn is_skippable_static_value(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::NullLiteral(_) => true,
+        Expression::Identifier(identifier) if identifier.name == "undefined" => true,
+        Expression::ParenthesizedExpression(value) => is_skippable_static_value(&value.expression),
+        Expression::TSAsExpression(value) => is_skippable_static_value(&value.expression),
+        Expression::TSSatisfiesExpression(value) => is_skippable_static_value(&value.expression),
+        Expression::TSNonNullExpression(value) => is_skippable_static_value(&value.expression),
+        _ => false,
     }
 }
 
@@ -543,6 +558,7 @@ mod tests {
                 "sz={{ hover: { bg: 'red-500' } }}",
                 vec!["hover:bg-red-500"],
             ),
+            ("sz={{ p: 4, gap: null, m: undefined }}", vec!["p-4"]),
             (
                 "sz={{ bgImg: 'url(/hero.png)' }}",
                 vec!["bg-[url(/hero.png)]"],

@@ -198,6 +198,17 @@ mod tests {
     }
 
     #[test]
+    fn skips_null_and_undefined_static_object_values() {
+        let source = "export const App = () => <div sz={{ p: 4, gap: null, m: undefined }} />;";
+        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"p-4\" />;"
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_array_sz_attribute() {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
         let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
