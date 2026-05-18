@@ -27,9 +27,14 @@
       "types": "./pkg/csszyx_core.d.ts",
       "node": "./pkg-node/csszyx_core.js",
       "default": "./pkg/csszyx_core.js"
+    },
+    "./native": {
+      "types": "./native/index.d.ts",
+      "node": "./native/index.js"
     }
   },
   "files": [
+    "native",
     "pkg",
     "pkg-node"
   ],
