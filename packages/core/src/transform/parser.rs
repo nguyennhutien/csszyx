@@ -232,6 +232,7 @@ fn static_object_from_array_expression(array: &ArrayExpression<'_>) -> Option<St
             }
             ArrayExpressionElement::BooleanLiteral(value) if !value.value => {}
             ArrayExpressionElement::NullLiteral(_) | ArrayExpressionElement::Elision(_) => {}
+            ArrayExpressionElement::Identifier(identifier) if identifier.name == "undefined" => {}
             _ => return None,
         }
     }
@@ -465,7 +466,7 @@ mod tests {
     fn parser_shell_keeps_empty_static_array_rewriteable() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div sz={[false, null]} />;".to_string(),
+            source: "export const App = () => <div sz={[false, null, undefined]} />;".to_string(),
         };
 
         let parsed = parse_source_shell(&file);

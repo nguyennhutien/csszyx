@@ -104,7 +104,8 @@ function assertNativeEngineTransform(binding) {
     },
     {
       filename: path.join(repoRoot, "fixtures", "empty-array-sz.tsx"),
-      source: "const EmptyArraySz = () => <div sz={[false, null]} />;",
+      source:
+        "const EmptyArraySz = () => <div sz={[false, null, undefined]} />;",
     },
     {
       filename: path.join(repoRoot, "fixtures", "dynamic-sz.tsx"),
