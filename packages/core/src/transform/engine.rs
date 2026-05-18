@@ -4,14 +4,24 @@
 //! result contract without enabling source rewrite yet.
 
 use super::{
-    lower::lower_source_ir_classes, parser::parse_source_shell,
-    rewrite::rewrite_static_sz_attributes, ParserPath, TransformFile, TransformMetadata,
-    TransformProducer, TransformResult,
+    fast_path::{triage_source, FastPathTriage},
+    lower::lower_source_ir_classes,
+    parser::parse_source_shell,
+    rewrite::rewrite_static_sz_attributes,
+    ParserPath, TransformFile, TransformMetadata, TransformProducer, TransformResult,
 };
+
+/// Transform one file through fast-path triage and parser-backed static rewrite.
+pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
+    match triage_source(file) {
+        FastPathTriage::Noop(_) => noop_result(file),
+        FastPathTriage::NeedsParser(_) => transform_static_classes(file),
+    }
+}
 
 /// Parse and lower a file into the native transform result shape without
 /// mutating source code.
-pub(super) fn transform_static_classes(file: &TransformFile) -> TransformResult {
+fn transform_static_classes(file: &TransformFile) -> TransformResult {
     let parsed = parse_source_shell(file);
     let lowered = lower_source_ir_classes(&parsed.ir);
     let mut diagnostics = parsed.diagnostics;
@@ -45,10 +55,46 @@ pub(super) fn transform_static_classes(file: &TransformFile) -> TransformResult 
     }
 }
 
+fn noop_result(file: &TransformFile) -> TransformResult {
+    TransformResult {
+        code: file.source.clone(),
+        map: None,
+        classes: Vec::new(),
+        raw_class_names: Vec::new(),
+        diagnostics: Vec::new(),
+        recovery_tokens: Vec::new(),
+        metadata: TransformMetadata {
+            transformed: false,
+            uses_runtime: false,
+            uses_merge: false,
+            uses_color_var: false,
+            producer: TransformProducer::Rust,
+            ast_budget_exceeded: false,
+        },
+        parser_path: ParserPath::FastRegex,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::transform_static_classes;
+    use super::{transform_file, transform_static_classes};
     use crate::transform::{ParserPath, TransformFile, TransformProducer};
+
+    #[test]
+    fn transform_file_skips_parser_for_no_sz_sources() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div className=\"block\" />;".to_string(),
+        };
+
+        let result = transform_file(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert_eq!(result.parser_path, ParserPath::FastRegex);
+        assert!(result.classes.is_empty());
+        assert!(result.raw_class_names.is_empty());
+    }
 
     #[test]
     fn static_engine_rewrites_single_static_sz_attribute() {
