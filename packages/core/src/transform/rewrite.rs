@@ -7,7 +7,11 @@
 
 use string_wizard::{MagicString, UpdateOptions};
 
-use super::{lower::lower_sz_attribute_classes, SourceIr};
+use super::{
+    lower::lower_sz_attribute_classes,
+    recovery::{generate_inline_recovery_token, offset_to_line_column},
+    SourceIr,
+};
 
 /// Reason a static IR cannot be rewritten by the current narrow slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,65 +27,85 @@ pub enum StaticRewriteUnsupported {
 /// Rewrite static `sz` attributes into `className="..."`.
 pub fn rewrite_static_sz_attributes(
     source: &str,
+    filename: &str,
     ir: &SourceIr,
 ) -> Result<String, StaticRewriteUnsupported> {
     let mut magic = MagicString::new(source);
     let mut rewrote = false;
 
     for element in &ir.jsx_opening_elements {
-        if element.sz_attribute_indices.is_empty() {
-            continue;
+        if let Some(recovery_index) = element.recovery_attribute_index {
+            if !element.has_recovery_token_attribute {
+                if let Some(last_attribute_end) = element.last_attribute_end {
+                    let recovery = &ir.recovery_attributes[recovery_index];
+                    let (line, column) =
+                        offset_to_line_column(source, recovery.attribute_span.start);
+                    let token = generate_inline_recovery_token(
+                        filename,
+                        line,
+                        column,
+                        &element.element_name,
+                    );
+                    magic.append_right(
+                        last_attribute_end as usize,
+                        format!(" data-sz-recovery-token=\"{token}\""),
+                    );
+                    rewrote = true;
+                }
+            }
         }
 
-        let mut classes = Vec::new();
-        let mut rewrites_empty_class = false;
-        for index in &element.sz_attribute_indices {
-            let attribute = &ir.sz_attributes[*index];
-            classes.extend(lower_sz_attribute_classes(attribute));
-            rewrites_empty_class |= attribute.rewrites_empty_class;
-        }
-        if classes.is_empty() && !rewrites_empty_class {
-            return Err(StaticRewriteUnsupported::EmptyClassList);
-        }
-
-        if let Some(class_index) = element.class_attribute_index {
-            let class_attribute = &ir.class_attributes[class_index];
-            let existing_classes = class_attribute
-                .value
-                .split_whitespace()
-                .filter(|class_name| !class_name.is_empty());
-            let merged = existing_classes
-                .chain(classes.iter().map(String::as_str))
-                .collect::<Vec<_>>()
-                .join(" ");
-            overwrite_attribute(&mut magic, class_attribute.attribute_span, &merged);
+        if !element.sz_attribute_indices.is_empty() {
+            let mut classes = Vec::new();
+            let mut rewrites_empty_class = false;
             for index in &element.sz_attribute_indices {
                 let attribute = &ir.sz_attributes[*index];
-                magic.remove(
-                    whitespace_start(source, attribute.attribute_span.start as usize),
-                    attribute.attribute_span.end as usize,
-                );
+                classes.extend(lower_sz_attribute_classes(attribute));
+                rewrites_empty_class |= attribute.rewrites_empty_class;
             }
-        } else {
-            let Some((first_index, rest)) = element.sz_attribute_indices.split_first() else {
-                continue;
-            };
-            let first_attribute = &ir.sz_attributes[*first_index];
-            overwrite_attribute(
-                &mut magic,
-                first_attribute.attribute_span,
-                &classes.join(" "),
-            );
-            for index in rest {
-                let attribute = &ir.sz_attributes[*index];
-                magic.remove(
-                    whitespace_start(source, attribute.attribute_span.start as usize),
-                    attribute.attribute_span.end as usize,
-                );
+            if classes.is_empty() && !rewrites_empty_class {
+                return Err(StaticRewriteUnsupported::EmptyClassList);
             }
-        }
 
-        rewrote = true;
+            if let Some(class_index) = element.class_attribute_index {
+                let class_attribute = &ir.class_attributes[class_index];
+                let existing_classes = class_attribute
+                    .value
+                    .split_whitespace()
+                    .filter(|class_name| !class_name.is_empty());
+                let merged = existing_classes
+                    .chain(classes.iter().map(String::as_str))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                overwrite_attribute(&mut magic, class_attribute.attribute_span, &merged);
+                for index in &element.sz_attribute_indices {
+                    let attribute = &ir.sz_attributes[*index];
+                    magic.remove(
+                        whitespace_start(source, attribute.attribute_span.start as usize),
+                        attribute.attribute_span.end as usize,
+                    );
+                }
+            } else {
+                let Some((first_index, rest)) = element.sz_attribute_indices.split_first() else {
+                    continue;
+                };
+                let first_attribute = &ir.sz_attributes[*first_index];
+                overwrite_attribute(
+                    &mut magic,
+                    first_attribute.attribute_span,
+                    &classes.join(" "),
+                );
+                for index in rest {
+                    let attribute = &ir.sz_attributes[*index];
+                    magic.remove(
+                        whitespace_start(source, attribute.attribute_span.start as usize),
+                        attribute.attribute_span.end as usize,
+                    );
+                }
+            }
+
+            rewrote = true;
+        }
     }
 
     if !rewrote {
@@ -128,11 +152,15 @@ mod tests {
         .ir
     }
 
+    fn rewrite(source: &str) -> Result<String, StaticRewriteUnsupported> {
+        rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &parse(source))
+    }
+
     #[test]
     fn rewrites_single_static_sz_attribute() {
         let source =
             "export const App = () => <div sz={{ start: 4, hover: { bg: 'red-500' } }} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -143,7 +171,7 @@ mod tests {
     #[test]
     fn merges_existing_static_class_attribute() {
         let source = "export const App = () => <div className=\"block\" sz={{ p: 4 }} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -154,7 +182,7 @@ mod tests {
     #[test]
     fn rewrites_multiple_grouped_static_sz_attributes() {
         let source = "export const App = () => <div sz={{ p: 4 }} sz={{ m: 2 }} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -166,7 +194,7 @@ mod tests {
     fn rewrites_multiple_opening_elements_independently() {
         let source =
             "export const App = () => <><div sz={{ p: 4 }} /><span className=\"x\" sz={{ m: 2 }} /></>;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -177,7 +205,7 @@ mod tests {
     #[test]
     fn rewrites_static_string_sz_attribute() {
         let source = "export const App = () => <div sz=\"p-4 bg-blue-500\" />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -189,7 +217,7 @@ mod tests {
     fn rewrites_static_array_sz_attribute() {
         let source =
             "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -200,7 +228,7 @@ mod tests {
     #[test]
     fn skips_null_and_undefined_static_object_values() {
         let source = "export const App = () => <div sz={{ p: 4, gap: null, m: undefined }} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -211,7 +239,7 @@ mod tests {
     #[test]
     fn rewrites_empty_static_array_sz_attribute() {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -222,7 +250,7 @@ mod tests {
     #[test]
     fn rewrites_typescript_wrapped_static_sz_attribute() {
         let source = "export const App = () => <div sz={{ p: 4 } as const} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -234,7 +262,7 @@ mod tests {
     fn rewrites_typescript_wrapped_static_property_values() {
         let source =
             "export const App = () => <div sz={{ p: (4 as const), m: (2 satisfies number) }} />;";
-        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
@@ -243,11 +271,40 @@ mod tests {
     }
 
     #[test]
+    fn appends_static_recovery_token_attribute() {
+        let source = "export const App = () => <div szRecover=\"csr\">x</div>;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(rewritten.contains("szRecover=\"csr\" data-sz-recovery-token=\""));
+        assert_eq!(rewritten.matches("data-sz-recovery-token").count(), 1);
+    }
+
+    #[test]
+    fn appends_recovery_token_after_last_attribute_before_sz_rewrite() {
+        let source = "export const App = () => <div szRecover=\"csr\" sz={{ p: 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(rewritten.contains("szRecover=\"csr\" className=\"p-4\" data-sz-recovery-token=\""));
+        assert_eq!(rewritten.matches("data-sz-recovery-token").count(), 1);
+    }
+
+    #[test]
+    fn skips_recovery_token_when_already_tagged() {
+        let source =
+            "export const App = () => <div szRecover=\"csr\" data-sz-recovery-token=\"abc\">x</div>;";
+
+        assert_eq!(
+            rewrite(source),
+            Err(StaticRewriteUnsupported::NoStaticSzAttribute)
+        );
+    }
+
+    #[test]
     fn rejects_empty_class_list() {
         let source = "export const App = () => <div sz={{ bg: 'red-500/50' }} />;";
 
         assert_eq!(
-            rewrite_static_sz_attributes(source, &parse(source)),
+            rewrite(source),
             Err(StaticRewriteUnsupported::EmptyClassList)
         );
     }

@@ -2,8 +2,9 @@ use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
         ArrayExpression, ArrayExpressionElement, Expression, JSXAttribute, JSXAttributeItem,
-        JSXAttributeName, JSXAttributeValue, JSXExpression, JSXOpeningElement, ObjectExpression,
-        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+        JSXAttributeName, JSXAttributeValue, JSXElementName, JSXExpression, JSXMemberExpression,
+        JSXMemberExpressionObject, JSXOpeningElement, ObjectExpression, ObjectProperty,
+        ObjectPropertyKind, PropertyKey, UnaryOperator,
     },
     AstKind,
 };
@@ -12,8 +13,8 @@ use oxc_parser::Parser;
 use oxc_span::{SourceType, Span};
 
 use super::{
-    ClassAttributeIr, JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty,
-    StaticSzValue, SzAttributeIr, TextSpan, TransformFile,
+    ClassAttributeIr, JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SourceIr,
+    StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan, TransformFile,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -94,11 +95,15 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
 
         let mut sz_attribute_indices = Vec::new();
         let mut class_attribute_index = None;
+        let mut recovery_attribute_index = None;
+        let mut has_recovery_token_attribute = false;
+        let mut last_attribute_end = None;
 
         for item in &element.attributes {
             let JSXAttributeItem::Attribute(attr) = item else {
                 continue;
             };
+            last_attribute_end = Some(attr.span.end);
             if let Some(name) = jsx_attribute_name(&attr.name) {
                 match name {
                     "sz" => {
@@ -115,16 +120,35 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
                             class_attribute_index = Some(index);
                         }
                     }
+                    "szRecover" => {
+                        if let Some(index) = self.collect_recovery_attribute(attr) {
+                            recovery_attribute_index = Some(index);
+                        } else {
+                            self.ir
+                                .unsupported_recovery_attribute_spans
+                                .push(text_span(attr.span));
+                        }
+                    }
+                    "data-sz-recovery-token" => {
+                        has_recovery_token_attribute = true;
+                    }
                     _ => {}
                 }
             }
         }
 
-        if !sz_attribute_indices.is_empty() || class_attribute_index.is_some() {
+        if !sz_attribute_indices.is_empty()
+            || class_attribute_index.is_some()
+            || recovery_attribute_index.is_some()
+        {
             self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
                 opening_span: text_span(element.span),
                 sz_attribute_indices,
                 class_attribute_index,
+                recovery_attribute_index,
+                has_recovery_token_attribute,
+                last_attribute_end,
+                element_name: jsx_element_name(&element.name),
             });
         }
 
@@ -173,12 +197,58 @@ impl CsszyxIrVisitor<'_, '_> {
         });
         Some(index)
     }
+
+    fn collect_recovery_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
+        let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
+            return None;
+        };
+        let mode = match value.value.as_str() {
+            "csr" => RecoveryMode::Csr,
+            "dev-only" => RecoveryMode::DevOnly,
+            _ => return None,
+        };
+
+        let index = self.ir.recovery_attributes.len();
+        self.ir.recovery_attributes.push(RecoveryAttributeIr {
+            attribute_span: text_span(attr.span),
+            mode,
+        });
+        Some(index)
+    }
 }
 
 fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
     match name {
         JSXAttributeName::Identifier(identifier) => Some(identifier.name.as_str()),
         JSXAttributeName::NamespacedName(_) => None,
+    }
+}
+
+fn jsx_element_name(name: &JSXElementName<'_>) -> String {
+    match name {
+        JSXElementName::Identifier(identifier) => identifier.name.to_string(),
+        JSXElementName::IdentifierReference(identifier) => identifier.name.to_string(),
+        JSXElementName::NamespacedName(namespaced) => {
+            format!("{}:{}", namespaced.namespace.name, namespaced.name.name)
+        }
+        JSXElementName::MemberExpression(member) => jsx_member_expression_name(member),
+        JSXElementName::ThisExpression(_) => "this".to_string(),
+    }
+}
+
+fn jsx_member_expression_name(member: &JSXMemberExpression<'_>) -> String {
+    format!(
+        "{}.{}",
+        jsx_member_expression_object_name(&member.object),
+        member.property.name
+    )
+}
+
+fn jsx_member_expression_object_name(object: &JSXMemberExpressionObject<'_>) -> String {
+    match object {
+        JSXMemberExpressionObject::IdentifierReference(identifier) => identifier.name.to_string(),
+        JSXMemberExpressionObject::MemberExpression(member) => jsx_member_expression_name(member),
+        JSXMemberExpressionObject::ThisExpression(_) => "this".to_string(),
     }
 }
 
@@ -461,15 +531,64 @@ mod tests {
         assert_eq!(parsed.ir.class_attributes.len(), 1);
         assert_eq!(parsed.ir.jsx_opening_elements.len(), 2);
         assert_eq!(parsed.ir.jsx_opening_elements[0].sz_attribute_indices, [0]);
+        assert_eq!(parsed.ir.jsx_opening_elements[0].element_name, "div");
         assert_eq!(
             parsed.ir.jsx_opening_elements[0].class_attribute_index,
             Some(0)
         );
+        assert_eq!(
+            parsed.ir.jsx_opening_elements[0].recovery_attribute_index,
+            None
+        );
+        assert!(!parsed.ir.jsx_opening_elements[0].has_recovery_token_attribute);
+        assert!(parsed.ir.jsx_opening_elements[0]
+            .last_attribute_end
+            .is_some());
         assert_eq!(parsed.ir.jsx_opening_elements[1].sz_attribute_indices, [1]);
         assert_eq!(
             parsed.ir.jsx_opening_elements[1].class_attribute_index,
             None
         );
+    }
+
+    #[test]
+    fn parser_shell_collects_static_recovery_attributes() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const App = () => <div szRecover=\"csr\" data-sz-recovery-token=\"abc\" />;"
+                    .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.recovery_attributes.len(), 1);
+        assert_eq!(
+            parsed.ir.recovery_attributes[0].mode,
+            super::RecoveryMode::Csr
+        );
+        assert_eq!(parsed.ir.jsx_opening_elements.len(), 1);
+        assert_eq!(
+            parsed.ir.jsx_opening_elements[0].recovery_attribute_index,
+            Some(0)
+        );
+        assert!(parsed.ir.jsx_opening_elements[0].has_recovery_token_attribute);
+        assert_eq!(parsed.ir.jsx_opening_elements[0].element_name, "div");
+    }
+
+    #[test]
+    fn parser_shell_marks_dynamic_recovery_attributes_unsupported() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = ({ mode }) => <div szRecover={mode} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(parsed.ir.recovery_attributes.is_empty());
+        assert_eq!(parsed.ir.unsupported_recovery_attribute_spans.len(), 1);
     }
 
     #[test]

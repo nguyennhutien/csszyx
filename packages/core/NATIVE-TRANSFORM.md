@@ -159,6 +159,9 @@ Current native-engine rewrite coverage is intentionally narrow:
   same JSX opening element.
 - Unsupported dynamic `sz` attributes emit diagnostics and leave the entire file
   unchanged to avoid partial rewrites before runtime fallback lands.
+- Static `szRecover="csr"` / `"dev-only"` emits a deterministic
+  `data-sz-recovery-token` and recovery token metadata; dynamic or unknown
+  values emit diagnostics and skip token emission.
 - Traversal enforces the 50k-node AST budget and leaves oversized files
   unchanged with `metadata.ast_budget_exceeded = true`.
 

@@ -7,8 +7,10 @@ use super::{
     fast_path::{triage_source, FastPathTriage},
     lower::lower_source_ir_classes,
     parser::parse_source_shell,
+    recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
-    ParserPath, TransformFile, TransformMetadata, TransformProducer, TransformResult,
+    ParserPath, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
+    TransformResult,
 };
 
 /// Transform one file through fast-path triage and parser-backed static rewrite.
@@ -24,8 +26,10 @@ pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
 fn transform_static_classes(file: &TransformFile) -> TransformResult {
     let parsed = parse_source_shell(file);
     let lowered = lower_source_ir_classes(&parsed.ir);
+    let recovery_tokens = recovery_tokens(file, &parsed.ir);
     let mut diagnostics = parsed.diagnostics;
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
+    diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
             "[csszyx] Rust native transform at {}: AST budget exceeded; leaving file unchanged for now.",
@@ -33,7 +37,7 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
         ));
     }
     let rewritten_code = if diagnostics.is_empty() {
-        rewrite_static_sz_attributes(&file.source, &parsed.ir).ok()
+        rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir).ok()
     } else {
         None
     };
@@ -49,7 +53,7 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
         diagnostics,
-        recovery_tokens: Vec::new(),
+        recovery_tokens,
         metadata: TransformMetadata {
             transformed,
             uses_runtime: false,
@@ -62,12 +66,45 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
     }
 }
 
+fn recovery_tokens(file: &TransformFile, ir: &super::SourceIr) -> Vec<RecoveryToken> {
+    ir.jsx_opening_elements
+        .iter()
+        .filter(|element| !element.has_recovery_token_attribute)
+        .filter_map(|element| {
+            let recovery_index = element.recovery_attribute_index?;
+            let recovery = &ir.recovery_attributes[recovery_index];
+            let (line, column) = offset_to_line_column(&file.source, recovery.attribute_span.start);
+            let token =
+                generate_inline_recovery_token(&file.filename, line, column, &element.element_name);
+
+            Some(RecoveryToken {
+                token,
+                mode: recovery.mode,
+                component: element.element_name.clone(),
+                path: format!("{}:{line}:{column}", file.filename),
+            })
+        })
+        .collect()
+}
+
 fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.unsupported_sz_attribute_spans
         .iter()
         .map(|span| {
             format!(
                 "[csszyx] Rust native transform at {}:{}: unsupported dynamic sz attribute; leaving file unchanged for now.",
+                file.filename, span.start
+            )
+        })
+        .collect()
+}
+
+fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.unsupported_recovery_attribute_spans
+        .iter()
+        .map(|span| {
+            format!(
+                "[csszyx] szRecover at {}:{}: only static string-literal values \"csr\" or \"dev-only\" are supported. Token emission skipped.",
                 file.filename, span.start
             )
         })
@@ -224,5 +261,62 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.contains("AST budget exceeded")));
+    }
+
+    #[test]
+    fn static_engine_emits_recovery_token() {
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source: "export const App = () => <div szRecover=\"csr\">x</div>;".to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert!(result.metadata.transformed);
+        assert!(result.code.contains("data-sz-recovery-token="));
+        assert_eq!(result.recovery_tokens.len(), 1);
+        assert_eq!(
+            result.recovery_tokens[0].mode,
+            crate::transform::RecoveryMode::Csr
+        );
+        assert_eq!(result.recovery_tokens[0].component, "div");
+        assert_eq!(result.recovery_tokens[0].path, "src/App.tsx:1:30");
+        assert_eq!(result.recovery_tokens[0].token.len(), 12);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn static_engine_reports_unsupported_recovery_without_token() {
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source: "export const App = ({ mode }) => <div szRecover={mode}>x</div>;".to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert!(result.recovery_tokens.is_empty());
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("szRecover")));
+    }
+
+    #[test]
+    fn static_engine_skips_already_tagged_recovery() {
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source:
+                "export const App = () => <div szRecover=\"csr\" data-sz-recovery-token=\"abc\">x</div>;"
+                    .to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert!(result.recovery_tokens.is_empty());
+        assert!(result.diagnostics.is_empty());
     }
 }

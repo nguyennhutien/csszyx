@@ -310,6 +310,8 @@ mod tests {
                 value_span: TextSpan::new(39, 44).expect("valid span"),
                 value: "block".to_string(),
             }],
+            recovery_attributes: Vec::new(),
+            unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: Vec::new(),
         };
 

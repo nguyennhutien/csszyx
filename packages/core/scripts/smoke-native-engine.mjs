@@ -112,19 +112,25 @@ function assertNativeEngineTransform(binding) {
       source:
         "const DynamicSz = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;",
     },
+    {
+      filename: path.join(repoRoot, "fixtures", "recover.tsx"),
+      source: 'const Recover = () => <div szRecover="csr">x</div>;',
+    },
   ]);
 
-  const [rewritten, noop, stringSz, arraySz, emptyArraySz, dynamicSz] = results;
+  const [rewritten, noop, stringSz, arraySz, emptyArraySz, dynamicSz, recover] =
+    results;
   if (
-    results.length !== 6 ||
+    results.length !== 7 ||
     !rewritten ||
     !noop ||
     !stringSz ||
     !arraySz ||
     !emptyArraySz ||
-    !dynamicSz
+    !dynamicSz ||
+    !recover
   ) {
-    fail(`Expected 6 transform results, received ${results.length}.`);
+    fail(`Expected 7 transform results, received ${results.length}.`);
   }
 
   if (
@@ -205,6 +211,29 @@ function assertNativeEngineTransform(binding) {
     fail(
       `Expected unsupported dynamic sz diagnostic: ${dynamicSz.diagnostics}`,
     );
+  }
+
+  if (!recover.code.includes('szRecover="csr" data-sz-recovery-token="')) {
+    fail(`Unexpected recovery code: ${recover.code}`);
+  }
+  if (recover.metadata?.transformed !== true) {
+    fail("Expected recovery result to be marked transformed.");
+  }
+  if (recover.recoveryTokens?.length !== 1) {
+    fail(
+      `Expected one recovery token, received ${recover.recoveryTokens?.length}`,
+    );
+  }
+  const [recoveryToken] = recover.recoveryTokens;
+  if (!/^[0-9a-f]{12}$/.test(recoveryToken.token)) {
+    fail(`Unexpected recovery token: ${recoveryToken.token}`);
+  }
+  if (
+    recoveryToken.mode !== "csr" ||
+    recoveryToken.component !== "div" ||
+    !recoveryToken.path.endsWith("fixtures/recover.tsx:1:27")
+  ) {
+    fail(`Unexpected recovery token data: ${JSON.stringify(recoveryToken)}`);
   }
 }
 

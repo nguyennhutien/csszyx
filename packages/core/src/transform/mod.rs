@@ -16,6 +16,8 @@ pub mod lower;
 #[allow(dead_code)]
 pub(crate) mod parser;
 #[cfg(feature = "native-engine")]
+pub(crate) mod recovery;
+#[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod rewrite;
 
@@ -29,8 +31,8 @@ pub use contract::{
     TransformResult,
 };
 pub use ir::{
-    ClassAttributeIr, IrError, JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty,
-    StaticSzValue, SzAttributeIr, TextSpan,
+    ClassAttributeIr, IrError, JsxOpeningElementIr, RecoveryAttributeIr, SourceIr, StaticSzObject,
+    StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan,
 };
 
 /// Error returned by the Rust transform scaffold.

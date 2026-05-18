@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::RecoveryMode;
+
 /// Byte span in the original UTF-8 source string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextSpan {
@@ -47,6 +49,10 @@ pub struct SourceIr {
     pub unsupported_sz_attribute_spans: Vec<TextSpan>,
     /// Static class/className attributes found in source order.
     pub class_attributes: Vec<ClassAttributeIr>,
+    /// Static `szRecover` attributes found in source order.
+    pub recovery_attributes: Vec<RecoveryAttributeIr>,
+    /// `szRecover` attribute spans that could not emit a token.
+    pub unsupported_recovery_attribute_spans: Vec<TextSpan>,
     /// JSX opening elements that contain csszyx-relevant static attributes.
     pub jsx_opening_elements: Vec<JsxOpeningElementIr>,
 }
@@ -63,6 +69,8 @@ impl SourceIr {
             sz_attributes: Vec::new(),
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
+            recovery_attributes: Vec::new(),
+            unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: Vec::new(),
         }
     }
@@ -72,6 +80,8 @@ impl SourceIr {
         self.sz_attributes.is_empty()
             && self.unsupported_sz_attribute_spans.is_empty()
             && self.class_attributes.is_empty()
+            && self.recovery_attributes.is_empty()
+            && self.unsupported_recovery_attribute_spans.is_empty()
     }
 }
 
@@ -84,6 +94,14 @@ pub struct JsxOpeningElementIr {
     pub sz_attribute_indices: Vec<usize>,
     /// Static class/className attribute index in [`SourceIr::class_attributes`].
     pub class_attribute_index: Option<usize>,
+    /// Static `szRecover` attribute index in [`SourceIr::recovery_attributes`].
+    pub recovery_attribute_index: Option<usize>,
+    /// Whether the opening element already has `data-sz-recovery-token`.
+    pub has_recovery_token_attribute: bool,
+    /// End offset of the last JSX attribute on the opening element.
+    pub last_attribute_end: Option<u32>,
+    /// String form of the JSX element name used by recovery tokens.
+    pub element_name: String,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -110,6 +128,15 @@ pub struct ClassAttributeIr {
     pub value_span: TextSpan,
     /// Raw class string exactly as parsed after JS string unescaping.
     pub value: String,
+}
+
+/// Static `szRecover` attribute.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryAttributeIr {
+    /// Full attribute span.
+    pub attribute_span: TextSpan,
+    /// Recovery mode requested by the attribute.
+    pub mode: RecoveryMode,
 }
 
 /// Ordered static sz object.
@@ -251,10 +278,16 @@ mod tests {
                 value_span: TextSpan::new(65, 70).expect("valid span"),
                 value: "block".to_string(),
             }],
+            recovery_attributes: Vec::new(),
+            unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: vec![JsxOpeningElementIr {
                 opening_span: TextSpan::new(1, 73).expect("valid span"),
                 sz_attribute_indices: vec![0],
                 class_attribute_index: Some(0),
+                recovery_attribute_index: None,
+                has_recovery_token_attribute: false,
+                last_attribute_end: Some(72),
+                element_name: "div".to_string(),
             }],
         };
 
