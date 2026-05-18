@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { transformSourceCode } from '../packages/compiler/src/transform.js';
 import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
 import { transformRust } from '../packages/compiler/src/transform-rust.js';
+import { loadNativeBinding } from '../packages/core/native/index.js';
 import {
     createTransformCacheKey,
     readTransformCache,
@@ -71,6 +72,57 @@ const options = readOptions();
 const startedAt = new Date();
 const nodeVersion = process.version;
 const platform = `${process.platform}-${process.arch}`;
+
+const NATIVE_RUST_AVAILABLE = tryPreloadRustBinding();
+
+/**
+ * Attempt to preload the Rust native addon from the workspace platform
+ * package. Returns true when `transformBatch()` is reachable through
+ * `transformRust()`. Returns false silently when the addon has not been
+ * built — the bench still runs, Rust rows fall back to the
+ * not-implemented placeholder, and the report makes the gap visible
+ * instead of crashing the suite.
+ *
+ * @returns true when the native binding loaded and answered a sentinel call.
+ */
+function tryPreloadRustBinding(): boolean {
+    const libc = process.platform === 'linux' && isMusl() ? 'musl' : 'gnu';
+    const triple =
+        process.platform === 'linux'
+            ? `${process.platform}-${process.arch}-${libc}`
+            : process.platform === 'win32'
+              ? `${process.platform}-${process.arch}-msvc`
+              : `${process.platform}-${process.arch}`;
+    const packageDir = resolve(REPO_ROOT, 'packages', `core-${triple}`);
+    try {
+        loadNativeBinding(packageDir);
+    } catch {
+        return false;
+    }
+    // Final smoke: `transformRust` must reach the binding through the public
+    // entry without throwing `OxcRustNotImplementedError`.
+    try {
+        transformRust('const X = () => <div sz={{ p: 4 }} />;', '/bench/preload.tsx');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Detect musl libc on Linux so the platform-package directory name
+ * matches the loader's expectation.
+ *
+ * @returns true on musl-based Linux, false on glibc or non-Linux hosts.
+ */
+function isMusl(): boolean {
+    const report = process.report?.getReport?.();
+    if (!report || typeof report !== 'object') {
+        return false;
+    }
+    const header = (report as { header?: { glibcVersionRuntime?: string } }).header;
+    return !header?.glibcVersionRuntime;
+}
 
 const cacheReport = runCacheBenchmarks(options);
 const parserReport = runParserBenchmarks(options);
@@ -308,14 +360,33 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 'Default oxc-parser + magic-string path.',
             ),
         );
-        assertRustScaffoldThrows(files[0]?.source ?? '', files[0]?.filename ?? '/bench/rust.tsx');
-        stats.push(
-            notImplementedCase(
-                `parser/${size}/rust-transformRust`,
-                size,
-                'Rust maximum-speed parser path is wired as an explicit scaffold and currently throws.',
-            ),
-        );
+        if (NATIVE_RUST_AVAILABLE) {
+            stats.push(
+                measureCase(
+                    `parser/${size}/rust-transformRust`,
+                    size,
+                    opts,
+                    () => {
+                        for (const file of files) {
+                            transformRust(file.source, file.filename);
+                        }
+                    },
+                    'Rust native maximum-speed parser path (oxc-parser + string_wizard via napi-rs).',
+                ),
+            );
+        } else {
+            assertRustScaffoldThrows(
+                files[0]?.source ?? '',
+                files[0]?.filename ?? '/bench/rust.tsx',
+            );
+            stats.push(
+                notImplementedCase(
+                    `parser/${size}/rust-transformRust`,
+                    size,
+                    'Rust native addon not built for this host. Run `pnpm --filter @csszyx/core native:build -- --native-engine` to enable measured Rust rows.',
+                ),
+            );
+        }
     }
 
     for (const fixture of fixtureSet) {
@@ -341,13 +412,27 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 'Single-fixture oxc path timing.',
             ),
         );
-        stats.push(
-            notImplementedCase(
-                `parser/fixture/${fixture.name}/rust`,
-                1,
-                'Single-fixture Rust scaffold row; not measured until the Rust core lands.',
-            ),
-        );
+        if (NATIVE_RUST_AVAILABLE) {
+            stats.push(
+                measureCase(
+                    `parser/fixture/${fixture.name}/rust`,
+                    1,
+                    opts,
+                    () => {
+                        transformRust(fixture.source, `/bench/${fixture.name}.tsx`);
+                    },
+                    'Single-fixture Rust path timing.',
+                ),
+            );
+        } else {
+            stats.push(
+                notImplementedCase(
+                    `parser/fixture/${fixture.name}/rust`,
+                    1,
+                    'Rust native addon not built for this host.',
+                ),
+            );
+        }
     }
 
     return stats;
@@ -661,9 +746,12 @@ function renderParserReport(stats: BenchStats[]): string {
             const babel = findStat(stats, `parser/${size}/babel-transformSourceCode`);
             const oxc = findStat(stats, `parser/${size}/oxc-transformOxc`);
             const rust = findStat(stats, `parser/${size}/rust-transformRust`);
-            return `- ${size} mixed fixtures: oxc is ${formatRatio(
-                babel.medianMs / oxc.medianMs,
-            )}x faster than Babel by median batch time; ${rust.name} is ${rust.status}.`;
+            const oxcRatio = `oxc is ${formatRatio(babel.medianMs / oxc.medianMs)}x faster than Babel`;
+            const rustClause =
+                rust.status === 'measured'
+                    ? `rust is ${formatRatio(babel.medianMs / rust.medianMs)}x faster than Babel and ${formatRatio(oxc.medianMs / rust.medianMs)}x faster than oxc-JS`
+                    : `${rust.name} is ${rust.status}`;
+            return `- ${size} mixed fixtures: ${oxcRatio} by median batch time; ${rustClause}.`;
         })
         .join('\n');
 
