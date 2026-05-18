@@ -15,6 +15,12 @@ const PACKAGE_BY_PLATFORM = new Map([
 
 let cachedBinding;
 let cachedPackageName;
+// Memoize the platform-detected package name so we do not pay
+// `process.report.getReport()` (~1.2 ms each on linux-arm64) on every
+// hot-loop `transformBatch()` call. The host platform does not change
+// at runtime, so a single resolution is enough.
+let memoizedAutoPackageName;
+let memoizedAutoResolved = false;
 
 export class CsszyxNativeUnavailableError extends Error {
     constructor(message, packageName = getNativePackageName()) {
@@ -35,19 +41,25 @@ export class CsszyxNativeUnavailableError extends Error {
 }
 
 export function getNativePackageName() {
+    if (memoizedAutoResolved) {
+        return memoizedAutoPackageName;
+    }
     const platform = process.platform;
     const arch = process.arch;
+    let resolved = null;
 
     if (platform === 'linux') {
         const libc = isMusl() ? 'musl' : 'gnu';
-        return PACKAGE_BY_PLATFORM.get(`${platform}-${arch}-${libc}`) ?? null;
+        resolved = PACKAGE_BY_PLATFORM.get(`${platform}-${arch}-${libc}`) ?? null;
+    } else if (platform === 'win32') {
+        resolved = PACKAGE_BY_PLATFORM.get(`${platform}-${arch}-msvc`) ?? null;
+    } else {
+        resolved = PACKAGE_BY_PLATFORM.get(`${platform}-${arch}`) ?? null;
     }
 
-    if (platform === 'win32') {
-        return PACKAGE_BY_PLATFORM.get(`${platform}-${arch}-msvc`) ?? null;
-    }
-
-    return PACKAGE_BY_PLATFORM.get(`${platform}-${arch}`) ?? null;
+    memoizedAutoPackageName = resolved;
+    memoizedAutoResolved = true;
+    return resolved;
 }
 
 export function loadNativeBinding(packageName = getNativePackageName()) {
