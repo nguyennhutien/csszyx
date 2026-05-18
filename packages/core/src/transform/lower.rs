@@ -5,7 +5,7 @@
 //! before any source mutation ships.
 
 use super::{
-    generated::tables::{boolean_class, is_boolean_shorthand, property_prefix, variant_prefix},
+    generated::tables::{boolean_class, property_prefix, variant_prefix},
     StaticSzObject, StaticSzValue,
 };
 
@@ -53,16 +53,10 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
     let class_key = property_prefix(key).unwrap_or(key);
 
     match value {
-        StaticSzValue::Boolean(true) => {
-            if !is_boolean_shorthand(key) {
-                return None;
-            }
-
-            Some(format!(
-                "{prefix}{}",
-                boolean_class(key).unwrap_or(class_key)
-            ))
-        }
+        StaticSzValue::Boolean(true) => Some(format!(
+            "{prefix}{}",
+            boolean_class(key).unwrap_or(class_key)
+        )),
         StaticSzValue::Boolean(false) | StaticSzValue::Object(_) => None,
         StaticSzValue::Number(value) => Some(format_number_class(class_key, *value, prefix)),
         StaticSzValue::String(value) => {

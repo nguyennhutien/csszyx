@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
+use crate::transform::generated::tables::{boolean_class, property_prefix, variant_prefix};
+
 /// Value types supported by the sz prop.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
@@ -50,10 +52,11 @@ fn process_sz_object(obj: &HashMap<String, SzValue>, prefix: &str, classes: &mut
                 }
             }
             SzValue::Nested(nested_obj) => {
+                let variant = variant_prefix(key).unwrap_or(key);
                 let new_prefix = if prefix.is_empty() {
-                    format!("{key}:")
+                    format!("{variant}:")
                 } else {
-                    format!("{prefix}{key}:")
+                    format!("{prefix}{variant}:")
                 };
                 process_sz_object(nested_obj, &new_prefix, classes);
             }
@@ -62,8 +65,13 @@ fn process_sz_object(obj: &HashMap<String, SzValue>, prefix: &str, classes: &mut
 }
 
 fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> String {
+    let class_key = property_prefix(key).unwrap_or(key);
+
     match value {
-        PrimitiveValue::Bool(true) => format!("{prefix}{key}"),
+        PrimitiveValue::Bool(true) => {
+            let class_name = boolean_class(key).unwrap_or(class_key);
+            format!("{prefix}{class_name}")
+        }
         PrimitiveValue::Bool(false) => String::new(),
         PrimitiveValue::Number(n) => {
             // Correct negative value handling: m: -4 -> -m-4
@@ -72,16 +80,16 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
                 if abs_val.fract() == 0.0 {
                     #[allow(clippy::cast_possible_truncation)]
                     let int_val = abs_val as i64; // Safe: CSS values are small integers
-                    format!("{prefix}-{key}-{int_val}")
+                    format!("{prefix}-{class_key}-{int_val}")
                 } else {
-                    format!("{prefix}-{key}-{abs_val}")
+                    format!("{prefix}-{class_key}-{abs_val}")
                 }
             } else if n.fract() == 0.0 {
                 #[allow(clippy::cast_possible_truncation)]
                 let int_val = *n as i64; // Safe: CSS values are small integers
-                format!("{prefix}{key}-{int_val}")
+                format!("{prefix}{class_key}-{int_val}")
             } else {
-                format!("{prefix}{key}-{n}")
+                format!("{prefix}{class_key}-{n}")
             }
         }
         PrimitiveValue::String(s) => {
@@ -105,10 +113,10 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
 
             if is_negative {
                 // Negative string: m: "-4" -> -m-4
-                format!("{prefix}-{key}-{final_val}")
+                format!("{prefix}-{class_key}-{final_val}")
             } else {
                 // Positive string: bg: "red-500" -> bg-red-500
-                format!("{prefix}{key}-{final_val}")
+                format!("{prefix}{class_key}-{final_val}")
             }
         }
     }
@@ -221,6 +229,25 @@ mod tests {
         process_sz_object(&obj, "", &mut classes);
 
         assert_eq!(classes[0], "hover:bg-blue-500");
+    }
+
+    #[test]
+    fn test_generated_property_and_boolean_maps() {
+        let mut obj = HashMap::new();
+        obj.insert(
+            "start".to_string(),
+            SzValue::Primitive(PrimitiveValue::Number(4.0)),
+        );
+        obj.insert(
+            "inlineBlock".to_string(),
+            SzValue::Primitive(PrimitiveValue::Bool(true)),
+        );
+
+        let mut classes = Vec::new();
+        process_sz_object(&obj, "", &mut classes);
+
+        assert!(classes.contains(&"inset-s-4".to_string()));
+        assert!(classes.contains(&"inline-block".to_string()));
     }
 
     #[test]
