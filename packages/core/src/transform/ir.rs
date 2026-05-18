@@ -43,6 +43,8 @@ pub struct SourceIr {
     pub source_span: TextSpan,
     /// JSX `sz` attributes found in source order.
     pub sz_attributes: Vec<SzAttributeIr>,
+    /// JSX `sz` attribute spans that could not be lowered statically.
+    pub unsupported_sz_attribute_spans: Vec<TextSpan>,
     /// Static class/className attributes found in source order.
     pub class_attributes: Vec<ClassAttributeIr>,
     /// JSX opening elements that contain csszyx-relevant static attributes.
@@ -59,6 +61,7 @@ impl SourceIr {
                 end: source_len,
             },
             sz_attributes: Vec::new(),
+            unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
             jsx_opening_elements: Vec::new(),
         }
@@ -66,7 +69,9 @@ impl SourceIr {
 
     /// Returns true when the parser found no csszyx-relevant JSX attributes.
     pub const fn is_noop(&self) -> bool {
-        self.sz_attributes.is_empty() && self.class_attributes.is_empty()
+        self.sz_attributes.is_empty()
+            && self.unsupported_sz_attribute_spans.is_empty()
+            && self.class_attributes.is_empty()
     }
 }
 
@@ -240,6 +245,7 @@ mod tests {
                 literal_class_name: None,
                 rewrites_empty_class: false,
             }],
+            unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {
                 attribute_span: TextSpan::new(54, 72).expect("valid span"),
                 value_span: TextSpan::new(65, 70).expect("valid span"),

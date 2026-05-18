@@ -77,6 +77,10 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
                     "sz" => {
                         if let Some(index) = self.collect_sz_attribute(attr) {
                             sz_attribute_indices.push(index);
+                        } else {
+                            self.ir
+                                .unsupported_sz_attribute_spans
+                                .push(text_span(attr.span));
                         }
                     }
                     "class" | "className" => {
@@ -543,6 +547,7 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty());
         assert!(parsed.ir.sz_attributes.is_empty());
+        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
     }
 
     #[test]

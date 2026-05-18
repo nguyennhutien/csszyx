@@ -25,6 +25,7 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
     let parsed = parse_source_shell(file);
     let lowered = lower_source_ir_classes(&parsed.ir);
     let mut diagnostics = parsed.diagnostics;
+    diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     let rewritten_code = if diagnostics.is_empty() {
         rewrite_static_sz_attributes(&file.source, &parsed.ir).ok()
     } else {
@@ -53,6 +54,18 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
         },
         parser_path: ParserPath::Static,
     }
+}
+
+fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.unsupported_sz_attribute_spans
+        .iter()
+        .map(|span| {
+            format!(
+                "[csszyx] Rust native transform at {}:{}: unsupported dynamic sz attribute; leaving file unchanged for now.",
+                file.filename, span.start
+            )
+        })
+        .collect()
 }
 
 fn noop_result(file: &TransformFile) -> TransformResult {
@@ -150,5 +163,38 @@ mod tests {
         assert!(!result.diagnostics.is_empty());
         assert!(result.classes.is_empty());
         assert!(!result.metadata.transformed);
+    }
+
+    #[test]
+    fn static_engine_reports_unsupported_dynamic_sz_without_rewrite() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = ({ styles }) => <div sz={styles} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert!(result.classes.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert!(result.diagnostics[0].contains("unsupported dynamic sz attribute"));
+    }
+
+    #[test]
+    fn static_engine_avoids_partial_rewrite_when_any_sz_is_unsupported() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const App = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;"
+                    .to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert_eq!(result.classes, ["p-4"]);
+        assert_eq!(result.diagnostics.len(), 1);
     }
 }

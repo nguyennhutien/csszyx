@@ -304,6 +304,7 @@ mod tests {
                 literal_class_name: None,
                 rewrites_empty_class: false,
             }],
+            unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {
                 attribute_span: TextSpan::new(28, 46).expect("valid span"),
                 value_span: TextSpan::new(39, 44).expect("valid span"),
