@@ -7,6 +7,7 @@
 mod contract;
 pub(crate) mod fast_path;
 mod ir;
+pub mod lower;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod parser;
