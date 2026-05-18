@@ -73,6 +73,10 @@ pub mod transform;
 /// Mangle map checksum module for SSR/CSR integrity.
 pub mod mangle;
 
+/// NAPI entrypoints for the future Node-native transform package.
+#[cfg(feature = "native")]
+pub mod native;
+
 // Re-export main APIs
 pub use collision::{compute_dual_hash, CollisionDetector, WasmCollisionDetector};
 pub use encoder::encode;

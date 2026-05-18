@@ -1,0 +1,155 @@
+//! NAPI entrypoints for the future Node-native transform package.
+//!
+//! The module is compiled only with the `native` Cargo feature. It bridges the
+//! JavaScript batch API to the Rust transform contract without implementing the
+//! parser or rewrite engine yet.
+
+use napi_derive::napi;
+
+use crate::transform::{
+    transform_batch, ParserPath, RecoveryMode, TransformFile, TransformProducer, TransformResult,
+};
+
+/// Source file passed from JavaScript to the native transform.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeTransformFile {
+    /// Absolute or project-relative filename used for diagnostics and cache identity.
+    pub filename: String,
+    /// Source module contents.
+    pub source: String,
+}
+
+/// Recovery token emitted by the native transform.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeRecoveryToken {
+    /// Public token inserted into generated code.
+    pub token: String,
+    /// Recovery mode encoded in the token.
+    pub mode: String,
+    /// Component label associated with the token.
+    pub component: String,
+    /// Source path associated with the token.
+    pub path: String,
+}
+
+/// Metadata describing which runtime helpers a native transform result needs.
+#[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
+#[napi(object)]
+pub struct NativeTransformMetadata {
+    /// Whether source code changed.
+    pub transformed: bool,
+    /// Whether the result imports the runtime _sz helper.
+    pub uses_runtime: bool,
+    /// Whether the result imports the runtime _szMerge helper.
+    pub uses_merge: bool,
+    /// Whether the result imports the runtime color-var helper.
+    pub uses_color_var: bool,
+    /// Producer identity for cache safety.
+    pub producer: String,
+    /// Whether native AST budget protection fired.
+    pub ast_budget_exceeded: bool,
+}
+
+/// Transform output shape returned to JavaScript per source file.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeTransformResult {
+    /// Rewritten source code.
+    pub code: String,
+    /// Source map payload once native rewriting lands.
+    pub map: Option<String>,
+    /// Generated csszyx/Tailwind classes.
+    pub classes: Vec<String>,
+    /// Static className/class strings discovered in the source.
+    pub raw_class_names: Vec<String>,
+    /// Non-fatal transform diagnostics.
+    pub diagnostics: Vec<String>,
+    /// Recovery token metadata emitted for hydration safety.
+    pub recovery_tokens: Vec<NativeRecoveryToken>,
+    /// Native transform metadata used by unplugin and benchmarks.
+    pub metadata: NativeTransformMetadata,
+    /// Native parser lane used for this file.
+    pub parser_path: String,
+}
+
+/// Transforms a batch of files with the native Rust core.
+///
+/// # Errors
+///
+/// Returns a NAPI error while the Rust transform engine is still scaffolded.
+#[napi(js_name = "transformBatch")]
+pub fn transform_batch_native(
+    files: Vec<NativeTransformFile>,
+) -> napi::Result<Vec<NativeTransformResult>> {
+    let files = files
+        .into_iter()
+        .map(|file| TransformFile {
+            filename: file.filename,
+            source: file.source,
+        })
+        .collect::<Vec<_>>();
+
+    transform_batch(&files)
+        .map(|results| {
+            results
+                .into_iter()
+                .map(NativeTransformResult::from)
+                .collect()
+        })
+        .map_err(|err| napi::Error::from_reason(err.to_string()))
+}
+
+impl From<TransformResult> for NativeTransformResult {
+    fn from(result: TransformResult) -> Self {
+        Self {
+            code: result.code,
+            map: result.map.map(|map| map.to_string()),
+            classes: result.classes,
+            raw_class_names: result.raw_class_names,
+            diagnostics: result.diagnostics,
+            recovery_tokens: result
+                .recovery_tokens
+                .into_iter()
+                .map(|token| NativeRecoveryToken {
+                    token: token.token,
+                    mode: recovery_mode_to_js(token.mode).to_string(),
+                    component: token.component,
+                    path: token.path,
+                })
+                .collect(),
+            metadata: NativeTransformMetadata {
+                transformed: result.metadata.transformed,
+                uses_runtime: result.metadata.uses_runtime,
+                uses_merge: result.metadata.uses_merge,
+                uses_color_var: result.metadata.uses_color_var,
+                producer: producer_to_js(result.metadata.producer).to_string(),
+                ast_budget_exceeded: result.metadata.ast_budget_exceeded,
+            },
+            parser_path: parser_path_to_js(result.parser_path).to_string(),
+        }
+    }
+}
+
+const fn recovery_mode_to_js(mode: RecoveryMode) -> &'static str {
+    match mode {
+        RecoveryMode::Csr => "csr",
+        RecoveryMode::DevOnly => "dev-only",
+    }
+}
+
+const fn producer_to_js(producer: TransformProducer) -> &'static str {
+    match producer {
+        TransformProducer::Rust => "rust",
+    }
+}
+
+const fn parser_path_to_js(path: ParserPath) -> &'static str {
+    match path {
+        ParserPath::FastRegex => "fastRegex",
+        ParserPath::Static => "static",
+        ParserPath::Semantic => "semantic",
+    }
+}

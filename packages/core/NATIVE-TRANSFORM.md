@@ -45,6 +45,10 @@ cargo check --manifest-path packages/core/Cargo.toml --features native
 cargo clippy --manifest-path packages/core/Cargo.toml --all-targets --features native -- -D warnings
 ```
 
+Do not use `cargo test --features native` as a local gate unless it runs inside
+a Node addon harness. The napi crate references Node-provided symbols that are
+not available when Cargo links a standalone Rust test binary.
+
 ## Export Shape
 
 The current public exports remain stable:
@@ -116,6 +120,12 @@ packages/core/src/transform/
   parser.rs           # oxc_parser path
   semantic.rs         # oxc_semantic path
   rewrite.rs          # span replacement/string mutation
+```
+
+The napi bridge lives separately:
+
+```text
+packages/core/src/native.rs # #[napi] entrypoints, feature-gated by native
 ```
 
 The JS boundary should receive a compact result object and no AST. AST values
