@@ -24,9 +24,15 @@ hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde-wasm-bindgen = "0.6.5"
+napi = { version = "3.9.0", default-features = false, features = ["napi4"], optional = true }
+napi-derive = { version = "3.5.6", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "=0.3.43"
+
+[features]
+default = []
+native = ["dep:napi", "dep:napi-derive"]
 
 # Note: [profile.release] lives in the workspace root Cargo.toml.
 # Cargo ignores profile sections in non-root workspace members and emits a
@@ -44,4 +50,3 @@ wasm-opt = false
 
 [lints]
 workspace = true
-

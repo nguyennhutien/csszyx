@@ -25,6 +25,26 @@ install. Source-build fallback can be revisited later, but it is not part of the
 first native boundary because install-time compilation adds CI and user-machine
 risk.
 
+## Dependency Pins
+
+Native build tooling is pinned instead of ranged:
+
+| Dependency     | Pin     | Where                                                | Reason                                                    |
+| -------------- | ------- | ---------------------------------------------------- | --------------------------------------------------------- |
+| `@napi-rs/cli` | `3.6.2` | `packages/core/package.json`                         | Current stable CLI used only by core build/release tasks. |
+| `napi`         | `3.9.0` | `packages/core/Cargo.toml` optional `native` feature | N-API binding crate; not compiled by default WASM builds. |
+| `napi-derive`  | `3.5.6` | `packages/core/Cargo.toml` optional `native` feature | Procedural macros for future native exports.              |
+
+The Cargo dependencies are behind `features.native`; default `cargo test` and
+the existing WASM build path must remain independent from napi. CI should check
+both:
+
+```bash
+cargo test --manifest-path packages/core/Cargo.toml
+cargo check --manifest-path packages/core/Cargo.toml --features native
+cargo clippy --manifest-path packages/core/Cargo.toml --all-targets --features native -- -D warnings
+```
+
 ## Export Shape
 
 The current public exports remain stable:
