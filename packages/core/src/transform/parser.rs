@@ -103,16 +103,17 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
 
 impl CsszyxIrVisitor<'_, '_> {
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
-        let (object, value_span, literal_class_name) = match &attr.value {
+        let (object, value_span, literal_class_name, rewrites_empty_class) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
                 string_value_span(value.span, self.source),
                 Some(value.value.to_string()),
+                true,
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
-                let (object, value_span) =
+                let (object, value_span, rewrites_empty_class) =
                     static_object_from_jsx_expression(&container.expression)?;
-                (object, value_span, None)
+                (object, value_span, None, rewrites_empty_class)
             }
             _ => return None,
         };
@@ -123,6 +124,7 @@ impl CsszyxIrVisitor<'_, '_> {
             value_span,
             object,
             literal_class_name,
+            rewrites_empty_class,
         });
         Some(index)
     }
@@ -151,15 +153,17 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
 
 fn static_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
-) -> Option<(StaticSzObject, TextSpan)> {
+) -> Option<(StaticSzObject, TextSpan, bool)> {
     match expression {
         JSXExpression::ObjectExpression(object) => Some((
             static_object_from_object_expression(object)?,
             text_span(object.span),
+            false,
         )),
         JSXExpression::ArrayExpression(array) => Some((
             static_object_from_array_expression(array)?,
             text_span(array.span),
+            true,
         )),
         JSXExpression::ParenthesizedExpression(parenthesized) => {
             static_object_from_expression(&parenthesized.expression)
@@ -170,15 +174,17 @@ fn static_object_from_jsx_expression(
 
 fn static_object_from_expression(
     expression: &Expression<'_>,
-) -> Option<(StaticSzObject, TextSpan)> {
+) -> Option<(StaticSzObject, TextSpan, bool)> {
     match expression {
         Expression::ObjectExpression(object) => Some((
             static_object_from_object_expression(object)?,
             text_span(object.span),
+            false,
         )),
         Expression::ArrayExpression(array) => Some((
             static_object_from_array_expression(array)?,
             text_span(array.span),
+            true,
         )),
         Expression::ParenthesizedExpression(parenthesized) => {
             static_object_from_expression(&parenthesized.expression)
@@ -437,6 +443,21 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.classes, ["flex", "p-4"]);
         assert_eq!(parsed.ir.sz_attributes[0].object.properties.len(), 2);
+    }
+
+    #[test]
+    fn parser_shell_keeps_empty_static_array_rewriteable() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div sz={[false, null]} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(lowered.classes.is_empty());
+        assert!(parsed.ir.sz_attributes[0].rewrites_empty_class);
     }
 
     #[test]

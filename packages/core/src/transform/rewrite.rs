@@ -34,11 +34,13 @@ pub fn rewrite_static_sz_attributes(
         }
 
         let mut classes = Vec::new();
+        let mut rewrites_empty_class = false;
         for index in &element.sz_attribute_indices {
             let attribute = &ir.sz_attributes[*index];
             classes.extend(lower_sz_attribute_classes(attribute));
+            rewrites_empty_class |= attribute.rewrites_empty_class;
         }
-        if classes.is_empty() {
+        if classes.is_empty() && !rewrites_empty_class {
             return Err(StaticRewriteUnsupported::EmptyClassList);
         }
 
@@ -192,6 +194,17 @@ mod tests {
         assert_eq!(
             rewritten,
             "export const App = () => <div className=\"flex p-4\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_empty_static_array_sz_attribute() {
+        let source = "export const App = () => <div sz={[false, null]} />;";
+        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"\" />;"
         );
     }
 

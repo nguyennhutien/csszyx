@@ -102,11 +102,22 @@ function assertNativeEngineTransform(binding) {
       source:
         "const ArraySz = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;",
     },
+    {
+      filename: path.join(repoRoot, "fixtures", "empty-array-sz.tsx"),
+      source: "const EmptyArraySz = () => <div sz={[false, null]} />;",
+    },
   ]);
 
-  const [rewritten, noop, stringSz, arraySz] = results;
-  if (results.length !== 4 || !rewritten || !noop || !stringSz || !arraySz) {
-    fail(`Expected 4 transform results, received ${results.length}.`);
+  const [rewritten, noop, stringSz, arraySz, emptyArraySz] = results;
+  if (
+    results.length !== 5 ||
+    !rewritten ||
+    !noop ||
+    !stringSz ||
+    !arraySz ||
+    !emptyArraySz
+  ) {
+    fail(`Expected 5 transform results, received ${results.length}.`);
   }
 
   if (
@@ -154,6 +165,17 @@ function assertNativeEngineTransform(binding) {
   }
   if (JSON.stringify(arraySz.classes) !== JSON.stringify(["flex", "p-4"])) {
     fail(`Unexpected array sz classes: ${JSON.stringify(arraySz.classes)}`);
+  }
+
+  if (
+    emptyArraySz.code !== 'const EmptyArraySz = () => <div className="" />;'
+  ) {
+    fail(`Unexpected empty array sz code: ${emptyArraySz.code}`);
+  }
+  if (JSON.stringify(emptyArraySz.classes) !== JSON.stringify([])) {
+    fail(
+      `Unexpected empty array sz classes: ${JSON.stringify(emptyArraySz.classes)}`,
+    );
   }
 }
 

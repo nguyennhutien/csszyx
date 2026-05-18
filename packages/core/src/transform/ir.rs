@@ -92,6 +92,8 @@ pub struct SzAttributeIr {
     pub object: StaticSzObject,
     /// Static class string from `sz="..."` syntax.
     pub literal_class_name: Option<String>,
+    /// Whether an empty class result should still rewrite to `className=""`.
+    pub rewrites_empty_class: bool,
 }
 
 /// Static class/className attribute.
@@ -236,6 +238,7 @@ mod tests {
                 value_span: TextSpan::new(9, 51).expect("valid span"),
                 object,
                 literal_class_name: None,
+                rewrites_empty_class: false,
             }],
             class_attributes: vec![ClassAttributeIr {
                 attribute_span: TextSpan::new(54, 72).expect("valid span"),

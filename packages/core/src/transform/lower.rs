@@ -302,6 +302,7 @@ mod tests {
                     }],
                 },
                 literal_class_name: None,
+                rewrites_empty_class: false,
             }],
             class_attributes: vec![ClassAttributeIr {
                 attribute_span: TextSpan::new(28, 46).expect("valid span"),
