@@ -93,11 +93,15 @@ function assertNativeEngineTransform(binding) {
       filename: path.join(repoRoot, "fixtures", "plain.tsx"),
       source: 'const Plain = () => <div className="x" />;',
     },
+    {
+      filename: path.join(repoRoot, "fixtures", "string-sz.tsx"),
+      source: 'const StringSz = () => <div sz="px-4 py-2" />;',
+    },
   ]);
 
-  const [rewritten, noop] = results;
-  if (results.length !== 2 || !rewritten || !noop) {
-    fail(`Expected 2 transform results, received ${results.length}.`);
+  const [rewritten, noop, stringSz] = results;
+  if (results.length !== 3 || !rewritten || !noop || !stringSz) {
+    fail(`Expected 3 transform results, received ${results.length}.`);
   }
 
   if (
@@ -129,6 +133,15 @@ function assertNativeEngineTransform(binding) {
   }
   if (noop.parserPath !== "fastRegex") {
     fail(`Expected fastRegex parserPath, received ${noop.parserPath}.`);
+  }
+
+  if (
+    stringSz.code !== 'const StringSz = () => <div className="px-4 py-2" />;'
+  ) {
+    fail(`Unexpected string sz code: ${stringSz.code}`);
+  }
+  if (JSON.stringify(stringSz.classes) !== JSON.stringify(["px-4", "py-2"])) {
+    fail(`Unexpected string sz classes: ${JSON.stringify(stringSz.classes)}`);
   }
 }
 

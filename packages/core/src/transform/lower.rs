@@ -23,7 +23,7 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
     let classes = ir
         .sz_attributes
         .iter()
-        .flat_map(|attr| lower_static_sz_object(&attr.object))
+        .flat_map(lower_sz_attribute_classes)
         .collect();
     let raw_class_names = ir
         .class_attributes
@@ -35,6 +35,20 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
         classes,
         raw_class_names,
     }
+}
+
+/// Lower one static `sz` attribute into classes.
+pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<String> {
+    let mut classes = attribute
+        .literal_class_name
+        .as_deref()
+        .into_iter()
+        .flat_map(str::split_whitespace)
+        .filter(|class_name| !class_name.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    classes.extend(lower_static_sz_object(&attribute.object));
+    classes
 }
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
@@ -287,6 +301,7 @@ mod tests {
                         value: StaticSzValue::Number(4.0),
                     }],
                 },
+                literal_class_name: None,
             }],
             class_attributes: vec![ClassAttributeIr {
                 attribute_span: TextSpan::new(28, 46).expect("valid span"),

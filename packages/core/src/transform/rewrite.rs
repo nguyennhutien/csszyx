@@ -7,7 +7,7 @@
 
 use string_wizard::{MagicString, UpdateOptions};
 
-use super::{lower::lower_static_sz_object, SourceIr};
+use super::{lower::lower_sz_attribute_classes, SourceIr};
 
 /// Reason a static IR cannot be rewritten by the current narrow slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub fn rewrite_static_sz_attributes(
         let mut classes = Vec::new();
         for index in &element.sz_attribute_indices {
             let attribute = &ir.sz_attributes[*index];
-            classes.extend(lower_static_sz_object(&attribute.object));
+            classes.extend(lower_sz_attribute_classes(attribute));
         }
         if classes.is_empty() {
             return Err(StaticRewriteUnsupported::EmptyClassList);
@@ -169,6 +169,17 @@ mod tests {
         assert_eq!(
             rewritten,
             "export const App = () => <><div className=\"p-4\" /><span className=\"x m-2\" /></>;"
+        );
+    }
+
+    #[test]
+    fn rewrites_static_string_sz_attribute() {
+        let source = "export const App = () => <div sz=\"p-4 bg-blue-500\" />;";
+        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"p-4 bg-blue-500\" />;"
         );
     }
 

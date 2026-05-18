@@ -90,6 +90,8 @@ pub struct SzAttributeIr {
     pub value_span: TextSpan,
     /// Static object extracted from the attribute.
     pub object: StaticSzObject,
+    /// Static class string from `sz="..."` syntax.
+    pub literal_class_name: Option<String>,
 }
 
 /// Static class/className attribute.
@@ -233,6 +235,7 @@ mod tests {
                 attribute_span: TextSpan::new(5, 52).expect("valid span"),
                 value_span: TextSpan::new(9, 51).expect("valid span"),
                 object,
+                literal_class_name: None,
             }],
             class_attributes: vec![ClassAttributeIr {
                 attribute_span: TextSpan::new(54, 72).expect("valid span"),

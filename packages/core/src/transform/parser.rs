@@ -103,16 +103,26 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
 
 impl CsszyxIrVisitor<'_, '_> {
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
-        let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
-            return None;
+        let (object, value_span, literal_class_name) = match &attr.value {
+            Some(JSXAttributeValue::StringLiteral(value)) => (
+                StaticSzObject::empty(),
+                string_value_span(value.span, self.source),
+                Some(value.value.to_string()),
+            ),
+            Some(JSXAttributeValue::ExpressionContainer(container)) => {
+                let (object, value_span) =
+                    static_object_from_jsx_expression(&container.expression)?;
+                (object, value_span, None)
+            }
+            _ => return None,
         };
-        let (object, value_span) = static_object_from_jsx_expression(&container.expression)?;
 
         let index = self.ir.sz_attributes.len();
         self.ir.sz_attributes.push(SzAttributeIr {
             attribute_span: text_span(attr.span),
             value_span,
             object,
+            literal_class_name,
         });
         Some(index)
     }
@@ -367,6 +377,24 @@ mod tests {
             parsed.ir.jsx_opening_elements[1].class_attribute_index,
             None
         );
+    }
+
+    #[test]
+    fn parser_shell_collects_string_sz_attribute() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div sz=\"p-4 bg-blue-500\" />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(
+            parsed.ir.sz_attributes[0].literal_class_name.as_deref(),
+            Some("p-4 bg-blue-500")
+        );
+        assert_eq!(lowered.classes, ["p-4", "bg-blue-500"]);
     }
 
     #[test]
