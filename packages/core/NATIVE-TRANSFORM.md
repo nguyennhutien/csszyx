@@ -29,16 +29,16 @@ risk.
 
 Native build tooling is pinned instead of ranged:
 
-| Dependency      | Pin       | Where                                                       | Reason                                                                                     |
-| --------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.                                  |
-| `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.                                  |
-| `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for future native exports.                                               |
-| `oxc_parser`    | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; latest checked line compatible with rustc 1.92. |
-| `oxc_semantic`  | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the future semantic path; pinned with `oxc_parser`.             |
-| `oxc_span`      | `0.126.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                                    |
-| `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                                   |
-| `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Future span overwrite engine; still under exact review before default use.                 |
+| Dependency      | Pin       | Where                                                       | Reason                                                                         |
+| --------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.                      |
+| `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.                      |
+| `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for future native exports.                                   |
+| `oxc_parser`    | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; requires rustc 1.93.                |
+| `oxc_semantic`  | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the future semantic path; pinned with `oxc_parser`. |
+| `oxc_span`      | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                        |
+| `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                       |
+| `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Future span overwrite engine; still under exact review before default use.     |
 
 The N-API dependencies are behind `features.native`, while parser/rewrite
 dependencies are behind `features.native-engine`; default `cargo test` and the
@@ -60,6 +60,9 @@ pnpm --filter @csszyx/core native:check
 Do not use `cargo test --features native` as a local gate unless it runs inside
 a Node addon harness. The napi crate references Node-provided symbols that are
 not available when Cargo links a standalone Rust test binary.
+For the same reason, CI must not use `cargo test --all-features`; run default
+Cargo tests, native-engine parser tests, and `native:check`/`check-native.mjs`
+instead.
 
 ## Export Shape
 
