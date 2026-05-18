@@ -4,8 +4,8 @@
 //! result contract without enabling source rewrite yet.
 
 use super::{
-    lower::lower_source_ir_classes, parser::parse_source_shell, ParserPath, TransformFile,
-    TransformMetadata, TransformProducer, TransformResult,
+    lower::lower_source_ir_classes, parser::parse_source_shell, rewrite::rewrite_single_static_sz,
+    ParserPath, TransformFile, TransformMetadata, TransformProducer, TransformResult,
 };
 
 /// Parse and lower a file into the native transform result shape without
@@ -14,20 +14,26 @@ pub(super) fn transform_static_classes(file: &TransformFile) -> TransformResult 
     let parsed = parse_source_shell(file);
     let lowered = lower_source_ir_classes(&parsed.ir);
     let mut diagnostics = parsed.diagnostics;
+    let rewritten_code = if diagnostics.is_empty() {
+        rewrite_single_static_sz(&file.source, &parsed.ir).ok()
+    } else {
+        None
+    };
+    let transformed = rewritten_code.is_some();
 
     if parsed.panicked {
         diagnostics.push("oxc parser panicked before csszyx lowering completed".to_string());
     }
 
     TransformResult {
-        code: file.source.clone(),
+        code: rewritten_code.unwrap_or_else(|| file.source.clone()),
         map: None,
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
         diagnostics,
         recovery_tokens: Vec::new(),
         metadata: TransformMetadata {
-            transformed: false,
+            transformed,
             uses_runtime: false,
             uses_merge: false,
             uses_color_var: false,
@@ -44,10 +50,33 @@ mod tests {
     use crate::transform::{ParserPath, TransformFile, TransformProducer};
 
     #[test]
-    fn static_engine_collects_classes_without_rewriting_source() {
+    fn static_engine_rewrites_single_static_sz_attribute() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div className=\"block\" sz={{ start: 4, hover: { bg: 'red-500' } }} />;"
+            source: "export const App = () => <div sz={{ start: 4, hover: { bg: 'red-500' } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(
+            result.code,
+            "export const App = () => <div className=\"inset-s-4 hover:bg-red-500\" />;"
+        );
+        assert!(result.metadata.transformed);
+        assert_eq!(result.metadata.producer, TransformProducer::Rust);
+        assert_eq!(result.parser_path, ParserPath::Static);
+        assert_eq!(result.classes, ["inset-s-4", "hover:bg-red-500"]);
+        assert!(result.raw_class_names.is_empty());
+        assert!(result.diagnostics.is_empty());
+        assert!(result.recovery_tokens.is_empty());
+    }
+
+    #[test]
+    fn static_engine_collects_existing_classes_without_rewriting_source() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div className=\"block\" sz={{ p: 4 }} />;"
                 .to_string(),
         };
 
@@ -55,12 +84,8 @@ mod tests {
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
-        assert_eq!(result.metadata.producer, TransformProducer::Rust);
-        assert_eq!(result.parser_path, ParserPath::Static);
-        assert_eq!(result.classes, ["inset-s-4", "hover:bg-red-500"]);
+        assert_eq!(result.classes, ["p-4"]);
         assert_eq!(result.raw_class_names, ["block"]);
-        assert!(result.diagnostics.is_empty());
-        assert!(result.recovery_tokens.is_empty());
     }
 
     #[test]

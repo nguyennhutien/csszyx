@@ -15,6 +15,9 @@ pub mod lower;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod parser;
+#[cfg(feature = "native-engine")]
+#[allow(dead_code)]
+pub(crate) mod rewrite;
 
 use fast_path::{triage_source, FastPathTriage};
 
