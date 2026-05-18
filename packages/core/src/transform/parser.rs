@@ -1,8 +1,8 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXExpression,
-    JSXOpeningElement, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
-    UnaryOperator,
+    ArrayExpression, ArrayExpressionElement, Expression, JSXAttribute, JSXAttributeItem,
+    JSXAttributeName, JSXAttributeValue, JSXExpression, JSXOpeningElement, ObjectExpression,
+    ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -157,6 +157,10 @@ fn static_object_from_jsx_expression(
             static_object_from_object_expression(object)?,
             text_span(object.span),
         )),
+        JSXExpression::ArrayExpression(array) => Some((
+            static_object_from_array_expression(array)?,
+            text_span(array.span),
+        )),
         JSXExpression::ParenthesizedExpression(parenthesized) => {
             static_object_from_expression(&parenthesized.expression)
         }
@@ -171,6 +175,10 @@ fn static_object_from_expression(
         Expression::ObjectExpression(object) => Some((
             static_object_from_object_expression(object)?,
             text_span(object.span),
+        )),
+        Expression::ArrayExpression(array) => Some((
+            static_object_from_array_expression(array)?,
+            text_span(array.span),
         )),
         Expression::ParenthesizedExpression(parenthesized) => {
             static_object_from_expression(&parenthesized.expression)
@@ -187,6 +195,23 @@ fn static_object_from_object_expression(object: &ObjectExpression<'_>) -> Option
             return None;
         };
         properties.push(static_property_from_object_property(property)?);
+    }
+
+    Some(StaticSzObject { properties })
+}
+
+fn static_object_from_array_expression(array: &ArrayExpression<'_>) -> Option<StaticSzObject> {
+    let mut properties = Vec::new();
+
+    for element in &array.elements {
+        match element {
+            ArrayExpressionElement::ObjectExpression(object) => {
+                properties.extend(static_object_from_object_expression(object)?.properties);
+            }
+            ArrayExpressionElement::BooleanLiteral(value) if !value.value => {}
+            ArrayExpressionElement::NullLiteral(_) | ArrayExpressionElement::Elision(_) => {}
+            _ => return None,
+        }
     }
 
     Some(StaticSzObject { properties })
@@ -395,6 +420,23 @@ mod tests {
             Some("p-4 bg-blue-500")
         );
         assert_eq!(lowered.classes, ["p-4", "bg-blue-500"]);
+    }
+
+    #[test]
+    fn parser_shell_lowers_static_array_sz_attribute() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;"
+                    .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.classes, ["flex", "p-4"]);
+        assert_eq!(parsed.ir.sz_attributes[0].object.properties.len(), 2);
     }
 
     #[test]

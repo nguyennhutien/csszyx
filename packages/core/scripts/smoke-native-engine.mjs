@@ -97,11 +97,16 @@ function assertNativeEngineTransform(binding) {
       filename: path.join(repoRoot, "fixtures", "string-sz.tsx"),
       source: 'const StringSz = () => <div sz="px-4 py-2" />;',
     },
+    {
+      filename: path.join(repoRoot, "fixtures", "array-sz.tsx"),
+      source:
+        "const ArraySz = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;",
+    },
   ]);
 
-  const [rewritten, noop, stringSz] = results;
-  if (results.length !== 3 || !rewritten || !noop || !stringSz) {
-    fail(`Expected 3 transform results, received ${results.length}.`);
+  const [rewritten, noop, stringSz, arraySz] = results;
+  if (results.length !== 4 || !rewritten || !noop || !stringSz || !arraySz) {
+    fail(`Expected 4 transform results, received ${results.length}.`);
   }
 
   if (
@@ -142,6 +147,13 @@ function assertNativeEngineTransform(binding) {
   }
   if (JSON.stringify(stringSz.classes) !== JSON.stringify(["px-4", "py-2"])) {
     fail(`Unexpected string sz classes: ${JSON.stringify(stringSz.classes)}`);
+  }
+
+  if (arraySz.code !== 'const ArraySz = () => <div className="flex p-4" />;') {
+    fail(`Unexpected array sz code: ${arraySz.code}`);
+  }
+  if (JSON.stringify(arraySz.classes) !== JSON.stringify(["flex", "p-4"])) {
+    fail(`Unexpected array sz classes: ${JSON.stringify(arraySz.classes)}`);
   }
 }
 

@@ -184,6 +184,18 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_static_array_sz_attribute() {
+        let source =
+            "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;";
+        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"flex p-4\" />;"
+        );
+    }
+
+    #[test]
     fn rejects_empty_class_list() {
         let source = "export const App = () => <div sz={{ bg: 'red-500/50' }} />;";
 
