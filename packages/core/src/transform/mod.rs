@@ -5,7 +5,10 @@
 //! scaffold so callers cannot mistake it for a working native transform.
 
 mod contract;
+pub(crate) mod fast_path;
 mod ir;
+
+use fast_path::{triage_source, FastPathTriage};
 
 pub use contract::{
     ParserPath, RecoveryMode, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
@@ -42,7 +45,11 @@ impl std::error::Error for TransformError {}
 /// Returns [`TransformError::NotImplemented`] until the Rust transform engine
 /// lands.
 #[allow(clippy::missing_const_for_fn)]
-pub fn transform_batch(_files: &[TransformFile]) -> Result<Vec<TransformResult>, TransformError> {
+pub fn transform_batch(files: &[TransformFile]) -> Result<Vec<TransformResult>, TransformError> {
+    let _needs_parser = files
+        .iter()
+        .any(|file| matches!(triage_source(file), FastPathTriage::NeedsParser(_)));
+
     Err(TransformError::NotImplemented)
 }
 
