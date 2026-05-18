@@ -5,6 +5,9 @@
 //! scaffold so callers cannot mistake it for a working native transform.
 
 mod contract;
+#[cfg(feature = "native-engine")]
+#[allow(dead_code)]
+pub(crate) mod engine;
 pub(crate) mod fast_path;
 pub(crate) mod generated;
 mod ir;
