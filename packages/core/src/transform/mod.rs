@@ -5,10 +5,15 @@
 //! scaffold so callers cannot mistake it for a working native transform.
 
 mod contract;
+mod ir;
 
 pub use contract::{
     ParserPath, RecoveryMode, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
     TransformResult,
+};
+pub use ir::{
+    ClassAttributeIr, IrError, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
+    SzAttributeIr, TextSpan,
 };
 
 /// Error returned by the Rust transform scaffold.

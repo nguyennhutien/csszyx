@@ -147,6 +147,7 @@ Future transform code should use these internal boundaries:
 packages/core/src/transform/
   mod.rs              # orchestration and public Rust API
   contract.rs         # serde/napi-safe request and result structs
+  ir.rs               # parser-neutral typed transform IR
   fast_path.rs        # AST-free static sz path
   parser.rs           # oxc_parser path
   semantic.rs         # oxc_semantic path
