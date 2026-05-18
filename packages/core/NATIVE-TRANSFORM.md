@@ -103,6 +103,11 @@ FreeBSD can be added after the main matrix is stable. WASM stays in the umbrella
 package and is not a substitute for the Node native transform unless a separate
 fallback mode is explicitly designed.
 
+The platform package directories are scaffolded under `packages/core-*`, but
+they are excluded from `pnpm-workspace.yaml` until the native publish matrix is
+ready. This avoids unsupported-platform warnings on every local pnpm command
+while keeping the metadata contract reviewable.
+
 ## Rust Source Layout
 
 The existing crate keeps the shared Rust kernels:

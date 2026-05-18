@@ -1,0 +1,21 @@
+{
+  "name": "@csszyx/core-linux-arm64-musl",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Linux arm64 musl native binding for @csszyx/core",
+  "license": "MIT",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "musl"
+  ],
+  "type": "commonjs",
+  "main": "./csszyx-core.linux-arm64-musl.node",
+  "files": [
+    "csszyx-core.linux-arm64-musl.node"
+  ]
+}

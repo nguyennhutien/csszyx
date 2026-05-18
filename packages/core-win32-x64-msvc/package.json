@@ -1,0 +1,18 @@
+{
+  "name": "@csszyx/core-win32-x64-msvc",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Windows x64 MSVC native binding for @csszyx/core",
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "type": "commonjs",
+  "main": "./csszyx-core.win32-x64-msvc.node",
+  "files": [
+    "csszyx-core.win32-x64-msvc.node"
+  ]
+}
