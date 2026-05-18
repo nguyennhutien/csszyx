@@ -165,6 +165,13 @@ fn static_object_from_jsx_expression(
             text_span(array.span),
             true,
         )),
+        JSXExpression::TSAsExpression(value) => static_object_from_expression(&value.expression),
+        JSXExpression::TSSatisfiesExpression(value) => {
+            static_object_from_expression(&value.expression)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            static_object_from_expression(&value.expression)
+        }
         JSXExpression::ParenthesizedExpression(parenthesized) => {
             static_object_from_expression(&parenthesized.expression)
         }
@@ -186,6 +193,11 @@ fn static_object_from_expression(
             text_span(array.span),
             true,
         )),
+        Expression::TSAsExpression(value) => static_object_from_expression(&value.expression),
+        Expression::TSSatisfiesExpression(value) => {
+            static_object_from_expression(&value.expression)
+        }
+        Expression::TSNonNullExpression(value) => static_object_from_expression(&value.expression),
         Expression::ParenthesizedExpression(parenthesized) => {
             static_object_from_expression(&parenthesized.expression)
         }
@@ -458,6 +470,35 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert!(lowered.classes.is_empty());
         assert!(parsed.ir.sz_attributes[0].rewrites_empty_class);
+    }
+
+    #[test]
+    fn parser_shell_unwraps_typescript_static_wrappers() {
+        let cases = [
+            (
+                "export const App = () => <div sz={{ p: 4 } as const} />;",
+                vec!["p-4"],
+            ),
+            (
+                "export const App = () => <div sz={{ m: 2 } satisfies Record<string, unknown>} />;",
+                vec!["m-2"],
+            ),
+            (
+                "export const App = () => <div sz={([{ flex: true }] as const)} />;",
+                vec!["flex"],
+            ),
+        ];
+
+        for (source, expected) in cases {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            assert!(parsed.diagnostics.is_empty(), "{source}");
+            assert_eq!(lowered.classes, expected, "{source}");
+        }
     }
 
     #[test]

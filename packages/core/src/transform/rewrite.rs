@@ -209,6 +209,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_typescript_wrapped_static_sz_attribute() {
+        let source = "export const App = () => <div sz={{ p: 4 } as const} />;";
+        let rewritten = rewrite_static_sz_attributes(source, &parse(source)).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className=\"p-4\" />;"
+        );
+    }
+
+    #[test]
     fn rejects_empty_class_list() {
         let source = "export const App = () => <div sz={{ bg: 'red-500/50' }} />;";
 
