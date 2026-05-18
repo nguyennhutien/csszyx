@@ -45,7 +45,7 @@ const args = [
   "--package-json-path",
   "package.json",
   "--features",
-  "native",
+  process.argv.includes("--native-engine") ? "native,native-engine" : "native",
   "--platform",
   "--no-js",
   "--no-dts-header",
