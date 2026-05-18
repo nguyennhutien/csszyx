@@ -1,7 +1,7 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Expression, JSXAttribute, JSXAttributeName, JSXAttributeValue, JSXExpression, ObjectExpression,
-    ObjectProperty, ObjectPropertyKind, PropertyKey,
+    ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -180,6 +180,7 @@ fn static_value_from_expression(expression: &Expression<'_>) -> Option<StaticSzV
     match expression {
         Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
         Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
+        Expression::UnaryExpression(value) => static_value_from_unary_expression(value),
         Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
         Expression::ObjectExpression(value) => Some(StaticSzValue::Object(
             static_object_from_object_expression(value)?,
@@ -187,6 +188,20 @@ fn static_value_from_expression(expression: &Expression<'_>) -> Option<StaticSzV
         Expression::ParenthesizedExpression(value) => {
             static_value_from_expression(&value.expression)
         }
+        _ => None,
+    }
+}
+
+fn static_value_from_unary_expression(
+    expression: &oxc_ast::ast::UnaryExpression<'_>,
+) -> Option<StaticSzValue> {
+    let Expression::NumericLiteral(value) = &expression.argument else {
+        return None;
+    };
+
+    match expression.operator {
+        UnaryOperator::UnaryNegation => Some(StaticSzValue::Number(-value.value)),
+        UnaryOperator::UnaryPlus => Some(StaticSzValue::Number(value.value)),
         _ => None,
     }
 }
@@ -299,6 +314,37 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.raw_class_names, ["block"]);
         assert_eq!(lowered.classes, ["inset-s-4", "inline-block"]);
+    }
+
+    #[test]
+    fn parser_shell_lowers_static_ir_fixture_matrix() {
+        let cases = [
+            ("sz={{ m: -2 }}", vec!["-m-2"]),
+            ("sz={{ m: +2 }}", vec!["m-2"]),
+            ("sz={{ italic: false }}", vec!["not-italic"]),
+            (
+                "sz={{ hover: { bg: 'red-500' } }}",
+                vec!["hover:bg-red-500"],
+            ),
+            (
+                "sz={{ bgImg: 'url(/hero.png)' }}",
+                vec!["bg-[url(/hero.png)]"],
+            ),
+            ("sz={{ bg: 'red-500/50' }}", vec![]),
+        ];
+
+        for (attribute, expected) in cases {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("export const App = () => <div {attribute} />;"),
+            };
+
+            let parsed = parse_source_shell(&file);
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            assert!(parsed.diagnostics.is_empty(), "{attribute}");
+            assert_eq!(lowered.classes, expected, "{attribute}");
+        }
     }
 
     #[test]
