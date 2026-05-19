@@ -120,6 +120,35 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain(' sz=');
     });
 
+    it('injects the _sz runtime import when the rust engine emits a runtime fallback', () => {
+        if (!nativeRustAvailable) {
+            return;
+        }
+
+        // Conditional spread is the canonical R4.5 shape: the Rust engine
+        // emits `className={_sz(<original>)}` and flips usesRuntime=true.
+        // The unplugin's runtime-helpers pass must read that flag and add
+        // the matching `_sz` import from @csszyx/runtime — without it the
+        // emitted code references an undefined symbol at runtime, which
+        // is the kind of silent end-to-end break that's invisible to
+        // unit tests on either side of the boundary.
+        const source = [
+            'const BASE = { p: 4 } as const;',
+            'export const App = ({ big }: { big: boolean }) =>',
+            '    <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
+        ].join('\n');
+        const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+
+        const result = prePlugin.transform.call({ warn: vi.fn() }, source, '/repo/src/App.tsx') as {
+            code: string;
+        };
+
+        expect(result.code).toContain('_sz({ ...BASE, ...(big ? { p: 8 } : {}) })');
+        expect(result.code).toMatch(
+            /import\s+\{[^}]*\b_sz\b[^}]*\}\s+from\s+['"]@csszyx\/runtime['"]/,
+        );
+    });
+
     it('lets CSSZYX_PARSER=rust override build.parser=babel', () => {
         process.env.CSSZYX_PARSER = 'rust';
 
