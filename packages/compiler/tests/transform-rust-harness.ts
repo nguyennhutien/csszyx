@@ -2,7 +2,7 @@
  * Rust transform parity harness — compares `transformRust` output against
  * `transformOxc` (the v0.8.0 default) on the same fixture set. Catches
  * silent drift as the Rust native engine grows coverage. Sister harness
- * to `oxc-parity-harness.ts`; same 4-state model but the baseline is
+ * to `oxc-parity-harness.ts`; same state model but the baseline is
  * `transformOxc` instead of `transformSourceCode` because oxc-JS is the
  * production parser that Rust must match before it can take over.
  *
@@ -68,9 +68,11 @@ export interface RustParityFixture {
      * - `surgical-parity`: classes match, code differs by formatting (rare
      *   for Rust vs oxc-JS since both go through magic-string-equivalent
      *   surgical edits; included for symmetry).
+     * - `rust-ahead`: Rust intentionally produces stricter static output than
+     *   oxc-JS for this fixture. Rust's class set must be a superset of oxc-JS.
      * - `parity`: full match — classes + code + transformed flag.
      */
-    expected: 'pending' | 'classes-only-parity' | 'surgical-parity' | 'parity';
+    expected: 'pending' | 'classes-only-parity' | 'surgical-parity' | 'rust-ahead' | 'parity';
     /** Why this fixture is pending — link to the slice that lands it. */
     pendingReason?: string;
 }
@@ -153,6 +155,10 @@ export function assertExpectedRustParity(
             `Fixture "${fixture.name}" marked as ${fixture.expected} but Rust threw: ${comparison.rustError}`,
         );
     }
+    if (fixture.expected === 'rust-ahead') {
+        assertRustAhead(fixture, comparison);
+        return;
+    }
     if (!comparison.classesEqual) {
         throw new Error(
             `Fixture "${fixture.name}" marked as ${fixture.expected} but class sets differ.\n` +
@@ -198,12 +204,36 @@ export function summariseRust(fixtures: readonly RustParityFixture[]): string {
     const parity = fixtures.filter(f => f.expected === 'parity').length;
     const surgical = fixtures.filter(f => f.expected === 'surgical-parity').length;
     const classesOnly = fixtures.filter(f => f.expected === 'classes-only-parity').length;
+    const rustAhead = fixtures.filter(f => f.expected === 'rust-ahead').length;
     const pending = fixtures.filter(f => f.expected === 'pending').length;
-    const pct = total === 0 ? 0 : Math.round(((parity + surgical + classesOnly) / total) * 100);
+    const covered = parity + surgical + classesOnly + rustAhead;
+    const pct = total === 0 ? 0 : Math.round((covered / total) * 100);
     return (
-        `Rust vs oxc-JS parity: ${pct}% — ${parity} full, ${surgical} surgical, ` +
-        `${classesOnly} classes-only, ${pending} pending (${total} total)`
+        `Rust vs oxc-JS coverage: ${pct}% — ${parity} full, ${surgical} surgical, ` +
+        `${classesOnly} classes-only, ${rustAhead} rust-ahead, ${pending} pending (${total} total)`
     );
+}
+
+function assertRustAhead(fixture: RustParityFixture, comparison: RustParityComparison): void {
+    if (!comparison.rust?.transformed) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as rust-ahead but Rust did not transform source.`,
+        );
+    }
+    if (comparison.codeEqual) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as rust-ahead but code matches oxc-JS. ` +
+                'Flip its `expected` to "parity".',
+        );
+    }
+    const rustClasses = [...comparison.rust.classes].sort();
+    if (!isSuperset(rustClasses, comparison.oxc.classes)) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as rust-ahead but Rust lost oxc-JS classes.\n` +
+                `  oxc:  [${comparison.oxc.classes.join(', ')}]\n` +
+                `  rust: [${rustClasses.join(', ')}]`,
+        );
+    }
 }
 
 /**
@@ -223,4 +253,9 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
         }
     }
     return true;
+}
+
+function isSuperset(a: readonly string[], b: readonly string[]): boolean {
+    const seen = new Set(a);
+    return b.every(item => seen.has(item));
 }

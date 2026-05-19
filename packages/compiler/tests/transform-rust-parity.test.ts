@@ -2,8 +2,8 @@
  * Rust transform parity — tracks how many fixtures the Rust native engine
  * matches `transformOxc` (the v0.8.0 production baseline). Mirrors the
  * Phase D oxc-vs-Babel parity playbook: each fixture carries an
- * `expected` state, flips from `pending` to `parity` as the Rust engine
- * grows coverage, and catches drift in both directions.
+ * `expected` state, flips from `pending` to `parity` or `rust-ahead` as the
+ * Rust engine grows coverage, and catches drift in both directions.
  *
  * The Rust engine ships as a native addon under `@csszyx/core/native` and
  * must be built once per host platform before these tests can compare
@@ -67,9 +67,7 @@ const fixtures: readonly RustParityFixture[] = [
         name: 'static-spread-literal',
         source: 'const X = () => <div sz={{ ...{ p: 4 }, m: 2 }} />;',
         filename: 'spread-literal.tsx',
-        expected: 'pending',
-        pendingReason:
-            'Rust statically flattens literal-object spreads; oxc-JS punts to runtime _sz call. Semantic divergence — Rust is ahead. Flip when oxc-JS adds the same fast path or the harness gains a "rust-ahead" state.',
+        expected: 'rust-ahead',
     },
     {
         name: 'sz-recover-csr',
@@ -155,7 +153,7 @@ describe('Rust native engine — parity vs oxc-JS', () => {
         const summary = summariseRust(fixtures);
         console.log(`\n  ${summary}\n`);
         expect(summary).toMatch(
-            /Rust vs oxc-JS parity: \d+% — \d+ full, \d+ surgical, \d+ classes-only, \d+ pending \(\d+ total\)/,
+            /Rust vs oxc-JS coverage: \d+% — \d+ full, \d+ surgical, \d+ classes-only, \d+ rust-ahead, \d+ pending \(\d+ total\)/,
         );
     });
 });
