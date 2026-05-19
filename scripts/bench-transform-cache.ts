@@ -31,6 +31,8 @@ interface CliOptions {
     iterations: number;
     /** Number of warmup iterations before measuring. */
     warmups: number;
+    /** Number of one-file edits in the HMR-shaped benchmark. */
+    hmrEdits: number;
     /** Output directory for markdown reports. */
     outDir: string;
 }
@@ -153,6 +155,7 @@ function readOptions(): CliOptions {
         sizes: [100, 1000],
         iterations: 5,
         warmups: 2,
+        hmrEdits: 1000,
         outDir: DEFAULT_OUT_DIR,
     };
 
@@ -167,6 +170,8 @@ function readOptions(): CliOptions {
             parsed.iterations = Math.max(1, Number(args[++i] ?? parsed.iterations));
         } else if (arg === '--warmups') {
             parsed.warmups = Math.max(0, Number(args[++i] ?? parsed.warmups));
+        } else if (arg === '--hmr-edits') {
+            parsed.hmrEdits = Math.max(1, Number(args[++i] ?? parsed.hmrEdits));
         } else if (arg === '--out-dir') {
             parsed.outDir = args[++i] ?? parsed.outDir;
         }
@@ -412,6 +417,67 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
         }
     }
 
+    const hmrFiles = createHmrFiles(opts.hmrEdits);
+    stats.push(
+        measureCase(
+            'parser/hmr/oxc-transformOxc',
+            opts.hmrEdits,
+            opts,
+            () => {
+                for (const file of hmrFiles) {
+                    transformOxc(file.source, file.filename);
+                }
+            },
+            'HMR-shaped baseline: one edited file per transform call through oxc-JS.',
+        ),
+    );
+    if (NATIVE_RUST_AVAILABLE) {
+        stats.push(
+            measureCase(
+                'parser/hmr/rust-transformRust',
+                opts.hmrEdits,
+                opts,
+                () => {
+                    for (const file of hmrFiles) {
+                        transformRust(file.source, file.filename);
+                    }
+                },
+                'HMR-shaped Rust path: one edited file per transformRust call.',
+            ),
+        );
+        stats.push(
+            measureCase(
+                'parser/hmr/rust-transformRustBatch1',
+                opts.hmrEdits,
+                opts,
+                () => {
+                    for (const file of hmrFiles) {
+                        const [result] = transformRustBatch([file]);
+                        if (!result) {
+                            throw new Error(`missing Rust batch result for ${file.filename}`);
+                        }
+                    }
+                },
+                'HMR-shaped Rust batch-of-one path: one napi transformBatch call per edited file.',
+            ),
+        );
+    } else {
+        stats.push(
+            notImplementedCase(
+                'parser/hmr/rust-transformRust',
+                opts.hmrEdits,
+                'Rust native addon not built for this host.',
+            ),
+        );
+        stats.push(
+            notImplementedCase(
+                'parser/hmr/rust-transformRustBatch1',
+                opts.hmrEdits,
+                'Rust native addon not built for this host.',
+            ),
+        );
+    }
+
     for (const fixture of fixtureSet) {
         stats.push(
             measureCase(
@@ -596,6 +662,23 @@ export function Plain${index}({ active }: { active: boolean }) {
   return <button className={active ? 'is-active' : 'is-idle'}>{label}</button>;
 }
 `;
+}
+
+/**
+ * Create HMR-shaped one-file edit fixtures.
+ *
+ * @param count number of simulated edits
+ * @returns TSX source variants for a single hot module
+ */
+function createHmrFiles(count: number): Array<{ filename: string; source: string }> {
+    return Array.from({ length: count }, (_, index) => ({
+        filename: '/bench/src/HotModule.tsx',
+        source: `const BASE = { p: ${index % 8}, bg: 'blue-500' } as const;
+export function HotModule({ active }: { active: boolean }) {
+  return <div sz={active ? BASE : { p: ${(index + 1) % 8}, bg: 'red-500' }} />;
+}
+`,
+    }));
 }
 
 /**
@@ -792,10 +875,13 @@ Environment:
 - Platform: ${platform}
 - Iterations: ${options.iterations}
 - Warmups: ${options.warmups}
+- HMR edits: ${options.hmrEdits}
 
 ## Summary
 
 ${speedups}
+
+${renderHmrSummary(stats)}
 
 The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path. Rust rows intentionally report not-implemented during the scaffold phase so the harness shape is ready before Rust timings exist.
 
@@ -808,9 +894,36 @@ ${rows}
 ## Interpretation
 
 - Batch rows show the expected project-level parser delta.
+- HMR rows simulate many one-file edits and should guide whether persistent
+  worker lifecycle work is worth the complexity.
 - Single-fixture rows expose which syntax shapes are expensive enough to skew a project.
 - The benchmark measures compiler transform cost only; bundler scheduling, Tailwind scanning, and mangle finalization are outside this harness.
 `;
+}
+
+/**
+ * Render the HMR-shaped benchmark summary.
+ *
+ * @param stats benchmark stats
+ * @returns markdown bullet list
+ */
+function renderHmrSummary(stats: BenchStats[]): string {
+    const oxc = findStat(stats, 'parser/hmr/oxc-transformOxc');
+    const rust = findStat(stats, 'parser/hmr/rust-transformRust');
+    const rustBatch = findStat(stats, 'parser/hmr/rust-transformRustBatch1');
+    if (rust.status !== 'measured' || rustBatch.status !== 'measured') {
+        return `- HMR-shaped ${options.hmrEdits} edits: Rust native addon not built; HMR Rust rows are not implemented.`;
+    }
+    return [
+        `- HMR-shaped ${options.hmrEdits} edits: rust is ${formatRatio(
+            oxc.medianMs / rust.medianMs,
+        )}x faster than oxc-JS.`,
+        `- HMR-shaped ${options.hmrEdits} edits: rust batch-of-one is ${formatRatio(
+            oxc.medianMs / rustBatch.medianMs,
+        )}x faster than oxc-JS and ${formatRatio(
+            rust.medianMs / rustBatch.medianMs,
+        )}x vs per-file Rust.`,
+    ].join('\n');
 }
 
 /**
