@@ -117,6 +117,28 @@ pub struct SzAttributeIr {
     pub literal_class_name: Option<String>,
     /// Whether an empty class result should still rewrite to `className=""`.
     pub rewrites_empty_class: bool,
+    /// Static ternary form — present when `sz={cond ? A : B}` lowered cleanly
+    /// with both branches collapsing to static class lists. When set, the
+    /// attribute carries no static object/literal; rewriters emit a
+    /// `className={cond ? "…" : "…"}` expression in place of the original
+    /// `sz` attribute. When unset the attribute follows the regular static
+    /// object/literal path.
+    pub ternary: Option<StaticTernaryIr>,
+}
+
+/// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
+///
+/// The test span points at the conditional expression's `test` portion in the
+/// original source so rewriters can splice the user's exact `cond` text back
+/// into the emitted `className={…}` without re-parsing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaticTernaryIr {
+    /// Source span of the ternary `test` expression.
+    pub test_span: TextSpan,
+    /// Classes produced by lowering the consequent branch, in source order.
+    pub consequent_classes: Vec<String>,
+    /// Classes produced by lowering the alternate branch, in source order.
+    pub alternate_classes: Vec<String>,
 }
 
 /// Static class/className attribute.
@@ -271,6 +293,7 @@ mod tests {
                 object,
                 literal_class_name: None,
                 rewrites_empty_class: false,
+                ternary: None,
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

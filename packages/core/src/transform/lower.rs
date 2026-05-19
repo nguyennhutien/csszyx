@@ -38,6 +38,12 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
 }
 
 /// Lower one static `sz` attribute into classes.
+///
+/// For a ternary `sz={cond ? A : B}` attribute both branches contribute to the
+/// reported class list so `result.classes` matches what oxc-JS reports today
+/// (both possible runtime outcomes flow back as static knowledge for the
+/// className manifest). The rewrite layer keeps the two branches separate
+/// when it emits source.
 pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<String> {
     let mut classes = attribute
         .literal_class_name
@@ -48,6 +54,10 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         .map(ToString::to_string)
         .collect::<Vec<_>>();
     classes.extend(lower_static_sz_object(&attribute.object));
+    if let Some(ternary) = &attribute.ternary {
+        classes.extend(ternary.consequent_classes.iter().cloned());
+        classes.extend(ternary.alternate_classes.iter().cloned());
+    }
     classes
 }
 
@@ -303,6 +313,7 @@ mod tests {
                 },
                 literal_class_name: None,
                 rewrites_empty_class: false,
+                ternary: None,
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

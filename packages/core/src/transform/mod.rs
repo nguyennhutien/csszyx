@@ -35,7 +35,7 @@ pub use contract::{
 };
 pub use ir::{
     ClassAttributeIr, IrError, JsxOpeningElementIr, RecoveryAttributeIr, SourceIr, StaticSzObject,
-    StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan,
+    StaticSzProperty, StaticSzValue, StaticTernaryIr, SzAttributeIr, TextSpan,
 };
 
 /// Error returned by the Rust transform scaffold.

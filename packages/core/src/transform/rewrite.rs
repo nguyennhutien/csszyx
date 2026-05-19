@@ -56,6 +56,17 @@ pub fn rewrite_static_sz_attributes(
         }
 
         if !element.sz_attribute_indices.is_empty() {
+            let has_ternary = element
+                .sz_attribute_indices
+                .iter()
+                .any(|index| ir.sz_attributes[*index].ternary.is_some());
+
+            if has_ternary {
+                rewrite_ternary_sz_attribute(source, ir, element, &mut magic)?;
+                rewrote = true;
+                continue;
+            }
+
             let mut classes = Vec::new();
             let mut rewrites_empty_class = false;
             for index in &element.sz_attribute_indices {
@@ -117,6 +128,44 @@ pub fn rewrite_static_sz_attributes(
     }
 
     Ok(magic.to_string())
+}
+
+/// Emit `className={cond ? "…" : "…"}` for a single ternary `sz` attribute.
+///
+/// The only supported shape is exactly one `sz={cond ? A : B}` with no
+/// companion `className`/`class` on the same element — anything more
+/// elaborate would need a `_sz(...)` runtime merge call which is not wired
+/// in this slice. Returns `Err(EmptyClassList)` to fail-closed (leave source
+/// untouched) for those combinations instead of silently joining both
+/// branches' classes into one className.
+fn rewrite_ternary_sz_attribute(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) -> Result<(), StaticRewriteUnsupported> {
+    if element.sz_attribute_indices.len() != 1 || element.class_attribute_index.is_some() {
+        return Err(StaticRewriteUnsupported::EmptyClassList);
+    }
+    let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
+    let ternary = only_attribute
+        .ternary
+        .as_ref()
+        .expect("ternary presence already verified by caller");
+    let test_source = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+    let consequent = ternary.consequent_classes.join(" ");
+    let alternate = ternary.alternate_classes.join(" ");
+    let replacement = format!("className={{{test_source} ? \"{consequent}\" : \"{alternate}\"}}");
+    magic.update_with(
+        only_attribute.attribute_span.start as usize,
+        only_attribute.attribute_span.end as usize,
+        replacement,
+        UpdateOptions {
+            overwrite: true,
+            ..UpdateOptions::default()
+        },
+    );
+    Ok(())
 }
 
 fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class_name: &str) {
@@ -307,6 +356,31 @@ mod tests {
         assert_eq!(
             rewrite(source),
             Err(StaticRewriteUnsupported::NoStaticSzAttribute)
+        );
+    }
+
+    #[test]
+    fn rewrites_static_ternary_sz_attribute() {
+        let source = "const X = ({ active }) => <div sz={active ? { p: 4 } : { p: 8 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ active }) => <div className={active ? \"p-4\" : \"p-8\"} />;"
+        );
+    }
+
+    #[test]
+    fn ternary_falls_through_when_paired_with_classname() {
+        // Ternary + sibling className currently has no runtime merge wired up.
+        // The rewriter must not emit a partial transform — leave the file
+        // unchanged through the empty-class-list error so the engine reports
+        // it the same way it does for any other unsupported combination.
+        let source = "const X = ({ active }) => <div className=\"existing\" sz={active ? { p: 4 } : { p: 8 }} />;";
+
+        assert_eq!(
+            rewrite(source),
+            Err(StaticRewriteUnsupported::EmptyClassList)
         );
     }
 

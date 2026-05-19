@@ -99,8 +99,7 @@ const fixtures: readonly RustParityFixture[] = [
         name: 'sz-runtime-ternary',
         source: 'const X = ({ active }) => <div sz={active ? { p: 4 } : { p: 8 }} />;',
         filename: 'ternary.tsx',
-        expected: 'pending',
-        pendingReason: 'Rust fail-closes on dynamic sz; oxc-JS emits _sz runtime call',
+        expected: 'parity',
     },
 ];
 

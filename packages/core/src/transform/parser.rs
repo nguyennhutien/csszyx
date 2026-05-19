@@ -1,20 +1,21 @@
 use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
-        ArrayExpression, ArrayExpressionElement, Expression, JSXAttribute, JSXAttributeItem,
-        JSXAttributeName, JSXAttributeValue, JSXElementName, JSXExpression, JSXMemberExpression,
-        JSXMemberExpressionObject, JSXOpeningElement, ObjectExpression, ObjectProperty,
-        ObjectPropertyKind, PropertyKey, UnaryOperator,
+        ArrayExpression, ArrayExpressionElement, ConditionalExpression, Expression, JSXAttribute,
+        JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElementName, JSXExpression,
+        JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement, ObjectExpression,
+        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
     },
     AstKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
-use oxc_span::{SourceType, Span};
+use oxc_span::{GetSpan, SourceType, Span};
 
 use super::{
-    ClassAttributeIr, JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SourceIr,
-    StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan, TransformFile,
+    lower::lower_static_sz_object, ClassAttributeIr, JsxOpeningElementIr, RecoveryAttributeIr,
+    RecoveryMode, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
+    SzAttributeIr, TextSpan, TransformFile,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -185,20 +186,41 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
 
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
         let ctx = self.resolve_context();
-        let (object, value_span, literal_class_name, rewrites_empty_class) = match &attr.value {
-            Some(JSXAttributeValue::StringLiteral(value)) => (
-                StaticSzObject::empty(),
-                string_value_span(value.span, self.source),
-                Some(value.value.to_string()),
-                true,
-            ),
-            Some(JSXAttributeValue::ExpressionContainer(container)) => {
-                let (object, value_span, rewrites_empty_class) =
-                    static_object_from_jsx_expression(&container.expression, ctx)?;
-                (object, value_span, None, rewrites_empty_class)
-            }
-            _ => return None,
-        };
+        let (object, value_span, literal_class_name, rewrites_empty_class, ternary) =
+            match &attr.value {
+                Some(JSXAttributeValue::StringLiteral(value)) => (
+                    StaticSzObject::empty(),
+                    string_value_span(value.span, self.source),
+                    Some(value.value.to_string()),
+                    true,
+                    None,
+                ),
+                Some(JSXAttributeValue::ExpressionContainer(container)) => {
+                    // Ternary `sz={cond ? A : B}` is structurally distinct from
+                    // the object/array/identifier shapes the regular static
+                    // lowering matches, so try it first. When both branches
+                    // collapse to static class lists the attribute records a
+                    // pre-lowered ternary and the rewrite layer emits a
+                    // `className={cond ? "…" : "…"}` expression. Otherwise
+                    // we fall back to the regular static-object path.
+                    if let Some((ternary, value_span)) =
+                        static_ternary_from_jsx_expression(&container.expression, ctx)
+                    {
+                        (
+                            StaticSzObject::empty(),
+                            value_span,
+                            None,
+                            false,
+                            Some(ternary),
+                        )
+                    } else {
+                        let (object, value_span, rewrites_empty_class) =
+                            static_object_from_jsx_expression(&container.expression, ctx)?;
+                        (object, value_span, None, rewrites_empty_class, None)
+                    }
+                }
+                _ => return None,
+            };
 
         let index = self.ir.sz_attributes.len();
         self.ir.sz_attributes.push(SzAttributeIr {
@@ -207,6 +229,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             object,
             literal_class_name,
             rewrites_empty_class,
+            ternary,
         });
         Some(index)
     }
@@ -277,6 +300,42 @@ fn jsx_member_expression_object_name(object: &JSXMemberExpressionObject<'_>) -> 
         JSXMemberExpressionObject::MemberExpression(member) => jsx_member_expression_name(member),
         JSXMemberExpressionObject::ThisExpression(_) => "this".to_string(),
     }
+}
+
+/// Pre-lower a JSX-level `sz={cond ? A : B}` expression to a static ternary.
+///
+/// Returns `None` for any non-ternary expression as well as for ternaries
+/// where one or both branches are not statically lowerable. Callers fall back
+/// to the regular static-object path on `None`, which keeps the existing
+/// fail-closed semantics for dynamic sz attributes untouched.
+fn static_ternary_from_jsx_expression(
+    expression: &JSXExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticTernaryIr, TextSpan)> {
+    match expression {
+        JSXExpression::ConditionalExpression(conditional) => {
+            static_ternary_from_conditional(conditional, ctx)
+        }
+        _ => None,
+    }
+}
+
+fn static_ternary_from_conditional(
+    conditional: &ConditionalExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticTernaryIr, TextSpan)> {
+    let (consequent_object, _, _) = static_object_from_expression(&conditional.consequent, ctx)?;
+    let (alternate_object, _, _) = static_object_from_expression(&conditional.alternate, ctx)?;
+    let consequent_classes = lower_static_sz_object(&consequent_object);
+    let alternate_classes = lower_static_sz_object(&alternate_object);
+    Some((
+        StaticTernaryIr {
+            test_span: text_span(conditional.test.span()),
+            consequent_classes,
+            alternate_classes,
+        },
+        text_span(conditional.span),
+    ))
 }
 
 fn static_object_from_jsx_expression(
@@ -823,6 +882,44 @@ mod tests {
             assert!(parsed.diagnostics.is_empty(), "{attribute}");
             assert_eq!(lowered.classes, expected, "{attribute}");
         }
+    }
+
+    #[test]
+    fn parser_shell_lowers_static_ternary_sz_attribute() {
+        let source = "const X = ({ active }) => <div sz={active ? { p: 4 } : { p: 8 }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty(), "{}", source);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        let ternary = parsed.ir.sz_attributes[0]
+            .ternary
+            .as_ref()
+            .expect("ternary should be recorded");
+        assert_eq!(ternary.consequent_classes, ["p-4"]);
+        assert_eq!(ternary.alternate_classes, ["p-8"]);
+        let test_text = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+        assert_eq!(test_text, "active");
+
+        // Both branches' classes flow back into the result manifest so
+        // downstream consumers (className manifest, hydration) see the
+        // full set of possible runtime outputs.
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_falls_through_when_ternary_branch_is_dynamic() {
+        let source = "const X = ({ active, styles }) => <div sz={active ? styles : { p: 8 }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.ir.sz_attributes.is_empty());
+        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
     }
 
     #[test]
