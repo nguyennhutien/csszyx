@@ -83,8 +83,7 @@ const fixtures: readonly RustParityFixture[] = [
             '\n',
         ),
         filename: 'binding.tsx',
-        expected: 'pending',
-        pendingReason: 'Rust semantic resolver for `sz={varName}` not yet wired',
+        expected: 'parity',
     },
     {
         name: 'sz-conditional-spread',

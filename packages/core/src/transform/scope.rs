@@ -86,6 +86,61 @@ impl DeclaratorScope {
     pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, &BindingEntry)> {
         self.entries.iter().map(|(n, b)| (n.as_str(), b))
     }
+
+    /// Resolve `name` to the AST expression it was initialised with, by
+    /// walking `program` until the recorded initializer span matches.
+    ///
+    /// Returns `None` for unknown names, destructured bindings, or names
+    /// whose initializer span has been mutated between scope-build time and
+    /// this call (the latter should never happen with the immutable arena
+    /// the parser uses, but the check is cheap and defensive).
+    ///
+    /// O(N) over `program.body` per call — acceptable for the per-file
+    /// resolution rate (single-digit identifier `sz` references per file).
+    pub fn resolve_initializer<'a>(
+        &self,
+        name: &str,
+        program: &'a Program<'a>,
+    ) -> Option<&'a Expression<'a>> {
+        let entry = self.resolve(name)?;
+        find_initializer_at_span(program, entry.initializer)
+    }
+}
+
+/// Locate the variable declarator initializer expression matching `span`.
+///
+/// Mirrors the statement-shape filter in [`collect_from_statement`] —
+/// only top-level `VariableDeclaration` and `ExportNamedDeclaration ->
+/// VariableDeclaration` paths are inspected, so the lookup cannot
+/// return an unrelated expression that happens to live at the same
+/// byte range.
+fn find_initializer_at_span<'a>(
+    program: &'a Program<'a>,
+    span: TextSpan,
+) -> Option<&'a Expression<'a>> {
+    for stmt in &program.body {
+        let decl = match stmt {
+            Statement::VariableDeclaration(d) => Some(d.as_ref()),
+            Statement::ExportNamedDeclaration(export) => match export.declaration.as_ref() {
+                Some(Declaration::VariableDeclaration(d)) => Some(d.as_ref()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(decl) = decl else {
+            continue;
+        };
+        for declarator in &decl.declarations {
+            let Some(init) = &declarator.init else {
+                continue;
+            };
+            let init_span = init.span();
+            if init_span.start == span.start && init_span.end == span.end {
+                return Some(init);
+            }
+        }
+    }
+    None
 }
 
 fn collect_from_statement(stmt: &Statement<'_>, out: &mut Vec<(String, BindingEntry)>) {

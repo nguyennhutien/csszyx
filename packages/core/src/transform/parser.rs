@@ -47,11 +47,14 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
     let ast_budget_exceeded = if parsed.panicked {
         false
     } else {
+        let scope = super::scope::DeclaratorScope::from_program(&parsed.program);
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
             ir: &mut ir,
             node_count: 0,
             ast_budget_exceeded: false,
+            scope: &scope,
+            program: &parsed.program,
         };
         visitor.visit_program(&parsed.program);
         visitor.ast_budget_exceeded
@@ -73,14 +76,21 @@ fn source_type_for_path(filename: &str) -> SourceType {
     SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx())
 }
 
-struct CsszyxIrVisitor<'source, 'ir> {
+struct CsszyxIrVisitor<'source, 'ir, 'p> {
     source: &'source str,
     ir: &'ir mut SourceIr,
     node_count: usize,
     ast_budget_exceeded: bool,
+    /// Top-level declarator scope used to resolve `sz={NAME}` references
+    /// to their initializer expression. Stored by reference so its
+    /// underlying allocator outlives the visitor.
+    scope: &'p super::scope::DeclaratorScope,
+    /// Backing program used together with `scope` to look up identifier
+    /// initializer expressions during static lowering.
+    program: &'p oxc_ast::ast::Program<'p>,
 }
 
-impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
+impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
     fn enter_node(&mut self, _kind: AstKind<'a>) {
         self.node_count = self.node_count.saturating_add(1);
         if self.node_count > AST_BUDGET {
@@ -156,8 +166,25 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_> {
     }
 }
 
-impl CsszyxIrVisitor<'_, '_> {
+/// Scope + program pair threaded through static-lowering recursions so the
+/// `sz={NAME}` identifier path can resolve declarator initializers without
+/// each helper learning the scope module directly.
+#[derive(Clone, Copy)]
+struct ResolveContext<'p> {
+    scope: &'p super::scope::DeclaratorScope,
+    program: &'p oxc_ast::ast::Program<'p>,
+}
+
+impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
+    const fn resolve_context(&self) -> ResolveContext<'p> {
+        ResolveContext {
+            scope: self.scope,
+            program: self.program,
+        }
+    }
+
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
+        let ctx = self.resolve_context();
         let (object, value_span, literal_class_name, rewrites_empty_class) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
@@ -167,7 +194,7 @@ impl CsszyxIrVisitor<'_, '_> {
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
                 let (object, value_span, rewrites_empty_class) =
-                    static_object_from_jsx_expression(&container.expression)?;
+                    static_object_from_jsx_expression(&container.expression, ctx)?;
                 (object, value_span, None, rewrites_empty_class)
             }
             _ => return None,
@@ -254,27 +281,43 @@ fn jsx_member_expression_object_name(object: &JSXMemberExpressionObject<'_>) -> 
 
 fn static_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
+    ctx: ResolveContext<'_>,
 ) -> Option<(StaticSzObject, TextSpan, bool)> {
     match expression {
         JSXExpression::ObjectExpression(object) => Some((
-            static_object_from_object_expression(object)?,
+            static_object_from_object_expression(object, ctx)?,
             text_span(object.span),
             false,
         )),
         JSXExpression::ArrayExpression(array) => Some((
-            static_object_from_array_expression(array)?,
+            static_object_from_array_expression(array, ctx)?,
             text_span(array.span),
             true,
         )),
-        JSXExpression::TSAsExpression(value) => static_object_from_expression(&value.expression),
+        JSXExpression::TSAsExpression(value) => {
+            static_object_from_expression(&value.expression, ctx)
+        }
         JSXExpression::TSSatisfiesExpression(value) => {
-            static_object_from_expression(&value.expression)
+            static_object_from_expression(&value.expression, ctx)
         }
         JSXExpression::TSNonNullExpression(value) => {
-            static_object_from_expression(&value.expression)
+            static_object_from_expression(&value.expression, ctx)
         }
         JSXExpression::ParenthesizedExpression(parenthesized) => {
-            static_object_from_expression(&parenthesized.expression)
+            static_object_from_expression(&parenthesized.expression, ctx)
+        }
+        // `sz={NAME}` — resolve the identifier to its declarator
+        // initializer and recurse. The recorded value-span is the span
+        // of the IDENTIFIER (not the initializer) because that span is
+        // what the rewrite phase replaces; identifier resolution is a
+        // semantic enhancement, not a span change.
+        JSXExpression::Identifier(identifier) => {
+            let initializer = ctx
+                .scope
+                .resolve_initializer(&identifier.name, ctx.program)?;
+            let (object, _, rewrites_empty_class) =
+                static_object_from_expression(initializer, ctx)?;
+            Some((object, text_span(identifier.span), rewrites_empty_class))
         }
         _ => None,
     }
@@ -282,31 +325,47 @@ fn static_object_from_jsx_expression(
 
 fn static_object_from_expression(
     expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
 ) -> Option<(StaticSzObject, TextSpan, bool)> {
     match expression {
         Expression::ObjectExpression(object) => Some((
-            static_object_from_object_expression(object)?,
+            static_object_from_object_expression(object, ctx)?,
             text_span(object.span),
             false,
         )),
         Expression::ArrayExpression(array) => Some((
-            static_object_from_array_expression(array)?,
+            static_object_from_array_expression(array, ctx)?,
             text_span(array.span),
             true,
         )),
-        Expression::TSAsExpression(value) => static_object_from_expression(&value.expression),
+        Expression::TSAsExpression(value) => static_object_from_expression(&value.expression, ctx),
         Expression::TSSatisfiesExpression(value) => {
-            static_object_from_expression(&value.expression)
+            static_object_from_expression(&value.expression, ctx)
         }
-        Expression::TSNonNullExpression(value) => static_object_from_expression(&value.expression),
+        Expression::TSNonNullExpression(value) => {
+            static_object_from_expression(&value.expression, ctx)
+        }
         Expression::ParenthesizedExpression(parenthesized) => {
-            static_object_from_expression(&parenthesized.expression)
+            static_object_from_expression(&parenthesized.expression, ctx)
+        }
+        // Nested identifier reference (e.g. `sz={{ ...BASE }}` where BASE
+        // resolves to another identifier, or a wrapped binding via
+        // `as const`). Look up the declarator + recurse with the same
+        // context so deep chains stay constant-time per lookup.
+        Expression::Identifier(identifier) => {
+            let initializer = ctx
+                .scope
+                .resolve_initializer(&identifier.name, ctx.program)?;
+            static_object_from_expression(initializer, ctx)
         }
         _ => None,
     }
 }
 
-fn static_object_from_object_expression(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+fn static_object_from_object_expression(
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
     let mut properties = Vec::with_capacity(object.properties.len());
 
     for property in &object.properties {
@@ -315,10 +374,11 @@ fn static_object_from_object_expression(object: &ObjectExpression<'_>) -> Option
                 if is_skippable_static_value(&property.value) {
                     continue;
                 }
-                properties.push(static_property_from_object_property(property)?);
+                properties.push(static_property_from_object_property(property, ctx)?);
             }
             ObjectPropertyKind::SpreadProperty(spread) => {
-                properties.extend(static_object_from_spread_argument(&spread.argument)?.properties);
+                properties
+                    .extend(static_object_from_spread_argument(&spread.argument, ctx)?.properties);
             }
         }
     }
@@ -326,30 +386,48 @@ fn static_object_from_object_expression(object: &ObjectExpression<'_>) -> Option
     Some(StaticSzObject { properties })
 }
 
-fn static_object_from_spread_argument(expression: &Expression<'_>) -> Option<StaticSzObject> {
+fn static_object_from_spread_argument(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
     match expression {
-        Expression::ObjectExpression(object) => static_object_from_object_expression(object),
+        Expression::ObjectExpression(object) => static_object_from_object_expression(object, ctx),
         Expression::ParenthesizedExpression(value) => {
-            static_object_from_spread_argument(&value.expression)
+            static_object_from_spread_argument(&value.expression, ctx)
         }
-        Expression::TSAsExpression(value) => static_object_from_spread_argument(&value.expression),
+        Expression::TSAsExpression(value) => {
+            static_object_from_spread_argument(&value.expression, ctx)
+        }
         Expression::TSSatisfiesExpression(value) => {
-            static_object_from_spread_argument(&value.expression)
+            static_object_from_spread_argument(&value.expression, ctx)
         }
         Expression::TSNonNullExpression(value) => {
-            static_object_from_spread_argument(&value.expression)
+            static_object_from_spread_argument(&value.expression, ctx)
+        }
+        // Identifier-backed spread (`{ ...BASE }`) — resolve via scope and
+        // recurse. Returns None when the binding cannot be resolved to a
+        // static object so callers fall back to the unsupported-sz path
+        // rather than emitting partial output.
+        Expression::Identifier(identifier) => {
+            let initializer = ctx
+                .scope
+                .resolve_initializer(&identifier.name, ctx.program)?;
+            static_object_from_spread_argument(initializer, ctx)
         }
         _ => None,
     }
 }
 
-fn static_object_from_array_expression(array: &ArrayExpression<'_>) -> Option<StaticSzObject> {
+fn static_object_from_array_expression(
+    array: &ArrayExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
     let mut properties = Vec::new();
 
     for element in &array.elements {
         match element {
             ArrayExpressionElement::ObjectExpression(object) => {
-                properties.extend(static_object_from_object_expression(object)?.properties);
+                properties.extend(static_object_from_object_expression(object, ctx)?.properties);
             }
             ArrayExpressionElement::BooleanLiteral(value) if !value.value => {}
             ArrayExpressionElement::NullLiteral(_) | ArrayExpressionElement::Elision(_) => {}
@@ -361,7 +439,10 @@ fn static_object_from_array_expression(array: &ArrayExpression<'_>) -> Option<St
     Some(StaticSzObject { properties })
 }
 
-fn static_property_from_object_property(property: &ObjectProperty<'_>) -> Option<StaticSzProperty> {
+fn static_property_from_object_property(
+    property: &ObjectProperty<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzProperty> {
     if property.method || property.computed || property.shorthand {
         return None;
     }
@@ -369,7 +450,7 @@ fn static_property_from_object_property(property: &ObjectProperty<'_>) -> Option
     Some(StaticSzProperty {
         key: static_property_key(&property.key)?,
         span: text_span(property.span),
-        value: static_value_from_expression(&property.value)?,
+        value: static_value_from_expression(&property.value, ctx)?,
     })
 }
 
@@ -381,21 +462,37 @@ fn static_property_key(key: &PropertyKey<'_>) -> Option<String> {
     }
 }
 
-fn static_value_from_expression(expression: &Expression<'_>) -> Option<StaticSzValue> {
+fn static_value_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzValue> {
     match expression {
         Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
         Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
         Expression::UnaryExpression(value) => static_value_from_unary_expression(value),
         Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
         Expression::ObjectExpression(value) => Some(StaticSzValue::Object(
-            static_object_from_object_expression(value)?,
+            static_object_from_object_expression(value, ctx)?,
         )),
         Expression::ParenthesizedExpression(value) => {
-            static_value_from_expression(&value.expression)
+            static_value_from_expression(&value.expression, ctx)
         }
-        Expression::TSAsExpression(value) => static_value_from_expression(&value.expression),
-        Expression::TSSatisfiesExpression(value) => static_value_from_expression(&value.expression),
-        Expression::TSNonNullExpression(value) => static_value_from_expression(&value.expression),
+        Expression::TSAsExpression(value) => static_value_from_expression(&value.expression, ctx),
+        Expression::TSSatisfiesExpression(value) => {
+            static_value_from_expression(&value.expression, ctx)
+        }
+        Expression::TSNonNullExpression(value) => {
+            static_value_from_expression(&value.expression, ctx)
+        }
+        // Nested identifier inside a property value, e.g. `{ p: SIZE }`
+        // where SIZE is a local const. Resolve via scope and recurse so
+        // R4.2 also handles partial-static cases.
+        Expression::Identifier(identifier) => {
+            let initializer = ctx
+                .scope
+                .resolve_initializer(&identifier.name, ctx.program)?;
+            static_value_from_expression(initializer, ctx)
+        }
         _ => None,
     }
 }
