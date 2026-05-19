@@ -14,7 +14,7 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { transformSourceCode } from '../packages/compiler/src/transform.js';
 import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
-import { transformRust } from '../packages/compiler/src/transform-rust.js';
+import { transformRust, transformRustBatch } from '../packages/compiler/src/transform-rust.js';
 import { loadNativeBinding } from '../packages/core/native/index.js';
 import {
     createTransformCacheKey,
@@ -374,6 +374,22 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                     'Rust native maximum-speed parser path (oxc-parser + string_wizard via napi-rs).',
                 ),
             );
+            stats.push(
+                measureCase(
+                    `parser/${size}/rust-transformRustBatch`,
+                    size,
+                    opts,
+                    () => {
+                        const results = transformRustBatch(files);
+                        if (results.length !== files.length) {
+                            throw new Error(
+                                `Rust batch returned ${results.length} results for ${files.length} files`,
+                            );
+                        }
+                    },
+                    'Rust native batch parser path: one napi-rs transformBatch call for the full fixture set.',
+                ),
+            );
         } else {
             assertRustScaffoldThrows(
                 files[0]?.source ?? '',
@@ -384,6 +400,13 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                     `parser/${size}/rust-transformRust`,
                     size,
                     'Rust native addon not built for this host. Run `pnpm --filter @csszyx/core native:build -- --native-engine` to enable measured Rust rows.',
+                ),
+            );
+            stats.push(
+                notImplementedCase(
+                    `parser/${size}/rust-transformRustBatch`,
+                    size,
+                    'Rust native addon not built for this host. Run `pnpm --filter @csszyx/core native:build -- --native-engine` to enable measured Rust batch rows.',
                 ),
             );
         }
@@ -746,12 +769,17 @@ function renderParserReport(stats: BenchStats[]): string {
             const babel = findStat(stats, `parser/${size}/babel-transformSourceCode`);
             const oxc = findStat(stats, `parser/${size}/oxc-transformOxc`);
             const rust = findStat(stats, `parser/${size}/rust-transformRust`);
+            const rustBatch = findStat(stats, `parser/${size}/rust-transformRustBatch`);
             const oxcRatio = `oxc is ${formatRatio(babel.medianMs / oxc.medianMs)}x faster than Babel`;
             const rustClause =
                 rust.status === 'measured'
                     ? `rust is ${formatRatio(babel.medianMs / rust.medianMs)}x faster than Babel and ${formatRatio(oxc.medianMs / rust.medianMs)}x faster than oxc-JS`
                     : `${rust.name} is ${rust.status}`;
-            return `- ${size} mixed fixtures: ${oxcRatio} by median batch time; ${rustClause}.`;
+            const rustBatchClause =
+                rustBatch.status === 'measured'
+                    ? `rust batch is ${formatRatio(rust.medianMs / rustBatch.medianMs)}x vs per-file Rust and ${formatRatio(oxc.medianMs / rustBatch.medianMs)}x vs oxc-JS`
+                    : `${rustBatch.name} is ${rustBatch.status}`;
+            return `- ${size} mixed fixtures: ${oxcRatio} by median batch time; ${rustClause}; ${rustBatchClause}.`;
         })
         .join('\n');
 

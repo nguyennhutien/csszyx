@@ -7,6 +7,16 @@ import {
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform.js';
 
 /**
+ * Source file passed to the Rust native batch transform.
+ */
+export interface TransformRustFile {
+    /** Source filename for diagnostics and recovery-token stability. */
+    filename?: string;
+    /** Source module contents. */
+    source: string;
+}
+
+/**
  * Thrown while the Rust maximum-speed transform is scaffolded but not yet implemented.
  */
 export class OxcRustNotImplementedError extends Error {
@@ -28,21 +38,47 @@ export class OxcRustNotImplementedError extends Error {
  *
  * @param source Source module contents.
  * @param filename Source filename for diagnostics.
- * @param _options Compiler options.
+ * @param options Compiler options.
  * @returns Transform result once the Rust core exists.
  * @throws {OxcRustNotImplementedError} until the Rust core lands.
  */
 export function transformRust(
     source: string,
     filename?: string,
-    _options?: TransformSourceCodeOptions,
+    options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
+    const [result] = transformRustBatch([{ filename, source }], options);
+    if (!result) {
+        throw new OxcRustNotImplementedError('native transform returned no result');
+    }
+    return result;
+}
+
+/**
+ * Transform a batch of files through the Rust native engine in one napi call.
+ *
+ * This is the compiler-level wrapper around `@csszyx/core/native`'s batch API.
+ * It keeps JS callers on the normal `SourceTransformResult` contract while
+ * preserving the Rust core's FFI amortization for benchmarks and future build
+ * integrations.
+ *
+ * @param files Source files to transform.
+ * @param options Compiler options reserved for future native config plumbing.
+ * @returns One transform result per input file, in input order.
+ * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ */
+export function transformRustBatch(
+    files: readonly TransformRustFile[],
+    options?: TransformSourceCodeOptions,
+): SourceTransformResult[] {
+    void options;
     try {
-        const [result] = transformBatch([{ filename: filename ?? 'file.tsx', source }]);
-        if (!result) {
-            throw new OxcRustNotImplementedError('native transform returned no result');
-        }
-        return fromNativeResult(result);
+        return transformBatch(
+            files.map((file, index) => ({
+                filename: file.filename ?? `file-${index}.tsx`,
+                source: file.source,
+            })),
+        ).map(fromNativeResult);
     } catch (err) {
         if (err instanceof OxcRustNotImplementedError) {
             throw err;
