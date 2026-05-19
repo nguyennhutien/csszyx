@@ -8,6 +8,7 @@ import {
     type TokenData,
     transform,
     transformOxc,
+    transformRust,
     transformSourceCode,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
@@ -631,9 +632,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (parserMode === 'babel') {
             result = transformSourceCode(source, effectiveFilename, compilerOptions);
         } else if (parserMode === 'rust') {
-            throw new Error(
-                'transformRust: not implemented yet - Rust core scaffold only; use parser "oxc" or "babel"',
-            );
+            // Honour the documented contract: `rust` is opt-in and never
+            // silently falls back to oxc/Babel. Any failure here surfaces
+            // to the caller with the same `OxcRustNotImplementedError` the
+            // compiler-level wrapper raises when the native addon is
+            // missing for the current host, so misconfigured environments
+            // fail loudly instead of producing oxc output users were not
+            // expecting.
+            result = transformRust(source, effectiveFilename, compilerOptions);
         } else {
             try {
                 result = transformOxc(source, effectiveFilename, compilerOptions);
