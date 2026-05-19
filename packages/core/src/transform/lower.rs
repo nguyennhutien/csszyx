@@ -314,6 +314,7 @@ mod tests {
                 literal_class_name: None,
                 rewrites_empty_class: false,
                 ternary: None,
+                runtime_fallback: false,
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

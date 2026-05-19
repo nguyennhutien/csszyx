@@ -101,9 +101,7 @@ const fixtures: readonly RustParityFixture[] = [
             'const X = ({ big }) => <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
         ].join('\n'),
         filename: 'cond-spread.tsx',
-        expected: 'pending',
-        pendingReason:
-            'Rust flattens the identifier spread but oxc-JS punts the whole object to `_sz({...})` because of the conditional spread. Closes when the conditional-spread runtime emission slice lands.',
+        expected: 'parity',
     },
     {
         name: 'sz-runtime-ternary',

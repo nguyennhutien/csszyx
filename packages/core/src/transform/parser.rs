@@ -186,41 +186,61 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
 
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
         let ctx = self.resolve_context();
-        let (object, value_span, literal_class_name, rewrites_empty_class, ternary) =
-            match &attr.value {
-                Some(JSXAttributeValue::StringLiteral(value)) => (
-                    StaticSzObject::empty(),
-                    string_value_span(value.span, self.source),
-                    Some(value.value.to_string()),
-                    true,
-                    None,
-                ),
-                Some(JSXAttributeValue::ExpressionContainer(container)) => {
-                    // Ternary `sz={cond ? A : B}` is structurally distinct from
-                    // the object/array/identifier shapes the regular static
-                    // lowering matches, so try it first. When both branches
-                    // collapse to static class lists the attribute records a
-                    // pre-lowered ternary and the rewrite layer emits a
-                    // `className={cond ? "…" : "…"}` expression. Otherwise
-                    // we fall back to the regular static-object path.
-                    if let Some((ternary, value_span)) =
-                        static_ternary_from_jsx_expression(&container.expression, ctx)
-                    {
-                        (
-                            StaticSzObject::empty(),
-                            value_span,
-                            None,
-                            false,
-                            Some(ternary),
-                        )
-                    } else {
-                        let (object, value_span, rewrites_empty_class) =
-                            static_object_from_jsx_expression(&container.expression, ctx)?;
-                        (object, value_span, None, rewrites_empty_class, None)
-                    }
+        let (
+            object,
+            value_span,
+            literal_class_name,
+            rewrites_empty_class,
+            ternary,
+            runtime_fallback,
+        ) = match &attr.value {
+            Some(JSXAttributeValue::StringLiteral(value)) => (
+                StaticSzObject::empty(),
+                string_value_span(value.span, self.source),
+                Some(value.value.to_string()),
+                true,
+                None,
+                false,
+            ),
+            Some(JSXAttributeValue::ExpressionContainer(container)) => {
+                // Three structurally distinct paths, tried in order:
+                // 1. Static ternary (`sz={cond ? A : B}`) — emits a
+                //    `className={cond ? "…" : "…"}` expression.
+                // 2. Static object/array/identifier — emits a plain
+                //    `className="…"`.
+                // 3. Runtime fallback (e.g. object literals with a
+                //    conditional-expression spread) — emits
+                //    `className={_sz(<original>)}` so the runtime
+                //    handles branches the parser cannot evaluate
+                //    statically. This matches the existing oxc-JS
+                //    production output and prevents the engine from
+                //    leaving source unchanged for shapes the runtime
+                //    can still execute correctly.
+                if let Some((ternary, value_span)) =
+                    static_ternary_from_jsx_expression(&container.expression, ctx)
+                {
+                    (
+                        StaticSzObject::empty(),
+                        value_span,
+                        None,
+                        false,
+                        Some(ternary),
+                        false,
+                    )
+                } else if let Some((object, value_span, rewrites_empty_class)) =
+                    static_object_from_jsx_expression(&container.expression, ctx)
+                {
+                    (object, value_span, None, rewrites_empty_class, None, false)
+                } else if let Some(value_span) =
+                    runtime_fallback_span_from_jsx_expression(&container.expression)
+                {
+                    (StaticSzObject::empty(), value_span, None, false, None, true)
+                } else {
+                    return None;
                 }
-                _ => return None,
-            };
+            }
+            _ => return None,
+        };
 
         let index = self.ir.sz_attributes.len();
         self.ir.sz_attributes.push(SzAttributeIr {
@@ -230,6 +250,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             literal_class_name,
             rewrites_empty_class,
             ternary,
+            runtime_fallback,
         });
         Some(index)
     }
@@ -336,6 +357,95 @@ fn static_ternary_from_conditional(
         },
         text_span(conditional.span),
     ))
+}
+
+/// Detect sz expressions whose static lowering cannot succeed but whose
+/// shape the runtime `_sz(...)` helper still handles correctly.
+///
+/// Today only one pattern qualifies: an object literal that contains at
+/// least one spread element whose argument is a conditional expression
+/// (`{ ...BASE, ...(cond ? {} : {}) }`). oxc-JS punts the same shape to a
+/// runtime call instead of trying to expand the conditional branch list
+/// at compile time, so mirroring that decision here keeps the two
+/// producers byte-equal and lets the engine continue rewriting the file
+/// rather than fail-closing.
+///
+/// Returns the source span of the inner expression — what the rewriter
+/// will splice inside `_sz(…)` — so the emitted call preserves the
+/// user's exact text.
+fn runtime_fallback_span_from_jsx_expression(expression: &JSXExpression<'_>) -> Option<TextSpan> {
+    match expression {
+        JSXExpression::ObjectExpression(object) => {
+            if object_has_conditional_spread(object) {
+                Some(text_span(object.span))
+            } else {
+                None
+            }
+        }
+        JSXExpression::TSAsExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        JSXExpression::TSSatisfiesExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        JSXExpression::ParenthesizedExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        _ => None,
+    }
+}
+
+fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<TextSpan> {
+    match expression {
+        Expression::ObjectExpression(object) => {
+            if object_has_conditional_spread(object) {
+                Some(text_span(object.span))
+            } else {
+                None
+            }
+        }
+        Expression::TSAsExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        Expression::TSSatisfiesExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        Expression::TSNonNullExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        Expression::ParenthesizedExpression(value) => {
+            runtime_fallback_span_from_expression(&value.expression)
+        }
+        _ => None,
+    }
+}
+
+fn object_has_conditional_spread(object: &ObjectExpression<'_>) -> bool {
+    object.properties.iter().any(|property| {
+        let ObjectPropertyKind::SpreadProperty(spread) = property else {
+            return false;
+        };
+        matches!(
+            unwrap_spread_argument(&spread.argument),
+            Expression::ConditionalExpression(_)
+        )
+    })
+}
+
+/// Strip TS wrappers and parens from a spread argument so the conditional-
+/// expression detector can see through `(cond ? … : …) as const` style
+/// wrappers without each call site re-implementing the unwrap.
+fn unwrap_spread_argument<'a, 'b>(expression: &'a Expression<'b>) -> &'a Expression<'b> {
+    match expression {
+        Expression::TSAsExpression(value) => unwrap_spread_argument(&value.expression),
+        Expression::TSSatisfiesExpression(value) => unwrap_spread_argument(&value.expression),
+        Expression::TSNonNullExpression(value) => unwrap_spread_argument(&value.expression),
+        Expression::ParenthesizedExpression(value) => unwrap_spread_argument(&value.expression),
+        _ => expression,
+    }
 }
 
 fn static_object_from_jsx_expression(
@@ -908,6 +1018,27 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_marks_conditional_spread_for_runtime_fallback() {
+        let source = "const BASE = { p: 4 } as const;\nconst X = ({ big }) => <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty(), "{}", source);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        // Classes are deliberately empty for runtime-fallback attributes —
+        // the runtime is the source of truth, mirroring oxc-JS.
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert!(lowered.classes.is_empty());
+        let value_text =
+            &source[attribute.value_span.start as usize..attribute.value_span.end as usize];
+        assert_eq!(value_text, "{ ...BASE, ...(big ? { p: 8 } : {}) }");
     }
 
     #[test]

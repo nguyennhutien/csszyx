@@ -67,6 +67,17 @@ pub fn rewrite_static_sz_attributes(
                 continue;
             }
 
+            let has_runtime_fallback = element
+                .sz_attribute_indices
+                .iter()
+                .any(|index| ir.sz_attributes[*index].runtime_fallback);
+
+            if has_runtime_fallback {
+                rewrite_runtime_fallback_sz_attribute(source, ir, element, &mut magic)?;
+                rewrote = true;
+                continue;
+            }
+
             let mut classes = Vec::new();
             let mut rewrites_empty_class = false;
             for index in &element.sz_attribute_indices {
@@ -156,6 +167,42 @@ fn rewrite_ternary_sz_attribute(
     let consequent = ternary.consequent_classes.join(" ");
     let alternate = ternary.alternate_classes.join(" ");
     let replacement = format!("className={{{test_source} ? \"{consequent}\" : \"{alternate}\"}}");
+    magic.update_with(
+        only_attribute.attribute_span.start as usize,
+        only_attribute.attribute_span.end as usize,
+        replacement,
+        UpdateOptions {
+            overwrite: true,
+            ..UpdateOptions::default()
+        },
+    );
+    Ok(())
+}
+
+/// Emit `className={_sz(<original-source>)}` for a single runtime-fallback
+/// `sz` attribute.
+///
+/// Only the simple case is supported in this slice — exactly one `sz`
+/// attribute on the element and no companion `className`/`class`.
+/// Combinations involving an existing `className` need an `_szMerge(...)`
+/// path (oxc-JS today raises `D2.5+` not-implemented in the same shape),
+/// so we fail-closed to keep source unchanged rather than silently dropping
+/// either side. Downstream consumers see `metadata.uses_runtime = true`
+/// and inject the helper import.
+fn rewrite_runtime_fallback_sz_attribute(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) -> Result<(), StaticRewriteUnsupported> {
+    if element.sz_attribute_indices.len() != 1 || element.class_attribute_index.is_some() {
+        return Err(StaticRewriteUnsupported::EmptyClassList);
+    }
+    let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
+    debug_assert!(only_attribute.runtime_fallback);
+    let expression_source =
+        &source[only_attribute.value_span.start as usize..only_attribute.value_span.end as usize];
+    let replacement = format!("className={{_sz({expression_source})}}");
     magic.update_with(
         only_attribute.attribute_span.start as usize,
         only_attribute.attribute_span.end as usize,
@@ -394,6 +441,31 @@ mod tests {
         assert_eq!(
             rewritten,
             "const X = ({ active }) => <div className={active ? \"p-4\" : \"p-8\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_conditional_spread_to_runtime_helper() {
+        // Mixing an identifier-backed spread with a conditional spread
+        // cannot be fully resolved at compile time without enumerating
+        // every reachable class set, so the rewriter punts to the runtime
+        // `_sz(...)` helper with the user's exact source preserved.
+        let source = "const BASE = { p: 4 } as const;\nconst X = ({ big }) => <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const BASE = { p: 4 } as const;\nconst X = ({ big }) => <div className={_sz({ ...BASE, ...(big ? { p: 8 } : {}) })} />;"
+        );
+    }
+
+    #[test]
+    fn runtime_fallback_falls_through_when_paired_with_classname() {
+        let source = "const X = ({ big }) => <div className=\"existing\" sz={{ ...(big ? { p: 8 } : {}) }} />;";
+
+        assert_eq!(
+            rewrite(source),
+            Err(StaticRewriteUnsupported::EmptyClassList)
         );
     }
 

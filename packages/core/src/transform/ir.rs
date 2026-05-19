@@ -124,6 +124,15 @@ pub struct SzAttributeIr {
     /// `sz` attribute. When unset the attribute follows the regular static
     /// object/literal path.
     pub ternary: Option<StaticTernaryIr>,
+    /// Runtime fallback marker — set when the sz expression contains shapes
+    /// the static lowering layer cannot fully resolve at compile time but
+    /// that the runtime `_sz(...)` helper still handles correctly (today:
+    /// object literals with at least one conditional-expression spread).
+    /// When set the rewriter emits `className={_sz(source[value_span])}`
+    /// and the engine forces `metadata.uses_runtime = true` so downstream
+    /// import injection picks the helper up. No classes are collected from
+    /// these attributes because the runtime is the source of truth.
+    pub runtime_fallback: bool,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
@@ -294,6 +303,7 @@ mod tests {
                 literal_class_name: None,
                 rewrites_empty_class: false,
                 ternary: None,
+                runtime_fallback: false,
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

@@ -47,6 +47,17 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
         diagnostics.push("oxc parser panicked before csszyx lowering completed".to_string());
     }
 
+    // Any `sz` attribute that fell to the runtime path needs the `_sz`
+    // helper at runtime, which downstream import-injection picks up
+    // through this flag. Mirroring the oxc-JS pipeline so caches built
+    // against one producer stay valid for the other.
+    let uses_runtime = transformed
+        && parsed
+            .ir
+            .sz_attributes
+            .iter()
+            .any(|attr| attr.runtime_fallback);
+
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
         map: None,
@@ -56,7 +67,7 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
         recovery_tokens,
         metadata: TransformMetadata {
             transformed,
-            uses_runtime: false,
+            uses_runtime,
             uses_merge: false,
             uses_color_var: false,
             producer: TransformProducer::Rust,
@@ -261,6 +272,26 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.contains("AST budget exceeded")));
+    }
+
+    #[test]
+    fn static_engine_emits_runtime_helper_for_conditional_spread() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const BASE = { p: 4 } as const;\nconst X = ({ big }) => <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file);
+
+        assert_eq!(
+            result.code,
+            "const BASE = { p: 4 } as const;\nconst X = ({ big }) => <div className={_sz({ ...BASE, ...(big ? { p: 8 } : {}) })} />;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
+        assert!(result.classes.is_empty());
+        assert!(result.diagnostics.is_empty());
     }
 
     #[test]
