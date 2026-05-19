@@ -1,22 +1,23 @@
 //! Single-file declarator scope tracker.
 //!
-//! Records the source span of every top-level `const`/`let`/`var` binding's
-//! initializer so later lowering passes can resolve `sz={NAME}` references
-//! and inspect the initializer with their own parser pass. Hand-rolled over
-//! the oxc-parser AST without pulling in `oxc_semantic`: covers the
-//! single-file declarator cases the parity fixtures need, sidesteps the
-//! `oxc_semantic` version-churn tax, and keeps the surface area auditable.
+//! Records the source span of every same-file `const`/`let`/`var` binding's
+//! initializer so later lowering passes can resolve `sz={NAME}` references.
+//! Hand-rolled over the oxc-parser AST without pulling in `oxc_semantic`:
+//! covers the single-file declarator cases the parity fixtures need, sidesteps
+//! the `oxc_semantic` version-churn tax, and keeps the surface area auditable.
 //!
-//! Scope of this module: top-level bindings + bindings declared inside the
-//! same containing function/arrow as the JSX expression being lowered.
-//! Nested closures, modules-as-arguments, and import-graph resolution are
-//! deliberately out of scope for the R4.1 slice; later slices can extend
-//! [`DeclaratorScope`] without changing the public API.
+//! Scope of this module: same-file bindings whose lexical span contains the
+//! JSX expression being lowered. Modules-as-arguments and import-graph
+//! resolution are deliberately out of scope for this slice; later slices can
+//! extend [`DeclaratorScope`] without changing the public API.
 
 use oxc_ast::ast::{
-    BindingPattern, Declaration, Expression, Program, Statement, VariableDeclarationKind,
+    BindingPattern, BlockStatement, Expression, FunctionBody, Program, VariableDeclaration,
+    VariableDeclarationKind,
 };
+use oxc_ast_visit::{walk, Visit};
 use oxc_span::GetSpan;
+use std::cmp::Reverse;
 
 use super::TextSpan;
 
@@ -25,6 +26,10 @@ use super::TextSpan;
 pub struct BindingEntry {
     /// Source span of the initializer expression (the RHS of `const X = ...`).
     pub initializer: TextSpan,
+    /// Source span of the binding declarator.
+    pub binding: TextSpan,
+    /// Lexical scope span that owns this binding.
+    pub scope: TextSpan,
     /// Declarator kind so callers can decide on hoisting / mutability rules
     /// when they grow beyond the single-file slice.
     pub kind: VariableDeclarationKind,
@@ -42,18 +47,16 @@ pub struct DeclaratorScope {
 }
 
 impl DeclaratorScope {
-    /// Build a scope by walking every top-level statement in `program`.
-    ///
-    /// Recurses one level into `export const … = …` and
-    /// `export default …` declarations so the suite covers what real csszyx
-    /// projects actually emit, without committing to full nested-scope
-    /// traversal in this slice.
+    /// Build a scope by walking same-file variable declarations in `program`.
     pub fn from_program(program: &Program<'_>) -> Self {
-        let mut entries = Vec::new();
-        for stmt in &program.body {
-            collect_from_statement(stmt, &mut entries);
+        let mut collector = ScopeCollector {
+            entries: Vec::new(),
+            scope_stack: vec![text_span(program.span)],
+        };
+        collector.visit_program(program);
+        Self {
+            entries: collector.entries,
         }
-        Self { entries }
     }
 
     /// Returns the most recent binding for `name`, or `None` if absent.
@@ -69,6 +72,24 @@ impl DeclaratorScope {
             .iter()
             .rfind(|(n, _)| n == name)
             .map(|(_, b)| b)
+    }
+
+    /// Resolve the closest visible binding for `name` before `reference_start`.
+    ///
+    /// This deliberately rejects declarations that appear after the JSX
+    /// reference and declarations whose lexical scope span does not contain the
+    /// reference. That prevents the native parser from using a later hot-reload
+    /// edit or a sibling function's local const as if it were visible.
+    pub fn resolve_before(&self, name: &str, reference_start: u32) -> Option<&BindingEntry> {
+        self.entries
+            .iter()
+            .filter(|(n, entry)| {
+                n == name
+                    && entry.binding.start <= reference_start
+                    && span_contains(entry.scope, reference_start)
+            })
+            .max_by_key(|(_, entry)| (Reverse(entry.scope.len()), entry.binding.start))
+            .map(|(_, entry)| entry)
     }
 
     /// Total number of recorded bindings.
@@ -105,94 +126,126 @@ impl DeclaratorScope {
         let entry = self.resolve(name)?;
         find_initializer_at_span(program, entry.initializer)
     }
+
+    /// Position-aware version of [`Self::resolve_initializer`].
+    pub fn resolve_initializer_before<'a>(
+        &self,
+        name: &str,
+        reference_start: u32,
+        program: &'a Program<'a>,
+    ) -> Option<&'a Expression<'a>> {
+        let entry = self.resolve_before(name, reference_start)?;
+        find_initializer_at_span(program, entry.initializer)
+    }
 }
 
-/// Locate the variable declarator initializer expression matching `span`.
-///
-/// Mirrors the statement-shape filter in [`collect_from_statement`] —
-/// only top-level `VariableDeclaration` and `ExportNamedDeclaration ->
-/// VariableDeclaration` paths are inspected, so the lookup cannot
-/// return an unrelated expression that happens to live at the same
-/// byte range.
 fn find_initializer_at_span<'a>(
     program: &'a Program<'a>,
     span: TextSpan,
 ) -> Option<&'a Expression<'a>> {
-    for stmt in &program.body {
-        let decl = match stmt {
-            Statement::VariableDeclaration(d) => Some(d.as_ref()),
-            Statement::ExportNamedDeclaration(export) => match export.declaration.as_ref() {
-                Some(Declaration::VariableDeclaration(d)) => Some(d.as_ref()),
-                _ => None,
-            },
-            _ => None,
-        };
-        let Some(decl) = decl else {
-            continue;
-        };
+    let mut finder = InitializerFinder { span, found: None };
+    finder.visit_program(program);
+    // The pointer was captured from `program` during the visitor walk above.
+    // The AST arena is immutable for the whole `'a` borrow, so reborrowing it
+    // here is equivalent to returning the matched expression from a manual
+    // recursive traversal.
+    finder.found.map(|found| unsafe { &*found })
+}
+
+struct InitializerFinder<'a> {
+    span: TextSpan,
+    found: Option<*const Expression<'a>>,
+}
+
+impl<'a> Visit<'a> for InitializerFinder<'a> {
+    fn visit_variable_declaration(&mut self, decl: &VariableDeclaration<'a>) {
+        if self.found.is_some() {
+            return;
+        }
         for declarator in &decl.declarations {
             let Some(init) = &declarator.init else {
                 continue;
             };
             let init_span = init.span();
-            if init_span.start == span.start && init_span.end == span.end {
-                return Some(init);
+            if init_span.start == self.span.start && init_span.end == self.span.end {
+                self.found = Some(std::ptr::from_ref::<Expression<'a>>(init));
+                return;
             }
         }
+
+        walk::walk_variable_declaration(self, decl);
     }
-    None
 }
 
-fn collect_from_statement(stmt: &Statement<'_>, out: &mut Vec<(String, BindingEntry)>) {
-    match stmt {
-        Statement::VariableDeclaration(decl) => collect_var_declarations(decl, out),
-        Statement::ExportNamedDeclaration(export) => {
-            if let Some(Declaration::VariableDeclaration(decl)) = export.declaration.as_ref() {
-                collect_var_declarations(decl, out);
-            }
-        }
-        // `export default <expr>`, function/class declarations, imports,
-        // etc. don't introduce const/let initializer bindings the scope
-        // walker cares about. Future cross-file re-export tracking can
-        // grow a dedicated branch here.
-        _ => {}
+struct ScopeCollector {
+    entries: Vec<(String, BindingEntry)>,
+    scope_stack: Vec<TextSpan>,
+}
+
+impl ScopeCollector {
+    fn current_scope(&self) -> TextSpan {
+        self.scope_stack
+            .last()
+            .copied()
+            .expect("scope stack always has program scope")
+    }
+}
+
+impl<'a> Visit<'a> for ScopeCollector {
+    fn visit_block_statement(&mut self, block: &BlockStatement<'a>) {
+        self.scope_stack.push(text_span(block.span));
+        walk::walk_block_statement(self, block);
+        self.scope_stack.pop();
+    }
+
+    fn visit_function_body(&mut self, body: &FunctionBody<'a>) {
+        self.scope_stack.push(text_span(body.span));
+        walk::walk_function_body(self, body);
+        self.scope_stack.pop();
+    }
+
+    fn visit_variable_declaration(&mut self, decl: &VariableDeclaration<'a>) {
+        collect_var_declarations(decl, self.current_scope(), &mut self.entries);
+        walk::walk_variable_declaration(self, decl);
     }
 }
 
 fn collect_var_declarations(
-    decl: &oxc_ast::ast::VariableDeclaration<'_>,
+    decl: &VariableDeclaration<'_>,
+    scope: TextSpan,
     out: &mut Vec<(String, BindingEntry)>,
 ) {
     for declarator in &decl.declarations {
         let Some(init) = &declarator.init else {
             continue;
         };
-        // Object/array destructuring (`const { a, b } = obj`, `const [a, b]
-        // = arr`) is deliberately not handled here: in the single-file
-        // slice we only need to resolve `sz={NAME}` to a static
-        // initializer, and destructured names get their values from a
-        // computed expression we cannot statically split. Later slices
-        // can add pattern-aware resolution if a parity fixture demands
-        // it.
         let BindingPattern::BindingIdentifier(id) = &declarator.id else {
             continue;
         };
-        let span = init.span();
-        // `TextSpan::new` returns Result because of `start > end` validation,
-        // but oxc-parser always produces ordered spans for valid source, so
-        // the failure path is unreachable here. Treating it as a hard error
-        // (panic via expect) is correct — if oxc ever produces an inverted
-        // span we want a stack trace rather than silent skip.
-        let initializer = TextSpan::new(span.start, span.end)
+        let init_span = init.span();
+        let binding_span = declarator.span();
+        let initializer = TextSpan::new(init_span.start, init_span.end)
             .expect("oxc-parser produced inverted span for initializer");
+        let binding = TextSpan::new(binding_span.start, binding_span.end)
+            .expect("oxc-parser produced inverted span for binding");
         out.push((
             id.name.as_str().to_string(),
             BindingEntry {
                 initializer,
+                binding,
+                scope,
                 kind: decl.kind,
             },
         ));
     }
+}
+
+fn text_span(span: oxc_span::Span) -> TextSpan {
+    TextSpan::new(span.start, span.end).expect("oxc-parser produced inverted span")
+}
+
+const fn span_contains(span: TextSpan, offset: u32) -> bool {
+    span.start <= offset && offset <= span.end
 }
 
 /// Compatibility helper: returns the span of an expression as a [`TextSpan`].
@@ -206,7 +259,6 @@ fn span_of(expr: &Expression<'_>) -> TextSpan {
     let span = expr.span();
     TextSpan::new(span.start, span.end).expect("oxc-parser produced inverted span for expression")
 }
-
 #[cfg(test)]
 mod tests {
     use oxc_allocator::Allocator;
@@ -230,6 +282,10 @@ mod tests {
 
     fn span_text(source: &str, start: u32, end: u32) -> &str {
         &source[start as usize..end as usize]
+    }
+
+    fn offset_of(source: &str, needle: &str) -> u32 {
+        u32::try_from(source.find(needle).expect("needle exists")).expect("fixture offset fits u32")
     }
 
     #[test]
@@ -297,6 +353,55 @@ mod tests {
             span_text(&source, entry.initializer.start, entry.initializer.end),
             "{ p: 4 }",
         );
+    }
+
+    #[test]
+    fn records_function_body_local_initializer() {
+        let source =
+            "const App = () => {\n  const BASE = { p: 4 };\n  return <div sz={BASE} />;\n};";
+        let (scope, source) = build_scope(source);
+
+        let reference = offset_of(&source, "BASE} />");
+        let entry = scope
+            .resolve_before("BASE", reference)
+            .expect("function-body local binding");
+        assert_eq!(
+            span_text(&source, entry.initializer.start, entry.initializer.end),
+            "{ p: 4 }",
+        );
+    }
+
+    #[test]
+    fn resolve_before_prefers_inner_scope() {
+        let source = "const BASE = { p: 1 };\nconst App = () => {\n  const BASE = { p: 4 };\n  return <div sz={BASE} />;\n};";
+        let (scope, source) = build_scope(source);
+
+        let reference = offset_of(&source, "BASE} />");
+        let entry = scope
+            .resolve_before("BASE", reference)
+            .expect("visible inner binding");
+        assert_eq!(
+            span_text(&source, entry.initializer.start, entry.initializer.end),
+            "{ p: 4 }",
+        );
+    }
+
+    #[test]
+    fn resolve_before_rejects_later_binding() {
+        let source = "const App = () => <div sz={BASE} />;\nconst BASE = { p: 4 };";
+        let (scope, source) = build_scope(source);
+
+        let reference = offset_of(&source, "BASE} />");
+        assert!(scope.resolve_before("BASE", reference).is_none());
+    }
+
+    #[test]
+    fn resolve_before_rejects_sibling_function_local() {
+        let source = "const A = () => {\n  const BASE = { p: 4 };\n  return null;\n};\nconst B = () => <div sz={BASE} />;";
+        let (scope, source) = build_scope(source);
+
+        let reference = offset_of(&source, "BASE} />");
+        assert!(scope.resolve_before("BASE", reference).is_none());
     }
 
     #[test]

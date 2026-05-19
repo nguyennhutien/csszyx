@@ -445,6 +445,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_function_body_local_static_ternary() {
+        let source = "const X = ({ active }) => {\n  const ON = { p: 4 } as const;\n  const OFF = { p: 8 } as const;\n  return <div sz={active ? ON : OFF} />;\n};";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ active }) => {\n  const ON = { p: 4 } as const;\n  const OFF = { p: 8 } as const;\n  return <div className={active ? \"p-4\" : \"p-8\"} />;\n};"
+        );
+    }
+
+    #[test]
     fn rewrites_conditional_spread_to_runtime_helper() {
         // Mixing an identifier-backed spread with a conditional spread
         // cannot be fully resolved at compile time without enumerating

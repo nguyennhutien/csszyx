@@ -481,9 +481,11 @@ fn static_object_from_jsx_expression(
         // what the rewrite phase replaces; identifier resolution is a
         // semantic enhancement, not a span change.
         JSXExpression::Identifier(identifier) => {
-            let initializer = ctx
-                .scope
-                .resolve_initializer(&identifier.name, ctx.program)?;
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
             let (object, _, rewrites_empty_class) =
                 static_object_from_expression(initializer, ctx)?;
             Some((object, text_span(identifier.span), rewrites_empty_class))
@@ -522,9 +524,11 @@ fn static_object_from_expression(
         // `as const`). Look up the declarator + recurse with the same
         // context so deep chains stay constant-time per lookup.
         Expression::Identifier(identifier) => {
-            let initializer = ctx
-                .scope
-                .resolve_initializer(&identifier.name, ctx.program)?;
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
             static_object_from_expression(initializer, ctx)
         }
         _ => None,
@@ -578,9 +582,11 @@ fn static_object_from_spread_argument(
         // static object so callers fall back to the unsupported-sz path
         // rather than emitting partial output.
         Expression::Identifier(identifier) => {
-            let initializer = ctx
-                .scope
-                .resolve_initializer(&identifier.name, ctx.program)?;
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
             static_object_from_spread_argument(initializer, ctx)
         }
         _ => None,
@@ -657,9 +663,11 @@ fn static_value_from_expression(
         // where SIZE is a local const. Resolve via scope and recurse so
         // R4.2 also handles partial-static cases.
         Expression::Identifier(identifier) => {
-            let initializer = ctx
-                .scope
-                .resolve_initializer(&identifier.name, ctx.program)?;
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
             static_value_from_expression(initializer, ctx)
         }
         _ => None,
@@ -1018,6 +1026,48 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_resolves_function_body_local_static_ternary() {
+        let source = "const X = ({ active }) => {\n  const ON = { p: 4 } as const;\n  const OFF = { p: 8 } as const;\n  return <div sz={active ? ON : OFF} />;\n};";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty(), "{}", source);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        let ternary = parsed.ir.sz_attributes[0]
+            .ternary
+            .as_ref()
+            .expect("local ternary should be recorded");
+        assert_eq!(ternary.consequent_classes, ["p-4"]);
+        assert_eq!(ternary.alternate_classes, ["p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_rejects_identifier_binding_declared_after_reference() {
+        let source = "const X = () => <div sz={BASE} />;\nconst BASE = { p: 4 } as const;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.ir.sz_attributes.is_empty());
+        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
+    }
+
+    #[test]
+    fn parser_shell_rejects_sibling_function_local_identifier_binding() {
+        let source = "const A = () => {\n  const BASE = { p: 4 } as const;\n  return null;\n};\nconst B = () => <div sz={BASE} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.ir.sz_attributes.is_empty());
+        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
     }
 
     #[test]

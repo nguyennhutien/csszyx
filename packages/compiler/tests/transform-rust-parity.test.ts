@@ -109,6 +109,18 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'ternary.tsx',
         expected: 'parity',
     },
+    {
+        name: 'sz-function-local-ternary',
+        source: [
+            'const X = ({ active }) => {',
+            '    const ON = { p: 4 } as const;',
+            '    const OFF = { p: 8 } as const;',
+            '    return <div sz={active ? ON : OFF} />;',
+            '};',
+        ].join('\n'),
+        filename: 'function-local-ternary.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {
