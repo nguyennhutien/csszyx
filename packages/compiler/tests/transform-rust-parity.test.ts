@@ -86,6 +86,15 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-identifier-spread',
+        source: [
+            'const BASE = { p: 4 } as const;',
+            'const X = () => <div sz={{ ...BASE, m: 2 }} />;',
+        ].join('\n'),
+        filename: 'ident-spread.tsx',
+        expected: 'parity',
+    },
+    {
         name: 'sz-conditional-spread',
         source: [
             'const BASE = { p: 4 } as const;',
@@ -93,7 +102,8 @@ const fixtures: readonly RustParityFixture[] = [
         ].join('\n'),
         filename: 'cond-spread.tsx',
         expected: 'pending',
-        pendingReason: 'Rust does not yet flatten identifier-backed spreads',
+        pendingReason:
+            'Rust flattens the identifier spread but oxc-JS punts the whole object to `_sz({...})` because of the conditional spread. Closes when the conditional-spread runtime emission slice lands.',
     },
     {
         name: 'sz-runtime-ternary',

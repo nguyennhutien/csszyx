@@ -297,6 +297,33 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_identifier_backed_spread() {
+        // `{ ...BASE, m: 2 }` resolves BASE through the declarator scope
+        // and flattens its initializer's properties in source order before
+        // the trailing literal property. This locks in the contract that
+        // identifier-backed spreads do not need a runtime helper as long
+        // as every referenced binding resolves to a fully static object.
+        let source = "const BASE = { p: 4 } as const;\nexport const App = () => <div sz={{ ...BASE, m: 2 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const BASE = { p: 4 } as const;\nexport const App = () => <div className=\"p-4 m-2\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_identifier_spread_only() {
+        let source = "const BASE = { p: 4, m: 2 } as const;\nexport const App = () => <div sz={{ ...BASE }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const BASE = { p: 4, m: 2 } as const;\nexport const App = () => <div className=\"p-4 m-2\" />;"
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_array_sz_attribute() {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
         let rewritten = rewrite(source).expect("rewritten");
