@@ -1,10 +1,15 @@
-use super::{SourceIr, TransformFile};
+use super::{
+    JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
+    TextSpan, TransformFile,
+};
 
 /// Conservative parser triage result for a source file.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FastPathTriage {
     /// The file cannot affect csszyx transform output and can skip parsing.
     Noop(SourceIr),
+    /// The file contains only AST-free static `sz={{ ... }}` attributes.
+    StaticIr(SourceIr),
     /// The file contains a possible csszyx marker and must use the parser path.
     NeedsParser(FastPathBailout),
 }
@@ -28,18 +33,221 @@ pub enum FastPathBailoutReason {
 
 /// Triage a source file before invoking a parser.
 ///
-/// This only accepts the zero-risk no-`sz` path. Every source that contains the
-/// marker falls through to the parser, including comments and strings.
+/// This accepts two zero-risk paths:
+/// - no `sz` marker: skip parsing entirely;
+/// - simple JSX `sz={{ key: literal }}` attributes: build parser-neutral IR
+///   directly and reuse the normal lower/rewrite pipeline.
+///
+/// Everything else falls through to the parser, including comments, strings,
+/// nested objects, spreads, existing class/className attributes, and recovery
+/// attributes.
 pub fn triage_source(file: &TransformFile) -> FastPathTriage {
-    if file.source.contains("sz") {
-        return FastPathTriage::NeedsParser(FastPathBailout {
-            filename: file.filename.clone(),
-            reason: FastPathBailoutReason::ContainsSzMarker,
+    if !file.source.contains("sz") {
+        let source_len = u32::try_from(file.source.len()).unwrap_or(u32::MAX);
+        return FastPathTriage::Noop(SourceIr::empty(file.filename.clone(), source_len));
+    }
+
+    if let Some(ir) = try_static_sz_ir(file) {
+        return FastPathTriage::StaticIr(ir);
+    }
+
+    FastPathTriage::NeedsParser(FastPathBailout {
+        filename: file.filename.clone(),
+        reason: FastPathBailoutReason::ContainsSzMarker,
+    })
+}
+
+fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
+    let source_len = u32::try_from(file.source.len()).ok()?;
+    let mut ir = SourceIr::empty(file.filename.clone(), source_len);
+    let mut search_from = 0;
+    let mut found = false;
+    let mut element_spans = Vec::<TextSpan>::new();
+    let sz_attribute_count = count_sz_attributes(&file.source);
+
+    while let Some(relative_start) = file.source[search_from..].find("sz={{") {
+        let attribute_start = search_from + relative_start;
+        if !is_attribute_boundary(&file.source, attribute_start) {
+            search_from = attribute_start + 2;
+            continue;
+        }
+        found = true;
+
+        let opening_start = file.source[..attribute_start].rfind('<')?;
+        let opening_end = attribute_start + file.source[attribute_start..].find('>')? + 1;
+        let opening = &file.source[opening_start..opening_end];
+        if opening.contains("class=")
+            || opening.contains("className=")
+            || opening.contains("szRecover")
+            || opening.contains("data-sz-recovery-token")
+            || opening.contains("{...")
+            || opening.matches("sz={{").count() != 1
+        {
+            return None;
+        }
+
+        let inner_start = attribute_start + "sz={{".len();
+        let close_relative = file.source[inner_start..opening_end].find("}}")?;
+        let inner_end = inner_start + close_relative;
+        let attribute_end = inner_end + 2;
+        if attribute_end > opening_end {
+            return None;
+        }
+
+        let object = parse_flat_static_object(&file.source[inner_start..inner_end], inner_start)?;
+        if object.is_empty() {
+            return None;
+        }
+
+        let opening_span = span(opening_start, opening_end)?;
+        if element_spans.contains(&opening_span) {
+            return None;
+        }
+        element_spans.push(opening_span);
+
+        let attribute_index = ir.sz_attributes.len();
+        ir.sz_attributes.push(SzAttributeIr {
+            attribute_span: span(attribute_start, attribute_end)?,
+            value_span: span(attribute_start + "sz=".len(), attribute_end)?,
+            object,
+            literal_class_name: None,
+            rewrites_empty_class: false,
+            ternary: None,
+            runtime_fallback: false,
+        });
+        ir.jsx_opening_elements.push(JsxOpeningElementIr {
+            opening_span,
+            sz_attribute_indices: vec![attribute_index],
+            class_attribute_index: None,
+            recovery_attribute_index: None,
+            has_recovery_token_attribute: false,
+            last_attribute_end: Some(u32::try_from(attribute_end).ok()?),
+            element_name: element_name(opening)?,
+        });
+
+        search_from = attribute_end;
+    }
+
+    if found && !ir.sz_attributes.is_empty() && ir.sz_attributes.len() == sz_attribute_count {
+        Some(ir)
+    } else {
+        None
+    }
+}
+
+fn count_sz_attributes(source: &str) -> usize {
+    let mut count = 0;
+    let mut search_from = 0;
+    while let Some(relative_start) = source[search_from..].find("sz=") {
+        let index = search_from + relative_start;
+        if is_attribute_boundary(source, index) {
+            count += 1;
+        }
+        search_from = index + 3;
+    }
+    count
+}
+
+fn parse_flat_static_object(source: &str, source_offset: usize) -> Option<StaticSzObject> {
+    let mut properties = Vec::new();
+    for raw_part in source.split(',') {
+        let part = raw_part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if part.contains(['{', '}', '[', ']', '(', ')']) || part.contains("...") {
+            return None;
+        }
+        let colon = part.find(':')?;
+        let key = part[..colon].trim();
+        if !is_identifier_key(key) {
+            return None;
+        }
+        let value_source = part[colon + 1..].trim();
+        let value = parse_static_value(value_source)?;
+        let part_start = source_offset + raw_part.find(part)?;
+        properties.push(StaticSzProperty {
+            key: key.to_string(),
+            span: span(part_start, part_start + part.len())?,
+            value,
         });
     }
 
-    let source_len = u32::try_from(file.source.len()).unwrap_or(u32::MAX);
-    FastPathTriage::Noop(SourceIr::empty(file.filename.clone(), source_len))
+    Some(StaticSzObject { properties })
+}
+
+fn parse_static_value(source: &str) -> Option<StaticSzValue> {
+    if source == "true" {
+        return Some(StaticSzValue::Boolean(true));
+    }
+    if source == "false" {
+        return Some(StaticSzValue::Boolean(false));
+    }
+    if let Some(value) = parse_simple_string(source) {
+        return Some(StaticSzValue::String(value));
+    }
+    if source
+        .chars()
+        .all(|ch| ch.is_ascii_digit() || ch == '-' || ch == '.')
+        && source.chars().filter(|ch| *ch == '-').count() <= 1
+        && source.chars().filter(|ch| *ch == '.').count() <= 1
+        && !source.ends_with(['-', '.'])
+    {
+        return source.parse::<f64>().ok().map(StaticSzValue::Number);
+    }
+
+    None
+}
+
+fn parse_simple_string(source: &str) -> Option<String> {
+    let bytes = source.as_bytes();
+    let quote = *bytes.first()?;
+    if quote != b'\'' && quote != b'"' {
+        return None;
+    }
+    if bytes.last().copied()? != quote || bytes.len() < 2 {
+        return None;
+    }
+    let inner = &source[1..source.len() - 1];
+    if inner.contains(['\\', '\'', '"', '\n', '\r']) {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
+fn is_identifier_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$')
+}
+
+fn is_attribute_boundary(source: &str, index: usize) -> bool {
+    source[..index]
+        .chars()
+        .next_back()
+        .is_some_and(|ch| ch.is_whitespace() || ch == '<')
+}
+
+fn element_name(opening: &str) -> Option<String> {
+    let mut name = opening.strip_prefix('<')?.trim_start();
+    if name.starts_with('/') {
+        return None;
+    }
+    name = name.split_whitespace().next()?;
+    if name.is_empty() || name.contains(['{', '}', '>']) {
+        return None;
+    }
+    Some(name.trim_end_matches('/').to_string())
+}
+
+fn span(start: usize, end: usize) -> Option<TextSpan> {
+    Some(TextSpan {
+        start: u32::try_from(start).ok()?,
+        end: u32::try_from(end).ok()?,
+    })
 }
 
 #[cfg(test)]
@@ -67,19 +275,70 @@ mod tests {
     }
 
     #[test]
-    fn source_with_sz_prop_bails_to_parser() {
+    fn flat_static_sz_prop_builds_ast_free_ir() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div sz={{ p: 4 }} />;".to_string(),
+            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', italic: true }} />;".to_string(),
         };
 
-        assert_eq!(
+        let FastPathTriage::StaticIr(ir) = triage_source(&file) else {
+            panic!("expected AST-free static IR");
+        };
+
+        assert_eq!(ir.sz_attributes.len(), 1);
+        assert_eq!(ir.jsx_opening_elements.len(), 1);
+        assert_eq!(ir.jsx_opening_elements[0].element_name, "div");
+        assert_eq!(ir.sz_attributes[0].object.properties.len(), 3);
+    }
+
+    #[test]
+    fn existing_class_bails_to_parser() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div className=\"x\" sz={{ p: 4 }} />;".to_string(),
+        };
+
+        assert!(matches!(
             triage_source(&file),
             FastPathTriage::NeedsParser(super::FastPathBailout {
-                filename: file.filename,
                 reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
             })
-        );
+        ));
+    }
+
+    #[test]
+    fn nested_static_sz_bails_to_parser() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { bg: 'red-500' } }} />;"
+                .to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn mixed_static_and_dynamic_sz_bails_to_parser() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;"
+                .to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
     }
 
     #[test]

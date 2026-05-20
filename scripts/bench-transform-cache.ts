@@ -158,6 +158,9 @@ function isMusl(): boolean {
 const cacheReport = runCacheBenchmarks(options);
 const parserReport = runParserBenchmarks(options);
 const rustTimingReport = NATIVE_RUST_AVAILABLE ? runRustHmrTimingBreakdown(options) : null;
+const rustStaticFastTimingReport = NATIVE_RUST_AVAILABLE
+    ? runRustStaticFastTimingBreakdown(options)
+    : null;
 
 mkdirSync(resolve(REPO_ROOT, options.outDir), { recursive: true });
 writeFileSync(
@@ -167,7 +170,7 @@ writeFileSync(
 );
 writeFileSync(
     resolve(REPO_ROOT, options.outDir, 'phase-e-babel-vs-oxc-bench.md'),
-    renderParserReport(parserReport, rustTimingReport),
+    renderParserReport(parserReport, rustTimingReport, rustStaticFastTimingReport),
     'utf8',
 );
 
@@ -569,6 +572,29 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
  */
 function runRustHmrTimingBreakdown(opts: CliOptions): RustTimingStats {
     const files = createHmrFiles(opts.hmrEdits);
+    return runRustTimingBreakdown(files);
+}
+
+/**
+ * Measure Rust-internal timing metadata for AST-free static fixtures.
+ *
+ * @param opts CLI options.
+ * @returns median Rust timing breakdown.
+ */
+function runRustStaticFastTimingBreakdown(opts: CliOptions): RustTimingStats {
+    const files = createStaticFastFiles(opts.hmrEdits);
+    return runRustTimingBreakdown(files);
+}
+
+/**
+ * Measure Rust timing metadata for one file set.
+ *
+ * @param files files to transform.
+ * @returns median Rust timing breakdown.
+ */
+function runRustTimingBreakdown(
+    files: Array<{ filename: string; source: string }>,
+): RustTimingStats {
     const rows = files.map(file => {
         const [result] = transformNativeBatch([file]);
         if (!result) {
@@ -580,7 +606,7 @@ function runRustHmrTimingBreakdown(opts: CliOptions): RustTimingStats {
     const timings = rows.map(row => row.metadata.timings);
     const parserPaths = countParserPaths(rows);
     return {
-        edits: opts.hmrEdits,
+        edits: files.length,
         totalNs: median(timings.map(timing => timing.totalNs)),
         triageNs: median(timings.map(timing => timing.triageNs)),
         parseNs: median(timings.map(timing => timing.parseNs)),
@@ -763,6 +789,22 @@ export function HotModule({ active }: { active: boolean }) {
 }
 
 /**
+ * Create AST-free static-path fixtures.
+ *
+ * @param count number of simulated edits
+ * @returns TSX source variants for literal-only sz attributes
+ */
+function createStaticFastFiles(count: number): Array<{ filename: string; source: string }> {
+    return Array.from({ length: count }, (_, index) => ({
+        filename: '/bench/src/StaticFastModule.tsx',
+        source: `export function StaticFastModule() {
+  return <div id="card-${index}" sz={{ p: ${index % 8}, bg: 'blue-500', color: 'white', flex: true }} />;
+}
+`,
+    }));
+}
+
+/**
  * Create parser comparison fixtures.
  *
  * @returns parser fixtures
@@ -925,9 +967,14 @@ ${rows}
  *
  * @param stats benchmark stats
  * @param rustTiming Rust native timing stats.
+ * @param rustStaticFastTiming Rust AST-free static timing stats.
  * @returns markdown report
  */
-function renderParserReport(stats: BenchStats[], rustTiming: RustTimingStats | null): string {
+function renderParserReport(
+    stats: BenchStats[],
+    rustTiming: RustTimingStats | null,
+    rustStaticFastTiming: RustTimingStats | null,
+): string {
     const rows = stats.map(stat => tableRow(stat)).join('\n');
     const speedups = options.sizes
         .map(size => {
@@ -965,7 +1012,7 @@ ${speedups}
 
 ${renderHmrSummary(stats)}
 
-${renderRustTimingSummary(rustTiming)}
+${renderRustTimingSummary(rustTiming, rustStaticFastTiming)}
 
 The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path. Rust rows intentionally report not-implemented during the scaffold phase so the harness shape is ready before Rust timings exist.
 
@@ -988,37 +1035,58 @@ ${rows}
 /**
  * Render Rust-internal timing breakdown.
  *
- * @param timing Rust timing stats or null when native is unavailable.
+ * @param hmrTiming Rust HMR timing stats or null when native is unavailable.
+ * @param staticFastTiming Rust AST-free timing stats or null when native is unavailable.
  * @returns markdown section.
  */
-function renderRustTimingSummary(timing: RustTimingStats | null): string {
-    if (!timing) {
+function renderRustTimingSummary(
+    hmrTiming: RustTimingStats | null,
+    staticFastTiming: RustTimingStats | null,
+): string {
+    if (!hmrTiming || !staticFastTiming) {
         return `## Rust HMR Internal Timing
 
 Rust native addon not built; no internal timing metadata was collected.`;
     }
 
-    const parserPathSummary = Object.entries(timing.parserPaths)
+    const hmrParserPathSummary = Object.entries(hmrTiming.parserPaths)
+        .map(([path, count]) => `${path}: ${count}`)
+        .join(', ');
+    const staticParserPathSummary = Object.entries(staticFastTiming.parserPaths)
         .map(([path, count]) => `${path}: ${count}`)
         .join(', ');
 
     return `## Rust HMR Internal Timing
 
-Median native-engine timing per HMR-shaped edit over ${timing.edits} edits:
+Median native-engine timing per HMR-shaped edit over ${hmrTiming.edits} edits:
 
 | Segment | Median |
 |---|---:|
-| Total | ${formatNs(timing.totalNs)} |
-| Triage | ${formatNs(timing.triageNs)} |
-| Parse | ${formatNs(timing.parseNs)} |
-| Scope | ${formatNs(timing.scopeNs)} |
-| AST to IR | ${formatNs(timing.irNs)} |
-| IR class lowering | ${formatNs(timing.lowerNs)} |
-| Recovery tokens | ${formatNs(timing.recoveryNs)} |
-| Diagnostics | ${formatNs(timing.diagnosticsNs)} |
-| Rewrite | ${formatNs(timing.rewriteNs)} |
+| Total | ${formatNs(hmrTiming.totalNs)} |
+| Triage | ${formatNs(hmrTiming.triageNs)} |
+| Parse | ${formatNs(hmrTiming.parseNs)} |
+| Scope | ${formatNs(hmrTiming.scopeNs)} |
+| AST to IR | ${formatNs(hmrTiming.irNs)} |
+| IR class lowering | ${formatNs(hmrTiming.lowerNs)} |
+| Recovery tokens | ${formatNs(hmrTiming.recoveryNs)} |
+| Diagnostics | ${formatNs(hmrTiming.diagnosticsNs)} |
+| Rewrite | ${formatNs(hmrTiming.rewriteNs)} |
 
-Parser paths: ${parserPathSummary || 'none'}.
+Parser paths: ${hmrParserPathSummary || 'none'}.
+
+Median AST-free static timing over ${staticFastTiming.edits} literal-only edits:
+
+| Segment | Median |
+|---|---:|
+| Total | ${formatNs(staticFastTiming.totalNs)} |
+| Triage + IR build | ${formatNs(staticFastTiming.triageNs)} |
+| Parse | ${formatNs(staticFastTiming.parseNs)} |
+| Scope | ${formatNs(staticFastTiming.scopeNs)} |
+| AST to IR | ${formatNs(staticFastTiming.irNs)} |
+| IR class lowering | ${formatNs(staticFastTiming.lowerNs)} |
+| Rewrite | ${formatNs(staticFastTiming.rewriteNs)} |
+
+Parser paths: ${staticParserPathSummary || 'none'}.
 `;
 }
 

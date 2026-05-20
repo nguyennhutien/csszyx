@@ -25,10 +25,55 @@ pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
             result.metadata.timings.total_ns = elapsed_ns(total_start);
             result
         }
+        FastPathTriage::StaticIr(ir) => {
+            let triage_ns = elapsed_ns(triage_start);
+            transform_fast_static_ir(file, &ir, triage_ns, total_start)
+        }
         FastPathTriage::NeedsParser(_) => {
             let triage_ns = elapsed_ns(triage_start);
             transform_static_classes(file, triage_ns, total_start)
         }
+    }
+}
+
+/// Lower and rewrite AST-free static IR from the conservative fast path.
+fn transform_fast_static_ir(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    triage_ns: u64,
+    total_start: Instant,
+) -> TransformResult {
+    let lower_start = Instant::now();
+    let lowered = lower_source_ir_classes(ir);
+    let lower_ns = elapsed_ns(lower_start);
+    let rewrite_start = Instant::now();
+    let rewritten_code = rewrite_static_sz_attributes(&file.source, &file.filename, ir).ok();
+    let rewrite_ns = elapsed_ns(rewrite_start);
+    let transformed = rewritten_code.is_some();
+
+    TransformResult {
+        code: rewritten_code.unwrap_or_else(|| file.source.clone()),
+        map: None,
+        classes: lowered.classes,
+        raw_class_names: lowered.raw_class_names,
+        diagnostics: Vec::new(),
+        recovery_tokens: Vec::new(),
+        metadata: TransformMetadata {
+            transformed,
+            uses_runtime: false,
+            uses_merge: false,
+            uses_color_var: false,
+            producer: TransformProducer::Rust,
+            ast_budget_exceeded: false,
+            timings: TransformTimings {
+                triage_ns,
+                lower_ns,
+                rewrite_ns,
+                total_ns: elapsed_ns(total_start),
+                ..TransformTimings::default()
+            },
+        },
+        parser_path: ParserPath::FastRegex,
     }
 }
 
@@ -232,6 +277,30 @@ mod tests {
         assert!(result.raw_class_names.is_empty());
         assert!(result.diagnostics.is_empty());
         assert!(result.recovery_tokens.is_empty());
+    }
+
+    #[test]
+    fn transform_file_uses_ast_free_path_for_flat_static_sz_attribute() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', italic: true }} />;"
+                .to_string(),
+        };
+
+        let result = transform_file(&file);
+
+        assert_eq!(
+            result.code,
+            "export const App = () => <div id=\"x\" className=\"p-4 bg-red-500 italic\" />;"
+        );
+        assert!(result.metadata.transformed);
+        assert_eq!(result.parser_path, ParserPath::FastRegex);
+        assert_eq!(result.classes, ["p-4", "bg-red-500", "italic"]);
+        assert_eq!(result.metadata.timings.parse_ns, 0);
+        assert_eq!(result.metadata.timings.scope_ns, 0);
+        assert_eq!(result.metadata.timings.ir_ns, 0);
+        assert!(result.metadata.timings.lower_ns > 0);
+        assert!(result.metadata.timings.rewrite_ns > 0);
     }
 
     #[test]
