@@ -380,26 +380,18 @@ fn static_ternary_from_conditional(
 /// Detect sz expressions whose static lowering cannot succeed but whose
 /// shape the runtime `_sz(...)` helper still handles correctly.
 ///
-/// Today only one pattern qualifies: an object literal that contains at
-/// least one spread element whose argument is a conditional expression
-/// (`{ ...BASE, ...(cond ? {} : {}) }`). oxc-JS punts the same shape to a
-/// runtime call instead of trying to expand the conditional branch list
-/// at compile time, so mirroring that decision here keeps the two
-/// producers byte-equal and lets the engine continue rewriting the file
-/// rather than fail-closing.
+/// Dynamic expressions qualify when static lowering has already failed and the
+/// expression can be handed to `_sz(...)` exactly as written. This covers the
+/// same no-className runtime fallback shape as oxc-JS: unresolved identifiers,
+/// function calls, object/array expressions with dynamic parts, conditionals,
+/// and TS/parens wrappers. Empty JSX expressions still fail closed.
 ///
 /// Returns the source span of the inner expression — what the rewriter
 /// will splice inside `_sz(…)` — so the emitted call preserves the
 /// user's exact text.
 fn runtime_fallback_span_from_jsx_expression(expression: &JSXExpression<'_>) -> Option<TextSpan> {
     match expression {
-        JSXExpression::ObjectExpression(object) => {
-            if object_has_conditional_spread(object) {
-                Some(text_span(object.span))
-            } else {
-                None
-            }
-        }
+        JSXExpression::EmptyExpression(_) => None,
         JSXExpression::TSAsExpression(value) => {
             runtime_fallback_span_from_expression(&value.expression)
         }
@@ -412,19 +404,12 @@ fn runtime_fallback_span_from_jsx_expression(expression: &JSXExpression<'_>) -> 
         JSXExpression::ParenthesizedExpression(value) => {
             runtime_fallback_span_from_expression(&value.expression)
         }
-        _ => None,
+        _ => Some(text_span(expression.span())),
     }
 }
 
 fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<TextSpan> {
     match expression {
-        Expression::ObjectExpression(object) => {
-            if object_has_conditional_spread(object) {
-                Some(text_span(object.span))
-            } else {
-                None
-            }
-        }
         Expression::TSAsExpression(value) => {
             runtime_fallback_span_from_expression(&value.expression)
         }
@@ -437,32 +422,7 @@ fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<
         Expression::ParenthesizedExpression(value) => {
             runtime_fallback_span_from_expression(&value.expression)
         }
-        _ => None,
-    }
-}
-
-fn object_has_conditional_spread(object: &ObjectExpression<'_>) -> bool {
-    object.properties.iter().any(|property| {
-        let ObjectPropertyKind::SpreadProperty(spread) = property else {
-            return false;
-        };
-        matches!(
-            unwrap_spread_argument(&spread.argument),
-            Expression::ConditionalExpression(_)
-        )
-    })
-}
-
-/// Strip TS wrappers and parens from a spread argument so the conditional-
-/// expression detector can see through `(cond ? … : …) as const` style
-/// wrappers without each call site re-implementing the unwrap.
-fn unwrap_spread_argument<'a, 'b>(expression: &'a Expression<'b>) -> &'a Expression<'b> {
-    match expression {
-        Expression::TSAsExpression(value) => unwrap_spread_argument(&value.expression),
-        Expression::TSSatisfiesExpression(value) => unwrap_spread_argument(&value.expression),
-        Expression::TSNonNullExpression(value) => unwrap_spread_argument(&value.expression),
-        Expression::ParenthesizedExpression(value) => unwrap_spread_argument(&value.expression),
-        _ => expression,
+        _ => Some(text_span(expression.span())),
     }
 }
 
@@ -1065,27 +1025,29 @@ mod tests {
     }
 
     #[test]
-    fn parser_shell_rejects_identifier_binding_declared_after_reference() {
+    fn parser_shell_does_not_static_resolve_identifier_declared_after_reference() {
         let source = "const X = () => <div sz={BASE} />;\nconst BASE = { p: 4 } as const;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
         });
 
-        assert!(parsed.ir.sz_attributes.is_empty());
-        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+        assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
     }
 
     #[test]
-    fn parser_shell_rejects_sibling_function_local_identifier_binding() {
+    fn parser_shell_does_not_static_resolve_sibling_function_local_identifier_binding() {
         let source = "const A = () => {\n  const BASE = { p: 4 } as const;\n  return null;\n};\nconst B = () => <div sz={BASE} />;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
         });
 
-        assert!(parsed.ir.sz_attributes.is_empty());
-        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+        assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
     }
 
     #[test]
@@ -1110,19 +1072,24 @@ mod tests {
     }
 
     #[test]
-    fn parser_shell_falls_through_when_ternary_branch_is_dynamic() {
+    fn parser_shell_marks_dynamic_ternary_branch_for_runtime_fallback() {
         let source = "const X = ({ active, styles }) => <div sz={active ? styles : { p: 8 }} />;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
         });
 
-        assert!(parsed.ir.sz_attributes.is_empty());
-        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        let value_text =
+            &source[attribute.value_span.start as usize..attribute.value_span.end as usize];
+        assert_eq!(value_text, "active ? styles : { p: 8 }");
+        assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
     }
 
     #[test]
-    fn parser_shell_ignores_dynamic_sz_object_for_now() {
+    fn parser_shell_marks_dynamic_sz_object_for_runtime_fallback() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: "export const App = () => <div sz={{ ...props, p: 4 }} />;".to_string(),
@@ -1131,8 +1098,25 @@ mod tests {
         let parsed = parse_source_shell(&file);
 
         assert!(parsed.diagnostics.is_empty());
-        assert!(parsed.ir.sz_attributes.is_empty());
-        assert_eq!(parsed.ir.unsupported_sz_attribute_spans.len(), 1);
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+        assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_marks_dynamic_identifier_for_runtime_fallback() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = ({ styles }) => <div sz={styles} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+        assert_eq!(parsed.ir.sz_attributes[0].value_span.len(), 6);
+        assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
     }
 
     #[test]

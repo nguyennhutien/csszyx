@@ -337,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn static_engine_reports_unsupported_dynamic_sz_without_rewrite() {
+    fn static_engine_emits_runtime_helper_for_dynamic_sz_identifier() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: "export const App = ({ styles }) => <div sz={styles} />;".to_string(),
@@ -345,15 +345,18 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.code, file.source);
-        assert!(!result.metadata.transformed);
+        assert_eq!(
+            result.code,
+            "export const App = ({ styles }) => <div className={_sz(styles)} />;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
-        assert_eq!(result.diagnostics.len(), 1);
-        assert!(result.diagnostics[0].contains("unsupported dynamic sz attribute"));
+        assert!(result.diagnostics.is_empty());
     }
 
     #[test]
-    fn static_engine_avoids_partial_rewrite_when_any_sz_is_unsupported() {
+    fn static_engine_rewrites_static_and_runtime_fallback_elements_together() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source:
@@ -363,10 +366,14 @@ mod tests {
 
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
-        assert_eq!(result.code, file.source);
-        assert!(!result.metadata.transformed);
+        assert_eq!(
+            result.code,
+            "export const App = ({ styles }) => <><div className=\"p-4\" /><span className={_sz(styles)} /></>;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
         assert_eq!(result.classes, ["p-4"]);
-        assert_eq!(result.diagnostics.len(), 1);
+        assert!(result.diagnostics.is_empty());
     }
 
     #[test]
@@ -404,6 +411,25 @@ mod tests {
         assert_eq!(
             result.code,
             "const BASE = { p: 4 } as const;\nconst X = ({ big }) => <div className={_sz({ ...BASE, ...(big ? { p: 8 } : {}) })} />;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
+        assert!(result.classes.is_empty());
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn static_engine_emits_runtime_helper_for_dynamic_identifier() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ({ styles }) => <div sz={styles} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const X = ({ styles }) => <div className={_sz(styles)} />;"
         );
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);

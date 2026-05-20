@@ -471,6 +471,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_dynamic_identifier_to_runtime_helper() {
+        let source = "const X = ({ styles }) => <div sz={styles} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ styles }) => <div className={_sz(styles)} />;"
+        );
+    }
+
+    #[test]
     fn runtime_fallback_falls_through_when_paired_with_classname() {
         let source = "const X = ({ big }) => <div className=\"existing\" sz={{ ...(big ? { p: 8 } : {}) }} />;";
 

@@ -102,6 +102,18 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-runtime-identifier',
+        source: 'const X = ({ styles }) => <div sz={styles} />;',
+        filename: 'runtime-ident.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'sz-runtime-call',
+        source: 'const X = () => <div sz={getStyles()} />;',
+        filename: 'runtime-call.tsx',
+        expected: 'parity',
+    },
+    {
         name: 'sz-runtime-ternary',
         source: 'const X = ({ active }) => <div sz={active ? { p: 4 } : { p: 8 }} />;',
         filename: 'ternary.tsx',

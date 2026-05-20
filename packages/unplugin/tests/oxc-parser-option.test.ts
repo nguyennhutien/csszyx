@@ -154,6 +154,7 @@ describe('csszyx parser selection', () => {
             'const BASE = { p: 4 } as const;',
             'export const App = ({ big }: { big: boolean }) =>',
             '    <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
+            'export const Runtime = ({ styles }) => <div sz={styles} />;',
         ].join('\n');
         const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
 
@@ -162,6 +163,7 @@ describe('csszyx parser selection', () => {
         };
 
         expect(result.code).toContain('_sz({ ...BASE, ...(big ? { p: 8 } : {}) })');
+        expect(result.code).toContain('_sz(styles)');
         expect(result.code).toMatch(
             /import\s+\{[^}]*\b_sz\b[^}]*\}\s+from\s+['"]@csszyx\/runtime['"]/,
         );

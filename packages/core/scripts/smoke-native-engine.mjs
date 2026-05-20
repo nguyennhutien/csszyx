@@ -218,24 +218,21 @@ function assertNativeEngineTransform(binding) {
 
   if (
     dynamicSz.code !==
-    "const DynamicSz = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;"
+    'const DynamicSz = ({ styles }) => <><div className="p-4" /><span className={_sz(styles)} /></>;'
   ) {
     fail(`Unexpected dynamic sz code: ${dynamicSz.code}`);
   }
-  if (dynamicSz.metadata?.transformed !== false) {
-    fail("Expected dynamic sz result to stay untransformed.");
+  if (dynamicSz.metadata?.transformed !== true) {
+    fail("Expected dynamic sz result to be marked transformed.");
+  }
+  if (dynamicSz.metadata?.usesRuntime !== true) {
+    fail("Expected dynamic sz result to require the _sz runtime helper.");
   }
   if (JSON.stringify(dynamicSz.classes) !== JSON.stringify(["p-4"])) {
     fail(`Unexpected dynamic sz classes: ${JSON.stringify(dynamicSz.classes)}`);
   }
-  if (
-    !dynamicSz.diagnostics?.some((diagnostic) =>
-      diagnostic.includes("unsupported dynamic sz attribute"),
-    )
-  ) {
-    fail(
-      `Expected unsupported dynamic sz diagnostic: ${dynamicSz.diagnostics}`,
-    );
+  if (dynamicSz.diagnostics?.length !== 0) {
+    fail(`Expected no dynamic sz diagnostics: ${dynamicSz.diagnostics}`);
   }
 
   if (!recover.code.includes('szRecover="csr" data-sz-recovery-token="')) {
