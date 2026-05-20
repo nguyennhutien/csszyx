@@ -12,15 +12,14 @@
 //     someone removed packages/foo without updating the config).
 //   - exclude-paths entries with suspicious path syntax (.. traversal
 //     or absolute paths) — release-please rejects these at runtime.
-//
-// Coverage of `extra-files` (every workspace package.json should be
-// listed) is intentionally NOT checked here yet — Phase 4 will add the
-// stricter coverage rule once the validation pattern is proven.
+//   - Native platform package manifests missing from root extra-files.
 //
 // Run locally:    node .github/scripts/validate-release-please-config.mjs
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+
+import { NATIVE_PLATFORM_PACKAGES } from '../../packages/core/native/platforms.js';
 
 const root = process.cwd();
 let errors = 0;
@@ -92,6 +91,15 @@ if (config && manifest) {
         }
         if (path.startsWith('/')) {
             error(`exclude-paths entry "${path}" is absolute — must be repo-relative`);
+        }
+    }
+
+    const rootPackage = config.packages?.['.'];
+    const extraFiles = new Set(rootPackage?.['extra-files'] ?? []);
+    for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
+        const packageJsonPath = `${packageInfo.dir}/package.json`;
+        if (!extraFiles.has(packageJsonPath)) {
+            error(`root extra-files is missing native package manifest "${packageJsonPath}"`);
         }
     }
 }
