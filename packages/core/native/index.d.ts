@@ -54,6 +54,27 @@ export interface NativeTransformResult {
         producer: 'rust';
         /** Whether native AST budget protection fired. */
         astBudgetExceeded: boolean;
+        /** Native timing breakdown in nanoseconds. */
+        timings: {
+            /** Fast pre-parser triage time. */
+            triageNs: number;
+            /** oxc parser time. */
+            parseNs: number;
+            /** Same-file scope collection time. */
+            scopeNs: number;
+            /** AST visitor to IR lowering time. */
+            irNs: number;
+            /** IR class lowering time. */
+            lowerNs: number;
+            /** Recovery token collection time. */
+            recoveryNs: number;
+            /** Safety diagnostic assembly time. */
+            diagnosticsNs: number;
+            /** Source rewrite time. */
+            rewriteNs: number;
+            /** Total native transform time. */
+            totalNs: number;
+        };
     };
     /** Native parser lane used for this file. */
     parserPath: 'fastRegex' | 'static' | 'semantic';

@@ -11,11 +11,12 @@ use oxc_ast::{
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType, Span};
+use std::time::Instant;
 
 use super::{
     lower::lower_static_sz_object, ClassAttributeIr, JsxOpeningElementIr, RecoveryAttributeIr,
     RecoveryMode, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
-    SzAttributeIr, TextSpan, TransformFile,
+    SzAttributeIr, TextSpan, TransformFile, TransformTimings,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -32,6 +33,8 @@ pub struct ParsedSourceShell {
     pub panicked: bool,
     /// Whether native AST traversal exceeded the csszyx budget.
     pub ast_budget_exceeded: bool,
+    /// Parser/scope/IR timing breakdown.
+    pub timings: TransformTimings,
 }
 
 /// Parse a source module with oxc and return an empty IR shell plus diagnostics.
@@ -41,14 +44,22 @@ pub struct ParsedSourceShell {
 pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
     let allocator = Allocator::default();
     let source_type = source_type_for_path(&file.filename);
+    let parse_start = Instant::now();
     let parsed = Parser::new(&allocator, &file.source, source_type).parse();
+    let parse_ns = elapsed_ns(parse_start);
     let source_len = u32::try_from(file.source.len()).unwrap_or(u32::MAX);
     let mut ir = SourceIr::empty(file.filename.clone(), source_len);
+    let mut timings = TransformTimings {
+        parse_ns,
+        ..TransformTimings::default()
+    };
 
     let ast_budget_exceeded = if parsed.panicked {
         false
     } else {
+        let scope_start = Instant::now();
         let scope = super::scope::DeclaratorScope::from_program(&parsed.program);
+        timings.scope_ns = elapsed_ns(scope_start);
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
             ir: &mut ir,
@@ -57,7 +68,9 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
             scope: &scope,
             program: &parsed.program,
         };
+        let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
+        timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
     };
 
@@ -70,7 +83,12 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
             .collect(),
         panicked: parsed.panicked,
         ast_budget_exceeded,
+        timings,
     }
+}
+
+fn elapsed_ns(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 fn source_type_for_path(filename: &str) -> SourceType {

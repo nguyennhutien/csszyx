@@ -155,6 +155,11 @@ function assertNativeEngineTransform(binding) {
   if (rewritten.metadata?.transformed !== true) {
     fail("Expected first result to be marked transformed.");
   }
+  if (!rewritten.metadata?.timings || rewritten.metadata.timings.totalNs <= 0) {
+    fail(
+      `Expected native timing metadata, received ${JSON.stringify(rewritten.metadata?.timings)}`,
+    );
+  }
   if (rewritten.parserPath !== "static") {
     fail(`Expected static parserPath, received ${rewritten.parserPath}.`);
   }

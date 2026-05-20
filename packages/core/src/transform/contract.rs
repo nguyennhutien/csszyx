@@ -48,6 +48,31 @@ pub struct TransformMetadata {
     pub producer: TransformProducer,
     /// Whether native AST budget protection fired.
     pub ast_budget_exceeded: bool,
+    /// Native timing breakdown in nanoseconds.
+    pub timings: TransformTimings,
+}
+
+/// Native transform timing breakdown in nanoseconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TransformTimings {
+    /// Fast pre-parser triage time.
+    pub triage_ns: u64,
+    /// oxc parser time.
+    pub parse_ns: u64,
+    /// Same-file scope collection time.
+    pub scope_ns: u64,
+    /// AST visitor to IR lowering time.
+    pub ir_ns: u64,
+    /// IR class lowering time.
+    pub lower_ns: u64,
+    /// Recovery token collection time.
+    pub recovery_ns: u64,
+    /// Safety diagnostic assembly time.
+    pub diagnostics_ns: u64,
+    /// Source rewrite time.
+    pub rewrite_ns: u64,
+    /// Total native transform time.
+    pub total_ns: u64,
 }
 
 /// Producer identity for native transform cache safety.

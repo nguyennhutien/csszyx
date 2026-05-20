@@ -8,6 +8,7 @@ use napi_derive::napi;
 
 use crate::transform::{
     transform_batch, ParserPath, RecoveryMode, TransformFile, TransformProducer, TransformResult,
+    TransformTimings,
 };
 
 /// Source file passed from JavaScript to the native transform.
@@ -51,6 +52,32 @@ pub struct NativeTransformMetadata {
     pub producer: String,
     /// Whether native AST budget protection fired.
     pub ast_budget_exceeded: bool,
+    /// Native timing breakdown in nanoseconds.
+    pub timings: NativeTransformTimings,
+}
+
+/// Native transform timing breakdown in nanoseconds.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeTransformTimings {
+    /// Fast pre-parser triage time.
+    pub triage_ns: u32,
+    /// oxc parser time.
+    pub parse_ns: u32,
+    /// Same-file scope collection time.
+    pub scope_ns: u32,
+    /// AST visitor to IR lowering time.
+    pub ir_ns: u32,
+    /// IR class lowering time.
+    pub lower_ns: u32,
+    /// Recovery token collection time.
+    pub recovery_ns: u32,
+    /// Safety diagnostic assembly time.
+    pub diagnostics_ns: u32,
+    /// Source rewrite time.
+    pub rewrite_ns: u32,
+    /// Total native transform time.
+    pub total_ns: u32,
 }
 
 /// Transform output shape returned to JavaScript per source file.
@@ -127,10 +154,31 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_color_var: result.metadata.uses_color_var,
                 producer: producer_to_js(result.metadata.producer).to_string(),
                 ast_budget_exceeded: result.metadata.ast_budget_exceeded,
+                timings: NativeTransformTimings::from(result.metadata.timings),
             },
             parser_path: parser_path_to_js(result.parser_path).to_string(),
         }
     }
+}
+
+impl From<TransformTimings> for NativeTransformTimings {
+    fn from(timings: TransformTimings) -> Self {
+        Self {
+            triage_ns: saturating_u32(timings.triage_ns),
+            parse_ns: saturating_u32(timings.parse_ns),
+            scope_ns: saturating_u32(timings.scope_ns),
+            ir_ns: saturating_u32(timings.ir_ns),
+            lower_ns: saturating_u32(timings.lower_ns),
+            recovery_ns: saturating_u32(timings.recovery_ns),
+            diagnostics_ns: saturating_u32(timings.diagnostics_ns),
+            rewrite_ns: saturating_u32(timings.rewrite_ns),
+            total_ns: saturating_u32(timings.total_ns),
+        }
+    }
+}
+
+fn saturating_u32(value: u64) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
 }
 
 const fn recovery_mode_to_js(mode: RecoveryMode) -> &'static str {

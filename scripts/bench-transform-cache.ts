@@ -15,7 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { transformSourceCode } from '../packages/compiler/src/transform.js';
 import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
 import { transformRust, transformRustBatch } from '../packages/compiler/src/transform-rust.js';
-import { loadNativeBinding } from '../packages/core/native/index.js';
+import {
+    loadNativeBinding,
+    type NativeTransformResult,
+    transformBatch as transformNativeBatch,
+} from '../packages/core/native/index.js';
 import {
     createTransformCacheKey,
     readTransformCache,
@@ -63,6 +67,31 @@ interface ParserFixture {
     name: string;
     /** Fixture source code. */
     source: string;
+}
+
+interface RustTimingStats {
+    /** Number of HMR-shaped edits measured. */
+    edits: number;
+    /** Median total native time per edit. */
+    totalNs: number;
+    /** Median fast triage time per edit. */
+    triageNs: number;
+    /** Median oxc parse time per edit. */
+    parseNs: number;
+    /** Median scope collection time per edit. */
+    scopeNs: number;
+    /** Median AST-to-IR time per edit. */
+    irNs: number;
+    /** Median IR class lowering time per edit. */
+    lowerNs: number;
+    /** Median recovery token time per edit. */
+    recoveryNs: number;
+    /** Median diagnostics assembly time per edit. */
+    diagnosticsNs: number;
+    /** Median source rewrite time per edit. */
+    rewriteNs: number;
+    /** Parser lane counts observed during the run. */
+    parserPaths: Record<string, number>;
 }
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -128,6 +157,7 @@ function isMusl(): boolean {
 
 const cacheReport = runCacheBenchmarks(options);
 const parserReport = runParserBenchmarks(options);
+const rustTimingReport = NATIVE_RUST_AVAILABLE ? runRustHmrTimingBreakdown(options) : null;
 
 mkdirSync(resolve(REPO_ROOT, options.outDir), { recursive: true });
 writeFileSync(
@@ -137,7 +167,7 @@ writeFileSync(
 );
 writeFileSync(
     resolve(REPO_ROOT, options.outDir, 'phase-e-babel-vs-oxc-bench.md'),
-    renderParserReport(parserReport),
+    renderParserReport(parserReport, rustTimingReport),
     'utf8',
 );
 
@@ -528,6 +558,57 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
 }
 
 /**
+ * Measure Rust-internal timing metadata for the HMR-shaped fixture set.
+ *
+ * This reads the native result metadata directly instead of the compiler
+ * wrapper because SourceTransformResult intentionally stays API-compatible
+ * with the existing Babel/oxc shape.
+ *
+ * @param opts CLI options.
+ * @returns median Rust timing breakdown.
+ */
+function runRustHmrTimingBreakdown(opts: CliOptions): RustTimingStats {
+    const files = createHmrFiles(opts.hmrEdits);
+    const rows = files.map(file => {
+        const [result] = transformNativeBatch([file]);
+        if (!result) {
+            throw new Error(`missing Rust timing result for ${file.filename}`);
+        }
+        return result;
+    });
+
+    const timings = rows.map(row => row.metadata.timings);
+    const parserPaths = countParserPaths(rows);
+    return {
+        edits: opts.hmrEdits,
+        totalNs: median(timings.map(timing => timing.totalNs)),
+        triageNs: median(timings.map(timing => timing.triageNs)),
+        parseNs: median(timings.map(timing => timing.parseNs)),
+        scopeNs: median(timings.map(timing => timing.scopeNs)),
+        irNs: median(timings.map(timing => timing.irNs)),
+        lowerNs: median(timings.map(timing => timing.lowerNs)),
+        recoveryNs: median(timings.map(timing => timing.recoveryNs)),
+        diagnosticsNs: median(timings.map(timing => timing.diagnosticsNs)),
+        rewriteNs: median(timings.map(timing => timing.rewriteNs)),
+        parserPaths,
+    };
+}
+
+/**
+ * Count parser lanes for native transform results.
+ *
+ * @param rows native transform rows.
+ * @returns parser path counts.
+ */
+function countParserPaths(rows: NativeTransformResult[]): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+        counts[row.parserPath] = (counts[row.parserPath] ?? 0) + 1;
+    }
+    return counts;
+}
+
+/**
  * Assert that the Rust parser scaffold is still an explicit throw, not a silent fallback.
  *
  * @param source fixture source
@@ -843,9 +924,10 @@ ${rows}
  * Render Babel-vs-oxc markdown report.
  *
  * @param stats benchmark stats
+ * @param rustTiming Rust native timing stats.
  * @returns markdown report
  */
-function renderParserReport(stats: BenchStats[]): string {
+function renderParserReport(stats: BenchStats[], rustTiming: RustTimingStats | null): string {
     const rows = stats.map(stat => tableRow(stat)).join('\n');
     const speedups = options.sizes
         .map(size => {
@@ -883,6 +965,8 @@ ${speedups}
 
 ${renderHmrSummary(stats)}
 
+${renderRustTimingSummary(rustTiming)}
+
 The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path. Rust rows intentionally report not-implemented during the scaffold phase so the harness shape is ready before Rust timings exist.
 
 ## Results
@@ -898,6 +982,43 @@ ${rows}
   worker lifecycle work is worth the complexity.
 - Single-fixture rows expose which syntax shapes are expensive enough to skew a project.
 - The benchmark measures compiler transform cost only; bundler scheduling, Tailwind scanning, and mangle finalization are outside this harness.
+`;
+}
+
+/**
+ * Render Rust-internal timing breakdown.
+ *
+ * @param timing Rust timing stats or null when native is unavailable.
+ * @returns markdown section.
+ */
+function renderRustTimingSummary(timing: RustTimingStats | null): string {
+    if (!timing) {
+        return `## Rust HMR Internal Timing
+
+Rust native addon not built; no internal timing metadata was collected.`;
+    }
+
+    const parserPathSummary = Object.entries(timing.parserPaths)
+        .map(([path, count]) => `${path}: ${count}`)
+        .join(', ');
+
+    return `## Rust HMR Internal Timing
+
+Median native-engine timing per HMR-shaped edit over ${timing.edits} edits:
+
+| Segment | Median |
+|---|---:|
+| Total | ${formatNs(timing.totalNs)} |
+| Triage | ${formatNs(timing.triageNs)} |
+| Parse | ${formatNs(timing.parseNs)} |
+| Scope | ${formatNs(timing.scopeNs)} |
+| AST to IR | ${formatNs(timing.irNs)} |
+| IR class lowering | ${formatNs(timing.lowerNs)} |
+| Recovery tokens | ${formatNs(timing.recoveryNs)} |
+| Diagnostics | ${formatNs(timing.diagnosticsNs)} |
+| Rewrite | ${formatNs(timing.rewriteNs)} |
+
+Parser paths: ${parserPathSummary || 'none'}.
 `;
 }
 
@@ -963,6 +1084,22 @@ function tableRow(stat: BenchStats): string {
  */
 function formatMs(ms: number): string {
     return ms.toFixed(ms < 10 ? 3 : 2);
+}
+
+/**
+ * Format nanoseconds as a compact time value.
+ *
+ * @param ns nanoseconds
+ * @returns formatted duration
+ */
+function formatNs(ns: number): string {
+    if (ns >= 1_000_000) {
+        return `${(ns / 1_000_000).toFixed(3)} ms`;
+    }
+    if (ns >= 1_000) {
+        return `${(ns / 1_000).toFixed(2)} us`;
+    }
+    return `${Math.round(ns)} ns`;
 }
 
 /**

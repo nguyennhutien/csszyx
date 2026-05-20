@@ -10,23 +10,43 @@ use super::{
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
     ParserPath, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
-    TransformResult,
+    TransformResult, TransformTimings,
 };
+use std::time::Instant;
 
 /// Transform one file through fast-path triage and parser-backed static rewrite.
 pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
+    let total_start = Instant::now();
+    let triage_start = Instant::now();
     match triage_source(file) {
-        FastPathTriage::Noop(_) => noop_result(file),
-        FastPathTriage::NeedsParser(_) => transform_static_classes(file),
+        FastPathTriage::Noop(_) => {
+            let mut result = noop_result(file);
+            result.metadata.timings.triage_ns = elapsed_ns(triage_start);
+            result.metadata.timings.total_ns = elapsed_ns(total_start);
+            result
+        }
+        FastPathTriage::NeedsParser(_) => {
+            let triage_ns = elapsed_ns(triage_start);
+            transform_static_classes(file, triage_ns, total_start)
+        }
     }
 }
 
 /// Parse and lower a file into the native transform result shape without
 /// mutating source code.
-fn transform_static_classes(file: &TransformFile) -> TransformResult {
+fn transform_static_classes(
+    file: &TransformFile,
+    triage_ns: u64,
+    total_start: Instant,
+) -> TransformResult {
     let parsed = parse_source_shell(file);
+    let lower_start = Instant::now();
     let lowered = lower_source_ir_classes(&parsed.ir);
+    let lower_ns = elapsed_ns(lower_start);
+    let recovery_start = Instant::now();
     let recovery_tokens = recovery_tokens(file, &parsed.ir);
+    let recovery_ns = elapsed_ns(recovery_start);
+    let diagnostics_start = Instant::now();
     let mut diagnostics = parsed.diagnostics;
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
@@ -36,11 +56,14 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
             file.filename
         ));
     }
+    let diagnostics_ns = elapsed_ns(diagnostics_start);
+    let rewrite_start = Instant::now();
     let rewritten_code = if diagnostics.is_empty() {
         rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir).ok()
     } else {
         None
     };
+    let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
 
     if parsed.panicked {
@@ -72,6 +95,17 @@ fn transform_static_classes(file: &TransformFile) -> TransformResult {
             uses_color_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
+            timings: TransformTimings {
+                triage_ns,
+                parse_ns: parsed.timings.parse_ns,
+                scope_ns: parsed.timings.scope_ns,
+                ir_ns: parsed.timings.ir_ns,
+                lower_ns,
+                recovery_ns,
+                diagnostics_ns,
+                rewrite_ns,
+                total_ns: elapsed_ns(total_start),
+            },
         },
         parser_path: ParserPath::Static,
     }
@@ -137,9 +171,14 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_color_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
+            timings: TransformTimings::default(),
         },
         parser_path: ParserPath::FastRegex,
     }
+}
+
+fn elapsed_ns(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 #[cfg(test)]
@@ -159,6 +198,9 @@ mod tests {
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
         assert_eq!(result.parser_path, ParserPath::FastRegex);
+        assert!(result.metadata.timings.total_ns > 0);
+        assert!(result.metadata.timings.triage_ns > 0);
+        assert_eq!(result.metadata.timings.parse_ns, 0);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
     }
@@ -171,7 +213,7 @@ mod tests {
                 .to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(
             result.code,
@@ -181,6 +223,12 @@ mod tests {
         assert_eq!(result.metadata.producer, TransformProducer::Rust);
         assert_eq!(result.parser_path, ParserPath::Static);
         assert_eq!(result.classes, ["inset-s-4", "hover:bg-red-500"]);
+        assert!(result.metadata.timings.total_ns > 0);
+        assert!(result.metadata.timings.parse_ns > 0);
+        assert!(result.metadata.timings.scope_ns > 0);
+        assert!(result.metadata.timings.ir_ns > 0);
+        assert!(result.metadata.timings.lower_ns > 0);
+        assert!(result.metadata.timings.rewrite_ns > 0);
         assert!(result.raw_class_names.is_empty());
         assert!(result.diagnostics.is_empty());
         assert!(result.recovery_tokens.is_empty());
@@ -194,7 +242,7 @@ mod tests {
                 .to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(
             result.code,
@@ -212,7 +260,7 @@ mod tests {
             source: "export const App = () => <div sz={{ p: }} />;".to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(!result.diagnostics.is_empty());
         assert!(result.classes.is_empty());
@@ -226,7 +274,7 @@ mod tests {
             source: "export const App = ({ styles }) => <div sz={styles} />;".to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
@@ -244,7 +292,7 @@ mod tests {
                     .to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
@@ -263,7 +311,7 @@ mod tests {
             source,
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
@@ -282,7 +330,7 @@ mod tests {
                 .to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(
             result.code,
@@ -301,7 +349,7 @@ mod tests {
             source: "export const App = () => <div szRecover=\"csr\">x</div>;".to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert!(result.metadata.transformed);
         assert!(result.code.contains("data-sz-recovery-token="));
@@ -323,7 +371,7 @@ mod tests {
             source: "export const App = ({ mode }) => <div szRecover={mode}>x</div>;".to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);
@@ -343,7 +391,7 @@ mod tests {
                     .to_string(),
         };
 
-        let result = transform_static_classes(&file);
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         assert_eq!(result.code, file.source);
         assert!(!result.metadata.transformed);

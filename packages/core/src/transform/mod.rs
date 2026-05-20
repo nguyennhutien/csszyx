@@ -31,7 +31,7 @@ use rayon::prelude::*;
 
 pub use contract::{
     ParserPath, RecoveryMode, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
-    TransformResult,
+    TransformResult, TransformTimings,
 };
 pub use ir::{
     ClassAttributeIr, IrError, JsxOpeningElementIr, RecoveryAttributeIr, SourceIr, StaticSzObject,
