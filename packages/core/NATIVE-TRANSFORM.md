@@ -124,6 +124,10 @@ While the packages stay private/excluded, `@csszyx/core` must not list them in
 half-wired state so local builds cannot accidentally produce a package that
 asks npm/pnpm to resolve unpublished native packages.
 
+The same validator requires every platform package version to match
+`@csszyx/core`. A release-please version bump must keep these manifests in sync
+before publish wiring can proceed.
+
 The loader, package, build, and smoke scripts read platform metadata from
 `packages/core/native/platforms.js`. Update that manifest first when adding a
 platform; `pnpm --filter @csszyx/core native:packages` validates every package

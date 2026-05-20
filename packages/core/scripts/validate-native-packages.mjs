@@ -37,6 +37,7 @@ for (const expected of NATIVE_PLATFORM_PACKAGES) {
 
   const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
   assertEqual(pkg.name, expected.name, `${expected.dir} name`);
+  assertEqual(pkg.version, corePackage.version, `${expected.dir} version`);
   assertEqual(pkg.private, true, `${expected.dir} private`);
   assertEqual(pkg.type, "commonjs", `${expected.dir} type`);
   assertArray(pkg.os, expected.os, `${expected.dir} os`);
