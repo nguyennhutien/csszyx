@@ -4,14 +4,24 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransformCacheKeyInput } from '../src/transform-cache.js';
-import { readTransformCache, resolveTransformCacheDir } from '../src/transform-cache.js';
+import {
+    readTransformCache,
+    resolveTransformCacheDir,
+    writeTransformCache,
+} from '../src/transform-cache.js';
 
 vi.mock('@csszyx/compiler', async importOriginal => {
     const actual = await importOriginal<typeof import('@csszyx/compiler')>();
     return {
         ...actual,
+        ensureRustTransformAvailable: vi.fn(() => {
+            throw new actual.OxcRustNotImplementedError('mock native unavailable');
+        }),
         transformOxc: vi.fn(() => {
             throw new Error('mock oxc failure');
+        }),
+        transformRust: vi.fn(() => {
+            throw new actual.OxcRustNotImplementedError('mock native unavailable');
         }),
     };
 });
@@ -85,5 +95,38 @@ describe('transform cache fallback safety', () => {
                 cacheInput({ filename: id, source, producer: 'babel-fallback' }),
             ),
         ).toBeNull();
+    });
+
+    it('does not serve a rust cache entry when the native binding is unavailable', () => {
+        const root = tempRoot();
+        const source = 'const App=()=> <div sz={{ p: 4 }} />;';
+        const id = join(root, 'src/App.tsx');
+        const cacheRoot = resolveTransformCacheDir(root);
+        writeTransformCache(
+            cacheRoot,
+            cacheInput({
+                filename: id,
+                parserMode: 'rust',
+                producer: 'rust',
+                source,
+            }),
+            {
+                code: 'const App=()=> <div className="p-4" />;',
+                transformed: true,
+                usesRuntime: false,
+                usesMerge: false,
+                usesColorVar: false,
+                classes: new Set(['p-4']),
+                rawClassNames: new Set(),
+                diagnostics: [],
+                recoveryTokens: new Map(),
+            },
+        );
+        const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+        prePlugin.configResolved?.({ root });
+
+        expect(() => prePlugin.transform.call({ warn: () => undefined }, source, id)).toThrow(
+            'transformRust: not implemented yet',
+        );
     });
 });

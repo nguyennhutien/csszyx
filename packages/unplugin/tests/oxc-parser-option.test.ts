@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadNativeBinding } from '@csszyx/core/native';
+import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
@@ -22,9 +22,19 @@ let nativeRustAvailable = false;
 
 beforeAll(() => {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const platformDir = path.resolve(here, '../../core-linux-arm64-gnu');
+    const packageName = getNativePackageName();
+    const platformDir = packageName
+        ? path.resolve(here, `../../${packageName.split('/').pop()}`)
+        : null;
     try {
-        loadNativeBinding(platformDir);
+        try {
+            loadNativeBinding();
+        } catch {
+            if (!platformDir) {
+                throw new Error('No supported native package for this platform');
+            }
+            loadNativeBinding(platformDir);
+        }
         nativeRustAvailable = true;
     } catch {
         nativeRustAvailable = false;
@@ -122,6 +132,14 @@ describe('csszyx parser selection', () => {
 
     it('injects the _sz runtime import when the rust engine emits a runtime fallback', () => {
         if (!nativeRustAvailable) {
+            const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+            expect(() =>
+                prePlugin.transform.call(
+                    { warn: vi.fn() },
+                    'export const App = () => <div sz={{ p: 4 }} />;',
+                    '/repo/src/App.tsx',
+                ),
+            ).toThrow('transformRust: not implemented yet');
             return;
         }
 

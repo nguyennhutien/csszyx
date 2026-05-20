@@ -55,6 +55,32 @@ export function transformRust(
 }
 
 /**
+ * Verify that the native Rust transform binding can be loaded.
+ *
+ * This is intentionally separate from `transformRust()` so build integrations
+ * can validate the explicit `rust` parser contract before serving cached
+ * output. If the native addon is missing, `rust` must fail loudly instead of
+ * returning a stale cache entry.
+ *
+ * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ */
+export function ensureRustTransformAvailable(): void {
+    try {
+        transformBatch([]);
+    } catch (err) {
+        if (err instanceof OxcRustNotImplementedError) {
+            throw err;
+        }
+        if (err instanceof CsszyxNativeUnavailableError) {
+            throw new OxcRustNotImplementedError(
+                `${err.message}; native package: ${err.packageName ?? 'unsupported platform'}`,
+            );
+        }
+        throw err;
+    }
+}
+
+/**
  * Transform a batch of files through the Rust native engine in one napi call.
  *
  * This is the compiler-level wrapper around `@csszyx/core/native`'s batch API.

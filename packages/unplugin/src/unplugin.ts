@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+    ensureRustTransformAvailable,
     type SourceTransformResult,
     type TokenData,
     transform,
@@ -611,6 +612,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             filename: effectiveFilename,
             source,
         };
+
+        if (parserMode === 'rust') {
+            ensureRustTransformAvailable();
+        }
 
         if (cacheEnabled) {
             const { key } = createTransformCacheKey(cacheInput);

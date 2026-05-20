@@ -66,6 +66,7 @@ export {
     transformOxc,
 } from './transform-oxc.js';
 export {
+    ensureRustTransformAvailable,
     OxcRustNotImplementedError,
     type TransformRustFile,
     transformRust,
