@@ -12,6 +12,22 @@ const repoRoot = path.resolve(__dirname, "../../..");
 
 let errors = 0;
 
+const corePackagePath = path.join(repoRoot, "packages/core/package.json");
+const workspacePath = path.join(repoRoot, "pnpm-workspace.yaml");
+const corePackage = JSON.parse(readFileSync(corePackagePath, "utf8"));
+const workspaceYaml = readFileSync(workspacePath, "utf8");
+const nativePackageNames = new Set(
+  NATIVE_PLATFORM_PACKAGES.map((packageInfo) => packageInfo.name),
+);
+
+assertNoNativeOptionalDependencies(corePackage);
+
+if (!workspaceYaml.includes('!packages/core-*')) {
+  fail(
+    'pnpm-workspace.yaml must keep packages/core-* excluded until native packages are publish-ready.',
+  );
+}
+
 for (const expected of NATIVE_PLATFORM_PACKAGES) {
   const packagePath = path.join(repoRoot, expected.dir, "package.json");
   if (!existsSync(packagePath)) {
@@ -78,6 +94,29 @@ function assertArray(actual, expected, label) {
   ) {
     fail(
       `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    );
+  }
+}
+
+/**
+ * Assert the umbrella package has not been half-wired to unpublished optional
+ * native packages.
+ *
+ * @param {{ optionalDependencies?: Record<string, string> }} pkg Core package.
+ */
+function assertNoNativeOptionalDependencies(pkg) {
+  const optionalDependencies = Object.keys(pkg.optionalDependencies ?? {});
+  const wiredNativeDependencies = optionalDependencies.filter((dependency) =>
+    nativePackageNames.has(dependency),
+  );
+
+  if (wiredNativeDependencies.length > 0) {
+    fail(
+      [
+        "@csszyx/core optionalDependencies already reference native packages,",
+        "but packages/core-* are still private and excluded from the workspace.",
+        `Remove or fully publish-wire: ${wiredNativeDependencies.join(", ")}`,
+      ].join(" "),
     );
   }
 }
