@@ -179,40 +179,59 @@ fn rewrite_ternary_sz_attribute(
     Ok(())
 }
 
-/// Emit `className={_sz(<original-source>)}` for a single runtime-fallback
-/// `sz` attribute.
+/// Emit a runtime fallback for a single `sz` attribute.
 ///
-/// Only the simple case is supported in this slice — exactly one `sz`
-/// attribute on the element and no companion `className`/`class`.
-/// Combinations involving an existing `className` need an `_szMerge(...)`
-/// path (oxc-JS today raises `D2.5+` not-implemented in the same shape),
-/// so we fail-closed to keep source unchanged rather than silently dropping
-/// either side. Downstream consumers see `metadata.uses_runtime = true`
-/// and inject the helper import.
+/// When there is no companion `className`/`class`, emit
+/// `className={_sz(<original-source>)}`. When a static string companion exists,
+/// emit `className={_szMerge("existing", _sz(<original-source>))}` and remove
+/// `sz`. Dynamic class expressions are not represented in the current IR, so
+/// they remain fail-closed until a dedicated parser slice owns them.
 fn rewrite_runtime_fallback_sz_attribute(
     source: &str,
     ir: &SourceIr,
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
 ) -> Result<(), StaticRewriteUnsupported> {
-    if element.sz_attribute_indices.len() != 1 || element.class_attribute_index.is_some() {
+    if element.sz_attribute_indices.len() != 1 {
         return Err(StaticRewriteUnsupported::EmptyClassList);
     }
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     debug_assert!(only_attribute.runtime_fallback);
     let expression_source =
         &source[only_attribute.value_span.start as usize..only_attribute.value_span.end as usize];
-    let replacement = format!("className={{_sz({expression_source})}}");
-    magic.update_with(
-        only_attribute.attribute_span.start as usize,
-        only_attribute.attribute_span.end as usize,
-        replacement,
-        UpdateOptions {
-            overwrite: true,
-            ..UpdateOptions::default()
-        },
-    );
+
+    if let Some(class_index) = element.class_attribute_index {
+        let class_attribute = &ir.class_attributes[class_index];
+        let existing = js_string_literal(&class_attribute.value);
+        magic.update_with(
+            class_attribute.attribute_span.start as usize,
+            class_attribute.attribute_span.end as usize,
+            format!("className={{_szMerge({existing}, _sz({expression_source}))}}"),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+        magic.remove(
+            whitespace_start(source, only_attribute.attribute_span.start as usize),
+            only_attribute.attribute_span.end as usize,
+        );
+    } else {
+        magic.update_with(
+            only_attribute.attribute_span.start as usize,
+            only_attribute.attribute_span.end as usize,
+            format!("className={{_sz({expression_source})}}"),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+    }
     Ok(())
+}
+
+fn js_string_literal(value: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class_name: &str) {
@@ -482,12 +501,24 @@ mod tests {
     }
 
     #[test]
-    fn runtime_fallback_falls_through_when_paired_with_classname() {
+    fn rewrites_runtime_fallback_with_static_classname_to_merge_helper() {
         let source = "const X = ({ big }) => <div className=\"existing\" sz={{ ...(big ? { p: 8 } : {}) }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
-            rewrite(source),
-            Err(StaticRewriteUnsupported::EmptyClassList)
+            rewritten,
+            "const X = ({ big }) => <div className={_szMerge(\"existing\", _sz({ ...(big ? { p: 8 } : {}) }))} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_runtime_fallback_with_static_class_to_merge_helper() {
+        let source = "const X = ({ styles }) => <div class=\"existing\" sz={styles} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ styles }) => <div className={_szMerge(\"existing\", _sz(styles))} />;"
         );
     }
 

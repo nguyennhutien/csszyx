@@ -117,6 +117,11 @@ function assertNativeEngineTransform(binding) {
         "const DynamicSz = ({ styles }) => <><div sz={{ p: 4 }} /><span sz={styles} /></>;",
     },
     {
+      filename: path.join(repoRoot, "fixtures", "merge-runtime-sz.tsx"),
+      source:
+        'const MergeRuntimeSz = ({ styles }) => <div className="existing" sz={styles} />;',
+    },
+    {
       filename: path.join(repoRoot, "fixtures", "recover.tsx"),
       source: 'const Recover = () => <div szRecover="csr">x</div>;',
     },
@@ -130,10 +135,11 @@ function assertNativeEngineTransform(binding) {
     spreadSz,
     emptyArraySz,
     dynamicSz,
+    mergeRuntimeSz,
     recover,
   ] = results;
   if (
-    results.length !== 8 ||
+    results.length !== 9 ||
     !rewritten ||
     !noop ||
     !stringSz ||
@@ -141,9 +147,10 @@ function assertNativeEngineTransform(binding) {
     !spreadSz ||
     !emptyArraySz ||
     !dynamicSz ||
+    !mergeRuntimeSz ||
     !recover
   ) {
-    fail(`Expected 8 transform results, received ${results.length}.`);
+    fail(`Expected 9 transform results, received ${results.length}.`);
   }
 
   if (
@@ -233,6 +240,37 @@ function assertNativeEngineTransform(binding) {
   }
   if (dynamicSz.diagnostics?.length !== 0) {
     fail(`Expected no dynamic sz diagnostics: ${dynamicSz.diagnostics}`);
+  }
+
+  if (
+    mergeRuntimeSz.code !==
+    'const MergeRuntimeSz = ({ styles }) => <div className={_szMerge("existing", _sz(styles))} />;'
+  ) {
+    fail(`Unexpected merge runtime sz code: ${mergeRuntimeSz.code}`);
+  }
+  if (mergeRuntimeSz.metadata?.transformed !== true) {
+    fail("Expected merge runtime sz result to be marked transformed.");
+  }
+  if (
+    mergeRuntimeSz.metadata?.usesRuntime !== true ||
+    mergeRuntimeSz.metadata?.usesMerge !== true
+  ) {
+    fail(
+      `Expected merge runtime sz to require _sz and _szMerge: ${JSON.stringify(mergeRuntimeSz.metadata)}`,
+    );
+  }
+  if (
+    JSON.stringify(mergeRuntimeSz.rawClassNames) !==
+    JSON.stringify(["existing"])
+  ) {
+    fail(
+      `Unexpected merge runtime rawClassNames: ${JSON.stringify(mergeRuntimeSz.rawClassNames)}`,
+    );
+  }
+  if (mergeRuntimeSz.diagnostics?.length !== 0) {
+    fail(
+      `Expected no merge runtime sz diagnostics: ${mergeRuntimeSz.diagnostics}`,
+    );
   }
 
   if (!recover.code.includes('szRecover="csr" data-sz-recovery-token="')) {

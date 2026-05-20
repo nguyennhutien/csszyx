@@ -125,6 +125,14 @@ fn transform_static_classes(
             .sz_attributes
             .iter()
             .any(|attr| attr.runtime_fallback);
+    let uses_merge = transformed
+        && parsed.ir.jsx_opening_elements.iter().any(|element| {
+            element.class_attribute_index.is_some()
+                && element
+                    .sz_attribute_indices
+                    .iter()
+                    .any(|index| parsed.ir.sz_attributes[*index].runtime_fallback)
+        });
 
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
@@ -136,7 +144,7 @@ fn transform_static_classes(
         metadata: TransformMetadata {
             transformed,
             uses_runtime,
-            uses_merge: false,
+            uses_merge,
             uses_color_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
@@ -434,6 +442,28 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn static_engine_emits_merge_helper_for_runtime_fallback_with_static_classname() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ({ styles }) => <div className=\"existing\" sz={styles} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const X = ({ styles }) => <div className={_szMerge(\"existing\", _sz(styles))} />;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
+        assert!(result.metadata.uses_merge);
+        assert!(result.classes.is_empty());
+        assert_eq!(result.raw_class_names, ["existing"]);
         assert!(result.diagnostics.is_empty());
     }
 

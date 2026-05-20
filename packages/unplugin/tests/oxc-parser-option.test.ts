@@ -130,7 +130,7 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain(' sz=');
     });
 
-    it('injects the _sz runtime import when the rust engine emits a runtime fallback', () => {
+    it('injects runtime imports when the rust engine emits fallback helpers', () => {
         if (!nativeRustAvailable) {
             const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
             expect(() =>
@@ -155,6 +155,7 @@ describe('csszyx parser selection', () => {
             'export const App = ({ big }: { big: boolean }) =>',
             '    <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
             'export const Runtime = ({ styles }) => <div sz={styles} />;',
+            'export const MergeRuntime = ({ styles }) => <div className="existing" sz={styles} />;',
         ].join('\n');
         const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
 
@@ -164,8 +165,12 @@ describe('csszyx parser selection', () => {
 
         expect(result.code).toContain('_sz({ ...BASE, ...(big ? { p: 8 } : {}) })');
         expect(result.code).toContain('_sz(styles)');
+        expect(result.code).toContain('_szMerge("existing", _sz(styles))');
         expect(result.code).toMatch(
             /import\s+\{[^}]*\b_sz\b[^}]*\}\s+from\s+['"]@csszyx\/runtime['"]/,
+        );
+        expect(result.code).toMatch(
+            /import\s+\{[^}]*\b_szMerge\b[^}]*\}\s+from\s+['"]@csszyx\/runtime['"]/,
         );
     });
 
