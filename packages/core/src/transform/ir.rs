@@ -47,7 +47,7 @@ pub struct SourceIr {
     pub sz_attributes: Vec<SzAttributeIr>,
     /// JSX `sz` attribute spans that could not be lowered statically.
     pub unsupported_sz_attribute_spans: Vec<TextSpan>,
-    /// Static class/className attributes found in source order.
+    /// Class/className attributes found in source order.
     pub class_attributes: Vec<ClassAttributeIr>,
     /// Static `szRecover` attributes found in source order.
     pub recovery_attributes: Vec<RecoveryAttributeIr>,
@@ -92,7 +92,7 @@ pub struct JsxOpeningElementIr {
     pub opening_span: TextSpan,
     /// Static `sz` attribute indices in [`SourceIr::sz_attributes`].
     pub sz_attribute_indices: Vec<usize>,
-    /// Static class/className attribute index in [`SourceIr::class_attributes`].
+    /// Class/className attribute index in [`SourceIr::class_attributes`].
     pub class_attribute_index: Option<usize>,
     /// Static `szRecover` attribute index in [`SourceIr::recovery_attributes`].
     pub recovery_attribute_index: Option<usize>,
@@ -150,7 +150,7 @@ pub struct StaticTernaryIr {
     pub alternate_classes: Vec<String>,
 }
 
-/// Static class/className attribute.
+/// Class/className attribute.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClassAttributeIr {
     /// Full attribute span.
@@ -159,6 +159,8 @@ pub struct ClassAttributeIr {
     pub value_span: TextSpan,
     /// Raw class string exactly as parsed after JS string unescaping.
     pub value: String,
+    /// Dynamic expression span for `className={expr}` / `class={expr}`.
+    pub expression_span: Option<TextSpan>,
 }
 
 /// Static `szRecover` attribute.
@@ -310,6 +312,7 @@ mod tests {
                 attribute_span: TextSpan::new(54, 72).expect("valid span"),
                 value_span: TextSpan::new(65, 70).expect("valid span"),
                 value: "block".to_string(),
+                expression_span: None,
             }],
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

@@ -156,6 +156,7 @@ describe('csszyx parser selection', () => {
             '    <div sz={{ ...BASE, ...(big ? { p: 8 } : {}) }} />;',
             'export const Runtime = ({ styles }) => <div sz={styles} />;',
             'export const MergeRuntime = ({ styles }) => <div className="existing" sz={styles} />;',
+            'export const MergeDynamic = ({ styles }) => <div className={getClass()} sz={styles} />;',
         ].join('\n');
         const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
 
@@ -166,6 +167,7 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('_sz({ ...BASE, ...(big ? { p: 8 } : {}) })');
         expect(result.code).toContain('_sz(styles)');
         expect(result.code).toContain('_szMerge("existing", _sz(styles))');
+        expect(result.code).toContain('_szMerge(getClass(), _sz(styles))');
         expect(result.code).toMatch(
             /import\s+\{[^}]*\b_sz\b[^}]*\}\s+from\s+['"]@csszyx\/runtime['"]/,
         );

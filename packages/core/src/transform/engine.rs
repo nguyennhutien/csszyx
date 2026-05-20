@@ -119,20 +119,26 @@ fn transform_static_classes(
     // helper at runtime, which downstream import-injection picks up
     // through this flag. Mirroring the oxc-JS pipeline so caches built
     // against one producer stay valid for the other.
-    let uses_runtime = transformed
-        && parsed
-            .ir
-            .sz_attributes
-            .iter()
-            .any(|attr| attr.runtime_fallback);
     let uses_merge = transformed
         && parsed.ir.jsx_opening_elements.iter().any(|element| {
-            element.class_attribute_index.is_some()
-                && element
-                    .sz_attribute_indices
-                    .iter()
-                    .any(|index| parsed.ir.sz_attributes[*index].runtime_fallback)
+            let Some(class_index) = element.class_attribute_index else {
+                return false;
+            };
+            let class_attribute = &parsed.ir.class_attributes[class_index];
+            let has_runtime_like_sz = element.sz_attribute_indices.iter().any(|index| {
+                let attribute = &parsed.ir.sz_attributes[*index];
+                attribute.runtime_fallback || attribute.ternary.is_some()
+            });
+            let has_static_sz = !element.sz_attribute_indices.is_empty();
+            has_runtime_like_sz || (class_attribute.expression_span.is_some() && has_static_sz)
         });
+    let uses_runtime = transformed
+        && (uses_merge
+            || parsed
+                .ir
+                .sz_attributes
+                .iter()
+                .any(|attr| attr.runtime_fallback));
 
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
@@ -464,6 +470,49 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert_eq!(result.raw_class_names, ["existing"]);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn static_engine_emits_merge_helper_for_runtime_fallback_with_dynamic_classname() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ({ styles }) => <div className={getClass()} sz={styles} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const X = ({ styles }) => <div className={_szMerge(getClass(), _sz(styles))} />;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
+        assert!(result.metadata.uses_merge);
+        assert!(result.classes.is_empty());
+        assert!(result.raw_class_names.is_empty());
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn static_engine_emits_merge_helper_for_static_sz_with_dynamic_classname() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = () => <div className={getClass()} sz={{ p: 4 }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const X = () => <div className={_szMerge(getClass(), \"p-4\")} />;"
+        );
+        assert!(result.metadata.transformed);
+        assert!(result.metadata.uses_runtime);
+        assert!(result.metadata.uses_merge);
+        assert_eq!(result.classes, ["p-4"]);
+        assert!(result.raw_class_names.is_empty());
         assert!(result.diagnostics.is_empty());
     }
 

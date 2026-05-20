@@ -28,6 +28,7 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
     let raw_class_names = ir
         .class_attributes
         .iter()
+        .filter(|attr| attr.expression_span.is_none())
         .map(|attr| attr.value.clone())
         .collect();
 
@@ -321,6 +322,7 @@ mod tests {
                 attribute_span: TextSpan::new(28, 46).expect("valid span"),
                 value_span: TextSpan::new(39, 44).expect("valid span"),
                 value: "block".to_string(),
+                expression_span: None,
             }],
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

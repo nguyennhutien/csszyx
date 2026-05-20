@@ -274,15 +274,28 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     }
 
     fn collect_class_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
-        let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
-            return None;
+        let (value_span, value, expression_span) = match &attr.value {
+            Some(JSXAttributeValue::StringLiteral(value)) => (
+                string_value_span(value.span, self.source),
+                value.value.to_string(),
+                None,
+            ),
+            Some(JSXAttributeValue::ExpressionContainer(container)) => {
+                if matches!(container.expression, JSXExpression::EmptyExpression(_)) {
+                    return None;
+                }
+                let span = text_span(container.expression.span());
+                (span, String::new(), Some(span))
+            }
+            _ => return None,
         };
 
         let index = self.ir.class_attributes.len();
         self.ir.class_attributes.push(ClassAttributeIr {
             attribute_span: text_span(attr.span),
-            value_span: string_value_span(value.span, self.source),
-            value: value.value.to_string(),
+            value_span,
+            value,
+            expression_span,
         });
         Some(index)
     }
@@ -745,10 +758,33 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(parsed.ir.class_attributes.len(), 1);
         assert_eq!(parsed.ir.class_attributes[0].value, "p-4 block");
+        assert!(parsed.ir.class_attributes[0].expression_span.is_none());
         assert_eq!(
             parsed.ir.class_attributes[0].value_span,
             super::TextSpan { start: 41, end: 50 }
         );
+    }
+
+    #[test]
+    fn parser_shell_collects_dynamic_class_attributes() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div className={getClass()} sz={{ p: 4 }} />;"
+                .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.class_attributes.len(), 1);
+        assert!(parsed.ir.class_attributes[0].value.is_empty());
+        assert_eq!(
+            parsed.ir.class_attributes[0].expression_span,
+            Some(super::TextSpan { start: 41, end: 51 })
+        );
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert!(lowered.raw_class_names.is_empty());
+        assert_eq!(lowered.classes, ["p-4"]);
     }
 
     #[test]

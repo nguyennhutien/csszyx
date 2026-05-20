@@ -122,6 +122,11 @@ function assertNativeEngineTransform(binding) {
         'const MergeRuntimeSz = ({ styles }) => <div className="existing" sz={styles} />;',
     },
     {
+      filename: path.join(repoRoot, "fixtures", "merge-dynamic-class.tsx"),
+      source:
+        "const MergeDynamicClass = ({ styles }) => <div className={getClass()} sz={styles} />;",
+    },
+    {
       filename: path.join(repoRoot, "fixtures", "recover.tsx"),
       source: 'const Recover = () => <div szRecover="csr">x</div>;',
     },
@@ -136,10 +141,11 @@ function assertNativeEngineTransform(binding) {
     emptyArraySz,
     dynamicSz,
     mergeRuntimeSz,
+    mergeDynamicClass,
     recover,
   ] = results;
   if (
-    results.length !== 9 ||
+    results.length !== 10 ||
     !rewritten ||
     !noop ||
     !stringSz ||
@@ -148,9 +154,10 @@ function assertNativeEngineTransform(binding) {
     !emptyArraySz ||
     !dynamicSz ||
     !mergeRuntimeSz ||
+    !mergeDynamicClass ||
     !recover
   ) {
-    fail(`Expected 9 transform results, received ${results.length}.`);
+    fail(`Expected 10 transform results, received ${results.length}.`);
   }
 
   if (
@@ -270,6 +277,26 @@ function assertNativeEngineTransform(binding) {
   if (mergeRuntimeSz.diagnostics?.length !== 0) {
     fail(
       `Expected no merge runtime sz diagnostics: ${mergeRuntimeSz.diagnostics}`,
+    );
+  }
+
+  if (
+    mergeDynamicClass.code !==
+    "const MergeDynamicClass = ({ styles }) => <div className={_szMerge(getClass(), _sz(styles))} />;"
+  ) {
+    fail(`Unexpected merge dynamic class code: ${mergeDynamicClass.code}`);
+  }
+  if (
+    mergeDynamicClass.metadata?.usesRuntime !== true ||
+    mergeDynamicClass.metadata?.usesMerge !== true
+  ) {
+    fail(
+      `Expected merge dynamic class to require _sz and _szMerge: ${JSON.stringify(mergeDynamicClass.metadata)}`,
+    );
+  }
+  if (mergeDynamicClass.rawClassNames?.length !== 0) {
+    fail(
+      `Unexpected merge dynamic class rawClassNames: ${JSON.stringify(mergeDynamicClass.rawClassNames)}`,
     );
   }
 

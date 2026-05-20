@@ -2,8 +2,7 @@
 //!
 //! This slice rewrites static `sz` attributes and merges static string
 //! `class`/`className` attributes when parser IR proves they belong to the same
-//! JSX opening element. Dynamic class expressions are not represented in this IR
-//! and remain read-only until the semantic/runtime fallback path lands.
+//! JSX opening element.
 
 use string_wizard::{MagicString, UpdateOptions};
 
@@ -78,54 +77,7 @@ pub fn rewrite_static_sz_attributes(
                 continue;
             }
 
-            let mut classes = Vec::new();
-            let mut rewrites_empty_class = false;
-            for index in &element.sz_attribute_indices {
-                let attribute = &ir.sz_attributes[*index];
-                classes.extend(lower_sz_attribute_classes(attribute));
-                rewrites_empty_class |= attribute.rewrites_empty_class;
-            }
-            if classes.is_empty() && !rewrites_empty_class {
-                return Err(StaticRewriteUnsupported::EmptyClassList);
-            }
-
-            if let Some(class_index) = element.class_attribute_index {
-                let class_attribute = &ir.class_attributes[class_index];
-                let existing_classes = class_attribute
-                    .value
-                    .split_whitespace()
-                    .filter(|class_name| !class_name.is_empty());
-                let merged = existing_classes
-                    .chain(classes.iter().map(String::as_str))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                overwrite_attribute(&mut magic, class_attribute.attribute_span, &merged);
-                for index in &element.sz_attribute_indices {
-                    let attribute = &ir.sz_attributes[*index];
-                    magic.remove(
-                        whitespace_start(source, attribute.attribute_span.start as usize),
-                        attribute.attribute_span.end as usize,
-                    );
-                }
-            } else {
-                let Some((first_index, rest)) = element.sz_attribute_indices.split_first() else {
-                    continue;
-                };
-                let first_attribute = &ir.sz_attributes[*first_index];
-                overwrite_attribute(
-                    &mut magic,
-                    first_attribute.attribute_span,
-                    &classes.join(" "),
-                );
-                for index in rest {
-                    let attribute = &ir.sz_attributes[*index];
-                    magic.remove(
-                        whitespace_start(source, attribute.attribute_span.start as usize),
-                        attribute.attribute_span.end as usize,
-                    );
-                }
-            }
-
+            rewrite_static_sz_element(source, ir, element, &mut magic)?;
             rewrote = true;
         }
     }
@@ -141,21 +93,97 @@ pub fn rewrite_static_sz_attributes(
     Ok(magic.to_string())
 }
 
-/// Emit `className={cond ? "…" : "…"}` for a single ternary `sz` attribute.
+fn rewrite_static_sz_element(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) -> Result<(), StaticRewriteUnsupported> {
+    let mut classes = Vec::new();
+    let mut rewrites_empty_class = false;
+    for index in &element.sz_attribute_indices {
+        let attribute = &ir.sz_attributes[*index];
+        classes.extend(lower_sz_attribute_classes(attribute));
+        rewrites_empty_class |= attribute.rewrites_empty_class;
+    }
+    if classes.is_empty() && !rewrites_empty_class {
+        return Err(StaticRewriteUnsupported::EmptyClassList);
+    }
+
+    if let Some(class_index) = element.class_attribute_index {
+        rewrite_static_sz_with_existing_class(source, ir, element, magic, class_index, &classes);
+        return Ok(());
+    }
+
+    let Some((first_index, rest)) = element.sz_attribute_indices.split_first() else {
+        return Ok(());
+    };
+    let first_attribute = &ir.sz_attributes[*first_index];
+    overwrite_attribute(magic, first_attribute.attribute_span, &classes.join(" "));
+    for index in rest {
+        let attribute = &ir.sz_attributes[*index];
+        magic.remove(
+            whitespace_start(source, attribute.attribute_span.start as usize),
+            attribute.attribute_span.end as usize,
+        );
+    }
+    Ok(())
+}
+
+fn rewrite_static_sz_with_existing_class(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+    class_index: usize,
+    classes: &[String],
+) {
+    let class_attribute = &ir.class_attributes[class_index];
+    if class_attribute.expression_span.is_some() {
+        let existing = class_merge_argument(source, class_attribute);
+        let next = js_string_literal(&classes.join(" "));
+        magic.update_with(
+            class_attribute.attribute_span.start as usize,
+            class_attribute.attribute_span.end as usize,
+            format!("className={{_szMerge({existing}, {next})}}"),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+    } else {
+        let existing_classes = class_attribute
+            .value
+            .split_whitespace()
+            .filter(|class_name| !class_name.is_empty());
+        let merged = existing_classes
+            .chain(classes.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(" ");
+        overwrite_attribute(magic, class_attribute.attribute_span, &merged);
+    }
+
+    for index in &element.sz_attribute_indices {
+        let attribute = &ir.sz_attributes[*index];
+        magic.remove(
+            whitespace_start(source, attribute.attribute_span.start as usize),
+            attribute.attribute_span.end as usize,
+        );
+    }
+}
+
+/// Emit `className={cond ? "…" : "…"}` or merge it with an existing class.
 ///
-/// The only supported shape is exactly one `sz={cond ? A : B}` with no
-/// companion `className`/`class` on the same element — anything more
-/// elaborate would need a `_sz(...)` runtime merge call which is not wired
-/// in this slice. Returns `Err(EmptyClassList)` to fail-closed (leave source
-/// untouched) for those combinations instead of silently joining both
-/// branches' classes into one className.
+/// Multiple `sz` attributes are still unsupported for ternary because the
+/// runtime expression shape would need ordered merging across separate source
+/// spans.
 fn rewrite_ternary_sz_attribute(
     source: &str,
     ir: &SourceIr,
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
 ) -> Result<(), StaticRewriteUnsupported> {
-    if element.sz_attribute_indices.len() != 1 || element.class_attribute_index.is_some() {
+    if element.sz_attribute_indices.len() != 1 {
         return Err(StaticRewriteUnsupported::EmptyClassList);
     }
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
@@ -166,26 +194,42 @@ fn rewrite_ternary_sz_attribute(
     let test_source = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
     let consequent = ternary.consequent_classes.join(" ");
     let alternate = ternary.alternate_classes.join(" ");
-    let replacement = format!("className={{{test_source} ? \"{consequent}\" : \"{alternate}\"}}");
-    magic.update_with(
-        only_attribute.attribute_span.start as usize,
-        only_attribute.attribute_span.end as usize,
-        replacement,
-        UpdateOptions {
-            overwrite: true,
-            ..UpdateOptions::default()
-        },
-    );
+    let ternary_source = format!("{test_source} ? \"{consequent}\" : \"{alternate}\"");
+    if let Some(class_index) = element.class_attribute_index {
+        let class_attribute = &ir.class_attributes[class_index];
+        let existing = class_merge_argument(source, class_attribute);
+        magic.update_with(
+            class_attribute.attribute_span.start as usize,
+            class_attribute.attribute_span.end as usize,
+            format!("className={{_szMerge({existing}, {ternary_source})}}"),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+        magic.remove(
+            whitespace_start(source, only_attribute.attribute_span.start as usize),
+            only_attribute.attribute_span.end as usize,
+        );
+    } else {
+        magic.update_with(
+            only_attribute.attribute_span.start as usize,
+            only_attribute.attribute_span.end as usize,
+            format!("className={{{ternary_source}}}"),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+    }
     Ok(())
 }
 
 /// Emit a runtime fallback for a single `sz` attribute.
 ///
 /// When there is no companion `className`/`class`, emit
-/// `className={_sz(<original-source>)}`. When a static string companion exists,
-/// emit `className={_szMerge("existing", _sz(<original-source>))}` and remove
-/// `sz`. Dynamic class expressions are not represented in the current IR, so
-/// they remain fail-closed until a dedicated parser slice owns them.
+/// `className={_sz(<original-source>)}`. When a companion exists, emit
+/// `className={_szMerge(existing, _sz(<original-source>))}` and remove `sz`.
 fn rewrite_runtime_fallback_sz_attribute(
     source: &str,
     ir: &SourceIr,
@@ -202,7 +246,7 @@ fn rewrite_runtime_fallback_sz_attribute(
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
-        let existing = js_string_literal(&class_attribute.value);
+        let existing = class_merge_argument(source, class_attribute);
         magic.update_with(
             class_attribute.attribute_span.start as usize,
             class_attribute.attribute_span.end as usize,
@@ -232,6 +276,13 @@ fn rewrite_runtime_fallback_sz_attribute(
 
 fn js_string_literal(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+fn class_merge_argument(source: &str, class_attribute: &super::ClassAttributeIr) -> String {
+    class_attribute.expression_span.map_or_else(
+        || js_string_literal(&class_attribute.value),
+        |span| source[span.start as usize..span.end as usize].to_string(),
+    )
 }
 
 fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class_name: &str) {
@@ -291,6 +342,17 @@ mod tests {
         assert_eq!(
             rewritten,
             "export const App = () => <div className=\"block p-4\" />;"
+        );
+    }
+
+    #[test]
+    fn merges_existing_dynamic_class_attribute() {
+        let source = "export const App = () => <div className={getClass()} sz={{ p: 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className={_szMerge(getClass(), \"p-4\")} />;"
         );
     }
 
@@ -523,16 +585,24 @@ mod tests {
     }
 
     #[test]
-    fn ternary_falls_through_when_paired_with_classname() {
-        // Ternary + sibling className currently has no runtime merge wired up.
-        // The rewriter must not emit a partial transform — leave the file
-        // unchanged through the empty-class-list error so the engine reports
-        // it the same way it does for any other unsupported combination.
-        let source = "const X = ({ active }) => <div className=\"existing\" sz={active ? { p: 4 } : { p: 8 }} />;";
+    fn rewrites_runtime_fallback_with_dynamic_classname_to_merge_helper() {
+        let source = "const X = ({ styles }) => <div className={getClass()} sz={styles} />;";
+        let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
-            rewrite(source),
-            Err(StaticRewriteUnsupported::EmptyClassList)
+            rewritten,
+            "const X = ({ styles }) => <div className={_szMerge(getClass(), _sz(styles))} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_static_ternary_with_classname_to_merge_helper() {
+        let source = "const X = ({ active }) => <div className=\"existing\" sz={active ? { p: 4 } : { p: 8 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ active }) => <div className={_szMerge(\"existing\", active ? \"p-4\" : \"p-8\")} />;"
         );
     }
 
