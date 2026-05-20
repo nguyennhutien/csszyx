@@ -186,6 +186,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate native package metadata
+        run: pnpm --filter @csszyx/core native:packages
+
       # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
       # so the OPTIMIZED pkg/ is what turbo captures in its cache.
       - name: Build WASM core

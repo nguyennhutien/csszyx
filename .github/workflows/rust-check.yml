@@ -49,6 +49,9 @@ jobs:
       - name: Check native feature
         run: node scripts/check-native.mjs
 
+      - name: Validate native package metadata
+        run: node scripts/validate-native-packages.mjs
+
       - name: Run native engine parser tests
         run: cargo test --features native-engine transform::parser
 
