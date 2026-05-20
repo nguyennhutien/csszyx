@@ -6,30 +6,18 @@ import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { getHostNativePackage } from "./native-platforms.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const coreDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(coreDir, "../..");
 
-const PLATFORM_PACKAGES = {
-  "linux-arm64-gnu": "core-linux-arm64-gnu",
-  "linux-arm64-musl": "core-linux-arm64-musl",
-  "linux-x64-gnu": "core-linux-x64-gnu",
-  "linux-x64-musl": "core-linux-x64-musl",
-  "darwin-arm64": "core-darwin-arm64",
-  "darwin-x64": "core-darwin-x64",
-  "win32-arm64-msvc": "core-win32-arm64-msvc",
-  "win32-x64-msvc": "core-win32-x64-msvc",
-};
+const { platformKey, packageDir, nodePath } = getHostNativePackage(repoRoot);
 
-const platformKey = getPlatformKey();
-const packageDirName = PLATFORM_PACKAGES[platformKey];
-
-if (!packageDirName) {
+if (!packageDir || !nodePath) {
   fail(`Unsupported native platform: ${platformKey}`);
 }
 
-const packageDir = path.join(repoRoot, "packages", packageDirName);
-const nodePath = path.join(packageDir, `csszyx-core.${platformKey}.node`);
 const generatedDtsPath = path.join(packageDir, "index.d.ts");
 
 try {
@@ -97,40 +85,6 @@ function assertNotImplemented(binding) {
   fail(
     "Native transform unexpectedly completed before the Rust parser is implemented.",
   );
-}
-
-/**
- * Get the napi platform key for the current host.
- *
- * @returns {string} Platform key.
- */
-function getPlatformKey() {
-  const platform = process.platform;
-  const arch = process.arch;
-
-  if (platform === "linux") {
-    return `${platform}-${arch}-${isMusl() ? "musl" : "gnu"}`;
-  }
-
-  if (platform === "win32") {
-    return `${platform}-${arch}-msvc`;
-  }
-
-  return `${platform}-${arch}`;
-}
-
-/**
- * Detect musl Linux.
- *
- * @returns {boolean} True for musl Linux.
- */
-function isMusl() {
-  if (typeof process.report?.getReport !== "function") {
-    return false;
-  }
-
-  const report = process.report.getReport();
-  return !report.header?.glibcVersionRuntime;
 }
 
 /**

@@ -5,75 +5,14 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { NATIVE_PLATFORM_PACKAGES } from "./native-platforms.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
 
-const PACKAGES = [
-  {
-    dir: "packages/core-linux-x64-gnu",
-    name: "@csszyx/core-linux-x64-gnu",
-    os: ["linux"],
-    cpu: ["x64"],
-    libc: ["glibc"],
-    node: "csszyx-core.linux-x64-gnu.node",
-  },
-  {
-    dir: "packages/core-linux-x64-musl",
-    name: "@csszyx/core-linux-x64-musl",
-    os: ["linux"],
-    cpu: ["x64"],
-    libc: ["musl"],
-    node: "csszyx-core.linux-x64-musl.node",
-  },
-  {
-    dir: "packages/core-linux-arm64-gnu",
-    name: "@csszyx/core-linux-arm64-gnu",
-    os: ["linux"],
-    cpu: ["arm64"],
-    libc: ["glibc"],
-    node: "csszyx-core.linux-arm64-gnu.node",
-  },
-  {
-    dir: "packages/core-linux-arm64-musl",
-    name: "@csszyx/core-linux-arm64-musl",
-    os: ["linux"],
-    cpu: ["arm64"],
-    libc: ["musl"],
-    node: "csszyx-core.linux-arm64-musl.node",
-  },
-  {
-    dir: "packages/core-darwin-x64",
-    name: "@csszyx/core-darwin-x64",
-    os: ["darwin"],
-    cpu: ["x64"],
-    node: "csszyx-core.darwin-x64.node",
-  },
-  {
-    dir: "packages/core-darwin-arm64",
-    name: "@csszyx/core-darwin-arm64",
-    os: ["darwin"],
-    cpu: ["arm64"],
-    node: "csszyx-core.darwin-arm64.node",
-  },
-  {
-    dir: "packages/core-win32-x64-msvc",
-    name: "@csszyx/core-win32-x64-msvc",
-    os: ["win32"],
-    cpu: ["x64"],
-    node: "csszyx-core.win32-x64-msvc.node",
-  },
-  {
-    dir: "packages/core-win32-arm64-msvc",
-    name: "@csszyx/core-win32-arm64-msvc",
-    os: ["win32"],
-    cpu: ["arm64"],
-    node: "csszyx-core.win32-arm64-msvc.node",
-  },
-];
-
 let errors = 0;
 
-for (const expected of PACKAGES) {
+for (const expected of NATIVE_PLATFORM_PACKAGES) {
   const packagePath = path.join(repoRoot, expected.dir, "package.json");
   if (!existsSync(packagePath)) {
     fail(`${expected.dir}/package.json is missing`);

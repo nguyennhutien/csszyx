@@ -119,6 +119,11 @@ they are excluded from `pnpm-workspace.yaml` until the native publish matrix is
 ready. This avoids unsupported-platform warnings on every local pnpm command
 while keeping the metadata contract reviewable.
 
+The package/build/smoke scripts read platform metadata from
+`packages/core/scripts/native-platforms.mjs`. Update that manifest first when
+adding a platform; `pnpm --filter @csszyx/core native:packages` validates every
+package directory against it.
+
 To build the current host package locally:
 
 ```bash
@@ -151,14 +156,17 @@ This command builds with `features.native,native-engine`, calls
 and removes generated `.node`/`.d.ts` artifacts before exiting. The normal
 `native:smoke` command intentionally keeps validating the native-only scaffold.
 
-Current native-engine rewrite coverage is intentionally narrow:
+Current native-engine rewrite coverage is still opt-in, but now covers the main
+static and runtime fallback paths:
 
 - Static `sz={{ ... }}`, `sz="..."`, and fully static `sz={[...]}` inputs can
   rewrite to `className`.
 - Static string `class`/`className` attributes merge with static `sz` on the
   same JSX opening element.
-- Unsupported dynamic `sz` attributes emit diagnostics and leave the entire file
-  unchanged to avoid partial rewrites before runtime fallback lands.
+- Dynamic `sz` attributes emit `_sz(original)` runtime fallback output instead
+  of diagnostics for common identifier/call/object/array/ternary shapes.
+- Existing static or dynamic `class`/`className` values merge with static or
+  runtime-fallback `sz` output through `_szMerge(...)` when needed.
 - Static `szRecover="csr"` / `"dev-only"` emits a deterministic
   `data-sz-recovery-token` and recovery token metadata; dynamic or unknown
   values emit diagnostics and skip token emission.
