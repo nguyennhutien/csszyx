@@ -309,7 +309,7 @@ ${renderDiagnosticRows(diagnosticRows)}
 
 - \`fastRegex\` includes no-op files and AST-free flat static \`sz\` files; use the \`sz marker\` subset to judge fast-path value.
 - If most \`sz\` marker files stay on \`static\`, widening AST-free matching is low leverage.
-- Diagnostic rows are expected for unsupported dynamic safety cases; they should stay unchanged until a dedicated runtime-fallback slice owns them.
+- Diagnostic rows should now be mostly recovery-mode validation or syntax/parser issues; common dynamic \`sz\` fallback is expected to rewrite instead of diagnostic.
 `;
 }
 
