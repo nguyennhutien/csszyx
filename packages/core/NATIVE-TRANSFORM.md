@@ -119,10 +119,10 @@ they are excluded from `pnpm-workspace.yaml` until the native publish matrix is
 ready. This avoids unsupported-platform warnings on every local pnpm command
 while keeping the metadata contract reviewable.
 
-The package/build/smoke scripts read platform metadata from
-`packages/core/scripts/native-platforms.mjs`. Update that manifest first when
-adding a platform; `pnpm --filter @csszyx/core native:packages` validates every
-package directory against it.
+The loader, package, build, and smoke scripts read platform metadata from
+`packages/core/native/platforms.js`. Update that manifest first when adding a
+platform; `pnpm --filter @csszyx/core native:packages` validates every package
+directory against it.
 
 To build the current host package locally:
 

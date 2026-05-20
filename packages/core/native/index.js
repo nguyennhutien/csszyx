@@ -1,26 +1,11 @@
 import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
+import { getNativePackageName } from './platforms.js';
 
-const PACKAGE_BY_PLATFORM = new Map([
-    ['linux-x64-gnu', '@csszyx/core-linux-x64-gnu'],
-    ['linux-x64-musl', '@csszyx/core-linux-x64-musl'],
-    ['linux-arm64-gnu', '@csszyx/core-linux-arm64-gnu'],
-    ['linux-arm64-musl', '@csszyx/core-linux-arm64-musl'],
-    ['darwin-x64', '@csszyx/core-darwin-x64'],
-    ['darwin-arm64', '@csszyx/core-darwin-arm64'],
-    ['win32-x64-msvc', '@csszyx/core-win32-x64-msvc'],
-    ['win32-arm64-msvc', '@csszyx/core-win32-arm64-msvc'],
-]);
+const require = createRequire(import.meta.url);
 
 let cachedBinding;
 let cachedPackageName;
-// Memoize the platform-detected package name so we do not pay
-// `process.report.getReport()` (~1.2 ms each on linux-arm64) on every
-// hot-loop `transformBatch()` call. The host platform does not change
-// at runtime, so a single resolution is enough.
-let memoizedAutoPackageName;
-let memoizedAutoResolved = false;
 
 export class CsszyxNativeUnavailableError extends Error {
     constructor(message, packageName = getNativePackageName()) {
@@ -38,28 +23,6 @@ export class CsszyxNativeUnavailableError extends Error {
         this.code = 'CSSZYX_NATIVE_UNAVAILABLE';
         this.packageName = packageName;
     }
-}
-
-export function getNativePackageName() {
-    if (memoizedAutoResolved) {
-        return memoizedAutoPackageName;
-    }
-    const platform = process.platform;
-    const arch = process.arch;
-    let resolved = null;
-
-    if (platform === 'linux') {
-        const libc = isMusl() ? 'musl' : 'gnu';
-        resolved = PACKAGE_BY_PLATFORM.get(`${platform}-${arch}-${libc}`) ?? null;
-    } else if (platform === 'win32') {
-        resolved = PACKAGE_BY_PLATFORM.get(`${platform}-${arch}-msvc`) ?? null;
-    } else {
-        resolved = PACKAGE_BY_PLATFORM.get(`${platform}-${arch}`) ?? null;
-    }
-
-    memoizedAutoPackageName = resolved;
-    memoizedAutoResolved = true;
-    return resolved;
 }
 
 export function loadNativeBinding(packageName = getNativePackageName()) {
@@ -118,11 +81,4 @@ function isModuleNotFoundForPackage(err, packageName) {
     return typeof err.message === 'string' && err.message.includes(packageName);
 }
 
-function isMusl() {
-    if (typeof process.report?.getReport !== 'function') {
-        return false;
-    }
-
-    const report = process.report.getReport();
-    return !report.header?.glibcVersionRuntime;
-}
+export { getNativePackageName };
