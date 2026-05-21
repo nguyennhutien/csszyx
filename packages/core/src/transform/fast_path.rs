@@ -47,6 +47,13 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
         return FastPathTriage::Noop(SourceIr::empty(file.filename.clone(), source_len));
     }
 
+    if file.source.contains("dynamic(") {
+        return FastPathTriage::NeedsParser(FastPathBailout {
+            filename: file.filename.clone(),
+            reason: FastPathBailoutReason::ContainsSzMarker,
+        });
+    }
+
     if let Some(ir) = try_static_sz_ir(file) {
         return FastPathTriage::StaticIr(ir);
     }
@@ -298,6 +305,22 @@ mod tests {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: "export const App = () => <div className=\"x\" sz={{ p: 4 }} />;".to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn dynamic_call_bails_to_parser() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { dynamic } from '@csszyx/dynamic'; const App = () => <div sz={{ p: 4 }}><span className={dynamic({ w: 7 })} /></div>;".to_string(),
         };
 
         assert!(matches!(

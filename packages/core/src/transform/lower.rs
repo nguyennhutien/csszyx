@@ -21,9 +21,10 @@ pub struct LoweredSourceClasses {
 /// Lower parser-neutral source IR into class lists without rewriting source.
 pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
     let classes = ir
-        .sz_attributes
+        .extracted_classes
         .iter()
-        .flat_map(lower_sz_attribute_classes)
+        .cloned()
+        .chain(ir.sz_attributes.iter().flat_map(lower_sz_attribute_classes))
         .collect();
     let raw_class_names = ir
         .class_attributes
@@ -332,6 +333,7 @@ mod tests {
                 value: "block".to_string(),
                 expression_span: None,
             }],
+            extracted_classes: Vec::new(),
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

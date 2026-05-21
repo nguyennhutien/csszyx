@@ -1,10 +1,11 @@
 use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
-        ArrayExpression, ArrayExpressionElement, ConditionalExpression, Expression, JSXAttribute,
-        JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElementName, JSXExpression,
-        JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement, ObjectExpression,
-        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+        Argument, ArrayExpression, ArrayExpressionElement, CallExpression, ConditionalExpression,
+        Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue,
+        JSXElementName, JSXExpression, JSXMemberExpression, JSXMemberExpressionObject,
+        JSXOpeningElement, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
+        UnaryOperator,
     },
     AstKind,
 };
@@ -191,6 +192,15 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
         walk::walk_jsx_opening_element(self, element);
     }
+
+    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        self.collect_dynamic_call_classes(call);
+        walk::walk_call_expression(self, call);
+    }
 }
 
 /// Scope + program pair threaded through static-lowering recursions so the
@@ -357,6 +367,24 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             expression_span,
         });
         Some(index)
+    }
+
+    fn collect_dynamic_call_classes(&mut self, call: &CallExpression<'_>) {
+        let Expression::Identifier(callee) = &call.callee else {
+            return;
+        };
+        if callee.name != "dynamic" {
+            return;
+        }
+        let Some(argument) = call.arguments.first() else {
+            return;
+        };
+        let Some(object) = static_object_from_argument(argument, self.resolve_context()) else {
+            return;
+        };
+        self.ir
+            .extracted_classes
+            .extend(lower_static_sz_object(&object));
     }
 
     fn collect_recovery_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
@@ -580,6 +608,36 @@ fn static_object_from_expression(
                 ctx.program,
             )?;
             static_object_from_expression(initializer, ctx)
+        }
+        _ => None,
+    }
+}
+
+fn static_object_from_argument(
+    argument: &Argument<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
+    match argument {
+        Argument::ObjectExpression(object) => static_object_from_object_expression(object, ctx),
+        Argument::Identifier(identifier) => {
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
+            static_object_from_expression(initializer, ctx).map(|(object, _, _)| object)
+        }
+        Argument::ParenthesizedExpression(value) => {
+            static_object_from_expression(&value.expression, ctx).map(|(object, _, _)| object)
+        }
+        Argument::TSAsExpression(value) => {
+            static_object_from_expression(&value.expression, ctx).map(|(object, _, _)| object)
+        }
+        Argument::TSSatisfiesExpression(value) => {
+            static_object_from_expression(&value.expression, ctx).map(|(object, _, _)| object)
+        }
+        Argument::TSNonNullExpression(value) => {
+            static_object_from_expression(&value.expression, ctx).map(|(object, _, _)| object)
         }
         _ => None,
     }
@@ -1125,6 +1183,34 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert!(lowered.raw_class_names.is_empty());
         assert_eq!(lowered.classes, ["p-4"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_static_dynamic_call_classes() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { dynamic } from '@csszyx/dynamic'; const App = () => <div className={dynamic({ p: 4, rounded: 'md' })} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.classes, ["p-4", "rounded-md"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_identifier_dynamic_call_classes() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { dynamic } from '@csszyx/dynamic'; const boxStyles = { w: 7, h: 8, rounded: 'sm' } as const; const App = () => <div className={dynamic(boxStyles as any)} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.classes, ["w-7", "h-8", "rounded-sm"]);
     }
 
     #[test]

@@ -49,6 +49,8 @@ pub struct SourceIr {
     pub unsupported_sz_attribute_spans: Vec<TextSpan>,
     /// Class/className attributes found in source order.
     pub class_attributes: Vec<ClassAttributeIr>,
+    /// Classes extracted from static `dynamic({...})` calls.
+    pub extracted_classes: Vec<String>,
     /// Style attributes found in source order.
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
@@ -71,6 +73,7 @@ impl SourceIr {
             sz_attributes: Vec::new(),
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
+            extracted_classes: Vec::new(),
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -364,6 +367,7 @@ mod tests {
                 value: "block".to_string(),
                 expression_span: None,
             }],
+            extracted_classes: Vec::new(),
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

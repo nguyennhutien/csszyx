@@ -155,6 +155,25 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'dynamic-existing-class.tsx',
         expected: 'parity',
     },
+    {
+        name: 'dynamic-call-static-object',
+        source: [
+            "import { dynamic } from '@csszyx/dynamic';",
+            'const X = () => <div className={dynamic({ p: 4, rounded: "md" })} />;',
+        ].join('\n'),
+        filename: 'dynamic-call.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'dynamic-call-static-binding',
+        source: [
+            "import { dynamic } from '@csszyx/dynamic';",
+            'const styles = { w: 7, h: 8, rounded: "sm" } as const;',
+            'const X = () => <div className={dynamic(styles as any)} />;',
+        ].join('\n'),
+        filename: 'dynamic-call-binding.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {
