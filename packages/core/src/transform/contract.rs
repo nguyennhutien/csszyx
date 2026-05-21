@@ -100,7 +100,7 @@ pub enum ParserPath {
 pub struct TransformResult {
     /// Rewritten source code.
     pub code: String,
-    /// Source map payload once native rewriting lands.
+    /// Source map payload, or null when the native rewrite does not emit a map.
     pub map: Option<serde_json::Value>,
     /// Generated csszyx/Tailwind classes.
     pub classes: Vec<String>,

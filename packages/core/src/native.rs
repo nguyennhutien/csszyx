@@ -1,8 +1,7 @@
-//! NAPI entrypoints for the future Node-native transform package.
+//! NAPI entrypoints for the Node-native transform package.
 //!
 //! The module is compiled only with the `native` Cargo feature. It bridges the
-//! JavaScript batch API to the Rust transform contract without implementing the
-//! parser or rewrite engine yet.
+//! JavaScript batch API to the Rust transform contract.
 
 use napi_derive::napi;
 
@@ -86,7 +85,7 @@ pub struct NativeTransformTimings {
 pub struct NativeTransformResult {
     /// Rewritten source code.
     pub code: String,
-    /// Source map payload once native rewriting lands.
+    /// Source map payload, or null when the native rewrite does not emit a map.
     pub map: Option<String>,
     /// Generated csszyx/Tailwind classes.
     pub classes: Vec<String>,
@@ -106,7 +105,7 @@ pub struct NativeTransformResult {
 ///
 /// # Errors
 ///
-/// Returns a NAPI error while the Rust transform engine is still scaffolded.
+/// Returns a NAPI error when the Rust transform engine cannot run in this build.
 #[napi(js_name = "transformBatch")]
 pub fn transform_batch_native(
     files: Vec<NativeTransformFile>,

@@ -1,4 +1,4 @@
-/** Optional native package names supported by the future Node transform. */
+/** Optional native package names supported by the Node-native transform. */
 export type NativePlatformPackage =
     | '@csszyx/core-linux-x64-gnu'
     | '@csszyx/core-linux-x64-musl'

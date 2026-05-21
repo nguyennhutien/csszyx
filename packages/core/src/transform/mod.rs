@@ -1,8 +1,7 @@
 //! Native Rust transform contract.
 //!
-//! This module defines the stable Rust-side request/result shape before the
-//! parser and napi bindings land. The current implementation is intentionally a
-//! scaffold so callers cannot mistake it for a working native transform.
+//! This module defines the stable Rust-side request/result shape shared by the
+//! native engine, NAPI bindings, and JavaScript wrapper.
 
 mod contract;
 #[cfg(feature = "native-engine")]
@@ -39,10 +38,10 @@ pub use ir::{
     StaticTernaryIr, StyleAttributeIr, SzAttributeIr, TextSpan,
 };
 
-/// Error returned by the Rust transform scaffold.
+/// Error returned when the Rust transform engine cannot run in this build.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransformError {
-    /// The native transform core has not been implemented yet.
+    /// The native transform requires the `native-engine` Cargo feature.
     NotImplemented,
 }
 
@@ -50,7 +49,7 @@ impl std::fmt::Display for TransformError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotImplemented => {
-                f.write_str("csszyx Rust transform core is not implemented yet")
+                f.write_str("csszyx Rust transform core requires the native-engine feature")
             }
         }
     }
@@ -62,7 +61,8 @@ impl std::error::Error for TransformError {}
 ///
 /// # Errors
 ///
-/// Returns [`TransformError::NotImplemented`] unless the native engine feature is enabled.
+/// Returns [`TransformError::NotImplemented`] when this crate was built without
+/// the native engine feature.
 #[allow(clippy::missing_const_for_fn)]
 pub fn transform_batch(files: &[TransformFile]) -> Result<Vec<TransformResult>, TransformError> {
     #[cfg(feature = "native-engine")]
@@ -87,7 +87,7 @@ mod tests {
 
     #[cfg(not(feature = "native-engine"))]
     #[test]
-    fn transform_batch_is_an_explicit_scaffold() {
+    fn transform_batch_requires_native_engine_feature() {
         let files = [TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: "const App = () => <div sz={{ p: 4 }} />;".to_string(),
