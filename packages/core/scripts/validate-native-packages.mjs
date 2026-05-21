@@ -19,10 +19,14 @@ const releaseWorkflowPath = path.join(
   repoRoot,
   ".github/workflows/release.yml",
 );
+const nativeTypesPath = path.join(repoRoot, "packages/core/native/index.d.ts");
+const nativeDocsPath = path.join(repoRoot, "packages/core/NATIVE-TRANSFORM.md");
 const corePackage = JSON.parse(readFileSync(corePackagePath, "utf8"));
 const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
 const workspaceYaml = readFileSync(workspacePath, "utf8");
 const releaseWorkflow = readFileSync(releaseWorkflowPath, "utf8");
+const nativeTypes = readFileSync(nativeTypesPath, "utf8");
+const nativeDocs = readFileSync(nativeDocsPath, "utf8");
 const nativePackageNames = new Set(
   NATIVE_PLATFORM_PACKAGES.map((packageInfo) => packageInfo.name),
 );
@@ -31,6 +35,8 @@ const requireBinaries = process.argv.includes("--require-binaries");
 assertNativeOptionalDependencies(corePackage);
 assertSupportedArchitectures(rootPackage);
 assertReleaseMatrix(releaseWorkflow);
+assertNativeTypes(nativeTypes);
+assertNativeDocs(nativeDocs);
 
 if (workspaceYaml.includes("!packages/core-*")) {
   fail(
@@ -184,6 +190,11 @@ function assertReleaseMatrix(workflow) {
   for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
     assertTextIncludes(
       workflow,
+      `target: ${packageInfo.triple}\n            platform: ${packageInfo.platformKey}`,
+      "release native matrix target/platform pair",
+    );
+    assertTextIncludes(
+      workflow,
       `platform: ${packageInfo.platformKey}`,
       "release native matrix",
     );
@@ -201,6 +212,42 @@ function assertReleaseMatrix(workflow) {
 }
 
 /**
+ * Assert the public TypeScript package-name union matches the runtime platform
+ * manifest. This keeps `getNativePackageName()` and the exported
+ * `NativePlatformPackage` type from drifting apart when platforms are added or
+ * renamed.
+ *
+ * @param {string} types Native declaration file contents.
+ */
+function assertNativeTypes(types) {
+  const packageNames = new Set(
+    [...types.matchAll(/['"](@csszyx\/core-[^'"]+)['"]/g)].map(
+      (match) => match[1],
+    ),
+  );
+
+  assertSetEqual(
+    packageNames,
+    nativePackageNames,
+    "native/index.d.ts packages",
+  );
+}
+
+/**
+ * Assert the platform package docs table lists every runtime platform package
+ * and target triple. The docs are release-operator material, so stale docs can
+ * cause missed native artifacts even when code is correct.
+ *
+ * @param {string} docs Native transform docs contents.
+ */
+function assertNativeDocs(docs) {
+  for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
+    assertTextIncludes(docs, packageInfo.name, "native docs package table");
+    assertTextIncludes(docs, packageInfo.triple, "native docs package table");
+  }
+}
+
+/**
  * Assert an array contains a value.
  *
  * @param {unknown} actual Actual array.
@@ -210,6 +257,29 @@ function assertReleaseMatrix(workflow) {
 function assertIncludes(actual, expected, label) {
   if (!Array.isArray(actual) || !actual.includes(expected)) {
     fail(`${label}: expected to include ${JSON.stringify(expected)}`);
+  }
+}
+
+/**
+ * Assert two sets contain the same values.
+ *
+ * @param {Set<string>} actual Actual values.
+ * @param {Set<string>} expected Expected values.
+ * @param {string} label Assertion label.
+ */
+function assertSetEqual(actual, expected, label) {
+  const missing = [...expected].filter((value) => !actual.has(value));
+  const extra = [...actual].filter((value) => !expected.has(value));
+  if (missing.length > 0 || extra.length > 0) {
+    fail(
+      [
+        `${label}: mismatch`,
+        missing.length > 0 ? `missing ${missing.join(", ")}` : null,
+        extra.length > 0 ? `extra ${extra.join(", ")}` : null,
+      ]
+        .filter(Boolean)
+        .join("; "),
+    );
   }
 }
 
