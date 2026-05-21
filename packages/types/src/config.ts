@@ -116,7 +116,8 @@ export interface BuildConfig {
      *
      * `oxc` is the default parser. `babel` remains available as a compatibility
      * fallback while the migration keeps Babel dependencies installed. `rust`
-     * is an experimental maximum-speed scaffold and is not production-ready.
+     * opts into the native Rust engine and requires the matching optional
+     * `@csszyx/core-*` platform package to be installed.
      *
      * @default "oxc"
      */

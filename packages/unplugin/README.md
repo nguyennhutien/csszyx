@@ -78,7 +78,7 @@ Per project:
 
 ```ts
 csszyx({
-  build: { parser: "babel" }, // opt out of oxc default
+  build: { parser: "babel" }, // compatibility escape hatch
 });
 ```
 
@@ -87,6 +87,10 @@ Per build:
 ```bash
 CSSZYX_PARSER=babel pnpm build
 ```
+
+`build.parser: "rust"` opts into the native Rust engine. It requires the
+matching optional `@csszyx/core-*` platform package; when that package is
+missing, csszyx fails loudly instead of silently falling back to another parser.
 
 Either path routes prescan, transform, and HMR discovery through the
 legacy Babel implementation. Both paths produce identical class output;
