@@ -92,10 +92,10 @@ CSSZYX_PARSER=babel pnpm build
 matching optional `@csszyx/core-*` platform package; when that package is
 missing, csszyx fails loudly instead of silently falling back to another parser.
 
-Either path routes prescan, transform, and HMR discovery through the
-legacy Babel implementation. Both paths produce identical class output;
-the only difference is whether magic-string preserves your original
-formatting (oxc) or Babel's code generator pretty-prints it.
+`build.parser: "babel"` routes prescan, transform, and HMR discovery through the
+legacy Babel implementation. The default `oxc` path uses surgical magic-string
+edits to preserve source formatting outside touched ranges. The `rust` path uses
+the native engine when its optional platform package is installed.
 
 ## License
 
