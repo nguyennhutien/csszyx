@@ -4,11 +4,21 @@ on:
   push:
     branches: [main, develop]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "packages/core/**"
+      - "rust-toolchain.toml"
+      - ".rustfmt.toml"
+      - ".mise.toml"
   pull_request:
     branches: [main, develop]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "packages/core/**"
+      - "rust-toolchain.toml"
+      - ".rustfmt.toml"
+      - ".mise.toml"
 
 jobs:
   check:

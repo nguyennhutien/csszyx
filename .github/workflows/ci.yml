@@ -84,9 +84,14 @@ jobs:
               - '.eslintrc*'
               - 'eslint.config.*'
             code_rust:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
               - 'packages/core/src/**'
               - 'packages/core/Cargo.toml'
               - 'packages/core/Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.rustfmt.toml'
+              - '.mise.toml'
             # E2E tests verify the runtime stack end-to-end against
             # built playgrounds. Trigger only when something in that
             # surface area changes.
