@@ -503,11 +503,11 @@ fn static_object_from_jsx_expression(
     ctx: ResolveContext<'_>,
 ) -> Option<(StaticSzObject, TextSpan, bool)> {
     match expression {
-        JSXExpression::ObjectExpression(object) => Some((
-            static_object_from_object_expression(object, ctx)?,
-            text_span(object.span),
-            false,
-        )),
+        JSXExpression::ObjectExpression(object) => {
+            let object_ir = static_object_from_object_expression(object, ctx)?;
+            let rewrites_empty_class = object_ir.is_empty();
+            Some((object_ir, text_span(object.span), rewrites_empty_class))
+        }
         JSXExpression::ArrayExpression(array) => Some((
             static_object_from_array_expression(array, ctx)?,
             text_span(array.span),
@@ -549,11 +549,11 @@ fn static_object_from_expression(
     ctx: ResolveContext<'_>,
 ) -> Option<(StaticSzObject, TextSpan, bool)> {
     match expression {
-        Expression::ObjectExpression(object) => Some((
-            static_object_from_object_expression(object, ctx)?,
-            text_span(object.span),
-            false,
-        )),
+        Expression::ObjectExpression(object) => {
+            let object_ir = static_object_from_object_expression(object, ctx)?;
+            let rewrites_empty_class = object_ir.is_empty();
+            Some((object_ir, text_span(object.span), rewrites_empty_class))
+        }
         Expression::ArrayExpression(array) => Some((
             static_object_from_array_expression(array, ctx)?,
             text_span(array.span),
