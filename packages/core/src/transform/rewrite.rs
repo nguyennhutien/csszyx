@@ -640,6 +640,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_static_property_ternary_sz_attribute() {
+        let source = "const X = ({ big }) => <div sz={{ p: big ? 8 : 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ big }) => <div className={big ? \"p-8\" : \"p-4\"} />;"
+        );
+    }
+
+    #[test]
     fn rewrites_function_body_local_static_ternary() {
         let source = "const X = ({ active }) => {\n  const ON = { p: 4 } as const;\n  const OFF = { p: 8 } as const;\n  return <div sz={active ? ON : OFF} />;\n};";
         let rewritten = rewrite(source).expect("rewritten");

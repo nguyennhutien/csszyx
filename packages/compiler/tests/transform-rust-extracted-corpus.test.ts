@@ -31,10 +31,10 @@ interface ExtractedSnippet {
 }
 
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
-    parity: 88,
+    parity: 89,
     'rust-ahead': 4,
     'code-divergence': 1,
-    'class-divergence': 24,
+    'class-divergence': 23,
     'metadata-divergence': 1,
     'rust-unavailable': 0,
 };

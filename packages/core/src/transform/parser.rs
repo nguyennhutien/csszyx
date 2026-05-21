@@ -268,7 +268,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                     )
-                } else if let Some((object, value_span, dynamic_css_vars)) =
+                } else if let Some((object, value_span, dynamic_css_vars, ternary)) =
                     partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
@@ -276,7 +276,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        None,
+                        ternary,
                         false,
                         dynamic_css_vars,
                     )
@@ -588,22 +588,29 @@ fn static_object_from_expression(
 struct PartialSzObject {
     object: StaticSzObject,
     dynamic_css_vars: Vec<DynamicCssVarIr>,
+    ternary: Option<StaticTernaryIr>,
 }
 
 fn partial_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
     ctx: ResolveContext<'_>,
-) -> Option<(StaticSzObject, TextSpan, Vec<DynamicCssVarIr>)> {
+) -> Option<(
+    StaticSzObject,
+    TextSpan,
+    Vec<DynamicCssVarIr>,
+    Option<StaticTernaryIr>,
+)> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None)?;
-            if partial.dynamic_css_vars.is_empty() {
+            if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
                 return None;
             }
             Some((
                 partial.object,
                 text_span(object.span),
                 partial.dynamic_css_vars,
+                partial.ternary,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -625,17 +632,23 @@ fn partial_object_from_jsx_expression(
 fn partial_object_from_expression(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
-) -> Option<(StaticSzObject, TextSpan, Vec<DynamicCssVarIr>)> {
+) -> Option<(
+    StaticSzObject,
+    TextSpan,
+    Vec<DynamicCssVarIr>,
+    Option<StaticTernaryIr>,
+)> {
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None)?;
-            if partial.dynamic_css_vars.is_empty() {
+            if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
                 return None;
             }
             Some((
                 partial.object,
                 text_span(object.span),
                 partial.dynamic_css_vars,
+                partial.ternary,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -659,6 +672,7 @@ fn partial_object_from_object_expression(
 ) -> Option<PartialSzObject> {
     let mut properties = Vec::with_capacity(object.properties.len());
     let mut dynamic_css_vars = Vec::new();
+    let mut ternary = None;
 
     for property in &object.properties {
         match property {
@@ -684,7 +698,25 @@ fn partial_object_from_object_expression(
                         });
                     }
                     dynamic_css_vars.extend(nested.dynamic_css_vars);
+                    if nested.ternary.is_some() {
+                        if ternary.is_some() {
+                            return None;
+                        }
+                        ternary = nested.ternary;
+                    }
                     continue;
+                }
+
+                if let Expression::ConditionalExpression(conditional) = &property.value {
+                    if let Some(conditional_ternary) =
+                        conditional_class_from_property(&key, conditional, ctx, variant_prefix)
+                    {
+                        if ternary.is_some() {
+                            return None;
+                        }
+                        ternary = Some(conditional_ternary);
+                        continue;
+                    }
                 }
 
                 if !is_runtime_expression(&property.value) {
@@ -703,10 +735,52 @@ fn partial_object_from_object_expression(
         }
     }
 
+    if ternary.is_some() && (!properties.is_empty() || !dynamic_css_vars.is_empty()) {
+        return None;
+    }
+
     Some(PartialSzObject {
         object: StaticSzObject { properties },
         dynamic_css_vars,
+        ternary,
     })
+}
+
+fn conditional_class_from_property(
+    key: &str,
+    conditional: &ConditionalExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_prefix: Option<&str>,
+) -> Option<StaticTernaryIr> {
+    let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
+    let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
+    Some(StaticTernaryIr {
+        test_span: text_span(conditional.test.span()),
+        consequent_classes: conditional_property_classes(key, consequent, variant_prefix),
+        alternate_classes: conditional_property_classes(key, alternate, variant_prefix),
+    })
+}
+
+fn conditional_property_classes(
+    key: &str,
+    value: StaticSzValue,
+    variant_prefix: Option<&str>,
+) -> Vec<String> {
+    let object = StaticSzObject {
+        properties: vec![StaticSzProperty {
+            key: key.to_string(),
+            span: TextSpan { start: 0, end: 0 },
+            value,
+        }],
+    };
+    let classes = lower_static_sz_object(&object);
+    let Some(prefix) = variant_prefix else {
+        return classes;
+    };
+    classes
+        .into_iter()
+        .map(|class_name| format!("{prefix}:{class_name}"))
+        .collect()
 }
 
 fn dynamic_css_var_from_property(
