@@ -324,38 +324,20 @@ describe('RSC boundary guard', () => {
 });
 
 // =====================================================================
-// Known issues — fix planned in this version pump.
+// RSC audit regressions and remaining known issues.
 //
-// These tests document concrete behavioural gaps in the RSC boundary
-// guard surfaced by the 2026-05-13 audit. Each uses `it.fails(...)` so
-// the suite stays green while the bug exists; when a fix lands the
-// inner assertion starts passing and `it.fails` flips to red, forcing
-// the contributor to remove the `.fails` qualifier and promote the
-// test to a regular `it(...)`.
+// These tests document concrete behavioural gaps in the RSC boundary guard
+// surfaced by the 2026-05-13 audit. Fixed issues stay as regular regression
+// tests; unresolved behavioural bugs use `it.fails(...)`; longer-tail
+// performance work stays as `it.todo(...)`.
 //
 // Severity ordering:
-//   #3 subpath bypass            — HIGH (csszyx/browser + csszyx/dynamic exist today)
-//   #2 default-import bypass     — MEDIUM (defensive; runtime has no default export yet)
-//   #1 commented-out false +ve   — LOW (annoying but workaround = delete the comment)
 //   #4 normalizeModuleId perf    — LOW (fine on this repo, may bite large monorepos)
 //   #5 stale state on HMR        — LOW (dev-only, server restart clears)
 // =====================================================================
 
-describe('Known issues — fix planned in next version pump', () => {
-    // ---- Issue 3 ---------------------------------------------------
-    // Subpath bypass. RUNTIME_MODULES is an exact-match Set, so any
-    // import from `csszyx/*` or `@csszyx/*` outside the four hard-coded
-    // entries silently passes the guard. csszyx already ships
-    // `csszyx/browser` and `csszyx/dynamic` (umbrella package's
-    // package.json `exports` map), plus the standalone `@csszyx/dynamic`
-    // package — none of which are safe to import from a Server
-    // Component. Fix should switch to a prefix match against
-    // `csszyx`, `@csszyx/runtime`, `@csszyx/dynamic` package roots and
-    // treat ANY import from those roots as forbidden (regardless of
-    // imported symbol name), since runtime subpaths can expose their
-    // own client-only APIs.
-
-    it.fails('flags named imports from csszyx/dynamic in a server module', () => {
+describe('RSC audit regressions and known issues', () => {
+    it('flags named imports from csszyx/dynamic in a server module', () => {
         const code = `
             'use server';
             import { dynamic } from 'csszyx/dynamic';
@@ -366,7 +348,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
-    it.fails('flags named imports from the standalone @csszyx/dynamic package', () => {
+    it('flags named imports from the standalone @csszyx/dynamic package', () => {
         const code = `
             'use server';
             import { dynamic } from '@csszyx/dynamic';
@@ -377,7 +359,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
-    it.fails('flags namespace imports from csszyx/dynamic in a server module', () => {
+    it('flags namespace imports from csszyx/dynamic in a server module', () => {
         const code = `
             'use server';
             import * as cssz from 'csszyx/dynamic';
@@ -388,7 +370,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
-    it.fails('flags side-effect imports of csszyx/browser in a server module', () => {
+    it('flags side-effect imports of csszyx/browser in a server module', () => {
         // csszyx/browser is the IIFE runtime bundled for vanilla HTML —
         // unconditionally CSP-active in the browser, attaches a
         // MutationObserver. Importing it for side-effect from a server
@@ -403,15 +385,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
-    // ---- Issue 2 ---------------------------------------------------
-    // `readImportedSymbols` only scans inside `{...}` blocks, so default
-    // and `* as` aliased imports of a runtime helper bypass the check.
-    // csszyx/runtime currently has no default export, but the moment
-    // one is added (or someone uses a barrel re-export) this becomes a
-    // silent failure. Fix should also inspect the default-import
-    // identifier preceding the `{...}` or `from` keyword.
-
-    it.fails('flags default imports of forbidden runtime symbols', () => {
+    it('flags default imports of forbidden runtime symbols', () => {
         const code = `
             'use server';
             import _sz from '@csszyx/runtime';
@@ -422,7 +396,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
-    it.fails('flags mixed default + named imports where the default is forbidden', () => {
+    it('flags mixed default + named imports where the default is forbidden', () => {
         const code = `
             'use server';
             import _sz, { other } from '@csszyx/runtime';
@@ -433,15 +407,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
     });
 
-    // ---- Issue 1 ---------------------------------------------------
-    // `findRuntimeImports` runs regex against raw source — line and
-    // block comments are not stripped, so a forbidden import that has
-    // been commented out for any reason (stale code, FIX-ME marker,
-    // pending refactor) still trips the guard. Fix should remove
-    // single-line and block comments before scanning, or move to an
-    // AST-aware lightweight tokenizer.
-
-    it.fails('allows commented-out forbidden imports without triggering the guard', () => {
+    it('allows commented-out forbidden imports without triggering the guard', () => {
         const code = `
             'use server';
 
@@ -455,7 +421,7 @@ describe('Known issues — fix planned in next version pump', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).not.toThrow();
     });
 
-    it.fails('allows block-commented forbidden imports', () => {
+    it('allows block-commented forbidden imports', () => {
         const code = `
             'use server';
 

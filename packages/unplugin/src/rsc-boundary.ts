@@ -4,12 +4,16 @@ import * as path from 'node:path';
 const SERVER_DIRECTIVE_RE = /^['"]use server['"];?$/;
 const CLIENT_DIRECTIVE_RE = /^['"]use client['"];?$/;
 
-const RUNTIME_MODULES = new Set([
+const RUNTIME_HELPER_MODULES = new Set([
     '@csszyx/runtime',
     '@csszyx/runtime/lite',
     'csszyx',
     'csszyx/lite',
 ]);
+
+const CLIENT_RUNTIME_MODULES = new Set(['csszyx/browser']);
+
+const CLIENT_RUNTIME_MODULE_ROOTS = ['@csszyx/dynamic', 'csszyx/dynamic'];
 
 const FORBIDDEN_SYMBOLS = new Set([
     '_sz',
@@ -372,34 +376,83 @@ function skipWhitespaceAndComments(code: string, start: number): number {
  */
 function findRuntimeImports(code: string): Array<{ source: string; symbols: string[] }> {
     const imports: Array<{ source: string; symbols: string[] }> = [];
+    const scanCode = stripCommentsForImportScan(code);
     const staticImportRe = /import\s+(?!type\b)([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
     const sideEffectImportRe = /import\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-    for (const match of code.matchAll(staticImportRe)) {
+    for (const match of scanCode.matchAll(staticImportRe)) {
         const clause = match[1];
         const source = match[2];
-        if (!RUNTIME_MODULES.has(source)) {
+        if (!isRuntimeImportSource(source)) {
             continue;
         }
-        imports.push({ source, symbols: readImportedSymbols(clause) });
+        imports.push({ source, symbols: readRuntimeImportSymbols(source, clause) });
     }
 
-    for (const match of code.matchAll(sideEffectImportRe)) {
+    for (const match of scanCode.matchAll(sideEffectImportRe)) {
         const source = match[1];
-        if (RUNTIME_MODULES.has(source)) {
-            imports.push({ source, symbols: [] });
+        if (isRuntimeImportSource(source)) {
+            imports.push({
+                source,
+                symbols: isWholeRuntimeModuleForbidden(source) ? Array.from(FORBIDDEN_SYMBOLS) : [],
+            });
         }
     }
 
-    for (const match of code.matchAll(dynamicImportRe)) {
+    for (const match of scanCode.matchAll(dynamicImportRe)) {
         const source = match[1];
-        if (RUNTIME_MODULES.has(source)) {
+        if (isRuntimeImportSource(source)) {
             imports.push({ source, symbols: Array.from(FORBIDDEN_SYMBOLS) });
         }
     }
 
     return imports;
+}
+
+/**
+ * Returns true for csszyx runtime entrypoints that cannot cross into an RSC
+ * server module.
+ *
+ * @param source import source
+ * @returns true when the source is a csszyx runtime module
+ */
+function isRuntimeImportSource(source: string): boolean {
+    return (
+        RUNTIME_HELPER_MODULES.has(source) ||
+        source.startsWith('@csszyx/runtime/') ||
+        CLIENT_RUNTIME_MODULES.has(source) ||
+        CLIENT_RUNTIME_MODULE_ROOTS.some(root => source === root || source.startsWith(`${root}/`))
+    );
+}
+
+/**
+ * Some runtime entrypoints are client-only APIs where any import form is
+ * unsafe, even when the imported name is not one of the generated helpers.
+ *
+ * @param source import source
+ * @returns true when every import from this source is forbidden
+ */
+function isWholeRuntimeModuleForbidden(source: string): boolean {
+    return (
+        source.startsWith('@csszyx/runtime/') ||
+        CLIENT_RUNTIME_MODULES.has(source) ||
+        CLIENT_RUNTIME_MODULE_ROOTS.some(root => source === root || source.startsWith(`${root}/`))
+    );
+}
+
+/**
+ * Reads the symbols to enforce for a runtime import source.
+ *
+ * @param source import source
+ * @param clause static import clause
+ * @returns imported symbols relevant to the RSC guard
+ */
+function readRuntimeImportSymbols(source: string, clause: string): string[] {
+    if (isWholeRuntimeModuleForbidden(source)) {
+        return Array.from(FORBIDDEN_SYMBOLS);
+    }
+    return readImportedSymbols(clause);
 }
 
 /**
@@ -502,5 +555,84 @@ function readImportedSymbols(clause: string): string[] {
         symbols.push(...FORBIDDEN_SYMBOLS);
     }
 
+    const defaultImport = clause
+        .replace(/\{[\s\S]*?\}/, '')
+        .match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
+    const defaultSymbol = defaultImport?.[1];
+    if (defaultSymbol && FORBIDDEN_SYMBOLS.has(defaultSymbol)) {
+        symbols.push(defaultSymbol);
+    }
+
     return symbols;
+}
+
+/**
+ * Removes comments before regex import scanning while preserving strings and
+ * line positions for readable error output.
+ *
+ * @param code module source
+ * @returns source with comments replaced by whitespace
+ */
+function stripCommentsForImportScan(code: string): string {
+    let out = '';
+    let i = 0;
+    let quote: '"' | "'" | '`' | null = null;
+    let escaped = false;
+
+    while (i < code.length) {
+        const ch = code[i];
+        const next = code[i + 1];
+
+        if (quote) {
+            out += ch;
+            if (escaped) {
+                escaped = false;
+            } else if (ch === '\\') {
+                escaped = true;
+            } else if (ch === quote) {
+                quote = null;
+            }
+            i++;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'" || ch === '`') {
+            quote = ch;
+            out += ch;
+            i++;
+            continue;
+        }
+
+        if (ch === '/' && next === '/') {
+            out += '  ';
+            i += 2;
+            while (i < code.length && code[i] !== '\n') {
+                out += ' ';
+                i++;
+            }
+            continue;
+        }
+
+        if (ch === '/' && next === '*') {
+            out += '  ';
+            i += 2;
+            while (i < code.length) {
+                const blockCh = code[i];
+                const blockNext = code[i + 1];
+                if (blockCh === '*' && blockNext === '/') {
+                    out += '  ';
+                    i += 2;
+                    break;
+                }
+                out += blockCh === '\n' ? '\n' : ' ';
+                i++;
+            }
+            continue;
+        }
+
+        out += ch;
+        i++;
+    }
+
+    return out;
 }
