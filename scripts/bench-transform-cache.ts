@@ -58,8 +58,8 @@ interface BenchStats {
     filesPerSecond: number;
     /** Notes for report readers. */
     note: string;
-    /** Whether the row measured successfully or documents a scaffold state. */
-    status: 'measured' | 'not-implemented';
+    /** Whether the row measured successfully or documents a missing native addon. */
+    status: 'measured' | 'native-unavailable';
 }
 
 interface ParserFixture {
@@ -111,7 +111,7 @@ const NATIVE_RUST_AVAILABLE = tryPreloadRustBinding();
  * package. Returns true when `transformBatch()` is reachable through
  * `transformRust()`. Returns false silently when the addon has not been
  * built — the bench still runs, Rust rows fall back to the
- * not-implemented placeholder, and the report makes the gap visible
+ * native-unavailable placeholder, and the report makes the gap visible
  * instead of crashing the suite.
  *
  * @returns true when the native binding loaded and answered a sentinel call.
@@ -429,19 +429,19 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 ),
             );
         } else {
-            assertRustScaffoldThrows(
+            assertRustUnavailableThrows(
                 files[0]?.source ?? '',
                 files[0]?.filename ?? '/bench/rust.tsx',
             );
             stats.push(
-                notImplementedCase(
+                nativeUnavailableCase(
                     `parser/${size}/rust-transformRust`,
                     size,
                     'Rust native addon not built for this host. Run `pnpm --filter @csszyx/core native:build -- --native-engine` to enable measured Rust rows.',
                 ),
             );
             stats.push(
-                notImplementedCase(
+                nativeUnavailableCase(
                     `parser/${size}/rust-transformRustBatch`,
                     size,
                     'Rust native addon not built for this host. Run `pnpm --filter @csszyx/core native:build -- --native-engine` to enable measured Rust batch rows.',
@@ -496,14 +496,14 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
         );
     } else {
         stats.push(
-            notImplementedCase(
+            nativeUnavailableCase(
                 'parser/hmr/rust-transformRust',
                 opts.hmrEdits,
                 'Rust native addon not built for this host.',
             ),
         );
         stats.push(
-            notImplementedCase(
+            nativeUnavailableCase(
                 'parser/hmr/rust-transformRustBatch1',
                 opts.hmrEdits,
                 'Rust native addon not built for this host.',
@@ -548,7 +548,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
             );
         } else {
             stats.push(
-                notImplementedCase(
+                nativeUnavailableCase(
                     `parser/fixture/${fixture.name}/rust`,
                     1,
                     'Rust native addon not built for this host.',
@@ -635,12 +635,12 @@ function countParserPaths(rows: NativeTransformResult[]): Record<string, number>
 }
 
 /**
- * Assert that the Rust parser scaffold is still an explicit throw, not a silent fallback.
+ * Assert that the Rust parser still fails explicitly when the native addon is missing.
  *
  * @param source fixture source
  * @param filename fixture filename
  */
-function assertRustScaffoldThrows(source: string, filename: string): void {
+function assertRustUnavailableThrows(source: string, filename: string): void {
     try {
         transformRust(source, filename);
     } catch (err) {
@@ -695,14 +695,14 @@ function measureCase(
 }
 
 /**
- * Create a placeholder benchmark row for a parser path that is wired but not implemented.
+ * Create a placeholder benchmark row for a parser path whose native addon is missing.
  *
  * @param name case label
  * @param files file count
  * @param note report note
- * @returns not-implemented benchmark stats
+ * @returns native-unavailable benchmark stats
  */
-function notImplementedCase(name: string, files: number, note: string): BenchStats {
+function nativeUnavailableCase(name: string, files: number, note: string): BenchStats {
     return {
         name,
         files,
@@ -712,7 +712,7 @@ function notImplementedCase(name: string, files: number, note: string): BenchSta
         maxMs: 0,
         filesPerSecond: 0,
         note,
-        status: 'not-implemented',
+        status: 'native-unavailable',
     };
 }
 
@@ -1014,7 +1014,7 @@ ${renderHmrSummary(stats)}
 
 ${renderRustTimingSummary(rustTiming, rustStaticFastTiming)}
 
-The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path. Rust rows intentionally report not-implemented during the scaffold phase so the harness shape is ready before Rust timings exist.
+The batch fixtures repeat representative csszyx patterns: static object, string sz, local binding spread, dynamic CSS var, conditional array, recovery token, and no-sz fast path. Rust rows report \`native-unavailable\` when the host addon has not been built; run \`pnpm --filter @csszyx/core native:build -- --native-engine\` before benchmarking Rust.
 
 ## Results
 
@@ -1101,7 +1101,7 @@ function renderHmrSummary(stats: BenchStats[]): string {
     const rust = findStat(stats, 'parser/hmr/rust-transformRust');
     const rustBatch = findStat(stats, 'parser/hmr/rust-transformRustBatch1');
     if (rust.status !== 'measured' || rustBatch.status !== 'measured') {
-        return `- HMR-shaped ${options.hmrEdits} edits: Rust native addon not built; HMR Rust rows are not implemented.`;
+        return `- HMR-shaped ${options.hmrEdits} edits: Rust native addon not built; HMR Rust rows are native-unavailable.`;
     }
     return [
         `- HMR-shaped ${options.hmrEdits} edits: rust is ${formatRatio(
