@@ -662,6 +662,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_conditional_spread_ternary_sz_attribute() {
+        let source = "const active = { bg: 'blue-500', color: 'white' }; const inactive = { bg: 'gray-100', color: 'gray-600' }; const X = ({ on }) => <div sz={{ ...(on ? active : inactive), p: 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const active = { bg: 'blue-500', color: 'white' }; const inactive = { bg: 'gray-100', color: 'gray-600' }; const X = ({ on }) => <div className={on ? \"bg-blue-500 text-white p-4\" : \"bg-gray-100 text-gray-600 p-4\"} />;"
+        );
+    }
+
+    #[test]
     fn rewrites_function_body_local_static_ternary() {
         let source = "const X = ({ active }) => {\n  const ON = { p: 4 } as const;\n  const OFF = { p: 8 } as const;\n  return <div sz={active ? ON : OFF} />;\n};";
         let rewritten = rewrite(source).expect("rewritten");
@@ -699,13 +710,13 @@ mod tests {
     }
 
     #[test]
-    fn rewrites_runtime_fallback_with_static_classname_to_merge_helper() {
+    fn rewrites_conditional_spread_ternary_with_static_classname_to_merge_helper() {
         let source = "const X = ({ big }) => <div className=\"existing\" sz={{ ...(big ? { p: 8 } : {}) }} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
-            "const X = ({ big }) => <div className={_szMerge(\"existing\", _sz({ ...(big ? { p: 8 } : {}) }))} />;"
+            "const X = ({ big }) => <div className={_szMerge(\"existing\", big ? \"p-8\" : \"\")} />;"
         );
     }
 

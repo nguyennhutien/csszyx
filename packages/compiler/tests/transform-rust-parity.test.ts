@@ -193,6 +193,16 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'array-identifiers.tsx',
         expected: 'parity',
     },
+    {
+        name: 'sz-conditional-spread-ternary',
+        source: [
+            'const active = { bg: "blue-500", color: "white" };',
+            'const inactive = { bg: "gray-100", color: "gray-600" };',
+            'const X = ({ on }) => <div sz={{ ...(on ? active : inactive), p: 4 }} />;',
+        ].join('\n'),
+        filename: 'conditional-spread-ternary.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {

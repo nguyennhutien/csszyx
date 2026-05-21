@@ -845,6 +845,16 @@ fn partial_object_from_object_expression(
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
 ) -> Option<PartialSzObject> {
+    if variant_prefix.is_none() {
+        if let Some(ternary) = conditional_spread_ternary_from_object_expression(object, ctx) {
+            return Some(PartialSzObject {
+                object: StaticSzObject::empty(),
+                dynamic_css_vars: Vec::new(),
+                ternary: Some(ternary),
+            });
+        }
+    }
+
     let mut properties = Vec::with_capacity(object.properties.len());
     let mut dynamic_css_vars = Vec::new();
     let mut ternary = None;
@@ -919,6 +929,64 @@ fn partial_object_from_object_expression(
         dynamic_css_vars,
         ternary,
     })
+}
+
+fn conditional_spread_ternary_from_object_expression(
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticTernaryIr> {
+    let mut conditional = None;
+    let mut other_properties = Vec::new();
+
+    for property in &object.properties {
+        match property {
+            ObjectPropertyKind::SpreadProperty(spread) => {
+                let Expression::ConditionalExpression(next_conditional) =
+                    unwrap_expression(&spread.argument)
+                else {
+                    return None;
+                };
+                if conditional.is_some() {
+                    return None;
+                }
+                conditional = Some(next_conditional);
+            }
+            ObjectPropertyKind::ObjectProperty(property) => {
+                other_properties.push(static_property_from_object_property(property, ctx)?);
+            }
+        }
+    }
+
+    let conditional = conditional?;
+    let consequent =
+        conditional_spread_branch_classes(&conditional.consequent, &other_properties, ctx)?;
+    let alternate =
+        conditional_spread_branch_classes(&conditional.alternate, &other_properties, ctx)?;
+    Some(StaticTernaryIr {
+        test_span: text_span(conditional.test.span()),
+        consequent_classes: consequent,
+        alternate_classes: alternate,
+    })
+}
+
+fn conditional_spread_branch_classes(
+    branch: &Expression<'_>,
+    other_properties: &[StaticSzProperty],
+    ctx: ResolveContext<'_>,
+) -> Option<Vec<String>> {
+    let (mut object, _, _) = static_object_from_expression(branch, ctx)?;
+    object.properties.extend(other_properties.iter().cloned());
+    Some(lower_static_sz_object(&object))
+}
+
+fn unwrap_expression<'a>(expression: &'a Expression<'a>) -> &'a Expression<'a> {
+    match expression {
+        Expression::ParenthesizedExpression(value) => unwrap_expression(&value.expression),
+        Expression::TSAsExpression(value) => unwrap_expression(&value.expression),
+        Expression::TSSatisfiesExpression(value) => unwrap_expression(&value.expression),
+        Expression::TSNonNullExpression(value) => unwrap_expression(&value.expression),
+        _ => expression,
+    }
 }
 
 fn conditional_class_from_property(
