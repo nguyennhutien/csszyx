@@ -21,7 +21,7 @@ export interface NativeTransformFile {
 export interface NativeTransformResult {
     /** Rewritten source code. */
     code: string;
-    /** Source map payload once native rewriting lands. */
+    /** Source map payload, or null when the native rewrite does not emit a map. */
     map: unknown;
     /** Generated csszyx/Tailwind classes. */
     classes: string[];
@@ -110,7 +110,7 @@ export interface NativeBinding {
 export function getNativePackageName(): NativePlatformPackage | null;
 
 /**
- * Loads the native binding once platform packages exist.
+ * Loads the native binding from the current or provided platform package.
  *
  * @param packageName Optional package name override for tests and platform probes.
  * @returns Native binding after platform packages are available.
@@ -120,7 +120,7 @@ export function loadNativeBinding(
 ): NativeBinding;
 
 /**
- * Transforms a batch of files with the future native Rust core.
+ * Transforms a batch of files with the native Rust core.
  *
  * @param files Source files to transform.
  * @returns Native transform results in input order.

@@ -126,7 +126,7 @@ describe('transform cache fallback safety', () => {
         prePlugin.configResolved?.({ root });
 
         expect(() => prePlugin.transform.call({ warn: () => undefined }, source, id)).toThrow(
-            'transformRust: not implemented yet',
+            'mock native unavailable',
         );
     });
 });

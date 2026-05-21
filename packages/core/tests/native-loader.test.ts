@@ -9,7 +9,7 @@ import {
     transformBatch,
 } from '../native/index.js';
 
-describe('@csszyx/core/native scaffold', () => {
+describe('@csszyx/core/native loader', () => {
     it('can be imported without loading a native binary', () => {
         expect(typeof getNativePackageName).toBe('function');
         expect(typeof transformBatch).toBe('function');
@@ -23,11 +23,10 @@ describe('@csszyx/core/native scaffold', () => {
         }
     });
 
-    it('throws a stable error contract until native packages exist', () => {
-        expect(() => loadNativeBinding()).toThrow(CsszyxNativeUnavailableError);
-
+    it('loads the host binding when present or throws a stable unavailable error', () => {
         try {
-            transformBatch([{ filename: '/repo/src/App.tsx', source: 'const App = () => null;' }]);
+            const binding = loadNativeBinding();
+            expect(typeof binding.transformBatch).toBe('function');
         } catch (err) {
             expect(err).toBeInstanceOf(CsszyxNativeUnavailableError);
             expect((err as CsszyxNativeUnavailableError).code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
@@ -36,8 +35,6 @@ describe('@csszyx/core/native scaffold', () => {
             );
             return;
         }
-
-        throw new Error('transformBatch unexpectedly returned a result');
     });
 
     it('throws the same stable error for a missing explicit native package', () => {

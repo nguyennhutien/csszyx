@@ -17,30 +17,28 @@ export interface TransformRustFile {
 }
 
 /**
- * Thrown while the Rust maximum-speed transform is scaffolded but not yet implemented.
+ * Thrown when the Rust native transform cannot execute for the current host.
+ *
+ * The class name is kept for compatibility with earlier scaffold-era callers.
  */
 export class OxcRustNotImplementedError extends Error {
     /**
-     * @param detail What the caller attempted to execute.
+     * @param detail Native loader or transform failure detail.
      */
     constructor(detail: string) {
-        super(`transformRust: not implemented yet - ${detail}`);
+        super(`transformRust: native engine unavailable - ${detail}`);
         this.name = 'OxcRustNotImplementedError';
     }
 }
 
 /**
- * Placeholder for the future Rust transform core.
- *
- * The function is exported and wired behind `build.parser: 'rust'` so the
- * unplugin, config types, and benchmark harness can carry the third parser
- * mode without changing the default parser or silently falling back.
+ * Transform source through the Rust native engine.
  *
  * @param source Source module contents.
  * @param filename Source filename for diagnostics.
  * @param options Compiler options.
- * @returns Transform result once the Rust core exists.
- * @throws {OxcRustNotImplementedError} until the Rust core lands.
+ * @returns Transform result.
+ * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
  */
 export function transformRust(
     source: string,

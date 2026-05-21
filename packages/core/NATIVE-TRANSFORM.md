@@ -1,16 +1,15 @@
 # Native Transform Boundary
 
-This document locks the package boundary for the future Rust transform core.
-The transform implementation is intentionally not here yet; this file keeps the
-native packaging contract explicit before adding `napi-rs`, `oxc_parser`, or
-platform packages.
+This document locks the package boundary for the Rust transform core. The
+native engine is still opt-in, but the packaging and loader contract is now
+active and covered by CI.
 
 ## Decision
 
 `@csszyx/core` stays the umbrella package.
 
 - Browser and edge consumers keep using the existing WASM build.
-- Node build-time consumers may opt into a future native transform through
+- Node build-time consumers may opt into the native transform through
   `build.parser: "rust"`.
 - Native binaries ship as optional platform packages named
   `@csszyx/core-<triple>`.
@@ -29,18 +28,18 @@ risk.
 
 Native build tooling is pinned instead of ranged:
 
-| Dependency      | Pin       | Where                                                       | Reason                                                                         |
-| --------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.                      |
-| `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.                      |
-| `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for future native exports.                                   |
-| `oxc_ast`       | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | AST node types used only inside the parser lowering module.                    |
-| `oxc_ast_visit` | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Visitor traversal for lowering JSX attributes into csszyx IR.                  |
-| `oxc_parser`    | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; requires rustc 1.93.                |
-| `oxc_semantic`  | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the future semantic path; pinned with `oxc_parser`. |
-| `oxc_span`      | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                        |
-| `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                       |
-| `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Future span overwrite engine; still under exact review before default use.     |
+| Dependency      | Pin       | Where                                                       | Reason                                                                  |
+| --------------- | --------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `@napi-rs/cli`  | `3.6.2`   | `packages/core/package.json`                                | Current stable CLI used only by core build/release tasks.               |
+| `napi`          | `3.9.0`   | `packages/core/Cargo.toml` optional `native` feature        | N-API binding crate; not compiled by default WASM builds.               |
+| `napi-derive`   | `3.5.6`   | `packages/core/Cargo.toml` optional `native` feature        | Procedural macros for native exports.                                   |
+| `oxc_ast`       | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | AST node types used only inside the parser lowering module.             |
+| `oxc_ast_visit` | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Visitor traversal for lowering JSX attributes into csszyx IR.           |
+| `oxc_parser`    | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Rust parser for the full transform engine; requires rustc 1.93.         |
+| `oxc_semantic`  | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Binding/scope analysis for the semantic path; pinned with `oxc_parser`. |
+| `oxc_span`      | `0.131.0` | `packages/core/Cargo.toml` optional `native-engine` feature | Source-type and span helpers used by the parser facade.                 |
+| `rayon`         | `1.12.0`  | `packages/core/Cargo.toml` optional `native-engine` feature | Batch parallelism for native transforms.                                |
+| `string_wizard` | `0.0.27`  | `packages/core/Cargo.toml` optional `native-engine` feature | Span overwrite engine; still under exact review before default use.     |
 
 The N-API dependencies are behind `features.native`, while parser/rewrite
 dependencies are behind `features.native-engine`; default `cargo test` and the
@@ -80,7 +79,7 @@ The current public exports remain stable:
 }
 ```
 
-The native transform lands behind a separate export in a later task:
+The native transform lives behind a separate export:
 
 ```json
 {
@@ -165,10 +164,11 @@ To build and load-test the current host package through `@csszyx/core/native`:
 pnpm --filter @csszyx/core native:smoke
 ```
 
-The smoke command asserts that the generated addon exports `transformBatch()`,
-that `@csszyx/core/native` resolves the host optional package by package name,
-that the call reaches the Rust scaffold not-implemented error, and that generated
-`.node`/`.d.ts` artifacts are removed before the command exits.
+The smoke command asserts that the generated native-only addon exports
+`transformBatch()`, that `@csszyx/core/native` resolves the host optional package
+by package name, that the native-only build fails with the stable unavailable
+contract, and that generated `.node`/`.d.ts` artifacts are removed before the
+command exits.
 
 To build and load-test the current host package with the internal native engine
 feature:
@@ -181,7 +181,7 @@ This command builds with `features.native,native-engine`, calls
 `transformBatch()` through the real N-API addon resolved by package name,
 verifies static rewrite output, and removes generated `.node`/`.d.ts` artifacts
 before exiting. The normal `native:smoke` command intentionally keeps validating
-the native-only scaffold.
+the native-only unavailable contract.
 
 Current native-engine rewrite coverage is still opt-in, but now covers the main
 static and runtime fallback paths:

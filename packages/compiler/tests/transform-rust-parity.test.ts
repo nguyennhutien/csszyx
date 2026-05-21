@@ -231,9 +231,8 @@ describe('Rust native engine — parity vs oxc-JS', () => {
             loadNativeBinding(platformDir);
         } catch {
             // Binding absent or wrong platform — `transformRust` will
-            // continue to throw `OxcRustNotImplementedError` per
-            // existing scaffold semantics. Individual tests handle
-            // that via the `pending` state.
+            // continue to throw the compatibility unavailable error.
+            // Individual tests handle that via the `pending` state.
         }
     });
 

@@ -107,7 +107,7 @@ describe('csszyx parser selection', () => {
                     'const App=()=> <div sz={{ p: 4 }} />;',
                     '/repo/src/App.tsx',
                 ),
-            ).toThrow('transformRust: not implemented yet');
+            ).toThrow('Use build.parser: "oxc" or "babel"');
             return;
         }
 
@@ -135,7 +135,7 @@ describe('csszyx parser selection', () => {
                     'export const App = () => <div sz={{ p: 4 }} />;',
                     '/repo/src/App.tsx',
                 ),
-            ).toThrow('transformRust: not implemented yet');
+            ).toThrow('Use build.parser: "oxc" or "babel"');
             return;
         }
 
@@ -187,7 +187,7 @@ describe('csszyx parser selection', () => {
                     'const App=()=> <div sz={{ p: 4 }} />;',
                     '/repo/src/App.tsx',
                 ),
-            ).toThrow('transformRust: not implemented yet');
+            ).toThrow('Use build.parser: "oxc" or "babel"');
             return;
         }
 

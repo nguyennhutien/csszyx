@@ -639,11 +639,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         } else if (parserMode === 'rust') {
             // Honour the documented contract: `rust` is opt-in and never
             // silently falls back to oxc/Babel. Any failure here surfaces
-            // to the caller with the same `OxcRustNotImplementedError` the
-            // compiler-level wrapper raises when the native addon is
-            // missing for the current host, so misconfigured environments
-            // fail loudly instead of producing oxc output users were not
-            // expecting.
+            // to the caller with the same compatibility error the compiler
+            // wrapper raises when the native addon is missing for the current
+            // host, so misconfigured environments fail loudly instead of
+            // producing oxc output users were not expecting.
             result = transformRust(source, effectiveFilename, compilerOptions);
         } else {
             try {
