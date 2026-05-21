@@ -69,6 +69,31 @@ interface GroupStats {
     p50SzTotalNs: number;
     /** p95 total timing for files with an sz marker. */
     p95SzTotalNs: number;
+    /** p50 native timing by stage for this group. */
+    p50Timings: TimingBreakdown;
+    /** p95 native timing by stage for this group. */
+    p95Timings: TimingBreakdown;
+}
+
+interface TimingBreakdown {
+    /** Fast pre-parser triage time. */
+    triageNs: number;
+    /** oxc parser time. */
+    parseNs: number;
+    /** Same-file scope collection time. */
+    scopeNs: number;
+    /** AST visitor to IR lowering time. */
+    irNs: number;
+    /** IR class lowering time. */
+    lowerNs: number;
+    /** Recovery token collection time. */
+    recoveryNs: number;
+    /** Safety diagnostic assembly time. */
+    diagnosticsNs: number;
+    /** Source rewrite time. */
+    rewriteNs: number;
+    /** Total native transform time. */
+    totalNs: number;
 }
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -276,6 +301,7 @@ function renderReport(rows: ObservationRow[]): string {
 Generated: ${startedAt.toISOString()}
 
 Environment:
+
 - Node: ${process.version}
 - Platform: ${process.platform}-${process.arch}
 - Roots: ${options.roots.map(root => `\`${root}\``).join(', ')}
@@ -289,6 +315,16 @@ For files with an \`sz\` marker:
 
 ${statsBullets(szStats)}
 
+## Timing Breakdown
+
+All scanned source files:
+
+${timingTable(allStats)}
+
+Files with an \`sz\` marker:
+
+${timingTable(szStats)}
+
 ## Root Breakdown
 
 | Root | Files | sz marker | Transformed | Diagnostics | parserPath | p50 total | p95 total | p50 sz | p95 sz |
@@ -297,8 +333,8 @@ ${rootStats.map(statsTableRow).join('\n')}
 
 ## Slowest Files
 
-| File | parserPath | Transformed | Total | Diagnostics |
-|---|---|---:|---:|---:|
+| File | parserPath | Transformed | Total | Parse | IR | Rewrite | Diagnostics |
+|---|---|---:|---:|---:|---:|---:|---:|
 ${slowRows.map(slowTableRow).join('\n')}
 
 ## Diagnostic Files
@@ -308,6 +344,7 @@ ${renderDiagnosticRows(diagnosticRows)}
 ## Interpretation
 
 - \`fastRegex\` includes no-op files and AST-free flat static \`sz\` files; use the \`sz marker\` subset to judge fast-path value.
+- The \`sz marker\` subset only counts JSX attributes like \`sz=\` and \`szRecover=\`; it does not count package names such as \`csszyx\`.
 - If most \`sz\` marker files stay on \`static\`, widening AST-free matching is low leverage.
 - Diagnostic rows should now be mostly recovery-mode validation or syntax/parser issues; common dynamic \`sz\` fallback is expected to rewrite instead of diagnostic.
 `;
@@ -335,6 +372,8 @@ function summarize(name: string, rows: ObservationRow[]): GroupStats {
         p95TotalNs: percentile(totalNs, 95),
         p50SzTotalNs: percentile(szTotalNs, 50),
         p95SzTotalNs: percentile(szTotalNs, 95),
+        p50Timings: summarizeTimings(rows, 50),
+        p95Timings: summarizeTimings(rows, 95),
     };
 }
 
@@ -381,13 +420,40 @@ function statsTableRow(stats: GroupStats): string {
 }
 
 /**
+ * Render native timing percentiles by stage.
+ *
+ * @param stats grouped observation stats
+ * @returns markdown timing table
+ */
+function timingTable(stats: GroupStats): string {
+    return [
+        '| Percentile | Triage | Parse | Scope | IR | Lower | Recovery | Diagnostics | Rewrite | Total |',
+        '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+        timingTableRow('p50', stats.p50Timings),
+        timingTableRow('p95', stats.p95Timings),
+    ].join('\n');
+}
+
+/**
+ * Render one native timing percentile row.
+ *
+ * @param label percentile label
+ * @param timings timing values
+ * @returns markdown table row
+ */
+function timingTableRow(label: string, timings: TimingBreakdown): string {
+    return `| ${label} | ${formatNs(timings.triageNs)} | ${formatNs(timings.parseNs)} | ${formatNs(timings.scopeNs)} | ${formatNs(timings.irNs)} | ${formatNs(timings.lowerNs)} | ${formatNs(timings.recoveryNs)} | ${formatNs(timings.diagnosticsNs)} | ${formatNs(timings.rewriteNs)} | ${formatNs(timings.totalNs)} |`;
+}
+
+/**
  * Render one slow-file row.
  *
  * @param row observation row
  * @returns markdown table row
  */
 function slowTableRow(row: ObservationRow): string {
-    return `| \`${row.file.filename}\` | ${row.result.parserPath} | ${row.result.metadata.transformed ? 'yes' : 'no'} | ${formatNs(row.result.metadata.timings.totalNs)} | ${row.result.diagnostics.length} |`;
+    const timings = row.result.metadata.timings;
+    return `| \`${row.file.filename}\` | ${row.result.parserPath} | ${row.result.metadata.transformed ? 'yes' : 'no'} | ${formatNs(timings.totalNs)} | ${formatNs(timings.parseNs)} | ${formatNs(timings.irNs)} | ${formatNs(timings.rewriteNs)} | ${row.result.diagnostics.length} |`;
 }
 
 /**
@@ -425,13 +491,62 @@ function formatParserPaths(counts: Record<string, number>): string {
 }
 
 /**
+ * Summarize native timing stages at one percentile.
+ *
+ * @param rows observation rows
+ * @param percentileValue percentile between 0 and 100
+ * @returns timing stage summary
+ */
+function summarizeTimings(rows: ObservationRow[], percentileValue: number): TimingBreakdown {
+    const values = rows.map(row => row.result.metadata.timings);
+    return {
+        triageNs: percentile(
+            values.map(timing => timing.triageNs),
+            percentileValue,
+        ),
+        parseNs: percentile(
+            values.map(timing => timing.parseNs),
+            percentileValue,
+        ),
+        scopeNs: percentile(
+            values.map(timing => timing.scopeNs),
+            percentileValue,
+        ),
+        irNs: percentile(
+            values.map(timing => timing.irNs),
+            percentileValue,
+        ),
+        lowerNs: percentile(
+            values.map(timing => timing.lowerNs),
+            percentileValue,
+        ),
+        recoveryNs: percentile(
+            values.map(timing => timing.recoveryNs),
+            percentileValue,
+        ),
+        diagnosticsNs: percentile(
+            values.map(timing => timing.diagnosticsNs),
+            percentileValue,
+        ),
+        rewriteNs: percentile(
+            values.map(timing => timing.rewriteNs),
+            percentileValue,
+        ),
+        totalNs: percentile(
+            values.map(timing => timing.totalNs),
+            percentileValue,
+        ),
+    };
+}
+
+/**
  * Check for a source marker.
  *
  * @param source source text
  * @returns true when source contains sz
  */
 function hasSzMarker(source: string): boolean {
-    return source.includes('sz');
+    return /\bsz(?:Recover)?\s*=/.test(source);
 }
 
 /**
