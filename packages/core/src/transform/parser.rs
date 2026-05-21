@@ -1113,6 +1113,18 @@ fn static_object_from_array_expression(
             ArrayExpressionElement::BooleanLiteral(value) if !value.value => {}
             ArrayExpressionElement::NullLiteral(_) | ArrayExpressionElement::Elision(_) => {}
             ArrayExpressionElement::Identifier(identifier) if identifier.name == "undefined" => {}
+            ArrayExpressionElement::Identifier(identifier) => {
+                let initializer = ctx.scope.resolve_initializer_before(
+                    &identifier.name,
+                    identifier.span.start,
+                    ctx.program,
+                )?;
+                properties.extend(
+                    static_object_from_expression(initializer, ctx)?
+                        .0
+                        .properties,
+                );
+            }
             _ => return None,
         }
     }
@@ -1476,6 +1488,21 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.classes, ["flex", "p-4"]);
         assert_eq!(parsed.ir.sz_attributes[0].object.properties.len(), 2);
+    }
+
+    #[test]
+    fn parser_shell_lowers_identifier_static_array_elements() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const base = { p: 4, rounded: 'lg' }; const App = () => <div sz={[base, { bg: 'blue-500' }]} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(!parsed.ir.sz_attributes[0].runtime_fallback);
+        assert_eq!(lowered.classes, ["p-4", "rounded-lg", "bg-blue-500"]);
     }
 
     #[test]

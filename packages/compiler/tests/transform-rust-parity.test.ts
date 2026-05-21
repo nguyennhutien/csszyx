@@ -183,6 +183,16 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'array-logical.tsx',
         expected: 'parity',
     },
+    {
+        name: 'sz-array-identifier-elements',
+        source: [
+            'const layout = { flex: true, gap: 4 };',
+            'const color = { bg: "blue-500" };',
+            'const X = () => <div sz={[layout, color]} />;',
+        ].join('\n'),
+        filename: 'array-identifiers.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {
