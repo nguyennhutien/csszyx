@@ -273,6 +273,14 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
 
+      # Explicit native-engine package smoke. Unit tests already exercise the
+      # Rust parser branch when the host addon exists, but this step verifies
+      # the install-style optional package load path and the real N-API
+      # transform contract in one place. It cleans the generated .node before
+      # exiting, so it intentionally runs after unit tests.
+      - name: Smoke native engine package
+        run: pnpm --filter @csszyx/core native:engine:smoke
+
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         if: always()
