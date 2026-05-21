@@ -83,6 +83,8 @@ const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
+const DIRECTIVE_PROLOGUE_PREFIX_RE =
+    /^((?:\s|\/\/[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
@@ -204,6 +206,25 @@ function findPackageVersionFromFile(file: string, fallback: string): string {
  */
 function normalizeSourceFilename(filename: string): string {
     return filename.replace(/\\/g, '/');
+}
+
+/**
+ * Inserts a runtime import after a top-level client/server directive, preserving
+ * leading comments and blank lines. Keeping `'use server'` before generated
+ * imports is required for the RSC boundary guard to classify the module
+ * correctly.
+ *
+ * @param code transformed module code
+ * @param importStmt import statement to insert
+ * @returns code with the import inserted
+ */
+function insertRuntimeImport(code: string, importStmt: string): string {
+    const directiveMatch = code.match(DIRECTIVE_PROLOGUE_PREFIX_RE);
+    if (!directiveMatch) {
+        return `${importStmt}${code}`;
+    }
+
+    return code.replace(directiveMatch[0], `${directiveMatch[1]}${directiveMatch[2]}${importStmt}`);
 }
 
 /**
@@ -1173,18 +1194,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             );
                         } else {
                             const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
-                            const directiveMatch = transformedCode.match(
-                                /^['"]use (client|server)['"];?\s*/,
-                            );
-                            if (directiveMatch) {
-                                const directive = directiveMatch[0];
-                                transformedCode = transformedCode.replace(
-                                    directive,
-                                    `${directive}${importStmt}`,
-                                );
-                            } else {
-                                transformedCode = `${importStmt}${transformedCode}`;
-                            }
+                            transformedCode = insertRuntimeImport(transformedCode, importStmt);
                         }
                         transformed = true;
                     }

@@ -10,8 +10,13 @@ import {
     isRSCServerModule,
     type RSCModuleRecord,
 } from '../src/rsc-boundary.js';
+import { vitePlugin } from '../src/unplugin.js';
 
 const SERVER_FILE = '/app/actions.tsx';
+
+type TransformHook = {
+    transform: (this: { warn: (message: string) => void }, code: string, id: string) => unknown;
+};
 
 /**
  * Mirrors unplugin's runtime import insertion after a directive prologue.
@@ -152,6 +157,23 @@ describe('RSC boundary guard', () => {
                 '/repo/app/page.tsx',
             );
         }).toThrow('csszyxRSCViolation: _sz imported in Server Component /repo/app/page.tsx');
+    });
+
+    it('keeps generated runtime imports after leading-comment server directives', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'babel', cache: false },
+        }) as TransformHook[];
+        const source = `
+            // comments before directives are legal directive prologue trivia
+            'use server';
+            export function Card({ styles }) {
+                return <div sz={styles} />;
+            }
+        `;
+
+        expect(() =>
+            prePlugin.transform.call({ warn: () => undefined }, source, '/repo/actions.tsx'),
+        ).toThrow('csszyxRSCViolation: _sz imported in Server Component /repo/actions.tsx');
     });
 
     it('ignores type-only runtime imports', () => {

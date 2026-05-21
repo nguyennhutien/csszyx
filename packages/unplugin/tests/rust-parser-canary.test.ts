@@ -79,7 +79,9 @@ describe('rust parser real-source canary', () => {
 
     it('keeps Rust runtime helper output blocked in server components', () => {
         const prePlugin = createRustTransform();
-        const source = `'use server';
+        const source = `
+            // leading comment before directive should not hide the server boundary
+            'use server';
             export function Card({ styles, className }) {
                 return <div className={className} sz={styles} />;
             }
