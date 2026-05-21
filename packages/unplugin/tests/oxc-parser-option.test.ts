@@ -1,6 +1,3 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -12,29 +9,18 @@ type TransformHook = {
 
 const ORIGINAL_ENV = process.env.CSSZYX_PARSER;
 
-// The Rust parser branch needs the host platform's native addon to be
-// loaded before the unplugin can dispatch to it. CI must `pnpm --filter
-// @csszyx/core native:build -- --native-engine` ahead of these tests. We
-// preload here so `build.parser: "rust"` resolves through the real
-// engine; when the addon is missing the loader throws and the rust-mode
-// tests assert the documented unavailable-error contract instead.
+// The Rust parser branch needs the host platform's optional native package to
+// contain a built addon before the unplugin can dispatch to it. CI should run
+// `pnpm --filter @csszyx/core native:build -- --native-engine` ahead of these
+// tests so this suite exercises the real install-style package-name path. When
+// the addon is missing, the rust-mode tests assert the documented
+// unavailable-error contract instead.
 let nativeRustAvailable = false;
 
 beforeAll(() => {
-    const here = path.dirname(fileURLToPath(import.meta.url));
     const packageName = getNativePackageName();
-    const platformDir = packageName
-        ? path.resolve(here, `../../${packageName.split('/').pop()}`)
-        : null;
     try {
-        try {
-            loadNativeBinding();
-        } catch {
-            if (!platformDir) {
-                throw new Error('No supported native package for this platform');
-            }
-            loadNativeBinding(platformDir);
-        }
+        loadNativeBinding(packageName);
         nativeRustAvailable = true;
     } catch {
         nativeRustAvailable = false;
@@ -66,7 +52,9 @@ describe('csszyx parser selection', () => {
     });
 
     it('lets build.parser opt back into Babel', () => {
-        const [prePlugin] = vitePlugin({ build: { parser: 'babel' } }) as TransformHook[];
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'babel' },
+        }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
@@ -92,7 +80,9 @@ describe('csszyx parser selection', () => {
 
     it('lets CSSZYX_PARSER=oxc override build.parser=babel', () => {
         process.env.CSSZYX_PARSER = 'oxc';
-        const [prePlugin] = vitePlugin({ build: { parser: 'babel' } }) as TransformHook[];
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'babel' },
+        }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
@@ -108,7 +98,9 @@ describe('csszyx parser selection', () => {
             // No host addon present — assert the explicit unavailable-error
             // contract so users hitting this path know the parser flipped on
             // but the binding is missing for their platform.
-            const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+            const [prePlugin] = vitePlugin({
+                build: { parser: 'rust' },
+            }) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
                     { warn: vi.fn() },
@@ -119,7 +111,9 @@ describe('csszyx parser selection', () => {
             return;
         }
 
-        const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'rust' },
+        }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
@@ -132,7 +126,9 @@ describe('csszyx parser selection', () => {
 
     it('injects runtime imports when the rust engine emits fallback helpers', () => {
         if (!nativeRustAvailable) {
-            const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+            const [prePlugin] = vitePlugin({
+                build: { parser: 'rust' },
+            }) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
                     { warn: vi.fn() },
@@ -158,7 +154,9 @@ describe('csszyx parser selection', () => {
             'export const MergeRuntime = ({ styles }) => <div className="existing" sz={styles} />;',
             'export const MergeDynamic = ({ styles }) => <div className={getClass()} sz={styles} />;',
         ].join('\n');
-        const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'rust' },
+        }) as TransformHook[];
 
         const result = prePlugin.transform.call({ warn: vi.fn() }, source, '/repo/src/App.tsx') as {
             code: string;
@@ -180,7 +178,9 @@ describe('csszyx parser selection', () => {
         process.env.CSSZYX_PARSER = 'rust';
 
         if (!nativeRustAvailable) {
-            const [prePlugin] = vitePlugin({ build: { parser: 'babel' } }) as TransformHook[];
+            const [prePlugin] = vitePlugin({
+                build: { parser: 'babel' },
+            }) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
                     { warn: vi.fn() },
@@ -191,7 +191,9 @@ describe('csszyx parser selection', () => {
             return;
         }
 
-        const [prePlugin] = vitePlugin({ build: { parser: 'babel' } }) as TransformHook[];
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'babel' },
+        }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',

@@ -175,7 +175,6 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
       # the hash matches a prior run, turbo skips the task entirely
@@ -239,7 +238,6 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
       # the hash matches a prior run, turbo skips the task entirely
@@ -260,6 +258,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build the host native addon before unit tests so the Rust parser
+      # option suite exercises the same optional package-name resolution path
+      # users get after install. The build artefact is gitignored and remains
+      # available to all tests in this job.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       # `test:unit` is `turbo run test --filter=!@csszyx/e2e`. Playwright
       # tests live in @csszyx/e2e and run in their own job below — they
@@ -298,7 +303,6 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
-
 
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
@@ -362,7 +366,6 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
-
 
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
