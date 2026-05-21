@@ -82,6 +82,13 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     for property in &object.properties {
         match &property.value {
             StaticSzValue::Object(nested) => {
+                if property.key == "bgImg" {
+                    if let Some(class_name) = format_bg_img_object(nested, prefix) {
+                        classes.push(class_name);
+                    }
+                    continue;
+                }
+
                 let variant = variant_prefix(&property.key).unwrap_or(&property.key);
                 let mut next_prefix = String::with_capacity(prefix.len() + property.key.len() + 1);
                 next_prefix.push_str(prefix);
@@ -122,6 +129,19 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
         StaticSzValue::Boolean(false) | StaticSzValue::Object(_) => None,
         StaticSzValue::Number(value) => Some(format_number_class(class_key, *value, prefix)),
         StaticSzValue::String(value) => {
+            if key == "bgImg" {
+                return Some(format_bg_img_string(value, prefix));
+            }
+            if key == "bgSize" {
+                return Some(format_bg_size(value, prefix));
+            }
+            if key == "bgRepeat" || key == "backgroundRepeat" {
+                return Some(format_bg_repeat(value, prefix));
+            }
+            if key == "content" {
+                return Some(format_content(value, prefix));
+            }
+
             if has_slash_opacity(value) {
                 return None;
             }
@@ -143,20 +163,153 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
     }
 }
 
+fn format_bg_img_object(object: &StaticSzObject, prefix: &str) -> Option<String> {
+    let gradient = object_string_property(object, "gradient")?;
+    let mut class_name = match gradient {
+        "linear" => match object.properties.iter().find(|prop| prop.key == "dir") {
+            Some(prop) => match &prop.value {
+                StaticSzValue::Number(value) if *value < 0.0 => {
+                    format!("-bg-linear-{}", format_abs_number(*value))
+                }
+                StaticSzValue::Number(value) => format!("bg-linear-{}", format_abs_number(*value)),
+                StaticSzValue::String(value) if value.starts_with("--") => {
+                    format!("bg-linear-({value})")
+                }
+                StaticSzValue::String(value) if value.starts_with("to-") => {
+                    format!("bg-linear-{value}")
+                }
+                StaticSzValue::String(value) => {
+                    format!("bg-linear-[{}]", normalize_arbitrary_value(value))
+                }
+                _ => return None,
+            },
+            None => "bg-linear-to-r".to_string(),
+        },
+        "radial" => match object_string_property(object, "dir") {
+            Some(value) if value.starts_with("--") => format!("bg-radial-({value})"),
+            Some(value) => format!("bg-radial-[{}]", normalize_arbitrary_value(value)),
+            None => "bg-radial".to_string(),
+        },
+        "conic" => match object.properties.iter().find(|prop| prop.key == "dir") {
+            Some(prop) => match &prop.value {
+                StaticSzValue::Number(value) if *value < 0.0 => {
+                    format!("-bg-conic-{}", format_abs_number(*value))
+                }
+                StaticSzValue::Number(value) => format!("bg-conic-{}", format_abs_number(*value)),
+                StaticSzValue::String(value) if value.starts_with("--") => {
+                    format!("bg-conic-({value})")
+                }
+                StaticSzValue::String(value) => {
+                    format!("bg-conic-[{}]", normalize_arbitrary_value(value))
+                }
+                _ => return None,
+            },
+            None => "bg-conic".to_string(),
+        },
+        _ => return None,
+    };
+
+    if let Some(interpolation) = object_string_property(object, "in") {
+        class_name.push('/');
+        class_name.push_str(interpolation);
+    }
+
+    Some(format!("{prefix}{class_name}"))
+}
+
+fn object_string_property<'a>(object: &'a StaticSzObject, key: &str) -> Option<&'a str> {
+    object
+        .properties
+        .iter()
+        .find(|prop| prop.key == key)
+        .and_then(|prop| match &prop.value {
+            StaticSzValue::String(value) => Some(value.as_str()),
+            _ => None,
+        })
+}
+
+fn format_bg_img_string(value: &str, prefix: &str) -> String {
+    let value = value.trim();
+    if value == "none" {
+        return format!("{prefix}bg-none");
+    }
+
+    let normalized = value.strip_prefix('-').unwrap_or(value);
+    if normalized.starts_with("repeating-") {
+        return format!("{prefix}bg-[{}]", normalize_arbitrary_value(value));
+    }
+    if normalized.starts_with("linear-")
+        || normalized.starts_with("radial")
+        || normalized.starts_with("conic")
+        || normalized.starts_with("gradient-to-")
+    {
+        let mapped = normalized.replace("gradient-to-", "linear-to-");
+        if value.starts_with('-') {
+            return format!("{prefix}-bg-{mapped}");
+        }
+        return format!("{prefix}bg-{mapped}");
+    }
+    if value.starts_with("--") {
+        return format!("{prefix}bg-(image:{value})");
+    }
+    if value.starts_with("url(") {
+        return format!("{prefix}bg-[{value}]");
+    }
+    format!("{prefix}bg-[url({value})]")
+}
+
+fn format_bg_size(value: &str, prefix: &str) -> String {
+    match value {
+        "auto" | "cover" | "contain" => format!("{prefix}bg-{value}"),
+        value if value.starts_with("--") => format!("{prefix}bg-size-({value})"),
+        value => format!("{prefix}bg-size-[{}]", normalize_arbitrary_value(value)),
+    }
+}
+
+fn format_bg_repeat(value: &str, prefix: &str) -> String {
+    match value {
+        "repeat" => format!("{prefix}bg-repeat"),
+        "no-repeat" => format!("{prefix}bg-no-repeat"),
+        value => {
+            let suffix = value.strip_prefix("repeat-").unwrap_or(value);
+            format!("{prefix}bg-repeat-{suffix}")
+        }
+    }
+}
+
+fn format_content(value: &str, prefix: &str) -> String {
+    if value == "none" {
+        return format!("{prefix}content-none");
+    }
+    if value.starts_with("--") {
+        return format!("{prefix}content-({value})");
+    }
+    let inner = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+        format!("'{}'", &value[1..value.len() - 1])
+    } else {
+        value.to_string()
+    };
+    format!("{prefix}content-[{inner}]")
+}
+
 fn format_number_class(key: &str, value: f64, prefix: &str) -> String {
     let is_negative = value < 0.0;
-    let abs_value = value.abs();
-    let final_value = if abs_value.fract() == 0.0 {
-        #[allow(clippy::cast_possible_truncation)]
-        (abs_value as i64).to_string()
-    } else {
-        abs_value.to_string()
-    };
+    let final_value = format_abs_number(value);
 
     if is_negative {
         format!("{prefix}-{key}-{final_value}")
     } else {
         format!("{prefix}{key}-{final_value}")
+    }
+}
+
+fn format_abs_number(value: f64) -> String {
+    let abs_value = value.abs();
+    if abs_value.fract() == 0.0 {
+        #[allow(clippy::cast_possible_truncation)]
+        (abs_value as i64).to_string()
+    } else {
+        abs_value.to_string()
     }
 }
 
@@ -214,6 +367,14 @@ fn needs_brackets(value: &str) -> bool {
             !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit() || c == '.')
         })
     })
+}
+
+fn normalize_arbitrary_value(value: &str) -> String {
+    let stripped = value
+        .strip_prefix('[')
+        .and_then(|inner| inner.strip_suffix(']'))
+        .unwrap_or(value);
+    stripped.split_whitespace().collect::<Vec<_>>().join("_")
 }
 
 #[cfg(test)]
@@ -279,6 +440,48 @@ mod tests {
         };
 
         assert_eq!(lower_static_sz_object(&object), ["hover:bg-blue-500"]);
+    }
+
+    #[test]
+    fn lowers_background_image_object_syntax() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "bgImg",
+                StaticSzValue::Object(StaticSzObject {
+                    properties: vec![
+                        property("gradient", StaticSzValue::String("linear".to_string())),
+                        property("dir", StaticSzValue::String("to-br".to_string())),
+                    ],
+                }),
+            )],
+        };
+
+        assert_eq!(lower_static_sz_object(&object), ["bg-linear-to-br"]);
+    }
+
+    #[test]
+    fn lowers_background_size_and_content_special_cases() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "before",
+                StaticSzValue::Object(StaticSzObject {
+                    properties: vec![
+                        property("bgSize", StaticSzValue::String("24px 24px".to_string())),
+                        property("bgRepeat", StaticSzValue::String("no-repeat".to_string())),
+                        property("content", StaticSzValue::String("''".to_string())),
+                    ],
+                }),
+            )],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "before:bg-size-[24px_24px]",
+                "before:bg-no-repeat",
+                "before:content-['']"
+            ]
+        );
     }
 
     #[test]
