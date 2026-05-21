@@ -27,7 +27,7 @@ try {
   const native = await import(
     pathToFileURL(path.join(coreDir, "native", "index.js"))
   );
-  const binding = native.loadNativeBinding(packageDir);
+  const binding = native.loadNativeBinding();
 
   if (typeof binding?.transformBatch !== "function") {
     fail("Loaded native binding does not export transformBatch().");

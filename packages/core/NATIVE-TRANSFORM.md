@@ -166,8 +166,9 @@ pnpm --filter @csszyx/core native:smoke
 ```
 
 The smoke command asserts that the generated addon exports `transformBatch()`,
-that the call reaches the Rust scaffold not-implemented error, and that
-generated `.node`/`.d.ts` artifacts are removed before the command exits.
+that `@csszyx/core/native` resolves the host optional package by package name,
+that the call reaches the Rust scaffold not-implemented error, and that generated
+`.node`/`.d.ts` artifacts are removed before the command exits.
 
 To build and load-test the current host package with the internal native engine
 feature:
@@ -177,9 +178,10 @@ pnpm --filter @csszyx/core native:engine:smoke
 ```
 
 This command builds with `features.native,native-engine`, calls
-`transformBatch()` through the real N-API addon, verifies static rewrite output,
-and removes generated `.node`/`.d.ts` artifacts before exiting. The normal
-`native:smoke` command intentionally keeps validating the native-only scaffold.
+`transformBatch()` through the real N-API addon resolved by package name,
+verifies static rewrite output, and removes generated `.node`/`.d.ts` artifacts
+before exiting. The normal `native:smoke` command intentionally keeps validating
+the native-only scaffold.
 
 Current native-engine rewrite coverage is still opt-in, but now covers the main
 static and runtime fallback paths:
