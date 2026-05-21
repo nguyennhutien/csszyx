@@ -464,6 +464,37 @@ fn static_ternary_from_jsx_expression(
         JSXExpression::ConditionalExpression(conditional) => {
             static_ternary_from_conditional(conditional, ctx)
         }
+        JSXExpression::Identifier(identifier) => {
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
+            let (ternary, _) = static_ternary_from_expression(initializer, ctx)?;
+            Some((ternary, text_span(identifier.span)))
+        }
+        _ => None,
+    }
+}
+
+fn static_ternary_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticTernaryIr, TextSpan)> {
+    match expression {
+        Expression::ConditionalExpression(conditional) => {
+            static_ternary_from_conditional(conditional, ctx)
+        }
+        Expression::ParenthesizedExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        Expression::TSAsExpression(value) => static_ternary_from_expression(&value.expression, ctx),
+        Expression::TSSatisfiesExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        Expression::TSNonNullExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
         _ => None,
     }
 }

@@ -203,6 +203,17 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'conditional-spread-ternary.tsx',
         expected: 'parity',
     },
+    {
+        name: 'sz-identifier-static-ternary',
+        source: [
+            'const X = ({ active }) => {',
+            '  const styles = active ? { p: 4 } : { p: 2 };',
+            '  return <div sz={styles} />;',
+            '};',
+        ].join('\n'),
+        filename: 'identifier-static-ternary.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {

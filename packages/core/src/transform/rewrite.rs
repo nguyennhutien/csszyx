@@ -651,6 +651,17 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_identifier_static_ternary_sz_attribute() {
+        let source = "const X = ({ active }) => { const styles = active ? { p: 4 } : { p: 8 }; return <div sz={styles} />; };";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ active }) => { const styles = active ? { p: 4 } : { p: 8 }; return <div className={active ? \"p-4\" : \"p-8\"} />; };"
+        );
+    }
+
+    #[test]
     fn rewrites_static_property_ternary_sz_attribute() {
         let source = "const X = ({ big }) => <div sz={{ p: big ? 8 : 4 }} />;";
         let rewritten = rewrite(source).expect("rewritten");
