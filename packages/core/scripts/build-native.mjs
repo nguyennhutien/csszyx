@@ -6,15 +6,25 @@ import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { getHostNativePackage } from "./native-platforms.mjs";
+import {
+  getHostNativePackage,
+  getTargetNativePackage,
+} from "./native-platforms.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const coreDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(coreDir, "../..");
 
-const { platformKey, packageDir, nodePath } = getHostNativePackage(repoRoot);
+const target = readArgValue("--target");
+const resolved = target
+  ? {
+      platformKey: target,
+      ...getTargetNativePackage(repoRoot, target),
+    }
+  : getHostNativePackage(repoRoot);
+const { platformKey, packageInfo, packageDir, nodePath } = resolved;
 
-if (!packageDir || !nodePath) {
+if (!packageInfo || !packageDir || !nodePath) {
   fail(`Unsupported native platform: ${platformKey}`);
 }
 
@@ -40,6 +50,14 @@ const args = [
   packageDir,
 ];
 
+if (target) {
+  args.push("--target", target);
+}
+
+if (process.argv.includes("--cross-compile")) {
+  args.push("--cross-compile");
+}
+
 if (process.argv.includes("--release")) {
   args.push("--release");
 }
@@ -62,6 +80,27 @@ if (!existsSync(nodePath)) {
 rmSync(generatedDtsPath, { force: true });
 
 console.log(`[native-build] Built ${path.relative(repoRoot, nodePath)}`);
+
+/**
+ * Read a CLI argument value.
+ *
+ * @param {string} name Argument name.
+ * @returns {string | null} Argument value.
+ */
+function readArgValue(name) {
+  const equalPrefix = `${name}=`;
+  const equalArg = process.argv.find((arg) => arg.startsWith(equalPrefix));
+  if (equalArg) {
+    return equalArg.slice(equalPrefix.length);
+  }
+
+  const index = process.argv.indexOf(name);
+  if (index >= 0) {
+    return process.argv[index + 1] ?? null;
+  }
+
+  return null;
+}
 
 /**
  * Print a build failure and exit.

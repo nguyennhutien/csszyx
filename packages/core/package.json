@@ -56,5 +56,15 @@
   "devDependencies": {
     "@napi-rs/cli": "3.6.2",
     "vitest": "^4.1.6"
+  },
+  "optionalDependencies": {
+    "@csszyx/core-darwin-arm64": "workspace:*",
+    "@csszyx/core-darwin-x64": "workspace:*",
+    "@csszyx/core-linux-arm64-gnu": "workspace:*",
+    "@csszyx/core-linux-arm64-musl": "workspace:*",
+    "@csszyx/core-linux-x64-gnu": "workspace:*",
+    "@csszyx/core-linux-x64-musl": "workspace:*",
+    "@csszyx/core-win32-arm64-msvc": "workspace:*",
+    "@csszyx/core-win32-x64-msvc": "workspace:*"
   }
 }

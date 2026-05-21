@@ -73,5 +73,22 @@
     "node": ">=22.12.0",
     "pnpm": ">=10.0.0"
   },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "cpu": [
+        "x64",
+        "arm64"
+      ],
+      "libc": [
+        "glibc",
+        "musl"
+      ]
+    }
+  },
   "packageManager": "pnpm@10.32.1"
 }

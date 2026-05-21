@@ -19,13 +19,12 @@ const workspaceYaml = readFileSync(workspacePath, "utf8");
 const nativePackageNames = new Set(
   NATIVE_PLATFORM_PACKAGES.map((packageInfo) => packageInfo.name),
 );
+const requireBinaries = process.argv.includes("--require-binaries");
 
-assertNoNativeOptionalDependencies(corePackage);
+assertNativeOptionalDependencies(corePackage);
 
-if (!workspaceYaml.includes('!packages/core-*')) {
-  fail(
-    'pnpm-workspace.yaml must keep packages/core-* excluded until native packages are publish-ready.',
-  );
+if (workspaceYaml.includes('!packages/core-*')) {
+  fail("pnpm-workspace.yaml must include packages/core-* for native publishing.");
 }
 
 for (const expected of NATIVE_PLATFORM_PACKAGES) {
@@ -38,13 +37,20 @@ for (const expected of NATIVE_PLATFORM_PACKAGES) {
   const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
   assertEqual(pkg.name, expected.name, `${expected.dir} name`);
   assertEqual(pkg.version, corePackage.version, `${expected.dir} version`);
-  assertEqual(pkg.private, true, `${expected.dir} private`);
+  assertEqual(pkg.private, undefined, `${expected.dir} private`);
   assertEqual(pkg.type, "commonjs", `${expected.dir} type`);
   assertArray(pkg.os, expected.os, `${expected.dir} os`);
   assertArray(pkg.cpu, expected.cpu, `${expected.dir} cpu`);
   assertArray(pkg.libc ?? [], expected.libc ?? [], `${expected.dir} libc`);
   assertEqual(pkg.main, `./${expected.node}`, `${expected.dir} main`);
   assertArray(pkg.files, [expected.node], `${expected.dir} files`);
+
+  if (requireBinaries) {
+    const nodePath = path.join(repoRoot, expected.dir, expected.node);
+    if (!existsSync(nodePath)) {
+      fail(`${expected.dir}/${expected.node} is missing`);
+    }
+  }
 }
 
 if (errors > 0) {
@@ -100,23 +106,34 @@ function assertArray(actual, expected, label) {
 }
 
 /**
- * Assert the umbrella package has not been half-wired to unpublished optional
- * native packages.
+ * Assert the umbrella package wires every native platform package as an
+ * optional workspace dependency. pnpm rewrites these to the package version
+ * during pack/publish.
  *
  * @param {{ optionalDependencies?: Record<string, string> }} pkg Core package.
  */
-function assertNoNativeOptionalDependencies(pkg) {
-  const optionalDependencies = Object.keys(pkg.optionalDependencies ?? {});
-  const wiredNativeDependencies = optionalDependencies.filter((dependency) =>
-    nativePackageNames.has(dependency),
+function assertNativeOptionalDependencies(pkg) {
+  const optionalDependencies = pkg.optionalDependencies ?? {};
+
+  for (const dependency of nativePackageNames) {
+    if (optionalDependencies[dependency] !== "workspace:*") {
+      fail(
+        `@csszyx/core optionalDependencies must include ${dependency}: "workspace:*"`,
+      );
+    }
+  }
+
+  const unknownNativeDependencies = Object.keys(optionalDependencies).filter(
+    (dependency) =>
+      dependency.startsWith("@csszyx/core-") &&
+      !nativePackageNames.has(dependency),
   );
 
-  if (wiredNativeDependencies.length > 0) {
+  if (unknownNativeDependencies.length > 0) {
     fail(
       [
-        "@csszyx/core optionalDependencies already reference native packages,",
-        "but packages/core-* are still private and excluded from the workspace.",
-        `Remove or fully publish-wire: ${wiredNativeDependencies.join(", ")}`,
+        "@csszyx/core optionalDependencies reference unknown native packages:",
+        unknownNativeDependencies.join(", "),
       ].join(" "),
     );
   }

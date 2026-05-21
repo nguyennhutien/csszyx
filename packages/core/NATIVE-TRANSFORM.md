@@ -114,15 +114,20 @@ FreeBSD can be added after the main matrix is stable. WASM stays in the umbrella
 package and is not a substitute for the Node native transform unless a separate
 fallback mode is explicitly designed.
 
-The platform package directories are scaffolded under `packages/core-*`, but
-they are excluded from `pnpm-workspace.yaml` until the native publish matrix is
-ready. This avoids unsupported-platform warnings on every local pnpm command
-while keeping the metadata contract reviewable.
+The platform package directories live under `packages/core-*` and are included
+in the workspace so release publish can ship them with `@csszyx/core`. This
+means local pnpm commands print unsupported-platform warnings for the packages
+that do not match the current host; those warnings are expected and non-fatal.
 
-While the packages stay private/excluded, `@csszyx/core` must not list them in
-`optionalDependencies`. `pnpm --filter @csszyx/core native:packages` fails this
-half-wired state so local builds cannot accidentally produce a package that
-asks npm/pnpm to resolve unpublished native packages.
+`@csszyx/core` lists every platform package in `optionalDependencies` with
+`workspace:*`; pnpm rewrites those entries to the release version during
+pack/publish. The root `pnpm.supportedArchitectures` setting includes all
+native OS/CPU/libc combinations so pnpm can install and pack every optional
+workspace package from one release checkout.
+
+`pnpm --filter @csszyx/core native:packages` validates the workspace package
+metadata and can be run with `-- --require-binaries` in the release job after
+native artifacts are downloaded.
 
 The same validator requires every platform package version to match
 `@csszyx/core`. A release-please version bump must keep these manifests in sync
@@ -142,6 +147,17 @@ pnpm --filter @csszyx/core native:build -- --clean
 The script writes `csszyx-core.<platform>.node` into the matching
 `packages/core-*` directory and removes generated `.d.ts` noise from the
 platform package. Generated `.node` files are gitignored.
+
+To build a specific release target:
+
+```bash
+pnpm --filter @csszyx/core native:build -- \
+  --clean --native-engine --target x86_64-unknown-linux-gnu
+```
+
+Linux cross builds pass `--cross-compile` in the release matrix. The release
+workflow builds all eight native packages as artifacts, downloads them in the
+publish job, validates `--require-binaries`, then runs `pnpm -r publish`.
 
 To build and load-test the current host package through `@csszyx/core/native`:
 

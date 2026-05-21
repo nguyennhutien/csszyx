@@ -24,3 +24,19 @@ export function getHostNativePackage(repoRoot) {
     nodePath: path.join(packageDir, packageInfo.node),
   };
 }
+
+export function getTargetNativePackage(repoRoot, targetTriple) {
+  const packageInfo =
+    NATIVE_PLATFORM_PACKAGES.find((pkg) => pkg.triple === targetTriple) ?? null;
+
+  if (!packageInfo) {
+    return { packageInfo: null, packageDir: null, nodePath: null };
+  }
+
+  const packageDir = path.join(repoRoot, packageInfo.dir);
+  return {
+    packageInfo,
+    packageDir,
+    nodePath: path.join(packageDir, packageInfo.node),
+  };
+}
