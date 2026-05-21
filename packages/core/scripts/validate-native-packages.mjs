@@ -13,18 +13,29 @@ const repoRoot = path.resolve(__dirname, "../../..");
 let errors = 0;
 
 const corePackagePath = path.join(repoRoot, "packages/core/package.json");
+const rootPackagePath = path.join(repoRoot, "package.json");
 const workspacePath = path.join(repoRoot, "pnpm-workspace.yaml");
+const releaseWorkflowPath = path.join(
+  repoRoot,
+  ".github/workflows/release.yml",
+);
 const corePackage = JSON.parse(readFileSync(corePackagePath, "utf8"));
+const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
 const workspaceYaml = readFileSync(workspacePath, "utf8");
+const releaseWorkflow = readFileSync(releaseWorkflowPath, "utf8");
 const nativePackageNames = new Set(
   NATIVE_PLATFORM_PACKAGES.map((packageInfo) => packageInfo.name),
 );
 const requireBinaries = process.argv.includes("--require-binaries");
 
 assertNativeOptionalDependencies(corePackage);
+assertSupportedArchitectures(rootPackage);
+assertReleaseMatrix(releaseWorkflow);
 
-if (workspaceYaml.includes('!packages/core-*')) {
-  fail("pnpm-workspace.yaml must include packages/core-* for native publishing.");
+if (workspaceYaml.includes("!packages/core-*")) {
+  fail(
+    "pnpm-workspace.yaml must include packages/core-* for native publishing.",
+  );
 }
 
 for (const expected of NATIVE_PLATFORM_PACKAGES) {
@@ -136,5 +147,81 @@ function assertNativeOptionalDependencies(pkg) {
         unknownNativeDependencies.join(", "),
       ].join(" "),
     );
+  }
+}
+
+/**
+ * Assert pnpm installs every optional native workspace package for pack/publish
+ * rewrite regardless of the current host platform.
+ *
+ * @param {{ pnpm?: { supportedArchitectures?: { os?: string[], cpu?: string[], libc?: string[] } } }} pkg Root package.
+ */
+function assertSupportedArchitectures(pkg) {
+  const supported = pkg.pnpm?.supportedArchitectures;
+  for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
+    assertIncludes(
+      supported?.os,
+      packageInfo.os[0],
+      "pnpm.supportedArchitectures.os",
+    );
+    assertIncludes(
+      supported?.cpu,
+      packageInfo.cpu[0],
+      "pnpm.supportedArchitectures.cpu",
+    );
+    for (const libc of packageInfo.libc ?? []) {
+      assertIncludes(supported?.libc, libc, "pnpm.supportedArchitectures.libc");
+    }
+  }
+}
+
+/**
+ * Assert release.yml keeps one native build row for every platform package.
+ *
+ * @param {string} workflow Release workflow contents.
+ */
+function assertReleaseMatrix(workflow) {
+  for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
+    assertTextIncludes(
+      workflow,
+      `platform: ${packageInfo.platformKey}`,
+      "release native matrix",
+    );
+    assertTextIncludes(
+      workflow,
+      `target: ${packageInfo.triple}`,
+      "release native matrix",
+    );
+    assertTextIncludes(
+      workflow,
+      `packages/core-\${{ matrix.platform }}/csszyx-core.\${{ matrix.platform }}.node`,
+      "release native artifact path",
+    );
+  }
+}
+
+/**
+ * Assert an array contains a value.
+ *
+ * @param {unknown} actual Actual array.
+ * @param {string} expected Expected value.
+ * @param {string} label Assertion label.
+ */
+function assertIncludes(actual, expected, label) {
+  if (!Array.isArray(actual) || !actual.includes(expected)) {
+    fail(`${label}: expected to include ${JSON.stringify(expected)}`);
+  }
+}
+
+/**
+ * Assert text contains a substring.
+ *
+ * @param {string} text Text to inspect.
+ * @param {string} expected Expected substring.
+ * @param {string} label Assertion label.
+ */
+function assertTextIncludes(text, expected, label) {
+  if (!text.includes(expected)) {
+    fail(`${label}: expected to include ${JSON.stringify(expected)}`);
   }
 }
