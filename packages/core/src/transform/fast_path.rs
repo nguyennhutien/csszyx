@@ -114,11 +114,13 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             rewrites_empty_class: false,
             ternary: None,
             runtime_fallback: false,
+            dynamic_css_vars: Vec::new(),
         });
         ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span,
             sz_attribute_indices: vec![attribute_index],
             class_attribute_index: None,
+            style_attribute_index: None,
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
             last_attribute_end: Some(u32::try_from(attribute_end).ok()?),

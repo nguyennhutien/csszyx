@@ -9,7 +9,7 @@ use string_wizard::{MagicString, UpdateOptions};
 use super::{
     lower::lower_sz_attribute_classes,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
-    SourceIr,
+    DynamicCssVarCategory, DynamicCssVarIr, SourceIr,
 };
 
 /// Reason a static IR cannot be rewritten by the current narrow slice.
@@ -112,6 +112,7 @@ fn rewrite_static_sz_element(
 
     if let Some(class_index) = element.class_attribute_index {
         rewrite_static_sz_with_existing_class(source, ir, element, magic, class_index, &classes);
+        apply_dynamic_style_props(source, ir, element, magic);
         return Ok(());
     }
 
@@ -127,6 +128,7 @@ fn rewrite_static_sz_element(
             attribute.attribute_span.end as usize,
         );
     }
+    apply_dynamic_style_props(source, ir, element, magic);
     Ok(())
 }
 
@@ -285,6 +287,74 @@ fn class_merge_argument(source: &str, class_attribute: &super::ClassAttributeIr)
     )
 }
 
+fn apply_dynamic_style_props(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) {
+    let dynamic_props = element
+        .sz_attribute_indices
+        .iter()
+        .flat_map(|index| ir.sz_attributes[*index].dynamic_css_vars.iter())
+        .collect::<Vec<_>>();
+    if dynamic_props.is_empty() {
+        return;
+    }
+
+    let props = dynamic_props
+        .iter()
+        .map(|prop| style_prop_source(source, prop))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if let Some(style_index) = element.style_attribute_index {
+        let style_attr = &ir.style_attributes[style_index];
+        if let Some(expression_span) = style_attr.expression_span {
+            let expression = &source[expression_span.start as usize..expression_span.end as usize];
+            magic.update_with(
+                style_attr.attribute_span.start as usize,
+                style_attr.attribute_span.end as usize,
+                format!("style={{{{...{expression}, {props}}}}}"),
+                UpdateOptions {
+                    overwrite: true,
+                    ..UpdateOptions::default()
+                },
+            );
+        }
+        return;
+    }
+
+    if let Some(last_attribute_end) = element.last_attribute_end {
+        magic.append_right(
+            last_attribute_end as usize,
+            format!(" style={{{{{props}}}}}"),
+        );
+    }
+}
+
+fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {
+    format!(
+        "{}: {}",
+        js_string_literal(&prop.var_name),
+        dynamic_style_value_source(source, prop)
+    )
+}
+
+fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
+    let expression =
+        &source[prop.expression_span.start as usize..prop.expression_span.end as usize];
+    match prop.category {
+        DynamicCssVarCategory::Spacing => {
+            format!("`calc(${{{expression}}} * var(--spacing))`")
+        }
+        DynamicCssVarCategory::Color => format!("__szColorVar({expression})"),
+        DynamicCssVarCategory::Angle => format!("`${{{expression}}}deg`"),
+        DynamicCssVarCategory::Duration => format!("`${{{expression}}}ms`"),
+        DynamicCssVarCategory::Passthrough => format!("`${{{expression}}}`"),
+    }
+}
+
 fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class_name: &str) {
     magic.update_with(
         span.start as usize,
@@ -421,6 +491,50 @@ mod tests {
         assert_eq!(
             rewritten,
             "export const App = () => <div className=\"p-4 m-2\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_dynamic_spacing_value_to_css_var_style() {
+        let source = "const App = () => <div sz={{ p: padVal }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"p-(--_sz-p)\" style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+        );
+    }
+
+    #[test]
+    fn merges_dynamic_spacing_value_with_static_class() {
+        let source = "const App = () => <div className=\"base\" sz={{ p: padVal }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"base p-(--_sz-p)\" style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+        );
+    }
+
+    #[test]
+    fn merges_dynamic_spacing_value_with_dynamic_class() {
+        let source = "const App = () => <div className={getClasses()} sz={{ p: padVal }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className={_szMerge(getClasses(), \"p-(--_sz-p)\")} style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+        );
+    }
+
+    #[test]
+    fn merges_dynamic_spacing_value_into_existing_style_expression() {
+        let source = "const App = () => <div style={{ color: \"red\" }} sz={{ p: padVal }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div style={{...{ color: \"red\" }, \"--_sz-p\": `calc(${padVal} * var(--spacing))`}} className=\"p-(--_sz-p)\" />;"
         );
     }
 

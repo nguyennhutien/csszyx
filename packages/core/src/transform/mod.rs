@@ -34,8 +34,9 @@ pub use contract::{
     TransformResult, TransformTimings,
 };
 pub use ir::{
-    ClassAttributeIr, IrError, JsxOpeningElementIr, RecoveryAttributeIr, SourceIr, StaticSzObject,
-    StaticSzProperty, StaticSzValue, StaticTernaryIr, SzAttributeIr, TextSpan,
+    ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
+    RecoveryAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
+    StaticTernaryIr, StyleAttributeIr, SzAttributeIr, TextSpan,
 };
 
 /// Error returned by the Rust transform scaffold.

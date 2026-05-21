@@ -14,9 +14,10 @@ use oxc_span::{GetSpan, SourceType, Span};
 use std::time::Instant;
 
 use super::{
-    lower::lower_static_sz_object, ClassAttributeIr, JsxOpeningElementIr, RecoveryAttributeIr,
-    RecoveryMode, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
-    SzAttributeIr, TextSpan, TransformFile, TransformTimings,
+    lower::lower_static_sz_object, ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr,
+    JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SourceIr, StaticSzObject,
+    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr, TextSpan,
+    TransformFile, TransformTimings,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -124,6 +125,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
         let mut sz_attribute_indices = Vec::new();
         let mut class_attribute_index = None;
+        let mut style_attribute_index = None;
         let mut recovery_attribute_index = None;
         let mut has_recovery_token_attribute = false;
         let mut last_attribute_end = None;
@@ -147,6 +149,11 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                     "class" | "className" => {
                         if let Some(index) = self.collect_class_attribute(attr) {
                             class_attribute_index = Some(index);
+                        }
+                    }
+                    "style" => {
+                        if let Some(index) = self.collect_style_attribute(attr) {
+                            style_attribute_index = Some(index);
                         }
                     }
                     "szRecover" => {
@@ -174,6 +181,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                 opening_span: text_span(element.span),
                 sz_attribute_indices,
                 class_attribute_index,
+                style_attribute_index,
                 recovery_attribute_index,
                 has_recovery_token_attribute,
                 last_attribute_end,
@@ -211,6 +219,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             rewrites_empty_class,
             ternary,
             runtime_fallback,
+            dynamic_css_vars,
         ) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
@@ -219,6 +228,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 true,
                 None,
                 false,
+                Vec::new(),
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
                 // Three structurally distinct paths, tried in order:
@@ -244,15 +254,44 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Some(ternary),
                         false,
+                        Vec::new(),
                     )
                 } else if let Some((object, value_span, rewrites_empty_class)) =
                     static_object_from_jsx_expression(&container.expression, ctx)
                 {
-                    (object, value_span, None, rewrites_empty_class, None, false)
+                    (
+                        object,
+                        value_span,
+                        None,
+                        rewrites_empty_class,
+                        None,
+                        false,
+                        Vec::new(),
+                    )
+                } else if let Some((object, value_span, dynamic_css_vars)) =
+                    partial_object_from_jsx_expression(&container.expression, ctx)
+                {
+                    (
+                        object,
+                        value_span,
+                        None,
+                        false,
+                        None,
+                        false,
+                        dynamic_css_vars,
+                    )
                 } else if let Some(value_span) =
                     runtime_fallback_span_from_jsx_expression(&container.expression)
                 {
-                    (StaticSzObject::empty(), value_span, None, false, None, true)
+                    (
+                        StaticSzObject::empty(),
+                        value_span,
+                        None,
+                        false,
+                        None,
+                        true,
+                        Vec::new(),
+                    )
                 } else {
                     return None;
                 }
@@ -269,6 +308,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             rewrites_empty_class,
             ternary,
             runtime_fallback,
+            dynamic_css_vars,
         });
         Some(index)
     }
@@ -295,6 +335,25 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             attribute_span: text_span(attr.span),
             value_span,
             value,
+            expression_span,
+        });
+        Some(index)
+    }
+
+    fn collect_style_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
+        let expression_span = match &attr.value {
+            Some(JSXAttributeValue::ExpressionContainer(container)) => {
+                if matches!(container.expression, JSXExpression::EmptyExpression(_)) {
+                    return None;
+                }
+                Some(text_span(container.expression.span()))
+            }
+            _ => None,
+        };
+
+        let index = self.ir.style_attributes.len();
+        self.ir.style_attributes.push(StyleAttributeIr {
+            attribute_span: text_span(attr.span),
             expression_span,
         });
         Some(index)
@@ -524,6 +583,213 @@ fn static_object_from_expression(
         }
         _ => None,
     }
+}
+
+struct PartialSzObject {
+    object: StaticSzObject,
+    dynamic_css_vars: Vec<DynamicCssVarIr>,
+}
+
+fn partial_object_from_jsx_expression(
+    expression: &JSXExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticSzObject, TextSpan, Vec<DynamicCssVarIr>)> {
+    match expression {
+        JSXExpression::ObjectExpression(object) => {
+            let partial = partial_object_from_object_expression(object, ctx, None)?;
+            if partial.dynamic_css_vars.is_empty() {
+                return None;
+            }
+            Some((
+                partial.object,
+                text_span(object.span),
+                partial.dynamic_css_vars,
+            ))
+        }
+        JSXExpression::TSAsExpression(value) => {
+            partial_object_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSSatisfiesExpression(value) => {
+            partial_object_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            partial_object_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::ParenthesizedExpression(parenthesized) => {
+            partial_object_from_expression(&parenthesized.expression, ctx)
+        }
+        _ => None,
+    }
+}
+
+fn partial_object_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticSzObject, TextSpan, Vec<DynamicCssVarIr>)> {
+    match expression {
+        Expression::ObjectExpression(object) => {
+            let partial = partial_object_from_object_expression(object, ctx, None)?;
+            if partial.dynamic_css_vars.is_empty() {
+                return None;
+            }
+            Some((
+                partial.object,
+                text_span(object.span),
+                partial.dynamic_css_vars,
+            ))
+        }
+        Expression::ParenthesizedExpression(value) => {
+            partial_object_from_expression(&value.expression, ctx)
+        }
+        Expression::TSAsExpression(value) => partial_object_from_expression(&value.expression, ctx),
+        Expression::TSSatisfiesExpression(value) => {
+            partial_object_from_expression(&value.expression, ctx)
+        }
+        Expression::TSNonNullExpression(value) => {
+            partial_object_from_expression(&value.expression, ctx)
+        }
+        _ => None,
+    }
+}
+
+fn partial_object_from_object_expression(
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_prefix: Option<&str>,
+) -> Option<PartialSzObject> {
+    let mut properties = Vec::with_capacity(object.properties.len());
+    let mut dynamic_css_vars = Vec::new();
+
+    for property in &object.properties {
+        match property {
+            ObjectPropertyKind::ObjectProperty(property) => {
+                if is_skippable_static_value(&property.value) {
+                    continue;
+                }
+                if let Some(static_property) = static_property_from_object_property(property, ctx) {
+                    properties.push(static_property);
+                    continue;
+                }
+
+                let key = static_property_key(&property.key)?;
+                if let Expression::ObjectExpression(nested) = &property.value {
+                    let variant = variant_prefix_string(variant_prefix, &key);
+                    let nested =
+                        partial_object_from_object_expression(nested, ctx, Some(variant.as_str()))?;
+                    if !nested.object.is_empty() {
+                        properties.push(StaticSzProperty {
+                            key,
+                            span: text_span(property.span),
+                            value: StaticSzValue::Object(nested.object),
+                        });
+                    }
+                    dynamic_css_vars.extend(nested.dynamic_css_vars);
+                    continue;
+                }
+
+                if !is_runtime_expression(&property.value) {
+                    return None;
+                }
+                dynamic_css_vars.push(dynamic_css_var_from_property(
+                    &key,
+                    text_span(property.value.span()),
+                    variant_prefix,
+                ));
+            }
+            ObjectPropertyKind::SpreadProperty(spread) => {
+                properties
+                    .extend(static_object_from_spread_argument(&spread.argument, ctx)?.properties);
+            }
+        }
+    }
+
+    Some(PartialSzObject {
+        object: StaticSzObject { properties },
+        dynamic_css_vars,
+    })
+}
+
+fn dynamic_css_var_from_property(
+    key: &str,
+    expression_span: TextSpan,
+    variant_prefix: Option<&str>,
+) -> DynamicCssVarIr {
+    DynamicCssVarIr {
+        key: key.to_string(),
+        class_prefix: super::generated::tables::property_prefix(key)
+            .unwrap_or(key)
+            .to_string(),
+        var_name: css_variable_name(key, variant_prefix),
+        category: dynamic_css_var_category(key),
+        expression_span,
+        variant_prefix: variant_prefix.map(ToString::to_string),
+    }
+}
+
+fn variant_prefix_string(current: Option<&str>, key: &str) -> String {
+    let variant = super::generated::tables::variant_prefix(key).unwrap_or(key);
+    current.map_or_else(
+        || variant.to_string(),
+        |prefix| format!("{prefix}:{variant}"),
+    )
+}
+
+fn css_variable_name(key: &str, variant_prefix: Option<&str>) -> String {
+    let prop = kebab_case(key);
+    variant_prefix.map_or_else(
+        || format!("--_sz-{prop}"),
+        |prefix| format!("--_sz-{}-{prop}", prefix.replace(':', "-")),
+    )
+}
+
+fn kebab_case(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for (index, ch) in value.chars().enumerate() {
+        if ch.is_ascii_uppercase() {
+            if index > 0 {
+                out.push('-');
+            }
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
+    match key {
+        "p" | "pt" | "pr" | "pb" | "pl" | "px" | "py" | "ps" | "pe" | "pbs" | "pbe" | "m"
+        | "mt" | "mr" | "mb" | "ml" | "mx" | "my" | "ms" | "me" | "mbs" | "mbe" | "spaceX"
+        | "spaceY" | "gap" | "gapX" | "gapY" | "inset" | "insetX" | "insetY" | "top" | "right"
+        | "bottom" | "left" | "start" | "end" | "insetS" | "insetE" | "insetBs" | "insetBe"
+        | "w" | "minW" | "maxW" | "h" | "minH" | "maxH" | "size" | "blockSize" | "minBlockSize"
+        | "maxBlockSize" | "inlineSize" | "minInlineSize" | "maxInlineSize" | "basis"
+        | "indent" | "scrollM" | "scrollMt" | "scrollMr" | "scrollMb" | "scrollMl" | "scrollMs"
+        | "scrollMe" | "scrollMx" | "scrollMy" | "scrollP" | "scrollPt" | "scrollPr"
+        | "scrollPb" | "scrollPl" | "scrollPs" | "scrollPe" | "scrollPx" | "scrollPy"
+        | "scrollPbs" | "scrollPbe" | "scrollMbs" | "scrollMbe" | "translateX" | "translateY"
+        | "borderSpacing" | "borderSpacingX" | "borderSpacingY" | "outlineOffset"
+        | "ringOffset" | "underlineOffset" => DynamicCssVarCategory::Spacing,
+        "bg" | "color" | "borderColor" | "divideColor" | "outlineColor" | "ringColor"
+        | "ringOffsetColor" | "shadowColor" | "textShadowColor" | "decorationColor" | "accent"
+        | "caret" | "fill" | "stroke" | "from" | "via" | "to" | "dropShadowColor" => {
+            DynamicCssVarCategory::Color
+        }
+        "rotate" | "skewX" | "skewY" => DynamicCssVarCategory::Angle,
+        "duration" | "delay" | "animationDelay" => DynamicCssVarCategory::Duration,
+        _ => DynamicCssVarCategory::Passthrough,
+    }
+}
+
+const fn is_runtime_expression(expression: &Expression<'_>) -> bool {
+    !matches!(
+        expression,
+        Expression::ObjectExpression(_)
+            | Expression::ArrayExpression(_)
+            | Expression::FunctionExpression(_)
+            | Expression::ArrowFunctionExpression(_)
+    )
 }
 
 fn static_object_from_object_expression(

@@ -55,6 +55,13 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         .map(ToString::to_string)
         .collect::<Vec<_>>();
     classes.extend(lower_static_sz_object(&attribute.object));
+    classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
+        let variant = prop
+            .variant_prefix
+            .as_ref()
+            .map_or_else(String::new, |prefix| format!("{prefix}:"));
+        format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
+    }));
     if let Some(ternary) = &attribute.ternary {
         classes.extend(ternary.consequent_classes.iter().cloned());
         classes.extend(ternary.alternate_classes.iter().cloned());
@@ -316,6 +323,7 @@ mod tests {
                 rewrites_empty_class: false,
                 ternary: None,
                 runtime_fallback: false,
+                dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {
@@ -324,6 +332,7 @@ mod tests {
                 value: "block".to_string(),
                 expression_span: None,
             }],
+            style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: Vec::new(),

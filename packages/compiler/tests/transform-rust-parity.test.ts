@@ -131,6 +131,24 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'function-local-ternary.tsx',
         expected: 'parity',
     },
+    {
+        name: 'sz-dynamic-css-var',
+        source: 'const X = ({ pad }) => <div sz={{ p: pad, bg: "blue-500" }} />;',
+        filename: 'dynamic-css-var.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-existing-class',
+        source: 'const X = ({ pad }) => <div className="existing" sz={{ p: pad }} />;',
+        filename: 'dynamic-existing-static-class.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-existing-class-expression',
+        source: 'const X = ({ pad }) => <div className={getClasses()} sz={{ p: pad }} />;',
+        filename: 'dynamic-existing-class.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {

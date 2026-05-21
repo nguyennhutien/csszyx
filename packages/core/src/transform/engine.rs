@@ -9,8 +9,8 @@ use super::{
     parser::parse_source_shell,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
-    ParserPath, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
-    TransformResult, TransformTimings,
+    DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
+    TransformProducer, TransformResult, TransformTimings,
 };
 use std::time::Instant;
 
@@ -139,6 +139,12 @@ fn transform_static_classes(
                 .sz_attributes
                 .iter()
                 .any(|attr| attr.runtime_fallback));
+    let uses_color_var = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.dynamic_css_vars
+                .iter()
+                .any(|prop| prop.category == DynamicCssVarCategory::Color)
+        });
 
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
@@ -151,7 +157,7 @@ fn transform_static_classes(
             transformed,
             uses_runtime,
             uses_merge,
-            uses_color_var: false,
+            uses_color_var,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
             timings: TransformTimings {

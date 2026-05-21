@@ -49,6 +49,8 @@ pub struct SourceIr {
     pub unsupported_sz_attribute_spans: Vec<TextSpan>,
     /// Class/className attributes found in source order.
     pub class_attributes: Vec<ClassAttributeIr>,
+    /// Style attributes found in source order.
+    pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
     pub recovery_attributes: Vec<RecoveryAttributeIr>,
     /// `szRecover` attribute spans that could not emit a token.
@@ -69,6 +71,7 @@ impl SourceIr {
             sz_attributes: Vec::new(),
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
+            style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: Vec::new(),
@@ -94,6 +97,8 @@ pub struct JsxOpeningElementIr {
     pub sz_attribute_indices: Vec<usize>,
     /// Class/className attribute index in [`SourceIr::class_attributes`].
     pub class_attribute_index: Option<usize>,
+    /// Style attribute index in [`SourceIr::style_attributes`].
+    pub style_attribute_index: Option<usize>,
     /// Static `szRecover` attribute index in [`SourceIr::recovery_attributes`].
     pub recovery_attribute_index: Option<usize>,
     /// Whether the opening element already has `data-sz-recovery-token`.
@@ -133,6 +138,8 @@ pub struct SzAttributeIr {
     /// import injection picks the helper up. No classes are collected from
     /// these attributes because the runtime is the source of truth.
     pub runtime_fallback: bool,
+    /// Dynamic object properties emitted through CSS custom properties.
+    pub dynamic_css_vars: Vec<DynamicCssVarIr>,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
@@ -161,6 +168,48 @@ pub struct ClassAttributeIr {
     pub value: String,
     /// Dynamic expression span for `className={expr}` / `class={expr}`.
     pub expression_span: Option<TextSpan>,
+}
+
+/// JSX style attribute.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StyleAttributeIr {
+    /// Full attribute span.
+    pub attribute_span: TextSpan,
+    /// Dynamic expression span for `style={expr}`.
+    pub expression_span: Option<TextSpan>,
+}
+
+/// Dynamic sz object property lowered to a CSS variable class + style prop.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DynamicCssVarIr {
+    /// Source key text.
+    pub key: String,
+    /// Tailwind utility prefix.
+    pub class_prefix: String,
+    /// CSS custom property name, for example `--_sz-p`.
+    pub var_name: String,
+    /// Value transform category.
+    pub category: DynamicCssVarCategory,
+    /// Runtime expression span in the source module.
+    pub expression_span: TextSpan,
+    /// Variant prefix chain as emitted by Tailwind, for example `md:hover`.
+    pub variant_prefix: Option<String>,
+}
+
+/// Runtime value transform used when writing a CSS custom property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DynamicCssVarCategory {
+    /// `calc(value * var(--spacing))`.
+    Spacing,
+    /// `__szColorVar(value)`.
+    Color,
+    /// `${value}deg`.
+    Angle,
+    /// `${value}ms`.
+    Duration,
+    /// Direct stringification.
+    Passthrough,
 }
 
 /// Static `szRecover` attribute.
@@ -306,6 +355,7 @@ mod tests {
                 rewrites_empty_class: false,
                 ternary: None,
                 runtime_fallback: false,
+                dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {
@@ -314,12 +364,14 @@ mod tests {
                 value: "block".to_string(),
                 expression_span: None,
             }],
+            style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: vec![JsxOpeningElementIr {
                 opening_span: TextSpan::new(1, 73).expect("valid span"),
                 sz_attribute_indices: vec![0],
                 class_attribute_index: Some(0),
+                style_attribute_index: None,
                 recovery_attribute_index: None,
                 has_recovery_token_attribute: false,
                 last_attribute_end: Some(72),
