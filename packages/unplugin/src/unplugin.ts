@@ -503,10 +503,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         );
     }
     const parserOverride = process.env.CSSZYX_PARSER;
+    const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'oxc';
     const parserMode =
         parserOverride === 'babel' || parserOverride === 'oxc' || parserOverride === 'rust'
             ? parserOverride
-            : (options.build?.parser ?? 'oxc');
+            : (options.build?.parser ?? defaultParser);
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
 
