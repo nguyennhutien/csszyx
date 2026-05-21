@@ -229,6 +229,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             rewrites_empty_class,
             ternary,
             runtime_fallback,
+            candidate_classes,
             dynamic_css_vars,
         ) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
@@ -238,6 +239,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 true,
                 None,
                 false,
+                Vec::new(),
                 Vec::new(),
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
@@ -265,6 +267,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         Some(ternary),
                         false,
                         Vec::new(),
+                        Vec::new(),
                     )
                 } else if let Some((object, value_span, rewrites_empty_class)) =
                     static_object_from_jsx_expression(&container.expression, ctx)
@@ -277,6 +280,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         None,
                         false,
                         Vec::new(),
+                        Vec::new(),
                     )
                 } else if let Some((object, value_span, dynamic_css_vars, ternary)) =
                     partial_object_from_jsx_expression(&container.expression, ctx)
@@ -288,11 +292,14 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         ternary,
                         false,
+                        Vec::new(),
                         dynamic_css_vars,
                     )
                 } else if let Some(value_span) =
                     runtime_fallback_span_from_jsx_expression(&container.expression)
                 {
+                    let candidate_classes =
+                        candidate_classes_from_jsx_expression(&container.expression, ctx);
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -300,6 +307,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         None,
                         true,
+                        candidate_classes,
                         Vec::new(),
                     )
                 } else {
@@ -318,6 +326,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             rewrites_empty_class,
             ternary,
             runtime_fallback,
+            candidate_classes,
             dynamic_css_vars,
         });
         Some(index)
@@ -523,6 +532,114 @@ fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<
             runtime_fallback_span_from_expression(&value.expression)
         }
         _ => Some(text_span(expression.span())),
+    }
+}
+
+fn candidate_classes_from_jsx_expression(
+    expression: &JSXExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Vec<String> {
+    match expression {
+        JSXExpression::ArrayExpression(array) => {
+            candidate_classes_from_array_expression(array, ctx)
+        }
+        JSXExpression::TSAsExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSSatisfiesExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::ParenthesizedExpression(parenthesized) => {
+            candidate_classes_from_expression(&parenthesized.expression, ctx)
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn candidate_classes_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Vec<String> {
+    match expression {
+        Expression::ArrayExpression(array) => candidate_classes_from_array_expression(array, ctx),
+        Expression::ParenthesizedExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        Expression::TSAsExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        Expression::TSSatisfiesExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        Expression::TSNonNullExpression(value) => {
+            candidate_classes_from_expression(&value.expression, ctx)
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn candidate_classes_from_array_expression(
+    array: &ArrayExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Vec<String> {
+    let mut classes = Vec::new();
+    for element in &array.elements {
+        let object = match element {
+            ArrayExpressionElement::ObjectExpression(object) => {
+                static_object_from_object_expression(object, ctx)
+            }
+            ArrayExpressionElement::Identifier(identifier) => {
+                let initializer = ctx.scope.resolve_initializer_before(
+                    &identifier.name,
+                    identifier.span.start,
+                    ctx.program,
+                );
+                initializer.and_then(|expr| {
+                    static_object_from_expression(expr, ctx).map(|(object, _, _)| object)
+                })
+            }
+            ArrayExpressionElement::LogicalExpression(logical) if logical.operator.is_and() => {
+                static_object_candidate_from_expression(&logical.right, ctx)
+            }
+            _ => None,
+        };
+        if let Some(object) = object {
+            classes.extend(lower_static_sz_object(&object));
+        }
+    }
+    classes
+}
+
+fn static_object_candidate_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
+    match expression {
+        Expression::ObjectExpression(object) => static_object_from_object_expression(object, ctx),
+        Expression::Identifier(identifier) => {
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
+            static_object_from_expression(initializer, ctx).map(|(object, _, _)| object)
+        }
+        Expression::ParenthesizedExpression(value) => {
+            static_object_candidate_from_expression(&value.expression, ctx)
+        }
+        Expression::TSAsExpression(value) => {
+            static_object_candidate_from_expression(&value.expression, ctx)
+        }
+        Expression::TSSatisfiesExpression(value) => {
+            static_object_candidate_from_expression(&value.expression, ctx)
+        }
+        Expression::TSNonNullExpression(value) => {
+            static_object_candidate_from_expression(&value.expression, ctx)
+        }
+        _ => None,
     }
 }
 
@@ -1359,6 +1476,21 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.classes, ["flex", "p-4"]);
         assert_eq!(parsed.ir.sz_attributes[0].object.properties.len(), 2);
+    }
+
+    #[test]
+    fn parser_shell_collects_runtime_array_candidate_classes() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const base = { p: 4, rounded: 'md' }; const App = ({ active }) => <div sz={[{ ...base }, active && { bg: 'blue-500' }]} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+        assert_eq!(lowered.classes, ["p-4", "rounded-md", "bg-blue-500"]);
     }
 
     #[test]

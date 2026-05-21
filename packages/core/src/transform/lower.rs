@@ -56,6 +56,7 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         .map(ToString::to_string)
         .collect::<Vec<_>>();
     classes.extend(lower_static_sz_object(&attribute.object));
+    classes.extend(attribute.candidate_classes.iter().cloned());
     classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
         let variant = prop
             .variant_prefix
@@ -324,6 +325,7 @@ mod tests {
                 rewrites_empty_class: false,
                 ternary: None,
                 runtime_fallback: false,
+                candidate_classes: Vec::new(),
                 dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),

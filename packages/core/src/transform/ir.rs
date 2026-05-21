@@ -141,6 +141,8 @@ pub struct SzAttributeIr {
     /// import injection picks the helper up. No classes are collected from
     /// these attributes because the runtime is the source of truth.
     pub runtime_fallback: bool,
+    /// Static classes visible inside runtime-fallback shapes.
+    pub candidate_classes: Vec<String>,
     /// Dynamic object properties emitted through CSS custom properties.
     pub dynamic_css_vars: Vec<DynamicCssVarIr>,
 }
@@ -358,6 +360,7 @@ mod tests {
                 rewrites_empty_class: false,
                 ternary: None,
                 runtime_fallback: false,
+                candidate_classes: Vec::new(),
                 dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),

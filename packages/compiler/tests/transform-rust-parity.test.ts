@@ -174,6 +174,15 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'dynamic-call-binding.tsx',
         expected: 'parity',
     },
+    {
+        name: 'sz-array-logical-object',
+        source: [
+            'const base = { p: 4, rounded: "md" };',
+            'const X = ({ active }) => <div sz={[{ ...base }, active && { bg: "blue-500" }]} />;',
+        ].join('\n'),
+        filename: 'array-logical.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {

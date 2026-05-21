@@ -121,6 +121,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             rewrites_empty_class: false,
             ternary: None,
             runtime_fallback: false,
+            candidate_classes: Vec::new(),
             dynamic_css_vars: Vec::new(),
         });
         ir.jsx_opening_elements.push(JsxOpeningElementIr {
