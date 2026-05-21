@@ -64,6 +64,7 @@ if (process.argv.includes("--release")) {
 
 const result = spawnSync("napi", args, {
   cwd: coreDir,
+  env: nativeBuildEnv(),
   stdio: "inherit",
 });
 
@@ -100,6 +101,22 @@ function readArgValue(name) {
   }
 
   return null;
+}
+
+/**
+ * Build native binaries with the repository-pinned Rust toolchain.
+ *
+ * Some devcontainer shells may still export an older RUSTUP_TOOLCHAIN from a
+ * previous session. Leaving it in place overrides rust-toolchain.toml and can
+ * make oxc fail its rustc-version check, so native builds intentionally defer
+ * to the repo config.
+ *
+ * @returns {NodeJS.ProcessEnv} Child process environment.
+ */
+function nativeBuildEnv() {
+  const env = { ...process.env };
+  delete env.RUSTUP_TOOLCHAIN;
+  return env;
 }
 
 /**
