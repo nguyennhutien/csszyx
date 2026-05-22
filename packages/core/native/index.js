@@ -29,14 +29,6 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     if (cachedBinding && cachedPackageName === packageName) {
         return cachedBinding;
     }
-    // A binding loaded by explicit path (e.g. workspace test preload) is the
-    // same artefact the default platform-package name would resolve to, so
-    // we honour any cached binding once it is in place. Tests can preload
-    // via `loadNativeBinding(absolutePackageDir)` and `transformBatch()`
-    // will still see it on subsequent default-key calls.
-    if (cachedBinding) {
-        return cachedBinding;
-    }
 
     if (!packageName) {
         throw new CsszyxNativeUnavailableError(

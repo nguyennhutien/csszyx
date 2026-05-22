@@ -38,17 +38,18 @@ describe('@csszyx/core/native loader', () => {
     });
 
     it('throws the same stable error for a missing explicit native package', () => {
-        expect(() => loadNativeBinding('@csszyx/core-linux-x64-gnu')).toThrow(
-            CsszyxNativeUnavailableError,
-        );
+        // Use a synthetic platform name guaranteed to be missing on every
+        // runner. The previous fixture used `@csszyx/core-linux-x64-gnu`,
+        // which became loadable once CI started building the host native
+        // engine before unit tests, so the throw assertion regressed.
+        const missingPackage = '@csszyx/core-test-missing-platform';
+        expect(() => loadNativeBinding(missingPackage)).toThrow(CsszyxNativeUnavailableError);
 
         try {
-            loadNativeBinding('@csszyx/core-linux-x64-gnu');
+            loadNativeBinding(missingPackage);
         } catch (err) {
             expect((err as CsszyxNativeUnavailableError).code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
-            expect((err as CsszyxNativeUnavailableError).packageName).toBe(
-                '@csszyx/core-linux-x64-gnu',
-            );
+            expect((err as CsszyxNativeUnavailableError).packageName).toBe(missingPackage);
             return;
         }
 
