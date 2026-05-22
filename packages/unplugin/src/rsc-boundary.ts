@@ -15,6 +15,9 @@ const CLIENT_RUNTIME_MODULES = new Set(['csszyx/browser']);
 
 const CLIENT_RUNTIME_MODULE_ROOTS = ['@csszyx/dynamic', 'csszyx/dynamic'];
 
+const normalizedModuleIdCache = new Map<string, string>();
+const resolvedLocalModuleCache = new Map<string, string>();
+
 const FORBIDDEN_SYMBOLS = new Set([
     '_sz',
     '_sz2',
@@ -171,6 +174,7 @@ export function deleteRSCModuleRecord(records: Map<string, RSCModuleRecord>, id:
     const normalized = normalizeModuleId(id);
     const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
     const resolved = path.resolve(clean).replace(/\\/g, '/');
+    pruneRSCModulePathCaches(new Set([normalized, resolved, clean]));
 
     let deleted = records.delete(normalized);
     if (resolved !== normalized) {
@@ -510,11 +514,18 @@ function findLocalImportSources(code: string): string[] {
  */
 function normalizeModuleId(id: string): string {
     const clean = id.split('?')[0] ?? id;
-    try {
-        return fs.realpathSync.native(clean).replace(/\\/g, '/');
-    } catch {
-        return path.resolve(clean).replace(/\\/g, '/');
+    const cached = normalizedModuleIdCache.get(clean);
+    if (cached) {
+        return cached;
     }
+    let normalized: string;
+    try {
+        normalized = fs.realpathSync.native(clean).replace(/\\/g, '/');
+    } catch {
+        normalized = path.resolve(clean).replace(/\\/g, '/');
+    }
+    normalizedModuleIdCache.set(clean, normalized);
+    return normalized;
 }
 
 /**
@@ -525,6 +536,12 @@ function normalizeModuleId(id: string): string {
  * @returns normalized resolved module ID, or null when unsupported/missing
  */
 function resolveLocalModule(importer: string, source: string): string | null {
+    const cacheKey = `${importer}\0${source}`;
+    const cached = resolvedLocalModuleCache.get(cacheKey);
+    if (cached) {
+        return cached;
+    }
+
     const base = source.startsWith('/') ? source : path.resolve(path.dirname(importer), source);
     const candidates = [
         base,
@@ -542,11 +559,32 @@ function resolveLocalModule(importer: string, source: string): string | null {
 
     for (const candidate of candidates) {
         if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-            return normalizeModuleId(candidate);
+            const resolved = normalizeModuleId(candidate);
+            resolvedLocalModuleCache.set(cacheKey, resolved);
+            return resolved;
         }
     }
 
     return null;
+}
+
+/**
+ * Drops positive path cache entries that point at a deleted module.
+ *
+ * @param moduleIds normalized and raw path spellings that should be removed
+ */
+function pruneRSCModulePathCaches(moduleIds: Set<string>): void {
+    for (const [key, value] of normalizedModuleIdCache) {
+        const normalizedKey = key.replace(/\\/g, '/');
+        if (moduleIds.has(value) || moduleIds.has(normalizedKey)) {
+            normalizedModuleIdCache.delete(key);
+        }
+    }
+    for (const [key, value] of resolvedLocalModuleCache) {
+        if (moduleIds.has(value)) {
+            resolvedLocalModuleCache.delete(key);
+        }
+    }
 }
 
 /**

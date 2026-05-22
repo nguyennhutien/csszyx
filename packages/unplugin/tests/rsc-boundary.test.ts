@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { transformSourceCode } from '@csszyx/compiler';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
     assertNoRSCBoundaryViolation,
@@ -467,17 +467,42 @@ describe('RSC audit regressions and known issues', () => {
         }
     });
 
-    // ---- Issue 4 ---------------------------------------------------
-    // `normalizeModuleId` calls `fs.realpathSync.native` on every
-    // record creation, and `resolveLocalModule` does up to 11
-    // `existsSync` + `statSync` calls per relative import (extension
-    // fallback). For monorepos with thousands of TS files this adds up
-    // — every transform pass repeats the same lookups. Fix should
-    // memoise both normalisation and resolution per plugin lifetime.
-    //
-    // Not a unit-test concern — would be a microbenchmark against a
-    // generated workspace of N files. Tracked here for visibility.
+    it('memoises repeated module id normalisation lookups', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-rsc-normalize-'));
+        const realpathNative = vi.spyOn(fs.realpathSync, 'native');
+        try {
+            const serverFile = path.join(tmp, 'page.tsx');
+            fs.writeFileSync(serverFile, "'use server';\nexport const action = () => null;");
 
-    it.todo('normalizeModuleId memoises repeated lookups across transforms');
-    it.todo('resolveLocalModule memoises extension-fallback results across transforms');
+            createRSCModuleRecord(fs.readFileSync(serverFile, 'utf8'), serverFile);
+            createRSCModuleRecord(fs.readFileSync(serverFile, 'utf8'), serverFile);
+
+            expect(realpathNative.mock.calls.filter(([id]) => id === serverFile)).toHaveLength(1);
+        } finally {
+            realpathNative.mockRestore();
+            fs.rmSync(tmp, { force: true, recursive: true });
+        }
+    });
+
+    it('memoises positive local module resolution and prunes it on delete', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-rsc-resolve-'));
+        try {
+            const serverFile = path.join(tmp, 'page.tsx');
+            const childFile = path.join(tmp, 'child.tsx');
+            const source = "'use server';\nimport Child from './child';\nexport default Child;";
+            fs.writeFileSync(serverFile, source);
+            fs.writeFileSync(childFile, 'export default function Child() { return null; }');
+
+            const first = createRSCModuleRecord(source, serverFile);
+            const second = createRSCModuleRecord(source, serverFile);
+            expect(first.imports).toEqual(second.imports);
+            expect(first.imports).toHaveLength(1);
+
+            fs.unlinkSync(childFile);
+            expect(deleteRSCModuleRecord(new Map(), childFile)).toBe(false);
+            expect(createRSCModuleRecord(source, serverFile).imports).toEqual([]);
+        } finally {
+            fs.rmSync(tmp, { force: true, recursive: true });
+        }
+    });
 });
