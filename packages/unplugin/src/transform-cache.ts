@@ -116,13 +116,21 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
  *
  * @param cacheRoot Absolute transform cache directory.
  * @param input Inputs used to validate the cache entry.
+ * @param precomputedKey Optional cache key returned by an earlier
+ *        `createTransformCacheKey(input)` call. Pass it through to avoid a
+ *        redundant sha256 of the same source.
  * @returns Cached transform result, or null on miss/corruption.
  */
 export function readTransformCache(
     cacheRoot: string,
     input: TransformCacheKeyInput,
+    precomputedKey?: TransformCacheKey,
 ): CacheableTransformResult | null {
-    const { key, inputSha256 } = createTransformCacheKey(input);
+    // Callers that already hashed `input` for an L1 lookup can pass the
+    // resulting `TransformCacheKey` here to avoid a second sha256 of the
+    // same source. Falling back to fresh derivation keeps the function
+    // safe to use standalone.
+    const { key, inputSha256 } = precomputedKey ?? createTransformCacheKey(input);
     const file = cacheEntryPath(cacheRoot, key);
     let entry: TransformCacheEntry;
     try {
@@ -153,13 +161,22 @@ export function readTransformCache(
  * @param cacheRoot Absolute transform cache directory.
  * @param input Inputs that produced the result.
  * @param result Transform result to serialize.
+ * @param precomputedKey Optional cache key returned by an earlier
+ *        `createTransformCacheKey(input)` call. Pass it through so cold
+ *        cache-miss writes do not pay for a second sha256 over the same
+ *        source.
  */
 export function writeTransformCache(
     cacheRoot: string,
     input: TransformCacheKeyInput,
     result: CacheableTransformResult,
+    precomputedKey?: TransformCacheKey,
 ): void {
-    const { key, inputSha256 } = createTransformCacheKey(input);
+    // Same dedup contract as `readTransformCache`: callers that already
+    // hashed `input` for cache lookup can pass the existing key here so a
+    // cache-miss-then-write does not pay for two sha256 passes over the
+    // same source.
+    const { key, inputSha256 } = precomputedKey ?? createTransformCacheKey(input);
     const file = cacheEntryPath(cacheRoot, key);
     const dir = path.dirname(file);
     const tmp = path.join(

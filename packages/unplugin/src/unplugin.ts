@@ -88,6 +88,21 @@ const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
+// Precomputed regexes for the runtime-helper import-injection pass. The
+// previous version called `new RegExp(...)` for every helper on every
+// file, which compiles the same three patterns ~tens of thousands of
+// times during a full project build. The helper set is closed (only
+// these three names ever ship), so we cache the regexes here and reuse
+// them on every transform. The matching string `@csszyx/runtime` only
+// appears in modules that already import a helper, so callers can also
+// skip the regex tests entirely when the runtime package is absent from
+// the transformed source.
+const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
+    _sz: /\{[^}]*\b_sz\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    _szMerge: /\{[^}]*\b_szMerge\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    __szColorVar: /\{[^}]*\b__szColorVar\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+};
+
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
@@ -662,18 +677,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             ensureRustTransformAvailable();
         }
 
-        if (cacheEnabled) {
-            const { key } = createTransformCacheKey(cacheInput);
-            const memoryCached = transformMemoryCache.get(key);
+        // Hoist the cache key once per transform call. The previous version
+        // computed it inside the lookup block AND again inside
+        // `readTransformCache` / `writeTransformCache` (each call sha256s
+        // the full source), so a cold cache miss could pay three or four
+        // identical hashes per file. Computing it here lets every cache
+        // operation reuse the same digest.
+        const cacheKey = cacheEnabled ? createTransformCacheKey(cacheInput) : null;
+
+        if (cacheEnabled && cacheKey) {
+            const memoryCached = transformMemoryCache.get(cacheKey.key);
             if (memoryCached) {
-                transformMemoryCache.delete(key);
-                transformMemoryCache.set(key, memoryCached);
+                transformMemoryCache.delete(cacheKey.key);
+                transformMemoryCache.set(cacheKey.key, memoryCached);
                 return memoryCached;
             }
 
-            const cached = readTransformCache(cacheRoot, cacheInput);
+            const cached = readTransformCache(cacheRoot, cacheInput, cacheKey);
             if (cached) {
-                rememberTransformCacheEntry(key, cached);
+                rememberTransformCacheEntry(cacheKey.key, cached);
                 return cached;
             }
         }
@@ -702,9 +724,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         }
 
-        if (cacheEnabled) {
-            writeTransformCache(cacheRoot, cacheInput, result);
-            rememberTransformCacheEntry(createTransformCacheKey(cacheInput).key, result);
+        if (cacheEnabled && cacheKey) {
+            writeTransformCache(cacheRoot, cacheInput, result, cacheKey);
+            rememberTransformCacheEntry(cacheKey.key, result);
         }
         return result;
     }
@@ -1204,13 +1226,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (usesColorVar) {
                         imports.push('__szColorVar');
                     }
-                    // Filter out helpers already imported from @csszyx/runtime
-                    const needed = imports.filter(
-                        name =>
-                            !new RegExp(
-                                `\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]@csszyx/runtime['"]`,
-                            ).test(transformedCode),
-                    );
+                    // Filter out helpers already imported from @csszyx/runtime.
+                    // The literal package name only appears in modules that
+                    // already import a helper, so a single `.includes()`
+                    // short-circuit skips the regex tests entirely for the
+                    // common case where no `@csszyx/runtime` import exists.
+                    // The regexes themselves are cached at module scope so we
+                    // don't recompile them per file.
+                    const hasRuntimeImport =
+                        imports.length > 0 && transformedCode.includes('@csszyx/runtime');
+                    const needed = hasRuntimeImport
+                        ? imports.filter(
+                              name => !RUNTIME_HELPER_IMPORT_RE[name]!.test(transformedCode),
+                          )
+                        : imports;
                     if (needed.length > 0) {
                         const existingImport = transformedCode.match(
                             /^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m,
