@@ -17,13 +17,14 @@ import { type Browser, chromium, type Page } from 'playwright';
 
 /**
  * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
- * `no-csszyx` skips the csszyx plugin entirely (Tailwind-only baseline) so the
- * pipeline-profile report can attribute time to the rest of the Vite/Astro
- * chain instead of guessing at csszyx's share.
+ * `no-csszyx` skips the csszyx plugin entirely (Tailwind-only baseline). The
+ * `no-tailwind` mode skips both csszyx and Tailwind so the report can split
+ * pipeline cost three ways: csszyx share = oxc - no-csszyx; Tailwind share =
+ * no-csszyx - no-tailwind; pipeline floor = no-tailwind.
  */
-type BenchMode = 'oxc' | 'rust' | 'no-csszyx';
+type BenchMode = 'oxc' | 'rust' | 'no-csszyx' | 'no-tailwind';
 
-const BENCH_MODES = ['oxc', 'rust', 'no-csszyx'] as const;
+const BENCH_MODES = ['oxc', 'rust', 'no-csszyx', 'no-tailwind'] as const;
 
 interface CliOptions {
     /** Number of measured component edits. */
@@ -298,13 +299,7 @@ function startDevServer(
             cwd: DOCS_ROOT,
             env: {
                 ...process.env,
-                ...(parser === 'no-csszyx'
-                    ? { CSSZYX_BENCH_NO_CSSZYX: '1' }
-                    : {
-                          CSSZYX_PARSER: parser,
-                          CSSZYX_BENCH_TRACE: '1',
-                          CSSZYX_BENCH_TRACE_FILE: '__CsszyxHmrBench.tsx',
-                      }),
+                ...modeEnv(parser),
                 NODE_ENV: 'development',
             },
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -313,6 +308,30 @@ function startDevServer(
     child.stdout.on('data', chunk => logs.push(String(chunk)));
     child.stderr.on('data', chunk => logs.push(String(chunk)));
     return child;
+}
+
+/**
+ * Maps a bench mode to the env vars apps/docs's Astro config expects. The
+ * csszyx parser/trace flags only apply when csszyx is actually in the plugin
+ * chain; the no-csszyx and no-tailwind modes drop the relevant plugins via
+ * their CSSZYX_BENCH_* knobs.
+ *
+ * @param mode bench mode
+ * @returns env vars for the dev server child
+ */
+function modeEnv(mode: BenchMode): NodeJS.ProcessEnv {
+    switch (mode) {
+        case 'no-csszyx':
+            return { CSSZYX_BENCH_NO_CSSZYX: '1' };
+        case 'no-tailwind':
+            return { CSSZYX_BENCH_NO_TAILWIND: '1' };
+        default:
+            return {
+                CSSZYX_PARSER: mode,
+                CSSZYX_BENCH_TRACE: '1',
+                CSSZYX_BENCH_TRACE_FILE: '__CsszyxHmrBench.tsx',
+            };
+    }
 }
 
 /**
@@ -356,7 +375,7 @@ function writeBenchFiles(
     const palette = version % 2 === 0 ? 'red' : 'emerald';
     const padding = version + 1;
     const attribute =
-        mode === 'no-csszyx'
+        mode === 'no-csszyx' || mode === 'no-tailwind'
             ? `className="p-${padding} bg-${palette}-500"`
             : `sz={{ p: ${padding}, bg: '${palette}-500' }}`;
     writeFileSync(
@@ -616,7 +635,8 @@ function renderReport(rows: HmrStats[], opts: CliOptions): string {
     const oxc = rows.find(row => row.parser === 'oxc');
     const rust = rows.find(row => row.parser === 'rust');
     const baseline = rows.find(row => row.parser === 'no-csszyx');
-    const traceRows = rows.filter(row => row.parser !== 'no-csszyx');
+    const floor = rows.find(row => row.parser === 'no-tailwind');
+    const traceRows = rows.filter(row => row.parser === 'oxc' || row.parser === 'rust');
 
     return `# Phase E Docs HMR Benchmark
 
@@ -636,12 +656,17 @@ Environment:
 - Docs HMR median: ${formatComparison(oxc, rust, 'medianMs')}.
 - Tailwind-only baseline (no csszyx) p95: ${formatBaselineComparison(baseline, oxc, rust, 'p95Ms')}.
 - Tailwind-only baseline (no csszyx) median: ${formatBaselineComparison(baseline, oxc, rust, 'medianMs')}.
+- Pipeline floor (no csszyx, no Tailwind) median: ${formatFloor(floor, baseline, 'medianMs')}.
+- Pipeline floor (no csszyx, no Tailwind) p95: ${formatFloor(floor, baseline, 'p95Ms')}.
+${formatShareBreakdown(floor, baseline, oxc, rust)}
 
 This benchmark starts the real Astro docs dev server, opens Chromium, edits a
 temporary React component, and measures from file write to the browser
 observing the updated text. The \`no-csszyx\` row skips the csszyx plugin
-entirely and uses a Tailwind \`className\` form of the same component so the
-remaining Vite/Astro/Tailwind/React pipeline cost is visible on its own.
+entirely and uses a Tailwind \`className\` form of the same component; the
+\`no-tailwind\` row additionally skips the Tailwind plugin so the report can
+split user-visible HMR cost across csszyx, Tailwind, and the Astro/Vite/
+React pipeline floor.
 
 ## Results
 
@@ -660,15 +685,77 @@ ${traceRows.map(renderTraceRow).join('\n')}
 - The measured path includes filesystem write, Vite/Astro invalidation,
   csszyx transform, HMR transport, React refresh, and browser DOM update.
 - The csszyx trace is opt-in instrumentation from the unplugin and is filtered
-  to the temporary HMR bench component; \`no-csszyx\` does not load the plugin
-  so there is no trace row for it.
-- The Tailwind-only baseline isolates the floor of the Astro/Vite/Tailwind/
-  React refresh chain. If oxc and rust rows are near that floor, parser
-  micro-optimization cannot move the user-visible HMR p95 further; the
-  bottleneck lives outside csszyx.
-- This is broader than the compiler HMR-shaped microbenchmark and is the p95
-  gate needed before considering an R8 default flip.
+  to the temporary HMR bench component; \`no-csszyx\` and \`no-tailwind\` do
+  not load the plugin so there is no trace row for them.
+- The Tailwind-only baseline (\`no-csszyx\`) isolates the Astro/Vite/Tailwind/
+  React refresh chain without csszyx. The \`no-tailwind\` row drops Tailwind
+  too, isolating the pipeline floor where only Astro/Vite/React remains.
+- Share rows in the summary split the HMR median into csszyx share, Tailwind
+  share, and the irreducible pipeline floor. If the floor already meets or
+  exceeds the R8 default-flip target, parser optimization cannot close the
+  remaining gap and the target must be relaxed against this evidence.
 `;
+}
+
+/**
+ * Formats the pipeline-floor row for the summary, comparing the no-Tailwind
+ * row to both the Tailwind-only baseline and the rest of the surrounding
+ * pipeline so the reader can see how much Tailwind itself adds.
+ *
+ * @param floor no-tailwind row
+ * @param baseline no-csszyx row
+ * @param field metric field
+ * @returns summary line
+ */
+function formatFloor(
+    floor: HmrStats | undefined,
+    baseline: HmrStats | undefined,
+    field: 'medianMs' | 'p95Ms',
+): string {
+    if (!floor || floor.status !== 'measured') {
+        return 'not measured successfully';
+    }
+    const parts: string[] = [`${formatMs(floor[field])} (Astro/Vite/React only)`];
+    if (baseline && baseline.status === 'measured') {
+        const tailwindAdd = baseline[field] - floor[field];
+        parts.push(`Tailwind adds ${formatMs(tailwindAdd)} over floor`);
+    }
+    return parts.join('; ');
+}
+
+/**
+ * Formats the bottom-line share breakdown so the headline of the report
+ * quotes the four-way split directly. Each share is computed against the
+ * pipeline floor.
+ *
+ * @param floor no-tailwind row
+ * @param baseline no-csszyx row
+ * @param oxc csszyx oxc row
+ * @param rust csszyx rust row
+ * @returns summary lines for the share breakdown
+ */
+function formatShareBreakdown(
+    floor: HmrStats | undefined,
+    baseline: HmrStats | undefined,
+    oxc: HmrStats | undefined,
+    rust: HmrStats | undefined,
+): string {
+    if (
+        !floor ||
+        floor.status !== 'measured' ||
+        !baseline ||
+        baseline.status !== 'measured' ||
+        !oxc ||
+        oxc.status !== 'measured' ||
+        !rust ||
+        rust.status !== 'measured'
+    ) {
+        return '';
+    }
+    const tailwindAdd = baseline.medianMs - floor.medianMs;
+    const csszyxOxcAdd = oxc.medianMs - baseline.medianMs;
+    const csszyxRustAdd = rust.medianMs - baseline.medianMs;
+    return `- HMR median share split: pipeline floor ${formatMs(floor.medianMs)}; Tailwind adds ${formatMs(tailwindAdd)}; csszyx oxc adds ${formatMs(csszyxOxcAdd)}; csszyx rust adds ${formatMs(csszyxRustAdd)}.`;
 }
 
 /**

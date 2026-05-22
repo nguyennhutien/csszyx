@@ -129,12 +129,15 @@ export default defineConfig({
         plugins: [
             // csszyx MUST come before tailwindcss.
             // CSSZYX_BENCH_NO_CSSZYX=1 skips the csszyx plugin entirely so the
-            // pipeline-profile bench can measure a Tailwind-only baseline. It is
-            // a bench-only knob; production builds must never set it.
-            ...(process.env.CSSZYX_BENCH_NO_CSSZYX === '1'
+            // pipeline-profile bench can measure a Tailwind-only baseline.
+            // CSSZYX_BENCH_NO_TAILWIND=1 additionally skips the Tailwind plugin
+            // so the bench can measure the Astro/Vite/React-only floor. Both
+            // are bench-only knobs; production builds must never set them.
+            ...(process.env.CSSZYX_BENCH_NO_CSSZYX === '1' ||
+            process.env.CSSZYX_BENCH_NO_TAILWIND === '1'
                 ? []
                 : csszyx({ production: { mangle: true }, build: { scanCss: 'src/styles/landing.css' } })),
-            tailwindcss(),
+            ...(process.env.CSSZYX_BENCH_NO_TAILWIND === '1' ? [] : [tailwindcss()]),
         ],
     },
 });

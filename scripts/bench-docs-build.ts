@@ -17,13 +17,14 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
- * `no-csszyx` skips the csszyx plugin (Tailwind-only baseline) so the report
- * can show the build-pipeline floor without csszyx in the chain.
+ * `no-csszyx` skips the csszyx plugin (Tailwind-only baseline). `no-tailwind`
+ * skips both csszyx and Tailwind so the report can show the Astro/Vite/React
+ * pipeline floor with no styling plugins.
  */
-type BenchMode = 'oxc' | 'rust' | 'no-csszyx';
+type BenchMode = 'oxc' | 'rust' | 'no-csszyx' | 'no-tailwind';
 type BuildShape = 'cold' | 'warm';
 
-const BENCH_MODES = ['oxc', 'rust', 'no-csszyx'] as const;
+const BENCH_MODES = ['oxc', 'rust', 'no-csszyx', 'no-tailwind'] as const;
 
 interface CliOptions {
     /** Number of measured iterations per parser/build shape. */
@@ -147,9 +148,7 @@ function runBuildCase(parser: BenchMode, shape: BuildShape, opts: CliOptions): B
             encoding: 'utf8',
             env: {
                 ...process.env,
-                ...(parser === 'no-csszyx'
-                    ? { CSSZYX_BENCH_NO_CSSZYX: '1' }
-                    : { CSSZYX_PARSER: parser }),
+                ...modeEnv(parser),
                 NODE_ENV: 'production',
             },
             maxBuffer: 32 * 1024 * 1024,
@@ -166,6 +165,26 @@ function runBuildCase(parser: BenchMode, shape: BuildShape, opts: CliOptions): B
     }
 
     return measuredRow(parser, shape, samples);
+}
+
+/**
+ * Maps a bench mode to the env vars apps/docs's Astro config expects. The
+ * no-csszyx and no-tailwind modes drop the relevant plugins via their
+ * CSSZYX_BENCH_* knobs; csszyx parser mode applies only when the plugin is
+ * actually in the chain.
+ *
+ * @param mode bench mode
+ * @returns env vars for the build child process
+ */
+function modeEnv(mode: BenchMode): NodeJS.ProcessEnv {
+    switch (mode) {
+        case 'no-csszyx':
+            return { CSSZYX_BENCH_NO_CSSZYX: '1' };
+        case 'no-tailwind':
+            return { CSSZYX_BENCH_NO_TAILWIND: '1' };
+        default:
+            return { CSSZYX_PARSER: mode };
+    }
 }
 
 /**
@@ -266,9 +285,11 @@ function renderReport(rows: BuildStats[], opts: CliOptions): string {
     const coldOxc = findRow(rows, 'oxc', 'cold');
     const coldRust = findRow(rows, 'rust', 'cold');
     const coldBaseline = findRow(rows, 'no-csszyx', 'cold');
+    const coldFloor = findRow(rows, 'no-tailwind', 'cold');
     const warmOxc = findRow(rows, 'oxc', 'warm');
     const warmRust = findRow(rows, 'rust', 'warm');
     const warmBaseline = findRow(rows, 'no-csszyx', 'warm');
+    const warmFloor = findRow(rows, 'no-tailwind', 'warm');
 
     return `# Phase E Docs Build Benchmark
 
@@ -287,11 +308,17 @@ Environment:
 - Warm docs build: ${formatComparison(warmOxc, warmRust)}.
 - Cold Tailwind-only baseline (no csszyx): ${formatBaselineComparison(coldBaseline, coldOxc, coldRust)}.
 - Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
+- Cold pipeline floor (no csszyx, no Tailwind): ${formatFloor(coldFloor, coldBaseline)}.
+- Warm pipeline floor (no csszyx, no Tailwind): ${formatFloor(warmFloor, warmBaseline)}.
+${formatShareBreakdown('Cold', coldFloor, coldBaseline, coldOxc, coldRust)}
+${formatShareBreakdown('Warm', warmFloor, warmBaseline, warmOxc, warmRust)}
 
 This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
 It includes Astro, Vite, Tailwind, csszyx, file IO, build output generation,
 and plugin finalization. The \`no-csszyx\` rows skip the csszyx plugin entirely
-so the remaining Astro/Vite/Tailwind/React pipeline cost is visible as a floor.
+so the remaining Astro/Vite/Tailwind/React pipeline cost is visible as a floor;
+the \`no-tailwind\` rows additionally skip Tailwind so the report can split
+build wall time across csszyx, Tailwind, and the pipeline floor.
 
 ## Results
 
@@ -368,6 +395,63 @@ function formatBaselineComparison(
         parts.push(`csszyx rust is ${formatRatio(rust.medianMs / baseline.medianMs)} vs baseline`);
     }
     return parts.join('; ');
+}
+
+/**
+ * Formats the no-tailwind pipeline-floor summary line. Reports the floor
+ * itself and the additive Tailwind cost over that floor.
+ *
+ * @param floor no-tailwind row
+ * @param baseline no-csszyx row
+ * @returns summary line
+ */
+function formatFloor(floor: BuildStats | undefined, baseline: BuildStats | undefined): string {
+    if (!floor || floor.status !== 'measured') {
+        return 'not measured successfully';
+    }
+    const parts: string[] = [`${formatMs(floor.medianMs)} (Astro/Vite/React only)`];
+    if (baseline && baseline.status === 'measured') {
+        const tailwindAdd = baseline.medianMs - floor.medianMs;
+        parts.push(`Tailwind adds ${formatMs(tailwindAdd)} over floor`);
+    }
+    return parts.join('; ');
+}
+
+/**
+ * Formats the additive share breakdown for one build shape so the report
+ * header quotes the four-way split directly. Each share is the additive
+ * wall-time delta against the pipeline floor.
+ *
+ * @param shape build shape label
+ * @param floor no-tailwind row for the shape
+ * @param baseline no-csszyx row for the shape
+ * @param oxc csszyx oxc row for the shape
+ * @param rust csszyx rust row for the shape
+ * @returns share breakdown line
+ */
+function formatShareBreakdown(
+    shape: 'Cold' | 'Warm',
+    floor: BuildStats | undefined,
+    baseline: BuildStats | undefined,
+    oxc: BuildStats | undefined,
+    rust: BuildStats | undefined,
+): string {
+    if (
+        !floor ||
+        floor.status !== 'measured' ||
+        !baseline ||
+        baseline.status !== 'measured' ||
+        !oxc ||
+        oxc.status !== 'measured' ||
+        !rust ||
+        rust.status !== 'measured'
+    ) {
+        return '';
+    }
+    const tailwindAdd = baseline.medianMs - floor.medianMs;
+    const csszyxOxcAdd = oxc.medianMs - baseline.medianMs;
+    const csszyxRustAdd = rust.medianMs - baseline.medianMs;
+    return `- ${shape} share split: pipeline floor ${formatMs(floor.medianMs)}; Tailwind adds ${formatMs(tailwindAdd)}; csszyx oxc adds ${formatMs(csszyxOxcAdd)}; csszyx rust adds ${formatMs(csszyxRustAdd)}.`;
 }
 
 /**
