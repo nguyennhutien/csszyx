@@ -71,7 +71,11 @@ describe('transform cache fallback safety', () => {
 
     it('does not cache Babel fallback output under the oxc cache key', () => {
         const root = tempRoot();
-        const [prePlugin] = vitePlugin() as TransformHook[];
+        // Pinned to oxc so the oxc-to-Babel fallback path is exercised. The
+        // default parser is now rust; rust does not fall back to anything and
+        // would surface OxcRustNotImplementedError instead of running this
+        // test's intended fallback codepath.
+        const [prePlugin] = vitePlugin({ build: { parser: 'oxc' } }) as TransformHook[];
         prePlugin.configResolved?.({ root });
 
         const warnings: string[] = [];

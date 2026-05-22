@@ -114,12 +114,15 @@ export interface BuildConfig {
     /**
      * Source parser used for JSX/TSX sz transforms.
      *
-     * `oxc` is the default parser. `babel` remains available as a compatibility
-     * fallback while the migration keeps Babel dependencies installed. `rust`
-     * opts into the native Rust engine and requires the matching optional
-     * `@csszyx/core-*` platform package to be installed.
+     * `rust` is the default parser. The Rust engine ships through the
+     * matching optional `@csszyx/core-*` platform package. The package
+     * installs automatically as an optional dependency on supported
+     * platforms; when missing, csszyx fails loudly with an actionable error
+     * rather than silently falling back. Set this option to `oxc` to keep
+     * the previous JavaScript oxc-parser path, or to `babel` as a final
+     * compatibility escape hatch.
      *
-     * @default "oxc"
+     * @default "rust"
      */
     parser?: 'babel' | 'oxc' | 'rust';
 
@@ -290,7 +293,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     cacheDir: '.csszyx/cache',
     cache: true,
     astBudgetLimit: 50000,
-    parser: 'oxc',
+    parser: 'rust',
 };
 
 /**

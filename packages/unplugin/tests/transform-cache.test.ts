@@ -187,7 +187,10 @@ describe('transform cache', () => {
 
     it('plugin wiring writes cache entries by default', () => {
         const root = tempRoot();
-        const [prePlugin] = vitePlugin() as TransformHook[];
+        // Pinned to oxc so this test stays valid in environments without the
+        // optional Rust native addon. The cache-wiring assertion does not
+        // depend on which parser produced the entry.
+        const [prePlugin] = vitePlugin({ build: { parser: 'oxc' } }) as TransformHook[];
         prePlugin.configResolved?.({ root });
 
         const id = join(root, 'src/App.tsx');

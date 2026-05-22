@@ -562,7 +562,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         );
     }
     const parserOverride = process.env.CSSZYX_PARSER;
-    const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'oxc';
+    const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'rust';
     const parserMode =
         parserOverride === 'babel' || parserOverride === 'oxc' || parserOverride === 'rust'
             ? parserOverride
@@ -646,9 +646,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Runs the configured source transform. Oxc is the default parser after the
-     * Phase D corpus pass; Babel remains as an explicit compatibility fallback
-     * and as the safety net for unexpected oxc parser/compiler failures.
+     * Runs the configured source transform. Rust is the default parser after
+     * the Phase E max-speed pass and routes through the native engine. Oxc is
+     * the documented JavaScript fallback for native-unavailable platforms, and
+     * Babel remains the final compatibility safety net for unexpected
+     * parser/compiler failures on either engine.
      *
      * @param source Source module contents.
      * @param filename Source filename for parser diagnostics.
