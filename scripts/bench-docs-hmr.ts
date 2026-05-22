@@ -13,7 +13,7 @@ import { availableParallelism } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-import { type Browser, chromium } from 'playwright';
+import { type Browser, chromium, type Page } from 'playwright';
 
 type ParserMode = 'oxc' | 'rust';
 
@@ -45,6 +45,12 @@ interface HmrStats {
     maxMs: number;
     /** Raw samples. */
     samplesMs: number[];
+    /** Number of measured edits that missed the HMR wait deadline. */
+    timeouts: number;
+    /** Transform hook timing samples emitted by csszyx bench trace. */
+    transformHookMs: number[];
+    /** handleHotUpdate timing samples emitted by csszyx bench trace. */
+    hotUpdateMs: number[];
     /** Row status. */
     status: 'measured' | 'failed';
     /** Short note or failure diagnostic. */
@@ -135,34 +141,66 @@ async function runHmrCase(parser: ParserMode, port: number, opts: CliOptions): P
             waitUntil: 'networkidle',
         });
         await page.waitForSelector('[data-testid="csszyx-hmr"]');
+        await page.waitForTimeout(1_000);
 
         const samples: number[] = [];
+        let timeouts = 0;
         const totalEdits = opts.warmups + opts.edits;
         for (let i = 1; i <= totalEdits; i++) {
             const label = `hmr-${parser}-${i}`;
             const started = performance.now();
             writeBenchFiles(i, label);
-            await page.waitForFunction(
-                expected =>
-                    document
-                        .querySelector('[data-testid="csszyx-hmr"]')
-                        ?.textContent?.includes(String(expected)) === true,
-                label,
-                { timeout: 10_000 },
-            );
+            const timedOut = !(await waitForHmrText(page, label));
             const elapsed = performance.now() - started;
             if (i > opts.warmups) {
                 samples.push(elapsed);
+                if (timedOut) {
+                    timeouts++;
+                }
             }
         }
 
-        return measuredRow(parser, samples);
+        return measuredRow(parser, samples, timeouts, parseTraceTimings(logs));
     } catch (error) {
         return failedRow(parser, error, logs);
     } finally {
         await browser?.close().catch(() => undefined);
         await stopDevServer(server);
         cleanupBenchFiles();
+    }
+}
+
+/**
+ * Waits for the edited label through HMR. On timeout, reload once to keep the
+ * row running while preserving the slow sample and timeout count in the report.
+ *
+ * @param page browser page
+ * @param label expected rendered text
+ * @returns true when HMR updated before the deadline
+ */
+async function waitForHmrText(page: Page, label: string): Promise<boolean> {
+    try {
+        await page.waitForFunction(
+            expected =>
+                document
+                    .querySelector('[data-testid="csszyx-hmr"]')
+                    ?.textContent?.includes(String(expected)) === true,
+            label,
+            { timeout: 10_000 },
+        );
+        return true;
+    } catch {
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForSelector('[data-testid="csszyx-hmr"]');
+        await page.waitForFunction(
+            expected =>
+                document
+                    .querySelector('[data-testid="csszyx-hmr"]')
+                    ?.textContent?.includes(String(expected)) === true,
+            label,
+            { timeout: 10_000 },
+        );
+        return false;
     }
 }
 
@@ -192,6 +230,8 @@ function startDevServer(
             env: {
                 ...process.env,
                 CSSZYX_PARSER: parser,
+                CSSZYX_BENCH_TRACE: '1',
+                CSSZYX_BENCH_TRACE_FILE: '__CsszyxHmrBench.tsx',
                 NODE_ENV: 'development',
             },
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -313,9 +353,16 @@ async function delay(ms: number): Promise<void> {
  *
  * @param parser parser mode
  * @param samples raw samples
+ * @param timeouts measured HMR wait timeouts
+ * @param traceTimings csszyx trace timing samples
  * @returns stats row
  */
-function measuredRow(parser: ParserMode, samples: number[]): HmrStats {
+function measuredRow(
+    parser: ParserMode,
+    samples: number[],
+    timeouts: number,
+    traceTimings: TraceTimings,
+): HmrStats {
     const sorted = [...samples].sort((a, b) => a - b);
     return {
         name: `docs-hmr/${parser}`,
@@ -326,9 +373,47 @@ function measuredRow(parser: ParserMode, samples: number[]): HmrStats {
         minMs: Math.min(...samples),
         maxMs: Math.max(...samples),
         samplesMs: samples,
+        timeouts,
+        transformHookMs: traceTimings.transformHookMs,
+        hotUpdateMs: traceTimings.hotUpdateMs,
         status: 'measured',
-        note: 'Save-to-browser text update through Astro dev server and Chromium.',
+        note:
+            timeouts === 0
+                ? 'Save-to-browser text update through Astro dev server and Chromium.'
+                : `Save-to-browser text update; ${timeouts} measured edit(s) required reload recovery after HMR timeout.`,
     };
+}
+
+interface TraceTimings {
+    /** Transform hook timing samples. */
+    transformHookMs: number[];
+    /** handleHotUpdate timing samples. */
+    hotUpdateMs: number[];
+}
+
+/**
+ * Parses opt-in csszyx benchmark trace logs.
+ *
+ * @param logs captured dev-server logs
+ * @returns trace timing samples
+ */
+function parseTraceTimings(logs: string[]): TraceTimings {
+    const timings: TraceTimings = { transformHookMs: [], hotUpdateMs: [] };
+    const pattern = /\[csszyx:bench\]\s+(transform-hook|handle-hot-update)\s+([\d.]+)ms/g;
+    for (const chunk of logs) {
+        for (const match of chunk.matchAll(pattern)) {
+            const value = Number(match[2]);
+            if (!Number.isFinite(value)) {
+                continue;
+            }
+            if (match[1] === 'transform-hook') {
+                timings.transformHookMs.push(value);
+            } else {
+                timings.hotUpdateMs.push(value);
+            }
+        }
+    }
+    return timings;
 }
 
 /**
@@ -351,6 +436,9 @@ function failedRow(parser: ParserMode, error: unknown, logs: string[]): HmrStats
         minMs: Number.NaN,
         maxMs: Number.NaN,
         samplesMs: [],
+        timeouts: 0,
+        transformHookMs: [],
+        hotUpdateMs: [],
         status: 'failed',
         note: `${message}${logSummary ? `; ${logSummary}` : ''}`.slice(0, 240),
     };
@@ -423,14 +511,22 @@ browser observing the updated text.
 
 ## Results
 
-| Case | Status | Median ms | p95 ms | Mean ms | Min ms | Max ms | Samples ms | Note |
-|---|---|---:|---:|---:|---:|---:|---|---|
+| Case | Status | Median ms | p95 ms | Mean ms | Min ms | Max ms | Timeouts | Samples ms | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---|---|
 ${rows.map(renderRow).join('\n')}
+
+## csszyx Trace
+
+| Case | Transform hook median | Transform hook p95 | handleHotUpdate median | handleHotUpdate p95 | Samples |
+|---|---:|---:|---:|---:|---|
+${rows.map(renderTraceRow).join('\n')}
 
 ## Interpretation
 
 - The measured path includes filesystem write, Vite/Astro invalidation,
   csszyx transform, HMR transport, React refresh, and browser DOM update.
+- The csszyx trace is opt-in instrumentation from the unplugin and is filtered
+  to the temporary HMR bench component.
 - This is broader than the compiler HMR-shaped microbenchmark and is the p95
   gate needed before considering an R8 default flip.
 `;
@@ -462,7 +558,19 @@ function formatComparison(
  * @returns markdown table row
  */
 function renderRow(row: HmrStats): string {
-    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.p95Ms)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
+    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.p95Ms)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.timeouts} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
+}
+
+/**
+ * Renders one trace timing row.
+ *
+ * @param row stats row
+ * @returns markdown table row
+ */
+function renderTraceRow(row: HmrStats): string {
+    const transformSorted = [...row.transformHookMs].sort((a, b) => a - b);
+    const hotUpdateSorted = [...row.hotUpdateMs].sort((a, b) => a - b);
+    return `| \`${row.name}\` | ${formatMs(percentile(transformSorted, 0.5))} | ${formatMs(percentile(transformSorted, 0.95))} | ${formatMs(percentile(hotUpdateSorted, 0.5))} | ${formatMs(percentile(hotUpdateSorted, 0.95))} | transform=${row.transformHookMs.length}, hotUpdate=${row.hotUpdateMs.length} |`;
 }
 
 /**

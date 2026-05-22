@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -95,6 +96,27 @@ const PLUGIN_VERSION = findPackageVersionFromFile(
     UNKNOWN_PACKAGE_VERSION,
 );
 const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', UNKNOWN_PACKAGE_VERSION);
+const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
+const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
+
+/**
+ * Emits opt-in benchmark timing logs for local profiling harnesses.
+ *
+ * @param label Timing label.
+ * @param filename Source filename.
+ * @param elapsedMs Elapsed milliseconds.
+ */
+function traceBenchTiming(label: string, filename: string, elapsedMs: number): void {
+    if (!BENCH_TRACE_ENABLED) {
+        return;
+    }
+    if (BENCH_TRACE_FILE && !filename.includes(BENCH_TRACE_FILE)) {
+        return;
+    }
+    console.log(
+        `[csszyx:bench] ${label} ${elapsedMs.toFixed(3)}ms ${normalizeSourceFilename(filename)}`,
+    );
+}
 
 /**
  * Scans CSS files for Tailwind v4 @theme blocks and writes .csszyx/theme.d.ts.
@@ -1118,7 +1140,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             transformed = true;
                         }
                     } else {
+                        const transformStarted = performance.now();
                         const result = transformConfiguredSource(code, id);
+                        traceBenchTiming(
+                            'transform-hook',
+                            id,
+                            performance.now() - transformStarted,
+                        );
                         transformedCode = result.code;
                         usesRuntime = result.usesRuntime;
                         usesMerge = result.usesMerge;
@@ -1335,7 +1363,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     try {
+                        const hmrTransformStarted = performance.now();
                         result = transformConfiguredSource(fileContent, ctx.file);
+                        traceBenchTiming(
+                            'handle-hot-update',
+                            ctx.file,
+                            performance.now() - hmrTransformStarted,
+                        );
                     } catch {
                         return;
                     }
