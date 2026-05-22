@@ -49,6 +49,7 @@
     "native:build": "node scripts/build-native.mjs --release",
     "native:engine:smoke": "node scripts/smoke-native-engine.mjs",
     "native:packages": "node scripts/validate-native-packages.mjs",
+    "native:unavailable:smoke": "node scripts/smoke-native-unavailable.mjs",
     "native:smoke": "node scripts/smoke-native.mjs",
     "clean": "rm -rf pkg pkg-node target",
     "prepublishOnly": "node scripts/ensure-build.mjs --strict"
