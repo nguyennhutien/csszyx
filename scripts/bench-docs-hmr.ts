@@ -15,14 +15,22 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from 'playwright';
 
-type ParserMode = 'oxc' | 'rust';
+/**
+ * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
+ * `no-csszyx` skips the csszyx plugin entirely (Tailwind-only baseline) so the
+ * pipeline-profile report can attribute time to the rest of the Vite/Astro
+ * chain instead of guessing at csszyx's share.
+ */
+type BenchMode = 'oxc' | 'rust' | 'no-csszyx';
+
+const BENCH_MODES = ['oxc', 'rust', 'no-csszyx'] as const;
 
 interface CliOptions {
     /** Number of measured component edits. */
     edits: number;
     /** Number of warmup edits before measuring. */
     warmups: number;
-    /** Number of benchmark rounds; parser order alternates each round. */
+    /** Number of benchmark rounds; mode order alternates each round. */
     rounds: number;
     /** Base port used for the first dev server. */
     port: number;
@@ -33,8 +41,8 @@ interface CliOptions {
 interface HmrStats {
     /** Row label. */
     name: string;
-    /** Parser mode under test. */
-    parser: ParserMode;
+    /** Bench mode under test. */
+    parser: BenchMode;
     /** Median save-to-browser-update latency. */
     medianMs: number;
     /** p95 save-to-browser-update latency. */
@@ -118,39 +126,50 @@ function parseArgs(args: string[]): CliOptions {
  * @returns benchmark rows
  */
 async function runBenchmarks(opts: CliOptions): Promise<HmrStats[]> {
-    const grouped = new Map<ParserMode, HmrStats[]>([
-        ['oxc', []],
-        ['rust', []],
-    ]);
+    const grouped = new Map<BenchMode, HmrStats[]>(
+        BENCH_MODES.map(mode => [mode, [] as HmrStats[]]),
+    );
+    const modeCount = BENCH_MODES.length;
     for (let round = 0; round < opts.rounds; round++) {
-        const order: ParserMode[] = round % 2 === 0 ? ['oxc', 'rust'] : ['rust', 'oxc'];
-        for (const [index, parser] of order.entries()) {
+        const order: BenchMode[] = rotateModes(round);
+        for (const [index, mode] of order.entries()) {
             grouped
-                .get(parser)
-                ?.push(await runHmrCase(parser, opts.port + round * 2 + index, opts));
+                .get(mode)
+                ?.push(await runHmrCase(mode, opts.port + round * modeCount + index, opts));
         }
     }
     cleanupBenchFiles();
-    return (['oxc', 'rust'] as const).map(parser =>
-        aggregateRows(parser, grouped.get(parser) ?? []),
-    );
+    return BENCH_MODES.map(mode => aggregateRows(mode, grouped.get(mode) ?? []));
 }
 
 /**
- * Runs one parser HMR benchmark.
+ * Rotates the bench-mode order so each round starts with a different mode.
+ * Keeps the pairing fair across rounds without introducing a noise sweep.
  *
- * @param parser parser mode
+ * @param round zero-based round index
+ * @returns rotated mode order
+ */
+function rotateModes(round: number): BenchMode[] {
+    const order = [...BENCH_MODES];
+    const shift = round % order.length;
+    return [...order.slice(shift), ...order.slice(0, shift)];
+}
+
+/**
+ * Runs one HMR benchmark for a bench mode.
+ *
+ * @param parser bench mode
  * @param port dev-server port
  * @param opts CLI options
  * @returns benchmark row
  */
-async function runHmrCase(parser: ParserMode, port: number, opts: CliOptions): Promise<HmrStats> {
+async function runHmrCase(parser: BenchMode, port: number, opts: CliOptions): Promise<HmrStats> {
     let server: ChildProcessWithoutNullStreams | null = null;
     let browser: Browser | null = null;
     const logs: string[] = [];
 
     try {
-        writeBenchFiles(0);
+        writeBenchFiles(0, undefined, parser);
         server = startDevServer(parser, port, logs);
         await waitForServer(port);
 
@@ -168,7 +187,7 @@ async function runHmrCase(parser: ParserMode, port: number, opts: CliOptions): P
         for (let i = 1; i <= totalEdits; i++) {
             const label = `hmr-${parser}-${i}`;
             const started = performance.now();
-            writeBenchFiles(i, label);
+            writeBenchFiles(i, label, parser);
             const timedOut = !(await waitForHmrText(page, label));
             const elapsed = performance.now() - started;
             if (i > opts.warmups) {
@@ -257,13 +276,13 @@ async function recoverHmrPage(page: Page, label: string): Promise<void> {
 /**
  * Starts the docs Astro dev server.
  *
- * @param parser parser mode
+ * @param parser bench mode
  * @param port dev-server port
  * @param logs captured logs
  * @returns child process
  */
 function startDevServer(
-    parser: ParserMode,
+    parser: BenchMode,
     port: number,
     logs: string[],
 ): ChildProcessWithoutNullStreams {
@@ -279,9 +298,13 @@ function startDevServer(
             cwd: DOCS_ROOT,
             env: {
                 ...process.env,
-                CSSZYX_PARSER: parser,
-                CSSZYX_BENCH_TRACE: '1',
-                CSSZYX_BENCH_TRACE_FILE: '__CsszyxHmrBench.tsx',
+                ...(parser === 'no-csszyx'
+                    ? { CSSZYX_BENCH_NO_CSSZYX: '1' }
+                    : {
+                          CSSZYX_PARSER: parser,
+                          CSSZYX_BENCH_TRACE: '1',
+                          CSSZYX_BENCH_TRACE_FILE: '__CsszyxHmrBench.tsx',
+                      }),
                 NODE_ENV: 'development',
             },
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -319,17 +342,30 @@ async function waitForServer(port: number): Promise<void> {
  *
  * @param version version number used to change source
  * @param label text rendered by the component
+ * @param mode bench mode; `no-csszyx` emits Tailwind classes via className so
+ *   the component still renders identical visuals without the csszyx plugin in
+ *   the pipeline
  */
-function writeBenchFiles(version: number, label = `hmr-setup-${version}`): void {
+function writeBenchFiles(
+    version: number,
+    label = `hmr-setup-${version}`,
+    mode: BenchMode = 'oxc',
+): void {
     mkdirSync(dirname(BENCH_COMPONENT), { recursive: true });
     mkdirSync(dirname(BENCH_PAGE), { recursive: true });
+    const palette = version % 2 === 0 ? 'red' : 'emerald';
+    const padding = version + 1;
+    const attribute =
+        mode === 'no-csszyx'
+            ? `className="p-${padding} bg-${palette}-500"`
+            : `sz={{ p: ${padding}, bg: '${palette}-500' }}`;
     writeFileSync(
         BENCH_COMPONENT,
         `export default function CsszyxHmrBench() {
     return (
         <div
             data-testid="csszyx-hmr"
-            sz={{ p: ${version + 1}, bg: '${version % 2 === 0 ? 'red' : 'emerald'}-500' }}
+            ${attribute}
         >
             ${JSON.stringify(label)}
         </div>
@@ -399,14 +435,14 @@ async function delay(ms: number): Promise<void> {
 /**
  * Creates a measured stats row.
  *
- * @param parser parser mode
+ * @param parser bench mode
  * @param samples raw samples
  * @param timeouts measured HMR wait timeouts
  * @param traceTimings csszyx trace timing samples
  * @returns stats row
  */
 function measuredRow(
-    parser: ParserMode,
+    parser: BenchMode,
     samples: number[],
     timeouts: number,
     traceTimings: TraceTimings,
@@ -469,12 +505,12 @@ function parseTraceTimings(logs: string[]): TraceTimings {
 /**
  * Creates a failed stats row.
  *
- * @param parser parser mode
+ * @param parser bench mode
  * @param error thrown error
  * @param logs captured dev-server logs
  * @returns failed row
  */
-function failedRow(parser: ParserMode, error: unknown, logs: string[]): HmrStats {
+function failedRow(parser: BenchMode, error: unknown, logs: string[]): HmrStats {
     const message = error instanceof Error ? error.message : String(error);
     const logSummary = summarizeLogs(logs);
     return {
@@ -497,13 +533,13 @@ function failedRow(parser: ParserMode, error: unknown, logs: string[]): HmrStats
 }
 
 /**
- * Aggregates parser rows across repeated benchmark rounds.
+ * Aggregates bench-mode rows across repeated benchmark rounds.
  *
- * @param parser parser mode
+ * @param parser bench mode
  * @param rows per-round rows
  * @returns aggregate row
  */
-function aggregateRows(parser: ParserMode, rows: HmrStats[]): HmrStats {
+function aggregateRows(parser: BenchMode, rows: HmrStats[]): HmrStats {
     const measured = rows.filter(row => row.status === 'measured');
     if (measured.length === 0) {
         const firstFailure = rows.find(row => row.status === 'failed');
@@ -579,6 +615,8 @@ function percentile(sorted: number[], p: number): number {
 function renderReport(rows: HmrStats[], opts: CliOptions): string {
     const oxc = rows.find(row => row.parser === 'oxc');
     const rust = rows.find(row => row.parser === 'rust');
+    const baseline = rows.find(row => row.parser === 'no-csszyx');
+    const traceRows = rows.filter(row => row.parser !== 'no-csszyx');
 
     return `# Phase E Docs HMR Benchmark
 
@@ -596,10 +634,14 @@ Environment:
 
 - Docs HMR p95: ${formatComparison(oxc, rust, 'p95Ms')}.
 - Docs HMR median: ${formatComparison(oxc, rust, 'medianMs')}.
+- Tailwind-only baseline (no csszyx) p95: ${formatBaselineComparison(baseline, oxc, rust, 'p95Ms')}.
+- Tailwind-only baseline (no csszyx) median: ${formatBaselineComparison(baseline, oxc, rust, 'medianMs')}.
 
 This benchmark starts the real Astro docs dev server, opens Chromium, edits a
-temporary React component that uses \`sz\`, and measures from file write to the
-browser observing the updated text.
+temporary React component, and measures from file write to the browser
+observing the updated text. The \`no-csszyx\` row skips the csszyx plugin
+entirely and uses a Tailwind \`className\` form of the same component so the
+remaining Vite/Astro/Tailwind/React pipeline cost is visible on its own.
 
 ## Results
 
@@ -611,17 +653,52 @@ ${rows.map(renderRow).join('\n')}
 
 | Case | Transform hook median | Transform hook p95 | handleHotUpdate median | handleHotUpdate p95 | Samples |
 |---|---:|---:|---:|---:|---|
-${rows.map(renderTraceRow).join('\n')}
+${traceRows.map(renderTraceRow).join('\n')}
 
 ## Interpretation
 
 - The measured path includes filesystem write, Vite/Astro invalidation,
   csszyx transform, HMR transport, React refresh, and browser DOM update.
 - The csszyx trace is opt-in instrumentation from the unplugin and is filtered
-  to the temporary HMR bench component.
+  to the temporary HMR bench component; \`no-csszyx\` does not load the plugin
+  so there is no trace row for it.
+- The Tailwind-only baseline isolates the floor of the Astro/Vite/Tailwind/
+  React refresh chain. If oxc and rust rows are near that floor, parser
+  micro-optimization cannot move the user-visible HMR p95 further; the
+  bottleneck lives outside csszyx.
 - This is broader than the compiler HMR-shaped microbenchmark and is the p95
   gate needed before considering an R8 default flip.
 `;
+}
+
+/**
+ * Formats the no-csszyx baseline comparison line. Reports the ratio against
+ * both csszyx parser modes when measured, so the report header is enough to
+ * judge whether csszyx is or is not a meaningful share of the HMR path.
+ *
+ * @param baseline no-csszyx row
+ * @param oxc csszyx oxc row
+ * @param rust csszyx rust row
+ * @param field metric field
+ * @returns comparison line
+ */
+function formatBaselineComparison(
+    baseline: HmrStats | undefined,
+    oxc: HmrStats | undefined,
+    rust: HmrStats | undefined,
+    field: 'medianMs' | 'p95Ms',
+): string {
+    if (!baseline || baseline.status !== 'measured') {
+        return 'not measured successfully';
+    }
+    const parts: string[] = [`${formatMs(baseline[field])} (Tailwind only)`];
+    if (oxc && oxc.status === 'measured') {
+        parts.push(`csszyx oxc is ${formatRatio(oxc[field] / baseline[field])} vs baseline`);
+    }
+    if (rust && rust.status === 'measured') {
+        parts.push(`csszyx rust is ${formatRatio(rust[field] / baseline[field])} vs baseline`);
+    }
+    return parts.join('; ');
 }
 
 /**

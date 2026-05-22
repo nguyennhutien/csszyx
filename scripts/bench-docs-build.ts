@@ -15,8 +15,15 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
-type ParserMode = 'oxc' | 'rust';
+/**
+ * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
+ * `no-csszyx` skips the csszyx plugin (Tailwind-only baseline) so the report
+ * can show the build-pipeline floor without csszyx in the chain.
+ */
+type BenchMode = 'oxc' | 'rust' | 'no-csszyx';
 type BuildShape = 'cold' | 'warm';
+
+const BENCH_MODES = ['oxc', 'rust', 'no-csszyx'] as const;
 
 interface CliOptions {
     /** Number of measured iterations per parser/build shape. */
@@ -30,8 +37,8 @@ interface CliOptions {
 interface BuildStats {
     /** Row label. */
     name: string;
-    /** Parser mode under test. */
-    parser: ParserMode;
+    /** Bench mode under test. */
+    parser: BenchMode;
     /** Cold clears build/cache output; warm preserves parser cache after warmup. */
     shape: BuildShape;
     /** Median wall time in milliseconds. */
@@ -103,7 +110,7 @@ function parseArgs(args: string[]): CliOptions {
  */
 function runBenchmarks(opts: CliOptions): BuildStats[] {
     const rows: BuildStats[] = [];
-    for (const parser of ['oxc', 'rust'] as const) {
+    for (const parser of BENCH_MODES) {
         rows.push(runBuildCase(parser, 'cold', opts));
         rows.push(runBuildCase(parser, 'warm', opts));
     }
@@ -111,14 +118,14 @@ function runBenchmarks(opts: CliOptions): BuildStats[] {
 }
 
 /**
- * Runs one parser/build-shape case.
+ * Runs one bench-mode/build-shape case.
  *
- * @param parser parser mode
+ * @param parser bench mode
  * @param shape build shape
  * @param opts CLI options
  * @returns benchmark row
  */
-function runBuildCase(parser: ParserMode, shape: BuildShape, opts: CliOptions): BuildStats {
+function runBuildCase(parser: BenchMode, shape: BuildShape, opts: CliOptions): BuildStats {
     const samples: number[] = [];
     const totalRuns = opts.warmups + opts.iterations;
 
@@ -140,7 +147,9 @@ function runBuildCase(parser: ParserMode, shape: BuildShape, opts: CliOptions): 
             encoding: 'utf8',
             env: {
                 ...process.env,
-                CSSZYX_PARSER: parser,
+                ...(parser === 'no-csszyx'
+                    ? { CSSZYX_BENCH_NO_CSSZYX: '1' }
+                    : { CSSZYX_PARSER: parser }),
                 NODE_ENV: 'production',
             },
             maxBuffer: 32 * 1024 * 1024,
@@ -176,7 +185,7 @@ function cleanBuildOutputs(): void {
  * @param samples raw wall time samples
  * @returns stats row
  */
-function measuredRow(parser: ParserMode, shape: BuildShape, samples: number[]): BuildStats {
+function measuredRow(parser: BenchMode, shape: BuildShape, samples: number[]): BuildStats {
     const sorted = [...samples].sort((a, b) => a - b);
     const medianMs =
         sorted.length % 2 === 0
@@ -210,7 +219,7 @@ function measuredRow(parser: ParserMode, shape: BuildShape, samples: number[]): 
  * @returns failed stats row
  */
 function failedRow(
-    parser: ParserMode,
+    parser: BenchMode,
     shape: BuildShape,
     samples: number[],
     output: string,
@@ -256,8 +265,10 @@ function summarizeFailure(output: string): string {
 function renderReport(rows: BuildStats[], opts: CliOptions): string {
     const coldOxc = findRow(rows, 'oxc', 'cold');
     const coldRust = findRow(rows, 'rust', 'cold');
+    const coldBaseline = findRow(rows, 'no-csszyx', 'cold');
     const warmOxc = findRow(rows, 'oxc', 'warm');
     const warmRust = findRow(rows, 'rust', 'warm');
+    const warmBaseline = findRow(rows, 'no-csszyx', 'warm');
 
     return `# Phase E Docs Build Benchmark
 
@@ -274,11 +285,13 @@ Environment:
 
 - Cold docs build: ${formatComparison(coldOxc, coldRust)}.
 - Warm docs build: ${formatComparison(warmOxc, warmRust)}.
+- Cold Tailwind-only baseline (no csszyx): ${formatBaselineComparison(coldBaseline, coldOxc, coldRust)}.
+- Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
 
 This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
 It includes Astro, Vite, Tailwind, csszyx, file IO, build output generation,
-and plugin finalization. It is intentionally broader than the compiler parser
-microbenchmark.
+and plugin finalization. The \`no-csszyx\` rows skip the csszyx plugin entirely
+so the remaining Astro/Vite/Tailwind/React pipeline cost is visible as a floor.
 
 ## Results
 
@@ -293,6 +306,10 @@ ${rows.map(renderRow).join('\n')}
 - Warm rows preserve the csszyx transform cache after warmup while clearing
   generated build output, so they approximate repeated production rebuilds more
   than dev-server HMR.
+- The \`no-csszyx\` rows do not load the csszyx plugin; sz props in source stay
+  inert and Tailwind keeps scanning regular classNames in the source tree. The
+  rows isolate the build-pipeline floor and let csszyx-vs-baseline ratios show
+  whether csszyx is a meaningful share of wall time.
 - This report does not measure warm HMR p95. Keep R8 default flip gated until a
   dev-server HMR harness measures save-to-update latency.
 `;
@@ -306,11 +323,7 @@ ${rows.map(renderRow).join('\n')}
  * @param shape build shape
  * @returns row or undefined
  */
-function findRow(
-    rows: BuildStats[],
-    parser: ParserMode,
-    shape: BuildShape,
-): BuildStats | undefined {
+function findRow(rows: BuildStats[], parser: BenchMode, shape: BuildShape): BuildStats | undefined {
     return rows.find(row => row.parser === parser && row.shape === shape);
 }
 
@@ -326,6 +339,35 @@ function formatComparison(oxc: BuildStats | undefined, rust: BuildStats | undefi
         return 'not measured successfully';
     }
     return `rust is ${formatRatio(oxc.medianMs / rust.medianMs)} vs oxc by median wall time`;
+}
+
+/**
+ * Formats the no-csszyx baseline comparison line for a build shape. Ratios are
+ * csszyx/baseline so a value > 1 means csszyx adds wall time over the Tailwind
+ * floor; < 1 would mean csszyx removes wall time (not expected and worth a
+ * second look).
+ *
+ * @param baseline no-csszyx row
+ * @param oxc csszyx oxc row
+ * @param rust csszyx rust row
+ * @returns comparison line
+ */
+function formatBaselineComparison(
+    baseline: BuildStats | undefined,
+    oxc: BuildStats | undefined,
+    rust: BuildStats | undefined,
+): string {
+    if (!baseline || baseline.status !== 'measured') {
+        return 'not measured successfully';
+    }
+    const parts: string[] = [`${formatMs(baseline.medianMs)} (Tailwind only)`];
+    if (oxc && oxc.status === 'measured') {
+        parts.push(`csszyx oxc is ${formatRatio(oxc.medianMs / baseline.medianMs)} vs baseline`);
+    }
+    if (rust && rust.status === 'measured') {
+        parts.push(`csszyx rust is ${formatRatio(rust.medianMs / baseline.medianMs)} vs baseline`);
+    }
+    return parts.join('; ');
 }
 
 /**

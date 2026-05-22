@@ -128,7 +128,12 @@ export default defineConfig({
     vite: {
         plugins: [
             // csszyx MUST come before tailwindcss.
-            ...csszyx({ production: { mangle: true }, build: { scanCss: 'src/styles/landing.css' } }),
+            // CSSZYX_BENCH_NO_CSSZYX=1 skips the csszyx plugin entirely so the
+            // pipeline-profile bench can measure a Tailwind-only baseline. It is
+            // a bench-only knob; production builds must never set it.
+            ...(process.env.CSSZYX_BENCH_NO_CSSZYX === '1'
+                ? []
+                : csszyx({ production: { mangle: true }, build: { scanCss: 'src/styles/landing.css' } })),
             tailwindcss(),
         ],
     },
