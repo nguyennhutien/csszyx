@@ -1,8 +1,14 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { transformSourceCode } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
 import {
     assertNoRSCBoundaryViolation,
+    createRSCModuleRecord,
+    deleteRSCModuleRecord,
     findRSCBoundaryViolation,
     findRSCGraphViolation,
     hasUseClientDirective,
@@ -437,33 +443,28 @@ describe('RSC audit regressions and known issues', () => {
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).not.toThrow();
     });
 
-    // ---- Issue 5 ---------------------------------------------------
-    // `state.rscModules` is a long-lived Map keyed by module ID. Dev-
-    // mode HMR reuses the same plugin instance, so when a file is
-    // deleted from disk its stale record stays in the Map and is
-    // included in the next `buildEnd()` graph walk. The current code
-    // never invalidates records on file deletion. Fix should hook into
-    // the bundler's "module removed" event (or revalidate file
-    // existence in `assertNoRSCGraphViolation`).
+    it('removes stale graph records when a watched server module is deleted', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-rsc-'));
+        try {
+            const serverFile = path.join(tmp, 'deleted-page.tsx');
+            fs.writeFileSync(
+                serverFile,
+                `
+                    'use server';
+                    import { _sz } from '@csszyx/runtime';
+                `,
+            );
 
-    it.fails('graph walk should not report a violation rooted in a module whose file no longer exists', () => {
-        const records = new Map<string, RSCModuleRecord>([
-            [
-                '/repo/app/deleted-page.tsx',
-                {
-                    id: '/repo/app/deleted-page.tsx',
-                    isServer: true,
-                    isClient: false,
-                    imports: [],
-                    runtimeImports: [{ source: '@csszyx/runtime', symbols: ['_sz'] }],
-                },
-            ],
-        ]);
+            const record = createRSCModuleRecord(fs.readFileSync(serverFile, 'utf8'), serverFile);
+            const records = new Map<string, RSCModuleRecord>([[record.id, record]]);
 
-        // The file at this path was deleted between transforms; the
-        // record is stale. A correct implementation would revalidate
-        // existence and skip the missing module.
-        expect(findRSCGraphViolation(records)).toBeNull();
+            expect(findRSCGraphViolation(records)).not.toBeNull();
+            fs.unlinkSync(serverFile);
+            expect(deleteRSCModuleRecord(records, serverFile)).toBe(true);
+            expect(findRSCGraphViolation(records)).toBeNull();
+        } finally {
+            fs.rmSync(tmp, { force: true, recursive: true });
+        }
     });
 
     // ---- Issue 4 ---------------------------------------------------

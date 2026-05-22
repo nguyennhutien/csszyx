@@ -33,6 +33,7 @@ import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
     createRSCModuleRecord,
+    deleteRSCModuleRecord,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
@@ -1247,6 +1248,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
                     (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map =
                         state.mangleMap;
+                }
+            },
+
+            watchChange(id, change) {
+                if (change.event === 'delete') {
+                    deleteRSCModuleRecord(state.rscModules, id);
                 }
             },
 

@@ -160,6 +160,29 @@ export function createRSCModuleRecord(code: string, id: string): RSCModuleRecord
 }
 
 /**
+ * Removes a module record after the bundler watcher reports that the file was
+ * deleted.
+ *
+ * @param records module graph records keyed by normalized module ID
+ * @param id module ID/path from the watcher event
+ * @returns true when a stale record was removed
+ */
+export function deleteRSCModuleRecord(records: Map<string, RSCModuleRecord>, id: string): boolean {
+    const normalized = normalizeModuleId(id);
+    const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
+    const resolved = path.resolve(clean).replace(/\\/g, '/');
+
+    let deleted = records.delete(normalized);
+    if (resolved !== normalized) {
+        deleted = records.delete(resolved) || deleted;
+    }
+    if (clean !== normalized && clean !== resolved) {
+        deleted = records.delete(clean) || deleted;
+    }
+    return deleted;
+}
+
+/**
  * Finds forbidden runtime helper imports reachable from an RSC server module.
  * Traversal stops at `'use client'` modules because they define a separate
  * client module graph.
