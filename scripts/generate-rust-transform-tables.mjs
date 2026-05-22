@@ -1,154 +1,130 @@
 #!/usr/bin/env node
+
 // Generate Rust transform lookup tables from the TypeScript compiler source.
 
-import {
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-import ts from "typescript";
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import ts from 'typescript';
 
-const repoRoot = path.resolve(import.meta.dirname, "..");
-const sourcePath = path.join(
-  repoRoot,
-  "packages/compiler/src/transform-core.ts",
-);
-const outPath = path.join(
-  repoRoot,
-  "packages/core/src/transform/generated/tables.rs",
-);
+const repoRoot = path.resolve(import.meta.dirname, '..');
+const sourcePath = path.join(repoRoot, 'packages/compiler/src/transform-core.ts');
+const outPath = path.join(repoRoot, 'packages/core/src/transform/generated/tables.rs');
 
-const check = process.argv.includes("--check");
-const sourceText = readFileSync(sourcePath, "utf8");
+const check = process.argv.includes('--check');
+const sourceText = readFileSync(sourcePath, 'utf8');
 const sourceFile = ts.createSourceFile(
-  sourcePath,
-  sourceText,
-  ts.ScriptTarget.Latest,
-  true,
-  ts.ScriptKind.TS,
+    sourcePath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
 );
 
 const tables = {
-  propertyMap: extractStringObject("PROPERTY_MAP"),
-  variantMap: extractStringObject("VARIANT_MAP"),
-  booleanToClass: extractStringObject("BOOLEAN_TO_CLASS"),
-  booleanShorthands: extractStringSet("BOOLEAN_SHORTHANDS"),
+    propertyMap: extractStringObject('PROPERTY_MAP'),
+    variantMap: extractStringObject('VARIANT_MAP'),
+    booleanToClass: extractStringObject('BOOLEAN_TO_CLASS'),
+    booleanShorthands: extractStringSet('BOOLEAN_SHORTHANDS'),
 };
 
 const generated = formatRust(renderRust(tables));
 
 if (check) {
-  const current = readFileSync(outPath, "utf8");
-  if (current !== generated) {
-    console.error(
-      "[generate-rust-transform-tables] generated tables are stale. Run pnpm gen:rust-tables.",
-    );
-    process.exit(1);
-  }
-  process.exit(0);
+    const current = readFileSync(outPath, 'utf8');
+    if (current !== generated) {
+        console.error(
+            '[generate-rust-transform-tables] generated tables are stale. Run pnpm gen:rust-tables.',
+        );
+        process.exit(1);
+    }
+    process.exit(0);
 }
 
 mkdirSync(path.dirname(outPath), { recursive: true });
 writeFileSync(outPath, generated);
-console.log(
-  `[generate-rust-transform-tables] Wrote ${path.relative(repoRoot, outPath)}`,
-);
+console.log(`[generate-rust-transform-tables] Wrote ${path.relative(repoRoot, outPath)}`);
 
 function extractStringObject(name) {
-  const declaration = findVariableDeclaration(name);
-  const initializer = declaration.initializer;
-  if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
-    fail(`${name} must be an object literal`);
-  }
-
-  const entries = [];
-  for (const property of initializer.properties) {
-    if (!ts.isPropertyAssignment(property)) {
-      fail(`${name} contains a non-property assignment`);
+    const declaration = findVariableDeclaration(name);
+    const initializer = declaration.initializer;
+    if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
+        fail(`${name} must be an object literal`);
     }
 
-    const key = propertyNameToString(property.name);
-    const value = stringLiteralToString(property.initializer);
-    entries.push([key, value]);
-  }
+    const entries = [];
+    for (const property of initializer.properties) {
+        if (!ts.isPropertyAssignment(property)) {
+            fail(`${name} contains a non-property assignment`);
+        }
 
-  return entries;
+        const key = propertyNameToString(property.name);
+        const value = stringLiteralToString(property.initializer);
+        entries.push([key, value]);
+    }
+
+    return entries;
 }
 
 function extractStringSet(name) {
-  const declaration = findVariableDeclaration(name);
-  const initializer = declaration.initializer;
-  if (
-    !initializer ||
-    !ts.isNewExpression(initializer) ||
-    initializer.arguments?.length !== 1 ||
-    !ts.isArrayLiteralExpression(initializer.arguments[0])
-  ) {
-    fail(`${name} must be new Set([...])`);
-  }
+    const declaration = findVariableDeclaration(name);
+    const initializer = declaration.initializer;
+    if (
+        !initializer ||
+        !ts.isNewExpression(initializer) ||
+        initializer.arguments?.length !== 1 ||
+        !ts.isArrayLiteralExpression(initializer.arguments[0])
+    ) {
+        fail(`${name} must be new Set([...])`);
+    }
 
-  return initializer.arguments[0].elements.map((element) =>
-    stringLiteralToString(element),
-  );
+    return initializer.arguments[0].elements.map(element => stringLiteralToString(element));
 }
 
 function findVariableDeclaration(name) {
-  let found;
+    let found;
 
-  visit(sourceFile);
+    visit(sourceFile);
 
-  if (!found) {
-    fail(`Could not find ${name}`);
-  }
-
-  return found;
-
-  function visit(node) {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === name
-    ) {
-      found = node;
-      return;
+    if (!found) {
+        fail(`Could not find ${name}`);
     }
 
-    ts.forEachChild(node, visit);
-  }
+    return found;
+
+    function visit(node) {
+        if (
+            ts.isVariableDeclaration(node) &&
+            ts.isIdentifier(node.name) &&
+            node.name.text === name
+        ) {
+            found = node;
+            return;
+        }
+
+        ts.forEachChild(node, visit);
+    }
 }
 
 function propertyNameToString(name) {
-  if (
-    ts.isIdentifier(name) ||
-    ts.isStringLiteral(name) ||
-    ts.isNumericLiteral(name)
-  ) {
-    return name.text;
-  }
+    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+        return name.text;
+    }
 
-  fail(`Unsupported property key: ${name.getText(sourceFile)}`);
+    fail(`Unsupported property key: ${name.getText(sourceFile)}`);
 }
 
 function stringLiteralToString(node) {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return node.text;
-  }
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+        return node.text;
+    }
 
-  fail(`Expected string literal, got: ${node.getText(sourceFile)}`);
+    fail(`Expected string literal, got: ${node.getText(sourceFile)}`);
 }
 
-function renderRust({
-  propertyMap,
-  variantMap,
-  booleanToClass,
-  booleanShorthands,
-}) {
-  return `// @generated by scripts/generate-rust-transform-tables.mjs
+function renderRust({ propertyMap, variantMap, booleanToClass, booleanShorthands }) {
+    return `// @generated by scripts/generate-rust-transform-tables.mjs
 // Do not edit by hand.
 #![allow(dead_code, clippy::match_same_arms, clippy::too_many_lines)]
 #![allow(clippy::redundant_pub_crate)]
@@ -188,46 +164,40 @@ ${renderMatchPatterns(booleanShorthands)}
 }
 
 function renderMatchArms(entries) {
-  return entries
-    .map(
-      ([key, value]) =>
-        `        ${rustString(key)} => Some(${rustString(value)}),`,
-    )
-    .join("\n");
+    return entries
+        .map(([key, value]) => `        ${rustString(key)} => Some(${rustString(value)}),`)
+        .join('\n');
 }
 
 function renderMatchPatterns(entries) {
-  return entries
-    .map(
-      (key, index) =>
-        `${index === 0 ? "        " : "        | "}${rustString(key)}`,
-    )
-    .join("\n");
+    return entries
+        .map((key, index) => `${index === 0 ? '        ' : '        | '}${rustString(key)}`)
+        .join('\n');
 }
 
 function rustString(value) {
-  return JSON.stringify(value);
+    return JSON.stringify(value);
 }
 
 function formatRust(rustSource) {
-  const tempDir = mkdtempSync(path.join(os.tmpdir(), "csszyx-rust-tables-"));
-  const tempPath = path.join(tempDir, "tables.rs");
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'csszyx-rust-tables-'));
+    const tempPath = path.join(tempDir, 'tables.rs');
 
-  try {
-    writeFileSync(tempPath, rustSource);
-    const result = spawnSync("rustfmt", [tempPath], { encoding: "utf8" });
-    if (result.status !== 0) {
-      console.error(result.stderr);
-      fail("rustfmt failed for generated tables");
+    try {
+        writeFileSync(tempPath, rustSource);
+        const result = spawnSync('rustfmt', [tempPath], { encoding: 'utf8' });
+        if (result.status !== 0) {
+            console.error(result.stderr);
+            fail('rustfmt failed for generated tables');
+        }
+
+        return readFileSync(tempPath, 'utf8');
+    } finally {
+        rmSync(tempDir, { force: true, recursive: true });
     }
-
-    return readFileSync(tempPath, "utf8");
-  } finally {
-    rmSync(tempDir, { force: true, recursive: true });
-  }
 }
 
 function fail(message) {
-  console.error(`[generate-rust-transform-tables] ${message}`);
-  process.exit(1);
+    console.error(`[generate-rust-transform-tables] ${message}`);
+    process.exit(1);
 }
