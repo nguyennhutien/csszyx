@@ -338,6 +338,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build the host native addon before the workspace build. The default
+      # build.parser is "rust" and playgrounds invoke csszyx during their
+      # production build, so without the host addon every playground build
+      # fails with CsszyxNativeUnavailableError. The release publish matrix
+      # builds the addon per platform for releases; this step is the
+      # CI-only equivalent for the host runner.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
       # Build all workspace packages so the production playgrounds can
       # start (Next.js-SSR's `next start` and the Vite preview both need
       # built dist/ outputs). turbo's local cache makes the cold cost
@@ -400,6 +409,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build the host native addon before the workspace build. The default
+      # build.parser is "rust" and playgrounds invoke csszyx during their
+      # production build, so without the host addon every playground build
+      # fails with CsszyxNativeUnavailableError. Mirrors the e2e/test jobs.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       - name: Build
         run: pnpm build
