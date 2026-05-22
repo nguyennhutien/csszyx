@@ -1239,7 +1239,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         imports.length > 0 && transformedCode.includes('@csszyx/runtime');
                     const needed = hasRuntimeImport
                         ? imports.filter(
-                              name => !RUNTIME_HELPER_IMPORT_RE[name]!.test(transformedCode),
+                              name => !RUNTIME_HELPER_IMPORT_RE[name]?.test(transformedCode),
                           )
                         : imports;
                     if (needed.length > 0) {
