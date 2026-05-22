@@ -22,6 +22,8 @@ interface CliOptions {
     edits: number;
     /** Number of warmup edits before measuring. */
     warmups: number;
+    /** Number of benchmark rounds; parser order alternates each round. */
+    rounds: number;
     /** Base port used for the first dev server. */
     port: number;
     /** Output directory for the markdown report. */
@@ -47,6 +49,10 @@ interface HmrStats {
     samplesMs: number[];
     /** Number of measured edits that missed the HMR wait deadline. */
     timeouts: number;
+    /** Number of benchmark rounds included in this row. */
+    rounds: number;
+    /** Number of benchmark rounds that failed completely. */
+    failedRounds: number;
     /** Transform hook timing samples emitted by csszyx bench trace. */
     transformHookMs: number[];
     /** handleHotUpdate timing samples emitted by csszyx bench trace. */
@@ -82,6 +88,7 @@ function parseArgs(args: string[]): CliOptions {
     const parsed: CliOptions = {
         edits: 20,
         warmups: 3,
+        rounds: 1,
         port: 4329,
         outDir: '.agent/reports',
     };
@@ -92,6 +99,8 @@ function parseArgs(args: string[]): CliOptions {
             parsed.edits = Math.max(1, Number(args[++i] ?? parsed.edits));
         } else if (arg === '--warmups') {
             parsed.warmups = Math.max(0, Number(args[++i] ?? parsed.warmups));
+        } else if (arg === '--rounds') {
+            parsed.rounds = Math.max(1, Number(args[++i] ?? parsed.rounds));
         } else if (arg === '--port') {
             parsed.port = Math.max(1024, Number(args[++i] ?? parsed.port));
         } else if (arg === '--out-dir') {
@@ -109,12 +118,22 @@ function parseArgs(args: string[]): CliOptions {
  * @returns benchmark rows
  */
 async function runBenchmarks(opts: CliOptions): Promise<HmrStats[]> {
-    const rows: HmrStats[] = [];
-    for (const [index, parser] of (['oxc', 'rust'] as const).entries()) {
-        rows.push(await runHmrCase(parser, opts.port + index, opts));
+    const grouped = new Map<ParserMode, HmrStats[]>([
+        ['oxc', []],
+        ['rust', []],
+    ]);
+    for (let round = 0; round < opts.rounds; round++) {
+        const order: ParserMode[] = round % 2 === 0 ? ['oxc', 'rust'] : ['rust', 'oxc'];
+        for (const [index, parser] of order.entries()) {
+            grouped
+                .get(parser)
+                ?.push(await runHmrCase(parser, opts.port + round * 2 + index, opts));
+        }
     }
     cleanupBenchFiles();
-    return rows;
+    return (['oxc', 'rust'] as const).map(parser =>
+        aggregateRows(parser, grouped.get(parser) ?? []),
+    );
 }
 
 /**
@@ -180,27 +199,58 @@ async function runHmrCase(parser: ParserMode, port: number, opts: CliOptions): P
  */
 async function waitForHmrText(page: Page, label: string): Promise<boolean> {
     try {
-        await page.waitForFunction(
-            expected =>
-                document
-                    .querySelector('[data-testid="csszyx-hmr"]')
-                    ?.textContent?.includes(String(expected)) === true,
-            label,
-            { timeout: 10_000 },
-        );
+        await waitForRenderedLabel(page, label, 10_000);
         return true;
     } catch {
+        await recoverHmrPage(page, label);
+        return false;
+    }
+}
+
+/**
+ * Waits until the benchmark component renders the expected label.
+ *
+ * @param page browser page
+ * @param label expected rendered text
+ * @param timeoutMs wait timeout
+ */
+async function waitForRenderedLabel(page: Page, label: string, timeoutMs: number): Promise<void> {
+    await page.waitForFunction(
+        expected =>
+            document
+                .querySelector('[data-testid="csszyx-hmr"]')
+                ?.textContent?.includes(String(expected)) === true,
+        label,
+        { timeout: timeoutMs },
+    );
+}
+
+/**
+ * Reloads or navigates once after an HMR timeout. This keeps benchmark rows
+ * measured while the timeout sample preserves the reliability cost.
+ *
+ * @param page browser page
+ * @param label expected rendered text
+ */
+async function recoverHmrPage(page: Page, label: string): Promise<void> {
+    try {
         await page.reload({ waitUntil: 'networkidle' });
         await page.waitForSelector('[data-testid="csszyx-hmr"]');
-        await page.waitForFunction(
-            expected =>
-                document
-                    .querySelector('[data-testid="csszyx-hmr"]')
-                    ?.textContent?.includes(String(expected)) === true,
-            label,
-            { timeout: 10_000 },
-        );
-        return false;
+        await waitForRenderedLabel(page, label, 5_000);
+        return;
+    } catch {
+        // Fall through to a cache-busted navigation. If this also misses, keep
+        // the timeout sample instead of failing the whole parser row.
+    }
+
+    try {
+        const url = new URL(page.url());
+        url.searchParams.set('hmrBenchRecover', String(Date.now()));
+        await page.goto(url.toString(), { waitUntil: 'networkidle' });
+        await page.waitForSelector('[data-testid="csszyx-hmr"]');
+        await waitForRenderedLabel(page, label, 5_000);
+    } catch {
+        // The caller records the slow timeout sample and continues.
     }
 }
 
@@ -318,24 +368,22 @@ function cleanupBenchFiles(): void {
  * @param child child process
  */
 async function stopDevServer(child: ChildProcessWithoutNullStreams | null): Promise<void> {
-    if (!child || child.killed) {
+    if (!child) {
         return;
     }
     await new Promise<void>(resolveStop => {
-        const timeout = setTimeout(() => {
-            if (!child.killed) {
-                child.kill('SIGKILL');
-            }
-            resolveStop();
+        const killTimeout = setTimeout(() => {
+            child.kill('SIGKILL');
         }, 2_000);
+        const resolveTimeout = setTimeout(() => {
+            resolveStop();
+        }, 5_000);
         child.once('exit', () => {
-            clearTimeout(timeout);
+            clearTimeout(killTimeout);
+            clearTimeout(resolveTimeout);
             resolveStop();
         });
         child.kill('SIGTERM');
-        if (!child.killed) {
-            child.kill('SIGKILL');
-        }
     });
 }
 
@@ -376,6 +424,8 @@ function measuredRow(
         timeouts,
         transformHookMs: traceTimings.transformHookMs,
         hotUpdateMs: traceTimings.hotUpdateMs,
+        rounds: 1,
+        failedRounds: 0,
         status: 'measured',
         note:
             timeouts === 0
@@ -439,9 +489,50 @@ function failedRow(parser: ParserMode, error: unknown, logs: string[]): HmrStats
         timeouts: 0,
         transformHookMs: [],
         hotUpdateMs: [],
+        rounds: 1,
+        failedRounds: 1,
         status: 'failed',
         note: `${message}${logSummary ? `; ${logSummary}` : ''}`.slice(0, 240),
     };
+}
+
+/**
+ * Aggregates parser rows across repeated benchmark rounds.
+ *
+ * @param parser parser mode
+ * @param rows per-round rows
+ * @returns aggregate row
+ */
+function aggregateRows(parser: ParserMode, rows: HmrStats[]): HmrStats {
+    const measured = rows.filter(row => row.status === 'measured');
+    if (measured.length === 0) {
+        const firstFailure = rows.find(row => row.status === 'failed');
+        return {
+            ...(firstFailure ?? failedRow(parser, new Error('no benchmark rows produced'), [])),
+            rounds: rows.length,
+            failedRounds: rows.length,
+        };
+    }
+
+    const samples = measured.flatMap(row => row.samplesMs);
+    const traceTimings: TraceTimings = {
+        transformHookMs: measured.flatMap(row => row.transformHookMs),
+        hotUpdateMs: measured.flatMap(row => row.hotUpdateMs),
+    };
+    const row = measuredRow(
+        parser,
+        samples,
+        measured.reduce((sum, item) => sum + item.timeouts, 0),
+        traceTimings,
+    );
+    row.rounds = rows.length;
+    row.failedRounds = rows.length - measured.length;
+    const failureNote = rows.find(item => item.status === 'failed')?.note;
+    row.note =
+        row.failedRounds === 0
+            ? `Aggregated across ${row.rounds} round(s); parser order alternated per round.`
+            : `Aggregated across ${measured.length}/${row.rounds} successful round(s); ${row.failedRounds} round(s) failed${failureNote ? `: ${failureNote}` : ''}.`;
+    return row;
 }
 
 /**
@@ -499,6 +590,7 @@ Environment:
 - CPU parallelism: ${availableParallelism()}
 - Edits: ${opts.edits}
 - Warmups: ${opts.warmups}
+- Rounds: ${opts.rounds}
 
 ## Summary
 
@@ -511,8 +603,8 @@ browser observing the updated text.
 
 ## Results
 
-| Case | Status | Median ms | p95 ms | Mean ms | Min ms | Max ms | Timeouts | Samples ms | Note |
-|---|---|---:|---:|---:|---:|---:|---:|---|---|
+| Case | Status | Median ms | p95 ms | Mean ms | Min ms | Max ms | Rounds | Failed rounds | Timeouts | Samples ms | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
 ${rows.map(renderRow).join('\n')}
 
 ## csszyx Trace
@@ -558,7 +650,7 @@ function formatComparison(
  * @returns markdown table row
  */
 function renderRow(row: HmrStats): string {
-    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.p95Ms)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.timeouts} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
+    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.p95Ms)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.rounds} | ${row.failedRounds} | ${row.timeouts} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
 }
 
 /**
