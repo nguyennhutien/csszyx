@@ -201,6 +201,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build the host native addon before the workspace build below. The
+      # default build.parser is "rust" and playgrounds invoke csszyx during
+      # their production build, so without the host addon every playground
+      # build fails with CsszyxNativeUnavailableError. Mirrors the test/e2e/
+      # build jobs.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
       # ESLint only — Biome already ran in the lint-fast preflight.
       # Running it again here would duplicate formatting/import/basic
       # lint work for no extra signal.
