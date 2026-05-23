@@ -185,9 +185,6 @@ importers:
         specifier: 0.131.0
         version: 0.131.0
     devDependencies:
-      '@csszyx/types':
-        specifier: workspace:*
-        version: link:../types
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
