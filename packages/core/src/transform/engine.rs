@@ -93,6 +93,12 @@ fn transform_static_classes(
     let recovery_ns = elapsed_ns(recovery_start);
     let diagnostics_start = Instant::now();
     let mut diagnostics = parsed.diagnostics;
+    // Per-element warnings about unsupported sz/szRecover shapes are soft —
+    // the rewrite pass already skips those elements individually, so they
+    // must not block the rest of the file from transforming. The oxc-JS
+    // path has the same contract: a warning on one element keeps the
+    // valid ones flowing through className/recovery-token emission.
+    let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     if parsed.ast_budget_exceeded {
@@ -103,10 +109,10 @@ fn transform_static_classes(
     }
     let diagnostics_ns = elapsed_ns(diagnostics_start);
     let rewrite_start = Instant::now();
-    let rewritten_code = if diagnostics.is_empty() {
-        rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir).ok()
-    } else {
+    let rewritten_code = if has_parser_errors || parsed.ast_budget_exceeded || parsed.panicked {
         None
+    } else {
+        rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir).ok()
     };
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
