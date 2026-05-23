@@ -35,8 +35,10 @@ jobs:
     steps:
       - name: Detect release-please branch
         id: head-ref
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" = "release-please--branches--main" ]; then
+          if [ "$HEAD_REF" = "release-please--branches--main" ]; then
             echo "is_release_please=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_release_please=false" >> "$GITHUB_OUTPUT"
