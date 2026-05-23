@@ -3,40 +3,43 @@
 # the Cocogitto wrapper, while release-please remains the only changelog owner.
 
 pre-commit:
-  parallel: false
+  # Commands run in parallel. Each command groups steps that share files
+  # and chains them with `set -e` so writes inside a chain stay
+  # sequential. Disjoint file globs (TS vs Rust vs Markdown vs JSON
+  # vs lockfile) cannot race across commands, so the parallel pool is
+  # safe and ~2-3s faster than the previous fully-serial run.
+  parallel: true
   commands:
-    biome:
-      glob: "*.{js,jsx,ts,tsx,json,jsonc,json5,css}"
+    # TS/JS/JSON/CSS chain. Order matters because every step writes to
+    # the same staged files: biome auto-fixes safe issues, biome strict
+    # then catches anything the auto-fix skipped silently (mirrors CI's
+    # `biome check`), eslint --fix lands its complementary rule fixes,
+    # tsc -b verifies the workspace types end-to-end. set -e + chained
+    # invocations preserve the fail-fast behaviour the separate-commands
+    # version had.
+    ts-js:
+      # `.mjs` and `.cjs` MUST stay in this glob: biome.json includes
+      # `scripts/**/*.mjs` and `**/*.mjs`, and eslint.config.js lints both
+      # `**/*.cjs` and `**/*.mjs`. Dropping them lets the same kind of
+      # format/import-order regression that escaped PR #28's first push
+      # slip through the local gate again.
+      glob: "*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc,json5,css}"
       exclude:
         - "package.json"
         - "**/package.json"
         - "apps/docs/src/styles/landing.css"
-      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      run: |
+        set -e
+        pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+        pnpm exec biome check --no-errors-on-unmatched {staged_files}
+        pnpm exec eslint --fix --no-warn-ignored --cache --cache-location node_modules/.cache/eslint {staged_files}
+        pnpm exec tsc -b --pretty false
       stage_fixed: true
 
-    # Strict re-check after the auto-fix step above. Biome's --write mode
-    # silently skips unsafe fixes (non-null assertion → optional chain,
-    # etc.) as warnings; CI's `biome check` treats those as errors. Running
-    # the strict check at commit time keeps the local commit gate in sync
-    # with the CI lint job, so a commit that would fail the runner cannot
-    # land on a feature branch in the first place.
-    biome-strict:
-      glob: "*.{js,jsx,ts,tsx,json,jsonc,json5,css}"
-      exclude:
-        - "package.json"
-        - "**/package.json"
-        - "apps/docs/src/styles/landing.css"
-      run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
-
-    eslint-ts:
-      glob: "*.{ts,tsx}"
-      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
-      stage_fixed: true
-
-    typecheck-ts:
-      glob: "*.{ts,tsx}"
-      run: pnpm exec tsc -b --pretty false
-
+    # Root- and app-level JSON files that biome's includes (only
+    # packages/**/*.json) intentionally skip. Disjoint with the ts-js
+    # chain because biome and prettier write to different file sets
+    # under the same excludes; runs in parallel.
     prettier-json:
       glob: "*.{json,jsonc,json5}"
       exclude:
@@ -50,24 +53,25 @@ pre-commit:
       run: pnpm exec prettier --write {staged_files}
       stage_fixed: true
 
-    rustfmt:
+    # Rust chain. rustfmt writes formatted source, then clippy --fix
+    # applies its lints to the formatted result. Both target the same
+    # .rs files so they must stay sequential within this command.
+    rust:
       glob: "*.rs"
-      run: rustfmt --edition 2021 {staged_files}
+      run: |
+        set -e
+        rustfmt --edition 2021 {staged_files}
+        cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
       stage_fixed: true
 
-    cargo-clippy:
-      glob: "*.rs"
-      run: cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
-      stage_fixed: true
-
-    markdownlint:
+    # Markdown chain. markdownlint --fix and prettier --write both
+    # rewrite the same .md files, so this stays sequential too.
+    md:
       glob: "*.md"
-      run: pnpm exec markdownlint --fix {staged_files}
-      stage_fixed: true
-
-    prettier-md:
-      glob: "*.md"
-      run: pnpm exec prettier --write {staged_files}
+      run: |
+        set -e
+        pnpm exec markdownlint --fix {staged_files}
+        pnpm exec prettier --write {staged_files}
       stage_fixed: true
 
     sync-lockfile:
