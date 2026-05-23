@@ -14,6 +14,20 @@ pre-commit:
       run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
 
+    # Strict re-check after the auto-fix step above. Biome's --write mode
+    # silently skips unsafe fixes (non-null assertion → optional chain,
+    # etc.) as warnings; CI's `biome check` treats those as errors. Running
+    # the strict check at commit time keeps the local commit gate in sync
+    # with the CI lint job, so a commit that would fail the runner cannot
+    # land on a feature branch in the first place.
+    biome-strict:
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,json5,css}"
+      exclude:
+        - "package.json"
+        - "**/package.json"
+        - "apps/docs/src/styles/landing.css"
+      run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
+
     eslint-ts:
       glob: "*.{ts,tsx}"
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
@@ -63,3 +77,19 @@ commit-msg:
   commands:
     validate:
       run: scripts/verify-commit-message.sh {1}
+
+# Catch CI-style failures before they reach the runner. Pre-push runs the
+# strict lint, type-check, unit tests, and workspace build that the
+# corresponding CI jobs would run. This is the lighter sibling of
+# `pnpm verify:ci`: it does not wipe dist/.turbo/.csszyx caches, so it
+# misses cache-masked turbo cycles — those are caught by `pnpm pr:ready`
+# (full mirror with cache wipe + e2e) which is the recommended manual
+# step before opening a PR.
+#
+# Bypass with `git push --no-verify` for WIP pushes that are not meant
+# to pass CI (e.g. mid-feature backups to a private mirror remote).
+pre-push:
+  parallel: false
+  commands:
+    verify-pre-push:
+      run: pnpm verify:pre-push
