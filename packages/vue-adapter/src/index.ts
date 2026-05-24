@@ -232,7 +232,7 @@ export function mergeClassAttributes(template: string): string {
     // Pattern to find elements with multiple class attributes
     // This handles cases where both :class and class (from sz) exist
     const multiClassPattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?>)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*>)/g;
 
     let result = template;
 
@@ -247,7 +247,7 @@ export function mergeClassAttributes(template: string): string {
 
     // Also handle reverse order: :class before class
     const reversePattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?)class="([^"]*)"([^>]*?>)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?)class="([^"]*)"([^>]*>)/g;
 
     result = result.replace(
         reversePattern,

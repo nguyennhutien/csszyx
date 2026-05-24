@@ -219,7 +219,7 @@ export function mergeClassAttributes(content: string): string {
     // Pattern to find elements with multiple class attributes
     // This handles cases where both class:directive and class (from sz) exist
     const multiClassPattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)class="([^"]*)"([^>]*?>)/g;
+        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)class="([^"]*)"([^>]*>)/g;
 
     let result = content;
 

@@ -11,6 +11,8 @@
 import typescript from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import jsdoc from 'eslint-plugin-jsdoc';
+import regexp from 'eslint-plugin-regexp';
+import security from 'eslint-plugin-security';
 
 export default [
     // Ignore patterns — Biome owns everything ESLint used to lint, so this
@@ -39,6 +41,29 @@ export default [
             '**/*.js',
             '**/*.jsx',
         ],
+    },
+
+    // Security: detect unsafe regex, eval, new Function, child_process patterns
+    {
+        files: ['**/*.ts', '**/*.tsx'],
+        ...security.configs.recommended,
+        rules: {
+            ...security.configs.recommended.rules,
+            'security/detect-object-injection': 'off',
+            'security/detect-non-literal-fs-filename': 'off',
+            'security/detect-unsafe-regex': 'off',
+        },
+    },
+
+    // Regexp: catch ReDoS, polynomial backtracking, unmatchable patterns.
+    // Supersedes security/detect-unsafe-regex with deeper analysis.
+    {
+        files: ['**/*.ts', '**/*.tsx'],
+        ...regexp.configs['flat/recommended'],
+        rules: {
+            ...regexp.configs['flat/recommended'].rules,
+            'regexp/no-unused-capturing-group': 'off',
+        },
     },
 
     // JSDoc + TS type-aware rules

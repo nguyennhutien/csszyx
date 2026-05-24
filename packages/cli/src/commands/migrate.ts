@@ -236,7 +236,10 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         // still-unresolved classes get a fresh comment via the injectTodos pass.
         let processSource = source;
         if (resolveTodosPath && !isHtml) {
-            processSource = processSource.replace(/\{\/\*\s*@sz-todo:\s*(.*?)\s*\*\/\}\n?/g, '');
+            processSource = processSource.replace(
+                /\{\/\*\s*@sz-todo:\s*(\S(?:.*\S)?)\s*\*\/\}\n?/g,
+                '',
+            );
         }
 
         const result = isHtml

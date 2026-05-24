@@ -404,7 +404,7 @@ function skipWhitespaceAndComments(code: string, start: number): number {
 function findRuntimeImports(code: string): Array<{ source: string; symbols: string[] }> {
     const imports: Array<{ source: string; symbols: string[] }> = [];
     const scanCode = stripCommentsForImportScan(code);
-    const staticImportRe = /import\s+(?!type\b)([^'"]*?)\s+from\s+['"]([^'"]+)['"]/g;
+    const staticImportRe = /import\s+(?!type\b)(\S(?:.*\S)?)\s+from\s+['"]([^'"]+)['"]/g;
     const sideEffectImportRe = /import\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
@@ -490,8 +490,8 @@ function readRuntimeImportSymbols(source: string, clause: string): string[] {
  */
 function findLocalImportSources(code: string): string[] {
     const out: string[] = [];
-    const staticImportRe = /import\s+(?!type\b)(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
-    const exportFromRe = /export\s+(?!type\b)(?:[\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
+    const staticImportRe = /import\s+(?!type\b)(?:\S(?:.*\S)?\s+from\s+)?['"]([^'"]+)['"]/g;
+    const exportFromRe = /export\s+(?!type\b)\S(?:.*\S)?\s+from\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
     for (const re of [staticImportRe, exportFromRe, dynamicImportRe]) {
@@ -616,7 +616,7 @@ function readImportedSymbols(clause: string): string[] {
         symbols.push(...FORBIDDEN_SYMBOLS);
     }
 
-    const defaultImport = clause.replace(/\{[^}]*\}/, '').match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
+    const defaultImport = clause.replace(/\{[^}]*\}/, '').match(/^\s*([A-Z_$][\w$]*)\s*(?:,|$)/i);
     const defaultSymbol = defaultImport?.[1];
     if (defaultSymbol && FORBIDDEN_SYMBOLS.has(defaultSymbol)) {
         symbols.push(defaultSymbol);

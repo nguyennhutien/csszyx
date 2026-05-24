@@ -2723,10 +2723,7 @@ export function transform(
                     finalValue = `[${finalValue}]`;
                 }
                 // else: allowed bare fraction (w-1/2, basis-1/3)
-            } else if (
-                key === 'aspect' &&
-                /^[0-9]+(?:\.[0-9]+)?\/[0-9]+(?:\.[0-9]+)?$/.test(finalValue)
-            ) {
+            } else if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(finalValue)) {
                 if (
                     finalValue === 'auto' ||
                     finalValue === 'square' ||
