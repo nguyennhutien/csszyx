@@ -33,4 +33,9 @@ if ! command -v wasm-bindgen &>/dev/null; then
     cargo install wasm-bindgen-cli --locked --version 0.2.93
 fi
 
+# Build the native Rust engine for the host platform. After the R8
+# default-parser flip to 'rust', the docs Vite build requires the
+# napi-rs addon to transform .tsx source files.
+pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
 pnpm turbo run build --filter=@csszyx/docs
