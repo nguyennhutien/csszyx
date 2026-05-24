@@ -560,20 +560,20 @@ function parseSzProp(raw: string): Record<string, unknown> | null {
 
     // Step 1: Replace double-quoted strings FIRST (they may contain single quotes)
     const strings: string[] = [];
-    cleaned = cleaned.replace(/"([^"]*?)"/g, (_match, content: string) => {
+    cleaned = cleaned.replace(/"([^"]*)"/g, (_match, content: string) => {
         strings.push(content);
         return `"__STR_${strings.length - 1}__"`;
     });
 
     // Step 1b: Replace remaining single-quoted strings with placeholders
-    cleaned = cleaned.replace(/'([^']*?)'/g, (_match, content: string) => {
+    cleaned = cleaned.replace(/'([^']*)'/g, (_match, content: string) => {
         strings.push(content);
         return `"__STR_${strings.length - 1}__"`;
     });
 
     // Step 2: Quote unquoted object keys
     // Handle keys that are bare identifiers (camelCase, $, _)
-    cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+    cleaned = cleaned.replace(/([{,]\s*)([a-z_$][\w$]*)\s*:/gi, '$1"$2":');
 
     // Step 3: Restore string placeholders
     cleaned = cleaned.replace(/"__STR_(\d+)__"/g, (_match, idx: string) => {
@@ -675,7 +675,7 @@ function tryExpandRange(
 
     // Extract the sz prop key
     // e.g., "{ basis: 1 }...{ basis: 96 }" -> key = "basis"
-    const szMatch = szNorm.match(/\{\s*"?([a-zA-Z_$][a-zA-Z0-9_$]*)"?\s*:/);
+    const szMatch = szNorm.match(/\{\s*"?([a-z_$][\w$]*)"?\s*:/i);
     if (!szMatch) {
         const szMatch2 = szNorm.match(/\{\s*'([^']+)'\s*:/);
         if (!szMatch2) {
@@ -959,7 +959,7 @@ function parseCommaSeparatedRow(
  * @returns The level and text of the heading, or null.
  */
 function parseHeading(line: string): { level: number; text: string } | null {
-    const match = line.match(/^(#{2,4})\s+(.+)$/);
+    const match = line.match(/^(#{2,4})\s+(\S.*)$/);
     if (!match) {
         return null;
     }

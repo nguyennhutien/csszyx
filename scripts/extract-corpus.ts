@@ -134,8 +134,8 @@ function extractClassStrings(content: string): string[] {
         // Generic: any string literal that might be a TW class list
         // (handles theme objects, variant maps, etc.)
         // Note: validated separately — requires TW-specific tokens to avoid prose
-        /"([a-z!][a-z0-9 !:/.[\\]()@#%]{15,})"/g,
-        /'([a-z!][a-z0-9 !:/.[\\]()@#%]{15,})'/g,
+        /"([a-z!][a-z0-9 !:/.[\\()\]@#%]{15,})"/g,
+        /'([a-z!][a-z0-9 !:/.[\\()\]@#%]{15,})'/g,
     ];
 
     // Patterns that came from targeted contexts (className=, cn(), etc.)

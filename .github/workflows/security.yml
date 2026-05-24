@@ -74,11 +74,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # pnpm audit exits non-zero on any advisory. --audit-level critical
-      # avoids failing on transitive high advisories (Next.js, Astro, etc)
-      # that require upstream releases we cannot control.
+      # --audit-level high catches actionable advisories in our dep tree.
+      # --ignore-unfixable skips transitive advisories where the direct
+      # dependency hasn't released a patch yet (upstream outside our
+      # control). CI still fails on any high advisory we CAN fix.
       - name: Audit JS dependencies
-        run: pnpm audit --audit-level critical
+        run: pnpm audit --audit-level high --ignore-unfixable
 
   cargo-audit:
     name: cargo audit
