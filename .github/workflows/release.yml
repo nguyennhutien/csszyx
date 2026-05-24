@@ -201,6 +201,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="$PWD/node_modules/.bin:$PWD/packages/core/node_modules/.bin:$PATH"
           cd packages/core
           node scripts/build-native.mjs \
             --release --clean --native-engine \
