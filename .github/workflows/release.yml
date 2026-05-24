@@ -188,6 +188,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install zig (cross-compile)
+        if: matrix.cross
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -195,11 +201,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          args=(--release --clean --native-engine --target "${{ matrix.target }}")
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            args+=(--cross-compile)
-          fi
-          pnpm --filter @csszyx/core native:build -- "${args[@]}"
+          cd packages/core
+          node scripts/build-native.mjs \
+            --release --clean --native-engine \
+            --target "${{ matrix.target }}" \
+            ${{ matrix.cross && '--cross-compile' || '' }}
+          cd ../..
           mkdir -p "native-artifacts/packages/core-${{ matrix.platform }}"
           cp \
             "packages/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node" \
