@@ -81,6 +81,7 @@ jobs:
         id: recovery
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           recovered=0
