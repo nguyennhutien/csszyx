@@ -23,10 +23,21 @@ for arg in "$@"; do
     esac
 done
 
+validate_path() {
+    local name="$1" val="$2"
+    if ! printf '%s' "$val" | grep -qE '^/[A-Za-z0-9._/-]+$'; then
+        echo "[claude] FATAL: $name contains unsafe characters: $val" >&2
+        exit 1
+    fi
+}
+
 HOST_CLAUDE_HOME="/root/.claude"
 DEV_CLAUDE_HOME="${DEV_CLAUDE_HOME:-/root/.claude-devcontainer}"
 CLAUDE_WRAPPER="/root/.local/bin/claude"
 REAL_CLAUDE="/root/.local/share/mise/installs/node/22.22.1/bin/claude"
+
+validate_path "DEV_CLAUDE_HOME" "$DEV_CLAUDE_HOME"
+validate_path "REAL_CLAUDE" "$REAL_CLAUDE"
 
 if [ ! -x "$REAL_CLAUDE" ]; then
     echo "[claude] WARN: Claude CLI not found at $REAL_CLAUDE; run mise install first."

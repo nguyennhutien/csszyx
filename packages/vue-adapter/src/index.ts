@@ -7,6 +7,7 @@
  */
 
 import { type SzObject, transform } from '@csszyx/compiler';
+import { parseSync } from 'oxc-parser';
 
 /**
  * Preprocessor options.
@@ -37,6 +38,87 @@ export interface PreprocessResult {
 }
 
 /**
+ *
+ */
+type SafeValue = string | number | boolean | null | SafeValue[] | { [key: string]: SafeValue };
+/**
+ *
+ */
+type OxcNode = Record<string, unknown>;
+
+/**
+ * @param node - ESTree AST node to extract a literal value from
+ * @returns The extracted value, or undefined if the node type is unsupported
+ */
+function extractValue(node: OxcNode): SafeValue | undefined {
+    switch (node.type) {
+        case 'Literal':
+            return node.value as SafeValue;
+        case 'UnaryExpression':
+            if (
+                node.operator === '-' &&
+                (node.argument as OxcNode).type === 'Literal' &&
+                typeof (node.argument as OxcNode).value === 'number'
+            ) {
+                return -((node.argument as OxcNode).value as number);
+            }
+            return undefined;
+        case 'ArrayExpression': {
+            const arr: SafeValue[] = [];
+            for (const el of (node.elements as OxcNode[]) ?? []) {
+                if (!el) {
+                    arr.push(null);
+                    continue;
+                }
+                const v = extractValue(el);
+                if (v === undefined) return undefined;
+                arr.push(v);
+            }
+            return arr;
+        }
+        case 'ObjectExpression':
+            return extractObjectNode(node);
+        case 'TemplateLiteral':
+            if (((node.expressions as unknown[]) ?? []).length === 0) {
+                const quasis = node.quasis as OxcNode[];
+                return ((quasis[0].value as OxcNode).cooked as string) ?? undefined;
+            }
+            return undefined;
+        default:
+            return undefined;
+    }
+}
+
+/**
+ * @param node - ObjectExpression AST node
+ * @returns Plain object with extracted key-value pairs, or undefined if any property is unsupported
+ */
+function extractObjectNode(node: OxcNode): Record<string, SafeValue> | undefined {
+    const obj: Record<string, SafeValue> = {};
+    for (const prop of (node.properties as OxcNode[]) ?? []) {
+        if (prop.type !== 'Property') return undefined;
+        if (prop.computed) return undefined;
+
+        const key_node = prop.key as OxcNode;
+        let key: string;
+        if (key_node.type === 'Identifier') {
+            key = key_node.name as string;
+        } else if (key_node.type === 'Literal' && typeof key_node.value === 'string') {
+            key = key_node.value;
+        } else if (key_node.type === 'Literal' && typeof key_node.value === 'number') {
+            key = String(key_node.value);
+        } else {
+            return undefined;
+        }
+
+        const value = extractValue(prop.value as OxcNode);
+        if (value === undefined) return undefined;
+        obj[key] = value;
+    }
+    return obj;
+}
+
+/**
  * Parse a JavaScript object literal string into an object.
  * Handles nested objects for variants like hover, focus, etc.
  *
@@ -45,19 +127,13 @@ export interface PreprocessResult {
  */
 export function parseObjectLiteral(objStr: string): SzObject | null {
     try {
-        // Remove outer braces and whitespace
-        const content = objStr.trim();
-
-        // Use Function constructor to safely evaluate the object
-        // This is safer than eval and works for static objects
-        const fn = new Function(`return (${content})`);
-        const result = fn();
-
-        if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
-            return result as SzObject;
-        }
-
-        return null;
+        const src = `const _=${objStr.trim()}`;
+        const parsed = parseSync('sz.js', src);
+        if (parsed.errors.length > 0) return null;
+        const decl = (parsed.program as unknown as OxcNode).body as OxcNode[];
+        const init = ((decl[0].declarations as OxcNode[])[0].init as OxcNode) ?? null;
+        if (!init || init.type !== 'ObjectExpression') return null;
+        return (extractObjectNode(init) as SzObject) ?? null;
     } catch {
         return null;
     }

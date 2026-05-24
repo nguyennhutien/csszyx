@@ -405,6 +405,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      oxc-parser:
+        specifier: 0.131.0
+        version: 0.131.0
     devDependencies:
       '@types/node':
         specifier: ^20.11.0
@@ -494,6 +497,9 @@ importers:
 
   packages/vscode:
     devDependencies:
+      '@babel/parser':
+        specifier: ^7.23.0
+        version: 7.29.2
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
@@ -527,6 +533,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      oxc-parser:
+        specifier: 0.131.0
+        version: 0.131.0
     devDependencies:
       '@types/node':
         specifier: ^20.11.0

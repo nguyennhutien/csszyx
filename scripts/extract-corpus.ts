@@ -19,7 +19,7 @@
  * Re-run whenever a framework version is upgraded to refresh the snapshot.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -219,7 +219,9 @@ function processFramework(config: FrameworkConfig, tmpDir: string, dryRun: boole
 
     console.log(`\n── ${config.name} ──────────────────────────────────`);
     console.log(`  Cloning ${config.repo}...`);
-    execSync(`git clone --depth=1 --quiet "${config.repo}" "${repoDir}"`, { stdio: 'inherit' });
+    execFileSync('git', ['clone', '--depth=1', '--quiet', config.repo, repoDir], {
+        stdio: 'inherit',
+    });
 
     // Scan configured source dirs (fall back to whole repo if none found)
     const allClassStrings: string[] = [];

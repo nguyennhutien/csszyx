@@ -18,6 +18,7 @@ import * as vscode from 'vscode';
 
 import { BOOLEAN_SHORTHANDS, KNOWN_VARIANTS, PROPERTY_MAP, SUGGESTION_MAP } from './data.js';
 import { findSzExpressions } from './parser.js';
+import { parseObjectLiteralSafe } from './safe-eval.js';
 
 const DIAGNOSTIC_SOURCE = 'csszyx';
 
@@ -57,14 +58,9 @@ export function validateDocument(
     const diagnostics: vscode.Diagnostic[] = [];
 
     for (const { objText, startOffset, needsWrap } of findSzExpressions(text)) {
-        // Implicit form (`sz="a: 1, b: 2"`) needs `{ ... }` before eval.
         const evalSrc = needsWrap ? `{ ${objText} }` : objText;
-        let obj: Record<string, unknown>;
-        try {
-            obj = new Function(`"use strict"; return (${evalSrc})`)() as Record<string, unknown>;
-        } catch {
-            continue; // dynamic values prevent static eval — skip silently
-        }
+        const obj = parseObjectLiteralSafe(evalSrc);
+        if (!obj) continue;
 
         for (const key of Object.keys(obj)) {
             if (isValidKey(key)) {

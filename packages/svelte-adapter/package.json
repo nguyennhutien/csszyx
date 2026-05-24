@@ -23,7 +23,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/compiler": "workspace:*"
+    "@csszyx/compiler": "workspace:*",
+    "oxc-parser": "0.131.0"
   },
   "peerDependencies": {
     "svelte": "^4.0.0 || ^5.0.0"

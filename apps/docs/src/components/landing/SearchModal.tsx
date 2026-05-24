@@ -26,6 +26,10 @@ async function loadPagefind() {
     return pagefindApi;
 }
 
+function sanitizeExcerpt(html: string): string {
+    return html.replace(/<\/?(?!mark\b)[a-z][^>]*>/gi, '');
+}
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -145,7 +149,7 @@ export default function SearchModal({ isOpen, onClose }: Props) {
                                     <div className="search-result-title">{result.meta.title}</div>
                                     <div
                                         className="search-result-excerpt"
-                                        dangerouslySetInnerHTML={{ __html: result.excerpt }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizeExcerpt(result.excerpt) }}
                                     />
                                 </a>
                             </li>
