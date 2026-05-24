@@ -237,7 +237,7 @@ export function assertNoRSCGraphViolation(records: Map<string, RSCModuleRecord>)
  */
 function isNextAppRouterEntry(id: string): boolean {
     const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
-    return /(^|\/)app\/.*\/?(?:page|layout|template|loading|error|not-found|global-error|default|route)\.[cm]?[tj]sx?$/.test(
+    return /(^|\/)app\/(?:[^/]+\/)*(?:page|layout|template|loading|error|not-found|global-error|default|route)\.[cm]?[tj]sx?$/.test(
         clean,
     );
 }
@@ -404,7 +404,7 @@ function skipWhitespaceAndComments(code: string, start: number): number {
 function findRuntimeImports(code: string): Array<{ source: string; symbols: string[] }> {
     const imports: Array<{ source: string; symbols: string[] }> = [];
     const scanCode = stripCommentsForImportScan(code);
-    const staticImportRe = /import\s+(?!type\b)([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
+    const staticImportRe = /import\s+(?!type\b)([^'"]*?)\s+from\s+['"]([^'"]+)['"]/g;
     const sideEffectImportRe = /import\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
@@ -616,9 +616,7 @@ function readImportedSymbols(clause: string): string[] {
         symbols.push(...FORBIDDEN_SYMBOLS);
     }
 
-    const defaultImport = clause
-        .replace(/\{[\s\S]*?\}/, '')
-        .match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
+    const defaultImport = clause.replace(/\{[^}]*\}/, '').match(/^\s*([A-Za-z_$][\w$]*)\s*(?:,|$)/);
     const defaultSymbol = defaultImport?.[1];
     if (defaultSymbol && FORBIDDEN_SYMBOLS.has(defaultSymbol)) {
         symbols.push(defaultSymbol);

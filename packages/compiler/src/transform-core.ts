@@ -2766,8 +2766,9 @@ export function transform(
     // Only font-size suffixes are valid merge targets: xs, sm, base, lg, [2-9]?xl,
     // arbitrary [...], or CSS variable (...).
     let mergedClasses = classes;
-    const textSizePattern = /^((?:[a-z0-9\-[\]@/]*:)*)text-(xs|sm|base|lg|[2-9]?xl|\[.+\]|\(.+\))$/;
-    const leadingPattern = /^((?:[a-z0-9\-[\]@/]*:)*)leading-(.+)$/;
+    const textSizePattern =
+        /^((?:[a-z0-9[\]@/-]+:)*)text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
+    const leadingPattern = /^((?:[a-z0-9[\]@/-]+:)*)leading-(.+)$/;
     const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
     const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
     for (let i = 0; i < classes.length; i++) {

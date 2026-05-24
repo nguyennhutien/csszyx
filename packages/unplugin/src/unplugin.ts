@@ -86,7 +86,7 @@ const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
-    /^((?:\s|\/\/[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
+    /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
 // Precomputed regexes for the runtime-helper import-injection pass. The
 // previous version called `new RegExp(...)` for every helper on every

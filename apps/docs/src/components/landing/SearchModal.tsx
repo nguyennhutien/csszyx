@@ -27,7 +27,14 @@ async function loadPagefind() {
 }
 
 function sanitizeExcerpt(html: string): string {
-    return html.replace(/<\/?(?!mark\b)[a-z][^>]*>/gi, '');
+    const re = /<\/?(?!mark\b)[a-z][^>]*>/gi;
+    let s = html;
+    let prev: string;
+    do {
+        prev = s;
+        s = s.replace(re, '');
+    } while (s !== prev);
+    return s;
 }
 
 interface Props {
