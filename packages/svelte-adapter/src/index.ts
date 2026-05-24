@@ -216,33 +216,15 @@ export function transformMarkup(
  * @returns {string} Content with merged class attributes
  */
 export function mergeClassAttributes(content: string): string {
-    // Pattern to find elements with multiple class attributes
-    // This handles cases where both class:directive and class (from sz) exist
-    const multiClassPattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)class="([^"]*)"([^>]*>)/g;
-
-    let result = content;
-
-    // Merge duplicate class="..." attributes
-    result = result.replace(multiClassPattern, (match, before, class1, middle, class2, after) => {
-        // Combine classes with space
-        return `${before}class="${class1} ${class2}"${middle}${after}`;
+    const tagRe = /<[a-z][\w-]*\s[^>]*>/gi;
+    return content.replace(tagRe, tag => {
+        const matches = [...tag.matchAll(/\bclass="([^"]*)"/g)].map(m => m[1]);
+        if (matches.length < 2) return tag;
+        const merged = matches.join(' ');
+        const first = tag.indexOf('class="');
+        const cleaned = tag.replace(/\bclass="[^"]*"/g, '');
+        return `${cleaned.slice(0, first)}class="${merged}"${cleaned.slice(first)}`;
     });
-
-    // Handle class:name={condition} combined with class=""
-    // Pattern: class="..." followed by class:name or vice versa
-    const classDirectivePattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(class:[a-zA-Z-]+(?:=\{[^}]*\})?)/g;
-
-    result = result.replace(
-        classDirectivePattern,
-        (match, before, staticClass, middle, directive) => {
-            // Keep both - static class and conditional directive
-            return `${before}class="${staticClass}"${middle}${directive}`;
-        },
-    );
-
-    return result;
 }
 
 /**

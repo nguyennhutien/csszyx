@@ -2763,20 +2763,22 @@ export function transform(
     // Only font-size suffixes are valid merge targets: xs, sm, base, lg, [2-9]?xl,
     // arbitrary [...], or CSS variable (...).
     let mergedClasses = classes;
-    const textSizePattern =
-        /^((?:[a-z0-9[\]@/-]+:)*)text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
-    const leadingPattern = /^((?:[a-z0-9[\]@/-]+:)*)leading-(.+)$/;
+    const textSizeBaseRe = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
+    const leadingBaseRe = /^leading-(.+)$/;
     const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
     const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
-        const tm = textSizePattern.exec(cls);
+        const lastColon = cls.lastIndexOf(':');
+        const prefix = lastColon === -1 ? '' : cls.slice(0, lastColon + 1);
+        const base = lastColon === -1 ? cls : cls.slice(lastColon + 1);
+        const tm = textSizeBaseRe.exec(base);
         if (tm) {
-            textEntries.push({ index: i, prefix: tm[1], size: tm[2] });
+            textEntries.push({ index: i, prefix, size: tm[1] });
         }
-        const lm = leadingPattern.exec(cls);
+        const lm = leadingBaseRe.exec(base);
         if (lm) {
-            leadingEntries.push({ index: i, prefix: lm[1], value: lm[2] });
+            leadingEntries.push({ index: i, prefix, value: lm[1] });
         }
     }
     if (textEntries.length > 0 && leadingEntries.length > 0) {

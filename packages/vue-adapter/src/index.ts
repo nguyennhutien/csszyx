@@ -229,34 +229,19 @@ export function transformTemplate(
  * @returns {string} Template with merged class attributes
  */
 export function mergeClassAttributes(template: string): string {
-    // Pattern to find elements with multiple class attributes
-    // This handles cases where both :class and class (from sz) exist
-    const multiClassPattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)class="([^"]*)"([^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*>)/g;
-
-    let result = template;
-
-    // Merge class="..." with :class="..."
-    result = result.replace(
-        multiClassPattern,
-        (match, before, staticClass, middle, dynamicClass, after) => {
-            // Combine static class with dynamic class using array syntax
-            return `${before}:class="['${staticClass}', ${dynamicClass}]"${middle}${after}`;
-        },
-    );
-
-    // Also handle reverse order: :class before class
-    const reversePattern =
-        /(<[a-zA-Z][a-zA-Z0-9-]*\s[^>]*?)(?::class|v-bind:class)="([^"]*)"([^>]*?)class="([^"]*)"([^>]*>)/g;
-
-    result = result.replace(
-        reversePattern,
-        (match, before, dynamicClass, middle, staticClass, after) => {
-            return `${before}:class="['${staticClass}', ${dynamicClass}]"${middle}${after}`;
-        },
-    );
-
-    return result;
+    const tagRe = /<[a-z][\w-]*\s[^>]*>/gi;
+    return template.replace(tagRe, tag => {
+        const staticMatch = /\bclass="([^"]*)"/.exec(tag);
+        const dynamicMatch = /\b(?::class|v-bind:class)="([^"]*)"/.exec(tag);
+        if (!staticMatch || !dynamicMatch) return tag;
+        const staticClass = staticMatch[1];
+        const dynamicClass = dynamicMatch[1];
+        const cleaned = tag
+            .replace(/\bclass="[^"]*"/, '')
+            .replace(/\b(?::class|v-bind:class)="[^"]*"/, '');
+        const insertIdx = cleaned.indexOf(' ') + 1;
+        return `${cleaned.slice(0, insertIdx)}:class="['${staticClass}', ${dynamicClass}]" ${cleaned.slice(insertIdx)}`;
+    });
 }
 
 /**

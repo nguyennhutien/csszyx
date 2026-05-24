@@ -235,11 +235,31 @@ export function assertNoRSCGraphViolation(records: Map<string, RSCModuleRecord>)
  * @param id module ID/path
  * @returns true for supported Next App Router route entry filenames
  */
+const APP_ROUTER_ENTRIES = new Set([
+    'page',
+    'layout',
+    'template',
+    'loading',
+    'error',
+    'not-found',
+    'global-error',
+    'default',
+    'route',
+]);
+
+/**
+ * @param id - module ID/path
+ * @returns true for supported Next App Router route entry filenames
+ */
 function isNextAppRouterEntry(id: string): boolean {
     const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
-    return /(^|\/)app\/(?:[^/]+\/)*(?:page|layout|template|loading|error|not-found|global-error|default|route)\.[cm]?[tj]sx?$/.test(
-        clean,
-    );
+    if (!clean.includes('/app/') && !clean.startsWith('app/')) return false;
+    const basename = clean.split('/').pop() ?? '';
+    const dotIdx = basename.indexOf('.');
+    if (dotIdx === -1) return false;
+    const stem = basename.slice(0, dotIdx);
+    const ext = basename.slice(dotIdx + 1);
+    return APP_ROUTER_ENTRIES.has(stem) && /^[cm]?[tj]sx?$/.test(ext);
 }
 
 /**
@@ -616,7 +636,13 @@ function readImportedSymbols(clause: string): string[] {
         symbols.push(...FORBIDDEN_SYMBOLS);
     }
 
-    const defaultImport = clause.replace(/\{[^}]*\}/, '').match(/^\s*([A-Z_$][\w$]*)\s*(?:,|$)/i);
+    const braceStart = clause.indexOf('{');
+    const braceEnd = clause.indexOf('}', braceStart);
+    const stripped =
+        braceStart !== -1 && braceEnd !== -1
+            ? clause.slice(0, braceStart) + clause.slice(braceEnd + 1)
+            : clause;
+    const defaultImport = stripped.match(/^\s*([A-Z_$][\w$]*)\s*(?:,|$)/i);
     const defaultSymbol = defaultImport?.[1];
     if (defaultSymbol && FORBIDDEN_SYMBOLS.has(defaultSymbol)) {
         symbols.push(defaultSymbol);
