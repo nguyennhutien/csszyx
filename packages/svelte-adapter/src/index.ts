@@ -216,15 +216,26 @@ export function transformMarkup(
  * @returns {string} Content with merged class attributes
  */
 export function mergeClassAttributes(content: string): string {
-    const tagRe = /<[a-z][\w-]*\s[^>]*>/gi;
-    return content.replace(tagRe, tag => {
+    let result = content;
+    let i = 0;
+    while (i < result.length) {
+        const start = result.indexOf('<', i);
+        if (start === -1) break;
+        const end = result.indexOf('>', start);
+        if (end === -1) break;
+        const tag = result.slice(start, end + 1);
+        i = end + 1;
+        if (!/^<[a-z]/i.test(tag)) continue;
         const matches = [...tag.matchAll(/\bclass="([^"]*)"/g)].map(m => m[1]);
-        if (matches.length < 2) return tag;
+        if (matches.length < 2) continue;
         const merged = matches.join(' ');
-        const first = tag.indexOf('class="');
+        const firstIdx = tag.indexOf('class="');
         const cleaned = tag.replace(/\bclass="[^"]*"/g, '');
-        return `${cleaned.slice(0, first)}class="${merged}"${cleaned.slice(first)}`;
-    });
+        const newTag = `${cleaned.slice(0, firstIdx)}class="${merged}"${cleaned.slice(firstIdx)}`;
+        result = result.slice(0, start) + newTag + result.slice(end + 1);
+        i = start + newTag.length;
+    }
+    return result;
 }
 
 /**

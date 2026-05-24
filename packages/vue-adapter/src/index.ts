@@ -229,19 +229,28 @@ export function transformTemplate(
  * @returns {string} Template with merged class attributes
  */
 export function mergeClassAttributes(template: string): string {
-    const tagRe = /<[a-z][\w-]*\s[^>]*>/gi;
-    return template.replace(tagRe, tag => {
+    let result = template;
+    let i = 0;
+    while (i < result.length) {
+        const start = result.indexOf('<', i);
+        if (start === -1) break;
+        const end = result.indexOf('>', start);
+        if (end === -1) break;
+        const tag = result.slice(start, end + 1);
+        i = end + 1;
+        if (!/^<[a-z]/i.test(tag)) continue;
         const staticMatch = /\bclass="([^"]*)"/.exec(tag);
         const dynamicMatch = /\b(?::class|v-bind:class)="([^"]*)"/.exec(tag);
-        if (!staticMatch || !dynamicMatch) return tag;
-        const staticClass = staticMatch[1];
-        const dynamicClass = dynamicMatch[1];
+        if (!staticMatch || !dynamicMatch) continue;
         const cleaned = tag
             .replace(/\bclass="[^"]*"/, '')
             .replace(/\b(?::class|v-bind:class)="[^"]*"/, '');
         const insertIdx = cleaned.indexOf(' ') + 1;
-        return `${cleaned.slice(0, insertIdx)}:class="['${staticClass}', ${dynamicClass}]" ${cleaned.slice(insertIdx)}`;
-    });
+        const newTag = `${cleaned.slice(0, insertIdx)}:class="['${staticMatch[1]}', ${dynamicMatch[1]}]" ${cleaned.slice(insertIdx)}`;
+        result = result.slice(0, start) + newTag + result.slice(end + 1);
+        i = start + newTag.length;
+    }
+    return result;
 }
 
 /**
