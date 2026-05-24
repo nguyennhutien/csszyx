@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/svelte-adapter",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Svelte preprocessor for csszyx - transforms sz props into Tailwind CSS classes",
   "type": "module",

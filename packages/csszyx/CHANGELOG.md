@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.9.0](https://github.com/nguyennhutien/csszyx/compare/v0.8.0...v0.9.0) (2026-05-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **unplugin:** build.parser default is now "rust". Set build.parser: "oxc" or CSSZYX_PARSER=oxc to keep the previous JavaScript parser path. Missing native binaries on unsupported platforms surface CsszyxNativeUnavailableError with parser-fallback guidance.
+
+### Features
+
+* **unplugin:** flip default parser from oxc to rust ([#28](https://github.com/nguyennhutien/csszyx/issues/28)) ([f6b596c](https://github.com/nguyennhutien/csszyx/commit/f6b596c0a2a0e9848a207d93088b2c5bc638341d))
+
 ## [0.8.0](https://github.com/nguyennhutien/csszyx/compare/v0.7.0...v0.8.0) (2026-05-17)
 
 ### ⚠ BREAKING CHANGES
