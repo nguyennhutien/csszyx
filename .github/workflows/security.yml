@@ -18,8 +18,22 @@ name: Security
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/rust-check.yml"
+      - ".agent/**"
+      - "docs/**"
+      - "**/*.md"
   pull_request:
     branches: [main, develop]
+    paths-ignore:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/rust-check.yml"
+      - ".agent/**"
+      - "docs/**"
+      - "**/*.md"
   schedule:
     # Weekly Monday 06:00 UTC — catches new advisories on deps that
     # haven't changed (no PR trigger for those).
