@@ -1,0 +1,17 @@
+{
+  "name": "@csszyx/core-darwin-x64",
+  "version": "0.8.0",
+  "description": "macOS x64 native binding for @csszyx/core",
+  "license": "MIT",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "type": "commonjs",
+  "main": "./csszyx-core.darwin-x64.node",
+  "files": [
+    "csszyx-core.darwin-x64.node"
+  ]
+}

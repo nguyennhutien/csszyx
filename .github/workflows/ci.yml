@@ -35,8 +35,10 @@ jobs:
     steps:
       - name: Detect release-please branch
         id: head-ref
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" = "release-please--branches--main" ]; then
+          if [ "$HEAD_REF" = "release-please--branches--main" ]; then
             echo "is_release_please=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_release_please=false" >> "$GITHUB_OUTPUT"
@@ -84,9 +86,14 @@ jobs:
               - '.eslintrc*'
               - 'eslint.config.*'
             code_rust:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
               - 'packages/core/src/**'
               - 'packages/core/Cargo.toml'
               - 'packages/core/Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.rustfmt.toml'
+              - '.mise.toml'
             # E2E tests verify the runtime stack end-to-end against
             # built playgrounds. Trigger only when something in that
             # surface area changes.
@@ -115,6 +122,8 @@ jobs:
           node-version: "22"
       - name: Validate release-please config + manifest
         run: node .github/scripts/validate-release-please-config.mjs
+      - name: Validate native package metadata
+        run: node packages/core/scripts/validate-native-packages.mjs
 
   # Fast Biome preflight. Runs the same `pnpm lint:fast` script as
   # local dev (Biome only, no ESLint, no Rust toolchain) so most
@@ -173,7 +182,6 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
       # the hash matches a prior run, turbo skips the task entirely
@@ -194,6 +202,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build the host native addon before the workspace build below. The
+      # default build.parser is "rust" and playgrounds invoke csszyx during
+      # their production build, so without the host addon every playground
+      # build fails with CsszyxNativeUnavailableError. Mirrors the test/e2e/
+      # build jobs.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       # ESLint only — Biome already ran in the lint-fast preflight.
       # Running it again here would duplicate formatting/import/basic
@@ -237,7 +253,6 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
       # the hash matches a prior run, turbo skips the task entirely
@@ -259,12 +274,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build the host native addon before unit tests so the Rust parser
+      # option suite exercises the same optional package-name resolution path
+      # users get after install. The build artefact is gitignored and remains
+      # available to all tests in this job.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
       # `test:unit` is `turbo run test --filter=!@csszyx/e2e`. Playwright
       # tests live in @csszyx/e2e and run in their own job below — they
       # need a different gate (runtime_critical, not just code_ts) and a
       # different setup (browser install + production playgrounds).
       - name: Run unit tests
         run: pnpm test:unit
+
+      # Explicit native-engine package smoke. Unit tests already exercise the
+      # Rust parser branch when the host addon exists, but this step verifies
+      # the install-style optional package load path and the real N-API
+      # transform contract in one place. It cleans the generated .node before
+      # exiting, so it intentionally runs after unit tests.
+      - name: Smoke native engine package
+        run: pnpm --filter @csszyx/core native:engine:smoke
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
@@ -297,7 +327,6 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
       # the hash matches a prior run, turbo skips the task entirely
@@ -318,6 +347,15 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build the host native addon before the workspace build. The default
+      # build.parser is "rust" and playgrounds invoke csszyx during their
+      # production build, so without the host addon every playground build
+      # fails with CsszyxNativeUnavailableError. The release publish matrix
+      # builds the addon per platform for releases; this step is the
+      # CI-only equivalent for the host runner.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       # Build all workspace packages so the production playgrounds can
       # start (Next.js-SSR's `next start` and the Vite preview both need
@@ -361,7 +399,6 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-
       # Restore turbo's own cache directory. Turbo computes a hash of
       # task inputs and stores outputs under `.turbo/cache/{hash}/`. When
       # the hash matches a prior run, turbo skips the task entirely
@@ -382,6 +419,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build the host native addon before the workspace build. The default
+      # build.parser is "rust" and playgrounds invoke csszyx during their
+      # production build, so without the host addon every playground build
+      # fails with CsszyxNativeUnavailableError. Mirrors the e2e/test jobs.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       - name: Build
         run: pnpm build

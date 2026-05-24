@@ -98,6 +98,13 @@ export interface BuildConfig {
     cacheDir?: string;
 
     /**
+     * Enable the per-file transform cache.
+     *
+     * @default true
+     */
+    cache?: boolean;
+
+    /**
      * Maximum AST nodes per file before warning.
      *
      * @default 50000
@@ -107,12 +114,17 @@ export interface BuildConfig {
     /**
      * Source parser used for JSX/TSX sz transforms.
      *
-     * `oxc` is the default parser. `babel` remains available as a compatibility
-     * fallback while the migration keeps Babel dependencies installed.
+     * `rust` is the default parser. The Rust engine ships through the
+     * matching optional `@csszyx/core-*` platform package. The package
+     * installs automatically as an optional dependency on supported
+     * platforms; when missing, csszyx fails loudly with an actionable error
+     * rather than silently falling back. Set this option to `oxc` to keep
+     * the previous JavaScript oxc-parser path, or to `babel` as a final
+     * compatibility escape hatch.
      *
-     * @default "oxc"
+     * @default "rust"
      */
-    parser?: 'babel' | 'oxc';
+    parser?: 'babel' | 'oxc' | 'rust';
 
     /**
      * CSS file(s) to scan for Tailwind v4 @theme blocks.
@@ -279,8 +291,9 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     tailwindConfig: 'tailwind.config.js',
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
+    cache: true,
     astBudgetLimit: 50000,
-    parser: 'oxc',
+    parser: 'rust',
 };
 
 /**

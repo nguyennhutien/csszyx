@@ -4,11 +4,21 @@ on:
   push:
     branches: [main, develop]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "packages/core/**"
+      - "rust-toolchain.toml"
+      - ".rustfmt.toml"
+      - ".mise.toml"
   pull_request:
     branches: [main, develop]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "packages/core/**"
+      - "rust-toolchain.toml"
+      - ".rustfmt.toml"
+      - ".mise.toml"
 
 jobs:
   check:
@@ -21,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.93.0
         with:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
@@ -41,10 +51,19 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test --all-features
+        run: cargo test
+
+      - name: Check native feature
+        run: node scripts/check-native.mjs
+
+      - name: Validate native package metadata
+        run: node scripts/validate-native-packages.mjs
+
+      - name: Run native engine parser tests
+        run: cargo test --features native-engine transform::parser
 
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked --version 0.14.0 || true

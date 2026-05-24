@@ -15,10 +15,22 @@ for arg in "$@"; do
     esac
 done
 
+validate_path() {
+    local name="$1" val="$2"
+    if ! printf '%s' "$val" | grep -qE '^/[A-Za-z0-9._/-]+$'; then
+        echo "[codex] FATAL: $name contains unsafe characters: $val" >&2
+        exit 1
+    fi
+}
+
 HOST_CODEX_HOME="${HOST_CODEX_HOME:-/root/.codex}"
 DEV_CODEX_HOME="${CODEX_HOME:-/root/.codex-devcontainer}"
 CODEX_WRAPPER="/root/.local/bin/codex"
 REAL_CODEX="/root/.local/share/mise/installs/node/22.22.1/bin/codex"
+
+validate_path "HOST_CODEX_HOME" "$HOST_CODEX_HOME"
+validate_path "DEV_CODEX_HOME" "$DEV_CODEX_HOME"
+validate_path "REAL_CODEX" "$REAL_CODEX"
 
 mkdir -p "$DEV_CODEX_HOME"
 

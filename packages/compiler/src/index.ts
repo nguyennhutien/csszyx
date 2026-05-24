@@ -47,6 +47,7 @@ export {
 export {
     isValidSzProp,
     normalizeClassName,
+    type SourceTransformResult,
     type SzObject,
     type SzValue,
     transform,
@@ -64,6 +65,13 @@ export {
     type TransformOxcResult,
     transformOxc,
 } from './transform-oxc.js';
+export {
+    ensureRustTransformAvailable,
+    OxcRustNotImplementedError,
+    type TransformRustFile,
+    transformRust,
+    transformRustBatch,
+} from './transform-rust.js';
 
 // Export sz prop types (for IntelliSense and type safety)
 // CustomTheme is the augmentable interface — exported so users and plugins can

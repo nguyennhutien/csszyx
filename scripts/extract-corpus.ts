@@ -19,7 +19,7 @@
  * Re-run whenever a framework version is upgraded to refresh the snapshot.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,8 +134,8 @@ function extractClassStrings(content: string): string[] {
         // Generic: any string literal that might be a TW class list
         // (handles theme objects, variant maps, etc.)
         // Note: validated separately — requires TW-specific tokens to avoid prose
-        /"([a-z!][a-z0-9 !:/.[\\]()@#%]{15,})"/g,
-        /'([a-z!][a-z0-9 !:/.[\\]()@#%]{15,})'/g,
+        /"([a-z!][a-z0-9 !:/.[\\()\]@#%]{15,})"/g,
+        /'([a-z!][a-z0-9 !:/.[\\()\]@#%]{15,})'/g,
     ];
 
     // Patterns that came from targeted contexts (className=, cn(), etc.)
@@ -219,7 +219,9 @@ function processFramework(config: FrameworkConfig, tmpDir: string, dryRun: boole
 
     console.log(`\n── ${config.name} ──────────────────────────────────`);
     console.log(`  Cloning ${config.repo}...`);
-    execSync(`git clone --depth=1 --quiet "${config.repo}" "${repoDir}"`, { stdio: 'inherit' });
+    execFileSync('git', ['clone', '--depth=1', '--quiet', config.repo, repoDir], {
+        stdio: 'inherit',
+    });
 
     // Scan configured source dirs (fall back to whole repo if none found)
     const allClassStrings: string[] = [];

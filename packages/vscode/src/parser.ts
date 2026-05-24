@@ -154,7 +154,7 @@ export function parseSzContext(text: string): SzContext {
             keyAtColon = '';
         } else if (c === ':' && depth >= 1) {
             const seg = afterOpen.slice(segStart[depth] ?? 0, i).trim();
-            if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(seg)) {
+            if (/^[a-z_$][\w$]*$/i.test(seg)) {
                 lastColon = i;
                 keyAtColon = seg;
             }

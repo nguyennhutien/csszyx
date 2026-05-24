@@ -1,10 +1,21 @@
 import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 
-import { type TokenData, transform, transformOxc, transformSourceCode } from '@csszyx/compiler';
+import {
+    ensureRustTransformAvailable,
+    type SourceTransformResult,
+    type TokenData,
+    transform,
+    transformOxc,
+    transformRust,
+    transformSourceCode,
+} from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
-import type { PartialCsszyxConfig } from '@csszyx/types';
+import { DEFAULT_BUILD_CONFIG, type PartialCsszyxConfig } from '@csszyx/types';
 import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
@@ -23,10 +34,18 @@ import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
     createRSCModuleRecord,
+    deleteRSCModuleRecord,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
+import {
+    createTransformCacheKey,
+    evictOldTransformCacheEntries,
+    readTransformCache,
+    resolveTransformCacheDir,
+    writeTransformCache,
+} from './transform-cache.js';
 import {
     createChecksumModule,
     createMangleMapModule,
@@ -35,9 +54,6 @@ import {
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
 } from './virtual-modules.js';
-
-/** Compiler source-transform result shared by Babel and oxc paths. */
-type SourceTransformResult = ReturnType<typeof transformSourceCode>;
 
 /**
  * Plugin state for mangle map management.
@@ -65,8 +81,57 @@ interface PluginState {
  */
 const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
+const UNKNOWN_PACKAGE_VERSION = '0.0.0';
+const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
+const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
+const DIRECTIVE_PROLOGUE_PREFIX_RE =
+    /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
+
+// Precomputed regexes for the runtime-helper import-injection pass. The
+// previous version called `new RegExp(...)` for every helper on every
+// file, which compiles the same three patterns ~tens of thousands of
+// times during a full project build. The helper set is closed (only
+// these three names ever ship), so we cache the regexes here and reuse
+// them on every transform. The matching string `@csszyx/runtime` only
+// appears in modules that already import a helper, so callers can also
+// skip the regex tests entirely when the runtime package is absent from
+// the transformed source.
+const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
+    _sz: /\{[^}]*\b_sz\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    _szMerge: /\{[^}]*\b_szMerge\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    __szColorVar: /\{[^}]*\b__szColorVar\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+};
 
 let _hasWarnedTsConfig = false;
+let _hasWarnedTransformCacheVersion = false;
+const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
+const PLUGIN_VERSION = findPackageVersionFromFile(
+    fileURLToPath(import.meta.url),
+    UNKNOWN_PACKAGE_VERSION,
+);
+const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', UNKNOWN_PACKAGE_VERSION);
+const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
+const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
+
+/**
+ * Emits opt-in benchmark timing logs for local profiling harnesses.
+ *
+ * @param label Timing label.
+ * @param filename Source filename.
+ * @param elapsedMs Elapsed milliseconds.
+ */
+function traceBenchTiming(label: string, filename: string, elapsedMs: number): void {
+    if (!BENCH_TRACE_ENABLED) {
+        return;
+    }
+    if (BENCH_TRACE_FILE && !filename.includes(BENCH_TRACE_FILE)) {
+        return;
+    }
+    console.log(
+        `[csszyx:bench] ${label} ${elapsedMs.toFixed(3)}ms ${normalizeSourceFilename(filename)}`,
+    );
+}
 
 /**
  * Scans CSS files for Tailwind v4 @theme blocks and writes .csszyx/theme.d.ts.
@@ -122,6 +187,82 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
             // Ignore file read errors
         }
     }
+}
+
+/**
+ * Resolve a package entry and read the nearest package.json version.
+ *
+ * @param specifier Package specifier to resolve.
+ * @param fallback Version used when package metadata is unavailable.
+ * @returns Package version string.
+ */
+function findPackageVersionFromModule(specifier: string, fallback: string): string {
+    try {
+        return findPackageVersionFromFile(requireFromHere.resolve(specifier), fallback);
+    } catch {
+        return fallback;
+    }
+}
+
+/**
+ * Walk upward from a file until a package.json version is found.
+ *
+ * @param file File path inside a package.
+ * @param fallback Version used when no package.json can be read.
+ * @returns Package version string.
+ */
+function findPackageVersionFromFile(file: string, fallback: string): string {
+    let dir = path.dirname(file);
+    while (true) {
+        const packageJson = path.join(dir, 'package.json');
+        try {
+            const parsed = JSON.parse(fs.readFileSync(packageJson, 'utf8')) as {
+                version?: unknown;
+            };
+            if (typeof parsed.version === 'string') {
+                return parsed.version;
+            }
+            return fallback;
+        } catch {
+            // Keep walking up until the filesystem root.
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            return fallback;
+        }
+        dir = parent;
+    }
+}
+
+/**
+ * Normalizes source filenames before compiler calls and cache-key derivation.
+ * Recovery tokens include the filename in their hash input, so cache identity
+ * and compiler token generation must see the same path spelling.
+ *
+ * @param filename Source filename from the bundler.
+ * @returns Filename with POSIX separators.
+ */
+function normalizeSourceFilename(filename: string): string {
+    return filename.replace(/\\/g, '/');
+}
+
+/**
+ * Inserts a runtime import after a top-level client/server directive, preserving
+ * leading comments and blank lines. Keeping `'use server'` before generated
+ * imports is required for the RSC boundary guard to classify the module
+ * correctly.
+ *
+ * @param code transformed module code
+ * @param importStmt import statement to insert
+ * @returns code with the import inserted
+ */
+function insertRuntimeImport(code: string, importStmt: string): string {
+    const directiveMatch = code.match(DIRECTIVE_PROLOGUE_PREFIX_RE);
+    if (!directiveMatch) {
+        return `${importStmt}${code}`;
+    }
+
+    return code.replace(directiveMatch[0], `${directiveMatch[1]}${directiveMatch[2]}${importStmt}`);
 }
 
 /**
@@ -410,11 +551,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    const cacheRequested = (options.build?.cache ?? DEFAULT_BUILD_CONFIG.cache) !== false;
+    const cacheVersionsKnown =
+        PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
+    const cacheEnabled = cacheRequested && cacheVersionsKnown;
+    if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
+        _hasWarnedTransformCacheVersion = true;
+        console.warn(
+            '[csszyx] Transform cache disabled because package versions could not be resolved.',
+        );
+    }
     const parserOverride = process.env.CSSZYX_PARSER;
+    const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'rust';
     const parserMode =
-        parserOverride === 'babel' || parserOverride === 'oxc'
+        parserOverride === 'babel' || parserOverride === 'oxc' || parserOverride === 'rust'
             ? parserOverride
-            : (options.build?.parser ?? 'oxc');
+            : (options.build?.parser ?? defaultParser);
+    let evictedCacheRoot: string | null = null;
+    const transformMemoryCache = new Map<string, SourceTransformResult>();
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -492,9 +646,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Runs the configured source transform. Oxc is the default parser after the
-     * Phase D corpus pass; Babel remains as an explicit compatibility fallback
-     * and as the safety net for unexpected oxc parser/compiler failures.
+     * Runs the configured source transform. Rust is the default parser after
+     * the Phase E max-speed pass and routes through the native engine. Oxc is
+     * the documented JavaScript fallback for native-unavailable platforms, and
+     * Babel remains the final compatibility safety net for unexpected
+     * parser/compiler failures on either engine.
      *
      * @param source Source module contents.
      * @param filename Source filename for parser diagnostics.
@@ -502,20 +658,113 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
         const compilerOptions = { astBudget: astBudgetOverride };
-        if (parserMode !== 'oxc') {
-            return transformSourceCode(source, filename, compilerOptions);
+        const effectiveFilename = normalizeSourceFilename(filename);
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+
+        if (cacheEnabled) {
+            evictTransformCacheOnce();
         }
 
-        try {
-            return transformOxc(source, filename, compilerOptions);
-        } catch (err) {
-            const result = transformSourceCode(source, filename, compilerOptions);
-            const reason = err instanceof Error ? err.message : String(err);
-            result.diagnostics.push(
-                `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
-            );
-            return result;
+        const cacheInput = {
+            pluginVersion: PLUGIN_VERSION,
+            compilerVersion: COMPILER_VERSION,
+            parserMode,
+            producer: parserMode,
+            astBudget: astBudgetOverride,
+            filename: effectiveFilename,
+            source,
+        };
+
+        if (parserMode === 'rust') {
+            ensureRustTransformAvailable();
         }
+
+        // Hoist the cache key once per transform call. The previous version
+        // computed it inside the lookup block AND again inside
+        // `readTransformCache` / `writeTransformCache` (each call sha256s
+        // the full source), so a cold cache miss could pay three or four
+        // identical hashes per file. Computing it here lets every cache
+        // operation reuse the same digest.
+        const cacheKey = cacheEnabled ? createTransformCacheKey(cacheInput) : null;
+
+        if (cacheEnabled && cacheKey) {
+            const memoryCached = transformMemoryCache.get(cacheKey.key);
+            if (memoryCached) {
+                transformMemoryCache.delete(cacheKey.key);
+                transformMemoryCache.set(cacheKey.key, memoryCached);
+                return memoryCached;
+            }
+
+            const cached = readTransformCache(cacheRoot, cacheInput, cacheKey);
+            if (cached) {
+                rememberTransformCacheEntry(cacheKey.key, cached);
+                return cached;
+            }
+        }
+
+        let result: SourceTransformResult;
+        if (parserMode === 'babel') {
+            result = transformSourceCode(source, effectiveFilename, compilerOptions);
+        } else if (parserMode === 'rust') {
+            // Honour the documented contract: `rust` is opt-in and never
+            // silently falls back to oxc/Babel. Any failure here surfaces
+            // to the caller with the same compatibility error the compiler
+            // wrapper raises when the native addon is missing for the current
+            // host, so misconfigured environments fail loudly instead of
+            // producing oxc output users were not expecting.
+            result = transformRust(source, effectiveFilename, compilerOptions);
+        } else {
+            try {
+                result = transformOxc(source, effectiveFilename, compilerOptions);
+            } catch (err) {
+                result = transformSourceCode(source, effectiveFilename, compilerOptions);
+                const reason = err instanceof Error ? err.message : String(err);
+                result.diagnostics.push(
+                    `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
+                );
+                return result;
+            }
+        }
+
+        if (cacheEnabled && cacheKey) {
+            writeTransformCache(cacheRoot, cacheInput, result, cacheKey);
+            rememberTransformCacheEntry(cacheKey.key, result);
+        }
+        return result;
+    }
+
+    /**
+     * Stores one transform result in the in-process L1 cache with a small LRU cap.
+     *
+     * @param key Transform cache key.
+     * @param result Transform result.
+     */
+    function rememberTransformCacheEntry(key: string, result: SourceTransformResult): void {
+        transformMemoryCache.delete(key);
+        transformMemoryCache.set(key, result);
+        if (transformMemoryCache.size <= TRANSFORM_MEMORY_CACHE_MAX_ENTRIES) {
+            return;
+        }
+        const oldest = transformMemoryCache.keys().next().value;
+        if (oldest) {
+            transformMemoryCache.delete(oldest);
+        }
+    }
+
+    /** Runs transform-cache eviction once per resolved project cache root. */
+    function evictTransformCacheOnce(): void {
+        if (!cacheEnabled) {
+            return;
+        }
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+        if (evictedCacheRoot === cacheRoot) {
+            return;
+        }
+        evictedCacheRoot = cacheRoot;
+        evictOldTransformCacheEntries(cacheRoot, {
+            maxAgeMs: TRANSFORM_CACHE_MAX_AGE_MS,
+            maxEntries: TRANSFORM_CACHE_MAX_ENTRIES,
+        });
     }
 
     /**
@@ -915,7 +1164,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             transformed = true;
                         }
                     } else {
+                        const transformStarted = performance.now();
                         const result = transformConfiguredSource(code, id);
+                        traceBenchTiming(
+                            'transform-hook',
+                            id,
+                            performance.now() - transformStarted,
+                        );
                         transformedCode = result.code;
                         usesRuntime = result.usesRuntime;
                         usesMerge = result.usesMerge;
@@ -973,13 +1228,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (usesColorVar) {
                         imports.push('__szColorVar');
                     }
-                    // Filter out helpers already imported from @csszyx/runtime
-                    const needed = imports.filter(
-                        name =>
-                            !new RegExp(
-                                `\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]@csszyx/runtime['"]`,
-                            ).test(transformedCode),
-                    );
+                    // Filter out helpers already imported from @csszyx/runtime.
+                    // The literal package name only appears in modules that
+                    // already import a helper, so a single `.includes()`
+                    // short-circuit skips the regex tests entirely for the
+                    // common case where no `@csszyx/runtime` import exists.
+                    // The regexes themselves are cached at module scope so we
+                    // don't recompile them per file.
+                    const hasRuntimeImport =
+                        imports.length > 0 && transformedCode.includes('@csszyx/runtime');
+                    const needed = hasRuntimeImport
+                        ? imports.filter(
+                              name => !RUNTIME_HELPER_IMPORT_RE[name]?.test(transformedCode),
+                          )
+                        : imports;
                     if (needed.length > 0) {
                         const existingImport = transformedCode.match(
                             /^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m,
@@ -992,18 +1254,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             );
                         } else {
                             const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
-                            const directiveMatch = transformedCode.match(
-                                /^['"]use (client|server)['"];?\s*/,
-                            );
-                            if (directiveMatch) {
-                                const directive = directiveMatch[0];
-                                transformedCode = transformedCode.replace(
-                                    directive,
-                                    `${directive}${importStmt}`,
-                                );
-                            } else {
-                                transformedCode = `${importStmt}${transformedCode}`;
-                            }
+                            transformedCode = insertRuntimeImport(transformedCode, importStmt);
                         }
                         transformed = true;
                     }
@@ -1059,6 +1310,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             },
 
+            watchChange(id, change) {
+                if (change.event === 'delete') {
+                    deleteRSCModuleRecord(state.rscModules, id);
+                }
+            },
+
             /**
              * Webpack hook: pre-scans source files before compilation for Tailwind class discovery.
              * @param compiler - the Webpack compiler instance
@@ -1067,6 +1324,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    evictTransformCacheOnce();
                     if (state.classes.size === 0) {
                         prescanAndWriteClasses();
                     }
@@ -1093,6 +1351,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 configResolved(config) {
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
                     // Generate theme type augmentation from @theme CSS blocks
@@ -1135,7 +1394,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     try {
+                        const hmrTransformStarted = performance.now();
                         result = transformConfiguredSource(fileContent, ctx.file);
+                        traceBenchTiming(
+                            'handle-hot-update',
+                            ctx.file,
+                            performance.now() - hmrTransformStarted,
+                        );
                     } catch {
                         return;
                     }

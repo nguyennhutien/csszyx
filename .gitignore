@@ -25,6 +25,9 @@ pkg/
 pkg-node/
 target/
 *.wasm
+# Native platform packages are built from @csszyx/core and published as npm
+# artifacts. Keep generated binaries out of source control.
+packages/core-*/*.node
 # VS Code extension packaging output (see packages/vscode/scripts/package.mjs)
 *.vsix
 # MCP server bundles llms-full.txt from apps/docs/public at build time

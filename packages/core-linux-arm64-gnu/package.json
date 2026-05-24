@@ -1,0 +1,20 @@
+{
+  "name": "@csszyx/core-linux-arm64-gnu",
+  "version": "0.8.0",
+  "description": "Linux arm64 glibc native binding for @csszyx/core",
+  "license": "MIT",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "type": "commonjs",
+  "main": "./csszyx-core.linux-arm64-gnu.node",
+  "files": [
+    "csszyx-core.linux-arm64-gnu.node"
+  ]
+}

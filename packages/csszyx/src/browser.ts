@@ -92,7 +92,7 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
             }
             return key;
         }
-        while (pos < input.length && /[a-zA-Z0-9_$@\-.]/.test(input[pos])) {
+        while (pos < input.length && /[\w$@\-.]/.test(input[pos])) {
             key += input[pos];
             pos++;
         }
@@ -114,7 +114,7 @@ function parseSzAttribute(rawInput: string): Record<string, unknown> {
         }
 
         let token = '';
-        while (pos < input.length && /[a-zA-Z0-9_.\-+]/.test(input[pos])) {
+        while (pos < input.length && /[\w.\-+]/.test(input[pos])) {
             token += input[pos];
             pos++;
         }

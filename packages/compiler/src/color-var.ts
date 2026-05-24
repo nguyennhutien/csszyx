@@ -20,5 +20,6 @@ export function __szColorVar(v: string): string {
     if (v.startsWith('--')) {
         return `var(${v})`;
     }
+    if (/[);\s\\]/.test(v)) return v;
     return `var(--color-${v})`;
 }

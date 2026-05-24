@@ -78,6 +78,7 @@
     "vsix:publish": "pnpm build && node scripts/package.mjs --publish"
   },
   "devDependencies": {
+    "@babel/parser": "^7.23.0",
     "@csszyx/compiler": "workspace:*",
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",

@@ -15,6 +15,7 @@ import { type SzObject, transform } from '@csszyx/compiler/browser';
 import * as vscode from 'vscode';
 
 import { extractSzObjectAt } from './parser.js';
+import { parseObjectLiteralSafe } from './safe-eval.js';
 import { getSzContext } from './sz-context.js';
 
 /** Max object text length we attempt to eval. Guards against pathological inputs. */
@@ -46,22 +47,11 @@ function extractSzObjectText(
 }
 
 /**
- * Safely evaluate a JS object literal string. Returns null on any error.
- * Only used for hover (read-only display) — never written back to disk.
  * @param objText - Raw JS object literal text to evaluate
  * @returns Parsed SzObject or null if evaluation fails
  */
 function evalObject(objText: string): SzObject | null {
-    try {
-        // new Function runs in a fresh scope — no access to local variables
-        const result = new Function(`"use strict"; return (${objText})`)();
-        if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
-            return result as SzObject;
-        }
-        return null;
-    } catch {
-        return null;
-    }
+    return parseObjectLiteralSafe(objText) as SzObject | null;
 }
 
 /**

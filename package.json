@@ -27,6 +27,8 @@
     "prepare": "lefthook install",
     "postinstall": "[ -f .agent/fix-linux-arm64-binaries.sh ] && bash .agent/fix-linux-arm64-binaries.sh || true",
     "gen:llms": "node scripts/gen-llms.mjs",
+    "gen:rust-tables": "node scripts/generate-rust-transform-tables.mjs",
+    "gen:rust-tables:check": "node scripts/generate-rust-transform-tables.mjs --check",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",
@@ -35,15 +37,23 @@
     "test:e2e": "pnpm --filter @csszyx/e2e test",
     "serve:vanilla": "npx vite playground/vanilla-html --port 5176",
     "lint:fast": "biome check",
-    "lint": "biome check --write && eslint . --fix",
-    "lint:check": "biome check && eslint .",
+    "lint": "biome check --write && eslint . --fix --cache --cache-location node_modules/.cache/eslint",
+    "lint:check": "biome check && eslint . --cache --cache-location node_modules/.cache/eslint",
     "type-check": "tsc -b",
+    "verify:ci": "bash scripts/verify-like-ci.sh",
+    "verify:ci:fast": "bash scripts/verify-like-ci.sh --no-e2e",
+    "verify:pre-push": "bash scripts/verify-pre-push.sh",
+    "pr:ready": "pnpm verify:ci && echo '\\n✓ Full CI mirror green locally. Push the branch then run `gh pr create` when ready.'",
     "clean": "rm -rf node_modules .turbo packages/*/node_modules packages/*/dist playground/*/node_modules playground/*/dist playground/*/.next playground/*/out",
     "reset": "pnpm clean && pnpm install && turbo run build --filter='./packages/*'",
     "corpus:check": "node --import tsx/esm scripts/check-corpus.ts",
     "corpus:check:strict": "node --import tsx/esm scripts/check-corpus.ts --fail-fast",
     "corpus:extract": "node --import tsx/esm scripts/extract-corpus.ts",
     "compiler:profile-hotpath": "node --import tsx/esm scripts/profile-compiler-hotpath.ts",
+    "bench:transform-cache": "node --import tsx/esm scripts/bench-transform-cache.ts",
+    "bench:docs-build": "node --import tsx/esm scripts/bench-docs-build.ts",
+    "bench:docs-hmr": "node --import tsx/esm scripts/bench-docs-hmr.ts",
+    "observe:rust-parser-paths": "node --import tsx/esm scripts/observe-rust-parser-paths.ts",
     "pages:build": "bash scripts/build-cf-pages.sh"
   },
   "devDependencies": {
@@ -55,6 +65,8 @@
     "@typescript-eslint/parser": "^8.53.0",
     "eslint": "^9.39.2",
     "eslint-plugin-jsdoc": "^62.1.0",
+    "eslint-plugin-regexp": "3.1.0",
+    "eslint-plugin-security": "4.0.0",
     "lefthook": "^2.1.6",
     "markdownlint-cli": "^0.47.0",
     "prettier": "^3.8.0",
@@ -68,6 +80,23 @@
   "engines": {
     "node": ">=22.12.0",
     "pnpm": ">=10.0.0"
+  },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "cpu": [
+        "x64",
+        "arm64"
+      ],
+      "libc": [
+        "glibc",
+        "musl"
+      ]
+    }
   },
   "packageManager": "pnpm@10.32.1"
 }

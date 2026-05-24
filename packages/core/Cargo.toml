@@ -24,9 +24,33 @@ hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde-wasm-bindgen = "0.6.5"
+napi = { version = "3.9.0", default-features = false, features = ["napi4"], optional = true }
+napi-derive = { version = "3.5.6", optional = true }
+oxc_allocator = { version = "0.131.0", optional = true }
+oxc_ast = { version = "0.131.0", optional = true }
+oxc_ast_visit = { version = "0.131.0", optional = true }
+oxc_parser = { version = "0.131.0", optional = true }
+oxc_semantic = { version = "0.131.0", optional = true }
+oxc_span = { version = "0.131.0", optional = true }
+rayon = { version = "1.12.0", optional = true }
+string_wizard = { version = "0.0.27", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "=0.3.43"
+
+[features]
+default = []
+native = ["dep:napi", "dep:napi-derive"]
+native-engine = [
+    "dep:oxc_allocator",
+    "dep:oxc_ast",
+    "dep:oxc_ast_visit",
+    "dep:oxc_parser",
+    "dep:oxc_semantic",
+    "dep:oxc_span",
+    "dep:rayon",
+    "dep:string_wizard",
+]
 
 # Note: [profile.release] lives in the workspace root Cargo.toml.
 # Cargo ignores profile sections in non-root workspace members and emits a
@@ -44,4 +68,3 @@ wasm-opt = false
 
 [lints]
 workspace = true
-

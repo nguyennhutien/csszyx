@@ -46,7 +46,7 @@ function getQuotedValueRange(
 
     // Walk backward across word-identifier chars to find the opening quote.
     let start = position.character - 1;
-    while (start >= 0 && /[a-zA-Z0-9_-]/.test(line[start] ?? '')) {
+    while (start >= 0 && /[\w-]/.test(line[start] ?? '')) {
         start--;
     }
     if (start < 0) {
@@ -59,7 +59,7 @@ function getQuotedValueRange(
 
     // Walk forward from the cursor across word chars to find a matching closer.
     let end = position.character;
-    while (end < line.length && /[a-zA-Z0-9_-]/.test(line[end] ?? '')) {
+    while (end < line.length && /[\w-]/.test(line[end] ?? '')) {
         end++;
     }
     if (line[end] === opener) {

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-
+import { transform } from '../../compiler/src/transform-core.js';
 import {
     compute_mangle_checksum,
     encode,
@@ -96,6 +96,19 @@ describe('@csszyx/core Integration', () => {
             expect(result).toContain('hover:bg-blue-500');
             expect(result).toContain('hover:focus:scale-110');
         });
+
+        it('should match compiler transform for generated property and boolean maps', () => {
+            const cases = [
+                { start: 4 },
+                { inlineBlock: true },
+                { bgImg: 'url(/hero.png)' },
+                { hover: { start: 2 } },
+            ] as const;
+
+            for (const sz of cases) {
+                expect(transform_sz(sz)).toBe(transform(sz).className);
+            }
+        });
     });
 
     describe('Encoder', () => {
@@ -109,7 +122,7 @@ describe('@csszyx/core Integration', () => {
             // Check first 1000 encodings
             for (let i = 0; i < 1000; i++) {
                 const encoded = encode(i);
-                expect(encoded[0]).toMatch(/[a-zA-Z]/);
+                expect(encoded[0]).toMatch(/[a-z]/i);
             }
         });
 

@@ -35,13 +35,173 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       releases_created: ${{ steps.release.outputs.releases_created }}
+      recovered: ${{ steps.recovery.outputs.recovered }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      # ── Phase A: split action into two commands so each phase runs
+      # independently. The combined mode (no `command:` input) has a
+      # well-known v4 bug in single-root manifest configs: when the
+      # post-merge tagging logic detects an `autorelease: pending`
+      # PR but cannot resolve the component name (`PR component:
+      # undefined does not match configured component: csszyx`), the
+      # entire run aborts before tagging — leaving manifest +
+      # CHANGELOG already updated but no tag / release / npm
+      # publish. Running `release-pr` and `github-release` as
+      # separate steps isolates the two responsibilities; the
+      # github-release step can still succeed when release-pr is a
+      # no-op, and vice versa.
+      - name: Release-please — open or update release PR
+        uses: googleapis/release-please-action@v4
+        id: release-pr
         with:
+          command: release-pr
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release-please — tag merged release PR + create GitHub release
+        uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          command: github-release
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Phase B: defensive recovery. If the github-release step
+      # above hit the v4 abort bug, the merged release PR keeps its
+      # `autorelease: pending` label and no v{version} tag/release
+      # exists. This step scans for that exact stuck state and
+      # repairs it inline: create the tag pointing at the merge
+      # commit, create the GitHub release (notes auto-generated
+      # from commits since the previous tag), and flip the label
+      # to `autorelease: tagged`. Idempotent — if release-please
+      # already succeeded the loop finds zero pending PRs and
+      # produces `recovered=0` (no-op).
+      - name: Recover stuck autorelease:pending release PRs
+        id: recovery
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          recovered=0
+          # `gh pr list` with --search supports the same query language as the
+          # GitHub UI search box. is:merged is implied by --state merged.
+          gh pr list --state merged \
+            --search 'label:"autorelease: pending"' \
+            --json number,mergeCommit,title \
+            --jq '.[] | "\(.number)\t\(.mergeCommit.oid)\t\(.title)"' \
+            > /tmp/pending-prs.tsv
+          while IFS=$'\t' read -r num sha title; do
+            [ -z "${num:-}" ] && continue
+            version="$(printf '%s' "$title" | grep -oP 'v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+            if [ -z "${version:-}" ]; then
+              echo "::warning::Skipping PR #${num} — no v{version} found in title: ${title}"
+              continue
+            fi
+            if gh release view "v${version}" >/dev/null 2>&1; then
+              echo "Release v${version} already exists for PR #${num} — only flipping label"
+            else
+              echo "Recovering v${version} from PR #${num} (merge commit ${sha})..."
+              gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+                --field "ref=refs/tags/v${version}" \
+                --field "sha=${sha}" > /dev/null
+              gh release create "v${version}" \
+                --title "v${version}" \
+                --generate-notes > /dev/null
+              recovered=$((recovered + 1))
+            fi
+            gh pr edit "${num}" \
+              --remove-label "autorelease: pending" \
+              --add-label "autorelease: tagged" > /dev/null || true
+          done < /tmp/pending-prs.tsv
+          rm -f /tmp/pending-prs.tsv
+          echo "recovered=${recovered}" >> "$GITHUB_OUTPUT"
+          echo "Recovery complete — ${recovered} release(s) repaired."
+
+  build-native-artifacts:
+    name: Build native package artifacts
+    needs: release-please
+    if: |
+      needs.release-please.outputs.releases_created == 'true' ||
+      (needs.release-please.outputs.recovered != '' && needs.release-please.outputs.recovered != '0') ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64-gnu
+            cross: false
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            platform: linux-x64-musl
+            cross: true
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64-gnu
+            cross: true
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            platform: linux-arm64-musl
+            cross: true
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+            cross: false
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+            cross: false
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: win32-x64-msvc
+            cross: false
+          - runner: windows-latest
+            target: aarch64-pc-windows-msvc
+            platform: win32-arm64-msvc
+            cross: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.93.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native package
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--release --clean --native-engine --target "${{ matrix.target }}")
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            args+=(--cross-compile)
+          fi
+          pnpm --filter @csszyx/core native:build -- "${args[@]}"
+          mkdir -p "native-artifacts/packages/core-${{ matrix.platform }}"
+          cp \
+            "packages/core-${{ matrix.platform }}/csszyx-core.${{ matrix.platform }}.node" \
+            "native-artifacts/packages/core-${{ matrix.platform }}/"
+
+      - name: Upload native package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: native-artifacts/packages
+          if-no-files-found: error
 
   # Runs only when release-please created releases (i.e. the release PR was
   # just merged). Builds the workspace and publishes to npm. Per-package
@@ -49,12 +209,17 @@ jobs:
   # separately trigger release-vscode.yml for Marketplace publish.
   publish:
     name: Publish to npm
-    needs: release-please
-    # Runs when release-please just minted a release (normal flow) OR when an
-    # operator manually dispatches the workflow (recovery flow — tag/release
-    # already exist, package.json versions on main are correct, just need to
-    # run pnpm publish).
-    if: needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [release-please, build-native-artifacts]
+    # Runs when:
+    #   - release-please just minted a release (normal flow), OR
+    #   - the recovery step (Phase B above) tagged a stuck pending PR, OR
+    #   - an operator manually dispatches the workflow (tag/release already
+    #     exist via manual `gh` calls, package.json versions on main are
+    #     correct, just need to run pnpm publish).
+    if: |
+      needs.release-please.outputs.releases_created == 'true' ||
+      (needs.release-please.outputs.recovered != '' && needs.release-please.outputs.recovered != '0') ||
+      github.event_name == 'workflow_dispatch'
     # `npm-publish` environment holds NPM_TOKEN and requires a maintainer
     # review before the job runs. Even if a malicious workflow change
     # reaches main, the publish step pauses until @nguyennhutien approves
@@ -81,7 +246,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: wasm32-unknown-unknown
 
@@ -105,6 +270,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Validate native package metadata
+        run: pnpm --filter @csszyx/core native:packages
+
+      - name: Download native package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: .
+          pattern: native-*
+          merge-multiple: true
+
+      - name: Validate native package binaries
+        run: pnpm --filter @csszyx/core native:packages -- --require-binaries
 
       # wasm-opt runs inside this step via packages/core/scripts/run-wasm-opt.mjs
       # so the OPTIMIZED pkg/ is what turbo captures in its cache.

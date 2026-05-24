@@ -67,14 +67,26 @@ pub mod token;
 /// High-performance sz prop transformation module.
 pub mod transformer;
 
+/// Native Rust transform contract.
+pub mod transform;
+
 /// Mangle map checksum module for SSR/CSR integrity.
 pub mod mangle;
+
+/// NAPI entrypoints for the Node-native transform package.
+#[cfg(feature = "native")]
+pub mod native;
 
 // Re-export main APIs
 pub use collision::{compute_dual_hash, CollisionDetector, WasmCollisionDetector};
 pub use encoder::encode;
 pub use mangle::{compute_checksum_internal, compute_mangle_checksum, verify_mangle_checksum};
 pub use token::{generate_token, verify_token, ComponentInfo};
+pub use transform::{
+    transform_batch, ClassAttributeIr, IrError, ParserPath, RecoveryMode, RecoveryToken, SourceIr,
+    StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan, TransformError,
+    TransformFile, TransformMetadata, TransformProducer, TransformResult,
+};
 pub use transformer::transform_sz;
 
 use wasm_bindgen::prelude::*;

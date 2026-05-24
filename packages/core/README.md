@@ -4,6 +4,9 @@
 
 Compiled to WebAssembly, this package provides the performance-critical operations for the CSSzyx ecosystem. It runs in Node.js, browsers, and edge environments.
 
+The future Node-native transform boundary is documented in
+[NATIVE-TRANSFORM.md](./NATIVE-TRANSFORM.md). Existing WASM exports stay stable.
+
 ## Installation
 
 ```bash

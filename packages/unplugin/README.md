@@ -66,7 +66,7 @@ module.exports = {
 
 ## Features
 
-- **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings. Defaults to **oxc-parser + magic-string** (surgical edits, preserves source formatting) since v0.8.0; falls back to Babel automatically on unexpected oxc failures.
+- **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings. Defaults to the **native Rust engine** through the optional `@csszyx/core-*` platform package; opt back into the previous oxc-parser JavaScript path with `build.parser: "oxc"`, or fall through to Babel with `build.parser: "babel"`.
 - **HTML injection** -- Injects mangle maps and checksums for SSR hydration
 - **HMR support** -- Updates styles instantly during development
 - **CSS mangling** -- Compresses class names (e.g., `text-center` -> `z`) in production builds
@@ -74,24 +74,33 @@ module.exports = {
 
 ## Parser selection
 
+The default parser is `rust`, which runs through the native engine in the
+matching optional `@csszyx/core-*` platform package. When that package is
+missing, csszyx fails loudly instead of silently falling back to another
+parser; reinstall to pick up the optional dependency for your platform, or
+opt into the JavaScript engine explicitly.
+
 Per project:
 
 ```ts
 csszyx({
-  build: { parser: "babel" }, // opt out of oxc default
+  build: { parser: "oxc" }, // JavaScript oxc parser, no native addon
 });
 ```
 
 Per build:
 
 ```bash
-CSSZYX_PARSER=babel pnpm build
+CSSZYX_PARSER=oxc pnpm build
 ```
 
-Either path routes prescan, transform, and HMR discovery through the
-legacy Babel implementation. Both paths produce identical class output;
-the only difference is whether magic-string preserves your original
-formatting (oxc) or Babel's code generator pretty-prints it.
+The default `rust` path uses the native engine and shares the same
+`className` output shape as the JavaScript parsers. `build.parser: "oxc"`
+uses the previous JavaScript oxc-parser path with surgical magic-string
+edits to preserve source formatting outside touched ranges.
+`build.parser: "babel"` routes prescan, transform, and HMR discovery
+through the legacy Babel implementation as a final compatibility escape
+hatch.
 
 ## License
 

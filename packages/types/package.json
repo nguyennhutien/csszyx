@@ -25,19 +25,23 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
     },
     "./config": {
       "types": "./dist/config.d.mts",
-      "import": "./dist/config.mjs"
+      "import": "./dist/config.mjs",
+      "require": "./dist/config.cjs"
     },
     "./runtime": {
       "types": "./dist/runtime.d.mts",
-      "import": "./dist/runtime.mjs"
+      "import": "./dist/runtime.mjs",
+      "require": "./dist/runtime.cjs"
     },
     "./compiler": {
       "types": "./dist/compiler.d.mts",
-      "import": "./dist/compiler.mjs"
+      "import": "./dist/compiler.mjs",
+      "require": "./dist/compiler.cjs"
     },
     "./jsx": {
       "types": "./dist/jsx.d.ts"

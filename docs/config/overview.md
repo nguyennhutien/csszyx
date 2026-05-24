@@ -141,7 +141,7 @@ interface BuildConfig {
   cacheDir?: string; // Cache directory
   astBudgetLimit?: number; // Max AST nodes per file before warning
   scanCss?: string | string[]; // CSS files/globs with @theme blocks
-  parser?: "oxc" | "babel"; // Source-transform parser (default: 'oxc' since v0.8.0)
+  parser?: "oxc" | "babel" | "rust"; // Source-transform parser (default: 'oxc' since v0.8.0)
 }
 ```
 
@@ -167,11 +167,14 @@ the whole file.
 - `'babel'` — explicit opt-out. Routes prescan, transform, and HMR
   discovery through the legacy Babel implementation. Use only if you
   hit a corner case oxc rejects that Babel accepted.
+- `'rust'` — opt into the native Rust engine. Requires the matching
+  optional `@csszyx/core-*` platform package; missing native packages
+  fail loudly instead of silently falling back to another parser.
 
-The `CSSZYX_PARSER=babel` environment variable overrides this setting
-per build (useful for CI debugging without editing project config).
-Both paths produce identical class output; differences are limited to
-formatting preserved or stripped around the edit sites.
+The `CSSZYX_PARSER=babel|oxc|rust` environment variable overrides this
+setting per build (useful for CI debugging without editing project
+config). Parser paths are expected to produce the same class output;
+formatting differences are limited to the ranges each parser rewrites.
 
 On unexpected oxc failures (parser error, unsupported AST pattern),
 the unplugin automatically falls back to Babel and logs

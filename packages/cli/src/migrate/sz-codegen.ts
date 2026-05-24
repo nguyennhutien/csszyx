@@ -121,7 +121,7 @@ function isGradientObj(v: unknown): v is { gradient: string } {
  */
 function formatKey(key: string): string {
     // Keys that are valid JS identifiers don't need quoting
-    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)) {
+    if (/^[a-z_$][\w$]*$/i.test(key)) {
         return key;
     }
     // Keys starting with @ or containing hyphens, dots, etc. need quotes

@@ -35,7 +35,7 @@ import {
     PropertyCategory,
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
-import type { TransformSourceCodeOptions } from './transform.js';
+import type { SourceTransformResult, TransformSourceCodeOptions } from './transform.js';
 import {
     transform as compileSzObject,
     getVariantPrefix,
@@ -45,31 +45,8 @@ import {
     type SzValue,
 } from './transform-core.js';
 
-/**
- * Result shape returned by both `transformSourceCode` (Babel) and the
- * future `transformOxc`. Kept in lock-step so the parity harness can
- * diff results without conditional logic.
- */
-export interface TransformOxcResult {
-    /** Rewritten source — equal to input when `transformed === false`. */
-    code: string;
-    /** True when at least one sz/szRecover/_sz mutation was applied. */
-    transformed: boolean;
-    /** Did the file pull in `_sz` runtime helper? */
-    usesRuntime: boolean;
-    /** Did the file pull in `_szMerge` runtime helper? */
-    usesMerge: boolean;
-    /** Did the file use color-var helpers? */
-    usesColorVar: boolean;
-    /** Class names emitted by the compiler — drives the mangle map. */
-    classes: Set<string>;
-    /** Hand-written `className="..."` strings — TW JIT safelist only. */
-    rawClassNames: Set<string>;
-    /** Dev-mode warnings emitted during transform. */
-    diagnostics: string[];
-    /** Recovery tokens emitted by szRecover attributes. */
-    recoveryTokens: Map<string, TokenData>;
-}
+/** Result shape returned by the oxc parser path. */
+export type TransformOxcResult = SourceTransformResult;
 
 /**
  * Thrown when a caller hits a code path the current slice does not yet

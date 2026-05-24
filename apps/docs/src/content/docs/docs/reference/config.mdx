@@ -3,7 +3,7 @@ title: Plugin Config
 description: Full reference for CSSzyx plugin configuration options.
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 CSSzyx is configured by passing options directly to the plugin. There is no
 standalone `csszyx.config.ts` file — all config lives in your bundler config.
@@ -31,6 +31,7 @@ standalone `csszyx.config.ts` file — all config lives in your bundler config.
           },
           build: {
             astBudgetLimit: 50_000, // optional, default 50k
+            cache: true,            // optional, enabled by default
           },
         }),
         tailwindcss(),
@@ -44,6 +45,7 @@ standalone `csszyx.config.ts` file — all config lives in your bundler config.
 CSSzyx transforms sz props to className strings first; then Tailwind
 scans them to generate CSS.
 :::
+
   </TabItem>
 
   <TabItem label="Next.js">
@@ -65,6 +67,7 @@ scans them to generate CSS.
 
     export default nextConfig;
     ```
+
   </TabItem>
 
   <TabItem label="Webpack">
@@ -80,16 +83,17 @@ scans them to generate CSS.
       ],
     };
     ```
+
   </TabItem>
 </Tabs>
 
 ## TypeScript Types
 
 ```ts
-import type { PartialCsszyxConfig } from '@csszyx/types';
+import type { PartialCsszyxConfig } from "@csszyx/types";
 
 const csszyxOptions: PartialCsszyxConfig = {
-  exclude: ['src/generated/**'],
+  exclude: ["src/generated/**"],
   development: { debug: true },
   production: { mangle: true },
 };
@@ -103,15 +107,15 @@ Controls development mode behavior.
 
 ```ts
 interface DevelopmentConfig {
-  strictMode: boolean;  // Treat warnings as errors
-  debug: boolean;       // Enable debug logging
+  strictMode: boolean; // Treat warnings as errors
+  debug: boolean; // Enable debug logging
 }
 ```
 
-| Option | Default | Description |
-|---|---|---|
+| Option       | Default | Description                               |
+| ------------ | ------- | ----------------------------------------- |
 | `strictMode` | `false` | Treat all CSSzyx warnings as build errors |
-| `debug` | `false` | Enable verbose debug logging |
+| `debug`      | `false` | Enable verbose debug logging              |
 
 For per-element hydration recovery, use the `szRecover` JSX attribute
 on individual elements rather than a global flag — see
@@ -123,21 +127,21 @@ Controls production build behavior.
 
 ```ts
 interface ProductionConfig {
-  mangle: boolean;          // Minify class names (z, y, x, ...)
-  contentHashing: boolean;  // Hash for immutable caching
-  injectChecksum: boolean;  // Add hydration checksum to HTML
+  mangle: boolean; // Minify class names (z, y, x, ...)
+  contentHashing: boolean; // Hash for immutable caching
+  injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
-  minify: boolean;          // Minify output
+  minify: boolean; // Minify output
 }
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `mangle` | `true` | Replace class names with short encoded symbols |
-| `contentHashing` | `true` | Hash CSS output for cache-busting |
-| `injectChecksum` | `true` | Embed SHA-256 checksum in HTML |
-| `incrementalBuild` | `true` | Cache build artifacts for faster rebuilds |
-| `minify` | `true` | Minify emitted CSS and JS |
+| Option             | Default | Description                                    |
+| ------------------ | ------- | ---------------------------------------------- |
+| `mangle`           | `true`  | Replace class names with short encoded symbols |
+| `contentHashing`   | `true`  | Hash CSS output for cache-busting              |
+| `injectChecksum`   | `true`  | Embed SHA-256 checksum in HTML                 |
+| `incrementalBuild` | `true`  | Cache build artifacts for faster rebuilds      |
+| `minify`           | `true`  | Minify emitted CSS and JS                      |
 
 ### `build`
 
@@ -145,23 +149,27 @@ Controls the build pipeline.
 
 ```ts
 interface BuildConfig {
-  buildId?: string;           // Build identifier (auto-generated if omitted)
-  tailwindConfig?: string;    // Path to Tailwind config file
-  outputDir?: string;         // Output directory
-  cacheDir?: string;          // Cache directory
-  astBudgetLimit?: number;    // Max AST nodes per file before throwing
+  buildId?: string; // Build identifier (auto-generated if omitted)
+  tailwindConfig?: string; // Path to Tailwind config file
+  outputDir?: string; // Output directory
+  cacheDir?: string; // Cache directory
+  cache?: boolean; // Enable per-file transform cache
+  astBudgetLimit?: number; // Max AST nodes per file before throwing
+  parser?: "babel" | "oxc" | "rust"; // Source parser for JSX/TSX sz transforms
   scanCss?: string | string[]; // CSS files with @theme blocks to auto-scan
 }
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `buildId` | Auto | Unique build identifier |
-| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path |
-| `outputDir` | `'.csszyx'` | Plugin output directory |
-| `cacheDir` | `'.csszyx/cache'` | Incremental build cache |
-| `astBudgetLimit` | `50000` | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`. |
-| `scanCss` | `undefined` | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported. |
+| Option           | Default                | Description                                                                                                                                                                                                                                               |
+| ---------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                                                                   |
+| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                                                               |
+| `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                                                                   |
+| `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                                                                   |
+| `cache`          | `true`                 | Enable the per-file transform cache. Set to `false` when debugging parser output or isolating cache-related issues.                                                                                                                                       |
+| `astBudgetLimit` | `50000`                | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`.                                        |
+| `parser`         | `'rust'`               | Source parser for JSX/TSX sz transforms. Default uses the native Rust engine through the matching optional `@csszyx/core-*` platform package; csszyx fails loudly when the package is missing. Set `'oxc'` to opt into the previous JavaScript oxc-parser path on unsupported platforms or for parser-edge-case triage; `'babel'` is the final compatibility escape hatch.                                       |
+| `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                                                      |
 
 ### File Filters
 
@@ -171,7 +179,7 @@ AST parsing, so large generated files can be skipped without hitting the AST bud
 
 ```ts
 csszyx({
-  exclude: ['src/generated/**', /icon-dump\.tsx$/],
+  exclude: ["src/generated/**", /icon-dump\.tsx$/],
 });
 ```
 
@@ -222,17 +230,17 @@ Controls SSR hydration verification.
 
 ```ts
 interface HydrationConfig {
-  strict: boolean;                        // Enable strict checks
-  defaultRecoveryMode?: 'csr' | 'dev-only'; // Default recovery mode
-  auditLog: boolean;                      // Log hydration events
+  strict: boolean; // Enable strict checks
+  defaultRecoveryMode?: "csr" | "dev-only"; // Default recovery mode
+  auditLog: boolean; // Log hydration events
 }
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `strict` | `true` | Abort on any mismatch (non-configurable in production) |
-| `defaultRecoveryMode` | `null` | No recovery by default |
-| `auditLog` | `true` | Log all hydration events |
+| Option                | Default | Description                                            |
+| --------------------- | ------- | ------------------------------------------------------ |
+| `strict`              | `true`  | Abort on any mismatch (non-configurable in production) |
+| `defaultRecoveryMode` | `null`  | No recovery by default                                 |
+| `auditLog`            | `true`  | Log all hydration events                               |
 
 ### `performance`
 
@@ -240,16 +248,16 @@ Controls performance optimizations.
 
 ```ts
 interface PerformanceConfig {
-  parallel: boolean;          // Parallel processing during build
-  workers?: number;           // Worker thread count (auto-detected)
+  parallel: boolean; // Parallel processing during build
+  workers?: number; // Worker thread count (auto-detected)
   optimizeVariables: boolean; // CSS variable optimization
-  zeroRuntime: boolean;       // Static optimization for zero-runtime cases
+  zeroRuntime: boolean; // Static optimization for zero-runtime cases
 }
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `parallel` | `true` | Process files in parallel using worker threads |
-| `workers` | Auto | Worker count (defaults to CPU cores) |
-| `optimizeVariables` | `true` | Deduplicate CSS custom properties |
-| `zeroRuntime` | `true` | Optimize static sz props to literal strings |
+| Option              | Default | Description                                    |
+| ------------------- | ------- | ---------------------------------------------- |
+| `parallel`          | `true`  | Process files in parallel using worker threads |
+| `workers`           | Auto    | Worker count (defaults to CPU cores)           |
+| `optimizeVariables` | `true`  | Deduplicate CSS custom properties              |
+| `zeroRuntime`       | `true`  | Optimize static sz props to literal strings    |

@@ -38,6 +38,30 @@ export interface TransformSourceCodeOptions {
 }
 
 /**
+ * Source transform result shared by the Babel and oxc parser paths.
+ */
+export interface SourceTransformResult {
+    /** Rewritten source code. */
+    code: string;
+    /** Whether csszyx changed the source. */
+    transformed: boolean;
+    /** Whether the source needs the _sz runtime helper. */
+    usesRuntime: boolean;
+    /** Whether the source needs the _szMerge runtime helper. */
+    usesMerge: boolean;
+    /** Whether the source needs the color-var runtime helper. */
+    usesColorVar: boolean;
+    /** Classes generated from sz syntax. */
+    classes: Set<string>;
+    /** Raw className/class strings collected for Tailwind discovery only. */
+    rawClassNames: Set<string>;
+    /** Compiler diagnostics to emit in development. */
+    diagnostics: string[];
+    /** Recovery tokens emitted by szRecover attributes. */
+    recoveryTokens: Map<string, TokenData>;
+}
+
+/**
  * Transforms all sz props in a source code string into Tailwind classNames.
  *
  * @param {string} source - The source code to transform
@@ -53,17 +77,7 @@ export function transformSourceCode(
     source: string,
     filename?: string,
     options?: TransformSourceCodeOptions,
-): {
-    code: string;
-    transformed: boolean;
-    usesRuntime: boolean;
-    usesMerge: boolean;
-    usesColorVar: boolean;
-    classes: Set<string>;
-    rawClassNames: Set<string>;
-    diagnostics: string[];
-    recoveryTokens: Map<string, TokenData>;
-} {
+): SourceTransformResult {
     const astBudget = options?.astBudget ?? AST_BUDGET;
     let usesRuntime = false;
     let usesMerge = false;

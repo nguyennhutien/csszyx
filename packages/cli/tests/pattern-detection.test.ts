@@ -679,7 +679,10 @@ describe('@sz-todo comment round-trip', () => {
 `.trimStart();
 
         // Strip the comment (as migrate.ts does on --resolve-todos pass)
-        const stripped = sourceWithComment.replace(/\{\/\*\s*@sz-todo:\s*(.*?)\s*\*\/\}\n?/g, '');
+        const stripped = sourceWithComment.replace(
+            /\{\/\*\s*@sz-todo:\s*(\S(?:.*\S)?)\s*\*\/\}\n?/g,
+            '',
+        );
         const customMap = { 'ds-card': { rounded: 'lg', shadow: 'sm' } };
         const result = transformSource(stripped, 'test.tsx', { customMap, injectTodos: true });
 

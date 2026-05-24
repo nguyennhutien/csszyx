@@ -1,0 +1,98 @@
+# Security scanning — runs on every PR and weekly on main.
+#
+# Three layers, zero cost for public repos:
+#
+# 1. CodeQL: semantic static analysis for JS/TS. Catches command injection,
+#    path traversal, XSS, prototype pollution, regex injection, and other
+#    data-flow vulnerabilities that pattern-match linters miss.
+#
+# 2. npm audit: checks JS dependency tree for known CVEs.
+#
+# 3. cargo audit: checks Rust dependency tree for known advisories.
+#
+# Findings appear as inline annotations on the PR diff (CodeQL) or as
+# job failures (audit commands). No AI, no tokens, no third-party accounts.
+
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Weekly Monday 06:00 UTC — catches new advisories on deps that
+    # haven't changed (no PR trigger for those).
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # Default query suite covers security + quality. For security-only
+          # (fewer findings, higher signal), use:
+          #   queries: security-extended
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # --audit-level high catches actionable advisories in our dep tree.
+      # --ignore-unfixable skips transitive advisories where the direct
+      # dependency hasn't released a patch yet (upstream outside our
+      # control). CI still fails on any high advisory we CAN fix.
+      - name: Audit JS dependencies
+        run: pnpm audit --audit-level high --ignore-unfixable
+
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.93.0
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: cargo audit

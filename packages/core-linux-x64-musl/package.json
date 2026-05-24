@@ -1,0 +1,20 @@
+{
+  "name": "@csszyx/core-linux-x64-musl",
+  "version": "0.8.0",
+  "description": "Linux x64 musl native binding for @csszyx/core",
+  "license": "MIT",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "musl"
+  ],
+  "type": "commonjs",
+  "main": "./csszyx-core.linux-x64-musl.node",
+  "files": [
+    "csszyx-core.linux-x64-musl.node"
+  ]
+}
