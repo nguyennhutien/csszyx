@@ -90,12 +90,12 @@ export function unescapeTailwindClass(escapedName: string): string {
             const char = escapedName[i];
 
             // Check for hex escape sequences (e.g., \31, \32 for digits)
-            if (/[0-9a-fA-F]/.test(char)) {
+            if (/[0-9a-f]/i.test(char)) {
                 // Collect up to 6 hex digits
                 let hexStr = '';
                 while (
                     i < escapedName.length &&
-                    /[0-9a-fA-F]/.test(escapedName[i]) &&
+                    /[0-9a-f]/i.test(escapedName[i]) &&
                     hexStr.length < 6
                 ) {
                     hexStr += escapedName[i];
@@ -145,14 +145,14 @@ export function escapeCSSClassName(className: string): string {
         // First character rules
         if (i === 0) {
             // If starts with digit, escape it
-            if (/[0-9]/.test(char)) {
+            if (/\d/.test(char)) {
                 result += `\\3${char} `;
                 continue;
             }
             // If starts with hyphen followed by digit or another hyphen
             if (char === '-' && i + 1 < className.length) {
                 const next = className[i + 1];
-                if (/[0-9]/.test(next) || next === '-') {
+                if (/\d/.test(next) || next === '-') {
                     result += '\\-';
                     continue;
                 }

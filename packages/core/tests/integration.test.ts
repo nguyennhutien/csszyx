@@ -122,7 +122,7 @@ describe('@csszyx/core Integration', () => {
             // Check first 1000 encodings
             for (let i = 0; i < 1000; i++) {
                 const encoded = encode(i);
-                expect(encoded[0]).toMatch(/[a-zA-Z]/);
+                expect(encoded[0]).toMatch(/[a-z]/i);
             }
         });
 

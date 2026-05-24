@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
  */
 function computeRange(line: string, cursor: number): [number, number] | null {
     let start = cursor - 1;
-    while (start >= 0 && /[a-zA-Z0-9_-]/.test(line[start] ?? '')) {
+    while (start >= 0 && /[\w-]/.test(line[start] ?? '')) {
         start--;
     }
     if (start < 0) {
@@ -31,7 +31,7 @@ function computeRange(line: string, cursor: number): [number, number] | null {
     }
 
     let end = cursor;
-    while (end < line.length && /[a-zA-Z0-9_-]/.test(line[end] ?? '')) {
+    while (end < line.length && /[\w-]/.test(line[end] ?? '')) {
         end++;
     }
     if (line[end] === opener) {

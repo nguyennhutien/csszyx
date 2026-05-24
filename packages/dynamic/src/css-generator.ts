@@ -612,7 +612,7 @@ const RADIUS_SIZES = new Set(['sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl']);
  */
 function escapeCSSSelector(cls: string): string {
     // Escape: : / [ ] . # @ ( ) % + ~ = | ^ $ * ,
-    return cls.replace(/[^a-zA-Z0-9\-_]/g, c => `\\${c}`);
+    return cls.replace(/[^\w-]/g, c => `\\${c}`);
 }
 
 // ── Variant parsing ───────────────────────────────────────────────────────────
