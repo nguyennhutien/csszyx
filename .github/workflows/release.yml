@@ -37,32 +37,12 @@ jobs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       recovered: ${{ steps.recovery.outputs.recovered }}
     steps:
-      # ── Phase A: split action into two commands so each phase runs
-      # independently. The combined mode (no `command:` input) has a
-      # well-known v4 bug in single-root manifest configs: when the
-      # post-merge tagging logic detects an `autorelease: pending`
-      # PR but cannot resolve the component name (`PR component:
-      # undefined does not match configured component: csszyx`), the
-      # entire run aborts before tagging — leaving manifest +
-      # CHANGELOG already updated but no tag / release / npm
-      # publish. Running `release-pr` and `github-release` as
-      # separate steps isolates the two responsibilities; the
-      # github-release step can still succeed when release-pr is a
-      # no-op, and vice versa.
-      - name: Release-please — open or update release PR
-        uses: googleapis/release-please-action@v5
-        id: release-pr
-        with:
-          command: release-pr
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Release-please — tag merged release PR + create GitHub release
+      # v5 removed the `command` input — the action runs both release-pr
+      # and github-release in a single invocation automatically.
+      - name: Release Please
         uses: googleapis/release-please-action@v5
         id: release
         with:
-          command: github-release
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -316,25 +296,12 @@ jobs:
       # automatically skipped. --no-git-checks bypasses pnpm's interactive
       # branch confirmation prompt.
       #
-      # --provenance binds each tarball to this commit + workflow run via an
-      # OIDC-signed attestation. npm shows a "Built and signed" badge on the
-      # package page and `npm audit signatures` can verify offline. Free
-      # supply-chain hardening — only requires id-token: write (set above).
-      # Native platform packages may not exist on the registry yet.
-      # First-time scoped package publish with --provenance can fail
-      # (E404) because npm needs the package to exist before it can
-      # attach OIDC attestations. Publish native packages first without
-      # provenance, then publish everything else with provenance.
-      - name: Publish native platform packages
-        run: |
-          for pkg in packages/core-*; do
-            [ -f "$pkg/package.json" ] || continue
-            (cd "$pkg" && npm publish --access public --no-git-checks 2>/dev/null || true)
-          done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to npm with provenance
-        run: pnpm -r publish --access public --no-git-checks --provenance
+      # --provenance is omitted for now: first-time publish of new scoped
+      # packages (the 8 native @csszyx/core-* platform packages) fails
+      # with E404 when OIDC attestation is requested for a package that
+      # does not yet exist on the registry. Re-enable --provenance after
+      # all packages have been published at least once.
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
