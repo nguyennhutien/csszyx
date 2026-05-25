@@ -43,6 +43,12 @@ describe('CSS variable system config contract', () => {
         expect(result.code).toContain('"--sz"');
         expect(result.code).toContain('"--sy"');
         expect(result.classes).toEqual(new Set(['p-(--sz)', 'md:gap-(--sy)']));
+        expect(result.cssVariableMap).toEqual(
+            new Map([
+                ['--_sz-p', '--sz'],
+                ['--_sz-md-gap', '--sy'],
+            ]),
+        );
     });
 
     it('hoists repeated component-tier variables to a bounded common ancestor', () => {
@@ -57,6 +63,7 @@ describe('CSS variable system config contract', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
         expect(result.code).not.toContain('"--sz"');
         expect(result.classes).toEqual(new Set(['p-(--cz)']));
+        expect(result.cssVariableMap).toEqual(new Map([['--_sz-p', '--cz']]));
     });
 
     it('does not hoist repeated vars across component boundaries', () => {
@@ -115,5 +122,10 @@ describe('CSS variable system config contract', () => {
         ).toThrow('mangleVars is not implemented by the native Rust engine yet');
     });
 
-    it.todo('keeps CSS variable names out of the checksum payload while mangleVars is disabled');
+    it('keeps CSS variable names out of metadata while mangleVars is disabled', () => {
+        const source = 'const App = ({ pad }) => <div sz={{ p: pad }} />;';
+        const result = transformOxc(source, 'mangle-vars-disabled-metadata.tsx');
+
+        expect(result.cssVariableMap).toEqual(new Map());
+    });
 });

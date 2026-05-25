@@ -124,6 +124,7 @@ describe('transform cache fallback safety', () => {
                 rawClassNames: new Set(),
                 diagnostics: [],
                 recoveryTokens: new Map(),
+                cssVariableMap: new Map(),
             },
         );
         const [prePlugin] = vitePlugin({ build: { parser: 'rust' } }) as TransformHook[];

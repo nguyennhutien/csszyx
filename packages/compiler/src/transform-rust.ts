@@ -146,5 +146,6 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
                 },
             ]),
         ),
+        cssVariableMap: new Map(),
     };
 }

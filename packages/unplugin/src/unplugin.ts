@@ -28,6 +28,7 @@ import { mangleCSSSync } from './css-mangler.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
     buildRecoveryManifest,
+    createHydrationMangleMap,
     transformIndexHtml as injectHydrationData,
     injectRecoveryManifest,
 } from './html-transformer.js';
@@ -62,6 +63,7 @@ import {
 interface PluginState {
     classes: Set<string>;
     mangleMap: Record<string, string>;
+    varMangleMap: Record<string, string>;
     checksum: string;
     finalized: boolean;
     rootDir: string;
@@ -82,6 +84,7 @@ interface PluginState {
  */
 const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
+const VAR_MANGLE_MAP_PLACEHOLDER = '___CSSZYX_VAR_MANGLE_MAP___';
 const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
@@ -114,6 +117,18 @@ const PLUGIN_VERSION = findPackageVersionFromFile(
 const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', UNKNOWN_PACKAGE_VERSION);
 const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
 const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
+
+/**
+ * Reads CSS variable mangle metadata from compiler results. Older compiled
+ * compiler artifacts and pre-v4 cache entries do not have this field, so the
+ * unplugin treats it as empty instead of failing during dev/test transitions.
+ *
+ * @param result Compiler transform result.
+ * @returns CSS variable mangle metadata.
+ */
+function cssVariableEntries(result: SourceTransformResult): Iterable<[string, string]> {
+    return result.cssVariableMap ?? [];
+}
 
 /**
  * Emits opt-in benchmark timing logs for local profiling harnesses.
@@ -574,6 +589,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const state: PluginState = {
         classes: new Set<string>(),
         mangleMap: {},
+        varMangleMap: {},
         checksum: '',
         finalized: false,
         rootDir: process.cwd(),
@@ -1008,7 +1024,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             newMap[sortedClasses[i]] = encode(i);
         }
         state.mangleMap = newMap;
-        state.checksum = compute_mangle_checksum(state.mangleMap);
+        state.checksum = compute_mangle_checksum(
+            createHydrationMangleMap(state.mangleMap, state.varMangleMap),
+        );
         state.finalized = true;
     }
 
@@ -1039,6 +1057,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
             result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
+        if (result.includes(VAR_MANGLE_MAP_PLACEHOLDER)) {
+            const jsonMap = JSON.stringify(state.varMangleMap);
+            const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
+            result = result.split(VAR_MANGLE_MAP_PLACEHOLDER).join(escapedMap);
+        }
         return result;
     }
 
@@ -1067,7 +1090,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             load(id) {
                 if (id === RESOLVED_VIRTUAL_MODULE_ID) {
                     finalizeMangleMap();
-                    return createMangleMapModule(state.mangleMap, state.checksum);
+                    return createMangleMapModule(
+                        state.mangleMap,
+                        state.checksum,
+                        state.varMangleMap,
+                    );
                 }
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
                     finalizeMangleMap();
@@ -1182,6 +1209,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         usesColorVar = result.usesColorVar;
                         transformed = result.transformed;
                         szClasses = result.classes;
+                        for (const [original, mangled] of cssVariableEntries(result)) {
+                            state.varMangleMap[original] = mangled;
+                        }
                         // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
                         // Suppressed in production to avoid leaking source paths into build output.
                         if (
@@ -1211,7 +1241,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     );
 
                     // Inject mangle map debug script with placeholders
-                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var r={};for(var k in m)r[m[k]]=k;window.__csszyx={mangleMap:m,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm)(vr[vm[vk]]||(vr[vm[vk]]=[])).push(vk);window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
                     if (transformedCode.includes('<body')) {
                         transformedCode = transformedCode.replace(
                             /(<body[^>]*>)/i,
@@ -1418,6 +1448,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     for (const cls of result.classes) {
                         state.classes.add(cls);
                     }
+                    for (const [original, mangled] of cssVariableEntries(result)) {
+                        state.varMangleMap[original] = mangled;
+                    }
                     for (const [token, data] of result.recoveryTokens) {
                         state.recoveryTokens.set(token, data);
                     }
@@ -1446,6 +1479,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             mode:
                                 options.production?.injectChecksum === false ? 'script' : 'script',
                             minify: process.env.NODE_ENV === 'production',
+                            varMangleMap: state.varMangleMap,
                         });
                         // Recovery manifest is a no-op when zero szRecover tokens were
                         // emitted across the build, so pages without recovery sites get
@@ -1519,6 +1553,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             buildId: string;
                             classes: string[];
                             mangleMap?: Record<string, string>;
+                            varMangleMap?: Record<string, string>;
                         } = {
                             version: '0.4.0',
                             buildId: state.checksum,
@@ -1530,6 +1565,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             Object.keys(state.mangleMap).length > 0
                         ) {
                             manifestData.mangleMap = state.mangleMap;
+                        }
+                        if (Object.keys(state.varMangleMap).length > 0) {
+                            manifestData.varMangleMap = state.varMangleMap;
                         }
                         compilation.emitAsset(
                             'csszyx-manifest.json',
@@ -1654,6 +1692,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     buildId: string;
                     classes: string[];
                     mangleMap?: Record<string, string>;
+                    varMangleMap?: Record<string, string>;
                 } = {
                     version: '0.4.0',
                     buildId: state.checksum,
@@ -1661,6 +1700,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 };
                 if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
                     manifestData.mangleMap = state.mangleMap;
+                }
+                if (Object.keys(state.varMangleMap).length > 0) {
+                    manifestData.varMangleMap = state.varMangleMap;
                 }
                 this.emitFile({
                     type: 'asset',

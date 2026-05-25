@@ -68,6 +68,8 @@ export interface SourceTransformResult {
     diagnostics: string[];
     /** Recovery tokens emitted by szRecover attributes. */
     recoveryTokens: Map<string, TokenData>;
+    /** CSS custom property original-to-mangled names emitted by mangleVars. */
+    cssVariableMap: Map<string, string>;
 }
 
 /**
@@ -101,6 +103,7 @@ export function transformSourceCode(
     // by token (12-char hex hash); the unplugin aggregates these across all
     // files and serializes the result into the manifest script tag.
     const recoveryTokens = new Map<string, TokenData>();
+    const cssVariableMap = new Map<string, string>();
 
     // Fast path: check if file contains 'sz' before parsing
     if (!source.includes('sz')) {
@@ -114,6 +117,7 @@ export function transformSourceCode(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     }
 
@@ -990,6 +994,7 @@ export function transformSourceCode(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     } catch (e) {
         // Budget violations must propagate so the build aborts loudly with
@@ -1009,6 +1014,7 @@ export function transformSourceCode(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     }
 }

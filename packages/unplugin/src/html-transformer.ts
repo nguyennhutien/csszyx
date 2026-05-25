@@ -43,6 +43,12 @@ export interface HtmlInjectionOptions {
      * @default true in production
      */
     minify?: boolean;
+
+    /**
+     * CSS custom property mangle map. Empty by default; when present, the
+     * hydration checksum script includes both class and variable namespaces.
+     */
+    varMangleMap?: Record<string, string>;
 }
 
 /**
@@ -104,14 +110,17 @@ export function injectMangleMapScript(
     mangleMap: Record<string, string>,
     options: HtmlInjectionOptions = {},
 ): string {
-    const { prettyPrint = false } = options;
+    const { prettyPrint = false, varMangleMap = {} } = options;
+    const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
 
     const jsonContent = prettyPrint
-        ? JSON.stringify(mangleMap, null, 2)
-        : JSON.stringify(mangleMap);
+        ? JSON.stringify(checksumMap, null, 2)
+        : JSON.stringify(checksumMap);
+    const classMapContent = JSON.stringify(mangleMap);
+    const varMapContent = JSON.stringify(varMangleMap);
 
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
-    const debugScript = `<script>(function(){var m=${jsonContent};var r={};for(var k in m)r[m[k]]=k;var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
+    const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm)(vr[vm[vk]]||(vr[vm[vk]]=[])).push(vk);var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
 
     // Inject before </head> or before </html> if no head
     const combined = `${scriptTag}\n${debugScript}`;
@@ -131,6 +140,7 @@ export function injectMangleMapScript(
  * @param {string} html - HTML content
  * @param {Record<string, string>} mangleMap - Mangle map
  * @param {boolean} minify - Use short attribute names
+ * @param varMangleMap CSS variable mangle map.
  * @returns {string} Modified HTML
  *
  * @example
@@ -145,9 +155,10 @@ export function injectMangleMapAttribute(
     html: string,
     mangleMap: Record<string, string>,
     minify = false,
+    varMangleMap: Record<string, string> = {},
 ): string {
     const attrName = minify ? 'data-sz-m' : 'data-sz-map';
-    const jsonContent = JSON.stringify(mangleMap);
+    const jsonContent = JSON.stringify(createHydrationMangleMap(mangleMap, varMangleMap));
 
     const htmlTagPattern = /<html([^>]*)>/i;
     const match = html.match(htmlTagPattern);
@@ -194,11 +205,11 @@ export function injectHydrationData(
 
     // Inject mangle map based on mode
     if (mode === 'inline') {
-        result = injectMangleMapAttribute(result, mangleMap, minify);
+        result = injectMangleMapAttribute(result, mangleMap, minify, options.varMangleMap);
     } else if (mode === 'script') {
         result = injectMangleMapScript(result, mangleMap, options);
     } else if (mode === 'both') {
-        result = injectMangleMapAttribute(result, mangleMap, minify);
+        result = injectMangleMapAttribute(result, mangleMap, minify, options.varMangleMap);
         result = injectMangleMapScript(result, mangleMap, options);
     }
 
@@ -221,6 +232,34 @@ export function transformIndexHtml(
     options: HtmlInjectionOptions = {},
 ): string {
     return injectHydrationData(html, mangleMap, checksum, options);
+}
+
+/**
+ * Creates the map payload used by hydration checksum verification.
+ *
+ * Class-only builds return the historical class map unchanged. Builds with
+ * variable mangling prefix both namespaces so class names and CSS custom
+ * property names cannot collide inside the checksum input.
+ *
+ * @param classMap Original class name to mangled class token.
+ * @param varMap Original CSS custom property to mangled property name.
+ * @returns Mangle map payload for script/attribute injection.
+ */
+export function createHydrationMangleMap(
+    classMap: Record<string, string>,
+    varMap: Record<string, string> = {},
+): Record<string, string> {
+    if (Object.keys(varMap).length === 0) {
+        return classMap;
+    }
+    const payload: Record<string, string> = {};
+    for (const [key, value] of Object.entries(classMap)) {
+        payload[`class:${key}`] = value;
+    }
+    for (const [key, value] of Object.entries(varMap)) {
+        payload[`var:${key}`] = value;
+    }
+    return payload;
 }
 
 /**

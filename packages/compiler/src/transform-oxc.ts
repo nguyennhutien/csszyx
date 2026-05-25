@@ -88,6 +88,7 @@ export function transformOxc(
     const rawClassNames = new Set<string>();
     const diagnostics: string[] = [];
     const recoveryTokens = new Map<string, TokenData>();
+    const cssVariableMap = new Map<string, string>();
 
     if (!source.includes('sz')) {
         return {
@@ -100,6 +101,7 @@ export function transformOxc(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     }
 
@@ -415,6 +417,7 @@ export function transformOxc(
                         source,
                         options,
                         componentHoists?.usageNamesByElement.get(elementId),
+                        cssVariableMap,
                     );
                     if (partial && szAttrs.length === 1) {
                         const mergedStyleProps =
@@ -579,6 +582,7 @@ export function transformOxc(
         rawClassNames,
         diagnostics,
         recoveryTokens,
+        cssVariableMap,
     };
 }
 
@@ -1214,6 +1218,7 @@ function compileConditionalSpreadBranch(
  * @param source Original source for preserving runtime expressions.
  * @param options Transform options controlling opt-in CSS variable behavior.
  * @param hoistedNames Dynamic prop keys that should use component-tier hoisted vars.
+ * @param cssVariableMap Original-to-mangled CSS variable map to populate.
  * @returns Transform fragments, or null when the object needs runtime fallback.
  */
 function buildPartialObjectTransform(
@@ -1223,6 +1228,7 @@ function buildPartialObjectTransform(
     source: string,
     options?: TransformSourceCodeOptions,
     hoistedNames?: ReadonlyMap<string, string>,
+    cssVariableMap?: Map<string, string>,
 ): OxcPartialTransform | null {
     const partial = evaluatePartialObject(node, filename, bindings, source);
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
@@ -1246,8 +1252,8 @@ function buildPartialObjectTransform(
     }
 
     if (options?.mangleVars) {
-        applyHoistedVariableNames(partial, hoistedNames);
-        applyScopedVariablePlan(partial, hoistedNames);
+        applyHoistedVariableNames(partial, hoistedNames, cssVariableMap);
+        applyScopedVariablePlan(partial, hoistedNames, cssVariableMap);
     }
 
     for (const [, info] of partial.dynamicProps) {
@@ -1276,10 +1282,12 @@ function buildPartialObjectTransform(
  *
  * @param partial Partially evaluated sz object result for one JSX element.
  * @param hoistedNames Dynamic prop key to hoisted CSS var name.
+ * @param cssVariableMap Original-to-mangled CSS variable map to populate.
  */
 function applyHoistedVariableNames(
     partial: OxcPartialObjectResult,
     hoistedNames?: ReadonlyMap<string, string>,
+    cssVariableMap?: Map<string, string>,
 ): void {
     if (!hoistedNames) {
         return;
@@ -1287,6 +1295,7 @@ function applyHoistedVariableNames(
     for (const [id, name] of hoistedNames) {
         const info = partial.dynamicProps.get(id);
         if (info) {
+            cssVariableMap?.set(info.varName, name);
             info.varName = name;
         }
     }
@@ -1300,10 +1309,12 @@ function applyHoistedVariableNames(
  *
  * @param partial Partially evaluated sz object result for one JSX element.
  * @param hoistedNames Dynamic prop keys already assigned to component-tier hoisted vars.
+ * @param cssVariableMap Original-to-mangled CSS variable map to populate.
  */
 function applyScopedVariablePlan(
     partial: OxcPartialObjectResult,
     hoistedNames?: ReadonlyMap<string, string>,
+    cssVariableMap?: Map<string, string>,
 ): void {
     const entries = [...partial.dynamicProps.entries()].filter(([id]) => !hoistedNames?.has(id));
     const plan = planCSSVariableNames(
@@ -1318,6 +1329,7 @@ function applyScopedVariablePlan(
     for (const planned of plan) {
         const info = partial.dynamicProps.get(planned.id);
         if (info) {
+            cssVariableMap?.set(info.varName, planned.name);
             info.varName = planned.name;
         }
     }

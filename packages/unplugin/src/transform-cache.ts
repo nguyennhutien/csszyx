@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import type { SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 3;
+const CACHE_SCHEMA_VERSION = 4;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -23,6 +23,7 @@ interface SerializedTransformResult {
     rawClassNames: string[];
     diagnostics: string[];
     recoveryTokens: Array<[string, TokenData]>;
+    cssVariableMap: Array<[string, string]>;
 }
 
 /** On-disk transform cache entry schema. */
@@ -287,6 +288,7 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         rawClassNames: [...result.rawClassNames],
         diagnostics: [...result.diagnostics],
         recoveryTokens: [...result.recoveryTokens],
+        cssVariableMap: [...(result.cssVariableMap ?? new Map())],
     };
 }
 
@@ -307,6 +309,7 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         rawClassNames: new Set(result.rawClassNames),
         diagnostics: [...result.diagnostics],
         recoveryTokens: new Map(result.recoveryTokens),
+        cssVariableMap: new Map(result.cssVariableMap ?? []),
     };
 }
 

@@ -32,6 +32,7 @@ export const RESOLVED_VIRTUAL_CHECKSUM_ID: string = `\0${VIRTUAL_CHECKSUM_ID}`;
  *
  * @param {Record<string, string>} mangleMap - The mangle map (original -> mangled)
  * @param {string} checksum - SHA-256 checksum of the mangle map
+ * @param {Record<string, string>} varMangleMap - CSS variable mangle map
  * @returns {string} Module source code
  *
  * @example
@@ -45,21 +46,28 @@ export const RESOLVED_VIRTUAL_CHECKSUM_ID: string = `\0${VIRTUAL_CHECKSUM_ID}`;
  * // export const checksum = "a1b2c3d4e5f67890";
  * ```
  */
-export function createMangleMapModule(mangleMap: Record<string, string>, checksum: string): string {
+export function createMangleMapModule(
+    mangleMap: Record<string, string>,
+    checksum: string,
+    varMangleMap: Record<string, string> = {},
+): string {
     return `/**
  * Auto-generated mangle map for csszyx.
  * This module is generated at build time and contains the mapping
- * from original class names to mangled class names.
+ * from original class/CSS variable names to mangled names.
  *
  * @generated
  */
 
 export const mangleMap = ${JSON.stringify(mangleMap, null, 2)};
 
+export const varMangleMap = ${JSON.stringify(varMangleMap, null, 2)};
+
 export const checksum = ${JSON.stringify(checksum)};
 
 export default {
   mangleMap,
+  varMangleMap,
   checksum,
 };
 `;

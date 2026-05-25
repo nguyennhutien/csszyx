@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    createHydrationMangleMap,
     injectChecksum,
     injectHydrationData,
     injectMangleMapAttribute,
@@ -11,6 +12,7 @@ import {
 describe('html-transformer', () => {
     const sampleHtml = '<html lang="en"><head></head><body></body></html>';
     const sampleMap = { 'p-4': 'z', 'bg-red-500': 'y', 'text-white': 'x' };
+    const sampleVarMap = { '--_sz-p': '--sz', '--_sz-m': '--sz' };
     const sampleChecksum = 'a1b2c3d4e5f67890';
 
     describe('injectChecksum', () => {
@@ -77,6 +79,19 @@ describe('html-transformer', () => {
             const result = injectMangleMapScript(sampleHtml, {});
             expect(result).toContain('>{}</script>');
         });
+
+        it('should include CSS variable map in checksum payload and debug helpers', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                varMangleMap: sampleVarMap,
+            });
+
+            expect(result).toContain(
+                JSON.stringify(createHydrationMangleMap(sampleMap, sampleVarMap)),
+            );
+            expect(result).toContain(`var vm=${JSON.stringify(sampleVarMap)}`);
+            expect(result).toContain('decodeVar:function');
+            expect(result).toContain('encodeVar:function');
+        });
     });
 
     describe('injectMangleMapAttribute', () => {
@@ -96,6 +111,13 @@ describe('html-transformer', () => {
             const noHtml = '<div>content</div>';
             const result = injectMangleMapAttribute(noHtml, sampleMap);
             expect(result).toBe(noHtml);
+        });
+
+        it('should include CSS variable map in inline checksum payload', () => {
+            const result = injectMangleMapAttribute(sampleHtml, sampleMap, false, sampleVarMap);
+            expect(result).toContain(
+                JSON.stringify(createHydrationMangleMap(sampleMap, sampleVarMap)),
+            );
         });
     });
 
@@ -146,6 +168,22 @@ describe('html-transformer', () => {
             const result = transformIndexHtml(sampleHtml, sampleMap, sampleChecksum, opts);
             const expected = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, opts);
             expect(result).toBe(expected);
+        });
+    });
+
+    describe('createHydrationMangleMap', () => {
+        it('preserves the historical class map when no var map exists', () => {
+            expect(createHydrationMangleMap(sampleMap)).toBe(sampleMap);
+        });
+
+        it('prefixes class and var namespaces when var map exists', () => {
+            expect(createHydrationMangleMap(sampleMap, sampleVarMap)).toEqual({
+                'class:p-4': 'z',
+                'class:bg-red-500': 'y',
+                'class:text-white': 'x',
+                'var:--_sz-p': '--sz',
+                'var:--_sz-m': '--sz',
+            });
         });
     });
 });

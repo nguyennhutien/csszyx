@@ -75,6 +75,7 @@ describe('transform cache', () => {
                     },
                 ],
             ]),
+            cssVariableMap: new Map([['--_sz-p', '--sz']]),
         };
     }
 
@@ -96,6 +97,7 @@ describe('transform cache', () => {
         expect(cached?.rawClassNames).toEqual(new Set(['custom']));
         expect(cached?.diagnostics).toEqual(['diagnostic']);
         expect(cached?.recoveryTokens.get('abc123')?.mode).toBe('csr');
+        expect(cached?.cssVariableMap.get('--_sz-p')).toBe('--sz');
     });
 
     it('misses when source, version, parser, producer, budget, mangleVars, or filename changes', () => {
@@ -126,7 +128,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":3');
+        expect(content).toContain('"version":4');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
