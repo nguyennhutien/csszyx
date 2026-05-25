@@ -25,6 +25,9 @@ if [ -n "$upstream" ]; then
         [ -f "$f" ] || continue
         all_changed+=("$f")
         case "$f" in
+            # Build scripts and config — not application source
+            */scripts/*.mjs|*/scripts/*.ts|build.rs|*/build.rs) ;;
+            # Application source that affects build output
             *.ts|*.tsx|*.js|*.jsx|*.cjs|*.mjs|*.rs)
                 source_files+=("$f")
                 ;;&
