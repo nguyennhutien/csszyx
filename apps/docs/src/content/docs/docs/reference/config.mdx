@@ -128,6 +128,7 @@ Controls production build behavior.
 ```ts
 interface ProductionConfig {
   mangle: boolean; // Minify class names (z, y, x, ...)
+  mangleVars: boolean; // Opt into CSS custom property name mangling and hoisting
   contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
@@ -138,6 +139,7 @@ interface ProductionConfig {
 | Option             | Default | Description                                    |
 | ------------------ | ------- | ---------------------------------------------- |
 | `mangle`           | `true`  | Replace class names with short encoded symbols |
+| `mangleVars`       | `false` | Opt into CSS custom property name mangling and hoisting. Disabled builds keep existing `--_sz-*` output. |
 | `contentHashing`   | `true`  | Hash CSS output for cache-busting              |
 | `injectChecksum`   | `true`  | Embed SHA-256 checksum in HTML                 |
 | `incrementalBuild` | `true`  | Cache build artifacts for faster rebuilds      |

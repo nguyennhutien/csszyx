@@ -38,6 +38,17 @@ export interface ProductionConfig {
     mangle: boolean;
 
     /**
+     * Enable CSS custom property name mangling and hoisting.
+     *
+     * This is an opt-in feature gate for the tiered CSS variable system.
+     * When disabled, dynamic `sz` values keep the existing `--_sz-*`
+     * variable names and no variable hoisting is applied.
+     *
+     * @default false
+     */
+    mangleVars: boolean;
+
+    /**
      * Enable content hashing for immutable caching.
      *
      * @default true
@@ -278,6 +289,7 @@ export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
  */
 export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: true,
+    mangleVars: false,
     contentHashing: true,
     injectChecksum: true,
     incrementalBuild: true,
