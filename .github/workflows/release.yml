@@ -320,6 +320,20 @@ jobs:
       # OIDC-signed attestation. npm shows a "Built and signed" badge on the
       # package page and `npm audit signatures` can verify offline. Free
       # supply-chain hardening — only requires id-token: write (set above).
+      # Native platform packages may not exist on the registry yet.
+      # First-time scoped package publish with --provenance can fail
+      # (E404) because npm needs the package to exist before it can
+      # attach OIDC attestations. Publish native packages first without
+      # provenance, then publish everything else with provenance.
+      - name: Publish native platform packages
+        run: |
+          for pkg in packages/core-*; do
+            [ -f "$pkg/package.json" ] || continue
+            (cd "$pkg" && npm publish --access public --no-git-checks 2>/dev/null || true)
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish to npm with provenance
         run: pnpm -r publish --access public --no-git-checks --provenance
         env:
