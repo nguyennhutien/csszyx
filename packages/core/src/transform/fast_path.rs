@@ -126,6 +126,8 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         });
         ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span,
+            parent_element_index: None,
+            can_host_style: true,
             sz_attribute_indices: vec![attribute_index],
             class_attribute_index: None,
             style_attribute_index: None,

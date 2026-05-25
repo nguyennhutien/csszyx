@@ -96,6 +96,10 @@ impl SourceIr {
 pub struct JsxOpeningElementIr {
     /// Full opening-element span.
     pub opening_span: TextSpan,
+    /// Parent JSX node index in [`SourceIr::jsx_opening_elements`].
+    pub parent_element_index: Option<usize>,
+    /// Whether this JSX node can receive hoisted style props.
+    pub can_host_style: bool,
     /// Static `sz` attribute indices in [`SourceIr::sz_attributes`].
     pub sz_attribute_indices: Vec<usize>,
     /// Class/className attribute index in [`SourceIr::class_attributes`].
@@ -376,6 +380,8 @@ mod tests {
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: vec![JsxOpeningElementIr {
                 opening_span: TextSpan::new(1, 73).expect("valid span"),
+                parent_element_index: None,
+                can_host_style: true,
                 sz_attribute_indices: vec![0],
                 class_attribute_index: Some(0),
                 style_attribute_index: None,

@@ -301,6 +301,8 @@ mod tests {
                 start,
                 end: start + 10,
             },
+            parent_element_index: None,
+            can_host_style: true,
             sz_attribute_indices,
             class_attribute_index: None,
             style_attribute_index: None,
