@@ -53,3 +53,34 @@ If you prefer to migrate manually or have complex dynamic classes, use the recom
 - **Modifiers**: `hover:` -> `hover: { ... }`, `md:` -> `md: { ... }`
 
 > **Note**: Always verify the changes after running the CLI, especially for complex string template literals.
+
+## Upgrading to v0.9.0
+
+v0.9.0 changes the default `build.parser` from `"oxc"` to `"rust"`.
+The native Rust engine is faster but requires platform-specific binaries
+(`@csszyx/core-*` packages, declared as `optionalDependencies`).
+
+### If your platform is supported
+
+No action needed — `pnpm install` / `npm install` installs the native
+binary automatically. Supported platforms: linux-x64-gnu, linux-x64-musl,
+linux-arm64-gnu, linux-arm64-musl, darwin-x64, darwin-arm64,
+win32-x64-msvc, win32-arm64-msvc.
+
+### If your platform is not supported
+
+The build will fail with `CsszyxNativeUnavailableError` showing the
+expected package name. Fall back to the JavaScript parser:
+
+```ts
+// vite.config.ts / next.config.js
+csszyx({
+  build: { parser: "oxc" },
+});
+```
+
+Or set the environment variable for a single build:
+
+```bash
+CSSZYX_PARSER=oxc pnpm build
+```

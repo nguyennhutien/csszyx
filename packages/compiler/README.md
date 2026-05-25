@@ -95,20 +95,24 @@ runtime consumers like `@csszyx/dynamic`.
 
 Babel-based source transform. Parses TSX/JSX, walks the AST, rewrites
 `sz`/`szRecover`/`_sz` constructs, emits the new source via Babel's
-code generator. Source of truth before v0.8.0; retained as the fallback
-path in v0.8.0+.
+code generator. Retained as the final compatibility fallback.
 
 #### `transformOxc(source: string, filename?: string, options?: TransformSourceCodeOptions): TransformOxcResult` _(since v0.8.0)_
 
 oxc-parser + magic-string source transform. Same return shape as
 `transformSourceCode` so consumers (and the parity harness) can diff
-both implementations cleanly. Throws `OxcNotImplementedError` only for
-patterns that fall outside the curated Phase D coverage; the unplugin
-catches that error and routes to `transformSourceCode` as the fallback.
+both implementations cleanly. JavaScript fallback when the native Rust
+engine is unavailable (e.g. unsupported platform). Set
+`build.parser: 'oxc'` to use this path.
 
-Surgical edits preserve every byte the user wrote outside the touched
-`sz`/`szRecover` ranges — Babel's pretty-printer would have collapsed
-or expanded surrounding whitespace.
+#### `transformRust(source: string, filename?: string, options?: TransformSourceCodeOptions): TransformRustResult` _(default since v0.9.0)_
+
+Native Rust engine via napi-rs. Fastest parser path. Requires the
+matching optional `@csszyx/core-*` platform package. Missing native
+packages surface `CsszyxNativeUnavailableError`.
+
+All three transform paths preserve every byte the user wrote outside the
+touched `sz`/`szRecover` ranges.
 
 #### `isValidSzProp(szProp: unknown): boolean`
 

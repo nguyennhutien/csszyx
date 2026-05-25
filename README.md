@@ -152,11 +152,11 @@ window.__csszyx.checksum; // SHA-256 hex
 
 ## Project Status
 
-- **Version:** 0.8.0 (pre-release)
-- **Tests:** 2444 unit (vitest) + 34 E2E (Playwright) across 14 workspace packages
+- **Version:** 0.9.0 (pre-release)
+- **Tests:** 2479 unit (vitest) + 34 E2E (Playwright) across 14 workspace packages
 - **Tailwind:** v4 only (v3 planned)
 - **Release cadence:** automated via [release-please](https://github.com/googleapis/release-please-action); see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
-- **Build pipeline:** source transform uses `oxc-parser` + `magic-string` for surgical edits that preserve developer formatting (default since v0.8.0). Babel remains as an automatic fallback for unexpected oxc failures; opt out per project with `build.parser: 'babel'` or per build with `CSSZYX_PARSER=babel`. The native Rust engine is available through `build.parser: 'rust'` when the matching optional `@csszyx/core-*` package is installed.
+- **Build pipeline:** source transform uses the native Rust engine (`@csszyx/core-*` napi-rs addon) by default since v0.9.0. The JavaScript `oxc-parser` path is available via `build.parser: 'oxc'` or `CSSZYX_PARSER=oxc` for platforms without native binaries. Babel remains as a final compatibility escape hatch via `build.parser: 'babel'`.
 
 ## Contributing
 

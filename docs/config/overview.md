@@ -141,7 +141,7 @@ interface BuildConfig {
   cacheDir?: string; // Cache directory
   astBudgetLimit?: number; // Max AST nodes per file before warning
   scanCss?: string | string[]; // CSS files/globs with @theme blocks
-  parser?: "oxc" | "babel" | "rust"; // Source-transform parser (default: 'oxc' since v0.8.0)
+  parser?: "rust" | "oxc" | "babel"; // Source-transform parser (default: 'rust' since v0.9.0)
 }
 ```
 
@@ -152,34 +152,33 @@ interface BuildConfig {
 - `outputDir`: `'.csszyx'`
 - `cacheDir`: `'.csszyx/cache'`
 - `astBudgetLimit`: `50000`
-- `parser`: `'oxc'` (since v0.8.0; was `'babel'` before)
+- `parser`: `'rust'` (since v0.9.0; was `'oxc'` before)
 
 #### `parser` — source-transform engine
 
-Since v0.8.0, csszyx parses your source with `oxc-parser` and rewrites
-matched `sz` attributes via `magic-string`. This preserves the
-developer's exact formatting (whitespace, parens, indentation) outside
-the touched ranges — Babel's code generator would have pretty-printed
-the whole file.
+Since v0.9.0, csszyx uses the native Rust engine by default. The engine
+parses your source, extracts `sz` attributes, and rewrites them via
+surgical `magic-string` edits that preserve the developer's exact
+formatting outside the touched ranges.
 
-- `'oxc'` (default) — recommended for all projects. Faster, surgical
-  source preservation, byte-for-byte recovery-token compatibility.
-- `'babel'` — explicit opt-out. Routes prescan, transform, and HMR
-  discovery through the legacy Babel implementation. Use only if you
-  hit a corner case oxc rejects that Babel accepted.
-- `'rust'` — opt into the native Rust engine. Requires the matching
-  optional `@csszyx/core-*` platform package; missing native packages
-  fail loudly instead of silently falling back to another parser.
+- `'rust'` (default) — native napi-rs addon. Fastest parser path (6-8x
+  faster than oxc in microbenchmarks). Requires the matching optional
+  `@csszyx/core-*` platform package (declared as `optionalDependencies`,
+  installed automatically on supported platforms). Missing native
+  packages surface `CsszyxNativeUnavailableError` with the expected
+  package name and fallback guidance.
+- `'oxc'` — JavaScript fallback. Uses `oxc-parser` + `magic-string`
+  for the same surgical rewrite approach. No native addon required.
+  Use on platforms without native binaries or when debugging parser
+  differences.
+- `'babel'` — final compatibility escape hatch. Routes prescan,
+  transform, and HMR discovery through the legacy Babel implementation.
+  Use only if you hit a corner case the other parsers reject.
 
-The `CSSZYX_PARSER=babel|oxc|rust` environment variable overrides this
+The `CSSZYX_PARSER=rust|oxc|babel` environment variable overrides this
 setting per build (useful for CI debugging without editing project
 config). Parser paths are expected to produce the same class output;
 formatting differences are limited to the ranges each parser rewrites.
-
-On unexpected oxc failures (parser error, unsupported AST pattern),
-the unplugin automatically falls back to Babel and logs
-`[csszyx] oxc parser fell back to Babel for <file>: <reason>`. Grep
-your CI logs for that line after upgrading to surface coverage gaps.
 
 ### File Filters
 
