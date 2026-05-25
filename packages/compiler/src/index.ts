@@ -50,6 +50,7 @@ export {
     type SourceTransformResult,
     type SzObject,
     type SzValue,
+    type TransformSourceCodeOptions,
     transform,
     transformSourceCode,
 } from './transform.js';

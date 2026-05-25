@@ -93,6 +93,24 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('className="p-4"');
     });
 
+    it('passes production.mangleVars into the oxc compiler path', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: { mangleVars: true },
+        }) as TransformHook[];
+        const result = prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;',
+            '/repo/src/App.tsx',
+        ) as { code: string };
+
+        expect(result.code).toContain(
+            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(result.code).toContain('<div className="p-(--cz)" />');
+        expect(result.code).toContain('<span className="p-(--cz)" />');
+    });
+
     it('lets build.parser opt into the Rust engine explicitly', () => {
         if (!nativeRustAvailable) {
             // No host addon present — assert the explicit unavailable-error

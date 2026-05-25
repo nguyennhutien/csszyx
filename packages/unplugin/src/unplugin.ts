@@ -8,6 +8,7 @@ import {
     ensureRustTransformAvailable,
     type SourceTransformResult,
     type TokenData,
+    type TransformSourceCodeOptions,
     transform,
     transformOxc,
     transformRust,
@@ -657,7 +658,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Compiler transform result.
      */
     function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
-        const compilerOptions = { astBudget: astBudgetOverride };
+        const compilerOptions: TransformSourceCodeOptions = {
+            astBudget: astBudgetOverride,
+            mangleVars: options.production?.mangleVars === true,
+        };
         const effectiveFilename = normalizeSourceFilename(filename);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -671,6 +675,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             parserMode,
             producer: parserMode,
             astBudget: astBudgetOverride,
+            mangleVars: compilerOptions.mangleVars,
             filename: effectiveFilename,
             source,
         };
