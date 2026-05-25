@@ -96,4 +96,7 @@ pre-push:
   parallel: false
   commands:
     verify-pre-push:
-      run: pnpm verify:pre-push
+      # exec replaces the shell process so Ctrl-C (SIGINT) goes directly
+      # to pnpm → bash → child processes instead of being caught by
+      # lefthook's spinner.
+      run: exec pnpm verify:pre-push
