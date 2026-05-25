@@ -10,19 +10,6 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-# ── Skip for non-code branches/remotes ───────────────────────────────
-# Pre-push hook receives "local_ref local_sha remote_ref remote_sha"
-# lines on stdin. If all refs being pushed are non-code branches
-# (internal/docs), skip verification entirely.
-push_refs=""
-while read -r local_ref _local_sha _remote_ref _remote_sha; do
-    push_refs="${push_refs}${local_ref}"$'\n'
-done
-if [ -n "$push_refs" ] && ! printf '%s' "$push_refs" | grep -qvE '^refs/heads/internal/'; then
-    echo "[pre-push] Only internal/* branches being pushed — skipping verification."
-    exit 0
-fi
-
 # ── Compute upstream + changed files ──────────────────────────────────
 upstream=""
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then

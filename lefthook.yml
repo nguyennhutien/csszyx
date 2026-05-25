@@ -96,7 +96,16 @@ pre-push:
   parallel: false
   commands:
     verify-pre-push:
-      # exec replaces the shell process so Ctrl-C (SIGINT) goes directly
-      # to pnpm → bash → child processes instead of being caught by
-      # lefthook's spinner.
-      run: exec pnpm verify:pre-push
+      # Only verify pushes to origin. Private mirror (feature) and AI
+      # docs (private/internal/docs) don't need verification — CI runs
+      # on origin after PR creation.
+      # {push_remote} is lefthook's template for the remote name.
+      skip:
+        - ref: refs/heads/internal/*
+      run: |
+        remote="{push_remote}"
+        if [ "$remote" != "origin" ] && [ -n "$remote" ]; then
+          echo "[pre-push] Remote '$remote' — skipping verification."
+          exit 0
+        fi
+        exec pnpm verify:pre-push
