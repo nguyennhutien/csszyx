@@ -5,6 +5,8 @@
 
 mod contract;
 #[cfg(feature = "native-engine")]
+pub(crate) mod css_var_hoist_planner;
+#[cfg(feature = "native-engine")]
 pub(crate) mod css_var_planner;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
