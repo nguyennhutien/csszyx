@@ -8,6 +8,8 @@ use std::collections::HashMap;
 
 use crate::encoder::encode;
 
+use super::SourceIr;
+
 /// CSS variable naming tier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CssVariableTier {
@@ -90,6 +92,54 @@ pub fn plan_css_variable_names(usages: &[CssVariablePlanInput]) -> Vec<CssVariab
         .collect()
 }
 
+/// Applies scoped-tier CSS variable names to a cloned source IR.
+///
+/// This is the first native rewrite slice: it intentionally handles only
+/// element-scoped names. Component-tier hoisting needs a separate LCA planner
+/// so it can move style declarations between elements instead of only renaming
+/// them in place.
+pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
+    let mut next = ir.clone();
+    let mut usages = Vec::new();
+    let mut locations = Vec::new();
+
+    for element in &ir.jsx_opening_elements {
+        let element_id = element.opening_span.start.to_string();
+        for attr_index in &element.sz_attribute_indices {
+            let attribute = &ir.sz_attributes[*attr_index];
+            for (prop_index, prop) in attribute.dynamic_css_vars.iter().enumerate() {
+                let id = locations.len().to_string();
+                usages.push(CssVariablePlanInput {
+                    id,
+                    tier: CssVariableTier::Scoped,
+                    property_key: prop.key.clone(),
+                    variant_chain: prop.variant_prefix.clone(),
+                    element_id: Some(element_id.clone()),
+                });
+                locations.push((*attr_index, prop_index));
+            }
+        }
+    }
+
+    for entry in plan_css_variable_names(&usages) {
+        let Ok(location_index) = entry.id.parse::<usize>() else {
+            continue;
+        };
+        let Some((attr_index, prop_index)) = locations.get(location_index).copied() else {
+            continue;
+        };
+        if let Some(prop) = next
+            .sz_attributes
+            .get_mut(attr_index)
+            .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
+        {
+            prop.var_name = entry.name;
+        }
+    }
+
+    next
+}
+
 fn canonical_usage_key(usage: &CssVariablePlanInput) -> String {
     format!(
         "{}\0{}",
@@ -100,7 +150,14 @@ fn canonical_usage_key(usage: &CssVariablePlanInput) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{plan_css_variable_names, CssVariablePlanInput, CssVariableTier};
+    use super::{
+        apply_scoped_css_variable_names, plan_css_variable_names, CssVariablePlanInput,
+        CssVariableTier,
+    };
+    use crate::transform::{
+        DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr, SourceIr, StaticSzObject,
+        SzAttributeIr, TextSpan,
+    };
 
     fn usage(id: &str, tier: CssVariableTier, property_key: &str) -> CssVariablePlanInput {
         CssVariablePlanInput {
@@ -174,5 +231,83 @@ mod tests {
             .map(|entry| (entry.id.as_str(), entry.name.as_str()))
             .collect::<Vec<_>>();
         assert_eq!(pairs, [("component", "--cz"), ("scoped", "--sz")]);
+    }
+
+    #[test]
+    fn applies_scoped_names_to_dynamic_css_vars_per_element() {
+        let ir = SourceIr {
+            filename: "fixture.tsx".to_string(),
+            source_span: TextSpan { start: 0, end: 120 },
+            sz_attributes: vec![
+                sz_attribute(vec![
+                    dynamic_prop("p", "--_sz-p"),
+                    dynamic_prop("m", "--_sz-m"),
+                ]),
+                sz_attribute(vec![dynamic_prop("p", "--_sz-p")]),
+            ],
+            unsupported_sz_attribute_spans: Vec::new(),
+            class_attributes: Vec::new(),
+            extracted_classes: Vec::new(),
+            style_attributes: Vec::new(),
+            recovery_attributes: Vec::new(),
+            unsupported_recovery_attribute_spans: Vec::new(),
+            jsx_opening_elements: vec![opening_element(10, vec![0]), opening_element(40, vec![1])],
+        };
+
+        let planned = apply_scoped_css_variable_names(&ir);
+
+        assert_eq!(
+            planned.sz_attributes[0].dynamic_css_vars[0].var_name,
+            "--sz"
+        );
+        assert_eq!(
+            planned.sz_attributes[0].dynamic_css_vars[1].var_name,
+            "--sy"
+        );
+        assert_eq!(
+            planned.sz_attributes[1].dynamic_css_vars[0].var_name,
+            "--sz"
+        );
+    }
+
+    fn sz_attribute(dynamic_css_vars: Vec<DynamicCssVarIr>) -> SzAttributeIr {
+        SzAttributeIr {
+            attribute_span: TextSpan { start: 0, end: 0 },
+            value_span: TextSpan { start: 0, end: 0 },
+            object: StaticSzObject::empty(),
+            literal_class_name: None,
+            rewrites_empty_class: false,
+            ternary: None,
+            runtime_fallback: false,
+            candidate_classes: Vec::new(),
+            dynamic_css_vars,
+        }
+    }
+
+    fn dynamic_prop(key: &str, var_name: &str) -> DynamicCssVarIr {
+        DynamicCssVarIr {
+            key: key.to_string(),
+            class_prefix: key.to_string(),
+            var_name: var_name.to_string(),
+            category: DynamicCssVarCategory::Passthrough,
+            expression_span: TextSpan { start: 0, end: 0 },
+            variant_prefix: None,
+        }
+    }
+
+    fn opening_element(start: u32, sz_attribute_indices: Vec<usize>) -> JsxOpeningElementIr {
+        JsxOpeningElementIr {
+            opening_span: TextSpan {
+                start,
+                end: start + 10,
+            },
+            sz_attribute_indices,
+            class_attribute_index: None,
+            style_attribute_index: None,
+            recovery_attribute_index: None,
+            has_recovery_token_attribute: false,
+            last_attribute_end: None,
+            element_name: "div".to_string(),
+        }
     }
 }

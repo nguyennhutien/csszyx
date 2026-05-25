@@ -7,6 +7,7 @@
 use string_wizard::{MagicString, UpdateOptions};
 
 use super::{
+    css_var_planner::apply_scoped_css_variable_names,
     lower::lower_sz_attribute_classes,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     DynamicCssVarCategory, DynamicCssVarIr, SourceIr,
@@ -23,12 +24,33 @@ pub enum StaticRewriteUnsupported {
     EmptyClassList,
 }
 
+/// Native rewrite options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RewriteOptions {
+    /// Whether to rewrite dynamic CSS custom properties to scoped short names.
+    pub mangle_vars: bool,
+}
+
 /// Rewrite static `sz` attributes into `className="..."`.
 pub fn rewrite_static_sz_attributes(
     source: &str,
     filename: &str,
     ir: &SourceIr,
 ) -> Result<String, StaticRewriteUnsupported> {
+    rewrite_static_sz_attributes_with_options(source, filename, ir, RewriteOptions::default())
+}
+
+/// Rewrite static `sz` attributes into `className="..."` with native options.
+pub fn rewrite_static_sz_attributes_with_options(
+    source: &str,
+    filename: &str,
+    ir: &SourceIr,
+    options: RewriteOptions,
+) -> Result<String, StaticRewriteUnsupported> {
+    let planned_ir = options
+        .mangle_vars
+        .then(|| apply_scoped_css_variable_names(ir));
+    let ir = planned_ir.as_ref().unwrap_or(ir);
     let mut magic = MagicString::new(source);
     let mut rewrote = false;
 
@@ -377,7 +399,10 @@ fn whitespace_start(source: &str, attr_start: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{rewrite_static_sz_attributes, StaticRewriteUnsupported};
+    use super::{
+        rewrite_static_sz_attributes, rewrite_static_sz_attributes_with_options, RewriteOptions,
+        StaticRewriteUnsupported,
+    };
     use crate::transform::{parser::parse_source_shell, TransformFile};
 
     fn parse(source: &str) -> crate::transform::SourceIr {
@@ -513,6 +538,23 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = () => <div className=\"p-(--_sz-p)\" style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_dynamic_spacing_value_with_scoped_mangled_var() {
+        let source = "const App = () => <div sz={{ p: padVal }} />;";
+        let rewritten = rewrite_static_sz_attributes_with_options(
+            source,
+            "/repo/src/App.tsx",
+            &parse(source),
+            RewriteOptions { mangle_vars: true },
+        )
+        .expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"p-(--sz)\" style={{\"--sz\": `calc(${padVal} * var(--spacing))`}} />;"
         );
     }
 
