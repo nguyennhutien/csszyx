@@ -126,6 +126,9 @@ export default defineConfig({
         }),
     ],
     vite: {
+        resolve: {
+            tsconfigPaths: false,
+        },
         plugins: [
             // csszyx MUST come before tailwindcss.
             // CSSZYX_BENCH_NO_CSSZYX=1 skips the csszyx plugin entirely so the

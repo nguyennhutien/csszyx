@@ -6,6 +6,9 @@ import csszyx from 'csszyx/vite';
 export default defineConfig({
     integrations: [solidJs()],
     vite: {
+        resolve: {
+            tsconfigPaths: false,
+        },
         plugins: [
             // csszyx must run before Tailwind so generated utility classes are visible.
             csszyx({ build: { parser: process.env.CSSZYX_PARSER ?? 'oxc' } }),
