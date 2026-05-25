@@ -35,6 +35,15 @@ export interface TransformSourceCodeOptions {
      * are still safe to transform.
      */
     astBudget?: number;
+
+    /**
+     * Opt into tiered CSS custom property names for parser paths that support
+     * the CSS variable system. Unsupported parser paths must preserve existing
+     * `--_sz-*` output until they explicitly port this option.
+     *
+     * @default false
+     */
+    mangleVars?: boolean;
 }
 
 /**

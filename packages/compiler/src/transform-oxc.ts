@@ -27,6 +27,7 @@ import MagicString from 'magic-string';
 import { parseSync } from 'oxc-parser';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
+import { planCSSVariableNames } from './css-var-planner.js';
 import type { TokenData } from './manifest.js';
 import {
     COLOR_PROPERTIES,
@@ -380,6 +381,7 @@ export function transformOxc(
                         effectiveFilename,
                         objectBindings,
                         source,
+                        options,
                     );
                     if (partial && szAttrs.length === 1) {
                         if (classNameAttr?.value?.type === 'JSXExpressionContainer') {
@@ -1125,6 +1127,7 @@ function compileConditionalSpreadBranch(
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param source Original source for preserving runtime expressions.
+ * @param options Transform options controlling opt-in CSS variable behavior.
  * @returns Transform fragments, or null when the object needs runtime fallback.
  */
 function buildPartialObjectTransform(
@@ -1132,6 +1135,7 @@ function buildPartialObjectTransform(
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
+    options?: TransformSourceCodeOptions,
 ): OxcPartialTransform | null {
     const partial = evaluatePartialObject(node, filename, bindings, source);
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
@@ -1154,6 +1158,10 @@ function buildPartialObjectTransform(
         }
     }
 
+    if (options?.mangleVars) {
+        applyScopedVariablePlan(partial);
+    }
+
     for (const [, info] of partial.dynamicProps) {
         classParts.push(buildCSSVarClassName(info));
     }
@@ -1170,6 +1178,33 @@ function buildPartialObjectTransform(
         info => `${JSON.stringify(info.varName)}: ${generateStyleValueSource(info, source)}`,
     );
     return { className, classNameAttr, styleProps, usesColorVar: partial.usesColorVar };
+}
+
+/**
+ * Applies the opt-in scoped tier plan for dynamic vars on one JSX element.
+ *
+ * This intentionally only handles the element-local `s` tier. Component-tier
+ * `c` naming and hoisting need ancestor analysis and land in a later slice.
+ *
+ * @param partial Partially evaluated sz object result for one JSX element.
+ */
+function applyScopedVariablePlan(partial: OxcPartialObjectResult): void {
+    const entries = [...partial.dynamicProps.entries()];
+    const plan = planCSSVariableNames(
+        entries.map(([id]) => ({
+            id,
+            tier: 'scoped',
+            elementId: 'self',
+            propertyKey: id,
+        })),
+    );
+
+    for (const planned of plan) {
+        const info = partial.dynamicProps.get(planned.id);
+        if (info) {
+            info.varName = planned.name;
+        }
+    }
 }
 
 /**

@@ -34,7 +34,17 @@ describe('CSS variable system config contract', () => {
         expect(result.classes).toEqual(new Set(['p-(--_sz-p)', 'md:gap-(--_sz-md-gap)']));
     });
 
-    it.todo('maps scoped dynamic variables to per-element s-tier names when mangleVars is enabled');
+    it('maps scoped dynamic variables to per-element s-tier names when mangleVars is enabled', () => {
+        const source = 'const App = ({ pad, gap }) => <div sz={{ p: pad, md: { gap } }} />;';
+        const result = transformOxc(source, 'mangle-vars-enabled.tsx', { mangleVars: true });
+
+        expect(result.code).toContain('p-(--sz)');
+        expect(result.code).toContain('md:gap-(--sy)');
+        expect(result.code).toContain('"--sz"');
+        expect(result.code).toContain('"--sy"');
+        expect(result.classes).toEqual(new Set(['p-(--sz)', 'md:gap-(--sy)']));
+    });
+
     it.todo('hoists repeated component-tier variables to a bounded common ancestor');
     it.todo('keeps CSS variable names out of the checksum payload while mangleVars is disabled');
 });
