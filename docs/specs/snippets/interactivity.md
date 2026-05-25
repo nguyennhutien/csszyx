@@ -255,3 +255,52 @@ Utilities for hinting to the browser how an element will change.
 | **Keywords**  | `will-change: (etc)`    | `will-change-auto`, `will-change-scroll`(etc) | `{ willChange: 'auto' }`  |      |
 | **Arbitrary** | `will-change: <v>`      | `will-change-[<v>]`                           | `{ willChange: '<v>' }`   |      |
 | **Variable**  | `will-change: var(--c)` | `will-change-(--c)`                           | `{ willChange: '--c' }`   |      |
+
+## Scrollbar Width (v4.3)
+
+Utilities for controlling the scrollbar width.
+
+| Concept  | CSS Rule                | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :------- | :---------------------- | :---------------- | :------------------------ | :--- |
+| **Auto** | `scrollbar-width: auto` | `scrollbar-auto`  | `{ scrollbar: 'auto' }`   |      |
+| **Thin** | `scrollbar-width: thin` | `scrollbar-thin`  | `{ scrollbar: 'thin' }`   |      |
+| **None** | `scrollbar-width: none` | `scrollbar-none`  | `{ scrollbar: 'none' }`   |      |
+
+## Scrollbar Color (v4.3)
+
+Utilities for controlling the scrollbar thumb and track colors.
+
+| Concept      | CSS Rule                        | Tailwind v4 Class        | `sz` Prop (Object Syntax)      | Note |
+| :----------- | :------------------------------ | :----------------------- | :----------------------------- | :--- |
+| **Thumb**    | `scrollbar-color: <color> ...`  | `scrollbar-thumb-<name>` | `{ scrollbarThumb: '<name>' }` |      |
+| **Track**    | `scrollbar-color: ... <color>`  | `scrollbar-track-<name>` | `{ scrollbarTrack: '<name>' }` |      |
+| **Variable** | `scrollbar-color: var(--c) ...` | `scrollbar-thumb-(--c)`  | `{ scrollbarThumb: '--c' }`    |      |
+
+## Scrollbar Gutter (v4.3)
+
+Utilities for controlling the scrollbar gutter behavior.
+
+| Concept    | CSS Rule                              | Tailwind v4 Class         | `sz` Prop (Object Syntax)       | Note |
+| :--------- | :------------------------------------ | :------------------------ | :------------------------------ | :--- |
+| **Auto**   | `scrollbar-gutter: auto`              | `scrollbar-gutter-auto`   | `{ scrollbarGutter: 'auto' }`   |      |
+| **Stable** | `scrollbar-gutter: stable`            | `scrollbar-gutter-stable` | `{ scrollbarGutter: 'stable' }` |      |
+| **Both**   | `scrollbar-gutter: stable both-edges` | `scrollbar-gutter-both`   | `{ scrollbarGutter: 'both' }`   |      |
+
+## Zoom (v4.3)
+
+Utilities for controlling the zoom level of an element.
+
+| Concept      | CSS Rule         | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :----------- | :--------------- | :---------------- | :------------------------ | :--- |
+| **Scale**    | `zoom: <number>` | `zoom-<number>`   | `{ zoom: <number> }`      |      |
+| **Variable** | `zoom: var(--z)` | `zoom-(--z)`      | `{ zoom: '--z' }`         |      |
+
+## Tab Size (v4.3)
+
+Utilities for controlling the width of tab characters.
+
+| Concept       | CSS Rule             | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :------------ | :------------------- | :---------------- | :------------------------ | :--- |
+| **Number**    | `tab-size: <number>` | `tab-<number>`    | `{ tabSize: <number> }`   |      |
+| **Arbitrary** | `tab-size: <v>`      | `tab-[<v>]`       | `{ tabSize: '<v>' }`      |      |
+| **Variable**  | `tab-size: var(--t)` | `tab-(--t)`       | `{ tabSize: '--t' }`      |      |
