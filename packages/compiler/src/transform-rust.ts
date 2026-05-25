@@ -95,7 +95,11 @@ export function transformRustBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
-    void options;
+    if (options?.mangleVars) {
+        throw new OxcRustNotImplementedError(
+            'mangleVars is not implemented by the native Rust engine yet; use build.parser: "oxc" for opt-in CSS variable mangling.',
+        );
+    }
     try {
         return transformBatch(
             files.map((file, index) => ({

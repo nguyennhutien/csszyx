@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { transformOxc } from '../src/index.js';
+import { transformOxc, transformRust } from '../src/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '../../..');
@@ -105,6 +105,14 @@ describe('CSS variable system config contract', () => {
             '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
         );
         expect(result.code).not.toContain('--cz');
+    });
+
+    it('fails loudly instead of silently ignoring mangleVars on the Rust path', () => {
+        expect(() =>
+            transformRust('const App = ({ pad }) => <div sz={{ p: pad }} />;', 'rust-vars.tsx', {
+                mangleVars: true,
+            }),
+        ).toThrow('mangleVars is not implemented by the native Rust engine yet');
     });
 
     it.todo('keeps CSS variable names out of the checksum payload while mangleVars is disabled');

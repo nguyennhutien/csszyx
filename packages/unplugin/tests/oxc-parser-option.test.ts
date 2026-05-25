@@ -111,6 +111,21 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
+    it('fails loudly when production.mangleVars is used with the Rust parser before native support lands', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'rust', cache: false },
+            production: { mangleVars: true },
+        }) as TransformHook[];
+
+        expect(() =>
+            prePlugin.transform.call(
+                { warn: vi.fn() },
+                'const App = ({ pad }) => <div sz={{ p: pad }} />;',
+                '/repo/src/App.tsx',
+            ),
+        ).toThrow('mangleVars is not implemented by the native Rust engine yet');
+    });
+
     it('lets build.parser opt into the Rust engine explicitly', () => {
         if (!nativeRustAvailable) {
             // No host addon present — assert the explicit unavailable-error
