@@ -13,11 +13,15 @@ export default defineConfig({
     // csszyx transforms sz="" to className="" BEFORE JSX transformation
     // This allows Tailwind to scan the generated className strings
     ...csszyx({
+      build: {
+        parser: 'oxc',
+      },
       development: {
         debug: true,
       },
       production: {
         injectChecksum: true,
+        mangleVars: true,
       },
     }),
     tailwindcss(),

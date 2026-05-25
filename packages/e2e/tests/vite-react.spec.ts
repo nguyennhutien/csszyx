@@ -73,4 +73,27 @@ test.describe('Vite-React Playground', () => {
             expect(checksum).toHaveLength(16);
         }
     });
+
+    test('should expose hoisted css variable mangling metadata', async ({ page }) => {
+        await page.goto('/?page=css-vars');
+        await page.waitForLoadState('networkidle');
+
+        const fixture = page.getByTestId('css-var-fixture');
+        const cardA = page.getByTestId('css-var-card-a');
+        const cardB = page.getByTestId('css-var-card-b');
+
+        await expect(fixture).toBeVisible();
+        await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(4 \* var\(--spacing\)\)/);
+        await expect(cardA).toHaveAttribute('class', /p-\(--cz\)/);
+        await expect(cardB).toHaveAttribute('class', /p-\(--cz\)/);
+
+        await page.getByTestId('css-var-button').click();
+        await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(5 \* var\(--spacing\)\)/);
+
+        const varMap = await page.evaluate(() => window.__csszyx?.varMangleMap);
+        expect(varMap).toEqual({ '--_sz-p': '--cz' });
+
+        const decoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--cz'));
+        expect(decoded).toEqual(['--_sz-p']);
+    });
 });

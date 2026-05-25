@@ -8,6 +8,29 @@ import { VerificationComponent } from './Verification';
 const DynamicForm = lazy(() => import('./DynamicForm').then(m => ({ default: m.DynamicForm })));
 const JsonFormEditor = lazy(() => import('./JsonFormEditor').then(m => ({ default: m.JsonFormEditor })));
 
+function CssVarFixture() {
+  const [pad, setPad] = useState(4);
+
+  return (
+    <section data-testid="css-var-fixture" sz={{ minH: 'screen', p: 6, bg: 'white' }}>
+      <h1 sz={{ text: '2xl', fontWeight: 'bold', mb: 4 }}>CSS variable fixture</h1>
+      <button
+        data-testid="css-var-button"
+        onClick={() => setPad(value => value + 1)}
+        sz={{ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', mb: 4 }}
+      >
+        Increase spacing
+      </button>
+      <div data-testid="css-var-card-a" sz={{ p: pad, bg: 'blue-50', rounded: 'md' }}>
+        Shared dynamic padding A
+      </div>
+      <span data-testid="css-var-card-b" sz={{ p: pad, display: 'block', bg: 'green-50', rounded: 'md', mt: 3 }}>
+        Shared dynamic padding B
+      </span>
+    </section>
+  );
+}
+
 function App() {
   const [count, setCount] = useState(0);
   const [isActive, setIsActive] = useState(false);
@@ -28,6 +51,10 @@ function App() {
         <JsonFormEditor />
       </Suspense>
     );
+  }
+
+  if (page === 'css-vars') {
+    return <CssVarFixture />;
   }
 
   if (page === 'recovery') {
