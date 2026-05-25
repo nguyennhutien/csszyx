@@ -66,6 +66,7 @@ const result = spawnSync("napi", args, {
   cwd: coreDir,
   env: nativeBuildEnv(),
   stdio: "inherit",
+  shell: process.platform === "win32",
 });
 
 if (result.status !== 0) {
