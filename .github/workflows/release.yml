@@ -50,7 +50,7 @@ jobs:
       # github-release step can still succeed when release-pr is a
       # no-op, and vice versa.
       - name: Release-please — open or update release PR
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         id: release-pr
         with:
           command: release-pr
@@ -59,7 +59,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release-please — tag merged release PR + create GitHub release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         id: release
         with:
           command: github-release
@@ -172,13 +172,13 @@ jobs:
             cross: false
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "pnpm"
@@ -214,7 +214,7 @@ jobs:
             "native-artifacts/packages/core-${{ matrix.platform }}/"
 
       - name: Upload native package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.platform }}
           path: native-artifacts/packages
@@ -250,13 +250,13 @@ jobs:
       # would otherwise drop the workflow-level grant.
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "pnpm"
@@ -274,7 +274,7 @@ jobs:
       # (wasm-pack --mode no-install) can skip wasm-pack's own install step.
       - name: Cache wasm-bindgen-cli
         id: cache-wasm-bindgen
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/wasm-bindgen
           key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
@@ -292,7 +292,7 @@ jobs:
         run: pnpm --filter @csszyx/core native:packages
 
       - name: Download native package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: packages
           pattern: native-*
