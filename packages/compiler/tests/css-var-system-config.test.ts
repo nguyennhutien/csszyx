@@ -45,6 +45,67 @@ describe('CSS variable system config contract', () => {
         expect(result.classes).toEqual(new Set(['p-(--sz)', 'md:gap-(--sy)']));
     });
 
-    it.todo('hoists repeated component-tier variables to a bounded common ancestor');
+    it('hoists repeated component-tier variables to a bounded common ancestor', () => {
+        const source =
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
+        const result = transformOxc(source, 'mangle-vars-hoist.tsx', { mangleVars: true });
+
+        expect(result.code).toContain(
+            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(result.code).toContain('<div className="p-(--cz)" />');
+        expect(result.code).toContain('<span className="p-(--cz)" />');
+        expect(result.code).not.toContain('"--sz"');
+        expect(result.classes).toEqual(new Set(['p-(--cz)']));
+    });
+
+    it('does not hoist repeated vars across component boundaries', () => {
+        const source =
+            'const App = ({ pad }) => <Card><div sz={{ p: pad }} /><span sz={{ p: pad }} /></Card>;';
+        const result = transformOxc(source, 'mangle-vars-component-boundary.tsx', {
+            mangleVars: true,
+        });
+
+        expect(result.code).toContain('<Card>');
+        expect(result.code).toContain(
+            '<div className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+        );
+        expect(result.code).toContain(
+            '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+        );
+        expect(result.code).not.toContain('--cz');
+        expect(result.classes).toEqual(new Set(['p-(--sz)']));
+    });
+
+    it('merges hoisted vars into an existing ancestor style expression', () => {
+        const source =
+            'const App = ({ pad, rootStyle }) => <section style={rootStyle}><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
+        const result = transformOxc(source, 'mangle-vars-hoist-existing-style.tsx', {
+            mangleVars: true,
+        });
+
+        expect(result.code).toContain(
+            '<section style={{...rootStyle, "--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(result.code).toContain('<div className="p-(--cz)" />');
+        expect(result.code).toContain('<span className="p-(--cz)" />');
+    });
+
+    it('does not hoist repeated vars through fragments', () => {
+        const source =
+            'const App = ({ pad }) => <><div sz={{ p: pad }} /><span sz={{ p: pad }} /></>;';
+        const result = transformOxc(source, 'mangle-vars-fragment-boundary.tsx', {
+            mangleVars: true,
+        });
+
+        expect(result.code).toContain(
+            '<div className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+        );
+        expect(result.code).toContain(
+            '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+        );
+        expect(result.code).not.toContain('--cz');
+    });
+
     it.todo('keeps CSS variable names out of the checksum payload while mangleVars is disabled');
 });

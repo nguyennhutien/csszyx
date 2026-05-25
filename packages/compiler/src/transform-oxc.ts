@@ -27,6 +27,11 @@ import MagicString from 'magic-string';
 import { parseSync } from 'oxc-parser';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
+import {
+    type CSSVariableHoistNode,
+    type CSSVariableHoistUsage,
+    planComponentVariableHoists,
+} from './css-var-hoist-planner.js';
 import { planCSSVariableNames } from './css-var-planner.js';
 import type { TokenData } from './manifest.js';
 import {
@@ -112,6 +117,14 @@ export function transformOxc(
     const edits = new MagicString(source);
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
+    const componentHoists = options?.mangleVars
+        ? planOxcComponentVariableHoists(
+              parsed.program as unknown as OxcNode,
+              effectiveFilename,
+              objectBindings,
+              source,
+          )
+        : null;
     let transformed = false;
     let usesRuntime = false;
     let usesMerge = false;
@@ -138,6 +151,24 @@ export function transformOxc(
         let szRecoverAttr: JsxAttributeNode | null = null;
         let alreadyTagged = false;
         let lastAttr: JsxAttributeNode | null = null;
+        let appliedHoistedStyleProps = false;
+        const elementId = elementIdForOpening(openingNode);
+        const hoistedStyleProps = componentHoists?.stylePropsByTarget.get(elementId) ?? [];
+        const applyHoistedStyleProps = (): void => {
+            if (appliedHoistedStyleProps || hoistedStyleProps.length === 0) {
+                return;
+            }
+            applyStyleProps(
+                edits,
+                source,
+                styleAttr,
+                lastAttr,
+                hoistedStyleProps,
+                openingNode.name.end,
+            );
+            appliedHoistedStyleProps = true;
+            transformed = true;
+        };
 
         for (const attrRaw of attrs) {
             if (attrRaw.type !== 'JSXAttribute') {
@@ -219,6 +250,7 @@ export function transformOxc(
         }
 
         if (szAttrs.length === 0) {
+            applyHoistedStyleProps();
             return;
         }
 
@@ -382,8 +414,13 @@ export function transformOxc(
                         objectBindings,
                         source,
                         options,
+                        componentHoists?.usageNamesByElement.get(elementId),
                     );
                     if (partial && szAttrs.length === 1) {
+                        const mergedStyleProps =
+                            hoistedStyleProps.length > 0
+                                ? [...hoistedStyleProps, ...partial.styleProps]
+                                : partial.styleProps;
                         if (classNameAttr?.value?.type === 'JSXExpressionContainer') {
                             const classExpression = (
                                 classNameAttr.value as unknown as { expression: OxcNode }
@@ -398,7 +435,15 @@ export function transformOxc(
                                 `className={_szMerge(${classExpressionSource}, ${JSON.stringify(partial.className)})}`,
                             );
                             edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                            applyStyleProps(edits, source, styleAttr, lastAttr, partial.styleProps);
+                            applyStyleProps(
+                                edits,
+                                source,
+                                styleAttr,
+                                lastAttr,
+                                mergedStyleProps,
+                                openingNode.name.end,
+                            );
+                            appliedHoistedStyleProps = true;
                             for (const c of partial.className.split(/\s+/)) {
                                 if (c) {
                                     classes.add(c);
@@ -422,7 +467,15 @@ export function transformOxc(
                         } else {
                             edits.overwrite(szAttr.start, szAttr.end, partial.classNameAttr);
                         }
-                        applyStyleProps(edits, source, styleAttr, lastAttr, partial.styleProps);
+                        applyStyleProps(
+                            edits,
+                            source,
+                            styleAttr,
+                            lastAttr,
+                            mergedStyleProps,
+                            openingNode.name.end,
+                        );
+                        appliedHoistedStyleProps = true;
                         for (const c of partial.className.split(/\s+/)) {
                             if (c) {
                                 classes.add(c);
@@ -480,6 +533,8 @@ export function transformOxc(
             transformed = true;
             return;
         }
+
+        applyHoistedStyleProps();
 
         // Merge classes: existing className value first, then sz-derived.
         // This matches the order Babel produces in `transform.ts:228-371`.
@@ -680,6 +735,19 @@ interface JsxOpeningElementNode extends OxcNode {
     selfClosing: boolean;
 }
 
+/** oxc shape for a JSX element with an opening tag and children. */
+interface JsxElementNode extends OxcNode {
+    type: 'JSXElement';
+    openingElement: JsxOpeningElementNode;
+    children: OxcNode[];
+}
+
+/** oxc shape for a JSX fragment. */
+interface JsxFragmentNode extends OxcNode {
+    type: 'JSXFragment';
+    children: OxcNode[];
+}
+
 /** oxc shape for an object literal expression (`{ p: 4 }`). */
 interface ObjectExpressionNode extends OxcNode {
     type: 'ObjectExpression';
@@ -760,6 +828,23 @@ interface OxcPartialTransform {
     classNameAttr: string;
     styleProps: string[];
     usesColorVar: boolean;
+}
+
+/** Hoist decisions indexed for the source rewrite pass. */
+interface OxcComponentHoistAnalysis {
+    stylePropsByTarget: Map<string, string[]>;
+    usageNamesByElement: Map<string, Map<string, string>>;
+}
+
+/** Candidate dynamic var found during the read-only hoist prepass. */
+interface OxcComponentHoistCandidate {
+    id: string;
+    elementId: string;
+    dynamicKey: string;
+    propertyKey: string;
+    variantChain: string;
+    valueSource: string;
+    info: OxcDynamicPropInfo;
 }
 
 /**
@@ -1128,6 +1213,7 @@ function compileConditionalSpreadBranch(
  * @param bindings Local object-literal bindings.
  * @param source Original source for preserving runtime expressions.
  * @param options Transform options controlling opt-in CSS variable behavior.
+ * @param hoistedNames Dynamic prop keys that should use component-tier hoisted vars.
  * @returns Transform fragments, or null when the object needs runtime fallback.
  */
 function buildPartialObjectTransform(
@@ -1136,6 +1222,7 @@ function buildPartialObjectTransform(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
     options?: TransformSourceCodeOptions,
+    hoistedNames?: ReadonlyMap<string, string>,
 ): OxcPartialTransform | null {
     const partial = evaluatePartialObject(node, filename, bindings, source);
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
@@ -1159,7 +1246,8 @@ function buildPartialObjectTransform(
     }
 
     if (options?.mangleVars) {
-        applyScopedVariablePlan(partial);
+        applyHoistedVariableNames(partial, hoistedNames);
+        applyScopedVariablePlan(partial, hoistedNames);
     }
 
     for (const [, info] of partial.dynamicProps) {
@@ -1174,10 +1262,34 @@ function buildPartialObjectTransform(
         partial.conditionalClasses.length > 0
             ? `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`
             : `className="${className}"`;
-    const styleProps = [...partial.dynamicProps.values()].map(
-        info => `${JSON.stringify(info.varName)}: ${generateStyleValueSource(info, source)}`,
-    );
+    const styleProps = [...partial.dynamicProps.entries()]
+        .filter(([id]) => !hoistedNames?.has(id))
+        .map(
+            ([, info]) =>
+                `${JSON.stringify(info.varName)}: ${generateStyleValueSource(info, source)}`,
+        );
     return { className, classNameAttr, styleProps, usesColorVar: partial.usesColorVar };
+}
+
+/**
+ * Applies precomputed component-tier names for hoisted dynamic vars.
+ *
+ * @param partial Partially evaluated sz object result for one JSX element.
+ * @param hoistedNames Dynamic prop key to hoisted CSS var name.
+ */
+function applyHoistedVariableNames(
+    partial: OxcPartialObjectResult,
+    hoistedNames?: ReadonlyMap<string, string>,
+): void {
+    if (!hoistedNames) {
+        return;
+    }
+    for (const [id, name] of hoistedNames) {
+        const info = partial.dynamicProps.get(id);
+        if (info) {
+            info.varName = name;
+        }
+    }
 }
 
 /**
@@ -1187,9 +1299,13 @@ function buildPartialObjectTransform(
  * `c` naming and hoisting need ancestor analysis and land in a later slice.
  *
  * @param partial Partially evaluated sz object result for one JSX element.
+ * @param hoistedNames Dynamic prop keys already assigned to component-tier hoisted vars.
  */
-function applyScopedVariablePlan(partial: OxcPartialObjectResult): void {
-    const entries = [...partial.dynamicProps.entries()];
+function applyScopedVariablePlan(
+    partial: OxcPartialObjectResult,
+    hoistedNames?: ReadonlyMap<string, string>,
+): void {
+    const entries = [...partial.dynamicProps.entries()].filter(([id]) => !hoistedNames?.has(id));
     const plan = planCSSVariableNames(
         entries.map(([id]) => ({
             id,
@@ -1205,6 +1321,321 @@ function applyScopedVariablePlan(partial: OxcPartialObjectResult): void {
             info.varName = planned.name;
         }
     }
+}
+
+/**
+ * Plans component-tier CSS variable hoists from the oxc JSX tree.
+ *
+ * This prepass is intentionally read-only. It only emits rewrite metadata for
+ * dynamic vars that share the same generated component var name and the same
+ * runtime style value source inside a bounded JSX ancestor chain.
+ *
+ * @param root Parsed program root.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for expression slicing.
+ * @returns Hoist metadata consumed by the source rewrite pass.
+ */
+function planOxcComponentVariableHoists(
+    root: OxcNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+): OxcComponentHoistAnalysis {
+    const nodes: CSSVariableHoistNode[] = [];
+    const candidates: OxcComponentHoistCandidate[] = [];
+
+    collectOxcHoistCandidates(root, null, nodes, candidates, filename, bindings, source);
+    if (candidates.length < 2) {
+        return {
+            stylePropsByTarget: new Map(),
+            usageNamesByElement: new Map(),
+        };
+    }
+
+    const plannedNames = planCSSVariableNames(
+        candidates.map(candidate => ({
+            id: candidate.id,
+            tier: 'component',
+            elementId: candidate.elementId,
+            propertyKey: candidate.propertyKey,
+            variantChain: candidate.variantChain || undefined,
+        })),
+    );
+    const nameByUsage = new Map(plannedNames.map(entry => [entry.id, entry.name]));
+    const candidateById = new Map(candidates.map(candidate => [candidate.id, candidate]));
+    const hoistUsages: CSSVariableHoistUsage[] = candidates.map(candidate => ({
+        id: candidate.id,
+        elementId: candidate.elementId,
+        name: nameByUsage.get(candidate.id) ?? candidate.info.varName,
+        valueKey: candidate.valueSource,
+    }));
+    const plans = planComponentVariableHoists(nodes, hoistUsages, { maxDepth: 5 });
+    const stylePropsByTarget = new Map<string, string[]>();
+    const usageNamesByElement = new Map<string, Map<string, string>>();
+
+    for (const plan of plans) {
+        const [firstUsageId] = plan.usageIds;
+        const firstCandidate = firstUsageId ? candidateById.get(firstUsageId) : undefined;
+        if (!firstCandidate) {
+            continue;
+        }
+        appendMapArray(
+            stylePropsByTarget,
+            plan.targetElementId,
+            `${JSON.stringify(plan.name)}: ${firstCandidate.valueSource}`,
+        );
+        for (const usageId of plan.usageIds) {
+            const candidate = candidateById.get(usageId);
+            if (!candidate) {
+                continue;
+            }
+            getOrCreateMap(usageNamesByElement, candidate.elementId).set(
+                candidate.dynamicKey,
+                plan.name,
+            );
+        }
+    }
+
+    return { stylePropsByTarget, usageNamesByElement };
+}
+
+/**
+ * Collects JSX host nodes and dynamic CSS-var candidates for component hoisting.
+ *
+ * @param node Current AST node.
+ * @param parentElementId Current JSX parent id.
+ * @param nodes Hoist tree nodes to populate.
+ * @param candidates Dynamic var candidates to populate.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for expression slicing.
+ */
+function collectOxcHoistCandidates(
+    node: OxcNode,
+    parentElementId: string | null,
+    nodes: CSSVariableHoistNode[],
+    candidates: OxcComponentHoistCandidate[],
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+): void {
+    if (node.type === 'JSXElement') {
+        const element = node as JsxElementNode;
+        const opening = element.openingElement;
+        const elementId = elementIdForOpening(opening);
+        nodes.push({
+            id: elementId,
+            parentId: parentElementId,
+            canHost: canHostHoistedStyleProps(opening),
+        });
+        collectOpeningHoistCandidates(opening, elementId, candidates, filename, bindings, source);
+        for (const child of element.children) {
+            collectOxcHoistCandidates(
+                child,
+                elementId,
+                nodes,
+                candidates,
+                filename,
+                bindings,
+                source,
+            );
+        }
+        return;
+    }
+
+    if (node.type === 'JSXFragment') {
+        const fragment = node as JsxFragmentNode;
+        const elementId = `f${node.start}`;
+        nodes.push({ id: elementId, parentId: parentElementId, canHost: false });
+        for (const child of fragment.children) {
+            collectOxcHoistCandidates(
+                child,
+                elementId,
+                nodes,
+                candidates,
+                filename,
+                bindings,
+                source,
+            );
+        }
+        return;
+    }
+
+    for (const key of Object.keys(node)) {
+        if (isAstMetadataKey(key)) {
+            continue;
+        }
+        const child = (node as Record<string, unknown>)[key];
+        if (Array.isArray(child)) {
+            for (const item of child) {
+                if (isOxcNode(item)) {
+                    collectOxcHoistCandidates(
+                        item,
+                        parentElementId,
+                        nodes,
+                        candidates,
+                        filename,
+                        bindings,
+                        source,
+                    );
+                }
+            }
+        } else if (isOxcNode(child)) {
+            collectOxcHoistCandidates(
+                child,
+                parentElementId,
+                nodes,
+                candidates,
+                filename,
+                bindings,
+                source,
+            );
+        }
+    }
+}
+
+/**
+ * Collects dynamic vars from one JSX opening element's `sz` object.
+ *
+ * @param opening JSX opening element.
+ * @param elementId Stable element id.
+ * @param candidates Candidate list to populate.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for expression slicing.
+ */
+function collectOpeningHoistCandidates(
+    opening: JsxOpeningElementNode,
+    elementId: string,
+    candidates: OxcComponentHoistCandidate[],
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+): void {
+    for (const attrRaw of opening.attributes ?? []) {
+        if (attrRaw.type !== 'JSXAttribute') {
+            continue;
+        }
+        const attr = attrRaw as JsxAttributeNode;
+        if (attr.name?.name !== 'sz' || attr.value?.type !== 'JSXExpressionContainer') {
+            continue;
+        }
+        const expression = (attr.value as unknown as { expression: OxcNode }).expression;
+        if (expression.type !== 'ObjectExpression') {
+            continue;
+        }
+        const partial = evaluatePartialObject(
+            expression as ObjectExpressionNode,
+            filename,
+            bindings,
+            source,
+        );
+        if (!partial || partial.conditionalClasses.length > 0) {
+            continue;
+        }
+        for (const [dynamicKey, info] of partial.dynamicProps) {
+            candidates.push({
+                id: `${elementId}:${dynamicKey}`,
+                elementId,
+                dynamicKey,
+                propertyKey: dynamicKey,
+                variantChain: info.variantChain,
+                valueSource: generateStyleValueSource(info, source),
+                info,
+            });
+        }
+    }
+}
+
+/**
+ * Builds a stable id for a JSX opening element.
+ *
+ * @param opening JSX opening element.
+ * @returns Element id derived from the opening tag offset.
+ */
+function elementIdForOpening(opening: JsxOpeningElementNode): string {
+    return `e${opening.start}`;
+}
+
+/**
+ * Checks whether a JSX opening element can receive hoisted style props.
+ *
+ * @param opening JSX opening element.
+ * @returns True for DOM hosts with absent or expression style props.
+ */
+function canHostHoistedStyleProps(opening: JsxOpeningElementNode): boolean {
+    if (!isDomJsxOpening(opening)) {
+        return false;
+    }
+    const styleAttr = findJsxAttribute(opening, 'style');
+    return !styleAttr || styleAttr.value?.type === 'JSXExpressionContainer';
+}
+
+/**
+ * Checks whether a JSX opening element is a DOM tag rather than a component.
+ *
+ * @param opening JSX opening element.
+ * @returns True for lowercase JSX identifiers.
+ */
+function isDomJsxOpening(opening: JsxOpeningElementNode): boolean {
+    if (opening.name.type !== 'JSXIdentifier') {
+        return false;
+    }
+    const name = String((opening.name as unknown as { name: string }).name);
+    return name.length > 0 && name.charAt(0) === name.charAt(0).toLowerCase();
+}
+
+/**
+ * Finds a JSX attribute by name.
+ *
+ * @param opening JSX opening element.
+ * @param name Attribute name.
+ * @returns Matching JSX attribute, if present.
+ */
+function findJsxAttribute(opening: JsxOpeningElementNode, name: string): JsxAttributeNode | null {
+    for (const attrRaw of opening.attributes ?? []) {
+        if (attrRaw.type === 'JSXAttribute') {
+            const attr = attrRaw as JsxAttributeNode;
+            if (attr.name?.name === name) {
+                return attr;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Appends a value into an array-valued map.
+ *
+ * @param map Map to update.
+ * @param key Map key.
+ * @param value Value to append.
+ */
+function appendMapArray<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+    const existing = map.get(key);
+    if (existing) {
+        existing.push(value);
+    } else {
+        map.set(key, [value]);
+    }
+}
+
+/**
+ * Gets or creates a nested map.
+ *
+ * @param map Outer map.
+ * @param key Outer key.
+ * @returns Inner map.
+ */
+function getOrCreateMap<K, NK, NV>(map: Map<K, Map<NK, NV>>, key: K): Map<NK, NV> {
+    const existing = map.get(key);
+    if (existing) {
+        return existing;
+    }
+    const value = new Map<NK, NV>();
+    map.set(key, value);
+    return value;
 }
 
 /**
@@ -1347,6 +1778,7 @@ function evaluatePartialObject(
  * @param styleAttr Existing style attribute, if any.
  * @param lastAttr Last JSX attribute in the opening element.
  * @param styleProps Object property source fragments.
+ * @param fallbackInsertOffset Offset to use when the element has no attributes.
  */
 function applyStyleProps(
     edits: MagicString,
@@ -1354,14 +1786,16 @@ function applyStyleProps(
     styleAttr: JsxAttributeNode | null,
     lastAttr: JsxAttributeNode | null,
     styleProps: string[],
+    fallbackInsertOffset?: number,
 ): void {
     if (styleProps.length === 0) {
         return;
     }
     const propsSource = styleProps.join(', ');
     if (!styleAttr) {
-        if (lastAttr) {
-            edits.appendRight(lastAttr.end, ` style={{${propsSource}}}`);
+        const insertOffset = lastAttr?.end ?? fallbackInsertOffset;
+        if (insertOffset !== undefined) {
+            edits.appendRight(insertOffset, ` style={{${propsSource}}}`);
         }
         return;
     }
@@ -1718,6 +2152,28 @@ function unwrapExpression(node: OxcNode): OxcNode {
 }
 
 /**
+ * Checks whether an unknown value has the minimum oxc node shape.
+ *
+ * @param value Unknown value.
+ * @returns True when value looks like an oxc AST node.
+ */
+function isOxcNode(value: unknown): value is OxcNode {
+    return Boolean(
+        value && typeof value === 'object' && typeof (value as OxcNode).type === 'string',
+    );
+}
+
+/**
+ * Filters non-structural AST fields during generic traversal.
+ *
+ * @param key Object key.
+ * @returns True when the key should not be traversed.
+ */
+function isAstMetadataKey(key: string): boolean {
+    return key === 'loc' || key === 'range' || key === 'start' || key === 'end' || key === 'type';
+}
+
+/**
  * Hand-rolled depth-first AST walker. Replaces a Babel `traverse` call
  * for the read-only D2.1 scope — D2.2+ may upgrade to a parent-tracking
  * walker once magic-string edits need parent ranges (see
@@ -1727,22 +2183,13 @@ function unwrapExpression(node: OxcNode): OxcNode {
  * @param visit Function called for every visited node.
  */
 function walk(node: unknown, visit: (node: OxcNode) => void): void {
-    if (!node || typeof node !== 'object') {
+    if (!isOxcNode(node)) {
         return;
     }
-    const typed = node as OxcNode;
-    if (typeof typed.type !== 'string') {
-        return;
-    }
+    const typed = node;
     visit(typed);
     for (const key of Object.keys(typed)) {
-        if (
-            key === 'loc' ||
-            key === 'range' ||
-            key === 'start' ||
-            key === 'end' ||
-            key === 'type'
-        ) {
+        if (isAstMetadataKey(key)) {
             continue;
         }
         const child = (typed as Record<string, unknown>)[key];
