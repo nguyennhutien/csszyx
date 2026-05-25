@@ -83,9 +83,10 @@ pub use encoder::encode;
 pub use mangle::{compute_checksum_internal, compute_mangle_checksum, verify_mangle_checksum};
 pub use token::{generate_token, verify_token, ComponentInfo};
 pub use transform::{
-    transform_batch, ClassAttributeIr, IrError, ParserPath, RecoveryMode, RecoveryToken, SourceIr,
-    StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan, TransformError,
-    TransformFile, TransformMetadata, TransformProducer, TransformResult,
+    transform_batch, ClassAttributeIr, CssVariableMapEntry, IrError, ParserPath, RecoveryMode,
+    RecoveryToken, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
+    TextSpan, TransformError, TransformFile, TransformMetadata, TransformOptions,
+    TransformProducer, TransformResult,
 };
 pub use transformer::transform_sz;
 

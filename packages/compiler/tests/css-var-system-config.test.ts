@@ -114,12 +114,18 @@ describe('CSS variable system config contract', () => {
         expect(result.code).not.toContain('--cz');
     });
 
-    it('fails loudly instead of silently ignoring mangleVars on the Rust path', () => {
-        expect(() =>
-            transformRust('const App = ({ pad }) => <div sz={{ p: pad }} />;', 'rust-vars.tsx', {
-                mangleVars: true,
-            }),
-        ).toThrow('mangleVars is not implemented by the native Rust engine yet');
+    it('applies mangleVars on the Rust path when native support is available', () => {
+        const source =
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
+        const result = transformRust(source, 'rust-vars.tsx', { mangleVars: true });
+
+        expect(result.code).toContain(
+            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(result.code).toContain('<div className="p-(--cz)" />');
+        expect(result.code).toContain('<span className="p-(--cz)" />');
+        expect(result.classes).toEqual(new Set(['p-(--cz)']));
+        expect(result.cssVariableMap).toEqual(new Map([['--_sz-p', '--cz']]));
     });
 
     it('keeps CSS variable names out of metadata while mangleVars is disabled', () => {

@@ -79,6 +79,7 @@ describe('@csszyx/core/native loader', () => {
                 rawClassNames: [],
                 diagnostics: [],
                 recoveryTokens: [],
+                cssVariableMap: [],
                 metadata: {
                     transformed: true,
                     usesRuntime: false,

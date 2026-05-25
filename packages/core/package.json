@@ -46,7 +46,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "native:check": "node scripts/check-native.mjs",
-    "native:build": "node scripts/build-native.mjs --release",
+    "native:build": "node scripts/build-native.mjs --release --native-engine",
     "native:engine:smoke": "node scripts/smoke-native-engine.mjs",
     "native:packages": "node scripts/validate-native-packages.mjs",
     "native:unavailable:smoke": "node scripts/smoke-native-unavailable.mjs",

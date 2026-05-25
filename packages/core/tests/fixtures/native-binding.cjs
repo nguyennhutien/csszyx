@@ -6,6 +6,7 @@ exports.transformBatch = (files) =>
     rawClassNames: [],
     diagnostics: [],
     recoveryTokens: [],
+    cssVariableMap: [],
     metadata: {
       transformed: true,
       usesRuntime: false,

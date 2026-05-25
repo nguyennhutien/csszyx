@@ -4,18 +4,29 @@
 //! result contract without enabling source rewrite yet.
 
 use super::{
+    css_var_planner::apply_css_variable_mangling,
     fast_path::{triage_source, FastPathTriage},
     lower::lower_source_ir_classes,
     parser::parse_source_shell,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
-    rewrite::rewrite_static_sz_attributes,
+    rewrite::{
+        rewrite_static_sz_attributes, rewrite_static_sz_attributes_with_options, RewriteOptions,
+    },
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
-    TransformProducer, TransformResult, TransformTimings,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings,
 };
 use std::time::Instant;
 
 /// Transform one file through fast-path triage and parser-backed static rewrite.
 pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
+    transform_file_with_options(file, TransformOptions::default())
+}
+
+/// Transform one file through fast-path triage and parser-backed static rewrite.
+pub(super) fn transform_file_with_options(
+    file: &TransformFile,
+    options: TransformOptions,
+) -> TransformResult {
     let total_start = Instant::now();
     let triage_start = Instant::now();
     match triage_source(file) {
@@ -31,7 +42,7 @@ pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
         }
         FastPathTriage::NeedsParser(_) => {
             let triage_ns = elapsed_ns(triage_start);
-            transform_static_classes(file, triage_ns, total_start)
+            transform_static_classes_with_options(file, triage_ns, total_start, options)
         }
     }
 }
@@ -58,6 +69,7 @@ fn transform_fast_static_ir(
         raw_class_names: lowered.raw_class_names,
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
+        css_variable_map: Vec::new(),
         metadata: TransformMetadata {
             transformed,
             uses_runtime: false,
@@ -84,9 +96,24 @@ fn transform_static_classes(
     triage_ns: u64,
     total_start: Instant,
 ) -> TransformResult {
+    transform_static_classes_with_options(file, triage_ns, total_start, TransformOptions::default())
+}
+
+fn transform_static_classes_with_options(
+    file: &TransformFile,
+    triage_ns: u64,
+    total_start: Instant,
+    options: TransformOptions,
+) -> TransformResult {
     let parsed = parse_source_shell(file);
+    let css_var_mangling = options
+        .mangle_vars
+        .then(|| apply_css_variable_mangling(&parsed.ir, &file.source));
+    let lower_ir = css_var_mangling
+        .as_ref()
+        .map_or(&parsed.ir, |mangling| &mangling.ir);
     let lower_start = Instant::now();
-    let lowered = lower_source_ir_classes(&parsed.ir);
+    let lowered = lower_source_ir_classes(lower_ir);
     let lower_ns = elapsed_ns(lower_start);
     let recovery_start = Instant::now();
     let recovery_tokens = recovery_tokens(file, &parsed.ir);
@@ -111,6 +138,14 @@ fn transform_static_classes(
     let rewrite_start = Instant::now();
     let rewritten_code = if has_parser_errors || parsed.ast_budget_exceeded || parsed.panicked {
         None
+    } else if options.mangle_vars {
+        rewrite_static_sz_attributes_with_options(
+            &file.source,
+            &file.filename,
+            &parsed.ir,
+            RewriteOptions { mangle_vars: true },
+        )
+        .ok()
     } else {
         rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir).ok()
     };
@@ -159,6 +194,9 @@ fn transform_static_classes(
         raw_class_names: lowered.raw_class_names,
         diagnostics,
         recovery_tokens,
+        css_variable_map: css_var_mangling
+            .map(|mangling| mangling.variable_map)
+            .unwrap_or_default(),
         metadata: TransformMetadata {
             transformed,
             uses_runtime,
@@ -235,6 +273,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         raw_class_names: Vec::new(),
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
+        css_variable_map: Vec::new(),
         metadata: TransformMetadata {
             transformed: false,
             uses_runtime: false,

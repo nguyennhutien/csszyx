@@ -111,19 +111,23 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
-    it('fails loudly when production.mangleVars is used with the Rust parser before native support lands', () => {
+    it('passes production.mangleVars into the Rust compiler path', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
-        expect(() =>
-            prePlugin.transform.call(
-                { warn: vi.fn() },
-                'const App = ({ pad }) => <div sz={{ p: pad }} />;',
-                '/repo/src/App.tsx',
-            ),
-        ).toThrow('mangleVars is not implemented by the native Rust engine yet');
+        const result = prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;',
+            '/repo/src/App.tsx',
+        ) as { code: string };
+
+        expect(result.code).toContain(
+            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(result.code).toContain('<div className="p-(--cz)" />');
+        expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
     it('lets build.parser opt into the Rust engine explicitly', () => {

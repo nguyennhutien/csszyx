@@ -13,7 +13,7 @@ use super::{
         plan_component_variable_hoists, CssVariableHoistNode, CssVariableHoistOptions,
         CssVariableHoistUsage,
     },
-    DynamicCssVarCategory, SourceIr,
+    CssVariableMapEntry, DynamicCssVarCategory, SourceIr,
 };
 
 /// CSS variable naming tier.
@@ -55,6 +55,15 @@ pub struct CssVariablePlanEntry {
     pub element_id: Option<String>,
     /// Planned CSS custom property name.
     pub name: String,
+}
+
+/// Planned IR plus public CSS variable metadata.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CssVariableMangling {
+    /// Planned source IR.
+    pub ir: SourceIr,
+    /// Original-to-mangled CSS custom property map.
+    pub variable_map: Vec<CssVariableMapEntry>,
 }
 
 /// Plans tiered CSS custom property names without mutating source.
@@ -104,6 +113,7 @@ pub fn plan_css_variable_names(usages: &[CssVariablePlanInput]) -> Vec<CssVariab
 /// element-scoped names. Component-tier hoisting needs a separate LCA planner
 /// so it can move style declarations between elements instead of only renaming
 /// them in place.
+#[cfg(test)]
 pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
     let mut next = ir.clone();
     let mut usages = Vec::new();
@@ -147,10 +157,11 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
 }
 
 /// Applies component-tier hoists, then scoped names for non-hoisted vars.
-pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> SourceIr {
+pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> CssVariableMangling {
     let mut next = ir.clone();
     let mut component_usages = Vec::new();
     let mut locations = Vec::new();
+    let mut variable_map = Vec::new();
 
     for (element_index, element) in ir.jsx_opening_elements.iter().enumerate() {
         for attr_index in &element.sz_attribute_indices {
@@ -239,6 +250,7 @@ pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> SourceIr {
                 .get_mut(attr_index)
                 .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
             {
+                push_variable_map(&mut variable_map, &prop.var_name, &plan.name);
                 prop.var_name = plan.name.clone();
                 prop.hoisted = true;
                 hoisted_location_ids.insert(location_index);
@@ -275,11 +287,31 @@ pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> SourceIr {
             .get_mut(attr_index)
             .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
         {
+            push_variable_map(&mut variable_map, &prop.var_name, &entry.name);
             prop.var_name = entry.name;
         }
     }
 
-    next
+    CssVariableMangling {
+        ir: next,
+        variable_map,
+    }
+}
+
+fn push_variable_map(map: &mut Vec<CssVariableMapEntry>, original: &str, mangled: &str) {
+    if original == mangled {
+        return;
+    }
+    if map
+        .iter()
+        .any(|entry| entry.original == original && entry.mangled == mangled)
+    {
+        return;
+    }
+    map.push(CssVariableMapEntry {
+        original: original.to_string(),
+        mangled: mangled.to_string(),
+    });
 }
 
 fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {

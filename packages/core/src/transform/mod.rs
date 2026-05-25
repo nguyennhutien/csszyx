@@ -33,8 +33,8 @@ use fast_path::{triage_source, FastPathTriage};
 use rayon::prelude::*;
 
 pub use contract::{
-    ParserPath, RecoveryMode, RecoveryToken, TransformFile, TransformMetadata, TransformProducer,
-    TransformResult, TransformTimings,
+    CssVariableMapEntry, ParserPath, RecoveryMode, RecoveryToken, TransformFile, TransformMetadata,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings,
 };
 pub use ir::{
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
@@ -69,13 +69,31 @@ impl std::error::Error for TransformError {}
 /// the native engine feature.
 #[allow(clippy::missing_const_for_fn)]
 pub fn transform_batch(files: &[TransformFile]) -> Result<Vec<TransformResult>, TransformError> {
+    transform_batch_with_options(files, TransformOptions::default())
+}
+
+/// Transforms a batch of files with explicit native options.
+///
+/// # Errors
+///
+/// Returns [`TransformError::NotImplemented`] when this crate was built without
+/// the native engine feature.
+#[allow(clippy::missing_const_for_fn)]
+pub fn transform_batch_with_options(
+    files: &[TransformFile],
+    options: TransformOptions,
+) -> Result<Vec<TransformResult>, TransformError> {
     #[cfg(feature = "native-engine")]
     {
-        Ok(files.par_iter().map(engine::transform_file).collect())
+        Ok(files
+            .par_iter()
+            .map(|file| engine::transform_file_with_options(file, options))
+            .collect())
     }
 
     #[cfg(not(feature = "native-engine"))]
     {
+        let _ = options;
         let _needs_parser = files
             .iter()
             .any(|file| matches!(triage_source(file), FastPathTriage::NeedsParser(_)));

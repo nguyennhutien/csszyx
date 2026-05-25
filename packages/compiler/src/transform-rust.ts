@@ -95,17 +95,15 @@ export function transformRustBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
-    if (options?.mangleVars) {
-        throw new OxcRustNotImplementedError(
-            'mangleVars is not implemented by the native Rust engine yet; use build.parser: "oxc" for opt-in CSS variable mangling.',
-        );
-    }
     try {
         return transformBatch(
             files.map((file, index) => ({
                 filename: file.filename ?? `file-${index}.tsx`,
                 source: file.source,
             })),
+            {
+                mangleVars: options?.mangleVars === true,
+            },
         ).map(fromNativeResult);
     } catch (err) {
         if (err instanceof OxcRustNotImplementedError) {
@@ -146,6 +144,8 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
                 },
             ]),
         ),
-        cssVariableMap: new Map(),
+        cssVariableMap: new Map(
+            (result.cssVariableMap ?? []).map(entry => [entry.original, entry.mangled]),
+        ),
     };
 }
