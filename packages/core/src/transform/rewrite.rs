@@ -7,7 +7,7 @@
 use string_wizard::{MagicString, UpdateOptions};
 
 use super::{
-    css_var_planner::apply_scoped_css_variable_names,
+    css_var_planner::apply_css_variable_mangling,
     lower::lower_sz_attribute_classes,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     DynamicCssVarCategory, DynamicCssVarIr, SourceIr,
@@ -49,7 +49,7 @@ pub fn rewrite_static_sz_attributes_with_options(
 ) -> Result<String, StaticRewriteUnsupported> {
     let planned_ir = options
         .mangle_vars
-        .then(|| apply_scoped_css_variable_names(ir));
+        .then(|| apply_css_variable_mangling(ir, source));
     let ir = planned_ir.as_ref().unwrap_or(ir);
     let mut magic = MagicString::new(source);
     let mut rewrote = false;
@@ -100,6 +100,11 @@ pub fn rewrite_static_sz_attributes_with_options(
             }
 
             rewrite_static_sz_element(source, ir, element, &mut magic)?;
+            rewrote = true;
+        }
+
+        if element.sz_attribute_indices.is_empty() && !element.hoisted_dynamic_css_vars.is_empty() {
+            apply_dynamic_style_props(source, ir, element, &mut magic);
             rewrote = true;
         }
     }
@@ -319,6 +324,8 @@ fn apply_dynamic_style_props(
         .sz_attribute_indices
         .iter()
         .flat_map(|index| ir.sz_attributes[*index].dynamic_css_vars.iter())
+        .filter(|prop| !prop.hoisted)
+        .chain(element.hoisted_dynamic_css_vars.iter())
         .collect::<Vec<_>>();
     if dynamic_props.is_empty() {
         return;
@@ -347,12 +354,11 @@ fn apply_dynamic_style_props(
         return;
     }
 
-    if let Some(last_attribute_end) = element.last_attribute_end {
-        magic.append_right(
-            last_attribute_end as usize,
-            format!(" style={{{{{props}}}}}"),
-        );
-    }
+    let insert_at = element.last_attribute_end.map_or_else(
+        || opening_attribute_insert_offset(source, element.opening_span.end as usize),
+        |offset| offset as usize,
+    );
+    magic.append_right(insert_at, format!(" style={{{{{props}}}}}"));
 }
 
 fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {
@@ -395,6 +401,24 @@ fn whitespace_start(source: &str, attr_start: usize) -> usize {
         index -= 1;
     }
     index
+}
+
+fn opening_attribute_insert_offset(source: &str, opening_end: usize) -> usize {
+    let mut index = opening_end.saturating_sub(1);
+    while index > 0 && source.as_bytes()[index].is_ascii_whitespace() {
+        index -= 1;
+    }
+    if source.as_bytes().get(index) == Some(&b'>') {
+        index = index.saturating_sub(1);
+    }
+    while index > 0 && source.as_bytes()[index].is_ascii_whitespace() {
+        index -= 1;
+    }
+    if source.as_bytes().get(index) == Some(&b'/') {
+        index
+    } else {
+        index.saturating_add(1)
+    }
 }
 
 #[cfg(test)]
@@ -555,6 +579,24 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = () => <div className=\"p-(--sz)\" style={{\"--sz\": `calc(${padVal} * var(--spacing))`}} />;"
+        );
+    }
+
+    #[test]
+    fn hoists_repeated_dynamic_spacing_value_to_common_ancestor() {
+        let source =
+            "const App = () => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;";
+        let rewritten = rewrite_static_sz_attributes_with_options(
+            source,
+            "/repo/src/App.tsx",
+            &parse(source),
+            RewriteOptions { mangle_vars: true },
+        )
+        .expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <section style={{\"--cz\": `calc(${pad} * var(--spacing))`}}><div className=\"p-(--cz)\" /><span className=\"p-(--cz)\" /></section>;"
         );
     }
 

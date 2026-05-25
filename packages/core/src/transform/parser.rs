@@ -159,6 +159,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             has_recovery_token_attribute: false,
             last_attribute_end: None,
             element_name: "<>".to_string(),
+            hoisted_dynamic_css_vars: Vec::new(),
         });
 
         self.element_stack.push(index);
@@ -233,6 +234,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             has_recovery_token_attribute,
             last_attribute_end,
             element_name,
+            hoisted_dynamic_css_vars: Vec::new(),
         });
 
         walk::walk_jsx_opening_element(self, element);
@@ -1122,6 +1124,7 @@ fn dynamic_css_var_from_property(
         category: dynamic_css_var_category(key),
         expression_span,
         variant_prefix: variant_prefix.map(ToString::to_string),
+        hoisted: false,
     }
 }
 

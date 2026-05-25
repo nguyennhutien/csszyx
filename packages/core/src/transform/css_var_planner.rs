@@ -8,7 +8,13 @@ use std::collections::HashMap;
 
 use crate::encoder::encode;
 
-use super::SourceIr;
+use super::{
+    css_var_hoist_planner::{
+        plan_component_variable_hoists, CssVariableHoistNode, CssVariableHoistOptions,
+        CssVariableHoistUsage,
+    },
+    DynamicCssVarCategory, SourceIr,
+};
 
 /// CSS variable naming tier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +144,154 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
     }
 
     next
+}
+
+/// Applies component-tier hoists, then scoped names for non-hoisted vars.
+pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> SourceIr {
+    let mut next = ir.clone();
+    let mut component_usages = Vec::new();
+    let mut locations = Vec::new();
+
+    for (element_index, element) in ir.jsx_opening_elements.iter().enumerate() {
+        for attr_index in &element.sz_attribute_indices {
+            let attribute = &ir.sz_attributes[*attr_index];
+            for (prop_index, prop) in attribute.dynamic_css_vars.iter().enumerate() {
+                let id = locations.len().to_string();
+                component_usages.push(CssVariablePlanInput {
+                    id,
+                    tier: CssVariableTier::Component,
+                    property_key: prop.key.clone(),
+                    variant_chain: prop.variant_prefix.clone(),
+                    element_id: Some(element_index.to_string()),
+                });
+                locations.push((element_index, *attr_index, prop_index));
+            }
+        }
+    }
+
+    let component_plan = plan_css_variable_names(&component_usages);
+    let hoist_nodes = ir
+        .jsx_opening_elements
+        .iter()
+        .enumerate()
+        .map(|(index, element)| CssVariableHoistNode {
+            id: index.to_string(),
+            parent_id: element
+                .parent_element_index
+                .map(|parent| parent.to_string()),
+            can_host: element.can_host_style,
+        })
+        .collect::<Vec<_>>();
+    let hoist_usages = component_plan
+        .iter()
+        .filter_map(|entry| {
+            let location_index = entry.id.parse::<usize>().ok()?;
+            let (element_index, attr_index, prop_index) = *locations.get(location_index)?;
+            let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
+            Some(CssVariableHoistUsage {
+                id: entry.id.clone(),
+                element_id: element_index.to_string(),
+                name: entry.name.clone(),
+                value_key: dynamic_value_key(source, prop),
+            })
+        })
+        .collect::<Vec<_>>();
+    let hoist_plans = plan_component_variable_hoists(
+        &hoist_nodes,
+        &hoist_usages,
+        CssVariableHoistOptions::default(),
+    );
+
+    let mut hoisted_location_ids = std::collections::HashSet::new();
+    for plan in hoist_plans {
+        let Some(first_usage_id) = plan.usage_ids.first() else {
+            continue;
+        };
+        let Ok(first_location_index) = first_usage_id.parse::<usize>() else {
+            continue;
+        };
+        let Some((_, first_attr_index, first_prop_index)) =
+            locations.get(first_location_index).copied()
+        else {
+            continue;
+        };
+        let mut hoisted_prop =
+            next.sz_attributes[first_attr_index].dynamic_css_vars[first_prop_index].clone();
+        hoisted_prop.var_name = plan.name.clone();
+        hoisted_prop.hoisted = false;
+        if let Some(target) = next.jsx_opening_elements.get_mut(
+            plan.target_element_id
+                .parse::<usize>()
+                .unwrap_or(usize::MAX),
+        ) {
+            target.hoisted_dynamic_css_vars.push(hoisted_prop);
+        }
+
+        for usage_id in plan.usage_ids {
+            let Ok(location_index) = usage_id.parse::<usize>() else {
+                continue;
+            };
+            let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
+                continue;
+            };
+            if let Some(prop) = next
+                .sz_attributes
+                .get_mut(attr_index)
+                .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
+            {
+                prop.var_name = plan.name.clone();
+                prop.hoisted = true;
+                hoisted_location_ids.insert(location_index);
+            }
+        }
+    }
+
+    let scoped_usages = locations
+        .iter()
+        .enumerate()
+        .filter(|(location_index, _)| !hoisted_location_ids.contains(location_index))
+        .map(
+            |(location_index, (element_index, attr_index, prop_index))| {
+                let prop = &ir.sz_attributes[*attr_index].dynamic_css_vars[*prop_index];
+                CssVariablePlanInput {
+                    id: location_index.to_string(),
+                    tier: CssVariableTier::Scoped,
+                    property_key: prop.key.clone(),
+                    variant_chain: prop.variant_prefix.clone(),
+                    element_id: Some(element_index.to_string()),
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+    for entry in plan_css_variable_names(&scoped_usages) {
+        let Ok(location_index) = entry.id.parse::<usize>() else {
+            continue;
+        };
+        let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
+            continue;
+        };
+        if let Some(prop) = next
+            .sz_attributes
+            .get_mut(attr_index)
+            .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
+        {
+            prop.var_name = entry.name;
+        }
+    }
+
+    next
+}
+
+fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {
+    let expression =
+        &source[prop.expression_span.start as usize..prop.expression_span.end as usize];
+    match prop.category {
+        DynamicCssVarCategory::Spacing => format!("spacing:{expression}"),
+        DynamicCssVarCategory::Color => format!("color:{expression}"),
+        DynamicCssVarCategory::Angle => format!("angle:{expression}"),
+        DynamicCssVarCategory::Duration => format!("duration:{expression}"),
+        DynamicCssVarCategory::Passthrough => format!("pass:{expression}"),
+    }
 }
 
 fn canonical_usage_key(usage: &CssVariablePlanInput) -> String {
@@ -292,6 +446,7 @@ mod tests {
             category: DynamicCssVarCategory::Passthrough,
             expression_span: TextSpan { start: 0, end: 0 },
             variant_prefix: None,
+            hoisted: false,
         }
     }
 
@@ -310,6 +465,7 @@ mod tests {
             has_recovery_token_attribute: false,
             last_attribute_end: None,
             element_name: "div".to_string(),
+            hoisted_dynamic_css_vars: Vec::new(),
         }
     }
 }

@@ -114,6 +114,8 @@ pub struct JsxOpeningElementIr {
     pub last_attribute_end: Option<u32>,
     /// String form of the JSX element name used by recovery tokens.
     pub element_name: String,
+    /// Dynamic CSS custom properties hoisted from descendant `sz` attributes.
+    pub hoisted_dynamic_css_vars: Vec<DynamicCssVarIr>,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -203,6 +205,8 @@ pub struct DynamicCssVarIr {
     pub expression_span: TextSpan,
     /// Variant prefix chain as emitted by Tailwind, for example `md:hover`.
     pub variant_prefix: Option<String>,
+    /// Whether this declaration was hoisted to an ancestor style prop.
+    pub hoisted: bool,
 }
 
 /// Runtime value transform used when writing a CSS custom property.
@@ -389,6 +393,7 @@ mod tests {
                 has_recovery_token_attribute: false,
                 last_attribute_end: Some(72),
                 element_name: "div".to_string(),
+                hoisted_dynamic_css_vars: Vec::new(),
             }],
         };
 
