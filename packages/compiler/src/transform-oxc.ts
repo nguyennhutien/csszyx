@@ -863,6 +863,7 @@ interface OxcComponentHoistCandidate {
     propertyKey: string;
     variantChain: string;
     valueSource: string;
+    valueKey: string;
     info: OxcDynamicPropInfo;
 }
 
@@ -1432,7 +1433,7 @@ function planOxcComponentVariableHoists(
         id: candidate.id,
         elementId: candidate.elementId,
         name: nameByUsage.get(candidate.id) ?? candidate.info.varName,
-        valueKey: candidate.valueSource,
+        valueKey: candidate.valueKey,
     }));
     const analysis = planComponentVariableHoistsWithDiagnostics(nodes, hoistUsages, {
         maxDepth,
@@ -1627,6 +1628,7 @@ function collectOpeningHoistCandidates(
                 propertyKey: dynamicKey,
                 variantChain: info.variantChain,
                 valueSource: generateStyleValueSource(info, source),
+                valueKey: buildDynamicValueKey(info, source),
                 info,
             });
         }
@@ -1961,6 +1963,89 @@ function generateStyleValueSource(info: OxcDynamicPropInfo, source: string): str
         default:
             return `\`\${${expressionSource}}\``;
     }
+}
+
+/**
+ * Builds the normalized identity used for comparing dynamic CSS variable values.
+ *
+ * @param info Dynamic prop metadata.
+ * @param source Original source for expression slicing.
+ * @returns Category-prefixed normalized expression key.
+ */
+function buildDynamicValueKey(info: OxcDynamicPropInfo, source: string): string {
+    const expressionSource = normalizeDynamicExpressionKey(
+        source.slice(info.expression.start, info.expression.end),
+    );
+    switch (info.category) {
+        case PropertyCategory.SPACING:
+            return `spacing:${expressionSource}`;
+        case PropertyCategory.COLOR:
+            return `color:${expressionSource}`;
+        case PropertyCategory.ANGLE:
+            return `angle:${expressionSource}`;
+        case PropertyCategory.DURATION:
+            return `duration:${expressionSource}`;
+        default:
+            return `pass:${expressionSource}`;
+    }
+}
+
+/**
+ * Normalizes expression text only where semantics are structurally obvious.
+ *
+ * @param expressionSource Runtime expression source.
+ * @returns Trimmed expression with redundant outer parentheses removed.
+ */
+function normalizeDynamicExpressionKey(expressionSource: string): string {
+    let normalized = expressionSource.trim();
+    while (hasRedundantOuterParens(normalized)) {
+        normalized = normalized.slice(1, -1).trim();
+    }
+    return normalized;
+}
+
+/**
+ * Checks whether one pair of outer parentheses wraps the full expression.
+ *
+ * @param expressionSource Trimmed expression source.
+ * @returns True when removing the outer pair preserves grouping.
+ */
+function hasRedundantOuterParens(expressionSource: string): boolean {
+    if (!expressionSource.startsWith('(') || !expressionSource.endsWith(')')) {
+        return false;
+    }
+    let depth = 0;
+    let quote: string | null = null;
+    let escaped = false;
+    for (let index = 0; index < expressionSource.length; index++) {
+        const char = expressionSource[index];
+        if (quote) {
+            if (escaped) {
+                escaped = false;
+            } else if (char === '\\') {
+                escaped = true;
+            } else if (char === quote) {
+                quote = null;
+            }
+            continue;
+        }
+        if (char === '"' || char === "'" || char === '`') {
+            quote = char;
+            continue;
+        }
+        if (char === '(') {
+            depth++;
+        } else if (char === ')') {
+            depth--;
+            if (depth === 0 && index !== expressionSource.length - 1) {
+                return false;
+            }
+        }
+        if (depth < 0) {
+            return false;
+        }
+    }
+    return depth === 0;
 }
 
 /**

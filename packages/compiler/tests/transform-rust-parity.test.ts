@@ -215,6 +215,13 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-dynamic-css-var-mangle-vars-normalized-value-key',
+        source: 'const X = ({ pad }) => <section><div sz={{ p: pad }} /><button sz={{ p: (pad) }} /></section>;',
+        filename: 'dynamic-css-var-mangle-vars-normalized-value-key.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
         name: 'sz-dynamic-css-var-existing-class',
         source: 'const X = ({ pad }) => <div className="existing" sz={{ p: pad }} />;',
         filename: 'dynamic-existing-static-class.tsx',

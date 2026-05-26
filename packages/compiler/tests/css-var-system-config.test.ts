@@ -180,6 +180,22 @@ describe('CSS variable system config contract', () => {
         );
     });
 
+    it('hoists dynamic values with redundant expression parentheses', () => {
+        const source =
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: (pad) }} /></section>;';
+        const result = transformOxc(source, 'mangle-vars-normalized-value-key.tsx', {
+            mangleVars: true,
+        });
+
+        expect(result.code).toContain(
+            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(result.code).toContain('<div className="p-(--cz)" />');
+        expect(result.code).toContain('<span className="p-(--cz)" />');
+        expect(result.code).not.toContain('--sz');
+        expect(result.cssVariableMap).toEqual(new Map([['--_sz-p', '--cz']]));
+    });
+
     it('does not hoist repeated vars through fragments', () => {
         const source =
             'const App = ({ pad }) => <><div sz={{ p: pad }} /><span sz={{ p: pad }} /></>;';

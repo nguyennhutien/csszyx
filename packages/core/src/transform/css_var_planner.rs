@@ -428,8 +428,9 @@ fn push_variable_map(map: &mut Vec<CssVariableMapEntry>, original: &str, mangled
 }
 
 fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {
-    let expression =
-        &source[prop.expression_span.start as usize..prop.expression_span.end as usize];
+    let expression = normalize_dynamic_expression_key(
+        &source[prop.expression_span.start as usize..prop.expression_span.end as usize],
+    );
     match prop.category {
         DynamicCssVarCategory::Spacing => format!("spacing:{expression}"),
         DynamicCssVarCategory::Color => format!("color:{expression}"),
@@ -437,6 +438,52 @@ fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {
         DynamicCssVarCategory::Duration => format!("duration:{expression}"),
         DynamicCssVarCategory::Passthrough => format!("pass:{expression}"),
     }
+}
+
+fn normalize_dynamic_expression_key(expression: &str) -> String {
+    let mut normalized = expression.trim().to_string();
+    while has_redundant_outer_parens(&normalized) {
+        normalized = normalized[1..normalized.len() - 1].trim().to_string();
+    }
+    normalized
+}
+
+fn has_redundant_outer_parens(expression: &str) -> bool {
+    if !expression.starts_with('(') || !expression.ends_with(')') {
+        return false;
+    }
+    let mut depth = 0_i32;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let last_index = expression.len() - 1;
+    for (index, char) in expression.char_indices() {
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if char == '\\' {
+                escaped = true;
+            } else if char == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        if matches!(char, '"' | '\'' | '`') {
+            quote = Some(char);
+            continue;
+        }
+        if char == '(' {
+            depth += 1;
+        } else if char == ')' {
+            depth -= 1;
+            if depth == 0 && index != last_index {
+                return false;
+            }
+        }
+        if depth < 0 {
+            return false;
+        }
+    }
+    depth == 0
 }
 
 fn canonical_usage_key(usage: &CssVariablePlanInput) -> String {
@@ -452,7 +499,7 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{
-        apply_scoped_css_variable_names, plan_css_variable_names,
+        apply_scoped_css_variable_names, normalize_dynamic_expression_key, plan_css_variable_names,
         plan_css_variable_names_with_options, CssVariablePlanInput, CssVariablePlanOptions,
         CssVariableTier,
     };
@@ -551,6 +598,16 @@ mod tests {
             .map(|entry| (entry.id.as_str(), entry.name.as_str()))
             .collect::<Vec<_>>();
         assert_eq!(pairs, [("component", "--cy"), ("scoped", "--sy")]);
+    }
+
+    #[test]
+    fn normalizes_dynamic_value_key_outer_parentheses() {
+        assert_eq!(normalize_dynamic_expression_key(" pad "), "pad");
+        assert_eq!(normalize_dynamic_expression_key("((pad))"), "pad");
+        assert_eq!(
+            normalize_dynamic_expression_key("(pad) + gap"),
+            "(pad) + gap"
+        );
     }
 
     #[test]
