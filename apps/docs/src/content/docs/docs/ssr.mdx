@@ -3,7 +3,7 @@ title: SSR & Hydration
 description: How CSSzyx guarantees hydration correctness with SHA-256 checksums.
 ---
 
-import { Steps, Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid } from "@astrojs/starlight/components";
 
 When using SSR (Next.js, Remix, Astro), the server renders HTML with mangled
 class names (`z`, `y`, `x`). The client must use the same mangle map to
@@ -35,14 +35,23 @@ CSSzyx detects this and aborts hydration before the mismatch causes damage.
 ```html
 <!-- Server output includes checksum and mangle map -->
 <html data-sz-checksum="a3f9c2...">
-  <script id="__sz_mangle__" type="application/json">
-    {"z":"p-4","y":"bg-blue-500","x":"hover:bg-blue-600"}
+  <script id="__CSSZYX_MANGLE_MAP__" type="application/json">
+    {
+      "class:p-4": "z",
+      "class:bg-blue-500": "y",
+      "class:hover:bg-blue-600": "x"
+    }
   </script>
 </html>
 ```
 
-The client runtime calls `verifyMangleChecksum()` before hydration. If the
-checksum doesn't match the embedded mangle map, the abort protocol fires.
+The client runtime calls `verifyMangleChecksum(expectedChecksum)` before
+hydration. If the expected checksum doesn't match the checksum embedded on
+`<html data-sz-checksum="...">`, the abort protocol fires.
+
+When `production.mangleVars` is enabled, the same checksum map also includes
+CSS-variable entries such as `var:--_sz-p:--cz`. The debug helper keeps a
+separate `window.__csszyx.varMangleMap` for inspection.
 
 ## Abort Protocol
 
@@ -58,14 +67,13 @@ worse than aborting.
 
 ```ts
 // What happens on mismatch (automatically, no code needed)
-if (!verifyMangleChecksum(clientMangleMap, embeddedChecksum)) {
+if (!verifyMangleChecksum(expectedChecksum)) {
   abortHydration(); // Preserve SSR HTML, block React hydration
 }
 ```
 
 ## Setting Up SSR Hydration
 
-<Steps>
 1. **Enable checksum injection in the plugin**
 
    ```ts
@@ -82,10 +90,10 @@ if (!verifyMangleChecksum(clientMangleMap, embeddedChecksum)) {
 
    ```tsx
    // src/main.tsx (or app/layout.tsx for Next.js)
-   import { initRuntime } from '@csszyx/runtime';
+   import { initRuntime } from "@csszyx/runtime";
 
    initRuntime({
-     development: process.env.NODE_ENV === 'development',
+     development: process.env.NODE_ENV === "development",
      strictHydration: true,
    });
    ```
@@ -96,7 +104,6 @@ if (!verifyMangleChecksum(clientMangleMap, embeddedChecksum)) {
    per-element `szRecover` JSX attribute (see next section). It scopes
    recovery to subtrees where it's actually safe instead of opting the
    whole page in.
-</Steps>
 
 ## Recovery Tokens via `szRecover`
 
@@ -128,9 +135,17 @@ aborting, opt in per-element with the `szRecover` JSX attribute.
 
 2. **SSR HTML.** The unplugin injects a single manifest script into
    `<head>` containing every emitted token:
+
    ```html
    <script id="__SZ_RECOVERY_MANIFEST__" type="application/json">
-     {"buildId":"…","checksum":"…","mangleChecksum":"…","tokens":{"a3b9…":{"mode":"csr","component":"section","path":"…"}}}
+     {
+       "buildId": "…",
+       "checksum": "…",
+       "mangleChecksum": "…",
+       "tokens": {
+         "a3b9…": { "mode": "csr", "component": "section", "path": "…" }
+       }
+     }
    </script>
    ```
 
@@ -144,9 +159,9 @@ aborting, opt in per-element with the `szRecover` JSX attribute.
 
 ### `csr` vs `dev-only`
 
-| Mode       | Dev manifest | Prod manifest | When to use |
-|------------|--------------|---------------|-------------|
-| `csr`      | included     | included      | Subtrees that legitimately may render differently on client (auth-gated, locale-aware, A/B) |
+| Mode       | Dev manifest | Prod manifest | When to use                                                                                              |
+| ---------- | ------------ | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `csr`      | included     | included      | Subtrees that legitimately may render differently on client (auth-gated, locale-aware, A/B)              |
 | `dev-only` | included     | **stripped**  | Debug overlays, dev-mode banners — the build emits a single rolled-up warning listing the stripped paths |
 
 Production strips `dev-only` because the runtime's `__SZ_ALLOW_CSR_RECOVERY__`
@@ -178,13 +193,13 @@ import {
   verifyMangleMapIntegrity,
   getHydrationErrors,
   isHydrationAborted,
-} from '@csszyx/runtime';
+} from "@csszyx/runtime";
 
 // Start hydration session
 startHydration();
 
 // Verify checksum (throws on mismatch if strictHydration: true)
-const isValid = verifyMangleChecksum(map, checksum);
+const isValid = verifyMangleChecksum(expectedChecksum);
 
 // Check if hydration was aborted
 if (isHydrationAborted()) {
@@ -204,6 +219,7 @@ initRuntime({ debug: true });
 ```
 
 This logs:
+
 - Mangle map loaded from DOM
 - Checksum verification result
 - Any hydration errors with class-level detail
@@ -212,7 +228,7 @@ This logs:
 ## Hydration Error Types
 
 ```ts
-import type { HydrationErrorType } from '@csszyx/runtime';
+import type { HydrationErrorType } from "@csszyx/runtime";
 
 // Error types:
 // 'checksum_mismatch'   — SHA-256 mismatch between server/client
