@@ -188,6 +188,24 @@ describe('csszyx parser selection', () => {
         );
     });
 
+    it('exposes CSS variable hoisting efficacy metrics', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: { mangleVars: true },
+        }) as TransformHook[];
+
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;',
+            '/repo/src/App.tsx',
+        );
+        const moduleSource = String(prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID));
+
+        expect(moduleSource).toContain('"componentClassUses": 2');
+        expect(moduleSource).toContain('"componentStyleDeclarations": 1');
+        expect(moduleSource).toContain('"estimatedHoistedDeclarationsSaved": 1');
+    });
+
     it('passes production.mangleVars into the Rust compiler path', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },

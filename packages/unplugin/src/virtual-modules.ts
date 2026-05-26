@@ -19,6 +19,15 @@ export const RESOLVED_VIRTUAL_MODULE_ID: string = `\0${VIRTUAL_MODULE_ID}`;
 
 import type { CssVariableMangleValue } from '@csszyx/compiler';
 
+/** CSS variable mangling and hoisting metrics exposed for debugging. */
+export interface CSSVariableMetrics {
+    componentClassUses: number;
+    componentStyleDeclarations: number;
+    estimatedHoistedDeclarationsSaved: number;
+    scopedClassUses: number;
+    scopedStyleDeclarations: number;
+}
+
 /**
  * Virtual module ID for checksum only.
  */
@@ -36,6 +45,7 @@ export const RESOLVED_VIRTUAL_CHECKSUM_ID: string = `\0${VIRTUAL_CHECKSUM_ID}`;
  * @param {string} checksum - SHA-256 checksum of the mangle map
  * @param varMangleMap CSS variable mangle map. Values can be arrays when one
  * original dynamic variable is emitted with both scoped and hoisted names.
+ * @param cssVarMetrics CSS variable hoisting metrics.
  * @returns {string} Module source code
  *
  * @example
@@ -53,6 +63,7 @@ export function createMangleMapModule(
     mangleMap: Record<string, string>,
     checksum: string,
     varMangleMap: Record<string, CssVariableMangleValue> = {},
+    cssVarMetrics: CSSVariableMetrics | null = null,
 ): string {
     return `/**
  * Auto-generated mangle map for csszyx.
@@ -66,11 +77,14 @@ export const mangleMap = ${JSON.stringify(mangleMap, null, 2)};
 
 export const varMangleMap = ${JSON.stringify(varMangleMap, null, 2)};
 
+export const cssVarMetrics = ${JSON.stringify(cssVarMetrics, null, 2)};
+
 export const checksum = ${JSON.stringify(checksum)};
 
 export default {
   mangleMap,
   varMangleMap,
+  cssVarMetrics,
   checksum,
 };
 `;

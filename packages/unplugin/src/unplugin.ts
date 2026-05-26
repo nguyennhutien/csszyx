@@ -66,6 +66,8 @@ interface PluginState {
     mangleMap: Record<string, string>;
     varMangleEntriesByFile: Map<string, Array<[string, string]>>;
     varMangleMap: Record<string, CssVariableMangleValue>;
+    cssVarMetricsByFile: Map<string, CSSVariableMetrics>;
+    cssVarMetrics: CSSVariableMetrics;
     checksum: string;
     finalized: boolean;
     rootDir: string;
@@ -78,6 +80,15 @@ interface PluginState {
     recoveryTokens: Map<string, TokenData>;
     /** RSC graph records collected from transformed TS/JS modules. */
     rscModules: Map<string, RSCModuleRecord>;
+}
+
+/** CSS variable mangling and hoisting metrics emitted for debugging. */
+interface CSSVariableMetrics {
+    componentClassUses: number;
+    componentStyleDeclarations: number;
+    estimatedHoistedDeclarationsSaved: number;
+    scopedClassUses: number;
+    scopedStyleDeclarations: number;
 }
 
 /**
@@ -242,6 +253,127 @@ function addVarMangleMapping(
     if (!values.includes(mangled)) {
         map[original] = [...values, mangled];
     }
+}
+
+/**
+ * Empty CSS variable metric counters.
+ *
+ * @returns Zeroed CSS variable metrics.
+ */
+function emptyCSSVariableMetrics(): CSSVariableMetrics {
+    return {
+        componentClassUses: 0,
+        componentStyleDeclarations: 0,
+        estimatedHoistedDeclarationsSaved: 0,
+        scopedClassUses: 0,
+        scopedStyleDeclarations: 0,
+    };
+}
+
+/**
+ * Records CSS variable hoisting metrics owned by one source file.
+ *
+ * @param state Plugin state to update.
+ * @param filename Source filename that owns the metrics.
+ * @param code Transformed source code, or null to clear this file.
+ */
+function recordFileCSSVariableMetrics(
+    state: Pick<PluginState, 'cssVarMetricsByFile' | 'cssVarMetrics'>,
+    filename: string,
+    code: string | null,
+): void {
+    const normalizedFilename = normalizeSourceFilename(filename);
+    if (!code) {
+        state.cssVarMetricsByFile.delete(normalizedFilename);
+    } else {
+        const metrics = collectCSSVariableMetrics(code);
+        if (hasCSSVariableMetrics(metrics)) {
+            state.cssVarMetricsByFile.set(normalizedFilename, metrics);
+        } else {
+            state.cssVarMetricsByFile.delete(normalizedFilename);
+        }
+    }
+    state.cssVarMetrics = buildCSSVariableMetrics(state.cssVarMetricsByFile);
+}
+
+/**
+ * Collects CSS variable hoisting metrics from one transformed module.
+ *
+ * @param code Transformed source code.
+ * @returns Metrics for component/scoped tier class uses and style declarations.
+ */
+function collectCSSVariableMetrics(code: string): CSSVariableMetrics {
+    const componentUses = new Map<string, number>();
+    const componentDeclarations = new Map<string, number>();
+    const metrics = emptyCSSVariableMetrics();
+
+    for (const match of code.matchAll(/\(--([cs][A-Za-z0-9]+)\)/g)) {
+        const name = `--${match[1]}`;
+        if (name.startsWith('--c')) {
+            metrics.componentClassUses++;
+            incrementCount(componentUses, name);
+        } else {
+            metrics.scopedClassUses++;
+        }
+    }
+    for (const match of code.matchAll(/["'](--([cs][A-Za-z0-9]+))["']\s*:/g)) {
+        const name = match[1];
+        if (name.startsWith('--c')) {
+            metrics.componentStyleDeclarations++;
+            incrementCount(componentDeclarations, name);
+        } else {
+            metrics.scopedStyleDeclarations++;
+        }
+    }
+    for (const [name, uses] of componentUses) {
+        const declarations = componentDeclarations.get(name) ?? 0;
+        metrics.estimatedHoistedDeclarationsSaved += Math.max(0, uses - declarations);
+    }
+    return metrics;
+}
+
+/**
+ * Aggregates CSS variable metrics in stable filename order.
+ *
+ * @param metricsByFile Per-file metrics.
+ * @returns Aggregated metrics.
+ */
+function buildCSSVariableMetrics(
+    metricsByFile: ReadonlyMap<string, CSSVariableMetrics>,
+): CSSVariableMetrics {
+    const total = emptyCSSVariableMetrics();
+    for (const file of [...metricsByFile.keys()].sort()) {
+        const metrics = metricsByFile.get(file);
+        if (!metrics) {
+            continue;
+        }
+        total.componentClassUses += metrics.componentClassUses;
+        total.componentStyleDeclarations += metrics.componentStyleDeclarations;
+        total.estimatedHoistedDeclarationsSaved += metrics.estimatedHoistedDeclarationsSaved;
+        total.scopedClassUses += metrics.scopedClassUses;
+        total.scopedStyleDeclarations += metrics.scopedStyleDeclarations;
+    }
+    return total;
+}
+
+/**
+ * Checks whether any CSS variable metrics were collected.
+ *
+ * @param metrics Metrics to inspect.
+ * @returns True when at least one counter is non-zero.
+ */
+function hasCSSVariableMetrics(metrics: CSSVariableMetrics): boolean {
+    return Object.values(metrics).some(value => value > 0);
+}
+
+/**
+ * Increments one counter in a map.
+ *
+ * @param map Counter map.
+ * @param key Counter key.
+ */
+function incrementCount(map: Map<string, number>, key: string): void {
+    map.set(key, (map.get(key) ?? 0) + 1);
 }
 
 /**
@@ -706,6 +838,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         mangleMap: {},
         varMangleEntriesByFile: new Map(),
         varMangleMap: {},
+        cssVarMetricsByFile: new Map(),
+        cssVarMetrics: emptyCSSVariableMetrics(),
         checksum: '',
         finalized: false,
         rootDir: process.cwd(),
@@ -1000,6 +1134,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             state.recoveryTokens.set(token, data);
                         }
                         recordFileVarMangleEntries(state, filePath, cssVariableEntries(result));
+                        recordFileCSSVariableMetrics(state, filePath, result.code);
                         // Extract static classes from _sz() runtime calls.
                         // When an sz prop has any dynamic value, the compiler wraps the
                         // entire object in _sz({...}). Static values inside are invisible
@@ -1214,6 +1349,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         state.mangleMap,
                         state.checksum,
                         state.varMangleMap,
+                        state.cssVarMetrics,
                     );
                 }
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
@@ -1330,6 +1466,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         transformed = result.transformed;
                         szClasses = result.classes;
                         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
+                        recordFileCSSVariableMetrics(state, id, result.code);
                         // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
                         // Suppressed in production to avoid leaking source paths into build output.
                         if (
@@ -1346,6 +1483,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 } else if (shouldProcessSource(id)) {
                     recordFileVarMangleEntries(state, id, []);
+                    recordFileCSSVariableMetrics(state, id, null);
                 }
 
                 // Layout injection (SSR frameworks like Next.js)
@@ -1469,6 +1607,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (change.event === 'delete') {
                     deleteRSCModuleRecord(state.rscModules, id);
                     recordFileVarMangleEntries(state, id, []);
+                    recordFileCSSVariableMetrics(state, id, null);
                 }
             },
 
@@ -1547,6 +1686,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                     if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) {
                         recordFileVarMangleEntries(state, ctx.file, []);
+                        recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
@@ -1560,11 +1700,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         );
                     } catch {
                         recordFileVarMangleEntries(state, ctx.file, []);
+                        recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     if (!result.transformed) {
                         recordFileVarMangleEntries(state, ctx.file, []);
+                        recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
@@ -1573,6 +1715,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         state.classes.add(cls);
                     }
                     recordFileVarMangleEntries(state, ctx.file, cssVariableEntries(result));
+                    recordFileCSSVariableMetrics(state, ctx.file, result.code);
                     for (const [token, data] of result.recoveryTokens) {
                         state.recoveryTokens.set(token, data);
                     }
@@ -1676,6 +1819,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             classes: string[];
                             mangleMap?: Record<string, string>;
                             varMangleMap?: Record<string, CssVariableMangleValue>;
+                            cssVarMetrics?: CSSVariableMetrics;
                         } = {
                             version: '0.4.0',
                             buildId: state.checksum,
@@ -1690,6 +1834,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         }
                         if (Object.keys(state.varMangleMap).length > 0) {
                             manifestData.varMangleMap = state.varMangleMap;
+                        }
+                        if (hasCSSVariableMetrics(state.cssVarMetrics)) {
+                            manifestData.cssVarMetrics = state.cssVarMetrics;
                         }
                         compilation.emitAsset(
                             'csszyx-manifest.json',
@@ -1815,6 +1962,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     classes: string[];
                     mangleMap?: Record<string, string>;
                     varMangleMap?: Record<string, CssVariableMangleValue>;
+                    cssVarMetrics?: CSSVariableMetrics;
                 } = {
                     version: '0.4.0',
                     buildId: state.checksum,
@@ -1825,6 +1973,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
                 if (Object.keys(state.varMangleMap).length > 0) {
                     manifestData.varMangleMap = state.varMangleMap;
+                }
+                if (hasCSSVariableMetrics(state.cssVarMetrics)) {
+                    manifestData.cssVarMetrics = state.cssVarMetrics;
                 }
                 this.emitFile({
                     type: 'asset',
