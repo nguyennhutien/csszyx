@@ -91,6 +91,7 @@ const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
+const DEFAULT_VAR_MANGLE_MAP_MAX_BYTES = 100 * 1024;
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
@@ -183,6 +184,41 @@ function buildVarMangleMap(
         }
     }
     return next;
+}
+
+/**
+ * Validates the CSS variable mangle map before it is emitted into HTML/assets.
+ *
+ * @param varMangleMap CSS variable mangle map.
+ * @param maxBytes Maximum serialized UTF-8 bytes.
+ */
+function assertVarMangleMapSize(
+    varMangleMap: Record<string, CssVariableMangleValue>,
+    maxBytes: number,
+): void {
+    const size = Buffer.byteLength(JSON.stringify(varMangleMap), 'utf8');
+    if (size <= maxBytes) {
+        return;
+    }
+    throw new Error(
+        `[csszyx] CSS variable mangle map is ${size} bytes, which exceeds the ` +
+            `${maxBytes} byte safety cap. Reduce production.mangleVars usage, split the bundle, ` +
+            'or raise CSSZYX_VAR_MANGLE_MAP_MAX_BYTES if this payload size is intentional.',
+    );
+}
+
+/**
+ * Reads the CSS variable mangle-map size cap from the environment.
+ *
+ * @returns Maximum serialized var-map bytes.
+ */
+function resolveVarMangleMapMaxBytes(): number {
+    const raw = process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES;
+    if (!raw) {
+        return DEFAULT_VAR_MANGLE_MAP_MAX_BYTES;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_VAR_MANGLE_MAP_MAX_BYTES;
 }
 
 /**
@@ -649,6 +685,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const cacheVersionsKnown =
         PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
     const cacheEnabled = cacheRequested && cacheVersionsKnown;
+    const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
         console.warn(
@@ -1106,6 +1143,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             newMap[sortedClasses[i]] = encode(i);
         }
         state.mangleMap = newMap;
+        assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
         state.checksum = compute_mangle_checksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
         );

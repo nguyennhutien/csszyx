@@ -10,6 +10,7 @@ type TransformHook = {
 };
 
 const ORIGINAL_ENV = process.env.CSSZYX_PARSER;
+const ORIGINAL_VAR_MAP_MAX_BYTES = process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES;
 
 // The Rust parser branch needs the host platform's optional native package to
 // contain a built addon before the unplugin can dispatch to it. CI should run
@@ -34,6 +35,11 @@ afterEach(() => {
         delete process.env.CSSZYX_PARSER;
     } else {
         process.env.CSSZYX_PARSER = ORIGINAL_ENV;
+    }
+    if (ORIGINAL_VAR_MAP_MAX_BYTES === undefined) {
+        delete process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES;
+    } else {
+        process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES = ORIGINAL_VAR_MAP_MAX_BYTES;
     }
 });
 
@@ -162,6 +168,24 @@ describe('csszyx parser selection', () => {
 
         expect(moduleSource).not.toContain('"--_sz-p"');
         expect(moduleSource).toContain('"--_sz-gap": "--sz"');
+    });
+
+    it('fails loudly when CSS variable metadata exceeds the safety cap', () => {
+        process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES = '16';
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: { mangleVars: true },
+        }) as TransformHook[];
+
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = ({ pad }) => <div sz={{ p: pad }} />;',
+            '/repo/src/App.tsx',
+        );
+
+        expect(() => prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID)).toThrow(
+            'CSS variable mangle map',
+        );
     });
 
     it('passes production.mangleVars into the Rust compiler path', () => {
