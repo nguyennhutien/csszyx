@@ -66,6 +66,18 @@ describe('CSS variable system config contract', () => {
         expect(result.cssVariableMap).toEqual(new Map([['--_sz-p', '--cz']]));
     });
 
+    it('reduces repeated dynamic CSS variable output when mangleVars is enabled', () => {
+        const source =
+            'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /><button sz={{ p: pad }} /></section>;';
+        const disabled = transformOxc(source, 'mangle-vars-size-disabled.tsx');
+        const enabled = transformOxc(source, 'mangle-vars-size-enabled.tsx', { mangleVars: true });
+
+        expect(disabled.code).toContain('--_sz-p');
+        expect(enabled.code).toContain('--cz');
+        expect(enabled.code).not.toContain('--_sz-p');
+        expect(enabled.code.length).toBeLessThan(disabled.code.length);
+    });
+
     it('does not hoist repeated vars across component boundaries', () => {
         const source =
             'const App = ({ pad }) => <Card><div sz={{ p: pad }} /><span sz={{ p: pad }} /></Card>;';
