@@ -1268,6 +1268,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * This writes a manifest file with all discovered class names so Tailwind can scan it.
      */
     function prescanAndWriteClasses(): void {
+        const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className attribute values — used only for TW JIT safelist, never for the mangle map.
         const rawDiscoveredClasses = new Set<string>();
@@ -1328,6 +1329,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // so Tailwind JIT can detect any custom utilities that happen to shadow TW class names.
         const safelistClasses = new Set([...discoveredClasses, ...rawDiscoveredClasses]);
         writeSafelistFile(safelistClasses);
+        traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
     }
 
     /**

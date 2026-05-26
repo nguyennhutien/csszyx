@@ -52,6 +52,8 @@ interface BuildStats {
     maxMs: number;
     /** Raw measured samples. */
     samplesMs: number[];
+    /** Prescan timing samples emitted by csszyx bench trace. */
+    prescanMs: number[];
     /** Row status. */
     status: 'measured' | 'failed';
     /** Short note or failure diagnostic. */
@@ -128,6 +130,7 @@ function runBenchmarks(opts: CliOptions): BuildStats[] {
  */
 function runBuildCase(parser: BenchMode, shape: BuildShape, opts: CliOptions): BuildStats {
     const samples: number[] = [];
+    const prescanSamples: number[] = [];
     const totalRuns = opts.warmups + opts.iterations;
 
     if (shape === 'warm') {
@@ -161,10 +164,11 @@ function runBuildCase(parser: BenchMode, shape: BuildShape, opts: CliOptions): B
         }
         if (i >= opts.warmups) {
             samples.push(elapsed);
+            prescanSamples.push(...parsePrescanTimings(result.stdout, result.stderr));
         }
     }
 
-    return measuredRow(parser, shape, samples);
+    return measuredRow(parser, shape, samples, prescanSamples);
 }
 
 /**
@@ -183,7 +187,7 @@ function modeEnv(mode: BenchMode): NodeJS.ProcessEnv {
         case 'no-tailwind':
             return { CSSZYX_BENCH_NO_TAILWIND: '1' };
         default:
-            return { CSSZYX_PARSER: mode };
+            return { CSSZYX_BENCH_TRACE: '1', CSSZYX_PARSER: mode };
     }
 }
 
@@ -202,9 +206,15 @@ function cleanBuildOutputs(): void {
  * @param parser parser mode
  * @param shape build shape
  * @param samples raw wall time samples
+ * @param prescanSamples csszyx prescan trace samples
  * @returns stats row
  */
-function measuredRow(parser: BenchMode, shape: BuildShape, samples: number[]): BuildStats {
+function measuredRow(
+    parser: BenchMode,
+    shape: BuildShape,
+    samples: number[],
+    prescanSamples: number[],
+): BuildStats {
     const sorted = [...samples].sort((a, b) => a - b);
     const medianMs =
         sorted.length % 2 === 0
@@ -220,6 +230,7 @@ function measuredRow(parser: BenchMode, shape: BuildShape, samples: number[]): B
         minMs: Math.min(...samples),
         maxMs: Math.max(...samples),
         samplesMs: samples,
+        prescanMs: prescanSamples,
         status: 'measured',
         note:
             shape === 'cold'
@@ -252,6 +263,7 @@ function failedRow(
         minMs: Number.NaN,
         maxMs: Number.NaN,
         samplesMs: samples,
+        prescanMs: [],
         status: 'failed',
         note: summarizeFailure(output),
     };
@@ -272,6 +284,27 @@ function summarizeFailure(output: string): string {
         /csszyx|native|parser|Use build\.parser|error:/i.test(line),
     );
     return (relevant ?? lines.at(-1) ?? 'build failed').slice(0, 240);
+}
+
+/**
+ * Parses csszyx prescan timing logs from a docs build process.
+ *
+ * @param stdout process stdout
+ * @param stderr process stderr
+ * @returns prescan timing samples
+ */
+function parsePrescanTimings(stdout: string, stderr: string): number[] {
+    const samples: number[] = [];
+    const pattern = /\[csszyx:bench\]\s+prescan\s+([\d.]+)ms/g;
+    for (const chunk of [stdout, stderr]) {
+        for (const match of chunk.matchAll(pattern)) {
+            const value = Number(match[1]);
+            if (Number.isFinite(value)) {
+                samples.push(value);
+            }
+        }
+    }
+    return samples;
 }
 
 /**
@@ -296,6 +329,7 @@ function renderReport(rows: BuildStats[], opts: CliOptions): string {
 Generated: ${new Date().toISOString()}
 
 Environment:
+
 - Node: ${process.version}
 - Platform: ${process.platform}-${process.arch}
 - CPU parallelism: ${availableParallelism()}
@@ -306,6 +340,8 @@ Environment:
 
 - Cold docs build: ${formatComparison(coldOxc, coldRust)}.
 - Warm docs build: ${formatComparison(warmOxc, warmRust)}.
+- Cold csszyx prescan: ${formatPrescanComparison(coldOxc, coldRust)}.
+- Warm csszyx prescan: ${formatPrescanComparison(warmOxc, warmRust)}.
 - Cold Tailwind-only baseline (no csszyx): ${formatBaselineComparison(coldBaseline, coldOxc, coldRust)}.
 - Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
 - Cold pipeline floor (no csszyx, no Tailwind): ${formatFloor(coldFloor, coldBaseline)}.
@@ -322,8 +358,8 @@ build wall time across csszyx, Tailwind, and the pipeline floor.
 
 ## Results
 
-| Case | Status | Median ms | Mean ms | Min ms | Max ms | Samples ms | Note |
-|---|---|---:|---:|---:|---:|---|---|
+| Case | Status | Median ms | Prescan median ms | Mean ms | Min ms | Max ms | Samples ms | Note |
+|---|---|---:|---:|---:|---:|---:|---|---|
 ${rows.map(renderRow).join('\n')}
 
 ## Interpretation
@@ -366,6 +402,30 @@ function formatComparison(oxc: BuildStats | undefined, rust: BuildStats | undefi
         return 'not measured successfully';
     }
     return `rust is ${formatRatio(oxc.medianMs / rust.medianMs)} vs oxc by median wall time`;
+}
+
+/**
+ * Formats csszyx prescan timing comparison text.
+ *
+ * @param oxc oxc row
+ * @param rust rust row
+ * @returns summary text
+ */
+function formatPrescanComparison(
+    oxc: BuildStats | undefined,
+    rust: BuildStats | undefined,
+): string {
+    if (!oxc || !rust || oxc.status !== 'measured' || rust.status !== 'measured') {
+        return 'not measured successfully';
+    }
+    const oxcPrescan = median(oxc.prescanMs);
+    const rustPrescan = median(rust.prescanMs);
+    if (!Number.isFinite(oxcPrescan) || !Number.isFinite(rustPrescan) || rustPrescan === 0) {
+        return 'not traced';
+    }
+    return `rust ${formatMs(rustPrescan)} vs oxc ${formatMs(oxcPrescan)} (${formatRatio(
+        oxcPrescan / rustPrescan,
+    )})`;
 }
 
 /**
@@ -461,7 +521,27 @@ function formatShareBreakdown(
  * @returns markdown table row
  */
 function renderRow(row: BuildStats): string {
-    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
+    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(
+        median(row.prescanMs),
+    )} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(
+        row.maxMs,
+    )} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
+}
+
+/**
+ * Calculates median.
+ *
+ * @param samples numeric samples
+ * @returns median, or NaN when empty
+ */
+function median(samples: number[]): number {
+    if (samples.length === 0) {
+        return Number.NaN;
+    }
+    const sorted = [...samples].sort((a, b) => a - b);
+    return sorted.length % 2 === 0
+        ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+        : (sorted[Math.floor(sorted.length / 2)] ?? Number.NaN);
 }
 
 /**
