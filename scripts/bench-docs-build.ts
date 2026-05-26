@@ -60,6 +60,21 @@ interface BuildStats {
     note: string;
 }
 
+interface ReportPayload {
+    /** ISO generation timestamp. */
+    generated: string;
+    /** Node version used for the run. */
+    node: string;
+    /** Platform string. */
+    platform: string;
+    /** CPU parallelism reported by Node. */
+    cpuParallelism: number;
+    /** Benchmark options. */
+    options: CliOptions;
+    /** Benchmark rows. */
+    rows: BuildStats[];
+}
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DOCS_ROOT = join(REPO_ROOT, 'apps/docs');
 const BUILD_OUTPUTS = [
@@ -70,13 +85,27 @@ const BUILD_OUTPUTS = [
 
 const options = parseArgs(process.argv.slice(2));
 const stats = runBenchmarks(options);
+const payload: ReportPayload = {
+    generated: new Date().toISOString(),
+    node: process.version,
+    platform: `${process.platform}-${process.arch}`,
+    cpuParallelism: availableParallelism(),
+    options,
+    rows: stats,
+};
 mkdirSync(resolve(REPO_ROOT, options.outDir), { recursive: true });
 writeFileSync(
+    resolve(REPO_ROOT, options.outDir, 'phase-e-docs-build-bench.json'),
+    `${JSON.stringify(payload, null, 2)}\n`,
+    'utf8',
+);
+writeFileSync(
     resolve(REPO_ROOT, options.outDir, 'phase-e-docs-build-bench.md'),
-    renderReport(stats, options),
+    renderReport(payload),
     'utf8',
 );
 console.log(`Wrote ${join(options.outDir, 'phase-e-docs-build-bench.md')}`);
+console.log(`Wrote ${join(options.outDir, 'phase-e-docs-build-bench.json')}`);
 
 /**
  * Parses CLI options.
@@ -310,11 +339,11 @@ function parsePrescanTimings(stdout: string, stderr: string): number[] {
 /**
  * Renders benchmark report markdown.
  *
- * @param rows benchmark rows
- * @param opts CLI options
+ * @param payload report payload
  * @returns markdown report
  */
-function renderReport(rows: BuildStats[], opts: CliOptions): string {
+function renderReport(payload: ReportPayload): string {
+    const { rows } = payload;
     const coldOxc = findRow(rows, 'oxc', 'cold');
     const coldRust = findRow(rows, 'rust', 'cold');
     const coldBaseline = findRow(rows, 'no-csszyx', 'cold');
@@ -326,15 +355,15 @@ function renderReport(rows: BuildStats[], opts: CliOptions): string {
 
     return `# Phase E Docs Build Benchmark
 
-Generated: ${new Date().toISOString()}
+Generated: ${payload.generated}
 
 Environment:
 
-- Node: ${process.version}
-- Platform: ${process.platform}-${process.arch}
-- CPU parallelism: ${availableParallelism()}
-- Iterations: ${opts.iterations}
-- Warmups: ${opts.warmups}
+- Node: ${payload.node}
+- Platform: ${payload.platform}
+- CPU parallelism: ${payload.cpuParallelism}
+- Iterations: ${payload.options.iterations}
+- Warmups: ${payload.options.warmups}
 
 ## Summary
 
