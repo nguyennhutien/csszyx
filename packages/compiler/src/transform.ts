@@ -44,6 +44,14 @@ export interface TransformSourceCodeOptions {
      * @default false
      */
     mangleVars?: boolean;
+
+    /**
+     * Maximum cascade depth for component-tier CSS variable hoisting.
+     *
+     * Only used when `mangleVars` is enabled. Defaults to 5 to keep the
+     * invalidation surface bounded.
+     */
+    mangleVarHoistMaxDepth?: number;
 }
 
 /**

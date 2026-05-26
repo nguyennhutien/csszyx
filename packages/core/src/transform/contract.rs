@@ -14,6 +14,8 @@ pub struct TransformFile {
 pub struct TransformOptions {
     /// Whether dynamic CSS custom properties should use tiered short names.
     pub mangle_vars: bool,
+    /// Maximum cascade depth for component-tier CSS variable hoisting.
+    pub mangle_var_hoist_max_depth: Option<usize>,
 }
 
 /// Recovery token emitted by a transform result.

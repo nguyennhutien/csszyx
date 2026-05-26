@@ -17,10 +17,14 @@ describe('CSS variable system config contract', () => {
         );
 
         expect(typesConfig).toContain('mangleVars: boolean;');
+        expect(typesConfig).toContain('mangleVarHoistMaxDepth: number;');
         expect(typesConfig).toContain('@default false');
         expect(typesConfig).toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleVars:\s*false,/);
+        expect(typesConfig).toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleVarHoistMaxDepth:\s*5,/);
         expect(configDocs).toContain('mangleVars: boolean;');
-        expect(configDocs).toContain('| `mangleVars`       | `false`');
+        expect(configDocs).toContain('mangleVarHoistMaxDepth: number;');
+        expect(configDocs).toMatch(/\| `mangleVars`\s+\| `false`/);
+        expect(configDocs).toMatch(/\| `mangleVarHoistMaxDepth`\s+\| `5`/);
     });
 
     it('preserves existing dynamic CSS variable output when mangleVars is disabled', () => {
@@ -128,6 +132,32 @@ describe('CSS variable system config contract', () => {
         );
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
+    });
+
+    it('uses configured mangle var hoist max depth', () => {
+        const source =
+            'const App = ({ pad }) => <section><div><article><aside><div><div><span sz={{ p: pad }} /></div></div></aside></article></div><button sz={{ p: pad }} /></section>;';
+        const defaultDepth = transformOxc(source, 'mangle-vars-default-depth.tsx', {
+            mangleVars: true,
+        });
+        const deeper = transformOxc(source, 'mangle-vars-deeper-depth.tsx', {
+            mangleVars: true,
+            mangleVarHoistMaxDepth: 6,
+        });
+
+        expect(defaultDepth.code).not.toContain('<section style={{"--cz"');
+        expect(defaultDepth.code).toContain('className="p-(--sz)"');
+        expect(defaultDepth.diagnostics).toContain(
+            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: max-depth (maxDepth 5)',
+        );
+        expect(deeper.code).toContain(
+            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
+        );
+        expect(deeper.code).toContain('<span className="p-(--cz)" />');
+        expect(deeper.code).toContain('<button className="p-(--cz)" />');
+        expect(deeper.diagnostics).not.toContain(
+            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: max-depth (maxDepth 5)',
+        );
     });
 
     it('does not hoist repeated vars through fragments', () => {

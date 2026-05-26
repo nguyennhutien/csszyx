@@ -130,6 +130,7 @@ export function transformOxc(
               effectiveFilename,
               objectBindings,
               source,
+              options.mangleVarHoistMaxDepth,
           )
         : null;
     if (componentHoists) {
@@ -1381,6 +1382,7 @@ function addCssVariableMapping(
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param source Original source for expression slicing.
+ * @param maxDepth Maximum cascade distance for component-tier hoisting.
  * @returns Hoist metadata consumed by the source rewrite pass.
  */
 function planOxcComponentVariableHoists(
@@ -1388,6 +1390,7 @@ function planOxcComponentVariableHoists(
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
+    maxDepth?: number,
 ): OxcComponentHoistAnalysis {
     const nodes: CSSVariableHoistNode[] = [];
     const candidates: OxcComponentHoistCandidate[] = [];
@@ -1419,7 +1422,7 @@ function planOxcComponentVariableHoists(
         valueKey: candidate.valueSource,
     }));
     const analysis = planComponentVariableHoistsWithDiagnostics(nodes, hoistUsages, {
-        maxDepth: 5,
+        maxDepth,
     });
     const plans = analysis.plans;
     const stylePropsByTarget = new Map<string, string[]>();

@@ -160,7 +160,11 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
 }
 
 /// Applies component-tier hoists, then scoped names for non-hoisted vars.
-pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> CssVariableMangling {
+pub fn apply_css_variable_mangling(
+    ir: &SourceIr,
+    source: &str,
+    max_depth: Option<usize>,
+) -> CssVariableMangling {
     let mut next = ir.clone();
     let mut component_usages = Vec::new();
     let mut locations = Vec::new();
@@ -213,7 +217,9 @@ pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> CssVariableMa
     let hoist_analysis = plan_component_variable_hoists_with_diagnostics(
         &hoist_nodes,
         &hoist_usages,
-        CssVariableHoistOptions::default(),
+        CssVariableHoistOptions {
+            max_depth: max_depth.unwrap_or(CssVariableHoistOptions::default().max_depth),
+        },
     );
     let hoist_plans = hoist_analysis.plans;
 

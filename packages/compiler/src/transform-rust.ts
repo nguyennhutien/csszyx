@@ -107,6 +107,7 @@ export function transformRustBatch(
             })),
             {
                 mangleVars: options?.mangleVars === true,
+                mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
             },
         ).map(fromNativeResult);
     } catch (err) {

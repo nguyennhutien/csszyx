@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 4;
+const CACHE_SCHEMA_VERSION = 5;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -35,6 +35,7 @@ interface TransformCacheEntry {
     producer: TransformCacheProducer;
     astBudget: number | null;
     mangleVars: boolean;
+    mangleVarHoistMaxDepth: number | null;
     filename: string;
     inputSha256: string;
     timestamp: string;
@@ -65,6 +66,8 @@ export interface TransformCacheKeyInput {
     astBudget?: number;
     /** Whether dynamic CSS variable names are mangled by the compiler. */
     mangleVars?: boolean;
+    /** Maximum cascade depth for component-tier CSS variable hoisting. */
+    mangleVarHoistMaxDepth?: number;
     /** Source filename; recovery tokens depend on it. */
     filename: string;
     /** Source file contents. */
@@ -106,6 +109,7 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `producer=${input.producer}`,
         `astBudget=${input.astBudget ?? 'default'}`,
         `mangleVars=${input.mangleVars === true}`,
+        `mangleVarHoistMaxDepth=${input.mangleVarHoistMaxDepth ?? 'default'}`,
         `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');
@@ -152,6 +156,7 @@ export function readTransformCache(
         entry.producer !== input.producer ||
         entry.astBudget !== (input.astBudget ?? null) ||
         entry.mangleVars !== (input.mangleVars === true) ||
+        entry.mangleVarHoistMaxDepth !== (input.mangleVarHoistMaxDepth ?? null) ||
         entry.filename !== input.filename ||
         entry.inputSha256 !== inputSha256
     ) {
@@ -197,6 +202,7 @@ export function writeTransformCache(
         producer: input.producer,
         astBudget: input.astBudget ?? null,
         mangleVars: input.mangleVars === true,
+        mangleVarHoistMaxDepth: input.mangleVarHoistMaxDepth ?? null,
         filename: input.filename,
         inputSha256,
         timestamp: new Date().toISOString(),

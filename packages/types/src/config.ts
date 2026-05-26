@@ -49,6 +49,16 @@ export interface ProductionConfig {
     mangleVars: boolean;
 
     /**
+     * Maximum cascade depth for component-tier CSS variable hoisting.
+     *
+     * Only used when `mangleVars` is enabled. Lower values prefer local scoped
+     * variables; higher values allow hoisting across deeper DOM subtrees.
+     *
+     * @default 5
+     */
+    mangleVarHoistMaxDepth: number;
+
+    /**
      * Enable content hashing for immutable caching.
      *
      * @default true
@@ -290,6 +300,7 @@ export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
 export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: true,
     mangleVars: false,
+    mangleVarHoistMaxDepth: 5,
     contentHashing: true,
     injectChecksum: true,
     incrementalBuild: true,

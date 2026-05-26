@@ -21,6 +21,8 @@ export interface NativeTransformFile {
 export interface NativeTransformOptions {
     /** Whether dynamic CSS custom properties should use tiered short names. */
     mangleVars?: boolean;
+    /** Maximum cascade depth for component-tier CSS variable hoisting. */
+    mangleVarHoistMaxDepth?: number;
 }
 
 /** Native transform output shape returned per source file. */

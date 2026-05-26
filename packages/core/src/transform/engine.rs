@@ -106,9 +106,9 @@ fn transform_static_classes_with_options(
     options: TransformOptions,
 ) -> TransformResult {
     let parsed = parse_source_shell(file);
-    let css_var_mangling = options
-        .mangle_vars
-        .then(|| apply_css_variable_mangling(&parsed.ir, &file.source));
+    let css_var_mangling = options.mangle_vars.then(|| {
+        apply_css_variable_mangling(&parsed.ir, &file.source, options.mangle_var_hoist_max_depth)
+    });
     let lower_ir = css_var_mangling
         .as_ref()
         .map_or(&parsed.ir, |mangling| &mangling.ir);

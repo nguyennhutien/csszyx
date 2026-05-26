@@ -49,7 +49,7 @@ pub fn rewrite_static_sz_attributes_with_options(
 ) -> Result<String, StaticRewriteUnsupported> {
     let planned_ir = options
         .mangle_vars
-        .then(|| apply_css_variable_mangling(ir, source));
+        .then(|| apply_css_variable_mangling(ir, source, None));
     let ir = planned_ir.as_ref().map_or(ir, |mangling| &mangling.ir);
     let mut magic = MagicString::new(source);
     let mut rewrote = false;

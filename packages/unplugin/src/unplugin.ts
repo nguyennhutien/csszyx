@@ -711,6 +711,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const compilerOptions: TransformSourceCodeOptions = {
             astBudget: astBudgetOverride,
             mangleVars: options.production?.mangleVars === true,
+            mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
         };
         const effectiveFilename = normalizeSourceFilename(filename);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
@@ -726,6 +727,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             producer: parserMode,
             astBudget: astBudgetOverride,
             mangleVars: compilerOptions.mangleVars,
+            mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
             filename: effectiveFilename,
             source,
         };

@@ -26,6 +26,8 @@ pub struct NativeTransformFile {
 pub struct NativeTransformOptions {
     /// Whether dynamic CSS custom properties should use tiered short names.
     pub mangle_vars: Option<bool>,
+    /// Maximum cascade depth for component-tier CSS variable hoisting.
+    pub mangle_var_hoist_max_depth: Option<u32>,
 }
 
 /// Recovery token emitted by the native transform.
@@ -139,12 +141,15 @@ pub fn transform_batch_native(
         })
         .collect::<Vec<_>>();
 
+    let options = options.unwrap_or_default();
+
     transform_batch_with_options(
         &files,
         TransformOptions {
-            mangle_vars: options
-                .and_then(|options| options.mangle_vars)
-                .unwrap_or(false),
+            mangle_vars: options.mangle_vars.unwrap_or(false),
+            mangle_var_hoist_max_depth: options
+                .mangle_var_hoist_max_depth
+                .map(|depth| depth as usize),
         },
     )
     .map(|results| {

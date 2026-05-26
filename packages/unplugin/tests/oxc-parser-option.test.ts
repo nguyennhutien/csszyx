@@ -111,6 +111,26 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
+    it('passes production.mangleVarHoistMaxDepth into the oxc compiler path', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: { mangleVars: true, mangleVarHoistMaxDepth: 1 },
+        }) as TransformHook[];
+        const result = prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = ({ pad }) => <section><div><span sz={{ p: pad }} /></div><button sz={{ p: pad }} /></section>;',
+            '/repo/src/App.tsx',
+        ) as { code: string };
+
+        expect(result.code).not.toContain('<section style={{"--cz"');
+        expect(result.code).toContain(
+            '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+        );
+        expect(result.code).toContain(
+            '<button className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+        );
+    });
+
     it('passes production.mangleVars into the Rust compiler path', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },
