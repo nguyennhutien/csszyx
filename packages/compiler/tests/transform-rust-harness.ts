@@ -15,6 +15,7 @@
  */
 
 import {
+    type CssVariableMangleValue,
     OxcRustNotImplementedError,
     type SourceTransformResult,
     type TransformSourceCodeOptions,
@@ -39,7 +40,7 @@ export interface RustParityComparison {
         code: string;
         classes: string[];
         transformed: boolean;
-        cssVariableMap: [string, string][];
+        cssVariableMap: [string, CssVariableMangleValue][];
     };
     /** Rust output — null when the Rust path threw. */
     rust: SourceTransformResult | null;
@@ -279,20 +280,27 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
     return true;
 }
 
-function mapEntriesEqual(a: readonly [string, string][], b: readonly [string, string][]): boolean {
+function mapEntriesEqual(
+    a: readonly [string, CssVariableMangleValue][],
+    b: readonly [string, CssVariableMangleValue][],
+): boolean {
     if (a.length !== b.length) {
         return false;
     }
     for (let i = 0; i < a.length; i++) {
-        if (a[i]?.[0] !== b[i]?.[0] || a[i]?.[1] !== b[i]?.[1]) {
+        if (a[i]?.[0] !== b[i]?.[0] || JSON.stringify(a[i]?.[1]) !== JSON.stringify(b[i]?.[1])) {
             return false;
         }
     }
     return true;
 }
 
-function sortedMapEntries(map: ReadonlyMap<string, string>): [string, string][] {
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+function sortedMapEntries(
+    map: ReadonlyMap<string, CssVariableMangleValue>,
+): [string, CssVariableMangleValue][] {
+    return [...map.entries()]
+        .map(([key, value]) => [key, Array.isArray(value) ? [...value].sort() : value] as const)
+        .sort(([a], [b]) => a.localeCompare(b));
 }
 
 function isSuperset(a: readonly string[], b: readonly string[]): boolean {

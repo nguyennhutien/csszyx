@@ -17,6 +17,8 @@ export const VIRTUAL_MODULE_ID = 'virtual:csszyx/mangle-map';
  */
 export const RESOLVED_VIRTUAL_MODULE_ID: string = `\0${VIRTUAL_MODULE_ID}`;
 
+import type { CssVariableMangleValue } from '@csszyx/compiler';
+
 /**
  * Virtual module ID for checksum only.
  */
@@ -49,7 +51,7 @@ export const RESOLVED_VIRTUAL_CHECKSUM_ID: string = `\0${VIRTUAL_CHECKSUM_ID}`;
 export function createMangleMapModule(
     mangleMap: Record<string, string>,
     checksum: string,
-    varMangleMap: Record<string, string> = {},
+    varMangleMap: Record<string, CssVariableMangleValue> = {},
 ): string {
     return `/**
  * Auto-generated mangle map for csszyx.

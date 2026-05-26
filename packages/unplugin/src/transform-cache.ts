@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { SourceTransformResult, TokenData } from '@csszyx/compiler';
+import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
 const CACHE_SCHEMA_VERSION = 4;
 
@@ -23,7 +23,7 @@ interface SerializedTransformResult {
     rawClassNames: string[];
     diagnostics: string[];
     recoveryTokens: Array<[string, TokenData]>;
-    cssVariableMap: Array<[string, string]>;
+    cssVariableMap: Array<[string, CssVariableMangleValue]>;
 }
 
 /** On-disk transform cache entry schema. */

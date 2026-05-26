@@ -75,7 +75,7 @@ describe('transform cache', () => {
                     },
                 ],
             ]),
-            cssVariableMap: new Map([['--_sz-p', '--sz']]),
+            cssVariableMap: new Map([['--_sz-p', ['--cz', '--sz']]]),
         };
     }
 
@@ -97,7 +97,7 @@ describe('transform cache', () => {
         expect(cached?.rawClassNames).toEqual(new Set(['custom']));
         expect(cached?.diagnostics).toEqual(['diagnostic']);
         expect(cached?.recoveryTokens.get('abc123')?.mode).toBe('csr');
-        expect(cached?.cssVariableMap.get('--_sz-p')).toBe('--sz');
+        expect(cached?.cssVariableMap.get('--_sz-p')).toEqual(['--cz', '--sz']);
     });
 
     it('misses when source, version, parser, producer, budget, mangleVars, or filename changes', () => {

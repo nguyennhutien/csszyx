@@ -4,7 +4,11 @@ import {
     transformBatch,
 } from '@csszyx/core/native';
 
-import type { SourceTransformResult, TransformSourceCodeOptions } from './transform.js';
+import type {
+    CssVariableMangleValue,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
+} from './transform.js';
 
 /**
  * Source file passed to the Rust native batch transform.
@@ -144,8 +148,30 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
                 },
             ]),
         ),
-        cssVariableMap: new Map(
-            (result.cssVariableMap ?? []).map(entry => [entry.original, entry.mangled]),
-        ),
+        cssVariableMap: aggregateCssVariableMap(result.cssVariableMap ?? []),
     };
+}
+
+/**
+ * Converts native CSS variable map entries into compiler metadata.
+ *
+ * @param entries Native original/mangled pairs.
+ * @returns Compiler metadata map with one-to-many fanout preserved.
+ */
+function aggregateCssVariableMap(
+    entries: Array<{ original: string; mangled: string }>,
+): Map<string, CssVariableMangleValue> {
+    const map = new Map<string, CssVariableMangleValue>();
+    for (const entry of entries) {
+        const existing = map.get(entry.original);
+        if (!existing) {
+            map.set(entry.original, entry.mangled);
+            continue;
+        }
+        const values = Array.isArray(existing) ? existing : [existing];
+        if (!values.includes(entry.mangled)) {
+            map.set(entry.original, [...values, entry.mangled]);
+        }
+    }
+    return map;
 }

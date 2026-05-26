@@ -66,6 +66,23 @@ describe('CSS variable system config contract', () => {
         expect(result.cssVariableMap).toEqual(new Map([['--_sz-p', '--cz']]));
     });
 
+    it('keeps one-to-many CSS variable metadata when one original uses scoped and hoisted tiers', () => {
+        const source =
+            'const App = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;';
+        const oxc = transformOxc(source, 'mangle-vars-mixed-tiers.tsx', { mangleVars: true });
+        const rust = transformRust(source, 'rust-mangle-vars-mixed-tiers.tsx', {
+            mangleVars: true,
+        });
+
+        for (const result of [oxc, rust]) {
+            expect(result.code).toContain('p-(--cz)');
+            expect(result.code).toContain('p-(--sz)');
+            expect(new Set(asArray(result.cssVariableMap.get('--_sz-p')))).toEqual(
+                new Set(['--cz', '--sz']),
+            );
+        }
+    });
+
     it('reduces repeated dynamic CSS variable output when mangleVars is enabled', () => {
         const source =
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /><button sz={{ p: pad }} /></section>;';
@@ -147,3 +164,7 @@ describe('CSS variable system config contract', () => {
         expect(result.cssVariableMap).toEqual(new Map());
     });
 });
+
+function asArray<T>(value: T | T[] | undefined): T[] {
+    return value === undefined ? [] : Array.isArray(value) ? value : [value];
+}

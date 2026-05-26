@@ -9,7 +9,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { TokenData } from '@csszyx/compiler';
+import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
 
 /**
  * Injection mode for mangle map.
@@ -48,7 +48,7 @@ export interface HtmlInjectionOptions {
      * CSS custom property mangle map. Empty by default; when present, the
      * hydration checksum script includes both class and variable namespaces.
      */
-    varMangleMap?: Record<string, string>;
+    varMangleMap?: Record<string, CssVariableMangleValue>;
 }
 
 /**
@@ -120,7 +120,7 @@ export function injectMangleMapScript(
     const varMapContent = JSON.stringify(varMangleMap);
 
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
-    const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm)(vr[vm[vk]]||(vr[vm[vk]]=[])).push(vk);var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
+    const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
 
     // Inject before </head> or before </html> if no head
     const combined = `${scriptTag}\n${debugScript}`;
@@ -155,7 +155,7 @@ export function injectMangleMapAttribute(
     html: string,
     mangleMap: Record<string, string>,
     minify = false,
-    varMangleMap: Record<string, string> = {},
+    varMangleMap: Record<string, CssVariableMangleValue> = {},
 ): string {
     const attrName = minify ? 'data-sz-m' : 'data-sz-map';
     const jsonContent = JSON.stringify(createHydrationMangleMap(mangleMap, varMangleMap));
@@ -247,7 +247,7 @@ export function transformIndexHtml(
  */
 export function createHydrationMangleMap(
     classMap: Record<string, string>,
-    varMap: Record<string, string> = {},
+    varMap: Record<string, CssVariableMangleValue> = {},
 ): Record<string, string> {
     if (Object.keys(varMap).length === 0) {
         return classMap;
@@ -257,7 +257,13 @@ export function createHydrationMangleMap(
         payload[`class:${key}`] = value;
     }
     for (const [key, value] of Object.entries(varMap)) {
-        payload[`var:${key}`] = value;
+        if (Array.isArray(value)) {
+            for (const mangled of value) {
+                payload[`var:${key}:${mangled}`] = mangled;
+            }
+        } else {
+            payload[`var:${key}`] = value;
+        }
     }
     return payload;
 }

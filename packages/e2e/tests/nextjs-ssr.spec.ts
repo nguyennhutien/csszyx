@@ -53,6 +53,7 @@ test.describe('Next.js SSR Playground', () => {
         const fixture = page.getByTestId('next-css-var-fixture');
         const cardA = page.getByTestId('next-css-var-card-a');
         const cardB = page.getByTestId('next-css-var-card-b');
+        const scoped = page.getByTestId('next-css-var-scoped');
 
         await expect(fixture).toBeVisible();
         await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(4 \* var\(--spacing\)\)/);
@@ -62,14 +63,26 @@ test.describe('Next.js SSR Playground', () => {
         const cardBClasses = (await cardB.getAttribute('class'))?.split(/\s+/) ?? [];
         expect(cardAClasses).toContain(encodedClass);
         expect(cardBClasses).toContain(encodedClass);
+        const encodedScopedClass = await page.evaluate(() => window.__csszyx?.encode?.('p-(--sz)'));
+        expect(encodedScopedClass).toBeTruthy();
+        const scopedClasses = (await scoped.getAttribute('class'))?.split(/\s+/) ?? [];
+        expect(scopedClasses).toContain(encodedScopedClass);
+        await expect(scoped).toHaveAttribute('style', /--sz:\s*calc\(5 \* var\(--spacing\)\)/);
 
         await page.getByTestId('next-css-var-button').click();
         await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(5 \* var\(--spacing\)\)/);
+        await expect(scoped).toHaveAttribute('style', /--sz:\s*calc\(6 \* var\(--spacing\)\)/);
 
         const varMap = await page.evaluate(() => window.__csszyx?.varMangleMap);
-        expect(varMap).toMatchObject({ '--_sz-p': '--cz' });
+        expect(new Set(asArray(varMap?.['--_sz-p']))).toEqual(new Set(['--cz', '--sz']));
 
         const decoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--cz'));
         expect(decoded).toEqual(['--_sz-p']);
+        const scopedDecoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--sz'));
+        expect(scopedDecoded).toContain('--_sz-p');
     });
 });
+
+function asArray<T>(value: T | T[] | undefined): T[] {
+    return value === undefined ? [] : Array.isArray(value) ? value : [value];
+}

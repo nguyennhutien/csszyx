@@ -45,6 +45,7 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export {
+    type CssVariableMangleValue,
     isValidSzProp,
     normalizeClassName,
     type SourceTransformResult,

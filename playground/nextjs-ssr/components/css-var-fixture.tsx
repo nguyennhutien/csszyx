@@ -32,6 +32,12 @@ export function CssVarFixture() {
             >
                 Shared dynamic padding B
             </span>
+            <div
+                data-testid="next-css-var-scoped"
+                sz={{ p: pad + 1, bg: { color: 'violet-500', op: 10 }, rounded: 'md', mt: 3 }}
+            >
+                Scoped dynamic padding
+            </div>
         </section>
     );
 }

@@ -41,7 +41,11 @@ import {
     PropertyCategory,
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
-import type { SourceTransformResult, TransformSourceCodeOptions } from './transform.js';
+import type {
+    CssVariableMangleValue,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
+} from './transform.js';
 import {
     transform as compileSzObject,
     getVariantPrefix,
@@ -88,7 +92,7 @@ export function transformOxc(
     const rawClassNames = new Set<string>();
     const diagnostics: string[] = [];
     const recoveryTokens = new Map<string, TokenData>();
-    const cssVariableMap = new Map<string, string>();
+    const cssVariableMap = new Map<string, CssVariableMangleValue>();
 
     if (!source.includes('sz')) {
         return {
@@ -1228,7 +1232,7 @@ function buildPartialObjectTransform(
     source: string,
     options?: TransformSourceCodeOptions,
     hoistedNames?: ReadonlyMap<string, string>,
-    cssVariableMap?: Map<string, string>,
+    cssVariableMap?: Map<string, CssVariableMangleValue>,
 ): OxcPartialTransform | null {
     const partial = evaluatePartialObject(node, filename, bindings, source);
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
@@ -1287,7 +1291,7 @@ function buildPartialObjectTransform(
 function applyHoistedVariableNames(
     partial: OxcPartialObjectResult,
     hoistedNames?: ReadonlyMap<string, string>,
-    cssVariableMap?: Map<string, string>,
+    cssVariableMap?: Map<string, CssVariableMangleValue>,
 ): void {
     if (!hoistedNames) {
         return;
@@ -1295,7 +1299,7 @@ function applyHoistedVariableNames(
     for (const [id, name] of hoistedNames) {
         const info = partial.dynamicProps.get(id);
         if (info) {
-            cssVariableMap?.set(info.varName, name);
+            addCssVariableMapping(cssVariableMap, info.varName, name);
             info.varName = name;
         }
     }
@@ -1314,7 +1318,7 @@ function applyHoistedVariableNames(
 function applyScopedVariablePlan(
     partial: OxcPartialObjectResult,
     hoistedNames?: ReadonlyMap<string, string>,
-    cssVariableMap?: Map<string, string>,
+    cssVariableMap?: Map<string, CssVariableMangleValue>,
 ): void {
     const entries = [...partial.dynamicProps.entries()].filter(([id]) => !hoistedNames?.has(id));
     const plan = planCSSVariableNames(
@@ -1329,9 +1333,35 @@ function applyScopedVariablePlan(
     for (const planned of plan) {
         const info = partial.dynamicProps.get(planned.id);
         if (info) {
-            cssVariableMap?.set(info.varName, planned.name);
+            addCssVariableMapping(cssVariableMap, info.varName, planned.name);
             info.varName = planned.name;
         }
+    }
+}
+
+/**
+ * Adds one CSS variable mangle mapping while preserving one-to-many fanout.
+ *
+ * @param cssVariableMap Metadata map to update.
+ * @param original Original generated CSS custom-property name.
+ * @param mangled Scoped or hoisted custom-property name.
+ */
+function addCssVariableMapping(
+    cssVariableMap: Map<string, CssVariableMangleValue> | undefined,
+    original: string,
+    mangled: string,
+): void {
+    if (!cssVariableMap) {
+        return;
+    }
+    const existing = cssVariableMap.get(original);
+    if (!existing) {
+        cssVariableMap.set(original, mangled);
+        return;
+    }
+    const values = Array.isArray(existing) ? existing : [existing];
+    if (!values.includes(mangled)) {
+        cssVariableMap.set(original, [...values, mangled]);
     }
 }
 

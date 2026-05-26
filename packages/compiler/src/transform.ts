@@ -47,6 +47,13 @@ export interface TransformSourceCodeOptions {
 }
 
 /**
+ * CSS custom-property mangle metadata. Most originals map to one mangled name,
+ * but the same original can legitimately appear in both scoped and hoisted
+ * tiers in one build, e.g. `--_sz-p` -> `--sz` and `--cz`.
+ */
+export type CssVariableMangleValue = string | string[];
+
+/**
  * Source transform result shared by the Babel and oxc parser paths.
  */
 export interface SourceTransformResult {
@@ -69,7 +76,7 @@ export interface SourceTransformResult {
     /** Recovery tokens emitted by szRecover attributes. */
     recoveryTokens: Map<string, TokenData>;
     /** CSS custom property original-to-mangled names emitted by mangleVars. */
-    cssVariableMap: Map<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
 }
 
 /**
@@ -103,7 +110,7 @@ export function transformSourceCode(
     // by token (12-char hex hash); the unplugin aggregates these across all
     // files and serializes the result into the manifest script tag.
     const recoveryTokens = new Map<string, TokenData>();
-    const cssVariableMap = new Map<string, string>();
+    const cssVariableMap = new Map<string, CssVariableMangleValue>();
 
     // Fast path: check if file contains 'sz' before parsing
     if (!source.includes('sz')) {

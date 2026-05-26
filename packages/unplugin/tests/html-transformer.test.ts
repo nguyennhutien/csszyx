@@ -13,6 +13,7 @@ describe('html-transformer', () => {
     const sampleHtml = '<html lang="en"><head></head><body></body></html>';
     const sampleMap = { 'p-4': 'z', 'bg-red-500': 'y', 'text-white': 'x' };
     const sampleVarMap = { '--_sz-p': '--sz', '--_sz-m': '--sz' };
+    const mixedTierVarMap = { '--_sz-p': ['--cz', '--sz'] };
     const sampleChecksum = 'a1b2c3d4e5f67890';
 
     describe('injectChecksum', () => {
@@ -91,6 +92,15 @@ describe('html-transformer', () => {
             expect(result).toContain(`var vm=${JSON.stringify(sampleVarMap)}`);
             expect(result).toContain('decodeVar:function');
             expect(result).toContain('encodeVar:function');
+        });
+
+        it('should reverse one-to-many CSS variable maps for debug helpers', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                varMangleMap: mixedTierVarMap,
+            });
+
+            expect(result).toContain(`var vm=${JSON.stringify(mixedTierVarMap)}`);
+            expect(result).toContain('Array.isArray(vv)?vv:[vv]');
         });
     });
 
@@ -183,6 +193,16 @@ describe('html-transformer', () => {
                 'class:text-white': 'x',
                 'var:--_sz-p': '--sz',
                 'var:--_sz-m': '--sz',
+            });
+        });
+
+        it('keeps one-to-many CSS variable maps checksum-safe', () => {
+            expect(createHydrationMangleMap(sampleMap, mixedTierVarMap)).toEqual({
+                'class:p-4': 'z',
+                'class:bg-red-500': 'y',
+                'class:text-white': 'x',
+                'var:--_sz-p:--cz': '--cz',
+                'var:--_sz-p:--sz': '--sz',
             });
         });
     });
