@@ -6,6 +6,7 @@
  * Usage:
  *   pnpm bench:docs-build
  *   pnpm bench:docs-build -- --iterations 3 --warmups 1
+ *   pnpm bench:docs-build -- --modes oxc,rust --shapes cold
  */
 
 import { spawnSync } from 'node:child_process';
@@ -25,12 +26,17 @@ type BenchMode = 'oxc' | 'rust' | 'no-csszyx' | 'no-tailwind';
 type BuildShape = 'cold' | 'warm';
 
 const BENCH_MODES = ['oxc', 'rust', 'no-csszyx', 'no-tailwind'] as const;
+const BUILD_SHAPES = ['cold', 'warm'] as const;
 
 interface CliOptions {
     /** Number of measured iterations per parser/build shape. */
     iterations: number;
     /** Number of warmup builds per parser/build shape. */
     warmups: number;
+    /** Bench modes to run. */
+    modes: BenchMode[];
+    /** Build shapes to run. */
+    shapes: BuildShape[];
     /** Output directory for the markdown report. */
     outDir: string;
 }
@@ -117,6 +123,8 @@ function parseArgs(args: string[]): CliOptions {
     const parsed: CliOptions = {
         iterations: 3,
         warmups: 1,
+        modes: [...BENCH_MODES],
+        shapes: [...BUILD_SHAPES],
         outDir: '.agent/reports',
     };
 
@@ -126,12 +134,32 @@ function parseArgs(args: string[]): CliOptions {
             parsed.iterations = Math.max(1, Number(args[++i] ?? parsed.iterations));
         } else if (arg === '--warmups') {
             parsed.warmups = Math.max(0, Number(args[++i] ?? parsed.warmups));
+        } else if (arg === '--modes') {
+            parsed.modes = parseListOption(args[++i] ?? '', BENCH_MODES);
+        } else if (arg === '--shapes') {
+            parsed.shapes = parseListOption(args[++i] ?? '', BUILD_SHAPES);
         } else if (arg === '--out-dir') {
             parsed.outDir = args[++i] ?? parsed.outDir;
         }
     }
 
     return parsed;
+}
+
+/**
+ * Parses a comma-separated allowlisted CLI option.
+ *
+ * @param value comma-separated option value
+ * @param allowed allowed values
+ * @returns parsed values, or all allowed values when parsing yields none
+ */
+function parseListOption<const T extends string>(value: string, allowed: readonly T[]): T[] {
+    const allowedSet = new Set<string>(allowed);
+    const parsed = value
+        .split(',')
+        .map(item => item.trim())
+        .filter((item): item is T => allowedSet.has(item));
+    return parsed.length > 0 ? parsed : [...allowed];
 }
 
 /**
@@ -142,9 +170,10 @@ function parseArgs(args: string[]): CliOptions {
  */
 function runBenchmarks(opts: CliOptions): BuildStats[] {
     const rows: BuildStats[] = [];
-    for (const parser of BENCH_MODES) {
-        rows.push(runBuildCase(parser, 'cold', opts));
-        rows.push(runBuildCase(parser, 'warm', opts));
+    for (const parser of opts.modes) {
+        for (const shape of opts.shapes) {
+            rows.push(runBuildCase(parser, shape, opts));
+        }
     }
     return rows;
 }
@@ -352,6 +381,10 @@ function renderReport(payload: ReportPayload): string {
     const warmRust = findRow(rows, 'rust', 'warm');
     const warmBaseline = findRow(rows, 'no-csszyx', 'warm');
     const warmFloor = findRow(rows, 'no-tailwind', 'warm');
+    const shareBreakdown = [
+        formatShareBreakdown('Cold', coldFloor, coldBaseline, coldOxc, coldRust),
+        formatShareBreakdown('Warm', warmFloor, warmBaseline, warmOxc, warmRust),
+    ].filter(Boolean);
 
     return `# Phase E Docs Build Benchmark
 
@@ -364,6 +397,8 @@ Environment:
 - CPU parallelism: ${payload.cpuParallelism}
 - Iterations: ${payload.options.iterations}
 - Warmups: ${payload.options.warmups}
+- Modes: ${payload.options.modes.join(', ')}
+- Shapes: ${payload.options.shapes.join(', ')}
 
 ## Summary
 
@@ -375,10 +410,7 @@ Environment:
 - Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
 - Cold pipeline floor (no csszyx, no Tailwind): ${formatFloor(coldFloor, coldBaseline)}.
 - Warm pipeline floor (no csszyx, no Tailwind): ${formatFloor(warmFloor, warmBaseline)}.
-${formatShareBreakdown('Cold', coldFloor, coldBaseline, coldOxc, coldRust)}
-${formatShareBreakdown('Warm', warmFloor, warmBaseline, warmOxc, warmRust)}
-
-This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
+${shareBreakdown.length > 0 ? `${shareBreakdown.join('\n')}\n\n` : '\n'}This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
 It includes Astro, Vite, Tailwind, csszyx, file IO, build output generation,
 and plugin finalization. The \`no-csszyx\` rows skip the csszyx plugin entirely
 so the remaining Astro/Vite/Tailwind/React pipeline cost is visible as a floor;
