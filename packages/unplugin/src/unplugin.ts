@@ -13,6 +13,7 @@ import {
     transform,
     transformOxc,
     transformRust,
+    transformRustBatch,
     transformSourceCode,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
@@ -47,6 +48,8 @@ import {
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
+    type TransformCacheKey,
+    type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
 import {
@@ -89,6 +92,22 @@ interface CSSVariableMetrics {
     estimatedHoistedDeclarationsSaved: number;
     scopedClassUses: number;
     scopedStyleDeclarations: number;
+}
+
+/** Source file queued by the prescan walker. */
+interface PrescanSourceFile {
+    /** Absolute source path. */
+    filePath: string;
+    /** Source contents. */
+    content: string;
+}
+
+/** Prescan source file plus transform result. */
+interface PrescanTransformResult {
+    /** Absolute source path. */
+    filePath: string;
+    /** Compiler result for the file. */
+    result: SourceTransformResult;
 }
 
 /**
@@ -924,11 +943,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Compiler transform result.
      */
     function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
-        const compilerOptions: TransformSourceCodeOptions = {
-            astBudget: astBudgetOverride,
-            mangleVars: options.production?.mangleVars === true,
-            mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
-        };
+        const compilerOptions = createCompilerOptions();
         const effectiveFilename = normalizeSourceFilename(filename);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -936,17 +951,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             evictTransformCacheOnce();
         }
 
-        const cacheInput = {
-            pluginVersion: PLUGIN_VERSION,
-            compilerVersion: COMPILER_VERSION,
-            parserMode,
-            producer: parserMode,
-            astBudget: astBudgetOverride,
-            mangleVars: compilerOptions.mangleVars,
-            mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
-            filename: effectiveFilename,
+        const cacheInput = createConfiguredTransformCacheInput(
             source,
-        };
+            effectiveFilename,
+            compilerOptions,
+        );
 
         if (parserMode === 'rust') {
             ensureRustTransformAvailable();
@@ -1004,6 +1013,181 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             rememberTransformCacheEntry(cacheKey.key, result);
         }
         return result;
+    }
+
+    /**
+     * Builds compiler options shared by single-file and prescan-batch transforms.
+     *
+     * @returns Compiler options.
+     */
+    function createCompilerOptions(): TransformSourceCodeOptions {
+        return {
+            astBudget: astBudgetOverride,
+            mangleVars: options.production?.mangleVars === true,
+            mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
+        };
+    }
+
+    /**
+     * Builds cache identity for the configured parser/compiler options.
+     *
+     * @param source Source module contents.
+     * @param effectiveFilename Normalized source filename.
+     * @param compilerOptions Compiler options.
+     * @returns Transform cache input.
+     */
+    function createConfiguredTransformCacheInput(
+        source: string,
+        effectiveFilename: string,
+        compilerOptions: TransformSourceCodeOptions,
+    ): TransformCacheKeyInput {
+        return {
+            pluginVersion: PLUGIN_VERSION,
+            compilerVersion: COMPILER_VERSION,
+            parserMode,
+            producer: parserMode,
+            astBudget: astBudgetOverride,
+            mangleVars: compilerOptions.mangleVars,
+            mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
+            filename: effectiveFilename,
+            source,
+        };
+    }
+
+    /**
+     * Transforms prescan files, batching Rust cache misses in one native call.
+     *
+     * @param files Source files discovered during prescan.
+     * @returns Transform results for files that compiled successfully.
+     */
+    function transformPrescanSources(files: PrescanSourceFile[]): PrescanTransformResult[] {
+        if (parserMode !== 'rust' || files.length <= 1) {
+            return transformPrescanSourcesIndividually(files);
+        }
+
+        const compilerOptions = createCompilerOptions();
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+        const results = new Map<string, SourceTransformResult>();
+        const misses: Array<{
+            filePath: string;
+            effectiveFilename: string;
+            content: string;
+            cacheInput: TransformCacheKeyInput;
+            cacheKey: TransformCacheKey | null;
+        }> = [];
+
+        if (cacheEnabled) {
+            evictTransformCacheOnce();
+        }
+        ensureRustTransformAvailable();
+
+        for (const file of files) {
+            const effectiveFilename = normalizeSourceFilename(file.filePath);
+            const cacheInput = createConfiguredTransformCacheInput(
+                file.content,
+                effectiveFilename,
+                compilerOptions,
+            );
+            const cacheKey = cacheEnabled ? createTransformCacheKey(cacheInput) : null;
+
+            if (cacheEnabled && cacheKey) {
+                const memoryCached = transformMemoryCache.get(cacheKey.key);
+                if (memoryCached) {
+                    transformMemoryCache.delete(cacheKey.key);
+                    transformMemoryCache.set(cacheKey.key, memoryCached);
+                    results.set(file.filePath, memoryCached);
+                    continue;
+                }
+
+                const cached = readTransformCache(cacheRoot, cacheInput, cacheKey);
+                if (cached) {
+                    rememberTransformCacheEntry(cacheKey.key, cached);
+                    results.set(file.filePath, cached);
+                    continue;
+                }
+            }
+
+            misses.push({
+                filePath: file.filePath,
+                effectiveFilename,
+                content: file.content,
+                cacheInput,
+                cacheKey,
+            });
+        }
+
+        if (misses.length === 0) {
+            return files
+                .map(file => {
+                    const result = results.get(file.filePath);
+                    return result ? { filePath: file.filePath, result } : null;
+                })
+                .filter((entry): entry is PrescanTransformResult => entry !== null);
+        }
+
+        try {
+            const batchResults = transformRustBatch(
+                misses.map(file => ({
+                    filename: file.effectiveFilename,
+                    source: file.content,
+                })),
+                compilerOptions,
+            );
+            for (let index = 0; index < misses.length; index++) {
+                const miss = misses[index];
+                const result = batchResults[index];
+                if (!miss || !result) {
+                    continue;
+                }
+                if (cacheEnabled && miss.cacheKey) {
+                    writeTransformCache(cacheRoot, miss.cacheInput, result, miss.cacheKey);
+                    rememberTransformCacheEntry(miss.cacheKey.key, result);
+                }
+                results.set(miss.filePath, result);
+            }
+        } catch {
+            for (const miss of misses) {
+                try {
+                    results.set(
+                        miss.filePath,
+                        transformConfiguredSource(miss.content, miss.effectiveFilename),
+                    );
+                } catch {
+                    // Preserve historical prescan behavior: a file that cannot
+                    // transform during safelist discovery is skipped.
+                }
+            }
+        }
+
+        return files
+            .map(file => {
+                const result = results.get(file.filePath);
+                return result ? { filePath: file.filePath, result } : null;
+            })
+            .filter((entry): entry is PrescanTransformResult => entry !== null);
+    }
+
+    /**
+     * Transforms prescan files one by one.
+     *
+     * @param files Source files discovered during prescan.
+     * @returns Transform results for files that compiled successfully.
+     */
+    function transformPrescanSourcesIndividually(
+        files: PrescanSourceFile[],
+    ): PrescanTransformResult[] {
+        const results: PrescanTransformResult[] = [];
+        for (const file of files) {
+            try {
+                results.push({
+                    filePath: file.filePath,
+                    result: transformConfiguredSource(file.content, file.filePath),
+                });
+            } catch {
+                // Preserve historical prescan behavior: skip files that fail to transform.
+            }
+        }
+        return results;
     }
 
     /**
@@ -1087,6 +1271,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const discoveredClasses = new Set<string>();
         // Raw className attribute values — used only for TW JIT safelist, never for the mangle map.
         const rawDiscoveredClasses = new Set<string>();
+        const prescanSources: PrescanSourceFile[] = [];
 
         /**
          * Recursively walks directories to discover source files containing sz prop usage.
@@ -1109,100 +1294,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (!shouldProcessSource(filePath)) {
                         continue;
                     }
+                    let content: string;
                     try {
-                        const content = fs.readFileSync(filePath, 'utf-8');
-                        if (!content.includes('sz=') && !content.includes('sz:')) {
-                            continue;
-                        }
-                        const result = transformConfiguredSource(content, filePath);
-                        if (!result.transformed) {
-                            continue;
-                        }
-                        // Piggyback: use classes collected inside the Babel JSXAttribute visitor.
-                        // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
-                        // comments, and string literals in other positions never produce false
-                        // positives (they are different AST node types and never reach the visitor).
-                        // result.classes = sz-generated → safelist + mangle map
-                        // result.rawClassNames = raw className attrs → safelist only (never mangled)
-                        for (const cls of result.classes) {
-                            discoveredClasses.add(cls);
-                        }
-                        for (const cls of result.rawClassNames) {
-                            rawDiscoveredClasses.add(cls);
-                        }
-                        for (const [token, data] of result.recoveryTokens) {
-                            state.recoveryTokens.set(token, data);
-                        }
-                        recordFileVarMangleEntries(state, filePath, cssVariableEntries(result));
-                        recordFileCSSVariableMetrics(state, filePath, result.code);
-                        // Extract static classes from _sz() runtime calls.
-                        // When an sz prop has any dynamic value, the compiler wraps the
-                        // entire object in _sz({...}). Static values inside are invisible
-                        // to Tailwind's content scanner. Extract them here.
-                        if (result.usesRuntime) {
-                            const szCallRe = /_sz\(\s*\{/g;
-                            for (const szMatch of result.code.matchAll(szCallRe)) {
-                                let depth = 1;
-                                let idx = (szMatch.index ?? 0) + szMatch[0].length;
-                                while (idx < result.code.length && depth > 0) {
-                                    if (result.code[idx] === '{') {
-                                        depth++;
-                                    } else if (result.code[idx] === '}') {
-                                        depth--;
-                                    }
-                                    idx++;
-                                }
-                                const objStr = result.code.slice(
-                                    (szMatch.index ?? 0) + szMatch[0].length,
-                                    idx - 1,
-                                );
-                                // Extract key: 'string' or "string" pairs
-                                const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
-                                for (const kv of objStr.matchAll(strKv)) {
-                                    try {
-                                        const val = kv[2] ?? kv[3];
-                                        const r = transform({ [kv[1]]: val });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
-                                            discoveredClasses.add(c);
-                                        }
-                                    } catch {
-                                        /* skip invalid */
-                                    }
-                                }
-                                // Extract key: number pairs
-                                const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
-                                for (const kv of objStr.matchAll(numKv)) {
-                                    try {
-                                        const r = transform({ [kv[1]]: parseFloat(kv[2]) });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
-                                            discoveredClasses.add(c);
-                                        }
-                                    } catch {
-                                        /* skip invalid */
-                                    }
-                                }
-                                // Extract key: true/false pairs
-                                const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
-                                for (const kv of objStr.matchAll(boolKv)) {
-                                    try {
-                                        const r = transform({ [kv[1]]: kv[2] === 'true' });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
-                                            discoveredClasses.add(c);
-                                        }
-                                    } catch {
-                                        /* skip invalid */
-                                    }
-                                }
-                            }
-                        }
+                        content = fs.readFileSync(filePath, 'utf-8');
                     } catch {
-                        // Skip files that fail to transform
+                        continue;
                     }
+                    if (!content.includes('sz=') && !content.includes('sz:')) {
+                        continue;
+                    }
+                    prescanSources.push({ filePath, content });
                 }
             }
         }
 
         scanDir(state.rootDir);
+
+        for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            if (!result.transformed) {
+                continue;
+            }
+            collectPrescanResult(result, filePath, discoveredClasses, rawDiscoveredClasses);
+        }
 
         // Add only sz-generated classes to state.classes (the mangle map source).
         // Raw className attribute values are intentionally excluded — they are custom CSS classes
@@ -1215,6 +1328,143 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // so Tailwind JIT can detect any custom utilities that happen to shadow TW class names.
         const safelistClasses = new Set([...discoveredClasses, ...rawDiscoveredClasses]);
         writeSafelistFile(safelistClasses);
+    }
+
+    /**
+     * Collects class and metadata side effects from one prescan transform.
+     *
+     * @param result Compiler result.
+     * @param filePath Source file path.
+     * @param discoveredClasses sz-generated class sink.
+     * @param rawDiscoveredClasses raw className sink.
+     */
+    function collectPrescanResult(
+        result: SourceTransformResult,
+        filePath: string,
+        discoveredClasses: Set<string>,
+        rawDiscoveredClasses: Set<string>,
+    ): void {
+        // Piggyback: use classes collected inside the JSXAttribute visitor.
+        // Risk-free: only JSXAttribute nodes are visited, so text content,
+        // JSDoc, comments, and string literals in other positions never
+        // produce false positives.
+        for (const cls of result.classes) {
+            discoveredClasses.add(cls);
+        }
+        for (const cls of result.rawClassNames) {
+            rawDiscoveredClasses.add(cls);
+        }
+        for (const [token, data] of result.recoveryTokens) {
+            state.recoveryTokens.set(token, data);
+        }
+        recordFileVarMangleEntries(state, filePath, cssVariableEntries(result));
+        recordFileCSSVariableMetrics(state, filePath, result.code);
+        collectRuntimeStaticClasses(result, discoveredClasses);
+    }
+
+    /**
+     * Extracts static classes hidden inside generated `_sz({...})` runtime calls.
+     *
+     * @param result Compiler result.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeStaticClasses(
+        result: SourceTransformResult,
+        discoveredClasses: Set<string>,
+    ): void {
+        if (!result.usesRuntime) {
+            return;
+        }
+        const szCallRe = /_sz\(\s*\{/g;
+        for (const szMatch of result.code.matchAll(szCallRe)) {
+            let depth = 1;
+            let idx = (szMatch.index ?? 0) + szMatch[0].length;
+            while (idx < result.code.length && depth > 0) {
+                if (result.code[idx] === '{') {
+                    depth++;
+                } else if (result.code[idx] === '}') {
+                    depth--;
+                }
+                idx++;
+            }
+            const objStr = result.code.slice((szMatch.index ?? 0) + szMatch[0].length, idx - 1);
+            collectRuntimeStringClasses(objStr, discoveredClasses);
+            collectRuntimeNumberClasses(objStr, discoveredClasses);
+            collectRuntimeBooleanClasses(objStr, discoveredClasses);
+        }
+    }
+
+    /**
+     * Extracts static string values from an `_sz({...})` object string.
+     *
+     * @param objStr Object source text.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeStringClasses(objStr: string, discoveredClasses: Set<string>): void {
+        const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
+        for (const kv of objStr.matchAll(strKv)) {
+            try {
+                const val = kv[2] ?? kv[3];
+                collectTransformClasses(transform({ [kv[1]]: val }), discoveredClasses);
+            } catch {
+                // Skip invalid runtime static fragments.
+            }
+        }
+    }
+
+    /**
+     * Extracts static number values from an `_sz({...})` object string.
+     *
+     * @param objStr Object source text.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeNumberClasses(objStr: string, discoveredClasses: Set<string>): void {
+        const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
+        for (const kv of objStr.matchAll(numKv)) {
+            try {
+                collectTransformClasses(
+                    transform({ [kv[1]]: parseFloat(kv[2]) }),
+                    discoveredClasses,
+                );
+            } catch {
+                // Skip invalid runtime static fragments.
+            }
+        }
+    }
+
+    /**
+     * Extracts static boolean values from an `_sz({...})` object string.
+     *
+     * @param objStr Object source text.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeBooleanClasses(objStr: string, discoveredClasses: Set<string>): void {
+        const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
+        for (const kv of objStr.matchAll(boolKv)) {
+            try {
+                collectTransformClasses(
+                    transform({ [kv[1]]: kv[2] === 'true' }),
+                    discoveredClasses,
+                );
+            } catch {
+                // Skip invalid runtime static fragments.
+            }
+        }
+    }
+
+    /**
+     * Adds transform() className output to a class sink.
+     *
+     * @param result transform() result.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectTransformClasses(
+        result: ReturnType<typeof transform>,
+        discoveredClasses: Set<string>,
+    ): void {
+        for (const cls of result.className.split(/\s+/).filter(Boolean)) {
+            discoveredClasses.add(cls);
+        }
     }
 
     /**
