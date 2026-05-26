@@ -34,7 +34,8 @@ export const RESOLVED_VIRTUAL_CHECKSUM_ID: string = `\0${VIRTUAL_CHECKSUM_ID}`;
  *
  * @param {Record<string, string>} mangleMap - The mangle map (original -> mangled)
  * @param {string} checksum - SHA-256 checksum of the mangle map
- * @param {Record<string, string>} varMangleMap - CSS variable mangle map
+ * @param varMangleMap CSS variable mangle map. Values can be arrays when one
+ * original dynamic variable is emitted with both scoped and hoisted names.
  * @returns {string} Module source code
  *
  * @example
@@ -56,7 +57,7 @@ export function createMangleMapModule(
     return `/**
  * Auto-generated mangle map for csszyx.
  * This module is generated at build time and contains the mapping
- * from original class/CSS variable names to mangled names.
+ * from original class names and CSS variable names to mangled names.
  *
  * @generated
  */

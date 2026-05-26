@@ -140,7 +140,8 @@ export function injectMangleMapScript(
  * @param {string} html - HTML content
  * @param {Record<string, string>} mangleMap - Mangle map
  * @param {boolean} minify - Use short attribute names
- * @param varMangleMap CSS variable mangle map.
+ * @param varMangleMap CSS variable mangle map. Values can be arrays when one
+ * original dynamic variable is emitted with both scoped and hoisted names.
  * @returns {string} Modified HTML
  *
  * @example
@@ -242,7 +243,7 @@ export function transformIndexHtml(
  * property names cannot collide inside the checksum input.
  *
  * @param classMap Original class name to mangled class token.
- * @param varMap Original CSS custom property to mangled property name.
+ * @param varMap Original CSS custom property to mangled property names.
  * @returns Mangle map payload for script/attribute injection.
  */
 export function createHydrationMangleMap(
