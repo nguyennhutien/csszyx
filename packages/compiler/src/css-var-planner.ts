@@ -33,6 +33,12 @@ export interface CSSVariablePlanEntry extends CSSVariablePlanInput {
     name: string;
 }
 
+/** Options controlling CSS variable name allocation. */
+export interface CSSVariablePlanOptions {
+    /** CSS custom-property names already owned by user code in this file. */
+    reservedNames?: ReadonlySet<string>;
+}
+
 /**
  * Plans tiered CSS custom property names without mutating source.
  *
@@ -42,20 +48,23 @@ export interface CSSVariablePlanEntry extends CSSVariablePlanInput {
  * them local.
  *
  * @param usages CSS variable usages in source order.
+ * @param options Planner options.
  * @returns Planned names in the same order as the input usages.
  */
 export function planCSSVariableNames(
     usages: readonly CSSVariablePlanInput[],
+    options: CSSVariablePlanOptions = {},
 ): CSSVariablePlanEntry[] {
     const componentNames = new Map<string, string>();
     const scopedNamesByElement = new Map<string, Map<string, string>>();
+    const reservedNames = options.reservedNames ?? new Set<string>();
 
     return usages.map(usage => {
         if (usage.tier === 'component') {
             const key = canonicalUsageKey(usage);
             let name = componentNames.get(key);
             if (!name) {
-                name = `--c${encode(componentNames.size)}`;
+                name = allocateVariableName('--c', componentNames.size, reservedNames);
                 componentNames.set(key, name);
             }
             return { ...usage, name };
@@ -66,11 +75,34 @@ export function planCSSVariableNames(
         const key = canonicalUsageKey(usage);
         let name = elementNames.get(key);
         if (!name) {
-            name = `--s${encode(elementNames.size)}`;
+            name = allocateVariableName('--s', elementNames.size, reservedNames);
             elementNames.set(key, name);
         }
         return { ...usage, name };
     });
+}
+
+/**
+ * Allocates the next short CSS variable name while skipping user-owned names.
+ *
+ * @param prefix Tier prefix, including leading custom-property dashes.
+ * @param startIndex Initial sequence index.
+ * @param reservedNames Names already present in user-authored style objects.
+ * @returns Non-reserved CSS custom-property name.
+ */
+function allocateVariableName(
+    prefix: string,
+    startIndex: number,
+    reservedNames: ReadonlySet<string>,
+): string {
+    let index = startIndex;
+    while (true) {
+        const name = `${prefix}${encode(index)}`;
+        if (!reservedNames.has(name)) {
+            return name;
+        }
+        index++;
+    }
 }
 
 /**

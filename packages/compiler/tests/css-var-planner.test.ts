@@ -46,4 +46,19 @@ describe('CSS variable name planner', () => {
             ['scoped', '--sz'],
         ]);
     });
+
+    it('skips user-reserved CSS custom property names', () => {
+        const plan = planCSSVariableNames(
+            [
+                { id: 'component', tier: 'component', propertyKey: 'bg' },
+                { id: 'scoped', tier: 'scoped', elementId: 'card', propertyKey: 'p' },
+            ],
+            { reservedNames: new Set(['--cz', '--sz']) },
+        );
+
+        expect(plan.map(entry => [entry.id, entry.name])).toEqual([
+            ['component', '--cy'],
+            ['scoped', '--sy'],
+        ]);
+    });
 });

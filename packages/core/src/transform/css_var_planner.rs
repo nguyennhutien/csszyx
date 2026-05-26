@@ -4,7 +4,7 @@
 //! planner pure gives the Rust rewrite path a deterministic contract before it
 //! mutates source code.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::encoder::encode;
 
@@ -58,6 +58,13 @@ pub struct CssVariablePlanEntry {
     pub name: String,
 }
 
+/// Options controlling CSS variable name allocation.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CssVariablePlanOptions {
+    /// CSS custom-property names already owned by user code in this file.
+    pub reserved_names: HashSet<String>,
+}
+
 /// Planned IR plus public CSS variable metadata.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CssVariableMangling {
@@ -70,7 +77,16 @@ pub struct CssVariableMangling {
 }
 
 /// Plans tiered CSS custom property names without mutating source.
+#[cfg(test)]
 pub fn plan_css_variable_names(usages: &[CssVariablePlanInput]) -> Vec<CssVariablePlanEntry> {
+    plan_css_variable_names_with_options(usages, &CssVariablePlanOptions::default())
+}
+
+/// Plans tiered CSS custom property names with caller-provided allocation options.
+pub fn plan_css_variable_names_with_options(
+    usages: &[CssVariablePlanInput],
+    options: &CssVariablePlanOptions,
+) -> Vec<CssVariablePlanEntry> {
     let mut component_names: HashMap<String, String> = HashMap::new();
     let mut scoped_names_by_element: HashMap<String, HashMap<String, String>> = HashMap::new();
 
@@ -83,7 +99,9 @@ pub fn plan_css_variable_names(usages: &[CssVariablePlanInput]) -> Vec<CssVariab
                     let key = canonical_usage_key(usage);
                     component_names
                         .entry(key)
-                        .or_insert_with(|| format!("--c{}", encode(next_index)))
+                        .or_insert_with(|| {
+                            allocate_variable_name("--c", next_index, &options.reserved_names)
+                        })
                         .clone()
                 }
                 CssVariableTier::Scoped => {
@@ -93,7 +111,9 @@ pub fn plan_css_variable_names(usages: &[CssVariablePlanInput]) -> Vec<CssVariab
                     let key = canonical_usage_key(usage);
                     element_names
                         .entry(key)
-                        .or_insert_with(|| format!("--s{}", encode(next_index)))
+                        .or_insert_with(|| {
+                            allocate_variable_name("--s", next_index, &options.reserved_names)
+                        })
                         .clone()
                 }
             };
@@ -108,6 +128,21 @@ pub fn plan_css_variable_names(usages: &[CssVariablePlanInput]) -> Vec<CssVariab
             }
         })
         .collect()
+}
+
+fn allocate_variable_name(
+    prefix: &str,
+    start_index: usize,
+    reserved_names: &HashSet<String>,
+) -> String {
+    let mut index = start_index;
+    loop {
+        let name = format!("{}{}", prefix, encode(index));
+        if !reserved_names.contains(&name) {
+            return name;
+        }
+        index += 1;
+    }
 }
 
 /// Applies scoped-tier CSS variable names to a cloned source IR.
@@ -169,6 +204,8 @@ pub fn apply_css_variable_mangling(
     let mut component_usages = Vec::new();
     let mut locations = Vec::new();
     let mut variable_map = Vec::new();
+    let reserved_names = collect_static_style_custom_property_names(ir, source);
+    let plan_options = CssVariablePlanOptions { reserved_names };
 
     for (element_index, element) in ir.jsx_opening_elements.iter().enumerate() {
         for attr_index in &element.sz_attribute_indices {
@@ -187,7 +224,7 @@ pub fn apply_css_variable_mangling(
         }
     }
 
-    let component_plan = plan_css_variable_names(&component_usages);
+    let component_plan = plan_css_variable_names_with_options(&component_usages, &plan_options);
     let hoist_nodes = ir
         .jsx_opening_elements
         .iter()
@@ -285,7 +322,7 @@ pub fn apply_css_variable_mangling(
             },
         )
         .collect::<Vec<_>>();
-    for entry in plan_css_variable_names(&scoped_usages) {
+    for entry in plan_css_variable_names_with_options(&scoped_usages, &plan_options) {
         let Ok(location_index) = entry.id.parse::<usize>() else {
             continue;
         };
@@ -311,6 +348,51 @@ pub fn apply_css_variable_mangling(
             .map(format_hoist_skip_diagnostic)
             .collect(),
     }
+}
+
+fn collect_static_style_custom_property_names(ir: &SourceIr, source: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for style in &ir.style_attributes {
+        let Some(span) = style.expression_span else {
+            continue;
+        };
+        let expression = &source[span.start as usize..span.end as usize];
+        for name in extract_quoted_custom_property_keys(expression) {
+            names.insert(name);
+        }
+    }
+    names
+}
+
+fn extract_quoted_custom_property_keys(expression: &str) -> Vec<String> {
+    let bytes = expression.as_bytes();
+    let mut names = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        let quote = bytes[index];
+        if quote != b'"' && quote != b'\'' {
+            index += 1;
+            continue;
+        }
+        let start = index + 1;
+        index = start;
+        while index < bytes.len() && bytes[index] != quote {
+            index += 1;
+        }
+        if index >= bytes.len() {
+            break;
+        }
+        let value = &expression[start..index];
+        let mut after = index + 1;
+        while after < bytes.len() && bytes[after].is_ascii_whitespace() {
+            after += 1;
+        }
+        if value.starts_with("--") && after < bytes.len() && bytes[after] == b':' {
+            names.push(value.to_string());
+        }
+        index += 1;
+    }
+    names
 }
 
 fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
@@ -367,8 +449,11 @@ fn canonical_usage_key(usage: &CssVariablePlanInput) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::{
-        apply_scoped_css_variable_names, plan_css_variable_names, CssVariablePlanInput,
+        apply_scoped_css_variable_names, plan_css_variable_names,
+        plan_css_variable_names_with_options, CssVariablePlanInput, CssVariablePlanOptions,
         CssVariableTier,
     };
     use crate::transform::{
@@ -448,6 +533,24 @@ mod tests {
             .map(|entry| (entry.id.as_str(), entry.name.as_str()))
             .collect::<Vec<_>>();
         assert_eq!(pairs, [("component", "--cz"), ("scoped", "--sz")]);
+    }
+
+    #[test]
+    fn skips_user_reserved_css_custom_property_names() {
+        let mut scoped = usage("scoped", CssVariableTier::Scoped, "p");
+        scoped.element_id = Some("card".to_string());
+        let plan = plan_css_variable_names_with_options(
+            &[usage("component", CssVariableTier::Component, "bg"), scoped],
+            &CssVariablePlanOptions {
+                reserved_names: HashSet::from(["--cz".to_string(), "--sz".to_string()]),
+            },
+        );
+
+        let pairs = plan
+            .iter()
+            .map(|entry| (entry.id.as_str(), entry.name.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, [("component", "--cy"), ("scoped", "--sy")]);
     }
 
     #[test]

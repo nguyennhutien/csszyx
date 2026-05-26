@@ -124,6 +124,9 @@ export function transformOxc(
     const edits = new MagicString(source);
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
+    const reservedCSSVariableNames = options?.mangleVars
+        ? collectStaticStyleCustomPropertyNames(parsed.program as unknown as OxcNode)
+        : undefined;
     const componentHoists = options?.mangleVars
         ? planOxcComponentVariableHoists(
               parsed.program as unknown as OxcNode,
@@ -131,6 +134,7 @@ export function transformOxc(
               objectBindings,
               source,
               options.mangleVarHoistMaxDepth,
+              reservedCSSVariableNames,
           )
         : null;
     if (componentHoists) {
@@ -427,6 +431,7 @@ export function transformOxc(
                         options,
                         componentHoists?.usageNamesByElement.get(elementId),
                         cssVariableMap,
+                        reservedCSSVariableNames,
                     );
                     if (partial && szAttrs.length === 1) {
                         const mergedStyleProps =
@@ -1229,6 +1234,7 @@ function compileConditionalSpreadBranch(
  * @param options Transform options controlling opt-in CSS variable behavior.
  * @param hoistedNames Dynamic prop keys that should use component-tier hoisted vars.
  * @param cssVariableMap Original-to-mangled CSS variable map to populate.
+ * @param reservedNames User-authored CSS custom-property names to avoid.
  * @returns Transform fragments, or null when the object needs runtime fallback.
  */
 function buildPartialObjectTransform(
@@ -1239,6 +1245,7 @@ function buildPartialObjectTransform(
     options?: TransformSourceCodeOptions,
     hoistedNames?: ReadonlyMap<string, string>,
     cssVariableMap?: Map<string, CssVariableMangleValue>,
+    reservedNames?: ReadonlySet<string>,
 ): OxcPartialTransform | null {
     const partial = evaluatePartialObject(node, filename, bindings, source);
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
@@ -1263,7 +1270,7 @@ function buildPartialObjectTransform(
 
     if (options?.mangleVars) {
         applyHoistedVariableNames(partial, hoistedNames, cssVariableMap);
-        applyScopedVariablePlan(partial, hoistedNames, cssVariableMap);
+        applyScopedVariablePlan(partial, hoistedNames, cssVariableMap, reservedNames);
     }
 
     for (const [, info] of partial.dynamicProps) {
@@ -1320,11 +1327,13 @@ function applyHoistedVariableNames(
  * @param partial Partially evaluated sz object result for one JSX element.
  * @param hoistedNames Dynamic prop keys already assigned to component-tier hoisted vars.
  * @param cssVariableMap Original-to-mangled CSS variable map to populate.
+ * @param reservedNames User-authored CSS custom-property names to avoid.
  */
 function applyScopedVariablePlan(
     partial: OxcPartialObjectResult,
     hoistedNames?: ReadonlyMap<string, string>,
     cssVariableMap?: Map<string, CssVariableMangleValue>,
+    reservedNames?: ReadonlySet<string>,
 ): void {
     const entries = [...partial.dynamicProps.entries()].filter(([id]) => !hoistedNames?.has(id));
     const plan = planCSSVariableNames(
@@ -1334,6 +1343,7 @@ function applyScopedVariablePlan(
             elementId: 'self',
             propertyKey: id,
         })),
+        { reservedNames },
     );
 
     for (const planned of plan) {
@@ -1383,6 +1393,7 @@ function addCssVariableMapping(
  * @param bindings Local object-literal bindings.
  * @param source Original source for expression slicing.
  * @param maxDepth Maximum cascade distance for component-tier hoisting.
+ * @param reservedNames User-authored CSS custom-property names to avoid.
  * @returns Hoist metadata consumed by the source rewrite pass.
  */
 function planOxcComponentVariableHoists(
@@ -1391,6 +1402,7 @@ function planOxcComponentVariableHoists(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
     maxDepth?: number,
+    reservedNames?: ReadonlySet<string>,
 ): OxcComponentHoistAnalysis {
     const nodes: CSSVariableHoistNode[] = [];
     const candidates: OxcComponentHoistCandidate[] = [];
@@ -1412,6 +1424,7 @@ function planOxcComponentVariableHoists(
             propertyKey: candidate.propertyKey,
             variantChain: candidate.variantChain || undefined,
         })),
+        { reservedNames },
     );
     const nameByUsage = new Map(plannedNames.map(entry => [entry.id, entry.name]));
     const candidateById = new Map(candidates.map(candidate => [candidate.id, candidate]));
@@ -1675,6 +1688,54 @@ function findJsxAttribute(opening: JsxOpeningElementNode, name: string): JsxAttr
         }
     }
     return null;
+}
+
+/**
+ * Collects user-authored inline CSS custom-property names from static style objects.
+ *
+ * @param node AST node to scan.
+ * @returns CSS custom-property names that mangleVars must not reuse.
+ */
+function collectStaticStyleCustomPropertyNames(node: OxcNode): Set<string> {
+    const names = new Set<string>();
+    walk(node, child => {
+        if (child.type !== 'JSXOpeningElement') {
+            return;
+        }
+        const styleAttr = findJsxAttribute(child as unknown as JsxOpeningElementNode, 'style');
+        if (styleAttr?.value?.type !== 'JSXExpressionContainer') {
+            return;
+        }
+        const expression = (styleAttr.value as unknown as { expression: OxcNode }).expression;
+        if (expression.type !== 'ObjectExpression') {
+            return;
+        }
+        for (const propRaw of (expression as ObjectExpressionNode).properties ?? []) {
+            if (propRaw.type !== 'Property') {
+                continue;
+            }
+            const key = (propRaw as PropertyNode).key;
+            const name = literalStringValue(key);
+            if (name?.startsWith('--')) {
+                names.add(name);
+            }
+        }
+    });
+    return names;
+}
+
+/**
+ * Extracts a string literal AST value.
+ *
+ * @param node AST node.
+ * @returns Literal string value, or null.
+ */
+function literalStringValue(node: OxcNode): string | null {
+    if (node.type !== 'Literal') {
+        return null;
+    }
+    const value = (node as unknown as { value: unknown }).value;
+    return typeof value === 'string' ? value : null;
 }
 
 /**

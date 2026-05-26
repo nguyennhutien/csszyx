@@ -160,6 +160,26 @@ describe('CSS variable system config contract', () => {
         );
     });
 
+    it('does not reuse user-authored CSS custom property names', () => {
+        const source =
+            'const App = ({ pad, gap }) => <section style={{ "--cz": "user" }}><div style={{ "--sz": "local" }} sz={{ p: pad }} /><span sz={{ p: pad, gap }} /></section>;';
+        const result = transformOxc(source, 'mangle-vars-reserved-names.tsx', {
+            mangleVars: true,
+        });
+
+        expect(result.code).toContain('style={{...{ "--cz": "user" }, "--cy"');
+        expect(result.code).toContain('p-(--cy)');
+        expect(result.code).toContain('gap-(--sy)');
+        expect(result.code).not.toContain('p-(--cz)');
+        expect(result.code).not.toContain('gap-(--sz)');
+        expect(result.cssVariableMap).toEqual(
+            new Map([
+                ['--_sz-p', '--cy'],
+                ['--_sz-gap', '--sy'],
+            ]),
+        );
+    });
+
     it('does not hoist repeated vars through fragments', () => {
         const source =
             'const App = ({ pad }) => <><div sz={{ p: pad }} /><span sz={{ p: pad }} /></>;';
