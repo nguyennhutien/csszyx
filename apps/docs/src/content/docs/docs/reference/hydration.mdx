@@ -3,8 +3,7 @@ title: SSR Hydration API
 description: Complete API reference for CSSzyx hydration guards, error types, and recovery.
 ---
 
-
-import { Steps } from '@astrojs/starlight/components';
+import { Steps } from "@astrojs/starlight/components";
 
 The hydration API provides fine-grained control over SSR mismatch detection,
 abort protocol, and recovery. Most apps only need `initRuntime()` — the rest
@@ -16,7 +15,7 @@ is available for advanced use cases.
 
 1. **`startHydration()`** — begin hydration session
 
-2. **`loadMangleMapFromDOM()`** — read the injected mangle map from the `<script>` tag
+2. **`loadMangleMapFromDOM()`** — read the injected checksum mangle map from the `<script>` tag
 
 3. **`verifyMangleChecksum()`** — validate SHA-256 against `data-sz-checksum`
 
@@ -43,7 +42,7 @@ This behavior is intentional and cannot be overridden in production builds.
 Opens a hydration session. Call before any validation or React render.
 
 ```ts
-function startHydration(): void
+function startHydration(): void;
 ```
 
 ### `endHydration()`
@@ -51,7 +50,7 @@ function startHydration(): void
 Closes the current hydration session.
 
 ```ts
-function endHydration(): void
+function endHydration(): void;
 ```
 
 ### `abortHydration()`
@@ -59,7 +58,7 @@ function endHydration(): void
 Aborts hydration. Blocks React from taking over the DOM.
 
 ```ts
-function abortHydration(): void
+function abortHydration(): void;
 ```
 
 ### `isHydrationAborted()`
@@ -67,7 +66,7 @@ function abortHydration(): void
 Returns `true` if `abortHydration()` has been called.
 
 ```ts
-function isHydrationAborted(): boolean
+function isHydrationAborted(): boolean;
 ```
 
 ### `isHydrating()`
@@ -75,39 +74,43 @@ function isHydrationAborted(): boolean
 Returns `true` if a hydration session is active.
 
 ```ts
-function isHydrating(): boolean
+function isHydrating(): boolean;
 ```
 
 ## Mangle Map Verification
 
 ### `loadMangleMapFromDOM()`
 
-Reads the injected mangle map from the `#__sz_mangle__` script tag in the DOM.
+Reads the injected checksum mangle map from the `#__CSSZYX_MANGLE_MAP__`
+script tag in the DOM. The legacy `#__SZ_MANGLE_MAP__` id is still accepted
+for older builds.
 
 ```ts
-function loadMangleMapFromDOM(): MangleMap | null
+function loadMangleMapFromDOM(): MangleMap | null;
 
-type MangleMap = Record<string, string>; // { 'z': 'p-4', 'y': 'bg-blue-500' }
+type MangleMap = Record<string, string>; // { 'class:p-4': 'z', 'var:--_sz-p:--cz': '--cz' }
 ```
 
-### `verifyMangleChecksum(map, checksum)`
+When `production.mangleVars` is enabled, the checksum payload includes both
+class and CSS-variable entries. One original dynamic variable can map to more
+than one mangled name, so variable entries are namespaced with the mangled name
+in the checksum key.
 
-Computes SHA-256 of the mangle map and compares to the embedded checksum.
-Returns `true` if they match.
+### `verifyMangleChecksum(expectedChecksum)`
+
+Compares the expected mangle checksum with the checksum embedded on
+`<html data-sz-checksum="...">`. Returns `true` if they match.
 
 ```ts
-function verifyMangleChecksum(
-  map: MangleMap,
-  checksum: string
-): boolean
+function verifyMangleChecksum(expectedChecksum: string): boolean;
 ```
 
-### `verifyMangleMapIntegrity(map)`
+### `verifyMangleMapIntegrity()`
 
-Validates the structure of a mangle map (non-empty, valid string values).
+Validates the injected mangle map against the embedded checksum.
 
 ```ts
-function verifyMangleMapIntegrity(map: MangleMap): boolean
+function verifyMangleMapIntegrity(): boolean;
 ```
 
 ### `validateHydrationClass(mangledClass, map)`
@@ -115,10 +118,7 @@ function verifyMangleMapIntegrity(map: MangleMap): boolean
 Checks that a single mangled class exists in the mangle map.
 
 ```ts
-function validateHydrationClass(
-  mangledClass: string,
-  map: MangleMap
-): boolean
+function validateHydrationClass(mangledClass: string, map: MangleMap): boolean;
 ```
 
 ## Error Inspection
@@ -128,12 +128,12 @@ function validateHydrationClass(
 Returns all recorded hydration errors for the current session.
 
 ```ts
-function getHydrationErrors(): HydrationError[]
+function getHydrationErrors(): HydrationError[];
 
 interface HydrationError {
   type: HydrationErrorType;
   message: string;
-  class?: string;      // The mangled class that failed (if applicable)
+  class?: string; // The mangled class that failed (if applicable)
   timestamp: number;
 }
 ```
@@ -143,18 +143,18 @@ interface HydrationError {
 Clears the error list. Useful for testing.
 
 ```ts
-function clearHydrationErrors(): void
+function clearHydrationErrors(): void;
 ```
 
 ## Error Types
 
 ```ts
 type HydrationErrorType =
-  | 'checksum_mismatch'  // SHA-256 does not match
-  | 'missing_manifest'   // No mangle map in DOM
-  | 'invalid_manifest'   // Mangle map is malformed
-  | 'class_not_found'    // Mangled class has no mapping
-  | 'token_invalid';     // Recovery token signature is invalid
+  | "checksum_mismatch" // SHA-256 does not match
+  | "missing_manifest" // No mangle map in DOM
+  | "invalid_manifest" // Mangle map is malformed
+  | "class_not_found" // Mangled class has no mapping
+  | "token_invalid"; // Recovery token signature is invalid
 ```
 
 ## Recovery Tokens
@@ -167,10 +167,7 @@ main checksum check fails. Available in development only.
 Verifies a recovery token against a mangle map.
 
 ```ts
-function verifyRecoveryToken(
-  token: string,
-  map: MangleMap
-): VerificationResult
+function verifyRecoveryToken(token: string, map: MangleMap): VerificationResult;
 
 interface VerificationResult {
   valid: boolean;
@@ -184,7 +181,7 @@ interface VerificationResult {
 Returns `true` if a recovery token is present in the DOM.
 
 ```ts
-function hasRecoveryToken(): boolean
+function hasRecoveryToken(): boolean;
 ```
 
 ### `getRecoveryMode()`
@@ -192,8 +189,8 @@ function hasRecoveryToken(): boolean
 Returns the current recovery mode.
 
 ```ts
-type RecoveryMode = 'none' | 'csr' | 'dev-only';
-function getRecoveryMode(): RecoveryMode
+type RecoveryMode = "none" | "csr" | "dev-only";
+function getRecoveryMode(): RecoveryMode;
 ```
 
 ### `enableCSRRecovery()` / `disableCSRRecovery()` / `isCSRRecoveryAllowed()`
@@ -201,9 +198,9 @@ function getRecoveryMode(): RecoveryMode
 Manually enable or disable client-side recovery.
 
 ```ts
-function enableCSRRecovery(): void
-function disableCSRRecovery(): void
-function isCSRRecoveryAllowed(): boolean
+function enableCSRRecovery(): void;
+function disableCSRRecovery(): void;
+function isCSRRecoveryAllowed(): boolean;
 ```
 
 ## SSR Context
@@ -213,7 +210,7 @@ function isCSRRecoveryAllowed(): boolean
 Returns `true` when running in an SSR context (no DOM available).
 
 ```ts
-function isSSREnvironment(): boolean
+function isSSREnvironment(): boolean;
 ```
 
 ### `getSSRContext()`
@@ -221,12 +218,31 @@ function isSSREnvironment(): boolean
 Returns the current SSR context object.
 
 ```ts
-function getSSRContext(): SSRContext | null
+function getSSRContext(): SSRContext | null;
 
 interface SSRContext {
   buildId: string;
   checksum: string;
-  mangleMap: MangleMap;
+  timestamp: number;
+  hasRecoveryTokens: boolean;
+}
+```
+
+## Debug Helper
+
+Production builds with debug helper injection expose `window.__csszyx` for
+inspection. `mangleMap` stays class-only, while `varMangleMap` contains CSS
+variable mappings when `production.mangleVars` is enabled.
+
+```ts
+interface CsszyxDebugHelper {
+  mangleMap: Record<string, string>;
+  varMangleMap: Record<string, string | string[]>;
+  checksum: string;
+  encode(originalClass: string): string | undefined;
+  decode(mangledClass: string): string | undefined;
+  encodeVar(originalVar: string): string | string[] | undefined;
+  decodeVar(mangledVar: string): string[];
 }
 ```
 
@@ -242,7 +258,7 @@ import {
   loadMangleMapFromDOM,
   verifyMangleChecksum,
   isHydrationAborted,
-} from '@csszyx/runtime';
+} from "@csszyx/runtime";
 
 // In your app entry before React.hydrate()
 startHydration();
@@ -250,13 +266,13 @@ startHydration();
 const mangleMap = loadMangleMapFromDOM();
 const checksum = document.documentElement.dataset.szChecksum;
 
-if (!mangleMap || !verifyMangleChecksum(mangleMap, checksum)) {
+if (!mangleMap || !checksum || !verifyMangleChecksum(checksum)) {
   abortHydration();
 }
 
 if (!isHydrationAborted()) {
   // Safe to hydrate
-  hydrateRoot(document.getElementById('root'), <App />);
+  hydrateRoot(document.getElementById("root"), <App />);
 }
 
 endHydration();
