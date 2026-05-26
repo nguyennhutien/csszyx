@@ -248,12 +248,14 @@ describe('loadMangleMapFromDOM', () => {
         script.textContent = JSON.stringify({
             'class:p-4': 'z',
             'var:--_sz-p:--cz': '--cz',
+            'var:--_sz-p:--sz': '--sz',
         });
         document.head.appendChild(script);
 
         expect(loadMangleMapFromDOM()).toEqual({
             'class:p-4': 'z',
             'var:--_sz-p:--cz': '--cz',
+            'var:--_sz-p:--sz': '--sz',
         });
     });
 
