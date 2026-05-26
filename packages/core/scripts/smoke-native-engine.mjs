@@ -34,6 +34,7 @@ try {
   }
 
   assertNativeEngineTransform(binding);
+  assertNativeEngineMangleVars(binding);
   console.log(
     `[native-engine-smoke] Loaded ${path.relative(repoRoot, nodePath)}`,
   );
@@ -309,6 +310,43 @@ function assertNativeEngineTransform(binding) {
     !recoveryToken.path.endsWith("fixtures/recover.tsx:1:27")
   ) {
     fail(`Unexpected recovery token data: ${JSON.stringify(recoveryToken)}`);
+  }
+}
+
+function assertNativeEngineMangleVars(binding) {
+  const [result] = binding.transformBatch(
+    [
+      {
+        filename: path.join(repoRoot, "fixtures", "mangle-vars.tsx"),
+        source:
+          "const Vars = ({ pad }) => <section><div sz={{ p: pad }} /><button sz={{ p: pad }} /></section>;",
+      },
+    ],
+    { mangleVars: true },
+  );
+
+  if (!result) {
+    fail("Expected one mangleVars transform result.");
+  }
+  if (
+    result.code !==
+    'const Vars = ({ pad }) => <section style={{"--cz": `calc(${pad} * var(--spacing))`}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section>;'
+  ) {
+    fail(`Unexpected mangleVars code: ${result.code}`);
+  }
+  if (JSON.stringify(result.classes) !== JSON.stringify(["p-(--cz)", "p-(--cz)"])) {
+    fail(`Unexpected mangleVars classes: ${JSON.stringify(result.classes)}`);
+  }
+  if (
+    JSON.stringify(result.cssVariableMap) !==
+    JSON.stringify([{ original: "--_sz-p", mangled: "--cz" }])
+  ) {
+    fail(
+      `Unexpected mangleVars cssVariableMap: ${JSON.stringify(result.cssVariableMap)}`,
+    );
+  }
+  if (result.metadata?.transformed !== true || result.metadata?.producer !== "rust") {
+    fail(`Unexpected mangleVars metadata: ${JSON.stringify(result.metadata)}`);
   }
 }
 
