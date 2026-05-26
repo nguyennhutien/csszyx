@@ -64,6 +64,7 @@ import {
 interface PluginState {
     classes: Set<string>;
     mangleMap: Record<string, string>;
+    varMangleEntriesByFile: Map<string, Array<[string, string]>>;
     varMangleMap: Record<string, CssVariableMangleValue>;
     checksum: string;
     finalized: boolean;
@@ -142,7 +143,50 @@ function cssVariableEntries(result: SourceTransformResult): Array<[string, strin
 }
 
 /**
- * Adds one CSS variable mapping to the plugin-wide metadata map.
+ * Records the complete CSS variable mangle output owned by one source file.
+ *
+ * Rebuilding the public map from per-file entries prevents stale mappings when
+ * a dev-server transform reruns after a file changes or removes dynamic `sz`.
+ *
+ * @param state Plugin state to update.
+ * @param filename Source filename that owns the entries.
+ * @param entries Complete CSS variable entries emitted by this file.
+ */
+function recordFileVarMangleEntries(
+    state: Pick<PluginState, 'varMangleEntriesByFile' | 'varMangleMap'>,
+    filename: string,
+    entries: Array<[string, string]>,
+): void {
+    const normalizedFilename = normalizeSourceFilename(filename);
+    if (entries.length === 0) {
+        state.varMangleEntriesByFile.delete(normalizedFilename);
+    } else {
+        state.varMangleEntriesByFile.set(normalizedFilename, entries);
+    }
+    state.varMangleMap = buildVarMangleMap(state.varMangleEntriesByFile);
+}
+
+/**
+ * Builds a stable one-to-many CSS variable mangle map from per-file ownership.
+ *
+ * @param entriesByFile Per-file CSS variable metadata.
+ * @returns Public original-to-mangled map.
+ */
+function buildVarMangleMap(
+    entriesByFile: ReadonlyMap<string, Array<[string, string]>>,
+): Record<string, CssVariableMangleValue> {
+    const next: Record<string, CssVariableMangleValue> = {};
+    const files = [...entriesByFile.keys()].sort();
+    for (const file of files) {
+        for (const [original, mangled] of entriesByFile.get(file) ?? []) {
+            addVarMangleMapping(next, original, mangled);
+        }
+    }
+    return next;
+}
+
+/**
+ * Adds one CSS variable mapping to a metadata map.
  *
  * @param map Plugin metadata map to update.
  * @param original Original generated CSS custom-property name.
@@ -623,6 +667,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const state: PluginState = {
         classes: new Set<string>(),
         mangleMap: {},
+        varMangleEntriesByFile: new Map(),
         varMangleMap: {},
         checksum: '',
         finalized: false,
@@ -917,6 +962,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         for (const [token, data] of result.recoveryTokens) {
                             state.recoveryTokens.set(token, data);
                         }
+                        recordFileVarMangleEntries(state, filePath, cssVariableEntries(result));
                         // Extract static classes from _sz() runtime calls.
                         // When an sz prop has any dynamic value, the compiler wraps the
                         // entire object in _sz({...}). Static values inside are invisible
@@ -1245,9 +1291,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         usesColorVar = result.usesColorVar;
                         transformed = result.transformed;
                         szClasses = result.classes;
-                        for (const [original, mangled] of cssVariableEntries(result)) {
-                            addVarMangleMapping(state.varMangleMap, original, mangled);
-                        }
+                        recordFileVarMangleEntries(state, id, cssVariableEntries(result));
                         // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
                         // Suppressed in production to avoid leaking source paths into build output.
                         if (
@@ -1262,6 +1306,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             state.recoveryTokens.set(token, data);
                         }
                     }
+                } else if (shouldProcessSource(id)) {
+                    recordFileVarMangleEntries(state, id, []);
                 }
 
                 // Layout injection (SSR frameworks like Next.js)
@@ -1384,6 +1430,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             watchChange(id, change) {
                 if (change.event === 'delete') {
                     deleteRSCModuleRecord(state.rscModules, id);
+                    recordFileVarMangleEntries(state, id, []);
                 }
             },
 
@@ -1461,6 +1508,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) {
+                        recordFileVarMangleEntries(state, ctx.file, []);
                         return;
                     }
 
@@ -1473,10 +1521,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             performance.now() - hmrTransformStarted,
                         );
                     } catch {
+                        recordFileVarMangleEntries(state, ctx.file, []);
                         return;
                     }
 
                     if (!result.transformed) {
+                        recordFileVarMangleEntries(state, ctx.file, []);
                         return;
                     }
 
@@ -1484,9 +1534,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     for (const cls of result.classes) {
                         state.classes.add(cls);
                     }
-                    for (const [original, mangled] of cssVariableEntries(result)) {
-                        addVarMangleMapping(state.varMangleMap, original, mangled);
-                    }
+                    recordFileVarMangleEntries(state, ctx.file, cssVariableEntries(result));
                     for (const [token, data] of result.recoveryTokens) {
                         state.recoveryTokens.set(token, data);
                     }

@@ -2,8 +2,10 @@ import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
+import { RESOLVED_VIRTUAL_MODULE_ID } from '../src/virtual-modules.js';
 
 type TransformHook = {
+    load?: (id: string) => unknown;
     transform: (this: { warn: (message: string) => void }, code: string, id: string) => unknown;
 };
 
@@ -129,6 +131,37 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain(
             '<button className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
         );
+    });
+
+    it('replaces per-file CSS variable metadata instead of append-only accumulation', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: { mangleVars: true },
+        }) as TransformHook[];
+
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = ({ pad }) => <div sz={{ p: pad }} />;',
+            '/repo/src/App.tsx',
+        );
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const Card = ({ gap }) => <div sz={{ gap }} />;',
+            '/repo/src/Card.tsx',
+        );
+        const initialModuleSource = String(prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID));
+        expect(initialModuleSource).toContain('"--_sz-p": "--sz"');
+        expect(initialModuleSource).toContain('"--_sz-gap": "--sz"');
+
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = () => <div />;',
+            '/repo/src/App.tsx',
+        );
+        const moduleSource = String(prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID));
+
+        expect(moduleSource).not.toContain('"--_sz-p"');
+        expect(moduleSource).toContain('"--_sz-gap": "--sz"');
     });
 
     it('passes production.mangleVars into the Rust compiler path', () => {
