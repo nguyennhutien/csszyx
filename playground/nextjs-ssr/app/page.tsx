@@ -1,5 +1,6 @@
 import { AdvancedCases } from '@/components/advanced-cases';
 import { ClientCounter } from '@/components/client-counter';
+import { CssVarFixture } from '@/components/css-var-fixture';
 import { EdgeCaseTests } from '@/components/edge-cases';
 import { HydrationTest } from '@/components/hydration-test';
 import { ServerCard } from '@/components/server-card';
@@ -63,6 +64,11 @@ export default function Home() {
                 {/* Edge Case Tests */}
                 <section sz={{ mb: 12 }}>
                     <EdgeCaseTests />
+                </section>
+
+                {/* CSS Variable Mangling */}
+                <section sz={{ mb: 12 }}>
+                    <CssVarFixture />
                 </section>
 
                 {/* Advanced Cases */}

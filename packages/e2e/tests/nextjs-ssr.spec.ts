@@ -48,4 +48,28 @@ test.describe('Next.js SSR Playground', () => {
         expect(checksum).toBeTruthy();
         expect(checksum).toHaveLength(16);
     });
+
+    test('should expose hoisted css variable mangling metadata', async ({ page }) => {
+        const fixture = page.getByTestId('next-css-var-fixture');
+        const cardA = page.getByTestId('next-css-var-card-a');
+        const cardB = page.getByTestId('next-css-var-card-b');
+
+        await expect(fixture).toBeVisible();
+        await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(4 \* var\(--spacing\)\)/);
+        const encodedClass = await page.evaluate(() => window.__csszyx?.encode?.('p-(--cz)'));
+        expect(encodedClass).toBeTruthy();
+        const cardAClasses = (await cardA.getAttribute('class'))?.split(/\s+/) ?? [];
+        const cardBClasses = (await cardB.getAttribute('class'))?.split(/\s+/) ?? [];
+        expect(cardAClasses).toContain(encodedClass);
+        expect(cardBClasses).toContain(encodedClass);
+
+        await page.getByTestId('next-css-var-button').click();
+        await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(5 \* var\(--spacing\)\)/);
+
+        const varMap = await page.evaluate(() => window.__csszyx?.varMangleMap);
+        expect(varMap).toMatchObject({ '--_sz-p': '--cz' });
+
+        const decoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--cz'));
+        expect(decoded).toEqual(['--_sz-p']);
+    });
 });
