@@ -17,6 +17,7 @@
 import {
     OxcRustNotImplementedError,
     type SourceTransformResult,
+    type TransformSourceCodeOptions,
     transformOxc,
     transformRust,
 } from '../src/index.js';
@@ -31,11 +32,14 @@ export interface RustParityComparison {
     codeEqual: boolean;
     /** Did Rust and oxc-JS agree on the `transformed` flag? */
     transformedEqual: boolean;
+    /** Did Rust and oxc-JS agree on emitted CSS custom-property metadata? */
+    cssVariableMapEqual: boolean;
     /** oxc-JS output — always populated unless oxc itself throws. */
     oxc: {
         code: string;
         classes: string[];
         transformed: boolean;
+        cssVariableMap: [string, string][];
     };
     /** Rust output — null when the Rust path threw. */
     rust: SourceTransformResult | null;
@@ -57,6 +61,8 @@ export interface RustParityFixture {
     source: string;
     /** Filename passed to both implementations. */
     filename: string;
+    /** Optional transform options passed to both parser implementations. */
+    options?: TransformSourceCodeOptions;
     /**
      * Expected current parity state:
      * - `pending`: Rust throws `OxcRustNotImplementedError` (native unavailable
@@ -83,21 +89,27 @@ export interface RustParityFixture {
  *
  * @param source Source TSX/JSX text.
  * @param filename Filename passed to both implementations.
+ * @param options Optional transform options passed to both implementations.
  * @returns Side-by-side comparison.
  */
-export function compareRustVsOxc(source: string, filename: string): RustParityComparison {
-    const oxc = transformOxc(source, filename);
+export function compareRustVsOxc(
+    source: string,
+    filename: string,
+    options?: TransformSourceCodeOptions,
+): RustParityComparison {
+    const oxc = transformOxc(source, filename, options);
     const oxcView = {
         code: oxc.code,
         classes: [...oxc.classes].sort(),
         transformed: oxc.transformed,
+        cssVariableMap: sortedMapEntries(oxc.cssVariableMap),
     };
 
     let rust: SourceTransformResult | null = null;
     let rustError: string | null = null;
     let rustIsUnavailable = false;
     try {
-        rust = transformRust(source, filename);
+        rust = transformRust(source, filename, options);
     } catch (err) {
         rustError = err instanceof Error ? err.message : String(err);
         rustIsUnavailable = err instanceof OxcRustNotImplementedError;
@@ -108,6 +120,7 @@ export function compareRustVsOxc(source: string, filename: string): RustParityCo
             classesEqual: false,
             codeEqual: false,
             transformedEqual: false,
+            cssVariableMapEqual: false,
             oxc: oxcView,
             rust: null,
             rustError,
@@ -120,6 +133,10 @@ export function compareRustVsOxc(source: string, filename: string): RustParityCo
         classesEqual: arraysEqual(oxcView.classes, rustClassesSorted),
         codeEqual: oxcView.code === rust.code,
         transformedEqual: oxcView.transformed === rust.transformed,
+        cssVariableMapEqual: mapEntriesEqual(
+            oxcView.cssVariableMap,
+            sortedMapEntries(rust.cssVariableMap),
+        ),
         oxc: oxcView,
         rust,
         rustError: null,
@@ -164,6 +181,13 @@ export function assertExpectedRustParity(
             `Fixture "${fixture.name}" marked as ${fixture.expected} but class sets differ.\n` +
                 `  oxc:  [${comparison.oxc.classes.join(', ')}]\n` +
                 `  rust: [${comparison.rust ? [...comparison.rust.classes].sort().join(', ') : ''}]`,
+        );
+    }
+    if (!comparison.cssVariableMapEqual) {
+        throw new Error(
+            `Fixture "${fixture.name}" marked as ${fixture.expected} but cssVariableMap differs.\n` +
+                `  oxc:  ${JSON.stringify(comparison.oxc.cssVariableMap)}\n` +
+                `  rust: ${JSON.stringify(sortedMapEntries(comparison.rust?.cssVariableMap ?? new Map()))}`,
         );
     }
     if (fixture.expected === 'classes-only-parity') {
@@ -253,6 +277,22 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
         }
     }
     return true;
+}
+
+function mapEntriesEqual(a: readonly [string, string][], b: readonly [string, string][]): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i]?.[0] !== b[i]?.[0] || a[i]?.[1] !== b[i]?.[1]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function sortedMapEntries(map: ReadonlyMap<string, string>): [string, string][] {
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
 function isSuperset(a: readonly string[], b: readonly string[]): boolean {

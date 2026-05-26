@@ -144,6 +144,27 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-dynamic-css-var-mangle-vars',
+        source: 'const X = ({ pad }) => <div sz={{ p: pad, bg: "blue-500" }} />;',
+        filename: 'dynamic-css-var-mangle-vars.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-hoist',
+        source: [
+            'const X = ({ pad }) => (',
+            '  <section>',
+            '    <div sz={{ p: pad }} />',
+            '    <button sz={{ p: pad }} />',
+            '  </section>',
+            ');',
+        ].join('\n'),
+        filename: 'dynamic-css-var-mangle-vars-hoist.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
         name: 'sz-dynamic-css-var-existing-class',
         source: 'const X = ({ pad }) => <div className="existing" sz={{ p: pad }} />;',
         filename: 'dynamic-existing-static-class.tsx',
@@ -238,7 +259,7 @@ describe('Rust native engine — parity vs oxc-JS', () => {
 
     for (const fixture of fixtures) {
         it(`${fixture.name} [${fixture.expected}]`, () => {
-            const comparison = compareRustVsOxc(fixture.source, fixture.filename);
+            const comparison = compareRustVsOxc(fixture.source, fixture.filename, fixture.options);
             expect(() => assertExpectedRustParity(fixture, comparison)).not.toThrow();
         });
     }
