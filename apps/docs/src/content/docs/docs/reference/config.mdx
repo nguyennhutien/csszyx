@@ -128,7 +128,7 @@ Controls production build behavior.
 ```ts
 interface ProductionConfig {
   mangle: boolean; // Minify class names (z, y, x, ...)
-  mangleVars: boolean; // Opt into CSS custom property name mangling and hoisting
+  mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
@@ -139,11 +139,16 @@ interface ProductionConfig {
 | Option             | Default | Description                                    |
 | ------------------ | ------- | ---------------------------------------------- |
 | `mangle`           | `true`  | Replace class names with short encoded symbols |
-| `mangleVars`       | `false` | Opt into CSS custom property name mangling and hoisting. Disabled builds keep existing `--_sz-*` output. |
+| `mangleVars`       | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
 | `contentHashing`   | `true`  | Hash CSS output for cache-busting              |
 | `injectChecksum`   | `true`  | Embed SHA-256 checksum in HTML                 |
 | `incrementalBuild` | `true`  | Cache build artifacts for faster rebuilds      |
 | `minify`           | `true`  | Minify emitted CSS and JS                      |
+
+`mangleVars` does not define global theme-token aliases. It only rewrites the
+dynamic CSS variables csszyx emits for runtime `sz` values, such as `p: pad`,
+and keeps the feature opt-in while the global token tier remains a separate
+design surface.
 
 ### `build`
 
