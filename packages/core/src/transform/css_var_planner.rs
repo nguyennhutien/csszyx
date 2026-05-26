@@ -10,7 +10,8 @@ use crate::encoder::encode;
 
 use super::{
     css_var_hoist_planner::{
-        plan_component_variable_hoists, CssVariableHoistNode, CssVariableHoistOptions,
+        plan_component_variable_hoists_with_diagnostics, CssVariableHoistDiagnostic,
+        CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistSkipReason,
         CssVariableHoistUsage,
     },
     CssVariableMapEntry, DynamicCssVarCategory, SourceIr,
@@ -64,6 +65,8 @@ pub struct CssVariableMangling {
     pub ir: SourceIr,
     /// Original-to-mangled CSS custom property map.
     pub variable_map: Vec<CssVariableMapEntry>,
+    /// Non-fatal diagnostics emitted while planning variable mangling.
+    pub diagnostics: Vec<String>,
 }
 
 /// Plans tiered CSS custom property names without mutating source.
@@ -207,11 +210,12 @@ pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> CssVariableMa
             })
         })
         .collect::<Vec<_>>();
-    let hoist_plans = plan_component_variable_hoists(
+    let hoist_analysis = plan_component_variable_hoists_with_diagnostics(
         &hoist_nodes,
         &hoist_usages,
         CssVariableHoistOptions::default(),
     );
+    let hoist_plans = hoist_analysis.plans;
 
     let mut hoisted_location_ids = std::collections::HashSet::new();
     for plan in hoist_plans {
@@ -295,7 +299,28 @@ pub fn apply_css_variable_mangling(ir: &SourceIr, source: &str) -> CssVariableMa
     CssVariableMangling {
         ir: next,
         variable_map,
+        diagnostics: hoist_analysis
+            .diagnostics
+            .iter()
+            .map(format_hoist_skip_diagnostic)
+            .collect(),
     }
+}
+
+fn format_hoist_skip_diagnostic(diagnostic: &CssVariableHoistDiagnostic) -> String {
+    let reason = match diagnostic.reason {
+        CssVariableHoistSkipReason::NoLca => "no-lca",
+        CssVariableHoistSkipReason::NonHostAncestor => "non-host-ancestor",
+        CssVariableHoistSkipReason::MaxDepth => "max-depth",
+    };
+    let suffix = diagnostic
+        .max_depth
+        .map(|max_depth| format!(" (maxDepth {max_depth})"))
+        .unwrap_or_default();
+    format!(
+        "[csszyx] mangleVars skipped component CSS variable hoist for {} across {} usages: {}{}",
+        diagnostic.name, diagnostic.usage_count, reason, suffix
+    )
 }
 
 fn push_variable_map(map: &mut Vec<CssVariableMapEntry>, original: &str, mangled: &str) {

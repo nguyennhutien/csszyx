@@ -111,6 +111,9 @@ describe('CSS variable system config contract', () => {
         );
         expect(result.code).not.toContain('--cz');
         expect(result.classes).toEqual(new Set(['p-(--sz)']));
+        expect(result.diagnostics).toContain(
+            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: non-host-ancestor',
+        );
     });
 
     it('merges hoisted vars into an existing ancestor style expression', () => {
@@ -141,6 +144,9 @@ describe('CSS variable system config contract', () => {
             '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
         );
         expect(result.code).not.toContain('--cz');
+        expect(result.diagnostics).toContain(
+            '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: non-host-ancestor',
+        );
     });
 
     it('applies mangleVars on the Rust path when native support is available', () => {

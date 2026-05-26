@@ -134,6 +134,9 @@ fn transform_static_classes_with_options(
             file.filename
         ));
     }
+    if let Some(mangling) = &css_var_mangling {
+        diagnostics.extend(mangling.diagnostics.iter().cloned());
+    }
     let diagnostics_ns = elapsed_ns(diagnostics_start);
     let rewrite_start = Instant::now();
     let rewritten_code = if has_parser_errors || parsed.ast_budget_exceeded || parsed.panicked {

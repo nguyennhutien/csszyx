@@ -28,9 +28,10 @@ import { parseSync } from 'oxc-parser';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 import {
+    type CSSVariableHoistDiagnostic,
     type CSSVariableHoistNode,
     type CSSVariableHoistUsage,
-    planComponentVariableHoists,
+    planComponentVariableHoistsWithDiagnostics,
 } from './css-var-hoist-planner.js';
 import { planCSSVariableNames } from './css-var-planner.js';
 import type { TokenData } from './manifest.js';
@@ -131,6 +132,9 @@ export function transformOxc(
               source,
           )
         : null;
+    if (componentHoists) {
+        diagnostics.push(...componentHoists.diagnostics);
+    }
     let transformed = false;
     let usesRuntime = false;
     let usesMerge = false;
@@ -842,6 +846,7 @@ interface OxcPartialTransform {
 interface OxcComponentHoistAnalysis {
     stylePropsByTarget: Map<string, string[]>;
     usageNamesByElement: Map<string, Map<string, string>>;
+    diagnostics: string[];
 }
 
 /** Candidate dynamic var found during the read-only hoist prepass. */
@@ -1392,6 +1397,7 @@ function planOxcComponentVariableHoists(
         return {
             stylePropsByTarget: new Map(),
             usageNamesByElement: new Map(),
+            diagnostics: [],
         };
     }
 
@@ -1412,7 +1418,10 @@ function planOxcComponentVariableHoists(
         name: nameByUsage.get(candidate.id) ?? candidate.info.varName,
         valueKey: candidate.valueSource,
     }));
-    const plans = planComponentVariableHoists(nodes, hoistUsages, { maxDepth: 5 });
+    const analysis = planComponentVariableHoistsWithDiagnostics(nodes, hoistUsages, {
+        maxDepth: 5,
+    });
+    const plans = analysis.plans;
     const stylePropsByTarget = new Map<string, string[]>();
     const usageNamesByElement = new Map<string, Map<string, string>>();
 
@@ -1439,7 +1448,25 @@ function planOxcComponentVariableHoists(
         }
     }
 
-    return { stylePropsByTarget, usageNamesByElement };
+    return {
+        stylePropsByTarget,
+        usageNamesByElement,
+        diagnostics: analysis.diagnostics.map(formatHoistSkipDiagnostic),
+    };
+}
+
+/**
+ * Formats a stable diagnostic for a skipped component-tier CSS variable hoist.
+ *
+ * @param diagnostic Planner skip diagnostic.
+ * @returns User-facing compiler diagnostic.
+ */
+function formatHoistSkipDiagnostic(diagnostic: CSSVariableHoistDiagnostic): string {
+    const suffix =
+        diagnostic.reason === 'max-depth' && diagnostic.maxDepth !== undefined
+            ? ` (maxDepth ${diagnostic.maxDepth})`
+            : '';
+    return `[csszyx] mangleVars skipped component CSS variable hoist for ${diagnostic.name} across ${diagnostic.usageCount} usages: ${diagnostic.reason}${suffix}`;
 }
 
 /**

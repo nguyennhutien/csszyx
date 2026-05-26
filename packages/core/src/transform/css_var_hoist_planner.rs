@@ -41,6 +41,30 @@ pub struct CssVariableHoistPlan {
     pub usage_ids: Vec<String>,
 }
 
+/// Stable reason a repeated component-tier group could not be hoisted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CssVariableHoistSkipReason {
+    /// The usages do not share a common JSX ancestor in the collected tree.
+    NoLca,
+    /// The lowest common ancestor cannot receive a style prop.
+    NonHostAncestor,
+    /// At least one usage is farther than the configured cascade depth cap.
+    MaxDepth,
+}
+
+/// Diagnostic emitted when a repeated hoist group is intentionally skipped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CssVariableHoistDiagnostic {
+    /// CSS custom property name whose component-tier hoist was skipped.
+    pub name: String,
+    /// Reason the hoist could not be applied safely.
+    pub reason: CssVariableHoistSkipReason,
+    /// Number of same-name/same-value usages in the skipped group.
+    pub usage_count: usize,
+    /// Maximum cascade depth, when relevant.
+    pub max_depth: Option<usize>,
+}
+
 /// Hoist planner options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CssVariableHoistOptions {
@@ -56,12 +80,32 @@ impl Default for CssVariableHoistOptions {
     }
 }
 
+/// Component-tier hoist plans plus skip diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CssVariableHoistAnalysis {
+    /// Safe hoist plans.
+    pub plans: Vec<CssVariableHoistPlan>,
+    /// Repeated groups that could not be hoisted.
+    pub diagnostics: Vec<CssVariableHoistDiagnostic>,
+}
+
 /// Plans component-tier CSS variable hoists without mutating source.
+#[cfg(test)]
 pub fn plan_component_variable_hoists(
     nodes: &[CssVariableHoistNode],
     usages: &[CssVariableHoistUsage],
     options: CssVariableHoistOptions,
 ) -> Vec<CssVariableHoistPlan> {
+    plan_component_variable_hoists_with_diagnostics(nodes, usages, options).plans
+}
+
+/// Plans component-tier CSS variable hoists and records why repeated groups
+/// cannot be hoisted.
+pub fn plan_component_variable_hoists_with_diagnostics(
+    nodes: &[CssVariableHoistNode],
+    usages: &[CssVariableHoistUsage],
+    options: CssVariableHoistOptions,
+) -> CssVariableHoistAnalysis {
     let node_by_id = nodes
         .iter()
         .map(|node| (node.id.as_str(), node))
@@ -80,6 +124,7 @@ pub fn plan_component_variable_hoists(
     }
 
     let mut plans = Vec::new();
+    let mut diagnostics = Vec::new();
     for group in groups {
         if group.len() < 2 {
             continue;
@@ -89,18 +134,38 @@ pub fn plan_component_variable_hoists(
             .map(|usage| usage.element_id.as_str())
             .collect::<Vec<_>>();
         let Some(target_element_id) = find_lowest_common_ancestor(&element_ids, &node_by_id) else {
+            diagnostics.push(build_hoist_diagnostic(
+                &group,
+                CssVariableHoistSkipReason::NoLca,
+                None,
+            ));
             continue;
         };
         let Some(target) = node_by_id.get(target_element_id) else {
+            diagnostics.push(build_hoist_diagnostic(
+                &group,
+                CssVariableHoistSkipReason::NoLca,
+                None,
+            ));
             continue;
         };
         if !target.can_host {
+            diagnostics.push(build_hoist_diagnostic(
+                &group,
+                CssVariableHoistSkipReason::NonHostAncestor,
+                None,
+            ));
             continue;
         }
         if group.iter().any(|usage| {
             distance_to_ancestor(&usage.element_id, target_element_id, &node_by_id)
                 > options.max_depth
         }) {
+            diagnostics.push(build_hoist_diagnostic(
+                &group,
+                CssVariableHoistSkipReason::MaxDepth,
+                Some(options.max_depth),
+            ));
             continue;
         }
         plans.push(CssVariableHoistPlan {
@@ -111,7 +176,23 @@ pub fn plan_component_variable_hoists(
         });
     }
 
-    plans
+    CssVariableHoistAnalysis { plans, diagnostics }
+}
+
+fn build_hoist_diagnostic(
+    group: &[&CssVariableHoistUsage],
+    reason: CssVariableHoistSkipReason,
+    max_depth: Option<usize>,
+) -> CssVariableHoistDiagnostic {
+    CssVariableHoistDiagnostic {
+        name: group
+            .first()
+            .map(|usage| usage.name.clone())
+            .unwrap_or_default(),
+        reason,
+        usage_count: group.len(),
+        max_depth,
+    }
 }
 
 fn find_lowest_common_ancestor<'a>(
@@ -171,8 +252,9 @@ fn distance_to_ancestor(
 #[cfg(test)]
 mod tests {
     use super::{
-        plan_component_variable_hoists, CssVariableHoistNode, CssVariableHoistOptions,
-        CssVariableHoistPlan, CssVariableHoistUsage,
+        plan_component_variable_hoists, plan_component_variable_hoists_with_diagnostics,
+        CssVariableHoistDiagnostic, CssVariableHoistNode, CssVariableHoistOptions,
+        CssVariableHoistPlan, CssVariableHoistSkipReason, CssVariableHoistUsage,
     };
 
     #[test]
@@ -244,6 +326,20 @@ mod tests {
         )
         .is_empty());
         assert_eq!(
+            plan_component_variable_hoists_with_diagnostics(
+                &nodes,
+                &usages,
+                CssVariableHoistOptions { max_depth: 5 },
+            )
+            .diagnostics,
+            [CssVariableHoistDiagnostic {
+                name: "--cz".to_string(),
+                reason: CssVariableHoistSkipReason::MaxDepth,
+                usage_count: 2,
+                max_depth: Some(5),
+            }]
+        );
+        assert_eq!(
             plan_component_variable_hoists(
                 &nodes,
                 &usages,
@@ -266,7 +362,7 @@ mod tests {
         let plan = plan_component_variable_hoists(
             &[
                 node("root", None),
-                fragment,
+                fragment.clone(),
                 node("a", Some("fragment")),
                 node("b", Some("fragment")),
             ],
@@ -278,6 +374,51 @@ mod tests {
         );
 
         assert!(plan.is_empty());
+        assert_eq!(
+            plan_component_variable_hoists_with_diagnostics(
+                &[
+                    node("root", None),
+                    fragment,
+                    node("a", Some("fragment")),
+                    node("b", Some("fragment")),
+                ],
+                &[
+                    usage("a1", "a", "--cz", "blue-500"),
+                    usage("b1", "b", "--cz", "blue-500"),
+                ],
+                CssVariableHoistOptions::default(),
+            )
+            .diagnostics,
+            [CssVariableHoistDiagnostic {
+                name: "--cz".to_string(),
+                reason: CssVariableHoistSkipReason::NonHostAncestor,
+                usage_count: 2,
+                max_depth: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn diagnoses_missing_common_ancestor() {
+        let analysis = plan_component_variable_hoists_with_diagnostics(
+            &[node("a", None), node("b", None)],
+            &[
+                usage("a1", "a", "--cz", "blue-500"),
+                usage("b1", "b", "--cz", "blue-500"),
+            ],
+            CssVariableHoistOptions::default(),
+        );
+
+        assert_eq!(analysis.plans, []);
+        assert_eq!(
+            analysis.diagnostics,
+            [CssVariableHoistDiagnostic {
+                name: "--cz".to_string(),
+                reason: CssVariableHoistSkipReason::NoLca,
+                usage_count: 2,
+                max_depth: None,
+            }]
+        );
     }
 
     fn node(id: &str, parent_id: Option<&str>) -> CssVariableHoistNode {

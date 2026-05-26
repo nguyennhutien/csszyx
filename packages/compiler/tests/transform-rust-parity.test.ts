@@ -165,6 +165,20 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-dynamic-css-var-mangle-vars-component-boundary-diagnostic',
+        source: 'const X = ({ pad }) => <Card><div sz={{ p: pad }} /><button sz={{ p: pad }} /></Card>;',
+        filename: 'dynamic-css-var-mangle-vars-boundary.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-fragment-boundary-diagnostic',
+        source: 'const X = ({ pad }) => <><div sz={{ p: pad }} /><button sz={{ p: pad }} /></>;',
+        filename: 'dynamic-css-var-mangle-vars-fragment.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
         name: 'sz-dynamic-css-var-existing-class',
         source: 'const X = ({ pad }) => <div className="existing" sz={{ p: pad }} />;',
         filename: 'dynamic-existing-static-class.tsx',

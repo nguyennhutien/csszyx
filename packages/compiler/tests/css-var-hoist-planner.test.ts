@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { planComponentVariableHoists } from '../src/css-var-hoist-planner.js';
+import {
+    planComponentVariableHoists,
+    planComponentVariableHoistsWithDiagnostics,
+} from '../src/css-var-hoist-planner.js';
 
 describe('CSS variable hoist planner', () => {
     it('hoists identical component-tier vars to the lowest common ancestor', () => {
@@ -57,6 +60,17 @@ describe('CSS variable hoist planner', () => {
         ];
 
         expect(planComponentVariableHoists(nodes, usages, { maxDepth: 5 })).toEqual([]);
+        expect(planComponentVariableHoistsWithDiagnostics(nodes, usages, { maxDepth: 5 })).toEqual({
+            plans: [],
+            diagnostics: [
+                {
+                    name: '--cz',
+                    reason: 'max-depth',
+                    usageCount: 2,
+                    maxDepth: 5,
+                },
+            ],
+        });
         expect(planComponentVariableHoists(nodes, usages, { maxDepth: 6 })).toEqual([
             {
                 name: '--cz',
@@ -82,5 +96,49 @@ describe('CSS variable hoist planner', () => {
         );
 
         expect(plan).toEqual([]);
+        expect(
+            planComponentVariableHoistsWithDiagnostics(
+                [
+                    { id: 'root' },
+                    { id: 'fragment', parentId: 'root', canHost: false },
+                    { id: 'a', parentId: 'fragment' },
+                    { id: 'b', parentId: 'fragment' },
+                ],
+                [
+                    { id: 'a1', elementId: 'a', name: '--cz', valueKey: 'blue-500' },
+                    { id: 'b1', elementId: 'b', name: '--cz', valueKey: 'blue-500' },
+                ],
+            ),
+        ).toEqual({
+            plans: [],
+            diagnostics: [
+                {
+                    name: '--cz',
+                    reason: 'non-host-ancestor',
+                    usageCount: 2,
+                },
+            ],
+        });
+    });
+
+    it('diagnoses missing common ancestors', () => {
+        const analysis = planComponentVariableHoistsWithDiagnostics(
+            [{ id: 'a' }, { id: 'b' }],
+            [
+                { id: 'a1', elementId: 'a', name: '--cz', valueKey: 'blue-500' },
+                { id: 'b1', elementId: 'b', name: '--cz', valueKey: 'blue-500' },
+            ],
+        );
+
+        expect(analysis).toEqual({
+            plans: [],
+            diagnostics: [
+                {
+                    name: '--cz',
+                    reason: 'no-lca',
+                    usageCount: 2,
+                },
+            ],
+        });
     });
 });
