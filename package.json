@@ -52,6 +52,7 @@
     "compiler:profile-hotpath": "node --import tsx/esm scripts/profile-compiler-hotpath.ts",
     "bench:transform-cache": "node --import tsx/esm scripts/bench-transform-cache.ts",
     "bench:css-vars": "node --import tsx/esm scripts/bench-css-var-system.ts",
+    "bench:cli-migrate": "node --import tsx/esm scripts/bench-cli-migrate.ts",
     "bench:docs-build": "node --import tsx/esm scripts/bench-docs-build.ts",
     "bench:docs-size": "node --import tsx/esm scripts/bench-docs-output-size.ts",
     "bench:vite-react-size": "node --import tsx/esm scripts/bench-vite-react-output-size.ts",

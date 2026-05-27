@@ -496,6 +496,16 @@ describe('variant-parser', () => {
             expect(szObject).toEqual({ bg: { color: 'blue-500', op: 50 } });
         });
 
+        it('does not share cached object-valued parsed results between calls', () => {
+            const first = classNameToSzObject('bg-blue-500/50').szObject as {
+                bg: { color: string; op: number };
+            };
+            first.bg.color = 'mutated';
+
+            const second = classNameToSzObject('bg-blue-500/50').szObject;
+            expect(second).toEqual({ bg: { color: 'blue-500', op: 50 } });
+        });
+
         it('merges same variant nesting', () => {
             const { szObject } = classNameToSzObject('hover:bg-blue-600 hover:text-white');
             expect(szObject).toEqual({

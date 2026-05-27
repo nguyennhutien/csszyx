@@ -385,6 +385,15 @@ export type CsszyxTodoEntry = Record<string, unknown> | string | null | false;
  */
 export type CsszyxTodoMap = Record<string, CsszyxTodoEntry>;
 
+interface ParsedClassToken {
+    keyPath: string[];
+    prop: string;
+    value: unknown;
+}
+
+const MAX_TOKEN_CACHE_SIZE = 4096;
+const parsedTokenCache = new Map<string, ParsedClassToken | null>();
+
 /**
  * Resolve a customMap value for a given token.
  *
@@ -530,29 +539,100 @@ export function classNameToSzObject(
             }
         }
 
-        const { variantParts, baseClass } = extractVariants(token);
-
-        // Parse the base class
-        const parsed = parseClass(baseClass);
-        if (!parsed) {
+        const parsedToken = parseClassTokenCached(token);
+        if (!parsedToken) {
             unrecognized.push(token);
             continue;
         }
 
-        // Map variant parts to sz keys
-        const variantKeys: string[][] = variantParts.map(v => mapVariant(v));
-
-        // Build the full key path: flatten variant keys + prop
-        const keyPath: string[] = [];
-        for (const vk of variantKeys) {
-            keyPath.push(...vk);
-        }
-
         // Set value in the nested object
-        setNestedValue(szObject, keyPath, parsed.prop, parsed.value);
+        setNestedValue(
+            szObject,
+            parsedToken.keyPath,
+            parsedToken.prop,
+            cloneParsedValue(parsedToken.value),
+        );
     }
 
     return { szObject, unrecognized, keepInClassName };
+}
+
+/**
+ * Parse one Tailwind class token and cache the pure token-level result.
+ * Custom-map routes intentionally bypass this cache before calling here.
+ *
+ * @param token - A single Tailwind class token.
+ * @returns Parsed token metadata, or null for unrecognized tokens.
+ */
+function parseClassTokenCached(token: string): ParsedClassToken | null {
+    if (parsedTokenCache.has(token)) {
+        return parsedTokenCache.get(token) ?? null;
+    }
+
+    const parsed = parseClassToken(token);
+    rememberParsedToken(token, parsed);
+    return parsed;
+}
+
+/**
+ * Parse one Tailwind class token into a path + property/value tuple.
+ *
+ * @param token - A single Tailwind class token.
+ * @returns Parsed token metadata, or null for unrecognized tokens.
+ */
+function parseClassToken(token: string): ParsedClassToken | null {
+    const { variantParts, baseClass } = extractVariants(token);
+    const parsed = parseClass(baseClass);
+    if (!parsed) {
+        return null;
+    }
+
+    const keyPath: string[] = [];
+    for (const variant of variantParts) {
+        keyPath.push(...mapVariant(variant));
+    }
+
+    return {
+        keyPath,
+        prop: parsed.prop,
+        value: parsed.value,
+    };
+}
+
+/**
+ * Store a parsed token result with a small FIFO cap.
+ *
+ * @param token - Cache key.
+ * @param parsed - Parsed token metadata or null for misses.
+ */
+function rememberParsedToken(token: string, parsed: ParsedClassToken | null): void {
+    if (parsedTokenCache.size >= MAX_TOKEN_CACHE_SIZE) {
+        const oldest = parsedTokenCache.keys().next().value;
+        if (oldest !== undefined) {
+            parsedTokenCache.delete(oldest);
+        }
+    }
+    parsedTokenCache.set(token, parsed);
+}
+
+/**
+ * Clone object-valued parser results before placing them into an sz object.
+ *
+ * @param value - Parsed class value.
+ * @returns A value safe to insert into the caller-owned sz object.
+ */
+function cloneParsedValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(cloneParsedValue);
+    }
+    if (value && typeof value === 'object') {
+        const clone: Record<string, unknown> = {};
+        for (const [key, nested] of Object.entries(value)) {
+            clone[key] = cloneParsedValue(nested);
+        }
+        return clone;
+    }
+    return value;
 }
 
 /**
