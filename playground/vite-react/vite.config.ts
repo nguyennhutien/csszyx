@@ -18,7 +18,7 @@ export default defineConfig({
       },
       production: {
         injectChecksum: true,
-        mangleVars: true,
+        mangleVars: process.env.CSSZYX_BENCH_MANGLE_VARS === '0' ? false : true,
       },
     }),
     tailwindcss(),

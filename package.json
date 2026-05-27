@@ -54,6 +54,7 @@
     "bench:css-vars": "node --import tsx/esm scripts/bench-css-var-system.ts",
     "bench:docs-build": "node --import tsx/esm scripts/bench-docs-build.ts",
     "bench:docs-size": "node --import tsx/esm scripts/bench-docs-output-size.ts",
+    "bench:vite-react-size": "node --import tsx/esm scripts/bench-vite-react-output-size.ts",
     "bench:docs-hmr": "node --import tsx/esm scripts/bench-docs-hmr.ts",
     "observe:rust-parser-paths": "node --import tsx/esm scripts/observe-rust-parser-paths.ts",
     "pages:build": "bash scripts/build-cf-pages.sh"
