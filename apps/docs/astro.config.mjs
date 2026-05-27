@@ -134,12 +134,20 @@ export default defineConfig({
             // CSSZYX_BENCH_NO_CSSZYX=1 skips the csszyx plugin entirely so the
             // pipeline-profile bench can measure a Tailwind-only baseline.
             // CSSZYX_BENCH_NO_TAILWIND=1 additionally skips the Tailwind plugin
-            // so the bench can measure the Astro/Vite/React-only floor. Both
-            // are bench-only knobs; production builds must never set them.
+            // so the bench can measure the Astro/Vite/React-only floor.
+            // CSSZYX_BENCH_MANGLE_VARS=1 opts into CSS variable mangling for
+            // output-size benches only. These are bench-only knobs; production
+            // builds must never set them.
             ...(process.env.CSSZYX_BENCH_NO_CSSZYX === '1' ||
             process.env.CSSZYX_BENCH_NO_TAILWIND === '1'
                 ? []
-                : csszyx({ production: { mangle: true }, build: { scanCss: 'src/styles/landing.css' } })),
+                : csszyx({
+                        production: {
+                            mangle: true,
+                            mangleVars: process.env.CSSZYX_BENCH_MANGLE_VARS === '1',
+                        },
+                        build: { scanCss: 'src/styles/landing.css' },
+                    })),
             ...(process.env.CSSZYX_BENCH_NO_TAILWIND === '1' ? [] : [tailwindcss()]),
         ],
     },
