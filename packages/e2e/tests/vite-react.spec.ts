@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
 
 test.describe('Vite-React Playground', () => {
     test.beforeEach(async ({ page }) => {
@@ -87,8 +87,15 @@ test.describe('Vite-React Playground', () => {
         await expect(cardA).toHaveAttribute('class', /p-\(--cz\)/);
         await expect(cardB).toHaveAttribute('class', /p-\(--cz\)/);
 
+        const initialCardAPadding = await paddingTopPx(cardA);
+        const initialCardBPadding = await paddingTopPx(cardB);
+        expect(initialCardAPadding).toBeGreaterThan(0);
+        expect(initialCardBPadding).toBe(initialCardAPadding);
+
         await page.getByTestId('css-var-button').click();
         await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(5 \* var\(--spacing\)\)/);
+        await expect.poll(() => paddingTopPx(cardA)).toBeGreaterThan(initialCardAPadding);
+        await expect.poll(() => paddingTopPx(cardB)).toBeGreaterThan(initialCardBPadding);
 
         const varMap = await page.evaluate(() => window.__csszyx?.varMangleMap);
         expect(varMap).toEqual({ '--_sz-p': '--cz' });
@@ -97,3 +104,14 @@ test.describe('Vite-React Playground', () => {
         expect(decoded).toEqual(['--_sz-p']);
     });
 });
+
+/**
+ * Reads computed padding-top from a locator.
+ *
+ * @param locator element locator
+ * @returns numeric padding-top in px
+ */
+async function paddingTopPx(locator: Locator): Promise<number> {
+    const value = await locator.evaluate(element => getComputedStyle(element).paddingTop);
+    return Number.parseFloat(value);
+}
