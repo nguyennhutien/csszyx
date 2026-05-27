@@ -7,6 +7,7 @@
  *   pnpm bench:docs-build
  *   pnpm bench:docs-build -- --iterations 3 --warmups 1
  *   pnpm bench:docs-build -- --modes oxc,rust --shapes cold
+ *   pnpm bench:docs-build -- --modes rust,rust-mangle-vars --shapes cold
  */
 
 import { spawnSync } from 'node:child_process';
@@ -18,14 +19,15 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
- * `no-csszyx` skips the csszyx plugin (Tailwind-only baseline). `no-tailwind`
- * skips both csszyx and Tailwind so the report can show the Astro/Vite/React
- * pipeline floor with no styling plugins.
+ * `rust-mangle-vars` uses Rust with production.mangleVars enabled through the
+ * docs bench-only env knob. `no-csszyx` skips the csszyx plugin (Tailwind-only
+ * baseline). `no-tailwind` skips both csszyx and Tailwind so the report can
+ * show the Astro/Vite/React pipeline floor with no styling plugins.
  */
-type BenchMode = 'oxc' | 'rust' | 'no-csszyx' | 'no-tailwind';
+type BenchMode = 'oxc' | 'rust' | 'rust-mangle-vars' | 'no-csszyx' | 'no-tailwind';
 type BuildShape = 'cold' | 'warm';
 
-const BENCH_MODES = ['oxc', 'rust', 'no-csszyx', 'no-tailwind'] as const;
+const BENCH_MODES = ['oxc', 'rust', 'rust-mangle-vars', 'no-csszyx', 'no-tailwind'] as const;
 const BUILD_SHAPES = ['cold', 'warm'] as const;
 
 interface CliOptions {
@@ -244,6 +246,12 @@ function modeEnv(mode: BenchMode): NodeJS.ProcessEnv {
             return { CSSZYX_BENCH_NO_CSSZYX: '1' };
         case 'no-tailwind':
             return { CSSZYX_BENCH_NO_TAILWIND: '1' };
+        case 'rust-mangle-vars':
+            return {
+                CSSZYX_BENCH_MANGLE_VARS: '1',
+                CSSZYX_BENCH_TRACE: '1',
+                CSSZYX_PARSER: 'rust',
+            };
         default:
             return { CSSZYX_BENCH_TRACE: '1', CSSZYX_PARSER: mode };
     }
@@ -375,10 +383,12 @@ function renderReport(payload: ReportPayload): string {
     const { rows } = payload;
     const coldOxc = findRow(rows, 'oxc', 'cold');
     const coldRust = findRow(rows, 'rust', 'cold');
+    const coldRustMangleVars = findRow(rows, 'rust-mangle-vars', 'cold');
     const coldBaseline = findRow(rows, 'no-csszyx', 'cold');
     const coldFloor = findRow(rows, 'no-tailwind', 'cold');
     const warmOxc = findRow(rows, 'oxc', 'warm');
     const warmRust = findRow(rows, 'rust', 'warm');
+    const warmRustMangleVars = findRow(rows, 'rust-mangle-vars', 'warm');
     const warmBaseline = findRow(rows, 'no-csszyx', 'warm');
     const warmFloor = findRow(rows, 'no-tailwind', 'warm');
     const shareBreakdown = [
@@ -406,6 +416,8 @@ Environment:
 - Warm docs build: ${formatComparison(warmOxc, warmRust)}.
 - Cold csszyx prescan: ${formatPrescanComparison(coldOxc, coldRust)}.
 - Warm csszyx prescan: ${formatPrescanComparison(warmOxc, warmRust)}.
+- Cold mangleVars overhead: ${formatMangleVarsComparison(coldRust, coldRustMangleVars)}.
+- Warm mangleVars overhead: ${formatMangleVarsComparison(warmRust, warmRustMangleVars)}.
 - Cold Tailwind-only baseline (no csszyx): ${formatBaselineComparison(coldBaseline, coldOxc, coldRust)}.
 - Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
 - Cold pipeline floor (no csszyx, no Tailwind): ${formatFloor(coldFloor, coldBaseline)}.
@@ -434,6 +446,9 @@ ${rows.map(renderRow).join('\n')}
   inert and Tailwind keeps scanning regular classNames in the source tree. The
   rows isolate the build-pipeline floor and let csszyx-vs-baseline ratios show
   whether csszyx is a meaningful share of wall time.
+- The \`rust-mangle-vars\` rows use the same Rust parser path as \`rust\`, but
+  enable \`production.mangleVars\` through the docs bench-only
+  \`CSSZYX_BENCH_MANGLE_VARS=1\` knob.
 - This report does not measure warm HMR p95. Keep R8 default flip gated until a
   dev-server HMR harness measures save-to-update latency.
 `;
@@ -459,7 +474,10 @@ function findRow(rows: BuildStats[], parser: BenchMode, shape: BuildShape): Buil
  * @returns summary text
  */
 function formatComparison(oxc: BuildStats | undefined, rust: BuildStats | undefined): string {
-    if (!oxc || !rust || oxc.status !== 'measured' || rust.status !== 'measured') {
+    if (!oxc || !rust) {
+        return 'not selected';
+    }
+    if (oxc.status !== 'measured' || rust.status !== 'measured') {
         return 'not measured successfully';
     }
     return `rust is ${formatRatio(oxc.medianMs / rust.medianMs)} vs oxc by median wall time`;
@@ -476,7 +494,10 @@ function formatPrescanComparison(
     oxc: BuildStats | undefined,
     rust: BuildStats | undefined,
 ): string {
-    if (!oxc || !rust || oxc.status !== 'measured' || rust.status !== 'measured') {
+    if (!oxc || !rust) {
+        return 'not selected';
+    }
+    if (oxc.status !== 'measured' || rust.status !== 'measured') {
         return 'not measured successfully';
     }
     const oxcPrescan = median(oxc.prescanMs);
@@ -487,6 +508,27 @@ function formatPrescanComparison(
     return `rust ${formatMs(rustPrescan)} vs oxc ${formatMs(oxcPrescan)} (${formatRatio(
         oxcPrescan / rustPrescan,
     )})`;
+}
+
+/**
+ * Formats the Rust mangleVars on/off build-time comparison.
+ *
+ * @param rust mangleVars disabled Rust row
+ * @param rustMangleVars mangleVars enabled Rust row
+ * @returns summary text
+ */
+function formatMangleVarsComparison(
+    rust: BuildStats | undefined,
+    rustMangleVars: BuildStats | undefined,
+): string {
+    if (!rust || !rustMangleVars) {
+        return 'not selected';
+    }
+    if (rust.status !== 'measured' || rustMangleVars.status !== 'measured') {
+        return 'not measured successfully';
+    }
+    const delta = rustMangleVars.medianMs - rust.medianMs;
+    return `enabled is ${formatRatio(rustMangleVars.medianMs / rust.medianMs)} vs disabled (${formatSignedMs(delta)})`;
 }
 
 /**
@@ -505,7 +547,10 @@ function formatBaselineComparison(
     oxc: BuildStats | undefined,
     rust: BuildStats | undefined,
 ): string {
-    if (!baseline || baseline.status !== 'measured') {
+    if (!baseline) {
+        return 'not selected';
+    }
+    if (baseline.status !== 'measured') {
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(baseline.medianMs)} (Tailwind only)`];
@@ -527,7 +572,10 @@ function formatBaselineComparison(
  * @returns summary line
  */
 function formatFloor(floor: BuildStats | undefined, baseline: BuildStats | undefined): string {
-    if (!floor || floor.status !== 'measured') {
+    if (!floor) {
+        return 'not selected';
+    }
+    if (floor.status !== 'measured') {
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(floor.medianMs)} (Astro/Vite/React only)`];
@@ -616,6 +664,23 @@ function formatMs(value: number): string {
         return '-';
     }
     return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : value.toFixed(1);
+}
+
+/**
+ * Formats a signed millisecond delta.
+ *
+ * @param value milliseconds
+ * @returns formatted value
+ */
+function formatSignedMs(value: number): string {
+    if (!Number.isFinite(value)) {
+        return 'n/a';
+    }
+    const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
+    const absolute = Math.abs(value);
+    const formatted =
+        absolute >= 1000 ? `${(absolute / 1000).toFixed(2)}s` : `${absolute.toFixed(1)}ms`;
+    return `${prefix}${formatted}`;
 }
 
 /**
