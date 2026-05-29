@@ -615,16 +615,20 @@ function pruneRSCModulePathCaches(moduleIds: Set<string>): void {
  */
 function readImportedSymbols(clause: string): string[] {
     const symbols: string[] = [];
-    const named = clause.match(/\{([\s\S]*?)\}/);
-    if (named) {
-        for (const part of named[1].split(',')) {
+    // indexOf-based brace extraction avoids the polynomial backtracking
+    // that /\{([\s\S]*?)\}/ would suffer on inputs with repeated `{{`.
+    const openBrace = clause.indexOf('{');
+    const closeBrace = openBrace === -1 ? -1 : clause.indexOf('}', openBrace);
+    if (openBrace !== -1 && closeBrace !== -1) {
+        const namedPart = clause.slice(openBrace + 1, closeBrace);
+        for (const part of namedPart.split(',')) {
             const trimmed = part.trim();
             if (!trimmed || trimmed.startsWith('type ')) {
                 continue;
             }
             const sourceName = trimmed
-                .replace(/^type\s+/, '')
-                .split(/\s+as\s+/)[0]
+                .replace(/^type[ \t]+/, '')
+                .split(/[ \t]+as[ \t]+/)[0]
                 ?.trim();
             if (sourceName) {
                 symbols.push(sourceName);

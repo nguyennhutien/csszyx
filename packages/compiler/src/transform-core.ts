@@ -1320,7 +1320,7 @@ function handleGroupPeer(type: 'group' | 'peer', nestedObj: SzObject, prefix: st
             if (result.className) {
                 classes.push(result.className);
             }
-        } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+        } else if (nestedValue !== null && typeof nestedValue === 'object') {
             // { group: { name: { hover: { ... }}}} → group-hover/name:
             // Also handles data/aria inside named group:
             // { group: { card: { data: { active: { ... }}}}} → group-data-[active]/card:
@@ -1607,8 +1607,8 @@ export function transform(
         // ================================================================
         if (
             rawKey === 'bgImg' &&
-            typeof value === 'object' &&
             value !== null &&
+            typeof value === 'object' &&
             !Array.isArray(value)
         ) {
             const grad = value as { gradient?: string; dir?: string | number; in?: string };
@@ -1690,8 +1690,8 @@ export function transform(
         // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
         // ================================================================
         if (
-            typeof value === 'object' &&
             value !== null &&
+            typeof value === 'object' &&
             !Array.isArray(value) &&
             rawKey in PROPERTY_MAP &&
             'color' in (value as Record<string, unknown>)
@@ -1866,8 +1866,8 @@ export function transform(
                         }
                     } else if (
                         (mappedKey === '@min' || mappedKey === '@max') &&
-                        typeof nestedValue === 'object' &&
                         nestedValue !== null &&
+                        typeof nestedValue === 'object' &&
                         !KNOWN_BP.has(nestedKey) &&
                         !PROPERTY_MAP[nestedKey] &&
                         !BOOLEAN_SHORTHANDS.has(nestedKey)
@@ -1895,7 +1895,7 @@ export function transform(
                         if (result.className) {
                             classes.push(result.className);
                         }
-                    } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+                    } else if (nestedValue !== null && typeof nestedValue === 'object') {
                         // It's a named container: @md/sidebar
                         const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
                         const result = transform(nestedValue as SzObject, nestedPrefix);

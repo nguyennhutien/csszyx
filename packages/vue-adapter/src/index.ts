@@ -150,26 +150,35 @@ export function extractTemplate(source: string): {
     start: number;
     end: number;
 } | null {
-    // Match <template> tags (with or without attributes)
-    const templateRegex = /<template(\s[^>]*)?>[\s\S]*?<\/template>/gi;
-    const match = templateRegex.exec(source);
-
-    if (!match) {
-        return null;
+    // indexOf-based scan avoids the polynomial backtracking that a
+    // <template(\s[^>]*)?>...</template> regex would suffer on inputs
+    // with repeated "<template " prefixes.
+    const lowered = source.toLowerCase();
+    let openStart = -1;
+    let openEnd = -1;
+    let i = 0;
+    while (i < lowered.length) {
+        const candidate = lowered.indexOf('<template', i);
+        if (candidate === -1) return null;
+        const after = lowered.charAt(candidate + '<template'.length);
+        if (after === '>' || after === ' ' || after === '\t' || after === '\n' || after === '\r') {
+            const tagClose = lowered.indexOf('>', candidate);
+            if (tagClose === -1) return null;
+            openStart = candidate;
+            openEnd = tagClose + 1;
+            break;
+        }
+        i = candidate + 1;
     }
+    if (openStart === -1) return null;
 
-    // Find the actual content between template tags
-    const fullMatch = match[0];
-    const startTag = fullMatch.match(/<template(\s[^>]*)?>/i)?.[0] || '<template>';
-    const endTag = '</template>';
-
-    const contentStart = fullMatch.indexOf(startTag) + startTag.length;
-    const contentEnd = fullMatch.lastIndexOf(endTag);
+    const closeStart = lowered.indexOf('</template>', openEnd);
+    if (closeStart === -1) return null;
 
     return {
-        content: fullMatch.slice(contentStart, contentEnd),
-        start: match.index + contentStart,
-        end: match.index + contentEnd,
+        content: source.slice(openEnd, closeStart),
+        start: openEnd,
+        end: closeStart,
     };
 }
 
@@ -191,11 +200,14 @@ export function transformTemplate(
     let result = template;
     let count = 0;
 
-    // Pattern to match sz attributes
-    // Matches: sz="{ ... }", sz='{ ... }', :sz="{ ... }", v-bind:sz="{ ... }"
-    const szPattern = /(?:v-bind:|:)?sz=["'](\{[\s\S]*?\})["']/g;
+    // Pattern to match sz attributes. The non-greedy [^"']* avoids the
+    // backtracking that [\s\S]*? would suffer on inputs with repeated
+    // sz="{{ openings — quotes cannot appear inside the captured object
+    // literal, so a negated class is both safer and more accurate.
+    const szPattern = /(?:v-bind:|:)?sz=(?:"(\{[^"]*\})"|'(\{[^']*\})')/g;
 
-    result = result.replace(szPattern, (match, objStr) => {
+    result = result.replace(szPattern, (match, doubleQuoted, singleQuoted) => {
+        const objStr = doubleQuoted ?? singleQuoted;
         const szObj = parseObjectLiteral(objStr);
 
         if (!szObj) {

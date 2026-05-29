@@ -12,6 +12,29 @@ import { createHash } from 'node:crypto';
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
 
 /**
+ * Escape JSON for safe embedding inside an HTML `<script>` tag.
+ *
+ * `JSON.stringify` alone does not protect against `</script>`, HTML
+ * comment introducers, or CDATA terminators appearing in user-controlled
+ * map values. Escaping the leading character of each sequence keeps the
+ * payload parseable as JSON while preventing the browser HTML parser
+ * from interpreting it as markup.
+ *
+ * @param value - The value to JSON-encode for script-tag embedding.
+ * @param prettyPrint - When true, indent the JSON output by two spaces.
+ * @returns Sanitized JSON string safe to inline inside `<script>...</script>`.
+ */
+function safeJsonForScriptTag(value: unknown, prettyPrint = false): string {
+    const json = prettyPrint ? JSON.stringify(value, null, 2) : JSON.stringify(value);
+    return json
+        .replace(/</g, '\\u003C')
+        .replace(/>/g, '\\u003E')
+        .replace(/&/g, '\\u0026')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
+/**
  * Injection mode for mangle map.
  */
 export type InjectionMode = 'inline' | 'script' | 'both';
@@ -113,11 +136,9 @@ export function injectMangleMapScript(
     const { prettyPrint = false, varMangleMap = {} } = options;
     const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
 
-    const jsonContent = prettyPrint
-        ? JSON.stringify(checksumMap, null, 2)
-        : JSON.stringify(checksumMap);
-    const classMapContent = JSON.stringify(mangleMap);
-    const varMapContent = JSON.stringify(varMangleMap);
+    const jsonContent = safeJsonForScriptTag(checksumMap, prettyPrint);
+    const classMapContent = safeJsonForScriptTag(mangleMap);
+    const varMapContent = safeJsonForScriptTag(varMangleMap);
 
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
     const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;

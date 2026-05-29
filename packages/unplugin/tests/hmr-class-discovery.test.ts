@@ -52,7 +52,14 @@ describe('HMR incremental class discovery', () => {
             `<div class="${classList}">x</div>` +
             `<div class="${classList}">x</div>` +
             '</div>\n';
-        const existing = fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
+        let existing = '';
+        try {
+            existing = fs.readFileSync(p, 'utf-8');
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+                throw err;
+            }
+        }
         if (existing === content) {
             return false;
         }

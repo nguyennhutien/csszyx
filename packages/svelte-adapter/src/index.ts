@@ -154,8 +154,10 @@ export function transformMarkup(
     let count = 0;
 
     // Pattern 1: sz="{{ ... }}" or sz="{ ... }" (double braces for escaped or single braces)
-    // In Svelte, double braces {{ }} are escaped and render as literal { }
-    const staticPattern = /sz="(\{\{?[\s\S]*?\}\}?)"/g;
+    // In Svelte, double braces {{ }} are escaped and render as literal { }.
+    // The negated [^"] character class avoids the polynomial backtracking
+    // that [\s\S]*? would suffer on inputs with repeated sz="{{ openings.
+    const staticPattern = /sz="(\{[^"]*\}\}?)"/g;
 
     result = result.replace(staticPattern, (match, objStr) => {
         // Handle double braces (escaped) - convert to single

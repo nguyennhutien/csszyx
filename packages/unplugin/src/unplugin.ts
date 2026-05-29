@@ -447,16 +447,21 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
         _hasWarnedTsConfig = true;
         try {
             const checkFile = (cfgPath: string): boolean => {
-                if (fs.existsSync(cfgPath)) {
-                    const content = fs.readFileSync(cfgPath, 'utf-8');
-                    if (!content.includes('.csszyx')) {
-                        console.warn(
-                            '\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n',
-                        );
+                let content: string;
+                try {
+                    content = fs.readFileSync(cfgPath, 'utf-8');
+                } catch (err) {
+                    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+                        return false;
                     }
-                    return true;
+                    throw err;
                 }
-                return false;
+                if (!content.includes('.csszyx')) {
+                    console.warn(
+                        '\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n',
+                    );
+                }
+                return true;
             };
 
             // Try standard Next.js / tsc config first
@@ -1250,9 +1255,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             `<div class="${classList}">x</div>` +
             '</div>\n';
         try {
-            const existing = fs.existsSync(safelistPath)
-                ? fs.readFileSync(safelistPath, 'utf-8')
-                : '';
+            let existing = '';
+            try {
+                existing = fs.readFileSync(safelistPath, 'utf-8');
+            } catch (err) {
+                if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+                    throw err;
+                }
+            }
             if (existing !== content) {
                 fs.writeFileSync(safelistPath, content);
             }
@@ -1742,7 +1752,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Uses placeholders that are replaced in processAssets after all classes are collected
                 if (
                     transformedCode.includes('<html') &&
-                    /layout|Root|Document|app\\.tsx?$/i.test(id)
+                    /(?:layout|Root|Document|app)\.tsx?$/i.test(id)
                 ) {
                     const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
                     transformedCode = transformedCode.replace(

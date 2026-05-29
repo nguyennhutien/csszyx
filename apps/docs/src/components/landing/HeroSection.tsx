@@ -271,9 +271,9 @@ export default function HeroSection() {
         items.sort((a, b) => b.xPos - a.xPos);
         items.forEach((item, i) => {
           const iw = (item.el.offsetWidth / Math.max(w, 1)) * 100;
-          let target = (track as any).speed;
           if (i > 0) {
             const gap = items[i - 1].xPos - (item.xPos + iw);
+            let target: number;
             if (gap > ANIM_CONFIG.minGapPct + 4) target = (track as any).speed * ANIM_CONFIG.chaseAcceleration;
             else if (gap < ANIM_CONFIG.minGapPct) target = items[i - 1].speed * ANIM_CONFIG.brakeDeceleration;
             else target = items[i - 1].speed;

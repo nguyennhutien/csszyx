@@ -28,6 +28,27 @@ export interface InitOptions {
 }
 
 const VITE_FRAMEWORKS = new Set<Framework>(['vite-react', 'vite-vue', 'vite-svelte']);
+
+/**
+ * Read a file as utf8 if it exists, otherwise return null.
+ *
+ * Avoids the existsSync + readFile TOCTOU race by performing a single
+ * open and handling ENOENT, which keeps init resilient when other
+ * tooling races to create or remove the same paths.
+ *
+ * @param filePath - Absolute or cwd-relative path to read.
+ * @returns File contents, or null when the file does not exist.
+ */
+async function readFileOrNull(filePath: string): Promise<string | null> {
+    try {
+        return await fs.readFile(filePath, 'utf8');
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+            return null;
+        }
+        throw err;
+    }
+}
 const NEXTJS_FRAMEWORKS = new Set<Framework>(['nextjs-app', 'nextjs-pages']);
 
 /**
@@ -144,9 +165,9 @@ export async function init(options: InitOptions = {}): Promise<void> {
         if (config.setupGitignore) {
             const gitignorePath = path.join(cwd, '.gitignore');
             const ignoreEntry = '\n# csszyx generated theme types\n.csszyx\n';
-            if (fs.existsSync(gitignorePath)) {
-                const content = await fs.readFile(gitignorePath, 'utf8');
-                if (!content.includes('.csszyx')) {
+            const existing = await readFileOrNull(gitignorePath);
+            if (existing !== null) {
+                if (!existing.includes('.csszyx')) {
                     await fs.appendFile(gitignorePath, ignoreEntry);
                 }
             } else {
@@ -182,15 +203,18 @@ export async function init(options: InitOptions = {}): Promise<void> {
  */
 async function setupTailwindCss(cwd: string, framework: Framework): Promise<void> {
     let cssPath: string | undefined;
+    let content: string | null = null;
     for (const candidate of CSS_ENTRY_CANDIDATES) {
         const full = path.join(cwd, candidate);
-        if (fs.existsSync(full)) {
+        const existing = await readFileOrNull(full);
+        if (existing !== null) {
             cssPath = full;
+            content = existing;
             break;
         }
     }
 
-    if (!cssPath) {
+    if (!cssPath || content === null) {
         // Create src/index.css as the entry CSS file
         cssPath = path.join(cwd, 'src/index.css');
         await fs.ensureDir(path.dirname(cssPath));
@@ -199,7 +223,6 @@ async function setupTailwindCss(cwd: string, framework: Framework): Promise<void
         return;
     }
 
-    const content = await fs.readFile(cssPath, 'utf8');
     if (!content.includes('@import "tailwindcss"') && !content.includes("@import 'tailwindcss'")) {
         await fs.writeFile(cssPath, `@import "tailwindcss";\n\n${content}`);
         printInfo(`Added Tailwind v4 import to ${path.relative(cwd, cssPath)}`);
@@ -210,7 +233,11 @@ async function setupTailwindCss(cwd: string, framework: Framework): Promise<void
         const postcssMjs = path.join(cwd, 'postcss.config.mjs');
         const postcssJs = path.join(cwd, 'postcss.config.js');
         const postcssTs = path.join(cwd, 'postcss.config.ts');
-        if (!fs.existsSync(postcssMjs) && !fs.existsSync(postcssJs) && !fs.existsSync(postcssTs)) {
+        const hasExisting =
+            (await readFileOrNull(postcssMjs)) !== null ||
+            (await readFileOrNull(postcssJs)) !== null ||
+            (await readFileOrNull(postcssTs)) !== null;
+        if (!hasExisting) {
             await fs.writeFile(postcssMjs, generatePostcssConfig());
             printInfo('Created postcss.config.mjs for Tailwind v4');
         }
@@ -355,19 +382,17 @@ async function injectNextPlugin(cwd: string): Promise<boolean> {
  * @param cwd - Project root directory.
  */
 async function setupTsconfig(cwd: string): Promise<void> {
-    let tsconfigPath = path.join(cwd, 'tsconfig.json');
-    if (!fs.existsSync(tsconfigPath)) {
-        const viteTsConfig = path.join(cwd, 'tsconfig.app.json');
-        if (fs.existsSync(viteTsConfig)) {
-            tsconfigPath = viteTsConfig;
-        }
+    const primary = path.join(cwd, 'tsconfig.json');
+    const viteTsConfig = path.join(cwd, 'tsconfig.app.json');
+    let tsconfigPath = primary;
+    let content = await readFileOrNull(tsconfigPath);
+    if (content === null) {
+        tsconfigPath = viteTsConfig;
+        content = await readFileOrNull(tsconfigPath);
     }
-
-    if (!fs.existsSync(tsconfigPath)) {
+    if (content === null) {
         return;
     }
-
-    let content = await fs.readFile(tsconfigPath, 'utf8');
     if (content.includes('.csszyx')) {
         return;
     }
