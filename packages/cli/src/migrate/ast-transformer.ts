@@ -183,6 +183,21 @@ export function transformSource(
     // We warn the user to migrate to szv() instead of silently skipping.
     let hasCvaImport = false;
 
+    // ── Fast-path: skip parse when source has nothing to transform ───────
+    // Real-world migrations process many files; a single indexOf scan
+    // saves the full Babel parse + AST walk cost on every irrelevant file.
+    // Must catch both className references (migration target) and cva
+    // imports (warning surface) — anything else is invisible to migrate.
+    if (source.indexOf('className') === -1 && source.indexOf('cva') === -1) {
+        return {
+            code: source,
+            changed: false,
+            warnings: [],
+            stats: { classNamesTransformed: 0, classNamesSkipped: 0, classesUnrecognized: [] },
+            potentiallyUnusedImports: [],
+        };
+    }
+
     // ── Step 1: Parse ────────────────────────────────────────────────────
     let ast: ReturnType<typeof parse>;
     try {

@@ -69,6 +69,8 @@ interface FixtureSet {
     staticSource: string;
     /** JSX source with clsx/ternary/template migration patterns. */
     dynamicSource: string;
+    /** Non-JSX source the fast-path can skip without parsing. */
+    skipSource: string;
 }
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -185,6 +187,15 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 },
                 'Full JSX/TSX migration with clsx, ternary, logical, and template literal patterns.',
             ),
+            measureCase(
+                `cli-migrate/${size}/ast-skip`,
+                size,
+                opts,
+                () => {
+                    transformSource(fixtures.skipSource, `/bench/skip-${size}.ts`);
+                },
+                'Fast-path early-exit on non-JSX TypeScript files (no className, no cva). Models real-world utility/type/helper files migrate visits but never modifies.',
+            ),
         );
     }
 
@@ -245,11 +256,26 @@ function createFixtures(size: number): FixtureSet {
         return `export const Dynamic${index} = ({ active }) => <div className={\`${className} \${active ? "opacity-100" : "opacity-50"}\`} />;`;
     });
 
+    // Non-JSX TypeScript source the fast-path early-exits without parsing.
+    // Models utility/type/helper files common in real-world projects that
+    // do not need migration but still get processed by the migrate CLI.
+    const skipLines = Array.from({ length: size }, (_, index) => {
+        const variant = index % 3;
+        if (variant === 0) {
+            return `export interface Type${index} { id: number; name: string; tags: string[]; }`;
+        }
+        if (variant === 1) {
+            return `export const helper${index} = (x: number): number => x * ${index} + ${(index % 7) + 1};`;
+        }
+        return `export type Union${index} = "a" | "b" | "c" | "d-${index}";`;
+    });
+
     return {
         repeatedClassNames,
         uniqueClassNames,
         staticSource: `${staticLines.join('\n')}\n`,
         dynamicSource: `import clsx from 'clsx';\n${dynamicLines.join('\n')}\n`,
+        skipSource: `${skipLines.join('\n')}\n`,
     };
 }
 

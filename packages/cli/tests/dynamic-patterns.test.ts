@@ -289,10 +289,19 @@ describe('edge cases', () => {
     });
 
     it('handles parse errors gracefully', () => {
-        // Invalid JSX should not throw
-        const result = migrate('this is not valid JSX at all <<<>>>```');
+        // Invalid JSX with className should not throw — fast-path requires
+        // the source to mention className before attempting to parse.
+        const result = migrate('this is not valid <<className=>>>``` JSX');
         expect(result.changed).toBe(false);
         expect(result.warnings.length).toBeGreaterThan(0);
+    });
+
+    it('fast-path skips files without className or cva', () => {
+        // Sources without className or cva references should return
+        // unchanged with no parse cost or warnings.
+        const result = migrate('export const x = 1; const y = "hello world";');
+        expect(result.changed).toBe(false);
+        expect(result.warnings).toEqual([]);
     });
 });
 
