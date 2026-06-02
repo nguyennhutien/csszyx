@@ -12,6 +12,7 @@ import {
     resolveGlobalVarScanCacheDir,
     scanGlobalVarCss,
     TAILWIND_RESERVED_PREFIXES,
+    validateGlobalVarAliasInputs,
     writeGlobalVarScanCache,
 } from '../src/global-var-scanner.js';
 
@@ -290,6 +291,102 @@ describe('global variable scan cache', () => {
             );
             expect(readGlobalVarScanCache(cacheDir, changedContentKey)).toBeNull();
             expect(readGlobalVarScanCache(cacheDir, changedMtimeKey)).toBeNull();
+        } finally {
+            rmSync(cacheRoot, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('validateGlobalVarAliasInputs', () => {
+    it('connects CSS planning with JS out-of-band diagnostics for selected tokens', () => {
+        const result = validateGlobalVarAliasInputs({
+            cssFiles: [
+                {
+                    filePath: '/repo/src/tokens.css',
+                    css: `
+:root {
+  --brand-primary: red;
+  --brand-secondary: blue;
+  --other-token: green;
+}
+`,
+                },
+            ],
+            sourceFiles: [
+                {
+                    filePath: '/repo/src/theme.tsx',
+                    code: `
+document.body.style.setProperty('--brand-primary', color);
+document.body.style.setProperty('--other-token', color);
+const App = () => <div style={{ '--brand-secondary': color }} />;
+`,
+                },
+            ],
+            autoPrefix: '--brand-',
+        });
+
+        expect(result.plan.entries.map(entry => [entry.original, entry.alias])).toEqual([
+            ['--brand-primary', '--g0'],
+            ['--brand-secondary', '--g1'],
+        ]);
+        expect(
+            result.usageDiagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name]),
+        ).toEqual([
+            ['style-set-property', '--brand-primary'],
+            ['jsx-style-key', '--brand-secondary'],
+        ]);
+    });
+
+    it('does not scan source files when CSS planning fails', () => {
+        const result = validateGlobalVarAliasInputs({
+            cssFiles: [{ filePath: '/repo/src/tokens.css', css: ':root { --g0: red; }' }],
+            sourceFiles: [
+                {
+                    filePath: '/repo/src/theme.tsx',
+                    code: "document.body.style.setProperty('--brand-primary', color);",
+                },
+            ],
+            tokens: ['--brand-primary'],
+        });
+
+        expect(result.plan.diagnostics).toEqual([
+            expect.objectContaining({
+                code: 'missing-definition',
+                name: '--brand-primary',
+            }),
+        ]);
+        expect(result.usageDiagnostics).toEqual([]);
+    });
+
+    it('uses the scan cache when cacheDir and mtime are provided', () => {
+        const cacheRoot = mkdtempSync(join(tmpdir(), 'csszyx-global-vars-'));
+        try {
+            const cacheDir = resolveGlobalVarScanCacheDir(cacheRoot);
+            const first = validateGlobalVarAliasInputs({
+                cacheDir,
+                cssFiles: [
+                    {
+                        filePath: '/repo/src/tokens.css',
+                        css: ':root { --brand-primary: red; }',
+                        mtimeMs: 1,
+                    },
+                ],
+                tokens: ['--brand-primary'],
+            });
+            const second = validateGlobalVarAliasInputs({
+                cacheDir,
+                cssFiles: [
+                    {
+                        filePath: '/repo/src/tokens.css',
+                        css: ':root { --brand-primary: red; }',
+                        mtimeMs: 1,
+                    },
+                ],
+                tokens: ['--brand-primary'],
+            });
+
+            expect(first.plan.entries[0]?.alias).toBe('--g0');
+            expect(second.scans[0]?.definitions[0]?.name).toBe('--brand-primary');
         } finally {
             rmSync(cacheRoot, { recursive: true, force: true });
         }

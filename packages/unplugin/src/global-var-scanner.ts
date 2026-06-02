@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { type GlobalVarUsageDiagnostic, scanGlobalVarUsages } from '@csszyx/compiler';
 import postcss, { type AtRule, type ChildNode, type Root, type Rule } from 'postcss';
 
 /** Tailwind v4 @theme namespaces that Phase H must never alias. */
@@ -94,6 +95,24 @@ export interface GlobalVarScanCacheKeyInput {
     mtimeMs: number;
 }
 
+/** CSS source supplied to the Phase H validation orchestrator. */
+export interface GlobalVarCssSource {
+    /** Source file path. */
+    filePath: string;
+    /** CSS source text. */
+    css: string;
+    /** Source file mtime in milliseconds, used when cacheDir is set. */
+    mtimeMs?: number;
+}
+
+/** JS/TS/JSX/TSX source supplied to the Phase H validation orchestrator. */
+export interface GlobalVarCodeSource {
+    /** Source file path. */
+    filePath: string;
+    /** JS/TS/JSX/TSX source text. */
+    code: string;
+}
+
 /** Options for scanning one CSS source. */
 export interface ScanGlobalVarCssOptions {
     /** File path used for diagnostics. */
@@ -152,6 +171,32 @@ export interface GlobalVarAliasPlan {
     aliases: Map<string, string>;
     /** Planner diagnostics. */
     diagnostics: GlobalVarAliasDiagnostic[];
+}
+
+/** Input for Phase H scanner/planner/diagnostics integration. */
+export interface ValidateGlobalVarAliasInputsOptions {
+    /** CSS sources that define or reference custom properties. */
+    cssFiles: GlobalVarCssSource[];
+    /** JS/TS/JSX/TSX sources to scan for out-of-band usage. */
+    sourceFiles?: GlobalVarCodeSource[];
+    /** Explicit app-owned custom-property names. */
+    tokens?: string[];
+    /** Optional app-owned prefix discovery. Empty string disables discovery. */
+    autoPrefix?: string;
+    /** Additional reserved names or prefixes. Prefixes may end with `*`. */
+    reserved?: string[];
+    /** Optional global-var scan cache directory. */
+    cacheDir?: string;
+}
+
+/** Output from Phase H scanner/planner/diagnostics integration. */
+export interface GlobalVarAliasValidationResult {
+    /** CSS scan results. */
+    scans: CssVarScanResult[];
+    /** Deterministic alias plan. */
+    plan: GlobalVarAliasPlan;
+    /** JS/JSX out-of-band usage diagnostics for planned candidates. */
+    usageDiagnostics: GlobalVarUsageDiagnostic[];
 }
 
 const VAR_REFERENCE_RE = /var\(\s*(--[\w-]+)/g;
@@ -271,6 +316,36 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
 }
 
 /**
+ * Runs the Phase H pure validation pipeline without mutating build output.
+ *
+ * @param options Validation input.
+ * @returns CSS scans, alias plan, and JS/JSX out-of-band diagnostics.
+ */
+export function validateGlobalVarAliasInputs(
+    options: ValidateGlobalVarAliasInputsOptions,
+): GlobalVarAliasValidationResult {
+    const scans = options.cssFiles.map(file =>
+        scanCssSourceWithOptionalCache(file, options.cacheDir),
+    );
+    const plan = planGlobalVarAliases({
+        scans,
+        tokens: options.tokens,
+        autoPrefix: options.autoPrefix,
+        reserved: options.reserved,
+    });
+    if (plan.diagnostics.length > 0 || plan.entries.length === 0) {
+        return { scans, plan, usageDiagnostics: [] };
+    }
+
+    const candidateTokens = plan.entries.map(entry => entry.original);
+    const usageDiagnostics = (options.sourceFiles ?? []).flatMap(file =>
+        scanGlobalVarUsages(file.code, file.filePath, { tokens: candidateTokens }),
+    );
+
+    return { scans, plan, usageDiagnostics };
+}
+
+/**
  * Checks if a custom-property name is reserved by Tailwind v4.
  *
  * @param name Custom-property name.
@@ -344,6 +419,36 @@ export function writeGlobalVarScanCache(
         JSON.stringify({ key, result } satisfies GlobalVarScanCacheEntry),
         'utf8',
     );
+}
+
+/**
+ * Scans one CSS source with optional cache support.
+ *
+ * @param file CSS source.
+ * @param cacheDir Optional global-var scan cache directory.
+ * @returns CSS variable scan result.
+ */
+function scanCssSourceWithOptionalCache(
+    file: GlobalVarCssSource,
+    cacheDir: string | undefined,
+): CssVarScanResult {
+    if (cacheDir === undefined || file.mtimeMs === undefined) {
+        return scanGlobalVarCss(file.css, { filePath: file.filePath });
+    }
+
+    const key = createGlobalVarScanCacheKey({
+        filePath: file.filePath,
+        css: file.css,
+        mtimeMs: file.mtimeMs,
+    });
+    const cached = readGlobalVarScanCache(cacheDir, key);
+    if (cached) {
+        return cached;
+    }
+
+    const result = scanGlobalVarCss(file.css, { filePath: file.filePath });
+    writeGlobalVarScanCache(cacheDir, key, result);
+    return result;
 }
 
 /**
