@@ -1,0 +1,567 @@
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import postcss, { type AtRule, type ChildNode, type Root, type Rule } from 'postcss';
+
+/** Tailwind v4 @theme namespaces that Phase H must never alias. */
+export const TAILWIND_RESERVED_PREFIXES = [
+    '--color-',
+    '--spacing-',
+    '--font-',
+    '--font-weight-',
+    '--text-',
+    '--leading-',
+    '--tracking-',
+    '--radius-',
+    '--shadow-',
+    '--inset-shadow-',
+    '--drop-shadow-',
+    '--blur-',
+    '--perspective-',
+    '--aspect-',
+    '--ease-',
+    '--animate-',
+    '--breakpoint-',
+    '--container-',
+    '--tab-size-',
+    '--zoom-',
+] as const;
+
+/** Source location for one CSS custom-property occurrence. */
+export interface CssVarLocation {
+    /** Source file path, when known. */
+    filePath: string;
+    /** 1-based source line. */
+    line: number;
+    /** 1-based source column. */
+    column: number;
+}
+
+/** One CSS custom-property definition. */
+export interface CssVarDefinition extends CssVarLocation {
+    /** Custom-property name including the leading `--`. */
+    name: string;
+    /** Stable declaration scope key built from ancestor at-rules and selectors. */
+    scopeId: string;
+    /** Whether the definition lives inside a Tailwind v4 @theme block. */
+    tailwindOwned: boolean;
+    /** Whether this name is registered by an @property at-rule. */
+    registered: boolean;
+}
+
+/** One var(--token) reference. */
+export interface CssVarReference extends CssVarLocation {
+    /** Custom-property name including the leading `--`. */
+    name: string;
+    /** Stable reference scope key built from ancestor at-rules and selectors. */
+    scopeId: string;
+    /** Declaration property or at-rule params where the reference appears. */
+    owner: string;
+    /** Whether the reference lives inside a Tailwind v4 @theme block. */
+    tailwindOwned: boolean;
+}
+
+/** CSS custom-property scan output for one CSS source. */
+export interface CssVarScanResult {
+    /** Source file path, when known. */
+    filePath: string;
+    /** Custom-property declarations. */
+    definitions: CssVarDefinition[];
+    /** var(--token) references. */
+    references: CssVarReference[];
+    /** @property registered custom-property names. */
+    registered: string[];
+    /** Whether the file path appears to be third-party CSS. */
+    thirdParty: boolean;
+}
+
+/** Cache entry for one CSS variable scan result. */
+export interface GlobalVarScanCacheEntry {
+    /** Cache key derived from file path, mtime, and content hash. */
+    key: string;
+    /** Cached scan result. */
+    result: CssVarScanResult;
+}
+
+/** Inputs used to derive a scan cache key. */
+export interface GlobalVarScanCacheKeyInput {
+    /** Source file path. */
+    filePath: string;
+    /** CSS source text. */
+    css: string;
+    /** Source file mtime in milliseconds. */
+    mtimeMs: number;
+}
+
+/** Options for scanning one CSS source. */
+export interface ScanGlobalVarCssOptions {
+    /** File path used for diagnostics. */
+    filePath?: string;
+}
+
+/** Planner diagnostic severity. */
+export type GlobalVarAliasDiagnosticSeverity = 'error';
+
+/** Planner diagnostic. */
+export interface GlobalVarAliasDiagnostic {
+    /** Machine-readable diagnostic code. */
+    code:
+        | 'missing-definition'
+        | 'tailwind-reserved'
+        | 'tailwind-owned'
+        | 'registered-property'
+        | 'alias-collision';
+    /** Diagnostic severity. Phase H M2 is fail-closed. */
+    severity: GlobalVarAliasDiagnosticSeverity;
+    /** Related custom-property name. */
+    name: string;
+    /** Human-readable message. */
+    message: string;
+    /** Source location when available. */
+    location?: CssVarLocation;
+}
+
+/** One planned alias mapping. */
+export interface GlobalVarAliasEntry {
+    /** Original app-owned custom-property name. */
+    original: string;
+    /** Deterministic short alias name. */
+    alias: string;
+    /** Declaration scopes where aliases must be emitted. */
+    scopes: string[];
+}
+
+/** Input to the pure global variable alias planner. */
+export interface PlanGlobalVarAliasesInput {
+    /** CSS scan results. */
+    scans: CssVarScanResult[];
+    /** Explicit app-owned custom-property names. */
+    tokens?: string[];
+    /** Optional app-owned prefix discovery. Empty string disables discovery. */
+    autoPrefix?: string;
+    /** Additional reserved names or prefixes. Prefixes may end with `*`. */
+    reserved?: string[];
+}
+
+/** Output from the pure global variable alias planner. */
+export interface GlobalVarAliasPlan {
+    /** Deterministic alias entries. Empty when diagnostics contain errors. */
+    entries: GlobalVarAliasEntry[];
+    /** Original-to-alias lookup. Empty when diagnostics contain errors. */
+    aliases: Map<string, string>;
+    /** Planner diagnostics. */
+    diagnostics: GlobalVarAliasDiagnostic[];
+}
+
+const VAR_REFERENCE_RE = /var\(\s*(--[\w-]+)/g;
+const DEFAULT_SCOPE_ID = '<root>';
+
+/**
+ * Scans one CSS source for custom-property definitions and var() references.
+ *
+ * @param css CSS source text.
+ * @param options Scan options.
+ * @returns Definitions, references, registrations, and ownership metadata.
+ */
+export function scanGlobalVarCss(
+    css: string,
+    options: ScanGlobalVarCssOptions = {},
+): CssVarScanResult {
+    const filePath = options.filePath ?? '<inline>';
+    const root = postcss.parse(css, { from: filePath });
+    const registered = collectRegisteredProperties(root);
+    const definitions: CssVarDefinition[] = [];
+    const references: CssVarReference[] = [];
+
+    root.walkDecls(decl => {
+        const scopeId = buildScopeId(decl);
+        const tailwindOwned = isInsideThemeAtRule(decl);
+        if (decl.prop.startsWith('--')) {
+            definitions.push({
+                name: decl.prop,
+                scopeId,
+                tailwindOwned,
+                registered: registered.has(decl.prop),
+                ...nodeLocation(decl, filePath),
+            });
+        }
+        for (const name of extractVarReferences(decl.value)) {
+            references.push({
+                name,
+                scopeId,
+                owner: decl.prop,
+                tailwindOwned,
+                ...nodeLocation(decl, filePath),
+            });
+        }
+    });
+
+    root.walkAtRules(atRule => {
+        if (atRule.name === 'property') {
+            return;
+        }
+        for (const name of extractVarReferences(atRule.params)) {
+            references.push({
+                name,
+                scopeId: buildScopeId(atRule),
+                owner: `@${atRule.name}`,
+                tailwindOwned: isInsideThemeAtRule(atRule),
+                ...nodeLocation(atRule, filePath),
+            });
+        }
+    });
+
+    return {
+        filePath,
+        definitions,
+        references,
+        registered: [...registered].sort(),
+        thirdParty: isThirdPartyCssPath(filePath),
+    };
+}
+
+/**
+ * Plans deterministic `--g*` aliases for explicit app-owned tokens.
+ *
+ * @param input Planner input.
+ * @returns Alias plan or fail-closed diagnostics.
+ */
+export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVarAliasPlan {
+    const definitions = flattenDefinitions(input.scans);
+    const candidates = collectCandidates(input, definitions);
+    const diagnostics = validateCandidates(candidates, definitions, input.reserved ?? []);
+    if (diagnostics.length > 0) {
+        return { entries: [], aliases: new Map(), diagnostics };
+    }
+
+    const definitionNames = new Set(definitions.keys());
+    const entries: GlobalVarAliasEntry[] = [];
+    for (const [index, original] of candidates.entries()) {
+        const alias = `--g${index}`;
+        if (definitionNames.has(alias)) {
+            return {
+                entries: [],
+                aliases: new Map(),
+                diagnostics: [
+                    {
+                        code: 'alias-collision',
+                        severity: 'error',
+                        name: alias,
+                        message: `Generated alias ${alias} collides with an existing CSS custom property.`,
+                        location: definitions.get(alias)?.[0],
+                    },
+                ],
+            };
+        }
+        entries.push({
+            original,
+            alias,
+            scopes: [
+                ...new Set((definitions.get(original) ?? []).map(definition => definition.scopeId)),
+            ].sort(),
+        });
+    }
+
+    return {
+        entries,
+        aliases: new Map(entries.map(entry => [entry.original, entry.alias])),
+        diagnostics: [],
+    };
+}
+
+/**
+ * Checks if a custom-property name is reserved by Tailwind v4.
+ *
+ * @param name Custom-property name.
+ * @returns true when the name is Tailwind-owned by namespace.
+ */
+export function isTailwindReservedGlobalVar(name: string): boolean {
+    return TAILWIND_RESERVED_PREFIXES.some(prefix => name.startsWith(prefix));
+}
+
+/**
+ * Resolves the global variable scan cache directory.
+ *
+ * @param cacheDir csszyx cache root.
+ * @returns Cache directory for Phase H CSS scans.
+ */
+export function resolveGlobalVarScanCacheDir(cacheDir: string): string {
+    return path.join(cacheDir, 'global-vars');
+}
+
+/**
+ * Creates a cache key from file path, mtime, and content hash.
+ *
+ * @param input Cache key input.
+ * @returns Stable SHA-256 cache key.
+ */
+export function createGlobalVarScanCacheKey(input: GlobalVarScanCacheKeyInput): string {
+    const hash = createHash('sha256');
+    hash.update(input.filePath);
+    hash.update('\0');
+    hash.update(String(input.mtimeMs));
+    hash.update('\0');
+    hash.update(createHash('sha256').update(input.css).digest('hex'));
+    return hash.digest('hex');
+}
+
+/**
+ * Reads a cached global variable scan result when the key matches.
+ *
+ * @param cacheDir Global variable scan cache directory.
+ * @param key Expected cache key.
+ * @returns Cached scan result, or null on miss/corruption.
+ */
+export function readGlobalVarScanCache(cacheDir: string, key: string): CssVarScanResult | null {
+    try {
+        const raw = fs.readFileSync(globalVarScanCacheFile(cacheDir, key), 'utf8');
+        const entry = JSON.parse(raw) as Partial<GlobalVarScanCacheEntry>;
+        if (entry.key !== key || !entry.result) {
+            return null;
+        }
+        return entry.result;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Writes a global variable scan result cache entry.
+ *
+ * @param cacheDir Global variable scan cache directory.
+ * @param key Cache key.
+ * @param result Scan result to cache.
+ */
+export function writeGlobalVarScanCache(
+    cacheDir: string,
+    key: string,
+    result: CssVarScanResult,
+): void {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+        globalVarScanCacheFile(cacheDir, key),
+        JSON.stringify({ key, result } satisfies GlobalVarScanCacheEntry),
+        'utf8',
+    );
+}
+
+/**
+ * Collects custom properties registered through @property at-rules.
+ *
+ * @param root Parsed PostCSS root.
+ * @returns Registered custom-property names.
+ */
+function collectRegisteredProperties(root: Root): Set<string> {
+    const registered = new Set<string>();
+    root.walkAtRules('property', atRule => {
+        const name = atRule.params.trim();
+        if (name.startsWith('--')) {
+            registered.add(name);
+        }
+    });
+    return registered;
+}
+
+/**
+ * Builds the file path for one scan cache entry.
+ *
+ * @param cacheDir Global variable scan cache directory.
+ * @param key Cache key.
+ * @returns Absolute or relative cache entry path.
+ */
+function globalVarScanCacheFile(cacheDir: string, key: string): string {
+    return path.join(cacheDir, `${key}.json`);
+}
+
+/**
+ * Extracts CSS var() custom-property references from one value string.
+ *
+ * @param value CSS declaration value or at-rule params.
+ * @returns Sorted unique custom-property references.
+ */
+function extractVarReferences(value: string): string[] {
+    const references = new Set<string>();
+    for (const match of value.matchAll(VAR_REFERENCE_RE)) {
+        references.add(match[1]);
+    }
+    return [...references].sort();
+}
+
+/**
+ * Reads a PostCSS node source location.
+ *
+ * @param node PostCSS node.
+ * @param filePath Source file path for diagnostics.
+ * @returns Source location with fallback line and column.
+ */
+function nodeLocation(node: ChildNode, filePath: string): CssVarLocation {
+    return {
+        filePath,
+        line: node.source?.start?.line ?? 1,
+        column: node.source?.start?.column ?? 1,
+    };
+}
+
+/**
+ * Checks if a CSS path belongs to a third-party package.
+ *
+ * @param filePath CSS source file path.
+ * @returns true when the path contains node_modules.
+ */
+function isThirdPartyCssPath(filePath: string): boolean {
+    return filePath.split(/[\\/]/).includes('node_modules');
+}
+
+/**
+ * Checks whether a node is nested inside Tailwind's @theme at-rule.
+ *
+ * @param node PostCSS child node.
+ * @returns true when an ancestor at-rule is @theme.
+ */
+function isInsideThemeAtRule(node: ChildNode): boolean {
+    let current = node.parent as ChildNode | Root | undefined;
+    while (current && current.type !== 'root') {
+        if (current.type === 'atrule' && (current as AtRule).name === 'theme') {
+            return true;
+        }
+        current = current.parent as ChildNode | Root | undefined;
+    }
+    return false;
+}
+
+/**
+ * Builds a stable scope key from ancestor at-rules and selectors.
+ *
+ * @param node PostCSS child node.
+ * @returns Stable scope identifier.
+ */
+function buildScopeId(node: ChildNode): string {
+    const parts: string[] = [];
+    let current = node.parent as ChildNode | Root | undefined;
+    while (current && current.type !== 'root') {
+        if (current.type === 'rule') {
+            parts.push(`rule:${(current as Rule).selector}`);
+        } else if (current.type === 'atrule') {
+            const atRule = current as AtRule;
+            parts.push(`@${atRule.name} ${atRule.params}`.trim());
+        }
+        current = current.parent as ChildNode | Root | undefined;
+    }
+    return parts.reverse().join(' > ') || DEFAULT_SCOPE_ID;
+}
+
+/**
+ * Groups definitions by custom-property name.
+ *
+ * @param scans CSS scan results.
+ * @returns Definitions grouped by name.
+ */
+function flattenDefinitions(scans: CssVarScanResult[]): Map<string, CssVarDefinition[]> {
+    const definitions = new Map<string, CssVarDefinition[]>();
+    for (const scan of scans) {
+        for (const definition of scan.definitions) {
+            const existing = definitions.get(definition.name) ?? [];
+            existing.push(definition);
+            definitions.set(definition.name, existing);
+        }
+    }
+    return definitions;
+}
+
+/**
+ * Collects explicit and prefix-discovered planner candidates.
+ *
+ * @param input Planner input.
+ * @param definitions Definitions grouped by name.
+ * @returns Sorted candidate names.
+ */
+function collectCandidates(
+    input: PlanGlobalVarAliasesInput,
+    definitions: ReadonlyMap<string, CssVarDefinition[]>,
+): string[] {
+    const candidates = new Set(input.tokens ?? []);
+    const autoPrefix = input.autoPrefix ?? '';
+    if (autoPrefix !== '') {
+        for (const name of definitions.keys()) {
+            if (name.startsWith(autoPrefix)) {
+                candidates.add(name);
+            }
+        }
+    }
+    return [...candidates].sort();
+}
+
+/**
+ * Validates alias candidates before any rewrite can happen.
+ *
+ * @param candidates Candidate custom-property names.
+ * @param definitions Definitions grouped by name.
+ * @param reserved User reserved names or prefixes.
+ * @returns Fail-closed diagnostics.
+ */
+function validateCandidates(
+    candidates: string[],
+    definitions: ReadonlyMap<string, CssVarDefinition[]>,
+    reserved: string[],
+): GlobalVarAliasDiagnostic[] {
+    const diagnostics: GlobalVarAliasDiagnostic[] = [];
+    for (const name of candidates) {
+        const tokenDefinitions = definitions.get(name) ?? [];
+        if (tokenDefinitions.length === 0) {
+            diagnostics.push({
+                code: 'missing-definition',
+                severity: 'error',
+                name,
+                message: `Global variable token ${name} is not defined in scanned CSS.`,
+            });
+            continue;
+        }
+        if (isTailwindReservedGlobalVar(name) || matchesUserReserved(name, reserved)) {
+            diagnostics.push({
+                code: 'tailwind-reserved',
+                severity: 'error',
+                name,
+                message: `Global variable token ${name} is reserved and cannot be aliased.`,
+                location: tokenDefinitions[0],
+            });
+        }
+        const tailwindDefinition = tokenDefinitions.find(definition => definition.tailwindOwned);
+        if (tailwindDefinition) {
+            diagnostics.push({
+                code: 'tailwind-owned',
+                severity: 'error',
+                name,
+                message: `Global variable token ${name} is declared inside @theme and cannot be aliased.`,
+                location: tailwindDefinition,
+            });
+        }
+        const registeredDefinition = tokenDefinitions.find(definition => definition.registered);
+        if (registeredDefinition) {
+            diagnostics.push({
+                code: 'registered-property',
+                severity: 'error',
+                name,
+                message: `Registered custom property ${name} is not aliasable in Phase H v1.`,
+                location: registeredDefinition,
+            });
+        }
+    }
+    return diagnostics;
+}
+
+/**
+ * Checks a custom-property name against user reserved names or prefixes.
+ *
+ * @param name Custom-property name.
+ * @param reserved User reserved names or prefixes.
+ * @returns true when the name is reserved.
+ */
+function matchesUserReserved(name: string, reserved: string[]): boolean {
+    return reserved.some(pattern => {
+        if (pattern.endsWith('*')) {
+            return name.startsWith(pattern.slice(0, -1));
+        }
+        return name === pattern;
+    });
+}
