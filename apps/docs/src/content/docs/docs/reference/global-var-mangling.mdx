@@ -1,0 +1,58 @@
+---
+title: Global Variable Mangling
+description: Planned alias-only config for app-owned global CSS custom properties.
+---
+
+:::caution[Planned feature]
+`production.mangleGlobalVars` is reserved for the Phase H global variable tier.
+It is intentionally blocked at build time until the alias pipeline ships.
+:::
+
+Global variable mangling is planned as an opt-in way to shorten repeated
+app-owned CSS custom property references. Phase H v1 is **alias-only**:
+original public custom-property names remain defined, and csszyx-owned
+references may use short `--g*` aliases after the implementation ships.
+
+## Contract
+
+```ts
+csszyx({
+  production: {
+    mangleGlobalVars: {
+      enabled: true,
+      mode: 'alias',
+      tokens: ['--brand-primary', '--brand-primary-hover'],
+      onUnsafeUsage: 'error',
+    },
+  },
+});
+```
+
+Phase H v1 must preserve original variables:
+
+```css
+:root {
+  --brand-primary: #3b82f6;
+  --g0: var(--brand-primary);
+}
+```
+
+Full rename mode is not part of Phase H. It requires a separate spec after
+real-app validation proves csszyx can safely own all declarations and usages.
+
+## Reserved Names
+
+Tailwind v4 `@theme` namespaces are never aliasable. For example,
+`--color-*`, `--spacing-*`, `--font-*`, `--font-weight-*`,
+`--radius-*`, `--shadow-*`, `--breakpoint-*`, `--tab-size-*`, and
+`--zoom-*` are reserved.
+
+Use app-owned names such as `--brand-primary` or `--ds-button-radius`
+instead of Tailwind-owned names such as `--color-primary`.
+
+## Current Behavior
+
+The config type exists so projects and tools can prepare for Phase H, but
+`enabled: true` currently fails with an explicit build error. This avoids a
+silent no-op while the scanner, alias planner, CSS rewrite, and hydration
+manifest work are still pending.

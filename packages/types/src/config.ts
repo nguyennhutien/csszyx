@@ -59,6 +59,19 @@ export interface ProductionConfig {
     mangleVarHoistMaxDepth: number;
 
     /**
+     * Alias stable app-owned global CSS custom properties.
+     *
+     * This is the opt-in gate for the planned `g` tier. Phase H v1 is
+     * alias-only: original public custom-property declarations remain
+     * defined, and csszyx-owned references may use short `--g*` aliases once
+     * the implementation ships. Unknown modes are rejected so rename mode
+     * cannot accidentally enter the public contract.
+     *
+     * @default undefined (disabled)
+     */
+    mangleGlobalVars?: GlobalVarMangleConfig;
+
+    /**
      * Enable content hashing for immutable caching.
      *
      * @default true
@@ -85,6 +98,133 @@ export interface ProductionConfig {
      * @default true in production
      */
     minify: boolean;
+}
+
+/**
+ * Supported global custom-property optimization mode.
+ */
+export type GlobalVarMangleMode = 'alias';
+
+/**
+ * Reaction to unsafe global custom-property usage.
+ */
+export type GlobalVarUnsafeUsageMode = 'error';
+
+/**
+ * Configuration for app-owned global custom-property aliases.
+ */
+export interface GlobalVarMangleConfig {
+    /**
+     * Master switch for global custom-property aliasing.
+     *
+     * @default false
+     */
+    enabled: boolean;
+
+    /**
+     * Phase H v1 only supports alias mode.
+     *
+     * @default "alias"
+     */
+    mode?: GlobalVarMangleMode;
+
+    /**
+     * Explicit app-owned custom-property names to alias.
+     *
+     * Every token must include the leading `--`.
+     *
+     * @default []
+     */
+    tokens?: string[];
+
+    /**
+     * Optional app-owned prefix discovery. Empty string disables prefix
+     * discovery and requires explicit tokens.
+     *
+     * This must not default to a Tailwind namespace or `--g*`.
+     *
+     * @default ""
+     */
+    autoPrefix?: string;
+
+    /**
+     * Unsafe usage handling. Phase H v1 keeps this as error-only.
+     *
+     * @default "error"
+     */
+    onUnsafeUsage?: GlobalVarUnsafeUsageMode;
+
+    /**
+     * Additional app-specific custom-property names or prefixes that must
+     * never be aliased. Tailwind-owned prefixes are reserved implicitly by the
+     * implementation.
+     *
+     * @default []
+     */
+    reserved?: string[];
+}
+
+/**
+ * Validates the Phase H global variable alias config shape.
+ *
+ * @param config User-provided global variable alias config.
+ * @returns Validation errors. Empty means the config shape is valid.
+ */
+export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | undefined): string[] {
+    if (!config) {
+        return [];
+    }
+
+    const errors: string[] = [];
+    if (config.mode !== undefined && config.mode !== 'alias') {
+        errors.push("production.mangleGlobalVars.mode only supports 'alias' in Phase H v1.");
+    }
+    if (config.onUnsafeUsage !== undefined && config.onUnsafeUsage !== 'error') {
+        errors.push(
+            "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
+        );
+    }
+    if (config.autoPrefix !== undefined && !isValidCustomPropertyPrefix(config.autoPrefix)) {
+        errors.push('production.mangleGlobalVars.autoPrefix must be empty or start with "--".');
+    }
+
+    validateCustomPropertyList(config.tokens, 'tokens', errors);
+    validateCustomPropertyList(config.reserved, 'reserved', errors);
+
+    return errors;
+}
+
+/**
+ * Checks whether a custom-property discovery prefix is valid.
+ *
+ * @param prefix User-provided prefix.
+ * @returns true when the prefix is empty or CSS custom-property-like.
+ */
+function isValidCustomPropertyPrefix(prefix: string): boolean {
+    return prefix === '' || prefix.startsWith('--');
+}
+
+/**
+ * Validates an optional list of custom-property names.
+ *
+ * @param values User-provided list.
+ * @param field Field name for diagnostics.
+ * @param errors Mutable error list.
+ */
+function validateCustomPropertyList(
+    values: string[] | undefined,
+    field: 'tokens' | 'reserved',
+    errors: string[],
+): void {
+    if (!values) {
+        return;
+    }
+    for (const value of values) {
+        if (!value.startsWith('--')) {
+            errors.push(`production.mangleGlobalVars.${field} entries must start with "--".`);
+            return;
+        }
+    }
 }
 
 /**

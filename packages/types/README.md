@@ -52,6 +52,7 @@ import type {
   CsszyxConfig, // Main configuration interface
   DevelopmentConfig, // Development mode options
   ProductionConfig, // Production mode options
+  GlobalVarMangleConfig, // Planned global CSS variable alias options
   BuildConfig, // Build pipeline options
   HydrationConfig, // Hydration safety options
   PerformanceConfig, // Performance optimization options
@@ -77,6 +78,7 @@ const userConfig: PartialCsszyxConfig = {
   },
   production: {
     mangle: true,
+    mangleGlobalVars: { enabled: false },
   },
 };
 

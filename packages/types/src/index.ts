@@ -40,6 +40,9 @@ export type {
     CsszyxConfig,
     DevelopmentConfig,
     Environment,
+    GlobalVarMangleConfig,
+    GlobalVarMangleMode,
+    GlobalVarUnsafeUsageMode,
     HydrationConfig,
     PartialCsszyxConfig,
     PerformanceConfig,
@@ -53,6 +56,7 @@ export {
     DEFAULT_PERFORMANCE_CONFIG,
     DEFAULT_PRODUCTION_CONFIG,
     getCurrentEnvironment,
+    validateGlobalVarMangleConfig,
 } from './config.js';
 // Re-export core WASM contract
 export type { CsszyxCorePkg, CsszyxCoreWasm } from './core.js';

@@ -44,6 +44,34 @@ afterEach(() => {
 });
 
 describe('csszyx parser selection', () => {
+    it('rejects unsupported global variable alias modes before transform', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        mode: 'rename',
+                    },
+                },
+            } as never),
+        ).toThrow("production.mangleGlobalVars.mode only supports 'alias'");
+    });
+
+    it('rejects enabled global variable alias config until Phase H ships', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        mode: 'alias',
+                        tokens: ['--brand-primary'],
+                        onUnsafeUsage: 'error',
+                    },
+                },
+            }),
+        ).toThrow('production.mangleGlobalVars is planned for Phase H but is not implemented yet');
+    });
+
     it('uses oxc by default', () => {
         const [prePlugin] = vitePlugin() as TransformHook[];
         const warn = vi.fn();

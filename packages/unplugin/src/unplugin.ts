@@ -110,6 +110,28 @@ interface PrescanTransformResult {
     result: SourceTransformResult;
 }
 
+/** Local Phase H config shape used while @csszyx/types dist may be stale. */
+interface PhaseHGlobalVarMangleConfig {
+    /** Master switch for the planned alias pipeline. */
+    enabled: boolean;
+    /** Phase H v1 only supports alias mode. */
+    mode?: string;
+    /** Explicit app-owned custom-property names to alias. */
+    tokens?: string[];
+    /** Optional app-owned prefix discovery. */
+    autoPrefix?: string;
+    /** Unsafe usage handling. */
+    onUnsafeUsage?: string;
+    /** Additional names or prefixes that must never be aliased. */
+    reserved?: string[];
+}
+
+/** Production config extension for the planned Phase H alias gate. */
+interface PhaseHProductionConfig {
+    /** Planned app-owned global custom-property alias config. */
+    mangleGlobalVars?: PhaseHGlobalVarMangleConfig;
+}
+
 /**
  * Placeholders injected during transform, replaced in processAssets/generateBundle
  * with actual values once the complete mangle map is available.
@@ -824,6 +846,52 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
 }
 
 /**
+ * Validates the planned Phase H global-variable alias config before plugin
+ * state is created.
+ *
+ * @param options User plugin options.
+ */
+function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
+    const production = options.production as
+        | (typeof options.production & PhaseHProductionConfig)
+        | undefined;
+    const config = production?.mangleGlobalVars;
+    const errors: string[] = [];
+    if (config?.mode !== undefined && config.mode !== 'alias') {
+        errors.push("production.mangleGlobalVars.mode only supports 'alias' in Phase H v1.");
+    }
+    if (config?.onUnsafeUsage !== undefined && config.onUnsafeUsage !== 'error') {
+        errors.push(
+            "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
+        );
+    }
+    if (
+        config?.autoPrefix !== undefined &&
+        config.autoPrefix !== '' &&
+        !config.autoPrefix.startsWith('--')
+    ) {
+        errors.push('production.mangleGlobalVars.autoPrefix must be empty or start with "--".');
+    }
+    if (config?.tokens?.some((token: string) => !token.startsWith('--'))) {
+        errors.push('production.mangleGlobalVars.tokens entries must start with "--".');
+    }
+    if (config?.reserved?.some((token: string) => !token.startsWith('--'))) {
+        errors.push('production.mangleGlobalVars.reserved entries must start with "--".');
+    }
+    if (errors.length > 0) {
+        throw new Error(
+            `[csszyx] Invalid production.mangleGlobalVars config:\n${errors.join('\n')}`,
+        );
+    }
+    if (config?.enabled === true) {
+        throw new Error(
+            '[csszyx] production.mangleGlobalVars is planned for Phase H but is not implemented yet. ' +
+                'Keep it disabled until the global variable alias pipeline ships.',
+        );
+    }
+}
+
+/**
  * Core factory that creates the shared state and both pre/post plugins.
  * @param options configuration options
  * @returns pre and post plugins
@@ -832,6 +900,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     prePlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
     postPlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
 } {
+    assertGlobalVarMangleConfig(options);
+
     const manglingEnabled = options.production?.mangle !== false;
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =

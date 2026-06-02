@@ -18,13 +18,21 @@ describe('CSS variable system config contract', () => {
 
         expect(typesConfig).toContain('mangleVars: boolean;');
         expect(typesConfig).toContain('mangleVarHoistMaxDepth: number;');
+        expect(typesConfig).toContain('mangleGlobalVars?: GlobalVarMangleConfig;');
+        expect(typesConfig).toContain('mode?: GlobalVarMangleMode;');
+        expect(typesConfig).toContain('onUnsafeUsage?: GlobalVarUnsafeUsageMode;');
         expect(typesConfig).toContain('@default false');
         expect(typesConfig).toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleVars:\s*false,/);
         expect(typesConfig).toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleVarHoistMaxDepth:\s*5,/);
+        expect(typesConfig).not.toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleGlobalVars:/);
         expect(configDocs).toContain('mangleVars: boolean;');
         expect(configDocs).toContain('mangleVarHoistMaxDepth: number;');
+        expect(configDocs).toContain('mangleGlobalVars?: GlobalVarMangleConfig;');
+        expect(configDocs).toContain("mode?: 'alias';");
+        expect(configDocs).toContain("onUnsafeUsage?: 'error';");
         expect(configDocs).toMatch(/\| `mangleVars`\s+\| `false`/);
         expect(configDocs).toMatch(/\| `mangleVarHoistMaxDepth`\s+\| `5`/);
+        expect(configDocs).toMatch(/\| `mangleGlobalVars`\s+\| `undefined`/);
     });
 
     it('preserves existing dynamic CSS variable output when mangleVars is disabled', () => {
