@@ -102,6 +102,36 @@ describe('csszyx parser selection', () => {
         );
     });
 
+    it('rejects csszyx reserved global variable alias tokens before the Phase H gate', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        tokens: ['--gap'],
+                    },
+                },
+            }),
+        ).toThrow(
+            'production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "--gap"',
+        );
+    });
+
+    it('rejects csszyx reserved global variable autoPrefix before the Phase H gate', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        autoPrefix: '--g',
+                    },
+                },
+            }),
+        ).toThrow(
+            'production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "--g*"',
+        );
+    });
+
     it('uses oxc by default', () => {
         const [prePlugin] = vitePlugin() as TransformHook[];
         const warn = vi.fn();

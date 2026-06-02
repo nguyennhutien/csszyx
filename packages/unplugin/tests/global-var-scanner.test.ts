@@ -197,6 +197,7 @@ describe('planGlobalVarAliases', () => {
 :root {
   --brand-angle: 10deg;
   --brand-primary: red;
+  --gap: 1rem;
   --g0: already-taken;
 }
 `);
@@ -221,6 +222,7 @@ describe('planGlobalVarAliases', () => {
                 '--brand-theme',
                 '--brand-angle',
                 '--brand-primary',
+                '--gap',
             ],
         });
         expect(invalid.entries).toEqual([]);
@@ -231,9 +233,10 @@ describe('planGlobalVarAliases', () => {
                 ['tailwind-owned', '--color-primary'],
                 ['tailwind-owned', '--brand-theme'],
                 ['missing-definition', '--missing'],
+                ['tailwind-reserved', '--gap'],
             ]),
         );
-        expect(invalid.diagnostics).toHaveLength(5);
+        expect(invalid.diagnostics).toHaveLength(6);
     });
 
     it('honors user reserved exact names and prefixes', () => {

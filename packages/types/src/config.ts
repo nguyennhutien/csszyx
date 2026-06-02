@@ -4,7 +4,11 @@
  * This module defines all configuration interfaces and types used
  * throughout the csszyx framework.
  */
-import { isTailwindReservedCustomProperty } from './tailwind-reserved.js';
+import {
+    CSSZYX_GLOBAL_ALIAS_PREFIX,
+    isCsszyxGlobalAliasCustomProperty,
+    isTailwindReservedCustomProperty,
+} from './tailwind-reserved.js';
 
 /**
  * Development mode configuration options.
@@ -195,6 +199,14 @@ export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | un
         errors.push(
             `production.mangleGlobalVars.autoPrefix cannot target Tailwind reserved namespace "${config.autoPrefix}".`,
         );
+    } else if (
+        config.autoPrefix !== undefined &&
+        config.autoPrefix !== '' &&
+        isCsszyxGlobalAliasCustomProperty(config.autoPrefix)
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "${CSSZYX_GLOBAL_ALIAS_PREFIX}*".`,
+        );
     }
 
     validateCustomPropertyList(config.tokens, 'tokens', errors);
@@ -236,6 +248,12 @@ function validateCustomPropertyList(
         if (field === 'tokens' && isTailwindReservedCustomProperty(value)) {
             errors.push(
                 `production.mangleGlobalVars.tokens cannot include Tailwind reserved namespace token "${value}".`,
+            );
+            return;
+        }
+        if (field === 'tokens' && isCsszyxGlobalAliasCustomProperty(value)) {
+            errors.push(
+                `production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "${value}".`,
             );
             return;
         }

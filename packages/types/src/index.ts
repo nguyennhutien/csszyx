@@ -83,6 +83,8 @@ export type {
 } from './runtime.js';
 export { isCsszyxWindow } from './runtime.js';
 export {
+    CSSZYX_GLOBAL_ALIAS_PREFIX,
+    isCsszyxGlobalAliasCustomProperty,
     isTailwindReservedCustomProperty,
     TAILWIND_RESERVED_PREFIXES,
 } from './tailwind-reserved.js';

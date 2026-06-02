@@ -3,7 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { type GlobalVarUsageDiagnostic, scanGlobalVarUsages } from '@csszyx/compiler';
-import { isTailwindReservedCustomProperty } from '@csszyx/types';
+import {
+    CSSZYX_GLOBAL_ALIAS_PREFIX,
+    isCsszyxGlobalAliasCustomProperty,
+    isTailwindReservedCustomProperty,
+} from '@csszyx/types';
 import postcss, {
     type AtRule,
     type ChildNode,
@@ -13,7 +17,7 @@ import postcss, {
 } from 'postcss';
 import valueParser from 'postcss-value-parser';
 
-export { TAILWIND_RESERVED_PREFIXES } from '@csszyx/types';
+export { CSSZYX_GLOBAL_ALIAS_PREFIX, TAILWIND_RESERVED_PREFIXES } from '@csszyx/types';
 
 /** Source location for one CSS custom-property occurrence. */
 export interface CssVarLocation {
@@ -776,6 +780,15 @@ function validateCandidates(
                 severity: 'error',
                 name,
                 message: `Global variable token ${name} is reserved and cannot be aliased.`,
+                location: tokenDefinitions[0],
+            });
+        }
+        if (isCsszyxGlobalAliasCustomProperty(name)) {
+            diagnostics.push({
+                code: 'tailwind-reserved',
+                severity: 'error',
+                name,
+                message: `Global variable token ${name} uses csszyx reserved namespace ${CSSZYX_GLOBAL_ALIAS_PREFIX}* and cannot be aliased.`,
                 location: tokenDefinitions[0],
             });
         }
