@@ -260,6 +260,33 @@ export function createGlobalVarMapAssetSource(
 }
 
 /**
+ * Normalizes compiler global-var aliases for transform-cache identity.
+ *
+ * @param aliases Compiler option value.
+ * @returns Stable original-to-alias entries.
+ */
+export function normalizeGlobalVarAliasesForCache(
+    aliases: TransformSourceCodeOptions['globalVarAliases'],
+): Array<[string, string]> {
+    if (!aliases) {
+        return [];
+    }
+    const entries =
+        aliases instanceof Map
+            ? aliases.entries()
+            : Array.isArray(aliases)
+              ? aliases
+              : Object.entries(aliases);
+    const normalized = new Map<string, string>();
+    for (const [original, alias] of entries) {
+        if (original.startsWith('--') && alias.startsWith('--')) {
+            normalized.set(original, alias);
+        }
+    }
+    return [...normalized].sort(([left], [right]) => left.localeCompare(right));
+}
+
+/**
  * Validates the CSS variable mangle map before it is emitted into HTML/assets.
  *
  * @param varMangleMap CSS variable mangle map.
@@ -1121,6 +1148,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             astBudget: astBudgetOverride,
             mangleVars: compilerOptions.mangleVars,
             mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
+            globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
             filename: effectiveFilename,
             source,
         };

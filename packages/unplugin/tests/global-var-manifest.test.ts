@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     createGlobalVarMapAssetSource,
     extractGlobalVarAliasesForManifest,
+    normalizeGlobalVarAliasesForCache,
 } from '../src/unplugin.js';
 
 describe('extractGlobalVarAliasesForManifest', () => {
@@ -39,5 +40,30 @@ describe('extractGlobalVarAliasesForManifest', () => {
             }),
         ).toBe('{"--brand-primary":"--g0"}');
         expect(createGlobalVarMapAssetSource({ '--_sz-p': '--sz' })).toBeNull();
+    });
+
+    it('normalizes compiler aliases for transform cache identity', () => {
+        expect(
+            normalizeGlobalVarAliasesForCache({
+                '--z-token': '--g2',
+                nope: '--bad',
+                '--bad': 'g3',
+                '--brand-primary': '--g0',
+            }),
+        ).toEqual([
+            ['--brand-primary', '--g0'],
+            ['--z-token', '--g2'],
+        ]);
+        expect(
+            normalizeGlobalVarAliasesForCache(
+                new Map([
+                    ['--z-token', '--g2'],
+                    ['--brand-primary', '--g0'],
+                ]),
+            ),
+        ).toEqual([
+            ['--brand-primary', '--g0'],
+            ['--z-token', '--g2'],
+        ]);
     });
 });
