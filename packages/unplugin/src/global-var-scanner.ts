@@ -376,6 +376,11 @@ export function rewriteGlobalVarCssAliases(
 
     const root = postcss.parse(options.css, { from: options.filePath });
     const aliasNames = new Set(options.plan.entries.map(entry => entry.alias));
+    const referenceAliases = new Map(
+        options.plan.entries
+            .filter(entry => canRewriteGlobalVarReferences(entry))
+            .map(entry => [entry.original, entry.alias]),
+    );
     let aliasDeclarations = 0;
     let rewrittenReferences = 0;
 
@@ -394,7 +399,7 @@ export function rewriteGlobalVarCssAliases(
             return;
         }
 
-        const rewrite = rewriteGlobalVarValue(decl.value, options.plan.aliases);
+        const rewrite = rewriteGlobalVarValue(decl.value, referenceAliases);
         if (rewrite.count > 0) {
             decl.value = rewrite.value;
             rewrittenReferences += rewrite.count;
@@ -407,6 +412,39 @@ export function rewriteGlobalVarCssAliases(
         rewrittenReferences,
         diagnostics: [],
     };
+}
+
+/**
+ * Checks whether a planned alias is safe for broad declaration-value rewrites.
+ *
+ * The pure CSS pass can always emit alias declarations next to matching custom
+ * property definitions. Rewriting unrelated declaration values is stricter:
+ * until the build hook has a cascade-aware owned-reference proof, only tokens
+ * with at least one inherited global definition scope are eligible.
+ *
+ * @param entry Alias plan entry.
+ * @returns true when declaration values can use this alias.
+ */
+function canRewriteGlobalVarReferences(entry: GlobalVarAliasEntry): boolean {
+    return entry.scopes.some(isInheritedGlobalAliasScope);
+}
+
+/**
+ * Checks whether a scanner scope describes an inherited global declaration.
+ *
+ * @param scope Stable scanner scope id.
+ * @returns true for rule scopes such as `:root`, `html`, or `body`.
+ */
+function isInheritedGlobalAliasScope(scope: string): boolean {
+    const leaf = scope.split(' > ').at(-1);
+    if (!leaf?.startsWith('rule:')) {
+        return false;
+    }
+    const selector = leaf.slice('rule:'.length);
+    return selector.split(',').some(part => {
+        const normalized = part.trim();
+        return normalized === ':root' || normalized === 'html' || normalized === 'body';
+    });
 }
 
 /**

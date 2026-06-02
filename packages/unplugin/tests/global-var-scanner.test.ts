@@ -506,6 +506,28 @@ describe('rewriteGlobalVarCssAliases', () => {
         expect(second.css).toBe(first.css);
     });
 
+    it('does not rewrite references for scoped-only aliases without a global declaration', () => {
+        const css = `
+.card {
+  --brand-primary: red;
+}
+.button {
+  color: var(--brand-primary);
+}
+`;
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css)],
+            tokens: ['--brand-primary'],
+        });
+
+        const result = rewriteGlobalVarCssAliases({ css, plan });
+
+        expect(result.aliasDeclarations).toBe(1);
+        expect(result.rewrittenReferences).toBe(0);
+        expect(result.css).toContain('--brand-primary: red;\n  --g0: var(--brand-primary);');
+        expect(result.css).toContain('color: var(--brand-primary);');
+    });
+
     it('leaves at-rule params untouched in the pure M5 slice', () => {
         const css = `
 :root { --brand-breakpoint: 40rem; }
