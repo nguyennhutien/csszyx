@@ -52,7 +52,22 @@ export interface TransformSourceCodeOptions {
      * invalidation surface bounded.
      */
     mangleVarHoistMaxDepth?: number;
+
+    /**
+     * Explicit app-owned global CSS custom-property aliases. Parser paths that
+     * support Phase H rewrite exact static sz string values from original
+     * token names to aliases, for example `--brand-primary` -> `--g0`.
+     */
+    globalVarAliases?: GlobalVarAliasTableInput;
 }
+
+/**
+ * Accepted input shapes for global CSS custom-property alias tables.
+ */
+export type GlobalVarAliasTableInput =
+    | ReadonlyMap<string, string>
+    | ReadonlyArray<readonly [string, string]>
+    | Readonly<Record<string, string>>;
 
 /**
  * CSS custom-property mangle metadata. Most originals map to one mangled name,

@@ -10,12 +10,23 @@ pub struct TransformFile {
 }
 
 /// Options passed to the Rust transform core.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TransformOptions {
     /// Whether dynamic CSS custom properties should use tiered short names.
     pub mangle_vars: bool,
     /// Maximum cascade depth for component-tier CSS variable hoisting.
     pub mangle_var_hoist_max_depth: Option<usize>,
+    /// Exact app-owned global custom-property aliases for static sz values.
+    pub global_var_aliases: Vec<GlobalVarAliasEntry>,
+}
+
+/// One exact app-owned global custom-property alias.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GlobalVarAliasEntry {
+    /// Original custom-property name, including `--`.
+    pub original: String,
+    /// Alias custom-property name, including `--`.
+    pub alias: String,
 }
 
 /// Recovery token emitted by a transform result.

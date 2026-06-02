@@ -29,8 +29,8 @@ interface ExtractedSnippet {
 }
 
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
-    parity: 6,
-    'surgical-parity': 125,
+    parity: 8,
+    'surgical-parity': 126,
     'oxc-throws': 0,
     'class-divergence': 0,
     'diagnostics-divergence': 0,
@@ -42,7 +42,7 @@ describe('Phase D3 — extracted compiler corpus categories', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(131);
+        expect(snippets).toHaveLength(134);
     });
 
     it('matches the current Babel-vs-oxc category summary', () => {

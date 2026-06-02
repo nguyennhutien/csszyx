@@ -94,6 +94,7 @@ export function transformOxc(
     const diagnostics: string[] = [];
     const recoveryTokens = new Map<string, TokenData>();
     const cssVariableMap = new Map<string, CssVariableMangleValue>();
+    const globalVarAliases = normalizeGlobalVarAliases(options?.globalVarAliases);
 
     if (!source.includes('sz')) {
         return {
@@ -309,6 +310,8 @@ export function transformOxc(
                     objectBindings,
                     source,
                     classes,
+                    globalVarAliases,
+                    cssVariableMap,
                 );
                 if (conditionalClassExpr) {
                     if (classNameAttr || szAttrs.length > 1) {
@@ -330,7 +333,11 @@ export function transformOxc(
                 const bound = objectBindings.get(identifierName);
                 if (bound) {
                     const result = compileSzObject(
-                        astObjectToSzObject(bound, effectiveFilename, objectBindings),
+                        applyGlobalVarAliasesToSzObject(
+                            astObjectToSzObject(bound, effectiveFilename, objectBindings),
+                            globalVarAliases,
+                            cssVariableMap,
+                        ),
                     );
                     for (const c of result.className.split(/\s+/)) {
                         if (c) {
@@ -348,6 +355,8 @@ export function transformOxc(
                         objectBindings,
                         source,
                         classes,
+                        globalVarAliases,
+                        cssVariableMap,
                     );
                     if (conditionalClassExpr) {
                         if (classNameAttr || szAttrs.length > 1) {
@@ -370,6 +379,8 @@ export function transformOxc(
                     expression as ArrayExpressionNode,
                     effectiveFilename,
                     objectBindings,
+                    globalVarAliases,
+                    cssVariableMap,
                 );
                 if (arrayClasses === null) {
                     collectArrayCandidateClasses(
@@ -408,6 +419,8 @@ export function transformOxc(
                         objectBindings,
                         source,
                         classes,
+                        globalVarAliases,
+                        cssVariableMap,
                     );
                     if (conditionalSpreadClassExpr) {
                         if (classNameAttr || szAttrs.length > 1) {
@@ -432,6 +445,7 @@ export function transformOxc(
                         componentHoists?.usageNamesByElement.get(elementId),
                         cssVariableMap,
                         reservedCSSVariableNames,
+                        globalVarAliases,
                     );
                     if (partial && szAttrs.length === 1) {
                         const mergedStyleProps =
@@ -508,7 +522,9 @@ export function transformOxc(
                 }
                 throw err;
             }
-            const result = compileSzObject(szObj);
+            const result = compileSzObject(
+                applyGlobalVarAliasesToSzObject(szObj, globalVarAliases, cssVariableMap),
+            );
             for (const c of result.className.split(/\s+/)) {
                 if (c) {
                     szDerived.push(c);
@@ -934,12 +950,16 @@ function astObjectToSzObject(
  * @param node The oxc ArrayExpression node.
  * @param filename Filename for diagnostic offsets.
  * @param bindings Local object-literal bindings available for identifier/spread resolution.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
  * @returns Static class tokens, or null when runtime handling is required.
  */
 function astArrayToStaticClasses(
     node: ArrayExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
 ): string[] | null {
     const out: string[] = [];
     for (const element of node.elements) {
@@ -957,7 +977,13 @@ function astArrayToStaticClasses(
         }
         let result: ReturnType<typeof compileSzObject>;
         try {
-            result = compileSzObject(astObjectToSzObject(objectNode, filename, bindings));
+            result = compileSzObject(
+                applyGlobalVarAliasesToSzObject(
+                    astObjectToSzObject(objectNode, filename, bindings),
+                    globalVarAliases,
+                    cssVariableMap,
+                ),
+            );
         } catch (err) {
             if (err instanceof OxcNotImplementedError) {
                 return null;
@@ -1135,6 +1161,8 @@ function resolveObjectExpression(
  * @param bindings Local object-literal bindings.
  * @param source Original source for test expression slicing.
  * @param classes Class set to populate.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
  * @returns Ternary className expression source, or null when unsupported.
  */
 function buildConditionalSpreadClassExpression(
@@ -1143,6 +1171,8 @@ function buildConditionalSpreadClassExpression(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
     classes: Set<string>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
 ): string | null {
     let conditionalSpread: ConditionalExpressionNode | null = null;
     const otherProps: OxcNode[] = [];
@@ -1168,6 +1198,8 @@ function buildConditionalSpreadClassExpression(
         node,
         filename,
         bindings,
+        globalVarAliases,
+        cssVariableMap,
     );
     const alternate = compileConditionalSpreadBranch(
         conditionalSpread.alternate,
@@ -1175,6 +1207,8 @@ function buildConditionalSpreadClassExpression(
         node,
         filename,
         bindings,
+        globalVarAliases,
+        cssVariableMap,
     );
     if (consequent === null || alternate === null) {
         return null;
@@ -1196,6 +1230,8 @@ function buildConditionalSpreadClassExpression(
  * @param sourceNode Source object node used for span fields.
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
  * @returns Compiled class string, or null when unsupported.
  */
 function compileConditionalSpreadBranch(
@@ -1204,6 +1240,8 @@ function compileConditionalSpreadBranch(
     sourceNode: ObjectExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
 ): string | null {
     const branchObject = resolveObjectExpression(branch, bindings);
     if (!branchObject) {
@@ -1216,7 +1254,13 @@ function compileConditionalSpreadBranch(
             filename,
             bindings,
         );
-        return compileSzObject({ ...branchValue, ...overrides }).className;
+        return compileSzObject(
+            applyGlobalVarAliasesToSzObject(
+                { ...branchValue, ...overrides },
+                globalVarAliases,
+                cssVariableMap,
+            ),
+        ).className;
     } catch (err) {
         if (err instanceof OxcNotImplementedError) {
             return null;
@@ -1236,6 +1280,7 @@ function compileConditionalSpreadBranch(
  * @param hoistedNames Dynamic prop keys that should use component-tier hoisted vars.
  * @param cssVariableMap Original-to-mangled CSS variable map to populate.
  * @param reservedNames User-authored CSS custom-property names to avoid.
+ * @param globalVarAliases Exact global custom-property alias table.
  * @returns Transform fragments, or null when the object needs runtime fallback.
  */
 function buildPartialObjectTransform(
@@ -1247,8 +1292,16 @@ function buildPartialObjectTransform(
     hoistedNames?: ReadonlyMap<string, string>,
     cssVariableMap?: Map<string, CssVariableMangleValue>,
     reservedNames?: ReadonlySet<string>,
+    globalVarAliases: ReadonlyMap<string, string> = new Map(),
 ): OxcPartialTransform | null {
-    const partial = evaluatePartialObject(node, filename, bindings, source);
+    const partial = evaluatePartialObject(
+        node,
+        filename,
+        bindings,
+        source,
+        globalVarAliases,
+        cssVariableMap,
+    );
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
         return null;
     }
@@ -1263,7 +1316,9 @@ function buildPartialObjectTransform(
 
     const classParts: string[] = [];
     if (Object.keys(partial.staticProps).length > 0) {
-        const { className } = compileSzObject(partial.staticProps);
+        const { className } = compileSzObject(
+            applyGlobalVarAliasesToSzObject(partial.staticProps, globalVarAliases, cssVariableMap),
+        );
         if (className) {
             classParts.push(className);
         }
@@ -1380,6 +1435,87 @@ function addCssVariableMapping(
     if (!values.includes(mangled)) {
         cssVariableMap.set(original, [...values, mangled]);
     }
+}
+
+/**
+ * Normalize caller-provided global variable alias tables.
+ *
+ * Only exact CSS custom-property names participate. Invalid entries are ignored
+ * here because config/planner validation owns user-facing diagnostics.
+ *
+ * @param input Alias table input.
+ * @returns Normalized alias map.
+ */
+function normalizeGlobalVarAliases(
+    input: TransformSourceCodeOptions['globalVarAliases'],
+): Map<string, string> {
+    if (!input) {
+        return new Map();
+    }
+    const entries =
+        input instanceof Map
+            ? input.entries()
+            : Array.isArray(input)
+              ? input
+              : Object.entries(input);
+    const aliases = new Map<string, string>();
+    for (const [original, alias] of entries) {
+        if (original.startsWith('--') && alias.startsWith('--')) {
+            aliases.set(original, alias);
+        }
+    }
+    return aliases;
+}
+
+/**
+ * Rewrites exact static sz string values through the global variable alias map.
+ *
+ * @param object Static sz object.
+ * @param globalVarAliases Exact original-to-alias custom-property names.
+ * @param cssVariableMap CSS variable metadata map to populate.
+ * @returns Static sz object with aliased string values.
+ */
+function applyGlobalVarAliasesToSzObject(
+    object: SzObject,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue> | undefined,
+): SzObject {
+    if (globalVarAliases.size === 0) {
+        return object;
+    }
+
+    const rewritten: SzObject = {};
+    for (const [key, value] of Object.entries(object)) {
+        rewritten[key] = applyGlobalVarAliasesToSzValue(value, globalVarAliases, cssVariableMap);
+    }
+    return rewritten;
+}
+
+/**
+ * Rewrites one static sz value through the global variable alias map.
+ *
+ * @param value Static sz value.
+ * @param globalVarAliases Exact original-to-alias custom-property names.
+ * @param cssVariableMap CSS variable metadata map to populate.
+ * @returns Rewritten value.
+ */
+function applyGlobalVarAliasesToSzValue(
+    value: SzValue,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue> | undefined,
+): SzValue {
+    if (typeof value === 'string') {
+        const alias = globalVarAliases.get(value);
+        if (alias) {
+            addCssVariableMapping(cssVariableMap, value, alias);
+            return alias;
+        }
+        return value;
+    }
+    if (typeof value === 'object') {
+        return applyGlobalVarAliasesToSzObject(value, globalVarAliases, cssVariableMap);
+    }
+    return value;
 }
 
 /**
@@ -1616,6 +1752,8 @@ function collectOpeningHoistCandidates(
             filename,
             bindings,
             source,
+            new Map(),
+            undefined,
         );
         if (!partial || partial.conditionalClasses.length > 0) {
             continue;
@@ -1780,6 +1918,8 @@ function getOrCreateMap<K, NK, NV>(map: Map<K, Map<NK, NV>>, key: K): Map<NK, NV
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param source Original source for preserving runtime expressions.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
  * @param variantChain Current nested variant chain.
  * @returns Partial object result, or null for unsupported spread/computed cases.
  */
@@ -1788,6 +1928,8 @@ function evaluatePartialObject(
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue> | undefined,
     variantChain = '',
 ): OxcPartialObjectResult | null {
     const staticProps: SzObject = {};
@@ -1849,6 +1991,8 @@ function evaluatePartialObject(
                 filename,
                 bindings,
                 source,
+                globalVarAliases,
+                cssVariableMap,
                 nestedVariant,
             );
             if (!nested) {
@@ -1870,8 +2014,20 @@ function evaluatePartialObject(
             const consequent = extractStaticLiteralValue(conditional.consequent);
             const alternate = extractStaticLiteralValue(conditional.alternate);
             if (consequent !== null && alternate !== null) {
-                const { className: consequentClasses } = compileSzObject({ [key]: consequent });
-                const { className: alternateClasses } = compileSzObject({ [key]: alternate });
+                const { className: consequentClasses } = compileSzObject(
+                    applyGlobalVarAliasesToSzObject(
+                        { [key]: consequent },
+                        globalVarAliases,
+                        cssVariableMap,
+                    ),
+                );
+                const { className: alternateClasses } = compileSzObject(
+                    applyGlobalVarAliasesToSzObject(
+                        { [key]: alternate },
+                        globalVarAliases,
+                        cssVariableMap,
+                    ),
+                );
                 conditionalClasses.push({
                     test: conditional.test,
                     consequent: prefixVariantClasses(consequentClasses, variantChain),
@@ -2151,6 +2307,8 @@ function isRuntimeExpression(node: OxcNode): boolean {
  * @param bindings Local object-literal bindings available for branch resolution.
  * @param source Original source for slicing the test expression.
  * @param classes Class set to populate for Tailwind/mangle discovery.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
  * @returns Source for a className expression, or null when a branch is dynamic.
  */
 function buildStaticConditionalClassExpression(
@@ -2159,9 +2317,23 @@ function buildStaticConditionalClassExpression(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     source: string,
     classes: Set<string>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
 ): string | null {
-    const consequent = resolveStaticClassString(node.consequent, filename, bindings);
-    const alternate = resolveStaticClassString(node.alternate, filename, bindings);
+    const consequent = resolveStaticClassString(
+        node.consequent,
+        filename,
+        bindings,
+        globalVarAliases,
+        cssVariableMap,
+    );
+    const alternate = resolveStaticClassString(
+        node.alternate,
+        filename,
+        bindings,
+        globalVarAliases,
+        cssVariableMap,
+    );
     if (consequent === null || alternate === null) {
         return null;
     }
@@ -2180,12 +2352,16 @@ function buildStaticConditionalClassExpression(
  * @param node Candidate expression.
  * @param filename Filename for diagnostic offsets.
  * @param bindings Local object-literal bindings.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
  * @returns Compiled class string, or null when dynamic.
  */
 function resolveStaticClassString(
     node: OxcNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
 ): string | null {
     const unwrapped = unwrapExpression(node);
     let objectNode: ObjectExpressionNode | null = null;
@@ -2198,7 +2374,13 @@ function resolveStaticClassString(
         return null;
     }
     try {
-        return compileSzObject(astObjectToSzObject(objectNode, filename, bindings)).className;
+        return compileSzObject(
+            applyGlobalVarAliasesToSzObject(
+                astObjectToSzObject(objectNode, filename, bindings),
+                globalVarAliases,
+                cssVariableMap,
+            ),
+        ).className;
     } catch (err) {
         if (err instanceof OxcNotImplementedError) {
             return null;

@@ -13,6 +13,8 @@ pub(crate) mod css_var_planner;
 pub(crate) mod engine;
 pub(crate) mod fast_path;
 pub(crate) mod generated;
+#[cfg(feature = "native-engine")]
+pub(crate) mod global_var_aliases;
 mod ir;
 pub mod lower;
 #[cfg(feature = "native-engine")]
@@ -33,8 +35,9 @@ use fast_path::{triage_source, FastPathTriage};
 use rayon::prelude::*;
 
 pub use contract::{
-    CssVariableMapEntry, ParserPath, RecoveryMode, RecoveryToken, TransformFile, TransformMetadata,
-    TransformOptions, TransformProducer, TransformResult, TransformTimings,
+    CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, RecoveryMode, RecoveryToken,
+    TransformFile, TransformMetadata, TransformOptions, TransformProducer, TransformResult,
+    TransformTimings,
 };
 pub use ir::{
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
@@ -78,7 +81,7 @@ pub fn transform_batch(files: &[TransformFile]) -> Result<Vec<TransformResult>, 
 ///
 /// Returns [`TransformError::NotImplemented`] when this crate was built without
 /// the native engine feature.
-#[allow(clippy::missing_const_for_fn)]
+#[allow(clippy::missing_const_for_fn, clippy::needless_pass_by_value)]
 pub fn transform_batch_with_options(
     files: &[TransformFile],
     options: TransformOptions,
@@ -87,7 +90,7 @@ pub fn transform_batch_with_options(
     {
         Ok(files
             .par_iter()
-            .map(|file| engine::transform_file_with_options(file, options))
+            .map(|file| engine::transform_file_with_options(file, options.clone()))
             .collect())
     }
 

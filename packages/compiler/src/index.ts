@@ -53,6 +53,7 @@ export {
 } from './recovery.js';
 export {
     type CssVariableMangleValue,
+    type GlobalVarAliasTableInput,
     isValidSzProp,
     normalizeClassName,
     type SourceTransformResult,

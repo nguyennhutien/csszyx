@@ -23,6 +23,13 @@ export interface NativeTransformOptions {
     mangleVars?: boolean;
     /** Maximum cascade depth for component-tier CSS variable hoisting. */
     mangleVarHoistMaxDepth?: number;
+    /** Exact app-owned global custom-property aliases for static sz values. */
+    globalVarAliases?: Array<{
+        /** Original custom-property name, including `--`. */
+        original: string;
+        /** Alias custom-property name, including `--`. */
+        alias: string;
+    }>;
 }
 
 /** Native transform output shape returned per source file. */

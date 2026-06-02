@@ -195,6 +195,7 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
 }
 
 /// Applies component-tier hoists, then scoped names for non-hoisted vars.
+#[allow(clippy::too_many_lines)]
 pub fn apply_css_variable_mangling(
     ir: &SourceIr,
     source: &str,
@@ -255,7 +256,7 @@ pub fn apply_css_variable_mangling(
         &hoist_nodes,
         &hoist_usages,
         CssVariableHoistOptions {
-            max_depth: max_depth.unwrap_or(CssVariableHoistOptions::default().max_depth),
+            max_depth: max_depth.unwrap_or_else(|| CssVariableHoistOptions::default().max_depth),
         },
     );
     let hoist_plans = hoist_analysis.plans;
@@ -275,7 +276,7 @@ pub fn apply_css_variable_mangling(
         };
         let mut hoisted_prop =
             next.sz_attributes[first_attr_index].dynamic_css_vars[first_prop_index].clone();
-        hoisted_prop.var_name = plan.name.clone();
+        hoisted_prop.var_name.clone_from(&plan.name);
         hoisted_prop.hoisted = false;
         if let Some(target) = next.jsx_opening_elements.get_mut(
             plan.target_element_id
@@ -298,7 +299,7 @@ pub fn apply_css_variable_mangling(
                 .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
             {
                 push_variable_map(&mut variable_map, &prop.var_name, &plan.name);
-                prop.var_name = plan.name.clone();
+                prop.var_name.clone_from(&plan.name);
                 prop.hoisted = true;
                 hoisted_location_ids.insert(location_index);
             }

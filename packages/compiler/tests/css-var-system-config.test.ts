@@ -243,6 +243,49 @@ describe('CSS variable system config contract', () => {
 
         expect(result.cssVariableMap).toEqual(new Map());
     });
+
+    it('rewrites selected global variable tokens in static sz objects on oxc and Rust paths', () => {
+        const source =
+            "const App = () => <div sz={{ bg: '--brand-primary', hover: { text: '--brand-secondary' }, borderColor: '--other-token' }} />;";
+        const aliases = new Map([
+            ['--brand-primary', '--g0'],
+            ['--brand-secondary', '--g1'],
+        ]);
+        const oxc = transformOxc(source, 'global-var-aliases.tsx', {
+            globalVarAliases: aliases,
+        });
+        const rust = transformRust(source, 'rust-global-var-aliases.tsx', {
+            globalVarAliases: aliases,
+        });
+
+        for (const result of [oxc, rust]) {
+            expect(result.code).toContain('bg-(--g0)');
+            expect(result.code).toContain('hover:text-(length:--g1)');
+            expect(result.code).toContain('border-(--other-token)');
+            expect(result.code).not.toContain('bg-(--brand-primary)');
+            expect(result.code).not.toContain('hover:text-(length:--brand-secondary)');
+            expect(result.classes).toEqual(
+                new Set(['bg-(--g0)', 'hover:text-(length:--g1)', 'border-(--other-token)']),
+            );
+            expect(result.cssVariableMap).toEqual(
+                new Map([
+                    ['--brand-primary', '--g0'],
+                    ['--brand-secondary', '--g1'],
+                ]),
+            );
+        }
+    });
+
+    it('preserves static sz output when the global variable alias table is empty', () => {
+        const source = "const App = () => <div sz={{ bg: '--brand-primary' }} />;";
+        const result = transformOxc(source, 'global-var-aliases-empty.tsx', {
+            globalVarAliases: new Map(),
+        });
+
+        expect(result.code).toContain('bg-(--brand-primary)');
+        expect(result.classes).toEqual(new Set(['bg-(--brand-primary)']));
+        expect(result.cssVariableMap).toEqual(new Map());
+    });
 });
 
 function asArray<T>(value: T | T[] | undefined): T[] {

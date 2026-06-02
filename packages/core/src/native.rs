@@ -6,8 +6,8 @@
 use napi_derive::napi;
 
 use crate::transform::{
-    transform_batch_with_options, ParserPath, RecoveryMode, TransformFile, TransformOptions,
-    TransformProducer, TransformResult, TransformTimings,
+    transform_batch_with_options, GlobalVarAliasEntry, ParserPath, RecoveryMode, TransformFile,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings,
 };
 
 /// Source file passed from JavaScript to the native transform.
@@ -28,6 +28,18 @@ pub struct NativeTransformOptions {
     pub mangle_vars: Option<bool>,
     /// Maximum cascade depth for component-tier CSS variable hoisting.
     pub mangle_var_hoist_max_depth: Option<u32>,
+    /// Exact app-owned global custom-property aliases for static sz values.
+    pub global_var_aliases: Option<Vec<NativeGlobalVarAliasEntry>>,
+}
+
+/// One exact app-owned global custom-property alias.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeGlobalVarAliasEntry {
+    /// Original custom-property name, including `--`.
+    pub original: String,
+    /// Alias custom-property name, including `--`.
+    pub alias: String,
 }
 
 /// Recovery token emitted by the native transform.
@@ -150,6 +162,15 @@ pub fn transform_batch_native(
             mangle_var_hoist_max_depth: options
                 .mangle_var_hoist_max_depth
                 .map(|depth| depth as usize),
+            global_var_aliases: options
+                .global_var_aliases
+                .unwrap_or_default()
+                .into_iter()
+                .map(|entry| GlobalVarAliasEntry {
+                    original: entry.original,
+                    alias: entry.alias,
+                })
+                .collect(),
         },
     )
     .map(|results| {

@@ -6,6 +6,7 @@ import {
 
 import type {
     CssVariableMangleValue,
+    GlobalVarAliasTableInput,
     SourceTransformResult,
     TransformSourceCodeOptions,
 } from './transform.js';
@@ -108,6 +109,7 @@ export function transformRustBatch(
             {
                 mangleVars: options?.mangleVars === true,
                 mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
+                globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
             },
         ).map(fromNativeResult);
     } catch (err) {
@@ -121,6 +123,29 @@ export function transformRustBatch(
         }
         throw err;
     }
+}
+
+/**
+ * Normalize compiler alias-table options for the native NAPI object shape.
+ *
+ * @param input Alias table input.
+ * @returns Native alias entries.
+ */
+function normalizeGlobalVarAliases(
+    input: GlobalVarAliasTableInput | undefined,
+): Array<{ original: string; alias: string }> {
+    if (!input) {
+        return [];
+    }
+    const entries =
+        input instanceof Map
+            ? input.entries()
+            : Array.isArray(input)
+              ? input
+              : Object.entries(input);
+    return [...entries]
+        .filter(([original, alias]) => original.startsWith('--') && alias.startsWith('--'))
+        .map(([original, alias]) => ({ original, alias }));
 }
 
 /**
