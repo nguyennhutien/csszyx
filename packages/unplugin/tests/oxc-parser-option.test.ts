@@ -72,6 +72,36 @@ describe('csszyx parser selection', () => {
         ).toThrow('production.mangleGlobalVars is planned for Phase H but is not implemented yet');
     });
 
+    it('rejects Tailwind reserved global variable alias tokens before the Phase H gate', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        tokens: ['--color-primary'],
+                    },
+                },
+            }),
+        ).toThrow(
+            'production.mangleGlobalVars.tokens cannot include Tailwind reserved namespace token "--color-primary"',
+        );
+    });
+
+    it('rejects Tailwind reserved global variable autoPrefix before the Phase H gate', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        autoPrefix: '--spacing-',
+                    },
+                },
+            }),
+        ).toThrow(
+            'production.mangleGlobalVars.autoPrefix cannot target Tailwind reserved namespace "--spacing-"',
+        );
+    });
+
     it('uses oxc by default', () => {
         const [prePlugin] = vitePlugin() as TransformHook[];
         const warn = vi.fn();

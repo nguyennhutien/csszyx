@@ -92,6 +92,18 @@ const config: CsszyxConfig = {
 };
 ```
 
+#### Global Variable Alias Safety
+
+`production.mangleGlobalVars` is reserved for the Phase H global custom-property
+alias pipeline. Tailwind-owned `@theme` namespaces are rejected by shared config
+validation and must not be passed in `tokens` or `autoPrefix`.
+
+The reserved namespace list is exported as `TAILWIND_RESERVED_PREFIXES`, with
+`isTailwindReservedCustomProperty(name)` for validation. It follows Tailwind's
+theme variable namespace documentation. If Tailwind adds a new namespace, update
+`packages/types/src/tailwind-reserved.ts` and add scanner/config tests in the
+same change.
+
 ### Runtime Types (`/runtime`)
 
 Types for runtime operations:

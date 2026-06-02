@@ -80,3 +80,7 @@ export type {
     VerificationResult,
 } from './runtime.js';
 export { isCsszyxWindow } from './runtime.js';
+export {
+    isTailwindReservedCustomProperty,
+    TAILWIND_RESERVED_PREFIXES,
+} from './tailwind-reserved.js';

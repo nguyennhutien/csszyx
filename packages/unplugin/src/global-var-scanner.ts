@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { type GlobalVarUsageDiagnostic, scanGlobalVarUsages } from '@csszyx/compiler';
+import { isTailwindReservedCustomProperty } from '@csszyx/types';
 import postcss, {
     type AtRule,
     type ChildNode,
@@ -12,29 +13,7 @@ import postcss, {
 } from 'postcss';
 import valueParser from 'postcss-value-parser';
 
-/** Tailwind v4 @theme namespaces that Phase H must never alias. */
-export const TAILWIND_RESERVED_PREFIXES = [
-    '--color-',
-    '--spacing-',
-    '--font-',
-    '--font-weight-',
-    '--text-',
-    '--leading-',
-    '--tracking-',
-    '--radius-',
-    '--shadow-',
-    '--inset-shadow-',
-    '--drop-shadow-',
-    '--blur-',
-    '--perspective-',
-    '--aspect-',
-    '--ease-',
-    '--animate-',
-    '--breakpoint-',
-    '--container-',
-    '--tab-size-',
-    '--zoom-',
-] as const;
+export { TAILWIND_RESERVED_PREFIXES } from '@csszyx/types';
 
 /** Source location for one CSS custom-property occurrence. */
 export interface CssVarLocation {
@@ -437,7 +416,7 @@ export function rewriteGlobalVarCssAliases(
  * @returns true when the name is Tailwind-owned by namespace.
  */
 export function isTailwindReservedGlobalVar(name: string): boolean {
-    return TAILWIND_RESERVED_PREFIXES.some(prefix => name.startsWith(prefix));
+    return isTailwindReservedCustomProperty(name);
 }
 
 /**

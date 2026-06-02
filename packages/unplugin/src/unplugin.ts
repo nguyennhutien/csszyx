@@ -18,7 +18,11 @@ import {
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
-import { DEFAULT_BUILD_CONFIG, type PartialCsszyxConfig } from '@csszyx/types';
+import {
+    DEFAULT_BUILD_CONFIG,
+    type PartialCsszyxConfig,
+    validateGlobalVarMangleConfig,
+} from '@csszyx/types';
 import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
@@ -108,28 +112,6 @@ interface PrescanTransformResult {
     filePath: string;
     /** Compiler result for the file. */
     result: SourceTransformResult;
-}
-
-/** Local Phase H config shape used while @csszyx/types dist may be stale. */
-interface PhaseHGlobalVarMangleConfig {
-    /** Master switch for the planned alias pipeline. */
-    enabled: boolean;
-    /** Phase H v1 only supports alias mode. */
-    mode?: string;
-    /** Explicit app-owned custom-property names to alias. */
-    tokens?: string[];
-    /** Optional app-owned prefix discovery. */
-    autoPrefix?: string;
-    /** Unsafe usage handling. */
-    onUnsafeUsage?: string;
-    /** Additional names or prefixes that must never be aliased. */
-    reserved?: string[];
-}
-
-/** Production config extension for the planned Phase H alias gate. */
-interface PhaseHProductionConfig {
-    /** Planned app-owned global custom-property alias config. */
-    mangleGlobalVars?: PhaseHGlobalVarMangleConfig;
 }
 
 /**
@@ -852,32 +834,8 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
  * @param options User plugin options.
  */
 function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
-    const production = options.production as
-        | (typeof options.production & PhaseHProductionConfig)
-        | undefined;
-    const config = production?.mangleGlobalVars;
-    const errors: string[] = [];
-    if (config?.mode !== undefined && config.mode !== 'alias') {
-        errors.push("production.mangleGlobalVars.mode only supports 'alias' in Phase H v1.");
-    }
-    if (config?.onUnsafeUsage !== undefined && config.onUnsafeUsage !== 'error') {
-        errors.push(
-            "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
-        );
-    }
-    if (
-        config?.autoPrefix !== undefined &&
-        config.autoPrefix !== '' &&
-        !config.autoPrefix.startsWith('--')
-    ) {
-        errors.push('production.mangleGlobalVars.autoPrefix must be empty or start with "--".');
-    }
-    if (config?.tokens?.some((token: string) => !token.startsWith('--'))) {
-        errors.push('production.mangleGlobalVars.tokens entries must start with "--".');
-    }
-    if (config?.reserved?.some((token: string) => !token.startsWith('--'))) {
-        errors.push('production.mangleGlobalVars.reserved entries must start with "--".');
-    }
+    const config = options.production?.mangleGlobalVars;
+    const errors = validateGlobalVarMangleConfig(config);
     if (errors.length > 0) {
         throw new Error(
             `[csszyx] Invalid production.mangleGlobalVars config:\n${errors.join('\n')}`,
