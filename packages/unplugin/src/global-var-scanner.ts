@@ -3,7 +3,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { type GlobalVarUsageDiagnostic, scanGlobalVarUsages } from '@csszyx/compiler';
-import postcss, { type AtRule, type ChildNode, type Root, type Rule } from 'postcss';
+import postcss, {
+    type AtRule,
+    type ChildNode,
+    type Declaration,
+    type Root,
+    type Rule,
+} from 'postcss';
+import valueParser from 'postcss-value-parser';
 
 /** Tailwind v4 @theme namespaces that Phase H must never alias. */
 export const TAILWIND_RESERVED_PREFIXES = [
@@ -199,6 +206,28 @@ export interface GlobalVarAliasValidationResult {
     usageDiagnostics: GlobalVarUsageDiagnostic[];
 }
 
+/** Options for rewriting CSS with a validated global variable alias plan. */
+export interface RewriteGlobalVarCssAliasesOptions {
+    /** CSS source text. */
+    css: string;
+    /** Validated alias plan. Diagnostics keep the rewrite as a no-op. */
+    plan: GlobalVarAliasPlan;
+    /** Source file path used by PostCSS diagnostics/source maps. */
+    filePath?: string;
+}
+
+/** Result of a pure global variable CSS alias rewrite. */
+export interface GlobalVarCssAliasRewriteResult {
+    /** Rewritten CSS source. */
+    css: string;
+    /** Number of alias declarations inserted. */
+    aliasDeclarations: number;
+    /** Number of `var(--token)` references rewritten. */
+    rewrittenReferences: number;
+    /** Planner diagnostics that prevented rewriting, when any. */
+    diagnostics: GlobalVarAliasDiagnostic[];
+}
+
 const VAR_REFERENCE_RE = /var\(\s*(--[\w-]+)/g;
 const DEFAULT_SCOPE_ID = '<root>';
 
@@ -346,6 +375,62 @@ export function validateGlobalVarAliasInputs(
 }
 
 /**
+ * Rewrites one CSS source with a validated global variable alias plan.
+ *
+ * This is intentionally pure M5 plumbing. It does not integrate with build
+ * hooks yet; callers must provide a fail-closed plan from `planGlobalVarAliases`.
+ *
+ * @param options Rewrite options.
+ * @returns Rewritten CSS and rewrite counters.
+ */
+export function rewriteGlobalVarCssAliases(
+    options: RewriteGlobalVarCssAliasesOptions,
+): GlobalVarCssAliasRewriteResult {
+    if (options.plan.diagnostics.length > 0 || options.plan.entries.length === 0) {
+        return {
+            css: options.css,
+            aliasDeclarations: 0,
+            rewrittenReferences: 0,
+            diagnostics: options.plan.diagnostics,
+        };
+    }
+
+    const root = postcss.parse(options.css, { from: options.filePath });
+    const aliasNames = new Set(options.plan.entries.map(entry => entry.alias));
+    let aliasDeclarations = 0;
+    let rewrittenReferences = 0;
+
+    root.walkDecls(decl => {
+        if (isInsideThemeAtRule(decl)) {
+            return;
+        }
+
+        const alias = options.plan.aliases.get(decl.prop);
+        if (alias && !hasSiblingDeclaration(decl, alias)) {
+            decl.cloneAfter({ prop: alias, value: `var(${decl.prop})` });
+            aliasDeclarations++;
+        }
+
+        if (options.plan.aliases.has(decl.prop) || aliasNames.has(decl.prop)) {
+            return;
+        }
+
+        const rewrite = rewriteGlobalVarValue(decl.value, options.plan.aliases);
+        if (rewrite.count > 0) {
+            decl.value = rewrite.value;
+            rewrittenReferences += rewrite.count;
+        }
+    });
+
+    return {
+        css: root.toString(),
+        aliasDeclarations,
+        rewrittenReferences,
+        diagnostics: [],
+    };
+}
+
+/**
  * Checks if a custom-property name is reserved by Tailwind v4.
  *
  * @param name Custom-property name.
@@ -466,6 +551,52 @@ function collectRegisteredProperties(root: Root): Set<string> {
         }
     });
     return registered;
+}
+
+/**
+ * Rewrites `var(--token)` references inside one declaration value.
+ *
+ * @param value CSS declaration value.
+ * @param aliases Original-to-alias custom-property names.
+ * @returns Rewritten value and rewrite count.
+ */
+function rewriteGlobalVarValue(
+    value: string,
+    aliases: ReadonlyMap<string, string>,
+): { value: string; count: number } {
+    const parsed = valueParser(value);
+    let count = 0;
+    parsed.walk(node => {
+        if (node.type !== 'function' || node.value.toLowerCase() !== 'var') {
+            return;
+        }
+        const firstArgument = node.nodes.find(child => child.type !== 'space');
+        if (!firstArgument || firstArgument.type !== 'word') {
+            return;
+        }
+        const alias = aliases.get(firstArgument.value);
+        if (!alias) {
+            return;
+        }
+        firstArgument.value = alias;
+        count++;
+    });
+    return { value: count > 0 ? valueParser.stringify(parsed.nodes) : value, count };
+}
+
+/**
+ * Checks whether a declaration block already contains a given property.
+ *
+ * @param decl Declaration whose siblings should be checked.
+ * @param prop Custom-property name to find.
+ * @returns true when the same parent already declares `prop`.
+ */
+function hasSiblingDeclaration(decl: Declaration, prop: string): boolean {
+    const parent = decl.parent;
+    if (!parent || !('nodes' in parent)) {
+        return false;
+    }
+    return parent.nodes.some(node => node.type === 'decl' && node.prop === prop);
 }
 
 /**

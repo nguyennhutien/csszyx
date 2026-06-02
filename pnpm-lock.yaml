@@ -454,6 +454,9 @@ importers:
       postcss-selector-parser:
         specifier: ^6.0.15
         version: 6.1.2
+      postcss-value-parser:
+        specifier: ^4.2.0
+        version: 4.2.0
       unplugin:
         specifier: ^1.10.1
         version: 1.16.1

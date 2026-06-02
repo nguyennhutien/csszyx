@@ -10,6 +10,7 @@ import {
     planGlobalVarAliases,
     readGlobalVarScanCache,
     resolveGlobalVarScanCacheDir,
+    rewriteGlobalVarCssAliases,
     scanGlobalVarCss,
     TAILWIND_RESERVED_PREFIXES,
     validateGlobalVarAliasInputs,
@@ -390,5 +391,136 @@ const App = () => <div style={{ '--brand-secondary': color }} />;
         } finally {
             rmSync(cacheRoot, { recursive: true, force: true });
         }
+    });
+});
+
+describe('rewriteGlobalVarCssAliases', () => {
+    it('emits aliases in declaration scopes and rewrites declaration var() references', () => {
+        const css = `
+:root {
+  --brand-primary: red;
+  --brand-secondary: blue;
+  color: var(--brand-primary);
+}
+
+@media (min-width: 768px) {
+  [data-theme='dark'] {
+    --brand-primary: cyan;
+  }
+  .card {
+    color: var(--brand-primary, var(--brand-secondary));
+  }
+}
+`;
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css, { filePath: '/repo/src/theme.css' })],
+            tokens: ['--brand-primary', '--brand-secondary'],
+        });
+
+        const result = rewriteGlobalVarCssAliases({ css, plan, filePath: '/repo/src/theme.css' });
+
+        expect(result.diagnostics).toEqual([]);
+        expect(result.aliasDeclarations).toBe(3);
+        expect(result.rewrittenReferences).toBe(3);
+        expect(result.css).toContain('--brand-primary: red;\n  --g0: var(--brand-primary);');
+        expect(result.css).toContain('--brand-secondary: blue;\n  --g1: var(--brand-secondary);');
+        expect(result.css).toContain('--brand-primary: cyan;\n    --g0: var(--brand-primary);');
+        expect(result.css).toContain('color: var(--g0);');
+        expect(result.css).toContain('color: var(--g0, var(--g1));');
+    });
+
+    it('does not rewrite when the alias plan has diagnostics', () => {
+        const css = ':root { --brand-primary: red; color: var(--brand-primary); }';
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css)],
+            tokens: ['--brand-primary'],
+        });
+        const invalidPlan = {
+            ...plan,
+            entries: [],
+            aliases: new Map<string, string>(),
+            diagnostics: [
+                {
+                    code: 'missing-definition' as const,
+                    severity: 'error' as const,
+                    name: '--missing',
+                    message: 'missing',
+                },
+            ],
+        };
+
+        const result = rewriteGlobalVarCssAliases({ css, plan: invalidPlan });
+
+        expect(result.css).toBe(css);
+        expect(result.aliasDeclarations).toBe(0);
+        expect(result.rewrittenReferences).toBe(0);
+        expect(result.diagnostics).toHaveLength(1);
+    });
+
+    it('skips Tailwind @theme blocks even when given a manual alias plan', () => {
+        const css = `
+@theme {
+  --brand-primary: red;
+  color: var(--brand-primary);
+}
+:root {
+  --brand-primary: blue;
+  color: var(--brand-primary);
+}
+`;
+        const plan = {
+            entries: [
+                { original: '--brand-primary', alias: '--g0', scopes: ['@theme', 'rule::root'] },
+            ],
+            aliases: new Map([['--brand-primary', '--g0']]),
+            diagnostics: [],
+        };
+
+        const result = rewriteGlobalVarCssAliases({ css, plan });
+
+        expect(result.aliasDeclarations).toBe(1);
+        expect(result.rewrittenReferences).toBe(1);
+        expect(result.css).toContain(
+            '@theme {\n  --brand-primary: red;\n  color: var(--brand-primary);',
+        );
+        expect(result.css).toContain(
+            ':root {\n  --brand-primary: blue;\n  --g0: var(--brand-primary);',
+        );
+        expect(result.css).toContain('color: var(--g0);');
+    });
+
+    it('is idempotent for alias declarations and rewritten references', () => {
+        const css = ':root { --brand-primary: red; color: var(--brand-primary); }';
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css)],
+            tokens: ['--brand-primary'],
+        });
+
+        const first = rewriteGlobalVarCssAliases({ css, plan });
+        const second = rewriteGlobalVarCssAliases({ css: first.css, plan });
+
+        expect(first.aliasDeclarations).toBe(1);
+        expect(first.rewrittenReferences).toBe(1);
+        expect(second.aliasDeclarations).toBe(0);
+        expect(second.rewrittenReferences).toBe(0);
+        expect(second.css).toBe(first.css);
+    });
+
+    it('leaves at-rule params untouched in the pure M5 slice', () => {
+        const css = `
+:root { --brand-breakpoint: 40rem; }
+@media (width > var(--brand-breakpoint)) {
+  .card { width: var(--brand-breakpoint); }
+}
+`;
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css)],
+            tokens: ['--brand-breakpoint'],
+        });
+
+        const result = rewriteGlobalVarCssAliases({ css, plan });
+
+        expect(result.css).toContain('@media (width > var(--brand-breakpoint))');
+        expect(result.css).toContain('width: var(--g0);');
     });
 });
