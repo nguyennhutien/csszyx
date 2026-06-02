@@ -104,6 +104,16 @@ export interface GlobalVarCodeSource {
     code: string;
 }
 
+/** CSS asset supplied by a bundler output hook. */
+export interface GlobalVarCssAssetSource {
+    /** CSS asset file name, relative to the build output or absolute. */
+    fileName: string;
+    /** CSS asset source contents. */
+    source: string | Uint8Array;
+    /** Source file mtime in milliseconds, used when cacheDir is set. */
+    mtimeMs?: number;
+}
+
 /** Options for scanning one CSS source. */
 export interface ScanGlobalVarCssOptions {
     /** File path used for diagnostics. */
@@ -171,6 +181,26 @@ export interface ValidateGlobalVarAliasInputsOptions {
     /** CSS sources that define or reference custom properties. */
     cssFiles: GlobalVarCssSource[];
     /** JS/TS/JSX/TSX sources to scan for out-of-band usage. */
+    sourceFiles?: GlobalVarCodeSource[];
+    /** Explicit app-owned custom-property names. */
+    tokens?: string[];
+    /** Optional app-owned prefix discovery. Empty string disables discovery. */
+    autoPrefix?: string;
+    /** Prefix for generated aliases. Defaults to `---g`. */
+    aliasPrefix?: string;
+    /** Additional reserved names or prefixes. Prefixes may end with `*`. */
+    reserved?: string[];
+    /** Optional global-var scan cache directory. */
+    cacheDir?: string;
+}
+
+/** Input for building validation options from bundler output state. */
+export interface CreateGlobalVarAliasValidationOptionsInput {
+    /** Project root used to normalize relative asset names. */
+    rootDir: string;
+    /** CSS assets emitted by the bundler. Non-CSS assets are ignored. */
+    cssAssets: GlobalVarCssAssetSource[];
+    /** Source files transformed or observed before bundling. */
     sourceFiles?: GlobalVarCodeSource[];
     /** Explicit app-owned custom-property names. */
     tokens?: string[];
@@ -367,6 +397,36 @@ export function validateGlobalVarAliasInputs(
     );
 
     return { scans, plan, usageDiagnostics };
+}
+
+/**
+ * Builds validation options from bundler CSS assets and observed source files.
+ *
+ * This keeps production hook wiring deterministic: the same normalized CSS asset
+ * inventory can feed fail-closed validation before any CSS/TSX rewrite mutates
+ * output.
+ *
+ * @param input Bundler output and user global-var alias config fields.
+ * @returns Normalized validation options.
+ */
+export function createGlobalVarAliasValidationOptions(
+    input: CreateGlobalVarAliasValidationOptionsInput,
+): ValidateGlobalVarAliasInputsOptions {
+    return {
+        cssFiles: input.cssAssets
+            .filter(asset => /\.css(?:$|\?)/.test(asset.fileName))
+            .map(asset => ({
+                filePath: normalizeBuildAssetPath(input.rootDir, asset.fileName),
+                css: cssAssetSourceToString(asset.source),
+                mtimeMs: asset.mtimeMs,
+            })),
+        sourceFiles: input.sourceFiles ?? [],
+        tokens: input.tokens,
+        autoPrefix: input.autoPrefix,
+        aliasPrefix: input.aliasPrefix,
+        reserved: input.reserved,
+        cacheDir: input.cacheDir,
+    };
 }
 
 /**
@@ -567,6 +627,30 @@ function scanCssSourceWithOptionalCache(
     const result = scanGlobalVarCss(file.css, { filePath: file.filePath });
     writeGlobalVarScanCache(cacheDir, key, result);
     return result;
+}
+
+/**
+ * Normalizes a build asset name to an absolute diagnostic path.
+ *
+ * @param rootDir Project root.
+ * @param fileName Asset file name from the bundler.
+ * @returns Absolute normalized file path.
+ */
+function normalizeBuildAssetPath(rootDir: string, fileName: string): string {
+    return (path.isAbsolute(fileName) ? fileName : path.join(rootDir, fileName)).replace(
+        /\\/g,
+        '/',
+    );
+}
+
+/**
+ * Converts a CSS asset source into UTF-8 text.
+ *
+ * @param source Bundler asset source.
+ * @returns CSS source text.
+ */
+function cssAssetSourceToString(source: string | Uint8Array): string {
+    return typeof source === 'string' ? source : Buffer.from(source).toString('utf8');
 }
 
 /**

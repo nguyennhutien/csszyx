@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+    createGlobalVarAliasValidationOptions,
     createGlobalVarScanCacheKey,
     isTailwindReservedGlobalVar,
     planGlobalVarAliases,
@@ -319,6 +320,51 @@ describe('global variable scan cache', () => {
         } finally {
             rmSync(cacheRoot, { recursive: true, force: true });
         }
+    });
+});
+
+describe('createGlobalVarAliasValidationOptions', () => {
+    it('normalizes bundler CSS assets into validation input', () => {
+        const options = createGlobalVarAliasValidationOptions({
+            rootDir: '/repo',
+            cssAssets: [
+                {
+                    fileName: 'assets/app.css',
+                    source: new TextEncoder().encode(':root { --brand-primary: red; }'),
+                    mtimeMs: 10,
+                },
+                {
+                    fileName: 'assets/app.js',
+                    source: 'const css = "--brand-primary";',
+                },
+            ],
+            sourceFiles: [
+                {
+                    filePath: '/repo/src/App.tsx',
+                    code: "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
+                },
+            ],
+            tokens: ['--brand-primary'],
+            aliasPrefix: '---g',
+            cacheDir: '/repo/.csszyx/cache/global-vars',
+        });
+
+        expect(options.cssFiles).toEqual([
+            {
+                filePath: '/repo/assets/app.css',
+                css: ':root { --brand-primary: red; }',
+                mtimeMs: 10,
+            },
+        ]);
+        expect(options.sourceFiles?.[0]?.filePath).toBe('/repo/src/App.tsx');
+        expect(options.tokens).toEqual(['--brand-primary']);
+        expect(options.aliasPrefix).toBe('---g');
+        expect(options.cacheDir).toBe('/repo/.csszyx/cache/global-vars');
+
+        const validation = validateGlobalVarAliasInputs(options);
+        expect(validation.plan.entries.map(entry => [entry.original, entry.alias])).toEqual([
+            ['--brand-primary', '---gz'],
+        ]);
     });
 });
 
