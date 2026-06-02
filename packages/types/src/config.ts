@@ -68,9 +68,9 @@ export interface ProductionConfig {
      *
      * This is the opt-in gate for the planned `g` tier. Phase H v1 is
      * alias-only: original public custom-property declarations remain
-     * defined, and csszyx-owned references may use short `--g*` aliases once
-     * the implementation ships. Unknown modes are rejected so rename mode
-     * cannot accidentally enter the public contract.
+     * defined, and csszyx-owned references may use short generated aliases once
+     * the implementation ships. Unknown modes are rejected so rename mode cannot
+     * accidentally enter the public contract.
      *
      * @default undefined (disabled)
      */
@@ -146,11 +146,22 @@ export interface GlobalVarMangleConfig {
      * Optional app-owned prefix discovery. Empty string disables prefix
      * discovery and requires explicit tokens.
      *
-     * This must not default to a Tailwind namespace or `--g*`.
+     * This must not default to a Tailwind namespace or the generated alias
+     * prefix.
      *
      * @default ""
      */
     autoPrefix?: string;
+
+    /**
+     * Prefix used for generated global aliases.
+     *
+     * Phase H v1 defaults to `--zg`, then appends csszyx's z-y-x encoder
+     * output: `--zgz`, `--zgy`, `--zgx`, ...
+     *
+     * @default "--zg"
+     */
+    aliasPrefix?: string;
 
     /**
      * Unsafe usage handling. Phase H v1 keeps this as error-only.
@@ -202,14 +213,43 @@ export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | un
     } else if (
         config.autoPrefix !== undefined &&
         config.autoPrefix !== '' &&
-        isCsszyxGlobalAliasCustomProperty(config.autoPrefix)
+        isCsszyxGlobalAliasCustomProperty(config.autoPrefix, resolveGlobalVarAliasPrefix(config))
     ) {
         errors.push(
-            `production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "${CSSZYX_GLOBAL_ALIAS_PREFIX}*".`,
+            `production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "${resolveGlobalVarAliasPrefix(config)}*".`,
+        );
+    }
+    if (
+        config.aliasPrefix !== undefined &&
+        (config.aliasPrefix === '' || !isValidCustomPropertyPrefix(config.aliasPrefix))
+    ) {
+        errors.push(
+            'production.mangleGlobalVars.aliasPrefix must be non-empty and start with "--".',
+        );
+    } else if (
+        config.aliasPrefix !== undefined &&
+        isTailwindReservedCustomProperty(config.aliasPrefix)
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.aliasPrefix cannot target Tailwind reserved namespace "${config.aliasPrefix}".`,
+        );
+    } else if (
+        config.autoPrefix !== undefined &&
+        config.autoPrefix !== '' &&
+        config.aliasPrefix !== undefined &&
+        prefixesOverlap(config.autoPrefix, config.aliasPrefix)
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.aliasPrefix "${config.aliasPrefix}" must not overlap autoPrefix "${config.autoPrefix}".`,
         );
     }
 
-    validateCustomPropertyList(config.tokens, 'tokens', errors);
+    validateCustomPropertyList(
+        config.tokens,
+        'tokens',
+        errors,
+        resolveGlobalVarAliasPrefix(config),
+    );
     validateCustomPropertyList(config.reserved, 'reserved', errors);
 
     return errors;
@@ -226,16 +266,39 @@ function isValidCustomPropertyPrefix(prefix: string): boolean {
 }
 
 /**
+ * Resolves the generated alias prefix.
+ *
+ * @param config User-provided global variable alias config.
+ * @returns Active alias prefix.
+ */
+function resolveGlobalVarAliasPrefix(config: GlobalVarMangleConfig): string {
+    return config.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+}
+
+/**
+ * Checks whether two custom-property prefixes overlap.
+ *
+ * @param left First prefix.
+ * @param right Second prefix.
+ * @returns true when either prefix can include the other.
+ */
+function prefixesOverlap(left: string, right: string): boolean {
+    return left.startsWith(right) || right.startsWith(left);
+}
+
+/**
  * Validates an optional list of custom-property names.
  *
  * @param values User-provided list.
  * @param field Field name for diagnostics.
  * @param errors Mutable error list.
+ * @param aliasPrefix Active generated alias prefix.
  */
 function validateCustomPropertyList(
     values: string[] | undefined,
     field: 'tokens' | 'reserved',
     errors: string[],
+    aliasPrefix = CSSZYX_GLOBAL_ALIAS_PREFIX,
 ): void {
     if (!values) {
         return;
@@ -251,7 +314,7 @@ function validateCustomPropertyList(
             );
             return;
         }
-        if (field === 'tokens' && isCsszyxGlobalAliasCustomProperty(value)) {
+        if (field === 'tokens' && isCsszyxGlobalAliasCustomProperty(value, aliasPrefix)) {
             errors.push(
                 `production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "${value}".`,
             );

@@ -22,8 +22,8 @@ export const TAILWIND_RESERVED_PREFIXES = [
     '--animate-',
 ] as const;
 
-/** csszyx Phase H generated global-alias namespace. */
-export const CSSZYX_GLOBAL_ALIAS_PREFIX = '--g';
+/** Default csszyx Phase H generated global-alias namespace. */
+export const CSSZYX_GLOBAL_ALIAS_PREFIX = '--zg';
 
 /**
  * Checks whether a custom-property name is in a Tailwind-owned theme namespace.
@@ -40,8 +40,12 @@ export function isTailwindReservedCustomProperty(name: string): boolean {
  * global-alias names.
  *
  * @param name Custom-property name including the leading `--`.
- * @returns true when the name belongs to csszyx's reserved `--g*` namespace.
+ * @param aliasPrefix Active generated alias prefix.
+ * @returns true when the name belongs to csszyx's reserved generated alias namespace.
  */
-export function isCsszyxGlobalAliasCustomProperty(name: string): boolean {
-    return name.startsWith(CSSZYX_GLOBAL_ALIAS_PREFIX);
+export function isCsszyxGlobalAliasCustomProperty(
+    name: string,
+    aliasPrefix: string = CSSZYX_GLOBAL_ALIAS_PREFIX,
+): boolean {
+    return name.startsWith(aliasPrefix);
 }

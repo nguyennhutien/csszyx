@@ -94,7 +94,7 @@ export interface CsszyxDebugHelpers {
     decodeVar(name: string): string[];
     /** Encode an original CSS custom property name to emitted name(s). */
     encodeVar(name: string): CssVariableMangleValue | undefined;
-    /** Decode a global `--g*` alias back to its original custom-property name. */
+    /** Decode a global alias back to its original custom-property name. */
     decodeGlobalVar(alias: string): string | undefined;
     /** Decode all classes on an element, preserving unknown classes. */
     decodeAll(element: Element): string[];

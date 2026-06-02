@@ -102,7 +102,7 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('rejects csszyx reserved global variable alias tokens before the Phase H gate', () => {
+    it('allows common --g app tokens outside the active generated alias prefix', () => {
         expect(() =>
             vitePlugin({
                 production: {
@@ -112,8 +112,21 @@ describe('csszyx parser selection', () => {
                     },
                 },
             }),
+        ).not.toThrow();
+    });
+
+    it('rejects csszyx reserved global variable alias tokens before the Phase H gate', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        tokens: ['--zg-token'],
+                    },
+                },
+            }),
         ).toThrow(
-            'production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "--gap"',
+            'production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "--zg-token"',
         );
     });
 
@@ -123,12 +136,54 @@ describe('csszyx parser selection', () => {
                 production: {
                     mangleGlobalVars: {
                         enabled: false,
-                        autoPrefix: '--g',
+                        autoPrefix: '--zg',
                     },
                 },
             }),
         ).toThrow(
-            'production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "--g*"',
+            'production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "--zg*"',
+        );
+    });
+
+    it('rejects invalid global variable aliasPrefix before the Phase H gate', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        aliasPrefix: 'zg',
+                    },
+                },
+            }),
+        ).toThrow('production.mangleGlobalVars.aliasPrefix must be non-empty and start with "--"');
+    });
+
+    it('rejects Tailwind and overlapping global variable aliasPrefix config', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        aliasPrefix: '--color-',
+                    },
+                },
+            }),
+        ).toThrow(
+            'production.mangleGlobalVars.aliasPrefix cannot target Tailwind reserved namespace "--color-"',
+        );
+
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: false,
+                        autoPrefix: '--brand-',
+                        aliasPrefix: '--brand-zg',
+                    },
+                },
+            }),
+        ).toThrow(
+            'production.mangleGlobalVars.aliasPrefix "--brand-zg" must not overlap autoPrefix "--brand-"',
         );
     });
 

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { type GlobalVarUsageDiagnostic, scanGlobalVarUsages } from '@csszyx/compiler';
+import { encode } from '@csszyx/core';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     isCsszyxGlobalAliasCustomProperty,
@@ -149,6 +150,8 @@ export interface PlanGlobalVarAliasesInput {
     tokens?: string[];
     /** Optional app-owned prefix discovery. Empty string disables discovery. */
     autoPrefix?: string;
+    /** Prefix for generated aliases. Defaults to `--zg`. */
+    aliasPrefix?: string;
     /** Additional reserved names or prefixes. Prefixes may end with `*`. */
     reserved?: string[];
 }
@@ -173,6 +176,8 @@ export interface ValidateGlobalVarAliasInputsOptions {
     tokens?: string[];
     /** Optional app-owned prefix discovery. Empty string disables discovery. */
     autoPrefix?: string;
+    /** Prefix for generated aliases. Defaults to `--zg`. */
+    aliasPrefix?: string;
     /** Additional reserved names or prefixes. Prefixes may end with `*`. */
     reserved?: string[];
     /** Optional global-var scan cache directory. */
@@ -279,7 +284,7 @@ export function scanGlobalVarCss(
 }
 
 /**
- * Plans deterministic `--g*` aliases for explicit app-owned tokens.
+ * Plans deterministic global aliases for explicit app-owned tokens.
  *
  * @param input Planner input.
  * @returns Alias plan or fail-closed diagnostics.
@@ -287,7 +292,13 @@ export function scanGlobalVarCss(
 export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVarAliasPlan {
     const definitions = flattenDefinitions(input.scans);
     const candidates = collectCandidates(input, definitions);
-    const diagnostics = validateCandidates(candidates, definitions, input.reserved ?? []);
+    const aliasPrefix = input.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+    const diagnostics = validateCandidates(
+        candidates,
+        definitions,
+        input.reserved ?? [],
+        aliasPrefix,
+    );
     if (diagnostics.length > 0) {
         return { entries: [], aliases: new Map(), diagnostics };
     }
@@ -295,7 +306,7 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
     const definitionNames = new Set(definitions.keys());
     const entries: GlobalVarAliasEntry[] = [];
     for (const [index, original] of candidates.entries()) {
-        const alias = `${CSSZYX_GLOBAL_ALIAS_PREFIX}${index}`;
+        const alias = `${aliasPrefix}${encode(index)}`;
         if (definitionNames.has(alias)) {
             return {
                 entries: [],
@@ -343,6 +354,7 @@ export function validateGlobalVarAliasInputs(
         scans,
         tokens: options.tokens,
         autoPrefix: options.autoPrefix,
+        aliasPrefix: options.aliasPrefix,
         reserved: options.reserved,
     });
     if (plan.diagnostics.length > 0 || plan.entries.length === 0) {
@@ -755,12 +767,14 @@ function collectCandidates(
  * @param candidates Candidate custom-property names.
  * @param definitions Definitions grouped by name.
  * @param reserved User reserved names or prefixes.
+ * @param aliasPrefix Active generated alias prefix.
  * @returns Fail-closed diagnostics.
  */
 function validateCandidates(
     candidates: string[],
     definitions: ReadonlyMap<string, CssVarDefinition[]>,
     reserved: string[],
+    aliasPrefix: string,
 ): GlobalVarAliasDiagnostic[] {
     const diagnostics: GlobalVarAliasDiagnostic[] = [];
     for (const name of candidates) {
@@ -783,12 +797,12 @@ function validateCandidates(
                 location: tokenDefinitions[0],
             });
         }
-        if (isCsszyxGlobalAliasCustomProperty(name)) {
+        if (isCsszyxGlobalAliasCustomProperty(name, aliasPrefix)) {
             diagnostics.push({
                 code: 'tailwind-reserved',
                 severity: 'error',
                 name,
-                message: `Global variable token ${name} uses csszyx reserved namespace ${CSSZYX_GLOBAL_ALIAS_PREFIX}* and cannot be aliased.`,
+                message: `Global variable token ${name} uses csszyx reserved namespace ${aliasPrefix}* and cannot be aliased.`,
                 location: tokenDefinitions[0],
             });
         }
