@@ -14,7 +14,7 @@ describe('html-transformer', () => {
     const sampleMap = { 'p-4': 'z', 'bg-red-500': 'y', 'text-white': 'x' };
     const sampleVarMap = { '--_sz-p': '--sz', '--_sz-m': '--sz' };
     const mixedTierVarMap = { '--_sz-p': ['--cz', '--sz'] };
-    const globalVarMap = { '--brand-primary': '--zgz', '--_sz-p': '--sz' };
+    const globalVarMap = { '--brand-primary': '---gz', '--_sz-p': '--sz' };
     const sampleChecksum = 'a1b2c3d4e5f67890';
 
     describe('injectChecksum', () => {
@@ -124,13 +124,13 @@ describe('html-transformer', () => {
             };
             new Function('window', 'document', debugScript ?? '')(win, doc);
 
-            expect(win.__csszyx?.decodeGlobalVar('--zgz')).toBe('--brand-primary');
+            expect(win.__csszyx?.decodeGlobalVar('---gz')).toBe('--brand-primary');
             expect(win.__csszyx?.decodeGlobalVar('--sz')).toBeUndefined();
         });
 
         it('should honor custom global variable alias prefixes in debug helpers', () => {
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
-                varMangleMap: { '--brand-primary': '--gxz', '--other': '--zgz' },
+                varMangleMap: { '--brand-primary': '--gxz', '--other': '---gz' },
                 globalVarAliasPrefix: '--gx',
             });
             const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
@@ -149,7 +149,7 @@ describe('html-transformer', () => {
             new Function('window', 'document', debugScript ?? '')(win, doc);
 
             expect(win.__csszyx?.decodeGlobalVar('--gxz')).toBe('--brand-primary');
-            expect(win.__csszyx?.decodeGlobalVar('--zgz')).toBeUndefined();
+            expect(win.__csszyx?.decodeGlobalVar('---gz')).toBeUndefined();
         });
     });
 

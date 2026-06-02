@@ -156,10 +156,10 @@ export interface GlobalVarMangleConfig {
     /**
      * Prefix used for generated global aliases.
      *
-     * Phase H v1 defaults to `--zg`, then appends csszyx's z-y-x encoder
-     * output: `--zgz`, `--zgy`, `--zgx`, ...
+     * Phase H v1 defaults to `---g`, then appends csszyx's z-y-x encoder
+     * output: `---gz`, `---gy`, `---gx`, ...
      *
-     * @default "--zg"
+     * @default "---g"
      */
     aliasPrefix?: string;
 

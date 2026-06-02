@@ -10,16 +10,16 @@ describe('extractGlobalVarAliasesForManifest', () => {
     it('keeps only active global aliases in stable original-name order', () => {
         expect(
             extractGlobalVarAliasesForManifest({
-                '--z-token': '--zgx',
+                '--z-token': '---gx',
                 '--_sz-p': '--sz',
-                '--brand-primary': '--zgz',
-                '--card-gap': ['--cz', '--zgy'],
+                '--brand-primary': '---gz',
+                '--card-gap': ['--cz', '---gy'],
                 '--component-local': ['--cz', '--sz'],
             }),
         ).toEqual({
-            '--brand-primary': '--zgz',
-            '--card-gap': '--zgy',
-            '--z-token': '--zgx',
+            '--brand-primary': '---gz',
+            '--card-gap': '---gy',
+            '--z-token': '---gx',
         });
     });
 
@@ -28,7 +28,7 @@ describe('extractGlobalVarAliasesForManifest', () => {
             extractGlobalVarAliasesForManifest(
                 {
                     '--brand-primary': '--gxz',
-                    '--default-prefix': '--zgz',
+                    '--default-prefix': '---gz',
                     '--component-local': ['--cz', '--sz'],
                 },
                 '--gx',
@@ -50,10 +50,10 @@ describe('extractGlobalVarAliasesForManifest', () => {
     it('serializes the standalone global var map asset only when aliases exist', () => {
         expect(
             createGlobalVarMapAssetSource({
-                '--brand-primary': '--zgz',
+                '--brand-primary': '---gz',
                 '--_sz-p': '--sz',
             }),
-        ).toBe('{"--brand-primary":"--zgz"}');
+        ).toBe('{"--brand-primary":"---gz"}');
         expect(createGlobalVarMapAssetSource({ '--_sz-p': '--sz' })).toBeNull();
     });
 

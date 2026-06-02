@@ -23,7 +23,7 @@ export const TAILWIND_RESERVED_PREFIXES = [
 ] as const;
 
 /** Default csszyx Phase H generated global-alias namespace. */
-export const CSSZYX_GLOBAL_ALIAS_PREFIX = '--zg';
+export const CSSZYX_GLOBAL_ALIAS_PREFIX = '---g';
 
 /**
  * Checks whether a custom-property name is in a Tailwind-owned theme namespace.

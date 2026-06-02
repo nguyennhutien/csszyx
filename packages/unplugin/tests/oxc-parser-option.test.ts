@@ -121,12 +121,12 @@ describe('csszyx parser selection', () => {
                 production: {
                     mangleGlobalVars: {
                         enabled: false,
-                        tokens: ['--zg-token'],
+                        tokens: ['---g-token'],
                     },
                 },
             }),
         ).toThrow(
-            'production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "--zg-token"',
+            'production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "---g-token"',
         );
     });
 
@@ -136,12 +136,12 @@ describe('csszyx parser selection', () => {
                 production: {
                     mangleGlobalVars: {
                         enabled: false,
-                        autoPrefix: '--zg',
+                        autoPrefix: '---g',
                     },
                 },
             }),
         ).toThrow(
-            'production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "--zg*"',
+            'production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "---g*"',
         );
     });
 

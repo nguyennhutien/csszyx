@@ -56,7 +56,7 @@ export interface TransformSourceCodeOptions {
     /**
      * Explicit app-owned global CSS custom-property aliases. Parser paths that
      * support Phase H rewrite exact static sz string values from original
-     * token names to aliases, for example `--brand-primary` -> `--zgz`.
+     * token names to aliases, for example `--brand-primary` -> `---gz`.
      */
     globalVarAliases?: GlobalVarAliasTableInput;
 }

@@ -150,7 +150,7 @@ export interface PlanGlobalVarAliasesInput {
     tokens?: string[];
     /** Optional app-owned prefix discovery. Empty string disables discovery. */
     autoPrefix?: string;
-    /** Prefix for generated aliases. Defaults to `--zg`. */
+    /** Prefix for generated aliases. Defaults to `---g`. */
     aliasPrefix?: string;
     /** Additional reserved names or prefixes. Prefixes may end with `*`. */
     reserved?: string[];
@@ -176,7 +176,7 @@ export interface ValidateGlobalVarAliasInputsOptions {
     tokens?: string[];
     /** Optional app-owned prefix discovery. Empty string disables discovery. */
     autoPrefix?: string;
-    /** Prefix for generated aliases. Defaults to `--zg`. */
+    /** Prefix for generated aliases. Defaults to `---g`. */
     aliasPrefix?: string;
     /** Additional reserved names or prefixes. Prefixes may end with `*`. */
     reserved?: string[];

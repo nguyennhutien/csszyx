@@ -151,16 +151,16 @@ describe('planGlobalVarAliases', () => {
         expect(plan.entries).toEqual([
             {
                 original: '--brand-primary',
-                alias: '--zgz',
+                alias: '---gz',
                 scopes: ['rule::root', "rule:[data-theme='dark']"],
             },
             {
                 original: '--brand-secondary',
-                alias: '--zgy',
+                alias: '---gy',
                 scopes: ['rule::root'],
             },
         ]);
-        expect(plan.aliases.get('--brand-primary')).toBe('--zgz');
+        expect(plan.aliases.get('--brand-primary')).toBe('---gz');
     });
 
     it('discovers candidates by app-owned autoPrefix', () => {
@@ -178,8 +178,8 @@ describe('planGlobalVarAliases', () => {
         });
 
         expect(plan.entries.map(entry => [entry.original, entry.alias])).toEqual([
-            ['--brand-primary', '--zgz'],
-            ['--brand-secondary', '--zgy'],
+            ['--brand-primary', '---gz'],
+            ['--brand-secondary', '---gy'],
         ]);
     });
 
@@ -218,8 +218,8 @@ describe('planGlobalVarAliases', () => {
   --brand-angle: 10deg;
   --brand-primary: red;
   --gap: 1rem;
-  --zg-token: 1rem;
-  --zgz: already-taken;
+  ---g-token: 1rem;
+  ---gz: already-taken;
 }
 `);
 
@@ -231,7 +231,7 @@ describe('planGlobalVarAliases', () => {
         expect(collision.diagnostics).toEqual([
             expect.objectContaining({
                 code: 'alias-collision',
-                name: '--zgz',
+                name: '---gz',
             }),
         ]);
 
@@ -243,7 +243,7 @@ describe('planGlobalVarAliases', () => {
                 '--brand-theme',
                 '--brand-angle',
                 '--brand-primary',
-                '--zg-token',
+                '---g-token',
             ],
         });
         expect(invalid.entries).toEqual([]);
@@ -254,7 +254,7 @@ describe('planGlobalVarAliases', () => {
                 ['tailwind-owned', '--color-primary'],
                 ['tailwind-owned', '--brand-theme'],
                 ['missing-definition', '--missing'],
-                ['tailwind-reserved', '--zg-token'],
+                ['tailwind-reserved', '---g-token'],
             ]),
         );
         expect(invalid.diagnostics).toHaveLength(6);
@@ -351,8 +351,8 @@ const App = () => <div style={{ '--brand-secondary': color }} />;
         });
 
         expect(result.plan.entries.map(entry => [entry.original, entry.alias])).toEqual([
-            ['--brand-primary', '--zgz'],
-            ['--brand-secondary', '--zgy'],
+            ['--brand-primary', '---gz'],
+            ['--brand-secondary', '---gy'],
         ]);
         expect(
             result.usageDiagnostics.map(diagnostic => [diagnostic.kind, diagnostic.name]),
@@ -364,7 +364,7 @@ const App = () => <div style={{ '--brand-secondary': color }} />;
 
     it('does not scan source files when CSS planning fails', () => {
         const result = validateGlobalVarAliasInputs({
-            cssFiles: [{ filePath: '/repo/src/tokens.css', css: ':root { --zgz: red; }' }],
+            cssFiles: [{ filePath: '/repo/src/tokens.css', css: ':root { ---gz: red; }' }],
             sourceFiles: [
                 {
                     filePath: '/repo/src/theme.tsx',
@@ -410,7 +410,7 @@ const App = () => <div style={{ '--brand-secondary': color }} />;
                 tokens: ['--brand-primary'],
             });
 
-            expect(first.plan.entries[0]?.alias).toBe('--zgz');
+            expect(first.plan.entries[0]?.alias).toBe('---gz');
             expect(second.scans[0]?.definitions[0]?.name).toBe('--brand-primary');
         } finally {
             rmSync(cacheRoot, { recursive: true, force: true });
@@ -446,11 +446,11 @@ describe('rewriteGlobalVarCssAliases', () => {
         expect(result.diagnostics).toEqual([]);
         expect(result.aliasDeclarations).toBe(3);
         expect(result.rewrittenReferences).toBe(3);
-        expect(result.css).toContain('--brand-primary: red;\n  --zgz: var(--brand-primary);');
-        expect(result.css).toContain('--brand-secondary: blue;\n  --zgy: var(--brand-secondary);');
-        expect(result.css).toContain('--brand-primary: cyan;\n    --zgz: var(--brand-primary);');
-        expect(result.css).toContain('color: var(--zgz);');
-        expect(result.css).toContain('color: var(--zgz, var(--zgy));');
+        expect(result.css).toContain('--brand-primary: red;\n  ---gz: var(--brand-primary);');
+        expect(result.css).toContain('--brand-secondary: blue;\n  ---gy: var(--brand-secondary);');
+        expect(result.css).toContain('--brand-primary: cyan;\n    ---gz: var(--brand-primary);');
+        expect(result.css).toContain('color: var(---gz);');
+        expect(result.css).toContain('color: var(---gz, var(---gy));');
     });
 
     it('does not rewrite when the alias plan has diagnostics', () => {
@@ -548,7 +548,7 @@ describe('rewriteGlobalVarCssAliases', () => {
 
         expect(result.aliasDeclarations).toBe(1);
         expect(result.rewrittenReferences).toBe(0);
-        expect(result.css).toContain('--brand-primary: red;\n  --zgz: var(--brand-primary);');
+        expect(result.css).toContain('--brand-primary: red;\n  ---gz: var(--brand-primary);');
         expect(result.css).toContain('color: var(--brand-primary);');
     });
 
@@ -567,6 +567,6 @@ describe('rewriteGlobalVarCssAliases', () => {
         const result = rewriteGlobalVarCssAliases({ css, plan });
 
         expect(result.css).toContain('@media (width > var(--brand-breakpoint))');
-        expect(result.css).toContain('width: var(--zgz);');
+        expect(result.css).toContain('width: var(---gz);');
     });
 });
