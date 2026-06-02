@@ -100,7 +100,7 @@ describe('transform cache', () => {
         expect(cached?.cssVariableMap.get('--_sz-p')).toEqual(['--cz', '--sz']);
     });
 
-    it('misses when source, version, parser, producer, budget, mangleVars, hoist depth, or filename changes', () => {
+    it('misses when source, version, parser, producer, budget, mangle options, aliases, or filename changes', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input({ astBudget: 50_000 }), result());
 
@@ -114,11 +114,44 @@ describe('transform cache', () => {
         expect(readTransformCache(cacheRoot, input({ mangleVars: true }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ mangleVarHoistMaxDepth: 3 }))).toBeNull();
         expect(
+            readTransformCache(
+                cacheRoot,
+                input({
+                    globalVarAliases: [
+                        ['--color-brand', '--g0'],
+                        ['--space-card', '--g1'],
+                    ],
+                }),
+            ),
+        ).toBeNull();
+        expect(
             readTransformCache(cacheRoot, input({ filename: '/repo/src/Other.tsx' })),
         ).toBeNull();
         expect(
             readTransformCache(cacheRoot, input({ filename: '\\repo\\src\\App.tsx' })),
         ).toBeNull();
+    });
+
+    it('uses a stable cache key for reordered global variable aliases', () => {
+        const first = createTransformCacheKey(
+            input({
+                globalVarAliases: [
+                    ['--space-card', '--g1'],
+                    ['--color-brand', '--g0'],
+                ],
+            }),
+        );
+        const second = createTransformCacheKey(
+            input({
+                globalVarAliases: [
+                    ['--color-brand', '--g0'],
+                    ['--space-card', '--g1'],
+                ],
+            }),
+        );
+
+        expect(first.key).toBe(second.key);
+        expect(first.inputSha256).toBe(second.inputSha256);
     });
 
     it('writes entries atomically without leaving tmp files on success', () => {
@@ -129,7 +162,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":5');
+        expect(content).toContain('"version":6');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
