@@ -295,7 +295,7 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
     const definitionNames = new Set(definitions.keys());
     const entries: GlobalVarAliasEntry[] = [];
     for (const [index, original] of candidates.entries()) {
-        const alias = `--g${index}`;
+        const alias = `${CSSZYX_GLOBAL_ALIAS_PREFIX}${index}`;
         if (definitionNames.has(alias)) {
             return {
                 entries: [],
