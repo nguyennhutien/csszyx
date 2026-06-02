@@ -247,6 +247,19 @@ export function extractGlobalVarAliasesForManifest(
 }
 
 /**
+ * Serializes the standalone global-var map asset when g-tier aliases exist.
+ *
+ * @param varMangleMap CSS variable mangle metadata.
+ * @returns JSON asset contents, or null when there are no global aliases.
+ */
+export function createGlobalVarMapAssetSource(
+    varMangleMap: Record<string, CssVariableMangleValue>,
+): string | null {
+    const aliases = extractGlobalVarAliasesForManifest(varMangleMap);
+    return Object.keys(aliases).length > 0 ? JSON.stringify(aliases) : null;
+}
+
+/**
  * Validates the CSS variable mangle map before it is emitted into HTML/assets.
  *
  * @param varMangleMap CSS variable mangle map.
@@ -2165,6 +2178,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             'csszyx-manifest.json',
                             new compiler.webpack.sources.RawSource(JSON.stringify(manifestData)),
                         );
+                        const globalVarMapAsset = createGlobalVarMapAssetSource(state.varMangleMap);
+                        if (globalVarMapAsset) {
+                            compilation.emitAsset(
+                                '.csszyx/global-var-map.json',
+                                new compiler.webpack.sources.RawSource(globalVarMapAsset),
+                            );
+                        }
 
                         for (const file in assets) {
                             const asset = assets[file];
@@ -2310,6 +2330,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     fileName: 'csszyx-manifest.json',
                     source: JSON.stringify(manifestData),
                 });
+                const globalVarMapAsset = createGlobalVarMapAssetSource(state.varMangleMap);
+                if (globalVarMapAsset) {
+                    this.emitFile({
+                        type: 'asset',
+                        fileName: '.csszyx/global-var-map.json',
+                        source: globalVarMapAsset,
+                    });
+                }
 
                 for (const file in bundle) {
                     const chunk = bundle[file];
