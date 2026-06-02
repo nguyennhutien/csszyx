@@ -71,6 +71,36 @@ export interface MangleMap {
 }
 
 /**
+ * CSS variable mangle map values. One original variable can point to multiple
+ * emitted names when scoped and hoisted variables coexist.
+ */
+export type CssVariableMangleValue = string | string[];
+
+/**
+ * Debug helper object injected as `window.__csszyx` by the unplugin.
+ */
+export interface CsszyxDebugHelpers {
+    /** Original class name to mangled class name. */
+    mangleMap: MangleMap;
+    /** Original CSS custom property to emitted custom property name(s). */
+    varMangleMap: Record<string, CssVariableMangleValue>;
+    /** Mangle-map checksum emitted on the root HTML element. */
+    checksum: string;
+    /** Decode a mangled class name back to the original class name. */
+    decode(className: string): string | undefined;
+    /** Encode an original class name to the mangled class name. */
+    encode(className: string): string | undefined;
+    /** Decode any emitted CSS custom property name back to original names. */
+    decodeVar(name: string): string[];
+    /** Encode an original CSS custom property name to emitted name(s). */
+    encodeVar(name: string): CssVariableMangleValue | undefined;
+    /** Decode a global `--g*` alias back to its original custom-property name. */
+    decodeGlobalVar(alias: string): string | undefined;
+    /** Decode all classes on an element, preserving unknown classes. */
+    decodeAll(element: Element): string[];
+}
+
+/**
  * Mangle map metadata.
  */
 export interface MangleMapMetadata {
@@ -299,6 +329,11 @@ export interface CsszyxWindow extends Window {
      * Debug mode flag
      */
     __SZ_DEBUG__?: boolean;
+
+    /**
+     * Debug helpers injected by csszyx build output.
+     */
+    __csszyx?: CsszyxDebugHelpers;
 }
 
 /**

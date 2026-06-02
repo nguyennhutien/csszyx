@@ -66,6 +66,8 @@ export type { SzProps, SzPropValue } from './jsx.js';
 export type {
     AuditLogEntry,
     ComponentPropsWithSz,
+    CssVariableMangleValue,
+    CsszyxDebugHelpers,
     CsszyxWindow,
     HydrationError,
     HydrationErrorType,
