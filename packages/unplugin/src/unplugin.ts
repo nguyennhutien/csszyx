@@ -34,6 +34,14 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 import { mangleCSSSync } from './css-mangler.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
+    createGlobalVarAliasValidationOptions,
+    type GlobalVarAliasValidationResult,
+    type GlobalVarCodeSource,
+    type GlobalVarCssAssetSource,
+    resolveGlobalVarScanCacheDir,
+    validateGlobalVarAliasInputs,
+} from './global-var-scanner.js';
+import {
     buildRecoveryManifest,
     createHydrationMangleMap,
     transformIndexHtml as injectHydrationData,
@@ -225,6 +233,86 @@ function recordGlobalVarSourceFile(
         state.globalVarSourceFilesByFile.delete(normalizedFilename);
     } else {
         state.globalVarSourceFilesByFile.set(normalizedFilename, code);
+    }
+}
+
+/**
+ * Builds stable source-file diagnostics input in filename order.
+ *
+ * @param state Plugin state to read.
+ * @returns Source files for global-var validation.
+ */
+function buildGlobalVarSourceFiles(
+    state: Pick<PluginState, 'globalVarSourceFilesByFile'>,
+): GlobalVarCodeSource[] {
+    return [...state.globalVarSourceFilesByFile.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([filePath, code]) => ({ filePath, code }));
+}
+
+/**
+ *
+ */
+interface RollupBundleAssetLike {
+    type: string;
+    fileName?: string;
+    source?: unknown;
+}
+
+/**
+ * Extracts CSS assets from a Rollup/Vite output bundle for pure global-var
+ * validation before output mutation.
+ *
+ * @param bundle Rollup output bundle.
+ * @returns CSS assets in stable file-name order.
+ */
+function collectRollupGlobalVarCssAssets(
+    bundle: Record<string, RollupBundleAssetLike>,
+): GlobalVarCssAssetSource[] {
+    return Object.values(bundle)
+        .filter(
+            (
+                chunk,
+            ): chunk is RollupBundleAssetLike & {
+                fileName: string;
+                source: string | Uint8Array;
+            } =>
+                chunk.type === 'asset' &&
+                typeof chunk.fileName === 'string' &&
+                /\.css(?:$|\?)/.test(chunk.fileName) &&
+                (typeof chunk.source === 'string' || chunk.source instanceof Uint8Array),
+        )
+        .sort((left, right) => left.fileName.localeCompare(right.fileName))
+        .map(asset => ({
+            fileName: asset.fileName,
+            source: asset.source,
+        }));
+}
+
+/**
+ * Fails closed when the pure global-var validation pipeline reports unresolved
+ * CSS planning diagnostics or out-of-band source usages.
+ *
+ * @param result Global-var validation result.
+ */
+function assertNoGlobalVarAliasValidationErrors(result: GlobalVarAliasValidationResult): void {
+    const messages = [
+        ...result.plan.diagnostics.map(diagnostic => {
+            const location = diagnostic.location
+                ? ` (${diagnostic.location.filePath}:${diagnostic.location.line}:${diagnostic.location.column})`
+                : '';
+            return `[${diagnostic.code}] ${diagnostic.name}${location}: ${diagnostic.message}`;
+        }),
+        ...result.usageDiagnostics.map(diagnostic => {
+            const location = diagnostic.location;
+            return `[${diagnostic.kind}] ${diagnostic.name} (${location.filePath}:${location.line}:${location.column}): ${diagnostic.message}`;
+        }),
+    ];
+
+    if (messages.length > 0) {
+        throw new Error(
+            `[csszyx] production.mangleGlobalVars validation failed:\n${messages.join('\n')}`,
+        );
     }
 }
 
@@ -967,8 +1055,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
     const cacheEnabled = cacheRequested && cacheVersionsKnown;
     const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
-    const globalVarAliasPrefix =
-        options.production?.mangleGlobalVars?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+    const globalVarMangleConfig = options.production?.mangleGlobalVars;
+    const globalVarAliasPrefix = globalVarMangleConfig?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
         console.warn(
@@ -1023,6 +1111,47 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function isUserIncluded(id: string): boolean {
         return !options.include || matchesAnyPattern(id, options.include, state.rootDir);
+    }
+
+    /**
+     * Resolves the scan cache directory for pure global-var validation.
+     *
+     * @returns Cache directory when build cache is enabled.
+     */
+    function resolveGlobalVarValidationCacheDir(): string | undefined {
+        if (!cacheEnabled) {
+            return undefined;
+        }
+        const cacheRoot = path.resolve(
+            state.rootDir,
+            options.build?.cacheDir ?? DEFAULT_BUILD_CONFIG.cacheDir ?? '.csszyx/cache',
+        );
+        return resolveGlobalVarScanCacheDir(cacheRoot);
+    }
+
+    /**
+     * Validates CSS assets and observed source files before global-var output
+     * rewriting is allowed to mutate a production bundle.
+     *
+     * @param cssAssets Bundler CSS assets.
+     */
+    function validateGlobalVarBundleInputs(cssAssets: GlobalVarCssAssetSource[]): void {
+        if (globalVarMangleConfig?.enabled !== true) {
+            return;
+        }
+        const result = validateGlobalVarAliasInputs(
+            createGlobalVarAliasValidationOptions({
+                rootDir: state.rootDir,
+                cssAssets,
+                sourceFiles: buildGlobalVarSourceFiles(state),
+                tokens: globalVarMangleConfig.tokens,
+                autoPrefix: globalVarMangleConfig.autoPrefix,
+                aliasPrefix: globalVarAliasPrefix,
+                reserved: globalVarMangleConfig.reserved,
+                cacheDir: resolveGlobalVarValidationCacheDir(),
+            }),
+        );
+        assertNoGlobalVarAliasValidationErrors(result);
     }
 
     /**
@@ -2370,6 +2499,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             generateBundle(_options, bundle) {
                 finalizeMangleMap();
+                validateGlobalVarBundleInputs(collectRollupGlobalVarCssAssets(bundle));
 
                 // Emit CSS manifest for @csszyx/dynamic delta check.
                 // Lists all original class names (and mangle map if mangling enabled)
