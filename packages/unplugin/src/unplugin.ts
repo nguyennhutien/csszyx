@@ -88,6 +88,8 @@ interface PluginState {
     recoveryTokens: Map<string, TokenData>;
     /** RSC graph records collected from transformed TS/JS modules. */
     rscModules: Map<string, RSCModuleRecord>;
+    /** Source files observed by the transform hook for global-var diagnostics. */
+    globalVarSourceFilesByFile: Map<string, string>;
 }
 
 /** CSS variable mangling and hoisting metrics emitted for debugging. */
@@ -200,6 +202,30 @@ function recordFileVarMangleEntries(
         state.varMangleEntriesByFile.set(normalizedFilename, entries);
     }
     state.varMangleMap = buildVarMangleMap(state.varMangleEntriesByFile);
+}
+
+/**
+ * Records source text available before bundling/minification for Phase H
+ * global-var diagnostics.
+ *
+ * @param state Plugin state to update.
+ * @param filename Source filename that owns the text.
+ * @param code Source text, or null to clear this file.
+ */
+function recordGlobalVarSourceFile(
+    state: Pick<PluginState, 'globalVarSourceFilesByFile'>,
+    filename: string,
+    code: string | null,
+): void {
+    const normalizedFilename = normalizeSourceFilename(filename);
+    if (!/\.[tj]sx?(?:\?.*)?$/.test(normalizedFilename)) {
+        return;
+    }
+    if (code === null) {
+        state.globalVarSourceFilesByFile.delete(normalizedFilename);
+    } else {
+        state.globalVarSourceFilesByFile.set(normalizedFilename, code);
+    }
 }
 
 /**
@@ -970,6 +996,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         rootDir: process.cwd(),
         recoveryTokens: new Map<string, TokenData>(),
         rscModules: new Map<string, RSCModuleRecord>(),
+        globalVarSourceFilesByFile: new Map<string, string>(),
     };
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
@@ -1749,6 +1776,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
                     return null;
                 }
+                if (shouldProcessSource(id)) {
+                    recordGlobalVarSourceFile(state, id, code);
+                }
 
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
                     assertNoRSCBoundaryViolation(code, id);
@@ -1970,6 +2000,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             watchChange(id, change) {
                 if (change.event === 'delete') {
                     deleteRSCModuleRecord(state.rscModules, id);
+                    recordGlobalVarSourceFile(state, id, null);
                     recordFileVarMangleEntries(state, id, []);
                     recordFileCSSVariableMetrics(state, id, null);
                 }
@@ -2049,6 +2080,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) {
+                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
@@ -2063,18 +2095,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             performance.now() - hmrTransformStarted,
                         );
                     } catch {
+                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     if (!result.transformed) {
+                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     const sizeBefore = state.classes.size;
+                    recordGlobalVarSourceFile(state, ctx.file, fileContent);
                     for (const cls of result.classes) {
                         state.classes.add(cls);
                     }
