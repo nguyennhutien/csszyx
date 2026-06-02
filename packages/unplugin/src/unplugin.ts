@@ -221,6 +221,32 @@ function buildVarMangleMap(
 }
 
 /**
+ * Extracts Phase H global custom-property aliases for manifest/debug tooling.
+ *
+ * The legacy `varMangleMap` also carries dynamic s/c-tier CSS variables. This
+ * helper keeps manifest consumers from guessing tiers by exposing only `--g*`
+ * aliases as original-to-alias pairs.
+ *
+ * @param varMangleMap CSS variable mangle metadata.
+ * @returns Original global variable names mapped to their `--g*` aliases.
+ */
+export function extractGlobalVarAliasesForManifest(
+    varMangleMap: Record<string, CssVariableMangleValue>,
+): Record<string, string> {
+    const aliases: Record<string, string> = {};
+    for (const [original, value] of Object.entries(varMangleMap).sort(([left], [right]) =>
+        left.localeCompare(right),
+    )) {
+        const values = Array.isArray(value) ? value : [value];
+        const alias = values.find(candidate => candidate.startsWith('--g'));
+        if (alias) {
+            aliases[original] = alias;
+        }
+    }
+    return aliases;
+}
+
+/**
  * Validates the CSS variable mangle map before it is emitted into HTML/assets.
  *
  * @param varMangleMap CSS variable mangle map.
@@ -2109,6 +2135,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             classes: string[];
                             mangleMap?: Record<string, string>;
                             varMangleMap?: Record<string, CssVariableMangleValue>;
+                            globalVarAliases?: Record<string, string>;
                             cssVarMetrics?: CSSVariableMetrics;
                         } = {
                             version: '0.4.0',
@@ -2124,6 +2151,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         }
                         if (Object.keys(state.varMangleMap).length > 0) {
                             manifestData.varMangleMap = state.varMangleMap;
+                        }
+                        const globalVarAliases = extractGlobalVarAliasesForManifest(
+                            state.varMangleMap,
+                        );
+                        if (Object.keys(globalVarAliases).length > 0) {
+                            manifestData.globalVarAliases = globalVarAliases;
                         }
                         if (hasCSSVariableMetrics(state.cssVarMetrics)) {
                             manifestData.cssVarMetrics = state.cssVarMetrics;
@@ -2252,6 +2285,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     classes: string[];
                     mangleMap?: Record<string, string>;
                     varMangleMap?: Record<string, CssVariableMangleValue>;
+                    globalVarAliases?: Record<string, string>;
                     cssVarMetrics?: CSSVariableMetrics;
                 } = {
                     version: '0.4.0',
@@ -2263,6 +2297,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
                 if (Object.keys(state.varMangleMap).length > 0) {
                     manifestData.varMangleMap = state.varMangleMap;
+                }
+                const globalVarAliases = extractGlobalVarAliasesForManifest(state.varMangleMap);
+                if (Object.keys(globalVarAliases).length > 0) {
+                    manifestData.globalVarAliases = globalVarAliases;
                 }
                 if (hasCSSVariableMetrics(state.cssVarMetrics)) {
                     manifestData.cssVarMetrics = state.cssVarMetrics;
