@@ -39,6 +39,7 @@ import {
     type GlobalVarCodeSource,
     type GlobalVarCssAssetSource,
     resolveGlobalVarScanCacheDir,
+    rewriteGlobalVarCssAliases,
     validateGlobalVarAliasInputs,
 } from './global-var-scanner.js';
 import {
@@ -348,6 +349,38 @@ function assertNoGlobalVarAliasValidationErrors(result: GlobalVarAliasValidation
             `[csszyx] production.mangleGlobalVars validation failed:\n${messages.join('\n')}`,
         );
     }
+}
+
+/**
+ * Rewrites a CSS asset with the already validated global-var alias plan.
+ *
+ * @param css CSS asset source.
+ * @param filePath CSS asset path for diagnostics.
+ * @param result Validated global-var result for this output hook.
+ * @returns Rewritten CSS, or the original source when no plan is active.
+ */
+function rewriteCssWithValidatedGlobalVarPlan(
+    css: string,
+    filePath: string,
+    result: GlobalVarAliasValidationResult | null,
+): string {
+    if (result === null || result.plan.entries.length === 0) {
+        return css;
+    }
+    const rewrite = rewriteGlobalVarCssAliases({
+        css,
+        plan: result.plan,
+        filePath,
+    });
+    assertNoGlobalVarAliasValidationErrors({
+        scans: result.scans,
+        plan: {
+            ...result.plan,
+            diagnostics: rewrite.diagnostics,
+        },
+        usageDiagnostics: [],
+    });
+    return rewrite.css;
 }
 
 /**
@@ -2436,23 +2469,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             const asset = assets[file];
                             const source = asset.source().toString();
 
-                            if (
-                                manglingEnabled &&
-                                !isWebpackDevMode &&
-                                Object.keys(state.mangleMap).length > 0
-                            ) {
-                                if (file.endsWith('.css')) {
+                            if (file.endsWith('.css')) {
+                                let css = rewriteCssWithValidatedGlobalVarPlan(
+                                    source,
+                                    file,
+                                    state.globalVarValidationResult,
+                                );
+                                if (
+                                    manglingEnabled &&
+                                    !isWebpackDevMode &&
+                                    Object.keys(state.mangleMap).length > 0
+                                ) {
                                     try {
-                                        const result = mangleCSSSync(source, state.mangleMap, {
+                                        const result = mangleCSSSync(css, state.mangleMap, {
                                             debug: options.development?.debug,
                                             from: file,
                                         });
                                         if (result.transformedCount > 0) {
-                                            compilation.updateAsset(
-                                                file,
-                                                new compiler.webpack.sources.RawSource(result.css),
-                                            );
-                                            continue;
+                                            css = result.css;
                                         }
                                     } catch (e: unknown) {
                                         if (
@@ -2466,7 +2500,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                             throw e;
                                         }
                                     }
-                                } else if (file.endsWith('.html')) {
+                                }
+                                if (css !== source) {
+                                    compilation.updateAsset(
+                                        file,
+                                        new compiler.webpack.sources.RawSource(css),
+                                    );
+                                }
+                                continue;
+                            }
+
+                            if (
+                                manglingEnabled &&
+                                !isWebpackDevMode &&
+                                Object.keys(state.mangleMap).length > 0
+                            ) {
+                                if (file.endsWith('.html')) {
                                     // Mangle class attributes in HTML assets (SSR-generated pages)
                                     const mangledHtml = source
                                         .replace(
@@ -2597,16 +2646,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 for (const file in bundle) {
                     const chunk = bundle[file];
 
-                    if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                        if (chunk.type === 'asset' && chunk.fileName.endsWith('.css')) {
-                            const css = chunk.source.toString();
+                    if (chunk.type === 'asset' && chunk.fileName.endsWith('.css')) {
+                        const originalCss = chunk.source.toString();
+                        let css = rewriteCssWithValidatedGlobalVarPlan(
+                            originalCss,
+                            file,
+                            state.globalVarValidationResult,
+                        );
+                        if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
                             try {
                                 const result = mangleCSSSync(css, state.mangleMap, {
                                     debug: options.development?.debug,
                                     from: file,
                                 });
                                 if (result.transformedCount > 0) {
-                                    chunk.source = result.css;
+                                    css = result.css;
                                 }
                             } catch (e: unknown) {
                                 if (
@@ -2620,8 +2674,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     throw e;
                                 }
                             }
-                            continue;
-                        } else if (chunk.type === 'chunk') {
+                        }
+                        if (css !== originalCss) {
+                            chunk.source = css;
+                        }
+                        continue;
+                    }
+
+                    if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                        if (chunk.type === 'chunk') {
                             let mangledCode = mangleCodeClasses(chunk.code);
                             mangledCode = replacePlaceholders(mangledCode);
                             if (mangledCode !== chunk.code) {
