@@ -98,6 +98,8 @@ interface PluginState {
     rscModules: Map<string, RSCModuleRecord>;
     /** Source files observed by the transform hook for global-var diagnostics. */
     globalVarSourceFilesByFile: Map<string, string>;
+    /** Last validated global-var alias result for the current output hook. */
+    globalVarValidationResult: GlobalVarAliasValidationResult | null;
 }
 
 /** CSS variable mangling and hoisting metrics emitted for debugging. */
@@ -1117,6 +1119,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         recoveryTokens: new Map<string, TokenData>(),
         rscModules: new Map<string, RSCModuleRecord>(),
         globalVarSourceFilesByFile: new Map<string, string>(),
+        globalVarValidationResult: null,
     };
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
@@ -1166,10 +1169,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * rewriting is allowed to mutate a production bundle.
      *
      * @param cssAssets Bundler CSS assets.
+     * @returns Validated global-var result when the feature is enabled.
      */
-    function validateGlobalVarBundleInputs(cssAssets: GlobalVarCssAssetSource[]): void {
+    function validateGlobalVarBundleInputs(
+        cssAssets: GlobalVarCssAssetSource[],
+    ): GlobalVarAliasValidationResult | null {
         if (globalVarMangleConfig?.enabled !== true) {
-            return;
+            return null;
         }
         const result = validateGlobalVarAliasInputs(
             createGlobalVarAliasValidationOptions({
@@ -1184,6 +1190,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }),
         );
         assertNoGlobalVarAliasValidationErrors(result);
+        return result;
     }
 
     /**
@@ -2363,7 +2370,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     },
                     assets => {
                         finalizeMangleMap();
-                        validateGlobalVarBundleInputs(collectWebpackGlobalVarCssAssets(assets));
+                        state.globalVarValidationResult = validateGlobalVarBundleInputs(
+                            collectWebpackGlobalVarCssAssets(assets),
+                        );
 
                         // Webpack dev mode wraps every module in eval("..."), which means
                         // className:"..." strings become className:\"...\" inside the eval.
@@ -2532,7 +2541,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             generateBundle(_options, bundle) {
                 finalizeMangleMap();
-                validateGlobalVarBundleInputs(collectRollupGlobalVarCssAssets(bundle));
+                state.globalVarValidationResult = validateGlobalVarBundleInputs(
+                    collectRollupGlobalVarCssAssets(bundle),
+                );
 
                 // Emit CSS manifest for @csszyx/dynamic delta check.
                 // Lists all original class names (and mangle map if mangling enabled)
