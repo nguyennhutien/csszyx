@@ -3,3 +3,5 @@ node = "22.22.1"
 pnpm = "10.32.1"
 rust = "1.93.0"
 "npm:@anthropic-ai/claude-code" = "latest"
+"cargo:cocogitto" = "7.0.0"
+
