@@ -31,7 +31,7 @@ interface ExtractedSnippet {
 }
 
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
-    parity: 128,
+    parity: 129,
     'rust-ahead': 4,
     'code-divergence': 2,
     'class-divergence': 0,
@@ -48,7 +48,7 @@ describe('Rust native engine — extracted compiler corpus', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(134);
+        expect(snippets).toHaveLength(135);
     });
 
     it('matches the current Rust-vs-oxc category summary', () => {

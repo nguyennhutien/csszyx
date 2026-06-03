@@ -1,9 +1,18 @@
 {
   "name": "@csszyx/vue-adapter",
   "version": "0.9.0",
-  "private": true,
+  "private": false,
   "description": "Vue SFC preprocessor for csszyx - transform sz props to className",
   "license": "MIT",
+  "homepage": "https://github.com/nguyennhutien/csszyx/tree/main/packages/vue-adapter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/vue-adapter"
+  },
+  "bugs": {
+    "url": "https://github.com/nguyennhutien/csszyx/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "types": "./dist/index.d.mts",
