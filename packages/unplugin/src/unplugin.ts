@@ -571,6 +571,19 @@ function createEarlyGlobalVarAliasEntries(
 }
 
 /**
+ * Checks whether csszyx should emit the standalone global-var map asset.
+ *
+ * `csszyx-manifest.json` still carries `globalVarAliases`; this controls only
+ * the dedicated `.csszyx/global-var-map.json` tooling file.
+ *
+ * @param config User global-var mangle config.
+ * @returns true when the standalone map should be emitted.
+ */
+function shouldEmitGlobalVarMapAsset(config: GlobalVarMangleConfig | undefined): boolean {
+    return config?.emitMap !== false;
+}
+
+/**
  * Validates the CSS variable mangle map before it is emitted into HTML/assets.
  *
  * @param varMangleMap CSS variable mangle map.
@@ -2573,16 +2586,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             'csszyx-manifest.json',
                             new compiler.webpack.sources.RawSource(JSON.stringify(manifestData)),
                         );
-                        const globalVarMapAsset = createGlobalVarMapAssetSource(
-                            state.varMangleMap,
-                            globalVarAliasPrefix,
-                            state.globalVarValidationResult,
-                        );
-                        if (globalVarMapAsset) {
-                            compilation.emitAsset(
-                                '.csszyx/global-var-map.json',
-                                new compiler.webpack.sources.RawSource(globalVarMapAsset),
+                        if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
+                            const globalVarMapAsset = createGlobalVarMapAssetSource(
+                                state.varMangleMap,
+                                globalVarAliasPrefix,
+                                state.globalVarValidationResult,
                             );
+                            if (globalVarMapAsset) {
+                                compilation.emitAsset(
+                                    '.csszyx/global-var-map.json',
+                                    new compiler.webpack.sources.RawSource(globalVarMapAsset),
+                                );
+                            }
                         }
 
                         for (const file in assets) {
@@ -2752,17 +2767,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     fileName: 'csszyx-manifest.json',
                     source: JSON.stringify(manifestData),
                 });
-                const globalVarMapAsset = createGlobalVarMapAssetSource(
-                    state.varMangleMap,
-                    globalVarAliasPrefix,
-                    state.globalVarValidationResult,
-                );
-                if (globalVarMapAsset) {
-                    this.emitFile({
-                        type: 'asset',
-                        fileName: '.csszyx/global-var-map.json',
-                        source: globalVarMapAsset,
-                    });
+                if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
+                    const globalVarMapAsset = createGlobalVarMapAssetSource(
+                        state.varMangleMap,
+                        globalVarAliasPrefix,
+                        state.globalVarValidationResult,
+                    );
+                    if (globalVarMapAsset) {
+                        this.emitFile({
+                            type: 'asset',
+                            fileName: '.csszyx/global-var-map.json',
+                            source: globalVarMapAsset,
+                        });
+                    }
                 }
 
                 for (const file in bundle) {

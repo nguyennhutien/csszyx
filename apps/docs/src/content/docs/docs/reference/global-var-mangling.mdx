@@ -24,6 +24,7 @@ csszyx({
       mode: 'alias',
       tokens: ['--brand-primary', '--brand-primary-hover'],
       onUnsafeUsage: 'error',
+      emitMap: true,
     },
   },
 });
@@ -66,6 +67,11 @@ Runtime fallback `sz={expr}` shapes are not aliased in Phase H v1. They remain
 correct because alias mode keeps the original custom properties defined, but
 they should not be counted as optimized references in size or performance
 reports.
+
+`emitMap` controls only the standalone `.csszyx/global-var-map.json` tooling
+asset. Leave it enabled when external tools need a dedicated original-to-alias
+map. Set `emitMap: false` to avoid that extra file; `csszyx-manifest.json`
+still includes `globalVarAliases`.
 
 ## When to Use
 

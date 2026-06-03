@@ -162,6 +162,11 @@ export default defineConfig({
                                 process.env.CSSZYX_BENCH_MANGLE_GLOBAL_VARS === '1'
                                     ? {
                                             enabled: true,
+                                            emitMap:
+                                                process.env
+                                                    .CSSZYX_BENCH_NO_GLOBAL_VAR_MAP === '1'
+                                                    ? false
+                                                    : undefined,
                                             tokens: docsLandingGlobalVarTokens,
                                         }
                                     : undefined,

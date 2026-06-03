@@ -144,6 +144,7 @@ interface GlobalVarMangleConfig {
   autoPrefix?: string;
   onUnsafeUsage?: 'error';
   reserved?: string[];
+  emitMap?: boolean;
 }
 ```
 
@@ -167,6 +168,9 @@ design surface.
 It is default-off, accepts only `mode: 'alias'`, and must not remove original
 CSS custom-property names. `autoPrefix` remains disabled until csszyx can build
 the same alias table before source transforms and CSS output validation.
+Set `emitMap: false` only when the standalone `.csszyx/global-var-map.json`
+tooling asset is not needed; `csszyx-manifest.json` still includes
+`globalVarAliases` when aliases exist.
 
 ### `build`
 

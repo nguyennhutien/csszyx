@@ -25,7 +25,7 @@ import { extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
-type BenchMode = 'mangle-vars-off' | 'mangle-vars-on' | 'global-vars-on';
+type BenchMode = 'mangle-vars-off' | 'mangle-vars-on' | 'global-vars-on' | 'global-vars-no-map';
 type AssetGroup = 'all' | 'runtime' | 'html' | 'js' | 'css' | 'tooling' | 'other';
 
 interface AssetStats {
@@ -75,6 +75,7 @@ const rows = [
     runBuildCase('mangle-vars-off'),
     runBuildCase('mangle-vars-on'),
     runBuildCase('global-vars-on'),
+    runBuildCase('global-vars-no-map'),
 ];
 const payload: ReportPayload = {
     generated: new Date().toISOString(),
@@ -105,7 +106,9 @@ function runBuildCase(mode: BenchMode): BenchRow {
         env: {
             ...process.env,
             CSSZYX_BENCH_MANGLE_VARS: mode === 'mangle-vars-on' ? '1' : '0',
-            CSSZYX_BENCH_MANGLE_GLOBAL_VARS: mode === 'global-vars-on' ? '1' : '0',
+            CSSZYX_BENCH_MANGLE_GLOBAL_VARS:
+                mode === 'global-vars-on' || mode === 'global-vars-no-map' ? '1' : '0',
+            CSSZYX_BENCH_NO_GLOBAL_VAR_MAP: mode === 'global-vars-no-map' ? '1' : '0',
             CSSZYX_PARSER: 'rust',
             NODE_ENV: 'production',
         },
@@ -133,7 +136,9 @@ function runBuildCase(mode: BenchMode): BenchRow {
                 ? 'Rust parser build with CSSZYX_BENCH_MANGLE_VARS=1.'
                 : mode === 'global-vars-on'
                   ? 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1.'
-                  : 'Rust parser build with CSS variable optimizations left disabled.',
+                  : mode === 'global-vars-no-map'
+                    ? 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1 and standalone global-var map disabled.'
+                    : 'Rust parser build with CSS variable optimizations left disabled.',
     };
 }
 
@@ -299,9 +304,11 @@ function renderReport(payload: ReportPayload): string {
     const off = payload.rows.find(row => row.mode === 'mangle-vars-off');
     const mangleVarsOn = payload.rows.find(row => row.mode === 'mangle-vars-on');
     const globalVarsOn = payload.rows.find(row => row.mode === 'global-vars-on');
+    const globalVarsNoMap = payload.rows.find(row => row.mode === 'global-vars-no-map');
     const summary = [
         renderSummary('mangle-vars-on', off, mangleVarsOn),
         renderSummary('global-vars-on', off, globalVarsOn),
+        renderSummary('global-vars-no-map', off, globalVarsNoMap),
     ].join('\n');
 
     return `# Docs CSS Variable Output Size Benchmark
@@ -336,6 +343,10 @@ ${payload.rows.flatMap(renderRows).join('\n')}
 - The \`global-vars-on\` row is enabled only by
   \`CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1\`; docs production config still keeps
   \`production.mangleGlobalVars\` unset by default.
+- The \`global-vars-no-map\` row also disables the standalone
+  \`.csszyx/global-var-map.json\` asset via
+  \`CSSZYX_BENCH_NO_GLOBAL_VAR_MAP=1\`; the manifest still carries
+  \`globalVarAliases\`.
 - Raw bytes show emitted artifact size. Gzip and brotli bytes better approximate
   transfer size and are the gating numbers for any future default flip.
 - The \`runtime\` group excludes only \`.csszyx/global-var-map.json\`; the

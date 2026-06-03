@@ -107,6 +107,10 @@ build. Alias mode preserves the original custom-property names, rewrites static
 `sz` references and CSS `var(--token)` references, and does not optimize runtime
 fallback `sz={expr}` shapes.
 
+`emitMap` defaults to `true` and emits `.csszyx/global-var-map.json` for tooling.
+Set it to `false` only when the standalone map file is not needed; the build
+manifest still carries `globalVarAliases`.
+
 The reserved namespace list is exported as `TAILWIND_RESERVED_PREFIXES`, with
 `isTailwindReservedCustomProperty(name)` for validation. It follows Tailwind's
 theme variable namespace documentation. If Tailwind adds a new namespace, update

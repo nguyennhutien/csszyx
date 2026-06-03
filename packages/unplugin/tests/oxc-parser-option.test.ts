@@ -216,6 +216,45 @@ describe('csszyx parser selection', () => {
         );
     });
 
+    it('can skip the standalone global variable map asset', () => {
+        const [prePlugin, postPlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: {
+                mangleGlobalVars: {
+                    enabled: true,
+                    emitMap: false,
+                    tokens: ['--brand-primary'],
+                },
+            },
+        }) as [TransformHook, GenerateBundleHook];
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
+            '/repo/src/App.tsx',
+        );
+        const emitFile = vi.fn();
+        const bundle = {
+            'assets/app.css': {
+                type: 'asset',
+                fileName: 'assets/app.css',
+                source: ':root{--brand-primary:red}.card{color:var(--brand-primary)}',
+            },
+        };
+
+        postPlugin.generateBundle.call({ emitFile }, {}, bundle);
+
+        const emittedAssets = emitFile.mock.calls.map(([asset]) => asset);
+        expect(emittedAssets).toContainEqual(
+            expect.objectContaining({
+                fileName: 'csszyx-manifest.json',
+                source: expect.stringContaining('"globalVarAliases":{"--brand-primary":"---gz"}'),
+            }),
+        );
+        expect(emittedAssets).not.toContainEqual(
+            expect.objectContaining({ fileName: '.csszyx/global-var-map.json' }),
+        );
+    });
+
     it('rejects Tailwind reserved global variable alias tokens before the Phase H gate', () => {
         expect(() =>
             vitePlugin({

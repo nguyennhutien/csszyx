@@ -178,6 +178,16 @@ export interface GlobalVarMangleConfig {
      * @default []
      */
     reserved?: string[];
+
+    /**
+     * Emit the standalone `.csszyx/global-var-map.json` tooling asset.
+     *
+     * `csszyx-manifest.json` still includes `globalVarAliases` when aliases
+     * exist, so disabling this only removes the extra dedicated map file.
+     *
+     * @default true
+     */
+    emitMap?: boolean;
 }
 
 /**

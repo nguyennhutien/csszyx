@@ -21,6 +21,7 @@ describe('CSS variable system config contract', () => {
         expect(typesConfig).toContain('mangleGlobalVars?: GlobalVarMangleConfig;');
         expect(typesConfig).toContain('mode?: GlobalVarMangleMode;');
         expect(typesConfig).toContain('onUnsafeUsage?: GlobalVarUnsafeUsageMode;');
+        expect(typesConfig).toContain('emitMap?: boolean;');
         expect(typesConfig).toContain('@default false');
         expect(typesConfig).toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleVars:\s*false,/);
         expect(typesConfig).toMatch(/DEFAULT_PRODUCTION_CONFIG[\s\S]*mangleVarHoistMaxDepth:\s*5,/);
@@ -30,6 +31,7 @@ describe('CSS variable system config contract', () => {
         expect(configDocs).toContain('mangleGlobalVars?: GlobalVarMangleConfig;');
         expect(configDocs).toContain("mode?: 'alias';");
         expect(configDocs).toContain("onUnsafeUsage?: 'error';");
+        expect(configDocs).toContain('emitMap?: boolean;');
         expect(configDocs).toMatch(/\| `mangleVars`\s+\| `false`/);
         expect(configDocs).toMatch(/\| `mangleVarHoistMaxDepth`\s+\| `5`/);
         expect(configDocs).toMatch(/\| `mangleGlobalVars`\s+\| `undefined`/);
