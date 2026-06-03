@@ -6,6 +6,7 @@
  * Usage:
  *   pnpm bench:global-vars
  *   pnpm bench:global-vars -- --sizes 100,1000 --iterations 7 --warmups 3
+ *   pnpm bench:global-vars -- --production-build --production-build-sizes 2,20
  */
 
 import {
@@ -46,6 +47,8 @@ interface CliOptions {
     outDir: string;
     /** Include a temporary Vite production build fixture. */
     productionBuild: boolean;
+    /** Token counts for temporary Vite production build fixtures. */
+    productionBuildSizes: number[];
 }
 
 interface BenchRow {
@@ -150,6 +153,7 @@ function parseCliOptions(args: string[]): CliOptions {
         warmups: 2,
         outDir: '.agent/reports',
         productionBuild: false,
+        productionBuildSizes: [20],
     };
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
@@ -171,6 +175,12 @@ function parseCliOptions(args: string[]): CliOptions {
             index++;
         } else if (arg === '--production-build') {
             options.productionBuild = true;
+        } else if (arg === '--production-build-sizes' && next) {
+            options.productionBuildSizes = next
+                .split(',')
+                .map(value => Number.parseInt(value, 10))
+                .filter(value => Number.isFinite(value) && value > 0);
+            index++;
         }
     }
     return options;
@@ -197,16 +207,18 @@ async function runBench(options: CliOptions): Promise<BenchRow[]> {
         }),
     );
     if (options.productionBuild) {
-        rows.push(
-            await measureCase({
-                name: 'global-vars/vite-production-build/explicit-tokens',
-                tokens: 2,
-                iterations: Math.max(1, Math.min(options.iterations, 3)),
-                warmups: Math.min(options.warmups, 1),
-                run: runViteProductionBuildPipeline,
-                note: 'Programmatic Vite production build pair: disabled build plus explicit-token alias build through the real unplugin hooks.',
-            }),
-        );
+        for (const size of options.productionBuildSizes) {
+            rows.push(
+                await measureCase({
+                    name: `global-vars/${size}/vite-production-build/explicit-tokens`,
+                    tokens: size,
+                    iterations: Math.max(1, Math.min(options.iterations, 3)),
+                    warmups: Math.min(options.warmups, 1),
+                    run: () => runViteProductionBuildPipeline(size),
+                    note: 'Programmatic Vite production build pair: disabled build plus explicit-token alias build through the real unplugin hooks.',
+                }),
+            );
+        }
     }
     return rows;
 }
@@ -320,10 +332,11 @@ function runPipeline(fixture: Fixture): OutputMetrics {
  * Runs a temporary Vite production build fixture with global aliases disabled
  * and enabled, then compares emitted artifact sizes.
  *
+ * @param size Token count for the temporary fixture.
  * @returns output metrics.
  */
-async function runViteProductionBuildPipeline(): Promise<OutputMetrics> {
-    const output = await runViteProductionBuildPair();
+async function runViteProductionBuildPipeline(size: number): Promise<OutputMetrics> {
+    const output = await runViteProductionBuildPair(size);
     return {
         inputBytes: 0,
         disabledBytes: byteLength(output.disabledOutput),
@@ -343,15 +356,17 @@ async function runViteProductionBuildPipeline(): Promise<OutputMetrics> {
 /**
  * Builds one temporary Vite app twice: disabled and explicit-token alias mode.
  *
+ * @param size Token count for the temporary fixture.
  * @returns build output text and alias counters.
  */
-async function runViteProductionBuildPair(): Promise<ProductionBuildOutput> {
-    const root = createViteProductionFixture();
+async function runViteProductionBuildPair(size: number): Promise<ProductionBuildOutput> {
+    const fixture = createFixture(size);
+    const root = createViteProductionFixture(fixture);
     try {
         const disabledDir = join(root, 'dist-disabled');
         const aliasDir = join(root, 'dist-alias');
-        await runViteBuild(root, disabledDir, false);
-        await runViteBuild(root, aliasDir, true);
+        await runViteBuild(root, disabledDir, false, fixture.tokens);
+        await runViteBuild(root, aliasDir, true, fixture.tokens);
         const disabledOutput = readOutputBlob(disabledDir);
         const aliasOutput = readOutputBlob(aliasDir);
         if (!aliasOutput.includes('---gz') || !aliasOutput.includes('var(---gz)')) {
@@ -373,9 +388,10 @@ async function runViteProductionBuildPair(): Promise<ProductionBuildOutput> {
 /**
  * Creates a temporary Vite React fixture with explicit global token usage.
  *
+ * @param fixture Synthetic source/CSS fixture.
  * @returns fixture root.
  */
-function createViteProductionFixture(): string {
+function createViteProductionFixture(fixture: Fixture): string {
     const root = mkdtempSync(join(tmpdir(), 'csszyx-global-var-vite-'));
     const src = join(root, 'src');
     mkdirSync(src, { recursive: true });
@@ -390,26 +406,12 @@ function createViteProductionFixture(): string {
             "import React from 'react';",
             "import { createRoot } from 'react-dom/client';",
             "import './theme.css';",
-            'function App() {',
-            '  return (',
-            '    <main>',
-            "      <section sz={{ bg: '--brand-primary', color: '--brand-secondary' }} />",
-            "      <article sz={{ borderColor: '--brand-primary' }} />",
-            '    </main>',
-            '  );',
-            '}',
+            fixture.source,
             "createRoot(document.getElementById('root')!).render(<App />);",
         ].join('\n'),
         'utf8',
     );
-    writeFileSync(
-        join(src, 'theme.css'),
-        [
-            ':root{--brand-primary:#0ea5e9;--brand-secondary:#111827}',
-            '.card{color:var(--brand-primary);background:var(--brand-secondary)}',
-        ].join('\n'),
-        'utf8',
-    );
+    writeFileSync(join(src, 'theme.css'), fixture.css, 'utf8');
     return root;
 }
 
@@ -419,8 +421,14 @@ function createViteProductionFixture(): string {
  * @param root fixture root.
  * @param outDir output directory.
  * @param enabled whether explicit global aliases are enabled.
+ * @param tokens explicit global-var tokens.
  */
-async function runViteBuild(root: string, outDir: string, enabled: boolean): Promise<void> {
+async function runViteBuild(
+    root: string,
+    outDir: string,
+    enabled: boolean,
+    tokens: string[],
+): Promise<void> {
     await viteBuild({
         root,
         logLevel: 'silent',
@@ -444,7 +452,7 @@ async function runViteBuild(root: string, outDir: string, enabled: boolean): Pro
                     mangleGlobalVars: enabled
                         ? {
                               enabled: true,
-                              tokens: ['--brand-primary', '--brand-secondary'],
+                              tokens,
                           }
                         : undefined,
                 },
@@ -590,7 +598,7 @@ ${rows}
 
 - Pure pipeline rows scan CSS, plan aliases, rewrite CSS, transform TSX without
   aliases, and transform TSX with aliases using the same plan.
-${hasProductionRows ? '- Vite production rows are temporary fixture builds enabled by `--production-build`; they validate real unplugin build hooks, but the tiny fixture is not a product-size savings claim.\n' : '- Run with `--production-build` to add a temporary Vite production fixture that validates real unplugin build hooks.\n'}- Wall-time rows include the full measured callback for that case. The Vite
+${hasProductionRows ? '- Vite production rows are temporary fixture builds enabled by `--production-build`; they validate real unplugin build hooks, but the synthetic fixture is not a product-size savings claim.\n' : '- Run with `--production-build` to add a temporary Vite production fixture that validates real unplugin build hooks.\n'}- Wall-time rows include the full measured callback for that case. The Vite
   production row measures a disabled build plus an explicit-token alias build.
 - Negative byte deltas mean alias mode is smaller than disabled mode. Positive
   deltas mean alias declarations cost more than the source/CSS reference
