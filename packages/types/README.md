@@ -52,7 +52,7 @@ import type {
   CsszyxConfig, // Main configuration interface
   DevelopmentConfig, // Development mode options
   ProductionConfig, // Production mode options
-  GlobalVarMangleConfig, // Planned global CSS variable alias options
+  GlobalVarMangleConfig, // Global CSS variable alias options
   BuildConfig, // Build pipeline options
   HydrationConfig, // Hydration safety options
   PerformanceConfig, // Performance optimization options
@@ -78,7 +78,10 @@ const userConfig: PartialCsszyxConfig = {
   },
   production: {
     mangle: true,
-    mangleGlobalVars: { enabled: false },
+    mangleGlobalVars: {
+      enabled: true,
+      tokens: ["--brand-primary"],
+    },
   },
 };
 
@@ -94,9 +97,10 @@ const config: CsszyxConfig = {
 
 #### Global Variable Alias Safety
 
-`production.mangleGlobalVars` is reserved for the Phase H global custom-property
-alias pipeline. Tailwind-owned `@theme` namespaces are rejected by shared config
-validation and must not be passed in `tokens` or `autoPrefix`.
+`production.mangleGlobalVars` aliases explicit app-owned custom-property
+`tokens` in Phase H v1. Tailwind-owned `@theme` namespaces are rejected by
+shared config validation and must not be passed in `tokens` or `autoPrefix`.
+`autoPrefix` remains blocked until CSS pre-scan support exists.
 
 The reserved namespace list is exported as `TAILWIND_RESERVED_PREFIXES`, with
 `isTailwindReservedCustomProperty(name)` for validation. It follows Tailwind's

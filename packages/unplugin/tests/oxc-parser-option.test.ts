@@ -9,6 +9,14 @@ type TransformHook = {
     transform: (this: { warn: (message: string) => void }, code: string, id: string) => unknown;
 };
 
+type GenerateBundleHook = {
+    generateBundle: (
+        this: { emitFile: (asset: unknown) => void },
+        options: unknown,
+        bundle: Record<string, unknown>,
+    ) => void;
+};
+
 const ORIGINAL_ENV = process.env.CSSZYX_PARSER;
 const ORIGINAL_VAR_MAP_MAX_BYTES = process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES;
 
@@ -57,19 +65,109 @@ describe('csszyx parser selection', () => {
         ).toThrow("production.mangleGlobalVars.mode only supports 'alias'");
     });
 
-    it('rejects enabled global variable alias config until Phase H ships', () => {
+    it('rejects enabled global variable alias config without explicit tokens', () => {
         expect(() =>
             vitePlugin({
                 production: {
                     mangleGlobalVars: {
                         enabled: true,
                         mode: 'alias',
-                        tokens: ['--brand-primary'],
                         onUnsafeUsage: 'error',
                     },
                 },
             }),
-        ).toThrow('production.mangleGlobalVars is planned for Phase H but is not implemented yet');
+        ).toThrow('production.mangleGlobalVars.enabled requires explicit tokens');
+    });
+
+    it('rejects enabled global variable autoPrefix until CSS pre-scan support exists', () => {
+        expect(() =>
+            vitePlugin({
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        tokens: ['--brand-primary'],
+                        autoPrefix: '--brand-',
+                    },
+                },
+            }),
+        ).toThrow('production.mangleGlobalVars.autoPrefix requires CSS pre-scan support');
+    });
+
+    it('threads explicit global variable aliases into source transforms', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: {
+                mangleGlobalVars: {
+                    enabled: true,
+                    tokens: ['--brand-primary'],
+                },
+            },
+        }) as TransformHook[];
+
+        const result = prePlugin.transform.call(
+            { warn: vi.fn() },
+            "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
+            '/repo/src/App.tsx',
+        ) as { code: string };
+
+        expect(result.code).toContain('className="bg-(---gz)"');
+        expect(result.code).not.toContain('bg-(--brand-primary)');
+    });
+
+    it('rewrites CSS assets with the validated explicit global variable alias plan', () => {
+        const [prePlugin, postPlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: {
+                mangleGlobalVars: {
+                    enabled: true,
+                    tokens: ['--brand-primary'],
+                },
+            },
+        }) as [TransformHook, GenerateBundleHook];
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
+            '/repo/src/App.tsx',
+        );
+        const bundle = {
+            'assets/app.css': {
+                type: 'asset',
+                fileName: 'assets/app.css',
+                source: ':root{--brand-primary:red}.card{color:var(--brand-primary)}',
+            },
+        };
+
+        postPlugin.generateBundle.call({ emitFile: vi.fn() }, {}, bundle);
+
+        const css = String((bundle['assets/app.css'] as { source: string }).source);
+        expect(css).toContain('---gz:var(--brand-primary)');
+        expect(css).toContain('color:var(---gz)');
+    });
+
+    it('fails closed when explicit global variable tokens are missing from emitted CSS', () => {
+        const [, postPlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: {
+                mangleGlobalVars: {
+                    enabled: true,
+                    tokens: ['--brand-primary'],
+                },
+            },
+        }) as [TransformHook, GenerateBundleHook];
+
+        expect(() =>
+            postPlugin.generateBundle.call(
+                { emitFile: vi.fn() },
+                {},
+                {
+                    'assets/app.css': {
+                        type: 'asset',
+                        fileName: 'assets/app.css',
+                        source: '.card{color:red}',
+                    },
+                },
+            ),
+        ).toThrow('Global variable token --brand-primary is not defined in scanned CSS');
     });
 
     it('rejects Tailwind reserved global variable alias tokens before the Phase H gate', () => {

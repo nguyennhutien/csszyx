@@ -66,11 +66,11 @@ export interface ProductionConfig {
     /**
      * Alias stable app-owned global CSS custom properties.
      *
-     * This is the opt-in gate for the planned `g` tier. Phase H v1 is
-     * alias-only: original public custom-property declarations remain
-     * defined, and csszyx-owned references may use short generated aliases once
-     * the implementation ships. Unknown modes are rejected so rename mode cannot
-     * accidentally enter the public contract.
+     * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
+     * original public custom-property declarations remain defined, and
+     * csszyx-owned references may use short generated aliases. Explicit
+     * `tokens` are supported first; `autoPrefix` remains blocked until CSS
+     * pre-scan support exists.
      *
      * @default undefined (disabled)
      */

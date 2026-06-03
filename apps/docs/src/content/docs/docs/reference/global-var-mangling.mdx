@@ -1,17 +1,18 @@
 ---
 title: Global Variable Mangling
-description: Planned alias-only config for app-owned global CSS custom properties.
+description: Alias-only config for app-owned global CSS custom properties.
 ---
 
-:::caution[Planned feature]
-`production.mangleGlobalVars` is reserved for the Phase H global variable tier.
-It is intentionally blocked at build time until the alias pipeline ships.
+:::caution[Opt-in]
+`production.mangleGlobalVars` is default-off and only supports explicit
+`tokens` in Phase H v1. `autoPrefix` remains blocked until CSS pre-scan support
+exists.
 :::
 
-Global variable mangling is planned as an opt-in way to shorten repeated
-app-owned CSS custom property references. Phase H v1 is **alias-only**:
-original public custom-property names remain defined, and csszyx-owned
-references may use short `--g*` aliases after the implementation ships.
+Global variable mangling is an opt-in way to shorten repeated app-owned CSS
+custom property references. Phase H v1 is **alias-only**: original public
+custom-property names remain defined, and csszyx-owned references may use short
+`---g*` aliases.
 
 ## Contract
 
@@ -33,7 +34,7 @@ Phase H v1 must preserve original variables:
 ```css
 :root {
   --brand-primary: #3b82f6;
-  --g0: var(--brand-primary);
+  ---gz: var(--brand-primary);
 }
 ```
 
@@ -52,7 +53,11 @@ instead of Tailwind-owned names such as `--color-primary`.
 
 ## Current Behavior
 
-The config type exists so projects and tools can prepare for Phase H, but
-`enabled: true` currently fails with an explicit build error. This avoids a
-silent no-op while the scanner, alias planner, CSS rewrite, and hydration
-manifest work are still pending.
+`enabled: true` requires explicit `tokens`. csszyx builds one deterministic
+alias table from the sorted tokens, rewrites static `sz` references through that
+table, validates emitted CSS defines the same tokens, then rewrites matching CSS
+`var(--token)` references through the validated aliases.
+
+Builds fail closed when a token is missing from emitted CSS, when unsafe
+out-of-band JS usage is detected, or when CSS validation produces a different
+alias plan than source transforms used.

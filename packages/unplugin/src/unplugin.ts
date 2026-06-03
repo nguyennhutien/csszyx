@@ -1142,10 +1142,16 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
         );
     }
     if (config?.enabled === true) {
-        throw new Error(
-            '[csszyx] production.mangleGlobalVars is planned for Phase H but is not implemented yet. ' +
-                'Keep it disabled until the global variable alias pipeline ships.',
-        );
+        if (!config.tokens || config.tokens.length === 0) {
+            throw new Error(
+                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens in Phase H v1.',
+            );
+        }
+        if (config.autoPrefix !== undefined && config.autoPrefix !== '') {
+            throw new Error(
+                '[csszyx] production.mangleGlobalVars.autoPrefix requires CSS pre-scan support and is not enabled in Phase H v1.',
+            );
+        }
     }
 }
 

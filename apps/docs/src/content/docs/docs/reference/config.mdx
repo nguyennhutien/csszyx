@@ -130,7 +130,7 @@ interface ProductionConfig {
   mangle: boolean; // Minify class names (z, y, x, ...)
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
-  mangleGlobalVars?: GlobalVarMangleConfig; // Planned global token alias tier
+  mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
   contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
@@ -152,7 +152,7 @@ interface GlobalVarMangleConfig {
 | `mangle`                 | `true`  | Replace class names with short encoded symbols                                                                                                            |
 | `mangleVars`             | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
 | `mangleVarHoistMaxDepth` | `5`     | Maximum DOM ancestor distance for component-tier CSS variable hoisting when `mangleVars` is enabled.                                                      |
-| `mangleGlobalVars`       | `undefined` | Planned opt-in alias gate for app-owned global CSS custom properties. Phase H v1 is alias-only and keeps original public variables defined.           |
+| `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Phase H v1 is alias-only and keeps original public variables defined.          |
 | `contentHashing`         | `true`  | Hash CSS output for cache-busting                                                                                                                         |
 | `injectChecksum`         | `true`  | Embed SHA-256 checksum in HTML                                                                                                                            |
 | `incrementalBuild`       | `true`  | Cache build artifacts for faster rebuilds                                                                                                                 |
@@ -163,10 +163,10 @@ dynamic CSS variables csszyx emits for runtime `sz` values, such as `p: pad`,
 and keeps the feature opt-in while the global token tier remains a separate
 design surface.
 
-`mangleGlobalVars` is reserved for the Phase H global token tier. It is
-default-off, accepts only `mode: 'alias'`, and must not remove original CSS
-custom-property names. Enabling it before the alias pipeline ships fails with
-an explicit build error rather than silently no-oping.
+`mangleGlobalVars` enables the Phase H global token tier for explicit `tokens`.
+It is default-off, accepts only `mode: 'alias'`, and must not remove original
+CSS custom-property names. `autoPrefix` remains disabled until csszyx can build
+the same alias table before source transforms and CSS output validation.
 
 ### `build`
 
