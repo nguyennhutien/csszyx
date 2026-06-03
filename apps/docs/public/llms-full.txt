@@ -421,24 +421,24 @@ Advanced content styling.
 
 Environment-based styling.
 
-| Concept               | Tailwind v4 Class              | `sz` Prop (Object Syntax)                           | Note                          |
-| :-------------------- | :----------------------------- | :-------------------------------------------------- | :---------------------------- |
-| **Breakpoints**       | `md:block lg:flex`             | `{ md: { block: true }, lg: { flex: true } }`       |                               |
-| **Container Queries** | `@md:block @lg:flex`           | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
-| **Reduced Motion**    | `motion-reduce:hidden`         | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
-| **Prefers Contrast**  | `contrast-more:border`         | `{ contrastMore: { border: true } }`                |                               |
-| **Forced Colors**     | `forced-colors:border-gray`    | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
-| **Inverted Colors**   | `inverted-colors:invert`       | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
-| **Pointer**           | `pointer-coarse:p-4`           | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
-| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`       | v4.1. **Sugar**: CamelCase.   |
-| **User Valid**        | `user-valid:border-green-500`  | `{ userValid: { borderColor: 'green-500' } }`       | v4.1. Form validation state.  |
-| **User Invalid**      | `user-invalid:border-red-500`  | `{ userInvalid: { borderColor: 'red-500' } }`       | v4.1. Form validation state.  |
-| **Details Content**   | `details-content:block`        | `{ detailsContent: { block: true } }`               | v4.1. **Sugar**: CamelCase.   |
-| **Print**             | `print:hidden`                 | `{ print: { hidden: true } }`                       |                               |
-| **Orientation**       | `portrait:hidden`              | `{ portrait: { hidden: true } }`                    |                               |
-| **Scripting**         | `noscript:block`               | `{ noscript: { block: true } }`                     |                               |
-| **Supports**          | `supports-[display:grid]:grid` | `{ supports: { 'display:grid': { grid: true } } }`  |                               |
-| **Starting Style**    | `starting:opacity-0`           | `{ starting: { opacity: 0 } }`                      |                               |
+| Concept               | Tailwind v4 Class                 | `sz` Prop (Object Syntax)                           | Note                          |
+| :-------------------- | :-------------------------------- | :-------------------------------------------------- | :---------------------------- |
+| **Breakpoints**       | `md:block lg:flex`                | `{ md: { block: true }, lg: { flex: true } }`       |                               |
+| **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
+| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
+| **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                |                               |
+| **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
+| **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
+| **Pointer**           | `pointer-coarse:p-4`              | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
+| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`         | v4.1. **Sugar**: CamelCase.   |
+| **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`       | v4.1. Form validation state.  |
+| **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`       | v4.1. Form validation state.  |
+| **Details Content**   | `details-content:block`           | `{ detailsContent: { block: true } }`               | v4.1. **Sugar**: CamelCase.   |
+| **Print**             | `print:hidden`                    | `{ print: { hidden: true } }`                       |                               |
+| **Orientation**       | `portrait:hidden`                 | `{ portrait: { hidden: true } }`                    |                               |
+| **Scripting**         | `noscript:block`                  | `{ noscript: { block: true } }`                     |                               |
+| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { grid: true } } }`  |                               |
+| **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                      |                               |
 
 ## Attribute Selectors
 
@@ -1251,12 +1251,12 @@ Controls how multiple masks are combined.
 
 Control the color stops used in mask gradient functions.
 
-| Concept      | CSS Rule                | Tailwind v4 Class      | `sz` Prop (Object Syntax)     | Note |
-| :----------- | :---------------------- | :--------------------- | :---------------------------- | :--- |
-| **From**     | mask gradient start     | `mask-from-<color>`    | `{ maskFrom: '<color>' }`    |      |
-| **Via**      | mask gradient middle    | `mask-via-<color>`     | `{ maskVia: '<color>' }`     |      |
-| **To**       | mask gradient end       | `mask-to-<color>`      | `{ maskTo: '<color>' }`      |      |
-| **Variable** | `mask-from: var(--c)`   | `mask-from-(--c)`      | `{ maskFrom: '--c' }`        |      |
+| Concept      | CSS Rule              | Tailwind v4 Class   | `sz` Prop (Object Syntax) | Note |
+| :----------- | :-------------------- | :------------------ | :------------------------ | :--- |
+| **From**     | mask gradient start   | `mask-from-<color>` | `{ maskFrom: '<color>' }` |      |
+| **Via**      | mask gradient middle  | `mask-via-<color>`  | `{ maskVia: '<color>' }`  |      |
+| **To**       | mask gradient end     | `mask-to-<color>`   | `{ maskTo: '<color>' }`   |      |
+| **Variable** | `mask-from: var(--c)` | `mask-from-(--c)`   | `{ maskFrom: '--c' }`     |      |
 
 
 # Filters
@@ -1999,50 +1999,50 @@ Utilities for hinting to the browser how an element will change.
 
 Utilities for controlling the scrollbar width.
 
-| Concept  | CSS Rule                   | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note |
-| :------- | :------------------------- | :---------------- | :------------------------- | :--- |
-| **Auto** | `scrollbar-width: auto`    | `scrollbar-auto`  | `{ scrollbar: 'auto' }`   |      |
-| **Thin** | `scrollbar-width: thin`    | `scrollbar-thin`  | `{ scrollbar: 'thin' }`   |      |
-| **None** | `scrollbar-width: none`    | `scrollbar-none`  | `{ scrollbar: 'none' }`   |      |
+| Concept  | CSS Rule                | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :------- | :---------------------- | :---------------- | :------------------------ | :--- |
+| **Auto** | `scrollbar-width: auto` | `scrollbar-auto`  | `{ scrollbar: 'auto' }`   |      |
+| **Thin** | `scrollbar-width: thin` | `scrollbar-thin`  | `{ scrollbar: 'thin' }`   |      |
+| **None** | `scrollbar-width: none` | `scrollbar-none`  | `{ scrollbar: 'none' }`   |      |
 
 ## Scrollbar Color (v4.3)
 
 Utilities for controlling the scrollbar thumb and track colors.
 
-| Concept      | CSS Rule                                 | Tailwind v4 Class        | `sz` Prop (Object Syntax)        | Note |
-| :----------- | :--------------------------------------- | :----------------------- | :------------------------------- | :--- |
-| **Thumb**    | `scrollbar-color: <color> ...`           | `scrollbar-thumb-<name>` | `{ scrollbarThumb: '<name>' }`   |      |
-| **Track**    | `scrollbar-color: ... <color>`           | `scrollbar-track-<name>` | `{ scrollbarTrack: '<name>' }`   |      |
-| **Variable** | `scrollbar-color: var(--c) ...`          | `scrollbar-thumb-(--c)`  | `{ scrollbarThumb: '--c' }`     |      |
+| Concept      | CSS Rule                        | Tailwind v4 Class        | `sz` Prop (Object Syntax)      | Note |
+| :----------- | :------------------------------ | :----------------------- | :----------------------------- | :--- |
+| **Thumb**    | `scrollbar-color: <color> ...`  | `scrollbar-thumb-<name>` | `{ scrollbarThumb: '<name>' }` |      |
+| **Track**    | `scrollbar-color: ... <color>`  | `scrollbar-track-<name>` | `{ scrollbarTrack: '<name>' }` |      |
+| **Variable** | `scrollbar-color: var(--c) ...` | `scrollbar-thumb-(--c)`  | `{ scrollbarThumb: '--c' }`    |      |
 
 ## Scrollbar Gutter (v4.3)
 
 Utilities for controlling the scrollbar gutter behavior.
 
-| Concept    | CSS Rule                      | Tailwind v4 Class         | `sz` Prop (Object Syntax)          | Note |
-| :--------- | :---------------------------- | :------------------------ | :--------------------------------- | :--- |
-| **Auto**   | `scrollbar-gutter: auto`      | `scrollbar-gutter-auto`   | `{ scrollbarGutter: 'auto' }`     |      |
-| **Stable** | `scrollbar-gutter: stable`    | `scrollbar-gutter-stable` | `{ scrollbarGutter: 'stable' }`   |      |
-| **Both**   | `scrollbar-gutter: stable both-edges` | `scrollbar-gutter-both` | `{ scrollbarGutter: 'both' }` |      |
+| Concept    | CSS Rule                              | Tailwind v4 Class         | `sz` Prop (Object Syntax)       | Note |
+| :--------- | :------------------------------------ | :------------------------ | :------------------------------ | :--- |
+| **Auto**   | `scrollbar-gutter: auto`              | `scrollbar-gutter-auto`   | `{ scrollbarGutter: 'auto' }`   |      |
+| **Stable** | `scrollbar-gutter: stable`            | `scrollbar-gutter-stable` | `{ scrollbarGutter: 'stable' }` |      |
+| **Both**   | `scrollbar-gutter: stable both-edges` | `scrollbar-gutter-both`   | `{ scrollbarGutter: 'both' }`   |      |
 
 ## Zoom (v4.3)
 
 Utilities for controlling the zoom level of an element.
 
-| Concept      | CSS Rule          | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
-| :----------- | :---------------- | :---------------- | :------------------------ | :--- |
-| **Scale**    | `zoom: <number>`  | `zoom-<number>`   | `{ zoom: <number> }`     |      |
-| **Variable** | `zoom: var(--z)`  | `zoom-(--z)`      | `{ zoom: '--z' }`        |      |
+| Concept      | CSS Rule         | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :----------- | :--------------- | :---------------- | :------------------------ | :--- |
+| **Scale**    | `zoom: <number>` | `zoom-<number>`   | `{ zoom: <number> }`      |      |
+| **Variable** | `zoom: var(--z)` | `zoom-(--z)`      | `{ zoom: '--z' }`         |      |
 
 ## Tab Size (v4.3)
 
 Utilities for controlling the width of tab characters.
 
-| Concept      | CSS Rule              | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
-| :----------- | :-------------------- | :---------------- | :------------------------ | :--- |
-| **Number**   | `tab-size: <number>`  | `tab-<number>`    | `{ tabSize: <number> }`  |      |
-| **Arbitrary**| `tab-size: <v>`       | `tab-[<v>]`       | `{ tabSize: '<v>' }`     |      |
-| **Variable** | `tab-size: var(--t)`  | `tab-(--t)`       | `{ tabSize: '--t' }`     |      |
+| Concept       | CSS Rule             | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note |
+| :------------ | :------------------- | :---------------- | :------------------------ | :--- |
+| **Number**    | `tab-size: <number>` | `tab-<number>`    | `{ tabSize: <number> }`   |      |
+| **Arbitrary** | `tab-size: <v>`      | `tab-[<v>]`       | `{ tabSize: '<v>' }`      |      |
+| **Variable**  | `tab-size: var(--t)` | `tab-(--t)`       | `{ tabSize: '--t' }`      |      |
 
 
 # Layout
