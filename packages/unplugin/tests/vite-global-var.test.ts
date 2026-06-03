@@ -7,9 +7,11 @@ import {
     statSync,
     writeFileSync,
 } from 'node:fs';
+import { createServer, type Server } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { extname, join, resolve } from 'node:path';
+import { chromium } from 'playwright';
 import { type PluginOption, build as viteBuild } from 'vite';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -52,6 +54,28 @@ describe('vite global variable aliases', () => {
         expect(manifest.varMangleMap).toEqual({ '--brand-primary': '---gz' });
         expect(manifest.globalVarAliases).toEqual({ '--brand-primary': '---gz' });
         expect(globalVarMap).toEqual({ '--brand-primary': '---gz' });
+
+        const server = await serveStatic(join(root, 'dist'));
+        const browser = await chromium.launch({ headless: true });
+        try {
+            const page = await browser.newPage();
+            await page.goto(server.url);
+            await page.getByTestId('global-card').waitFor();
+
+            await expect
+                .poll(() =>
+                    page
+                        .getByTestId('global-card')
+                        .evaluate(element => getComputedStyle(element).color),
+                )
+                .toBe('rgb(255, 0, 0)');
+            await expect
+                .poll(() => page.evaluate(() => window.__csszyx?.decodeGlobalVar?.('---gz')))
+                .toBe('--brand-primary');
+        } finally {
+            await browser.close();
+            await server.close();
+        }
     });
 });
 
@@ -77,7 +101,7 @@ function createFixture(): string {
         [
             "import './style.css';",
             "import { createRoot } from 'react-dom/client';",
-            'const App = () => <div className="card" sz={{ bg: "--brand-primary" }} />;',
+            'const App = () => <div data-testid="global-card" className="card" sz={{ bg: "--brand-primary" }}>token</div>;',
             "createRoot(document.getElementById('root')!).render(<App />);",
         ].join('\n'),
     );
@@ -147,4 +171,61 @@ function listFiles(root: string): string[] {
             return statSync(file).isDirectory() ? listFiles(file) : [file];
         })
         .sort();
+}
+
+async function serveStatic(root: string): Promise<{ url: string; close: () => Promise<void> }> {
+    const server = createServer((request, response) => {
+        const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+        const relativePath =
+            pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
+        const file = resolve(root, relativePath);
+        if (!file.startsWith(root)) {
+            response.writeHead(403).end();
+            return;
+        }
+        try {
+            response.setHeader('content-type', contentType(file));
+            response.end(readFileSync(file));
+        } catch {
+            response.writeHead(404).end();
+        }
+    });
+    await new Promise<void>(resolveListen => {
+        server.listen(0, '127.0.0.1', resolveListen);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        throw new Error('Expected a TCP server address');
+    }
+    return {
+        url: `http://127.0.0.1:${address.port}/`,
+        close: () => closeServer(server),
+    };
+}
+
+function closeServer(server: Server): Promise<void> {
+    return new Promise((resolveClose, reject) => {
+        server.close(error => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolveClose();
+        });
+    });
+}
+
+function contentType(file: string): string {
+    switch (extname(file)) {
+        case '.html':
+            return 'text/html; charset=utf-8';
+        case '.js':
+            return 'text/javascript; charset=utf-8';
+        case '.css':
+            return 'text/css; charset=utf-8';
+        case '.json':
+            return 'application/json; charset=utf-8';
+        default:
+            return 'application/octet-stream';
+    }
 }
