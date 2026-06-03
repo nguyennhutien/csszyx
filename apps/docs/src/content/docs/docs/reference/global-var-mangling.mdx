@@ -61,3 +61,8 @@ table, validates emitted CSS defines the same tokens, then rewrites matching CSS
 Builds fail closed when a token is missing from emitted CSS, when unsafe
 out-of-band JS usage is detected, or when CSS validation produces a different
 alias plan than source transforms used.
+
+Runtime fallback `sz={expr}` shapes are not aliased in Phase H v1. They remain
+correct because alias mode keeps the original custom properties defined, but
+they should not be counted as optimized references in size or performance
+reports.

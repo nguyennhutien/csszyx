@@ -286,6 +286,26 @@ describe('CSS variable system config contract', () => {
         expect(result.classes).toEqual(new Set(['bg-(--brand-primary)']));
         expect(result.cssVariableMap).toEqual(new Map());
     });
+
+    it('does not alias runtime fallback sz expressions on oxc and Rust paths', () => {
+        const source =
+            "const App = ({ styles }: { styles: { bg: '--brand-primary' } }) => <div sz={styles} />;";
+        const aliases = new Map([['--brand-primary', '--g0']]);
+        const oxc = transformOxc(source, 'global-var-runtime-fallback.tsx', {
+            globalVarAliases: aliases,
+        });
+        const rust = transformRust(source, 'rust-global-var-runtime-fallback.tsx', {
+            globalVarAliases: aliases,
+        });
+
+        for (const result of [oxc, rust]) {
+            expect(result.code).toContain('_sz(styles)');
+            expect(result.code).toContain("'--brand-primary'");
+            expect(result.code).not.toContain('--g0');
+            expect(result.classes).toEqual(new Set());
+            expect(result.cssVariableMap).toEqual(new Map());
+        }
+    });
 });
 
 function asArray<T>(value: T | T[] | undefined): T[] {
