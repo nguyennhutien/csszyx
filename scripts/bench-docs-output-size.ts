@@ -1,9 +1,10 @@
 #!/usr/bin/env tsx
 
 /**
- * Benchmarks apps/docs production output size with CSS variable mangling off
- * and on. This measures artifact bytes after the real Astro/Vite/Tailwind
- * production build, plus gzip and brotli transfer estimates.
+ * Benchmarks apps/docs production output size with csszyx CSS-variable
+ * optimization modes off and on. This measures artifact bytes after the real
+ * Astro/Vite/Tailwind production build, plus gzip and brotli transfer
+ * estimates.
  *
  * Usage:
  *   pnpm bench:docs-size
@@ -24,7 +25,7 @@ import { extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
-type BenchMode = 'mangle-vars-off' | 'mangle-vars-on';
+type BenchMode = 'mangle-vars-off' | 'mangle-vars-on' | 'global-vars-on';
 type AssetGroup = 'all' | 'html' | 'js' | 'css' | 'other';
 
 interface AssetStats {
@@ -62,7 +63,11 @@ const BUILD_OUTPUTS = [
 ];
 const ASSET_GROUPS = ['all', 'html', 'js', 'css', 'other'] as const satisfies readonly AssetGroup[];
 
-const rows = [runBuildCase('mangle-vars-off'), runBuildCase('mangle-vars-on')];
+const rows = [
+    runBuildCase('mangle-vars-off'),
+    runBuildCase('mangle-vars-on'),
+    runBuildCase('global-vars-on'),
+];
 const payload: ReportPayload = {
     generated: new Date().toISOString(),
     node: process.version,
@@ -92,6 +97,7 @@ function runBuildCase(mode: BenchMode): BenchRow {
         env: {
             ...process.env,
             CSSZYX_BENCH_MANGLE_VARS: mode === 'mangle-vars-on' ? '1' : '0',
+            CSSZYX_BENCH_MANGLE_GLOBAL_VARS: mode === 'global-vars-on' ? '1' : '0',
             CSSZYX_PARSER: 'rust',
             NODE_ENV: 'production',
         },
@@ -117,7 +123,9 @@ function runBuildCase(mode: BenchMode): BenchRow {
         note:
             mode === 'mangle-vars-on'
                 ? 'Rust parser build with CSSZYX_BENCH_MANGLE_VARS=1.'
-                : 'Rust parser build with production.mangleVars left disabled.',
+                : mode === 'global-vars-on'
+                  ? 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1.'
+                  : 'Rust parser build with CSS variable optimizations left disabled.',
     };
 }
 
@@ -261,10 +269,14 @@ function summarizeFailure(output: string): string {
  */
 function renderReport(payload: ReportPayload): string {
     const off = payload.rows.find(row => row.mode === 'mangle-vars-off');
-    const on = payload.rows.find(row => row.mode === 'mangle-vars-on');
-    const summary = renderSummary(off, on);
+    const mangleVarsOn = payload.rows.find(row => row.mode === 'mangle-vars-on');
+    const globalVarsOn = payload.rows.find(row => row.mode === 'global-vars-on');
+    const summary = [
+        renderSummary('mangle-vars-on', off, mangleVarsOn),
+        renderSummary('global-vars-on', off, globalVarsOn),
+    ].join('\n');
 
-    return `# Phase F Docs Mangle Vars Size Benchmark
+    return `# Docs CSS Variable Output Size Benchmark
 
 Generated: ${payload.generated}
 
@@ -293,29 +305,45 @@ ${payload.rows.flatMap(renderRows).join('\n')}
   Vite, Tailwind, csszyx, minification, hashed assets, and generated HTML.
 - The \`mangle-vars-on\` row is enabled only by \`CSSZYX_BENCH_MANGLE_VARS=1\`;
   docs production config still keeps \`production.mangleVars\` off by default.
+- The \`global-vars-on\` row is enabled only by
+  \`CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1\`; docs production config still keeps
+  \`production.mangleGlobalVars\` unset by default.
 - Raw bytes show emitted artifact size. Gzip and brotli bytes better approximate
   transfer size and are the gating numbers for any future default flip.
 - This report does not measure runtime style invalidation. Keep default-on work
   gated until a runtime harness proves updates stay correct.
+
+## G-tier Remaining
+
+- Need a token-heavy real app before making product-size claims.
+- \`autoPrefix\` stays blocked until alias discovery can happen before source
+  transforms.
+- Runtime fallback alias tables stay deferred unless real apps show frequent
+  \`sz={expr}\` global-token usage.
 `;
 }
 
 /**
  * Renders summary bullets comparing enabled and disabled rows.
  *
+ * @param label enabled case label
  * @param off disabled row
  * @param on enabled row
  * @returns markdown bullets
  */
-function renderSummary(off: BenchRow | undefined, on: BenchRow | undefined): string {
+function renderSummary(
+    label: BenchMode,
+    off: BenchRow | undefined,
+    on: BenchRow | undefined,
+): string {
     if (!off || !on || off.status !== 'measured' || on.status !== 'measured') {
-        return '- One or more build cases failed; see the result table.';
+        return `- ${label}: one or more build cases failed; see the result table.`;
     }
 
     return ASSET_GROUPS.map(group => {
         const disabled = off.groups[group];
         const enabled = on.groups[group];
-        return `- ${group}: enabled vs disabled ${formatDelta(
+        return `- ${label} ${group}: enabled vs disabled ${formatDelta(
             enabled.bytes,
             disabled.bytes,
         )} raw, ${formatDelta(enabled.gzipBytes, disabled.gzipBytes)} gzip, ${formatDelta(

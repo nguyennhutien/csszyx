@@ -12,6 +12,8 @@ const docsLandingGlobalVarTokens = [
     '--lp-surface',
     '--lp-text',
     '--lp-text-muted',
+    '--trans-fast',
+    '--trans-smooth',
 ];
 
 export default defineConfig({
