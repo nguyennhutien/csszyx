@@ -72,6 +72,18 @@ describe('extractGlobalVarAliasesForManifest', () => {
         );
     });
 
+    it('keeps merged metadata and validated CSS aliases sorted by original name', () => {
+        const validation = {
+            plan: {
+                entries: [{ original: '--brand-primary', alias: '---gz', scopes: ['rule::root'] }],
+            },
+        } as never;
+
+        expect(createGlobalVarMapAssetSource({ '--z-token': '---gy' }, '---g', validation)).toBe(
+            '{"--brand-primary":"---gz","--z-token":"---gy"}',
+        );
+    });
+
     it('normalizes compiler aliases for transform cache identity', () => {
         expect(
             normalizeGlobalVarAliasesForCache({

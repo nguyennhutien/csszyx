@@ -462,7 +462,9 @@ export function extractGlobalVarAliasesForManifest(
             aliases[entry.original] = entry.alias;
         }
     }
-    return aliases;
+    return Object.fromEntries(
+        Object.entries(aliases).sort(([left], [right]) => left.localeCompare(right)),
+    );
 }
 
 /**
