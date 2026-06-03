@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
 type BenchMode = 'mangle-vars-off' | 'mangle-vars-on' | 'global-vars-on';
-type AssetGroup = 'all' | 'html' | 'js' | 'css' | 'other';
+type AssetGroup = 'all' | 'runtime' | 'html' | 'js' | 'css' | 'tooling' | 'other';
 
 interface AssetStats {
     files: number;
@@ -61,7 +61,15 @@ const BUILD_OUTPUTS = [
     join(DOCS_ROOT, '.astro'),
     join(DOCS_ROOT, '.csszyx/cache/transform'),
 ];
-const ASSET_GROUPS = ['all', 'html', 'js', 'css', 'other'] as const satisfies readonly AssetGroup[];
+const ASSET_GROUPS = [
+    'all',
+    'runtime',
+    'html',
+    'js',
+    'css',
+    'tooling',
+    'other',
+] as const satisfies readonly AssetGroup[];
 
 const rows = [
     runBuildCase('mangle-vars-off'),
@@ -154,7 +162,12 @@ function collectOutputStats(root: string): Record<AssetGroup, AssetStats> {
         const buffer = readFileSync(file);
         const stats = compressedStats(buffer);
         addStats(groups.all, stats);
-        addStats(groups[groupForFile(file)], stats);
+        if (isGlobalVarToolingMap(root, file)) {
+            addStats(groups.tooling, stats);
+        } else {
+            addStats(groups.runtime, stats);
+            addStats(groups[groupForFile(file)], stats);
+        }
     }
 
     return groups;
@@ -186,7 +199,7 @@ function walkFiles(root: string): string[] {
  * @param file output file path
  * @returns group name
  */
-function groupForFile(file: string): Exclude<AssetGroup, 'all'> {
+function groupForFile(file: string): Exclude<AssetGroup, 'all' | 'runtime' | 'tooling'> {
     const extension = extname(file).toLowerCase();
     if (extension === '.html') {
         return 'html';
@@ -198,6 +211,21 @@ function groupForFile(file: string): Exclude<AssetGroup, 'all'> {
         return 'css';
     }
     return 'other';
+}
+
+/**
+ * Checks whether a build artifact is g-tier tooling metadata.
+ *
+ * The standalone global-var map is useful for diagnostics/tooling, but it can
+ * dominate small-app transfer deltas. Keeping it separate in reports lets the
+ * runtime artifact numbers stay visible without hiding deployed-total cost.
+ *
+ * @param root build output directory
+ * @param file output file path
+ * @returns true when the file is the standalone global variable map
+ */
+function isGlobalVarToolingMap(root: string, file: string): boolean {
+    return relative(root, file).replace(/\\/g, '/') === '.csszyx/global-var-map.json';
 }
 
 /**
@@ -310,6 +338,9 @@ ${payload.rows.flatMap(renderRows).join('\n')}
   \`production.mangleGlobalVars\` unset by default.
 - Raw bytes show emitted artifact size. Gzip and brotli bytes better approximate
   transfer size and are the gating numbers for any future default flip.
+- The \`runtime\` group excludes only \`.csszyx/global-var-map.json\`; the
+  \`all\` group still includes that tooling asset because many deploy pipelines
+  publish the whole output directory.
 - This report does not measure runtime style invalidation. Keep default-on work
   gated until a runtime harness proves updates stay correct.
 
