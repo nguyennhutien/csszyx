@@ -99,6 +99,28 @@ describe('vite global variable aliases', () => {
             await server.close();
         }
     });
+
+    it('keeps JS source maps when global variable aliases rewrite source transforms', async () => {
+        const root = createFixture();
+
+        await runVite(root, { sourcemap: true });
+
+        const output = readOutputFiles(join(root, 'dist'));
+        const js = output.find(file => file.path.endsWith('.js'))?.text ?? '';
+        const jsMapFile = output.find(file => file.path.endsWith('.js.map'));
+        expect(js).toContain('className:`card z`');
+        expect(js).not.toContain('bg-(--brand-primary)');
+        expect(jsMapFile).toBeDefined();
+
+        const jsMap = JSON.parse(jsMapFile?.text ?? '{}') as {
+            version?: number;
+            sources?: string[];
+            sourcesContent?: string[];
+        };
+        expect(jsMap.version).toBe(3);
+        expect(jsMap.sources?.some(source => source.endsWith('src/App.tsx'))).toBe(true);
+        expect(jsMap.sourcesContent?.join('\n')).toContain('bg: "--brand-primary"');
+    });
 });
 
 function createFixture(): string {
@@ -137,7 +159,7 @@ function createFixture(): string {
     return root;
 }
 
-async function runVite(root: string): Promise<void> {
+async function runVite(root: string, options: { sourcemap?: boolean } = {}): Promise<void> {
     await viteBuild({
         root,
         logLevel: 'silent',
@@ -173,6 +195,7 @@ async function runVite(root: string): Promise<void> {
             emptyOutDir: true,
             minify: true,
             outDir: 'dist',
+            sourcemap: options.sourcemap,
         },
     });
 }
