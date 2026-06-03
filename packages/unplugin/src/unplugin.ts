@@ -302,6 +302,44 @@ function collectRollupGlobalVarCssAssets(
 }
 
 /**
+ * Reads configured source CSS files for Phase H validation.
+ *
+ * Some framework pipelines, notably Astro prerender builds, can invoke an
+ * output hook before all user CSS is visible as a Rollup/Webpack asset. The
+ * source CSS inventory keeps explicit-token validation tied to real files
+ * while the later output rewrite still mutates only emitted assets.
+ *
+ * @param rootDir Project root used to resolve scan patterns.
+ * @param scanCss User configured CSS scan patterns.
+ * @returns CSS sources in stable file-name order.
+ */
+function collectConfiguredGlobalVarCssSources(
+    rootDir: string,
+    scanCss: string | string[] | undefined,
+): GlobalVarCssAssetSource[] {
+    if (!scanCss) {
+        return [];
+    }
+    return expandFilePatterns(rootDir, scanCss)
+        .filter(file => file.endsWith('.css'))
+        .sort((left, right) => left.localeCompare(right))
+        .flatMap(file => {
+            try {
+                const stat = fs.statSync(file);
+                return [
+                    {
+                        fileName: file,
+                        source: fs.readFileSync(file, 'utf-8'),
+                        mtimeMs: stat.mtimeMs,
+                    },
+                ];
+            } catch {
+                return [];
+            }
+        });
+}
+
+/**
  * Extracts CSS assets from a Webpack asset map for pure global-var validation
  * before output mutation.
  *
@@ -1283,10 +1321,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (globalVarMangleConfig?.enabled !== true) {
             return null;
         }
+        const configuredCssAssets = collectConfiguredGlobalVarCssSources(
+            state.rootDir,
+            options.build?.scanCss,
+        );
         const result = validateGlobalVarAliasInputs(
             createGlobalVarAliasValidationOptions({
                 rootDir: state.rootDir,
-                cssAssets,
+                cssAssets: [...configuredCssAssets, ...cssAssets],
                 sourceFiles: buildGlobalVarSourceFiles(state),
                 tokens: globalVarMangleConfig.tokens,
                 autoPrefix: globalVarMangleConfig.autoPrefix,

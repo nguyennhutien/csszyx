@@ -7,6 +7,13 @@ import csszyxDarkTheme from './src/themes/csszyx-dark.json' with { type: 'json' 
 import csszyxLightTheme from './src/themes/csszyx-light.json' with { type: 'json' };
 import ecTwoslash from 'expressive-code-twoslash';
 
+const docsLandingGlobalVarTokens = [
+    '--lp-border',
+    '--lp-surface',
+    '--lp-text',
+    '--lp-text-muted',
+];
+
 export default defineConfig({
     site: 'https://csszyx.com',
     redirects: {
@@ -137,8 +144,11 @@ export default defineConfig({
             // CSSZYX_BENCH_NO_TAILWIND=1 additionally skips the Tailwind plugin
             // so the bench can measure the Astro/Vite/React-only floor.
             // CSSZYX_BENCH_MANGLE_VARS=1 opts into CSS variable mangling for
-            // output-size benches only. These are bench-only knobs; production
-            // builds must never set them.
+            // output-size benches only. These are opt-in validation knobs and
+            // are intentionally absent from normal production docs builds.
+            // CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1 opts into explicit g-tier
+            // aliases for docs landing tokens so Phase H can validate a
+            // real app without changing normal docs builds.
             ...(process.env.CSSZYX_BENCH_NO_CSSZYX === '1' ||
             process.env.CSSZYX_BENCH_NO_TAILWIND === '1'
                 ? []
@@ -146,6 +156,13 @@ export default defineConfig({
                         production: {
                             mangle: true,
                             mangleVars: process.env.CSSZYX_BENCH_MANGLE_VARS === '1',
+                            mangleGlobalVars:
+                                process.env.CSSZYX_BENCH_MANGLE_GLOBAL_VARS === '1'
+                                    ? {
+                                            enabled: true,
+                                            tokens: docsLandingGlobalVarTokens,
+                                        }
+                                    : undefined,
                         },
                         build: { scanCss: 'src/styles/landing.css' },
                     })),

@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -19,6 +23,7 @@ type GenerateBundleHook = {
 
 const ORIGINAL_ENV = process.env.CSSZYX_PARSER;
 const ORIGINAL_VAR_MAP_MAX_BYTES = process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES;
+const tempDirs: string[] = [];
 
 // The Rust parser branch needs the host platform's optional native package to
 // contain a built addon before the unplugin can dispatch to it. CI should run
@@ -39,6 +44,9 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+        rmSync(dir, { recursive: true, force: true });
+    }
     if (ORIGINAL_ENV === undefined) {
         delete process.env.CSSZYX_PARSER;
     } else {
@@ -168,6 +176,44 @@ describe('csszyx parser selection', () => {
                 },
             ),
         ).toThrow('Global variable token --brand-primary is not defined in scanned CSS');
+    });
+
+    it('accepts explicit tokens defined by configured scanCss sources', () => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-global-var-scan-css-'));
+        tempDirs.push(root);
+        const cssPath = join(root, 'tokens.css');
+        writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
+        const [, postPlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false, scanCss: cssPath },
+            production: {
+                mangleGlobalVars: {
+                    enabled: true,
+                    tokens: ['--brand-primary'],
+                },
+            },
+        }) as [TransformHook, GenerateBundleHook];
+        const emitFile = vi.fn();
+
+        expect(() =>
+            postPlugin.generateBundle.call(
+                { emitFile },
+                {},
+                {
+                    'assets/app.css': {
+                        type: 'asset',
+                        fileName: 'assets/app.css',
+                        source: '.card{color:red}',
+                    },
+                },
+            ),
+        ).not.toThrow();
+
+        expect(emitFile).toHaveBeenCalledWith(
+            expect.objectContaining({
+                fileName: '.csszyx/global-var-map.json',
+                source: '{"--brand-primary":"---gz"}',
+            }),
+        );
     });
 
     it('rejects Tailwind reserved global variable alias tokens before the Phase H gate', () => {
