@@ -21,6 +21,7 @@ import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@cssz
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     DEFAULT_BUILD_CONFIG,
+    type GlobalVarMangleConfig,
     type PartialCsszyxConfig,
     validateGlobalVarMangleConfig,
 } from '@csszyx/types';
@@ -470,6 +471,26 @@ export function normalizeGlobalVarAliasesForCache(
         }
     }
     return [...normalized].sort(([left], [right]) => left.localeCompare(right));
+}
+
+/**
+ * Builds the early alias table used by source transforms before CSS assets
+ * exist. Only explicit tokens are safe here; prefix discovery still requires
+ * CSS scanning in the output hook.
+ *
+ * @param config User global-var mangle config.
+ * @param aliasPrefix Active generated alias prefix.
+ * @returns Deterministic original-to-alias entries.
+ */
+function createEarlyGlobalVarAliasEntries(
+    config: GlobalVarMangleConfig | undefined,
+    aliasPrefix: string,
+): Array<[string, string]> {
+    if (config?.enabled !== true || !config.tokens || config.tokens.length === 0) {
+        return [];
+    }
+    const tokens = [...new Set(config.tokens)].sort();
+    return tokens.map((original, index) => [original, `${aliasPrefix}${encode(index)}`]);
 }
 
 /**
@@ -1124,6 +1145,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
     const globalVarMangleConfig = options.production?.mangleGlobalVars;
     const globalVarAliasPrefix = globalVarMangleConfig?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+    const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
+        globalVarMangleConfig,
+        globalVarAliasPrefix,
+    );
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
         console.warn(
@@ -1359,6 +1384,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             astBudget: astBudgetOverride,
             mangleVars: options.production?.mangleVars === true,
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
+            globalVarAliases:
+                earlyGlobalVarAliasEntries.length > 0 ? earlyGlobalVarAliasEntries : undefined,
         };
     }
 
