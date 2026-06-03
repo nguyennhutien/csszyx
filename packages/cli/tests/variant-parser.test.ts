@@ -443,7 +443,7 @@ describe('variant-parser', () => {
 
         it('supports variant', () => {
             const { szObject } = classNameToSzObject('supports-[display:grid]:grid');
-            expect(szObject).toEqual({ supports: { 'display:grid': { grid: true } } });
+            expect(szObject).toEqual({ supports: { 'display:grid': { display: 'grid' } } });
         });
 
         it('min breakpoint', () => {
@@ -453,17 +453,17 @@ describe('variant-parser', () => {
 
         it('container query', () => {
             const { szObject } = classNameToSzObject('@md:flex');
-            expect(szObject).toEqual({ '@md': { flex: true } });
+            expect(szObject).toEqual({ '@md': { display: 'flex' } });
         });
 
         it('container query with name', () => {
             const { szObject } = classNameToSzObject('@md/sidebar:block');
-            expect(szObject).toEqual({ '@md': { sidebar: { block: true } } });
+            expect(szObject).toEqual({ '@md': { sidebar: { display: 'block' } } });
         });
 
         it('@min arbitrary', () => {
             const { szObject } = classNameToSzObject('@min-[475px]:flex');
-            expect(szObject).toEqual({ '@min': { '475px': { flex: true } } });
+            expect(szObject).toEqual({ '@min': { '475px': { display: 'flex' } } });
         });
 
         it('gradient class', () => {
@@ -475,7 +475,7 @@ describe('variant-parser', () => {
 
         it('unrecognized classes tracked separately', () => {
             const { szObject, unrecognized } = classNameToSzObject('p-4 my-custom-class flex');
-            expect(szObject).toEqual({ p: 4, flex: true });
+            expect(szObject).toEqual({ p: 4, display: 'flex' });
             expect(unrecognized).toEqual(['my-custom-class']);
         });
 
@@ -487,7 +487,7 @@ describe('variant-parser', () => {
                 p: 4,
                 bg: 'blue-500',
                 hover: { bg: 'blue-600' },
-                md: { flex: true, items: 'center' },
+                md: { display: 'flex', items: 'center' },
             });
         });
 
@@ -514,20 +514,50 @@ describe('variant-parser', () => {
         });
 
         it('boolean classes', () => {
-            const { szObject } = classNameToSzObject('flex relative hidden');
-            expect(szObject).toEqual({ flex: true, relative: true, hidden: true });
+            const { szObject } = classNameToSzObject('flex relative');
+            expect(szObject).toEqual({ display: 'flex', relative: true });
         });
 
         it('no brackets in variant keys', () => {
             const { szObject } = classNameToSzObject('min-[320px]:flex max-[600px]:hidden');
             // Keys should NOT have brackets
             expect(szObject).toEqual({
-                min: { '320px': { flex: true } },
-                max: { '600px': { hidden: true } },
+                min: { '320px': { display: 'flex' } },
+                max: { '600px': { display: 'none' } },
             });
             // Verify no brackets
             expect('320px' in (szObject.min as Record<string, unknown>)).toBe(true);
             expect('[320px]' in (szObject.min as Record<string, unknown>)).toBe(false);
+        });
+
+        it('fails closed on conflicting display classes in the same scope', () => {
+            const { szObject, unrecognized } = classNameToSzObject('block flex p-4');
+            expect(szObject).toEqual({ p: 4 });
+            expect(unrecognized).toEqual(['block', 'flex']);
+        });
+
+        it('keeps later display tokens unresolved after a scope conflict', () => {
+            const { szObject, unrecognized } = classNameToSzObject('block flex inline p-4');
+            expect(szObject).toEqual({ p: 4 });
+            expect(unrecognized).toEqual(['block', 'flex', 'inline']);
+        });
+
+        it('allows display classes in different variant scopes', () => {
+            const { szObject, unrecognized } = classNameToSzObject('block md:flex');
+            expect(szObject).toEqual({ display: 'block', md: { display: 'flex' } });
+            expect(unrecognized).toEqual([]);
+        });
+
+        it('keeps flex display distinct from flex shorthand', () => {
+            const { szObject, unrecognized } = classNameToSzObject('flex flex-1');
+            expect(szObject).toEqual({ display: 'flex', flex: '1' });
+            expect(unrecognized).toEqual([]);
+        });
+
+        it('fails closed on conflicting display classes inside the same variant scope', () => {
+            const { szObject, unrecognized } = classNameToSzObject('md:block md:flex hover:flex');
+            expect(szObject).toEqual({ hover: { display: 'flex' } });
+            expect(unrecognized).toEqual(['md:block', 'md:flex']);
         });
     });
 });

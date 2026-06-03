@@ -44,7 +44,7 @@ describe('clsx/cn calls', () => {
         const result = migrate('<div className={cn("flex relative")} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('sz=');
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain('relative: true');
     });
 
@@ -153,7 +153,7 @@ describe('ternary expressions', () => {
         const result = migrate('<div className={isHidden ? "" : "block"} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('!isHidden &&');
-        expect(result.code).toContain('block: true');
+        expect(result.code).toContain("display: 'block'");
     });
 
     it('skips ternary with non-string branches', () => {
@@ -184,7 +184,7 @@ describe('logical AND expressions', () => {
         const result = migrate('<div className={isOpen && "flex items-center gap-4"} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('isOpen &&');
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain("items: 'center'");
         expect(result.code).toContain('gap: 4');
     });

@@ -24,6 +24,24 @@ describe('class-parser', () => {
             expect(parseClass('list-item')).toEqual({ prop: 'listItem', value: true });
         });
 
+        it('canonical display mode', () => {
+            expect(parseClass('block', { display: 'canonical' })).toEqual({
+                prop: 'display',
+                value: 'block',
+                cssProperty: 'display',
+            });
+            expect(parseClass('inline-flex', { display: 'canonical' })).toEqual({
+                prop: 'display',
+                value: 'inline-flex',
+                cssProperty: 'display',
+            });
+            expect(parseClass('hidden', { display: 'canonical' })).toEqual({
+                prop: 'display',
+                value: 'none',
+                cssProperty: 'display',
+            });
+        });
+
         it('position booleans', () => {
             expect(parseClass('static')).toEqual({ prop: 'static', value: true });
             expect(parseClass('fixed')).toEqual({ prop: 'fixed', value: true });

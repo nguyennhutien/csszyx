@@ -389,6 +389,7 @@ interface ParsedClassToken {
     keyPath: string[];
     prop: string;
     value: unknown;
+    cssProperty?: string;
 }
 
 const MAX_TOKEN_CACHE_SIZE = 4096;
@@ -488,6 +489,8 @@ export function classNameToSzObject(
     const szObject: Record<string, unknown> = {};
     const unrecognized: string[] = [];
     const keepInClassName: string[] = [];
+    const seenCssPropertiesByPath = new Map<string, Map<string, string>>();
+    const conflictedCssPropertiesByPath = new Map<string, Set<string>>();
 
     for (const token of tokens) {
         // Check custom map first
@@ -545,6 +548,20 @@ export function classNameToSzObject(
             continue;
         }
 
+        if (isCssPropertyConflicted(conflictedCssPropertiesByPath, parsedToken)) {
+            unrecognized.push(token);
+            continue;
+        }
+
+        const conflict = findCssPropertyConflict(seenCssPropertiesByPath, parsedToken, token);
+        if (conflict) {
+            rememberCssPropertyConflict(conflictedCssPropertiesByPath, parsedToken);
+            unrecognized.push(conflict, token);
+            removeNestedValue(szObject, parsedToken.keyPath, parsedToken.prop);
+            continue;
+        }
+        rememberCssProperty(seenCssPropertiesByPath, parsedToken, token);
+
         // Set value in the nested object
         setNestedValue(
             szObject,
@@ -582,7 +599,7 @@ function parseClassTokenCached(token: string): ParsedClassToken | null {
  */
 function parseClassToken(token: string): ParsedClassToken | null {
     const { variantParts, baseClass } = extractVariants(token);
-    const parsed = parseClass(baseClass);
+    const parsed = parseClass(baseClass, { display: 'canonical' });
     if (!parsed) {
         return null;
     }
@@ -596,6 +613,7 @@ function parseClassToken(token: string): ParsedClassToken | null {
         keyPath,
         prop: parsed.prop,
         value: parsed.value,
+        cssProperty: parsed.cssProperty,
     };
 }
 
@@ -661,4 +679,122 @@ function setNestedValue(
     }
 
     current[prop] = value;
+}
+
+/**
+ * Find a semantic CSS property conflict in the same variant scope.
+ *
+ * @param seen Previously accepted semantic CSS properties by variant path.
+ * @param parsed Parsed token metadata.
+ * @param token Current token.
+ * @returns The previous conflicting token, or null.
+ */
+function findCssPropertyConflict(
+    seen: Map<string, Map<string, string>>,
+    parsed: ParsedClassToken,
+    token: string,
+): string | null {
+    if (!parsed.cssProperty) {
+        return null;
+    }
+    const scope = parsed.keyPath.join('\0');
+    const previous = seen.get(scope)?.get(parsed.cssProperty);
+    return previous && previous !== token ? previous : null;
+}
+
+/**
+ * Check whether a semantic CSS property is already unsafe in this variant scope.
+ *
+ * @param conflicted Previously marked conflicts by variant path.
+ * @param parsed Parsed token metadata.
+ * @returns true when this property should stay unresolved.
+ */
+function isCssPropertyConflicted(
+    conflicted: Map<string, Set<string>>,
+    parsed: ParsedClassToken,
+): boolean {
+    if (!parsed.cssProperty) {
+        return false;
+    }
+    return conflicted.get(parsed.keyPath.join('\0'))?.has(parsed.cssProperty) === true;
+}
+
+/**
+ * Mark a semantic CSS property as unsafe in this variant scope.
+ *
+ * @param conflicted Conflict map to update.
+ * @param parsed Parsed token metadata.
+ */
+function rememberCssPropertyConflict(
+    conflicted: Map<string, Set<string>>,
+    parsed: ParsedClassToken,
+): void {
+    if (!parsed.cssProperty) {
+        return;
+    }
+    const scope = parsed.keyPath.join('\0');
+    let properties = conflicted.get(scope);
+    if (!properties) {
+        properties = new Set();
+        conflicted.set(scope, properties);
+    }
+    properties.add(parsed.cssProperty);
+}
+
+/**
+ * Record a semantic CSS property emitted into a variant scope.
+ *
+ * @param seen Property map to update.
+ * @param parsed Parsed token metadata.
+ * @param token Original Tailwind token.
+ */
+function rememberCssProperty(
+    seen: Map<string, Map<string, string>>,
+    parsed: ParsedClassToken,
+    token: string,
+): void {
+    if (!parsed.cssProperty) {
+        return;
+    }
+    const scope = parsed.keyPath.join('\0');
+    let properties = seen.get(scope);
+    if (!properties) {
+        properties = new Map();
+        seen.set(scope, properties);
+    }
+    properties.set(parsed.cssProperty, token);
+}
+
+/**
+ * Remove a previously emitted value from a nested sz object.
+ *
+ * Used when a later token proves that auto-migrating a semantic CSS property
+ * would be unsafe.
+ *
+ * @param obj Root sz object.
+ * @param keyPath Variant key path.
+ * @param prop Property to delete.
+ */
+function removeNestedValue(obj: Record<string, unknown>, keyPath: string[], prop: string): void {
+    let current: Record<string, unknown> | undefined = obj;
+    const parents: Array<[Record<string, unknown>, string]> = [];
+
+    for (const key of keyPath) {
+        const next = current[key];
+        if (!next || typeof next !== 'object' || Array.isArray(next)) {
+            return;
+        }
+        parents.push([current, key]);
+        current = next as Record<string, unknown>;
+    }
+
+    delete current[prop];
+
+    for (let index = parents.length - 1; index >= 0; index--) {
+        const [parent, key] = parents[index];
+        const child = parent[key];
+        if (child && typeof child === 'object' && Object.keys(child).length === 0) {
+            delete parent[key];
+        }
+    }
 }
