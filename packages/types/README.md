@@ -102,6 +102,11 @@ const config: CsszyxConfig = {
 shared config validation and must not be passed in `tokens` or `autoPrefix`.
 `autoPrefix` remains blocked until CSS pre-scan support exists.
 
+Use the option only for explicit tokens that are defined by the same production
+build. Alias mode preserves the original custom-property names, rewrites static
+`sz` references and CSS `var(--token)` references, and does not optimize runtime
+fallback `sz={expr}` shapes.
+
 The reserved namespace list is exported as `TAILWIND_RESERVED_PREFIXES`, with
 `isTailwindReservedCustomProperty(name)` for validation. It follows Tailwind's
 theme variable namespace documentation. If Tailwind adds a new namespace, update

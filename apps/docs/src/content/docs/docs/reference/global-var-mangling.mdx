@@ -66,3 +66,17 @@ Runtime fallback `sz={expr}` shapes are not aliased in Phase H v1. They remain
 correct because alias mode keeps the original custom properties defined, but
 they should not be counted as optimized references in size or performance
 reports.
+
+## When to Use
+
+Use Phase H v1 only when all of these are true:
+
+- The variables are app-owned public tokens, not Tailwind `@theme` namespaces.
+- The full token list is explicit in `tokens`.
+- The emitted CSS defines every token in the same production build.
+- The expected savings come from static `sz` values and CSS `var(--token)`
+  references, not runtime fallback `sz={expr}`.
+
+Do not use `autoPrefix` or rename mode yet. They require additional validation
+because source transforms need the same alias table before CSS output rewriting
+runs.
