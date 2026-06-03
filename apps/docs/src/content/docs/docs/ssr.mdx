@@ -49,8 +49,9 @@ The client runtime calls `verifyMangleChecksum(expectedChecksum)` before
 hydration. If the expected checksum doesn't match the checksum embedded on
 `<html data-sz-checksum="...">`, the abort protocol fires.
 
-When `production.mangleVars` is enabled, the same checksum map also includes
-CSS-variable entries such as `var:--_sz-p:--cz`. The debug helper keeps a
+When `production.mangleVars` or `production.mangleGlobalVars` emits CSS
+variable aliases, the same checksum map also includes CSS-variable entries such
+as `var:--_sz-p:--cz` or `var:--brand-primary`. The debug helper keeps a
 separate `window.__csszyx.varMangleMap` for inspection.
 
 ## Abort Protocol

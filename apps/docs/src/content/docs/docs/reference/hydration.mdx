@@ -91,10 +91,12 @@ function loadMangleMapFromDOM(): MangleMap | null;
 type MangleMap = Record<string, string>; // { 'class:p-4': 'z', 'var:--_sz-p:--cz': '--cz' }
 ```
 
-When `production.mangleVars` is enabled, the checksum payload includes both
-class and CSS-variable entries. One original dynamic variable can map to more
-than one mangled name, so variable entries are namespaced with the mangled name
-in the checksum key.
+When `production.mangleVars` or `production.mangleGlobalVars` emits CSS
+variable aliases, the checksum payload includes both class and CSS-variable
+entries. One original dynamic variable can map to more than one mangled name,
+so one-to-many variable entries are namespaced with the mangled name in the
+checksum key. Global aliases use the same `var:` namespace, for example
+`var:--brand-primary`.
 
 ### `verifyMangleChecksum(expectedChecksum)`
 

@@ -254,5 +254,23 @@ describe('html-transformer', () => {
                 'var:--_sz-p:--sz': '--sz',
             });
         });
+
+        it('includes global variable aliases in the checksum payload namespace', () => {
+            const payload = createHydrationMangleMap(sampleMap, globalVarMap);
+
+            expect(payload).toEqual({
+                'class:p-4': 'z',
+                'class:bg-red-500': 'y',
+                'class:text-white': 'x',
+                'var:--brand-primary': '---gz',
+                'var:--_sz-p': '--sz',
+            });
+            expect(payload).not.toEqual(
+                createHydrationMangleMap(sampleMap, {
+                    ...globalVarMap,
+                    '--brand-primary': '---gy',
+                }),
+            );
+        });
     });
 });
