@@ -22,8 +22,19 @@ describe('webpack global variable aliases', () => {
         await runWebpack(root);
 
         const css = readFileSync(join(root, 'dist/assets/style.css'), 'utf8');
+        const manifest = JSON.parse(
+            readFileSync(join(root, 'dist/csszyx-manifest.json'), 'utf8'),
+        ) as {
+            globalVarAliases?: Record<string, string>;
+        };
+        const globalVarMap = JSON.parse(
+            readFileSync(join(root, 'dist/.csszyx/global-var-map.json'), 'utf8'),
+        );
+
         expect(css).toContain('---gz:var(--brand-primary)');
         expect(css).toContain('color:var(---gz)');
+        expect(manifest.globalVarAliases).toEqual({ '--brand-primary': '---gz' });
+        expect(globalVarMap).toEqual({ '--brand-primary': '---gz' });
     });
 
     it('fails closed when explicit global variable aliases are missing CSS definitions', async () => {

@@ -439,11 +439,13 @@ function buildVarMangleMap(
  *
  * @param varMangleMap CSS variable mangle metadata.
  * @param aliasPrefix Active generated alias prefix.
+ * @param validationResult Validated CSS alias plan to include CSS-only aliases.
  * @returns Original global variable names mapped to their generated aliases.
  */
 export function extractGlobalVarAliasesForManifest(
     varMangleMap: Record<string, CssVariableMangleValue>,
     aliasPrefix: string = CSSZYX_GLOBAL_ALIAS_PREFIX,
+    validationResult: GlobalVarAliasValidationResult | null = null,
 ): Record<string, string> {
     const aliases: Record<string, string> = {};
     for (const [original, value] of Object.entries(varMangleMap).sort(([left], [right]) =>
@@ -455,6 +457,11 @@ export function extractGlobalVarAliasesForManifest(
             aliases[original] = alias;
         }
     }
+    for (const entry of validationResult?.plan.entries ?? []) {
+        if (entry.alias.startsWith(aliasPrefix)) {
+            aliases[entry.original] = entry.alias;
+        }
+    }
     return aliases;
 }
 
@@ -463,13 +470,15 @@ export function extractGlobalVarAliasesForManifest(
  *
  * @param varMangleMap CSS variable mangle metadata.
  * @param aliasPrefix Active generated alias prefix.
+ * @param validationResult Validated CSS alias plan to include CSS-only aliases.
  * @returns JSON asset contents, or null when there are no global aliases.
  */
 export function createGlobalVarMapAssetSource(
     varMangleMap: Record<string, CssVariableMangleValue>,
     aliasPrefix: string = CSSZYX_GLOBAL_ALIAS_PREFIX,
+    validationResult: GlobalVarAliasValidationResult | null = null,
 ): string | null {
-    const aliases = extractGlobalVarAliasesForManifest(varMangleMap, aliasPrefix);
+    const aliases = extractGlobalVarAliasesForManifest(varMangleMap, aliasPrefix, validationResult);
     return Object.keys(aliases).length > 0 ? JSON.stringify(aliases) : null;
 }
 
@@ -2504,6 +2513,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         const globalVarAliases = extractGlobalVarAliasesForManifest(
                             state.varMangleMap,
                             globalVarAliasPrefix,
+                            state.globalVarValidationResult,
                         );
                         if (Object.keys(globalVarAliases).length > 0) {
                             manifestData.globalVarAliases = globalVarAliases;
@@ -2518,6 +2528,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         const globalVarMapAsset = createGlobalVarMapAssetSource(
                             state.varMangleMap,
                             globalVarAliasPrefix,
+                            state.globalVarValidationResult,
                         );
                         if (globalVarMapAsset) {
                             compilation.emitAsset(
@@ -2680,6 +2691,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 const globalVarAliases = extractGlobalVarAliasesForManifest(
                     state.varMangleMap,
                     globalVarAliasPrefix,
+                    state.globalVarValidationResult,
                 );
                 if (Object.keys(globalVarAliases).length > 0) {
                     manifestData.globalVarAliases = globalVarAliases;
@@ -2695,6 +2707,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 const globalVarMapAsset = createGlobalVarMapAssetSource(
                     state.varMangleMap,
                     globalVarAliasPrefix,
+                    state.globalVarValidationResult,
                 );
                 if (globalVarMapAsset) {
                     this.emitFile({

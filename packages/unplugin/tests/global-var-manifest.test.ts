@@ -57,6 +57,21 @@ describe('extractGlobalVarAliasesForManifest', () => {
         expect(createGlobalVarMapAssetSource({ '--_sz-p': '--sz' })).toBeNull();
     });
 
+    it('includes aliases from the validated CSS plan even without TSX metadata', () => {
+        const validation = {
+            plan: {
+                entries: [{ original: '--brand-primary', alias: '---gz', scopes: ['rule::root'] }],
+            },
+        } as never;
+
+        expect(extractGlobalVarAliasesForManifest({}, '---g', validation)).toEqual({
+            '--brand-primary': '---gz',
+        });
+        expect(createGlobalVarMapAssetSource({}, '---g', validation)).toBe(
+            '{"--brand-primary":"---gz"}',
+        );
+    });
+
     it('normalizes compiler aliases for transform cache identity', () => {
         expect(
             normalizeGlobalVarAliasesForCache({
