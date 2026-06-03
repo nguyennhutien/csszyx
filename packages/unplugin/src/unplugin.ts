@@ -141,6 +141,7 @@ const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
 const DEFAULT_VAR_MANGLE_MAP_MAX_BYTES = 100 * 1024;
+const GLOBAL_VAR_ALIAS_MAP_OWNER = '\0csszyx:global-var-aliases';
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
@@ -1212,7 +1213,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         classes: new Set<string>(),
         mangleMap: {},
         varMangleEntriesByFile: new Map(),
-        varMangleMap: {},
+        varMangleMap: Object.fromEntries(earlyGlobalVarAliasEntries),
         cssVarMetricsByFile: new Map(),
         cssVarMetrics: emptyCSSVariableMetrics(),
         checksum: '',
@@ -1223,6 +1224,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         globalVarSourceFilesByFile: new Map<string, string>(),
         globalVarValidationResult: null,
     };
+    if (earlyGlobalVarAliasEntries.length > 0) {
+        state.varMangleEntriesByFile.set(GLOBAL_VAR_ALIAS_MAP_OWNER, earlyGlobalVarAliasEntries);
+    }
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
     const SOURCE_EXTENSIONS = new Set(['.tsx', '.jsx', '.ts', '.js']);

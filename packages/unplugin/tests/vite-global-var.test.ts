@@ -47,13 +47,25 @@ describe('vite global variable aliases', () => {
         expect(js).not.toContain('bg-(--brand-primary)');
         expect(manifest.mangleMap?.['bg-(---gz)']).toBe('z');
         expect(css).toContain('---gz:var(--brand-primary)');
+        expect(css).toContain('---gy:var(--brand-secondary)');
         expect(css).toContain('color:var(---gz)');
+        expect(css).toContain('border-color:var(---gy)');
         expect(html).toContain('data-sz-checksum=');
         expect(html).toContain('"var:--brand-primary":"---gz"');
-        expect(html).toContain('var vm={"--brand-primary":"---gz"}');
-        expect(manifest.varMangleMap).toEqual({ '--brand-primary': '---gz' });
-        expect(manifest.globalVarAliases).toEqual({ '--brand-primary': '---gz' });
-        expect(globalVarMap).toEqual({ '--brand-primary': '---gz' });
+        expect(html).toContain('"var:--brand-secondary":"---gy"');
+        expect(html).toContain('var vm={"--brand-primary":"---gz","--brand-secondary":"---gy"}');
+        expect(manifest.varMangleMap).toEqual({
+            '--brand-primary': '---gz',
+            '--brand-secondary': '---gy',
+        });
+        expect(manifest.globalVarAliases).toEqual({
+            '--brand-primary': '---gz',
+            '--brand-secondary': '---gy',
+        });
+        expect(globalVarMap).toEqual({
+            '--brand-primary': '---gz',
+            '--brand-secondary': '---gy',
+        });
 
         const server = await serveStatic(join(root, 'dist'));
         const browser = await chromium.launch({ headless: true });
@@ -70,8 +82,18 @@ describe('vite global variable aliases', () => {
                 )
                 .toBe('rgb(255, 0, 0)');
             await expect
+                .poll(() =>
+                    page
+                        .getByTestId('global-card')
+                        .evaluate(element => getComputedStyle(element).borderTopColor),
+                )
+                .toBe('rgb(0, 0, 255)');
+            await expect
                 .poll(() => page.evaluate(() => window.__csszyx?.decodeGlobalVar?.('---gz')))
                 .toBe('--brand-primary');
+            await expect
+                .poll(() => page.evaluate(() => window.__csszyx?.decodeGlobalVar?.('---gy')))
+                .toBe('--brand-secondary');
         } finally {
             await browser.close();
             await server.close();
@@ -107,7 +129,10 @@ function createFixture(): string {
     );
     writeFileSync(
         join(src, 'style.css'),
-        ':root{--brand-primary:red}.card{color:var(--brand-primary)}',
+        [
+            ':root{--brand-primary:red;--brand-secondary:blue}',
+            '.card{color:var(--brand-primary);border-color:var(--brand-secondary);border-style:solid;border-width:1px}',
+        ].join(''),
     );
     return root;
 }
@@ -139,7 +164,7 @@ async function runVite(root: string): Promise<void> {
                 production: {
                     mangleGlobalVars: {
                         enabled: true,
-                        tokens: ['--brand-primary'],
+                        tokens: ['--brand-primary', '--brand-secondary'],
                     },
                 },
             }) as PluginOption[]),
