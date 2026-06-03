@@ -385,6 +385,33 @@ function rewriteCssWithValidatedGlobalVarPlan(
 }
 
 /**
+ * Ensures the CSS-derived validation plan matches the early source-transform
+ * alias table exactly.
+ *
+ * @param result Validated CSS/source result.
+ * @param expectedEntries Early original-to-alias entries.
+ */
+function assertGlobalVarPlanMatchesEarlyAliases(
+    result: GlobalVarAliasValidationResult,
+    expectedEntries: ReadonlyArray<readonly [string, string]>,
+): void {
+    const actualEntries = [...result.plan.aliases.entries()].sort(([left], [right]) =>
+        left.localeCompare(right),
+    );
+    const expected = expectedEntries
+        .map(([original, alias]) => [original, alias])
+        .sort(([left], [right]) => left.localeCompare(right));
+    const expectedJson = JSON.stringify(expected);
+    const actualJson = JSON.stringify(actualEntries);
+    if (expectedJson !== actualJson) {
+        throw new Error(
+            '[csszyx] production.mangleGlobalVars validation failed:\n' +
+                `CSS alias plan ${actualJson} does not match source-transform alias table ${expectedJson}.`,
+        );
+    }
+}
+
+/**
  * Builds a stable one-to-many CSS variable mangle map from per-file ownership.
  *
  * @param entriesByFile Per-file CSS variable metadata.
@@ -1248,6 +1275,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }),
         );
         assertNoGlobalVarAliasValidationErrors(result);
+        assertGlobalVarPlanMatchesEarlyAliases(result, earlyGlobalVarAliasEntries);
         return result;
     }
 
