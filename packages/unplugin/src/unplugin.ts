@@ -260,6 +260,13 @@ interface RollupBundleAssetLike {
 }
 
 /**
+ *
+ */
+interface WebpackAssetLike {
+    source(): unknown;
+}
+
+/**
  * Extracts CSS assets from a Rollup/Vite output bundle for pure global-var
  * validation before output mutation.
  *
@@ -287,6 +294,31 @@ function collectRollupGlobalVarCssAssets(
             fileName: asset.fileName,
             source: asset.source,
         }));
+}
+
+/**
+ * Extracts CSS assets from a Webpack asset map for pure global-var validation
+ * before output mutation.
+ *
+ * @param assets Webpack compilation assets.
+ * @returns CSS assets in stable file-name order.
+ */
+function collectWebpackGlobalVarCssAssets(
+    assets: Record<string, WebpackAssetLike>,
+): GlobalVarCssAssetSource[] {
+    return Object.entries(assets)
+        .flatMap(([fileName, asset]) => {
+            if (!/\.css(?:$|\?)/.test(fileName)) {
+                return [];
+            }
+            const source = asset.source();
+            if (typeof source !== 'string' && !(source instanceof Uint8Array)) {
+                return [];
+            }
+            return [{ fileName, source }];
+        })
+        .sort((left, right) => left.fileName.localeCompare(right.fileName))
+        .map(({ fileName, source }) => ({ fileName, source }));
 }
 
 /**
@@ -2331,6 +2363,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     },
                     assets => {
                         finalizeMangleMap();
+                        validateGlobalVarBundleInputs(collectWebpackGlobalVarCssAssets(assets));
 
                         // Webpack dev mode wraps every module in eval("..."), which means
                         // className:"..." strings become className:\"...\" inside the eval.
