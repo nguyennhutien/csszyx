@@ -8,11 +8,24 @@
  *   pnpm bench:global-vars -- --sizes 100,1000 --iterations 7 --warmups 3
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
+
+import { type PluginOption, build as viteBuild } from 'vite';
 
 import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
 import {
@@ -20,6 +33,7 @@ import {
     rewriteGlobalVarCssAliases,
     scanGlobalVarCss,
 } from '../packages/unplugin/src/global-var-scanner.js';
+import { vitePlugin } from '../packages/unplugin/src/unplugin.js';
 
 interface CliOptions {
     /** Synthetic token counts to benchmark. */
@@ -30,6 +44,8 @@ interface CliOptions {
     warmups: number;
     /** Output directory for markdown and JSON reports. */
     outDir: string;
+    /** Include a temporary Vite production build fixture. */
+    productionBuild: boolean;
 }
 
 interface BenchRow {
@@ -102,11 +118,23 @@ interface Fixture {
     tokens: string[];
 }
 
+interface ProductionBuildOutput {
+    /** Disabled build output text. */
+    disabledOutput: string;
+    /** Alias build output text. */
+    aliasOutput: string;
+    /** Number of alias declarations observed in emitted CSS. */
+    aliasDeclarations: number;
+    /** Number of alias var() references observed in emitted CSS. */
+    rewrittenReferences: number;
+}
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const REPORT_NAME = 'phase-h-global-var-bench';
+const requireFromHere = createRequire(import.meta.url);
 
 const options = parseCliOptions(process.argv.slice(2));
-const rows = runBench(options);
+const rows = await runBench(options);
 writeReports(rows, options);
 
 /**
@@ -121,6 +149,7 @@ function parseCliOptions(args: string[]): CliOptions {
         iterations: 5,
         warmups: 2,
         outDir: '.agent/reports',
+        productionBuild: false,
     };
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
@@ -140,6 +169,8 @@ function parseCliOptions(args: string[]): CliOptions {
         } else if (arg === '--out-dir' && next) {
             options.outDir = next;
             index++;
+        } else if (arg === '--production-build') {
+            options.productionBuild = true;
         }
     }
     return options;
@@ -151,18 +182,33 @@ function parseCliOptions(args: string[]): CliOptions {
  * @param options CLI options.
  * @returns benchmark rows.
  */
-function runBench(options: CliOptions): BenchRow[] {
-    return options.sizes.map(size => {
-        const fixture = createFixture(size);
-        return measureCase({
-            name: `global-vars/${size}/pure-pipeline`,
-            tokens: size,
-            iterations: options.iterations,
-            warmups: options.warmups,
-            run: () => runPipeline(fixture),
-            note: 'Pure Phase H pipeline: CSS scan/plan/rewrite plus oxc TSX rewrite with the same alias table.',
-        });
-    });
+async function runBench(options: CliOptions): Promise<BenchRow[]> {
+    const rows = await Promise.all(
+        options.sizes.map(size => {
+            const fixture = createFixture(size);
+            return measureCase({
+                name: `global-vars/${size}/pure-pipeline`,
+                tokens: size,
+                iterations: options.iterations,
+                warmups: options.warmups,
+                run: () => runPipeline(fixture),
+                note: 'Pure Phase H pipeline: CSS scan/plan/rewrite plus oxc TSX rewrite with the same alias table.',
+            });
+        }),
+    );
+    if (options.productionBuild) {
+        rows.push(
+            await measureCase({
+                name: 'global-vars/vite-production-build/explicit-tokens',
+                tokens: 2,
+                iterations: Math.max(1, Math.min(options.iterations, 3)),
+                warmups: Math.min(options.warmups, 1),
+                run: runViteProductionBuildPipeline,
+                note: 'Programmatic Vite production build pair: disabled build plus explicit-token alias build through the real unplugin hooks.',
+            }),
+        );
+    }
+    return rows;
 }
 
 /**
@@ -182,17 +228,40 @@ function measureCase(input: {
     tokens: number;
     iterations: number;
     warmups: number;
-    run: () => OutputMetrics;
+    run: () => OutputMetrics | Promise<OutputMetrics>;
     note: string;
-}): BenchRow {
-    let output = input.run();
+}): BenchRow | Promise<BenchRow> {
+    return measureCaseAsync(input);
+}
+
+/**
+ * Measure one benchmark case.
+ *
+ * @param input measurement input.
+ * @param input.name case name.
+ * @param input.tokens token count.
+ * @param input.iterations measured iterations.
+ * @param input.warmups warmup iterations.
+ * @param input.run measured callback.
+ * @param input.note report note.
+ * @returns benchmark row.
+ */
+async function measureCaseAsync(input: {
+    name: string;
+    tokens: number;
+    iterations: number;
+    warmups: number;
+    run: () => OutputMetrics | Promise<OutputMetrics>;
+    note: string;
+}): Promise<BenchRow> {
+    let output = await input.run();
     for (let index = 0; index < input.warmups; index++) {
-        output = input.run();
+        output = await input.run();
     }
     const samplesMs: number[] = [];
     for (let index = 0; index < input.iterations; index++) {
         const start = performance.now();
-        output = input.run();
+        output = await input.run();
         samplesMs.push(performance.now() - start);
     }
     return {
@@ -245,6 +314,182 @@ function runPipeline(fixture: Fixture): OutputMetrics {
         aliasDeclarations: cssRewrite.aliasDeclarations,
         rewrittenReferences: cssRewrite.rewrittenReferences,
     };
+}
+
+/**
+ * Runs a temporary Vite production build fixture with global aliases disabled
+ * and enabled, then compares emitted artifact sizes.
+ *
+ * @returns output metrics.
+ */
+async function runViteProductionBuildPipeline(): Promise<OutputMetrics> {
+    const output = await runViteProductionBuildPair();
+    return {
+        inputBytes: 0,
+        disabledBytes: byteLength(output.disabledOutput),
+        aliasBytes: byteLength(output.aliasOutput),
+        disabledGzipBytes: gzipSize(output.disabledOutput),
+        aliasGzipBytes: gzipSize(output.aliasOutput),
+        disabledBrotliBytes: brotliSize(output.disabledOutput),
+        aliasBrotliBytes: brotliSize(output.aliasOutput),
+        byteDelta: byteLength(output.aliasOutput) - byteLength(output.disabledOutput),
+        gzipDelta: gzipSize(output.aliasOutput) - gzipSize(output.disabledOutput),
+        brotliDelta: brotliSize(output.aliasOutput) - brotliSize(output.disabledOutput),
+        aliasDeclarations: output.aliasDeclarations,
+        rewrittenReferences: output.rewrittenReferences,
+    };
+}
+
+/**
+ * Builds one temporary Vite app twice: disabled and explicit-token alias mode.
+ *
+ * @returns build output text and alias counters.
+ */
+async function runViteProductionBuildPair(): Promise<ProductionBuildOutput> {
+    const root = createViteProductionFixture();
+    try {
+        const disabledDir = join(root, 'dist-disabled');
+        const aliasDir = join(root, 'dist-alias');
+        await runViteBuild(root, disabledDir, false);
+        await runViteBuild(root, aliasDir, true);
+        const disabledOutput = readOutputBlob(disabledDir);
+        const aliasOutput = readOutputBlob(aliasDir);
+        if (!aliasOutput.includes('---gz') || !aliasOutput.includes('var(---gz)')) {
+            throw new Error(
+                'Vite production global-var alias fixture did not emit expected aliases.',
+            );
+        }
+        return {
+            disabledOutput,
+            aliasOutput,
+            aliasDeclarations: countMatches(aliasOutput, /---g[\w-]+:var\(--brand-/g),
+            rewrittenReferences: countMatches(aliasOutput, /var\(---g[\w-]+\)/g),
+        };
+    } finally {
+        rmSync(root, { force: true, recursive: true });
+    }
+}
+
+/**
+ * Creates a temporary Vite React fixture with explicit global token usage.
+ *
+ * @returns fixture root.
+ */
+function createViteProductionFixture(): string {
+    const root = mkdtempSync(join(tmpdir(), 'csszyx-global-var-vite-'));
+    const src = join(root, 'src');
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+        join(root, 'index.html'),
+        '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+        'utf8',
+    );
+    writeFileSync(
+        join(src, 'main.tsx'),
+        [
+            "import React from 'react';",
+            "import { createRoot } from 'react-dom/client';",
+            "import './theme.css';",
+            'function App() {',
+            '  return (',
+            '    <main>',
+            "      <section sz={{ bg: '--brand-primary', color: '--brand-secondary' }} />",
+            "      <article sz={{ borderColor: '--brand-primary' }} />",
+            '    </main>',
+            '  );',
+            '}',
+            "createRoot(document.getElementById('root')!).render(<App />);",
+        ].join('\n'),
+        'utf8',
+    );
+    writeFileSync(
+        join(src, 'theme.css'),
+        [
+            ':root{--brand-primary:#0ea5e9;--brand-secondary:#111827}',
+            '.card{color:var(--brand-primary);background:var(--brand-secondary)}',
+        ].join('\n'),
+        'utf8',
+    );
+    return root;
+}
+
+/**
+ * Runs Vite's async build API for one fixture mode.
+ *
+ * @param root fixture root.
+ * @param outDir output directory.
+ * @param enabled whether explicit global aliases are enabled.
+ */
+async function runViteBuild(root: string, outDir: string, enabled: boolean): Promise<void> {
+    await viteBuild({
+        root,
+        logLevel: 'silent',
+        resolve: {
+            alias: [
+                {
+                    find: 'react/jsx-runtime',
+                    replacement: requireFromHere.resolve('react/jsx-runtime'),
+                },
+                {
+                    find: 'react-dom/client',
+                    replacement: requireFromHere.resolve('react-dom/client'),
+                },
+                { find: 'react', replacement: requireFromHere.resolve('react') },
+            ],
+        },
+        plugins: [
+            ...(vitePlugin({
+                build: { cache: false, parser: 'oxc' },
+                production: {
+                    mangleGlobalVars: enabled
+                        ? {
+                              enabled: true,
+                              tokens: ['--brand-primary', '--brand-secondary'],
+                          }
+                        : undefined,
+                },
+            }) as PluginOption[]),
+        ],
+        build: {
+            emptyOutDir: true,
+            outDir,
+            minify: true,
+        },
+    });
+}
+
+/**
+ * Reads all emitted files into one deterministic text blob.
+ *
+ * @param root output root.
+ * @returns output blob.
+ */
+function readOutputBlob(root: string): string {
+    return listFiles(root)
+        .map(file => readFileSync(file, 'utf8'))
+        .join('\n');
+}
+
+/**
+ * Lists output files in stable order.
+ *
+ * @param root output root.
+ * @returns file paths.
+ */
+function listFiles(root: string): string[] {
+    if (!existsSync(root)) {
+        return [];
+    }
+    const files: string[] = [];
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+        const fullPath = join(root, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...listFiles(fullPath));
+        } else if (entry.isFile() && statSync(fullPath).size > 0) {
+            files.push(fullPath);
+        }
+    }
+    return files.sort();
 }
 
 /**
@@ -324,6 +569,7 @@ function writeReports(rows: BenchRow[], options: CliOptions): void {
  * @returns markdown.
  */
 function renderMarkdown(payload: ReportPayload): string {
+    const hasProductionRows = payload.rows.some(row => row.name.includes('vite-production-build'));
     const rows = payload.rows
         .map(
             row =>
@@ -342,18 +588,20 @@ ${rows}
 
 ## Notes
 
-- This is a pure pipeline harness, not a production build-hook benchmark.
-- Each sample scans CSS, plans aliases, rewrites CSS, transforms TSX without
-  aliases, and transforms TSX with aliases using the same plan.
+- Pure pipeline rows scan CSS, plan aliases, rewrite CSS, transform TSX without
+  aliases, and transform TSX with aliases using the same plan.
+${hasProductionRows ? '- Vite production rows are temporary fixture builds enabled by `--production-build`; they validate real unplugin build hooks, but the tiny fixture is not a product-size savings claim.\n' : '- Run with `--production-build` to add a temporary Vite production fixture that validates real unplugin build hooks.\n'}- Wall-time rows include the full measured callback for that case. The Vite
+  production row measures a disabled build plus an explicit-token alias build.
 - Negative byte deltas mean alias mode is smaller than disabled mode. Positive
   deltas mean alias declarations cost more than the source/CSS reference
   savings for that fixture.
 
 ## Remaining
 
-- Re-run on a real app after production build-hook wiring exists.
-- Add end-to-end build wall-time rows once \`mangleGlobalVars.enabled\` can run
-  without the feature gate.
+- Re-run on a token-heavy real app before using the production fixture's size
+  deltas for product decisions.
+- \`autoPrefix\` remains blocked until csszyx can derive the alias table before
+  source transforms or proves a safe post-transform JS rewrite strategy.
 `;
 }
 
@@ -433,4 +681,15 @@ function format(value: number): string {
  */
 function formatSigned(value: number): string {
     return value > 0 ? `+${value}` : String(value);
+}
+
+/**
+ * Count regex matches in a string.
+ *
+ * @param value input string.
+ * @param pattern global regex.
+ * @returns match count.
+ */
+function countMatches(value: string, pattern: RegExp): number {
+    return [...value.matchAll(pattern)].length;
 }
