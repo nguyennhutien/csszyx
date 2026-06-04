@@ -37,10 +37,12 @@ if (enableTurboCsszyxLoader) {
                     config: {
                         mangleVars: false,
                     },
-                    nextVersion: '16.2.7',
-                    csszyxVersion: '0.9.0',
-                    compilerVersion: '0.9.0',
-                    nativeVersion: '0.9.0',
+                    // csszyxVersion / compilerVersion / nativeVersion / nextVersion are
+                    // intentionally omitted so the loader resolves them from the
+                    // installed @csszyx/unplugin and @csszyx/compiler package.json
+                    // files at runtime. Hardcoding here would make the manifest's
+                    // generation identity drift from the actual engine after any
+                    // version bump and silently validate stale state as fresh.
                 },
             },
         ],
