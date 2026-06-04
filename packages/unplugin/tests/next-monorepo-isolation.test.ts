@@ -99,8 +99,8 @@ describe('Next monorepo / Vercel sibling-app isolation', () => {
             pid: 4242,
         });
 
-        expect(webShard.startsWith(webRoot)).toBe(true);
-        expect(webShard.startsWith(docsRoot)).toBe(false);
+        expect(webShard.filePath.startsWith(webRoot)).toBe(true);
+        expect(webShard.filePath.startsWith(docsRoot)).toBe(false);
 
         // docs shard dir must not exist purely as a side effect of web writes.
         // (readdirSync on a missing dir throws ENOENT — we use that as the

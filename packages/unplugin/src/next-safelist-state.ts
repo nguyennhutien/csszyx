@@ -34,6 +34,12 @@ export interface NextSafelistMaterializeResult {
     shardCount: number;
 }
 
+/** Result returned after one shard write attempt. */
+export interface NextSafelistShardWriteResult {
+    filePath: string;
+    changed: boolean;
+}
+
 /** Options for atomic file writes that need to survive Windows file scanners. */
 export interface AtomicWriteOptions {
     maxRetries?: number;
@@ -128,20 +134,28 @@ export function resolveNextSafelistStatePaths(
 /**
  * Write one source file's complete class set as an atomic metadata shard.
  *
+ * Skips the rewrite when an equivalent shard already exists on disk so that
+ * callers (loader, prebuild) can avoid running the safelist materialization
+ * cycle for no-op invocations. `sourceHash` is the equivalence key; the
+ * timestamp/pid fields stored in the shard are intentionally ignored.
+ *
  * @param shardsDir Directory containing safelist shard JSON files.
  * @param input Complete class metadata for one source file.
  * @param options Atomic write options.
- * @returns Absolute shard file path.
+ * @returns Shard file path plus whether the on-disk content was rewritten.
  */
 export function writeNextSafelistShard(
     shardsDir: string,
     input: NextSafelistShardInput,
     options: AtomicWriteOptions = {},
-): string {
+): NextSafelistShardWriteResult {
     const shard = normalizeShardInput(input);
     const filePath = path.join(shardsDir, `${shard.cacheKey}.json`);
+    if (isExistingShardEquivalent(filePath, shard)) {
+        return { filePath, changed: false };
+    }
     atomicWriteFileSync(filePath, `${JSON.stringify(shard, null, 2)}\n`, options);
-    return filePath;
+    return { filePath, changed: true };
 }
 
 /**
@@ -328,6 +342,24 @@ export function atomicRenameWithRetry(
             }
             sleepSync(retryDelayMs);
         }
+    }
+}
+
+/**
+ *
+ * @param filePath
+ * @param shard
+ */
+function isExistingShardEquivalent(filePath: string, shard: ShardFile): boolean {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<ShardFile>;
+        return (
+            parsed.version === 1 &&
+            parsed.sourcePath === shard.sourcePath &&
+            parsed.sourceHash === shard.sourceHash
+        );
+    } catch {
+        return false;
     }
 }
 

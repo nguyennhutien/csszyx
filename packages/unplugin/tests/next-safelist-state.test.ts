@@ -289,9 +289,11 @@ describe('Next safelist state', () => {
             classes: ['p-8'],
         });
 
-        expect(upperShard).not.toBe(lowerShard);
-        expect(existsSync(upperShard)).toBe(true);
-        expect(existsSync(lowerShard)).toBe(true);
+        expect(upperShard.filePath).not.toBe(lowerShard.filePath);
+        expect(upperShard.changed).toBe(true);
+        expect(lowerShard.changed).toBe(true);
+        expect(existsSync(upperShard.filePath)).toBe(true);
+        expect(existsSync(lowerShard.filePath)).toBe(true);
     });
 
     it('treats path separators as part of the cache key: explicit cacheKey collision is the only mechanism for cross-OS aliasing', () => {
@@ -319,12 +321,13 @@ describe('Next safelist state', () => {
             classes: ['p-4'],
         });
 
-        expect(nested).not.toBe(flat);
+        expect(nested.filePath).not.toBe(flat.filePath);
 
         // Explicit cacheKey collision: two callers can opt into sharing one
         // shard slot when they know two source paths address one logical file
         // (e.g. mid-build os.path normalization). The second write overwrites
-        // the first because the cache key is identical.
+        // the first because the cache key is identical and the equivalence
+        // check sees a different sourcePath/sourceHash on disk.
         const explicitKey = 'shared-explicit-key';
         const firstWrite = writeNextSafelistShard(paths.shardsDir, {
             sourcePath: join(root, 'aliased', 'page.tsx'),
@@ -338,8 +341,33 @@ describe('Next safelist state', () => {
             classes: ['p-8'],
             cacheKey: explicitKey,
         });
-        expect(firstWrite).toBe(secondWrite);
-        const finalClasses = JSON.parse(readFileSync(secondWrite, 'utf8')).classes;
+        expect(firstWrite.filePath).toBe(secondWrite.filePath);
+        expect(firstWrite.changed).toBe(true);
+        expect(secondWrite.changed).toBe(true);
+        const finalClasses = JSON.parse(readFileSync(secondWrite.filePath, 'utf8')).classes;
         expect(finalClasses).toEqual(['p-8']);
+    });
+
+    it('reports `changed: false` when the same shard content is rewritten', () => {
+        const root = tempRoot();
+        const sourcePath = join(root, 'src/Same.tsx');
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(sourcePath, 'export function Same() {}', { flag: 'wx' });
+        const paths = resolveNextSafelistStatePaths(root);
+
+        const firstWrite = writeNextSafelistShard(paths.shardsDir, {
+            sourcePath,
+            sourceHash: 'hash-same',
+            classes: ['p-4'],
+        });
+        const secondWrite = writeNextSafelistShard(paths.shardsDir, {
+            sourcePath,
+            sourceHash: 'hash-same',
+            classes: ['p-4'],
+        });
+
+        expect(firstWrite.changed).toBe(true);
+        expect(secondWrite.changed).toBe(false);
+        expect(secondWrite.filePath).toBe(firstWrite.filePath);
     });
 });

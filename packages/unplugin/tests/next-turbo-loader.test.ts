@@ -72,14 +72,51 @@ describe('Next Turbopack loader core', () => {
         expect(result.materialized).toBe(true);
         expect(readFileSync(result.context.safelist.outputPath, 'utf8')).toContain('p-4');
         expect(readNextGenerationManifest(result.context.manifestPath)?.completed).toBe(true);
-        expect(ctx.dependencies).toEqual(
-            expect.arrayContaining([
-                result.context.manifestPath,
-                result.shardPath,
-                result.context.safelist.outputPath,
-                result.context.safelist.snapshotPath,
-            ]),
-        );
+        // The loader intentionally registers no Turbopack dependencies. The
+        // transformed code is a pure function of the source plus the resolved
+        // csszyx config; the safelist output, snapshot, and generation
+        // manifest are side-effect outputs of the cycle, not inputs of the
+        // transform, so registering them would force a self-invalidation
+        // cascade across loader calls.
+        expect(result.dependencies).toEqual([]);
+        expect(ctx.dependencies).toEqual([]);
+    });
+
+    it('skips the materialization cycle on a repeated invocation with the same source content', () => {
+        const root = tempRoot();
+        const source = 'export const App=()=> <div sz={{ p: 4 }} />;';
+        const filename = writeSource(root, source);
+        const ctx = loaderContext(root, filename);
+
+        const first = runNextTurboLoader(source, ctx, {
+            parserMode: 'babel',
+            config: { mangleVars: false },
+            nextVersion: '16.2.7',
+            csszyxVersion: '0.9.0',
+            compilerVersion: '0.9.0',
+            nativeVersion: '0.9.0-test',
+            writeOptions: { retryDelayMs: 0 },
+        });
+        const second = runNextTurboLoader(source, ctx, {
+            parserMode: 'babel',
+            config: { mangleVars: false },
+            nextVersion: '16.2.7',
+            csszyxVersion: '0.9.0',
+            compilerVersion: '0.9.0',
+            nativeVersion: '0.9.0-test',
+            writeOptions: { retryDelayMs: 0 },
+        });
+
+        // First call writes the shard and runs the materialize cycle. Second
+        // call sees the equivalent shard already on disk; the shard write is
+        // a no-op so the cycle is skipped entirely. Without this skip, every
+        // Turbopack loader invocation across N files would re-acquire the
+        // state lock and re-materialize the full safelist, making initial dev
+        // start O(N²) shard reads.
+        expect(first.materialized).toBe(true);
+        expect(second.materialized).toBe(false);
+        expect(second.shardPath).toBe(first.shardPath);
+        expect(readFileSync(second.context.safelist.outputPath, 'utf8')).toContain('p-4');
     });
 
     it('can write only the metadata shard when an external watcher owns materialization', () => {

@@ -127,19 +127,25 @@ export function runNextTurboLoader(
         source,
         loaderContext.resourcePath,
     );
-    const dependencies: string[] = [context.manifestPath];
     let shardPath: string | null = null;
     let materialized = false;
 
     if (metadata.classes.length > 0) {
-        shardPath = writeNextSafelistShard(
+        const shardResult = writeNextSafelistShard(
             context.safelist.shardsDir,
             createNextSafelistShardFromMetadata(metadata, createShardCacheKey(context, metadata)),
             options.writeOptions,
         );
-        dependencies.push(shardPath);
+        shardPath = shardResult.filePath;
 
-        if (options.materializeSafelist !== false) {
+        // The shard write is content-addressed by (generation, source path,
+        // sourceHash). When `changed === false` the on-disk shard already
+        // matches the result we would produce, which means the safelist is
+        // already up to date for this file. Skipping the cycle here turns the
+        // loader from O(N) cycles per file in steady state into O(1), and the
+        // generation manifest written by the most recent cycle already covers
+        // this transform.
+        if (options.materializeSafelist !== false && shardResult.changed) {
             runNextWatcherCycle(context, {
                 writeOptions: options.writeOptions,
                 lockOptions: {
@@ -149,21 +155,26 @@ export function runNextTurboLoader(
                 },
             });
             materialized = true;
-            dependencies.push(context.safelist.outputPath, context.safelist.snapshotPath);
         }
     }
 
-    for (const dependency of dependencies) {
-        loaderContext.addDependency?.(dependency);
-    }
-
+    // The loader's transformed `code` is a pure function of `source` plus the
+    // resolved csszyx config (which already feeds the generation identity).
+    // It does not logically depend on the safelist output, the snapshot file,
+    // or the generation manifest — those are side-effect outputs of the
+    // materialization cycle. Registering them as Turbopack dependencies would
+    // make every loader call invalidate every other loader call's cache as
+    // soon as the cycle rewrites them, producing a re-run cascade that only
+    // converges because Turbopack content-hash-dedupes the loader output. We
+    // intentionally register no dependencies and let Tailwind v4's PostCSS
+    // `@source` watcher pick up the safelist file independently.
     return {
         code: injected.code,
         context,
         transform,
         shardPath,
         materialized,
-        dependencies,
+        dependencies: [],
     };
 }
 
