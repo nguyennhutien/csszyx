@@ -1,6 +1,5 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { TransformSourceCodeOptions } from '@csszyx/compiler';
@@ -10,6 +9,7 @@ import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
 } from './next-generation-manifest.js';
+import { readPackageVersion } from './next-package-version.js';
 import { injectNextRuntimeImports } from './next-runtime-injection.js';
 import { type AtomicWriteOptions, writeNextSafelistShard } from './next-safelist-state.js';
 import {
@@ -96,11 +96,12 @@ export function runNextTurboLoader(
         env: options.env ?? process.env,
         envKeys: options.envKeys,
         nextVersion: options.nextVersion ?? 'unknown-next',
-        csszyxVersion: options.csszyxVersion ?? readPackageVersion('../package.json'),
+        csszyxVersion:
+            options.csszyxVersion ?? readPackageVersion('../package.json', import.meta.url),
         nativeVersion:
             options.nativeVersion ??
             options.compilerVersion ??
-            readPackageVersion('../../compiler/package.json'),
+            readPackageVersion('../../compiler/package.json', import.meta.url),
         mode: options.mode ?? normalizeMode(loaderContext.mode),
     });
 
@@ -115,9 +116,11 @@ export function runNextTurboLoader(
             context.root,
             path.relative(context.root, context.cacheDir),
         ),
-        pluginVersion: options.csszyxVersion ?? readPackageVersion('../package.json'),
+        pluginVersion:
+            options.csszyxVersion ?? readPackageVersion('../package.json', import.meta.url),
         compilerVersion:
-            options.compilerVersion ?? readPackageVersion('../../compiler/package.json'),
+            options.compilerVersion ??
+            readPackageVersion('../../compiler/package.json', import.meta.url),
         astBudget: options.astBudget,
         allowBabelFallback: options.allowBabelFallback,
     });
@@ -312,19 +315,4 @@ function createShardCacheKey(
         .update('\0')
         .update(metadata.sourceHash)
         .digest('hex');
-}
-
-/**
- *
- * @param relativePackageJson
- */
-function readPackageVersion(relativePackageJson: string): string {
-    try {
-        const packageJson = JSON.parse(
-            readFileSync(new URL(relativePackageJson, import.meta.url), 'utf8'),
-        ) as { version?: unknown };
-        return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0';
-    } catch {
-        return '0.0.0';
-    }
 }

@@ -73,6 +73,16 @@
         "types": "./dist/next-turbo-loader.d.cts",
         "default": "./dist/next-turbo-loader.cjs"
       }
+    },
+    "./next-prebuild": {
+      "import": {
+        "types": "./dist/next-prebuild.d.mts",
+        "default": "./dist/next-prebuild.mjs"
+      },
+      "require": {
+        "types": "./dist/next-prebuild.d.cts",
+        "default": "./dist/next-prebuild.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",

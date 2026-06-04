@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 
 import type { JsonLike } from './next-cache-identity.js';
+import { readPackageVersion } from './next-package-version.js';
 import { type AtomicWriteOptions, writeNextSafelistShard } from './next-safelist-state.js';
 import {
     type NextSourceParserMode,
@@ -35,10 +36,10 @@ export interface NextPrebuildOptions {
     config?: JsonLike;
     env?: Record<string, string | undefined>;
     envKeys?: readonly string[];
-    nextVersion: string;
-    csszyxVersion: string;
-    compilerVersion: string;
-    nativeVersion: string;
+    nextVersion?: string;
+    csszyxVersion?: string;
+    compilerVersion?: string;
+    nativeVersion?: string;
     mode?: 'development' | 'production';
     astBudget?: number;
     allowBabelFallback?: boolean;
@@ -84,6 +85,14 @@ export interface NextPrebuildResult {
 export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResult {
     assertProductionManglingBoundary(options);
 
+    const csszyxVersion =
+        options.csszyxVersion ?? readPackageVersion('../package.json', import.meta.url);
+    const compilerVersion =
+        options.compilerVersion ??
+        readPackageVersion('../../compiler/package.json', import.meta.url);
+    const nativeVersion = options.nativeVersion ?? compilerVersion;
+    const nextVersion = options.nextVersion ?? 'unknown-next';
+
     const context = createNextStateContext({
         explicitRoot: options.explicitRoot,
         loaderRootContext: options.loaderRootContext,
@@ -94,9 +103,9 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         config: options.config ?? {},
         env: options.env ?? process.env,
         envKeys: options.envKeys,
-        nextVersion: options.nextVersion,
-        csszyxVersion: options.csszyxVersion,
-        nativeVersion: options.nativeVersion,
+        nextVersion,
+        csszyxVersion,
+        nativeVersion,
         mode: options.mode ?? 'production',
     });
 
@@ -124,8 +133,8 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
             parserMode: options.parserMode ?? 'rust',
             compilerOptions: options.compilerOptions,
             cacheRoot,
-            pluginVersion: options.csszyxVersion,
-            compilerVersion: options.compilerVersion,
+            pluginVersion: csszyxVersion,
+            compilerVersion,
             astBudget: options.astBudget,
             allowBabelFallback: options.allowBabelFallback,
         });

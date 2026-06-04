@@ -9,6 +9,7 @@ export default defineBuildConfig({
         './src/webpack',
         './src/css-mangler',
         './src/next-turbo-loader',
+        './src/next-prebuild',
     ],
     declaration: 'node16',
     rollup: {
