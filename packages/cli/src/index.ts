@@ -19,6 +19,7 @@ import { doctor } from './commands/doctor.js';
 import { generateTypes } from './commands/generate-types.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
+import { nextPrebuild } from './commands/next-prebuild.js';
 
 const cli = cac('csszyx');
 
@@ -118,6 +119,39 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
             injectTodos: options.injectTodos,
             resolveTodos: options.resolveTodos,
         });
+    });
+
+// next-prebuild command
+cli.command(
+    'next-prebuild [pattern]',
+    'Seed the Next.js Turbopack csszyx safelist and generation manifest',
+)
+    .option('--root <dir>', 'Next app root (defaults to cwd)')
+    .option('--cwd <dir>', 'Current working directory')
+    .option('--mode <mode>', 'development | production (default: production)')
+    .option('--parser-mode <mode>', 'rust | oxc | babel (default: rust)')
+    .option(
+        '--output-file <path>',
+        'Tailwind @source safelist output (default: csszyx-classes.html)',
+    )
+    .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
+    .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option('--json', 'Emit a single JSON result instead of formatted text')
+    .action(async (pattern, options) => {
+        const code = await nextPrebuild({
+            cwd: options.cwd,
+            root: options.root,
+            mode: options.mode,
+            parserMode: options.parserMode,
+            outputFile: options.outputFile,
+            cacheDir: options.cacheDir,
+            pattern,
+            extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+            json: options.json,
+        });
+        if (code !== 0) {
+            process.exit(code);
+        }
     });
 
 // Default command (show help)

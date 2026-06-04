@@ -114,6 +114,9 @@ importers:
       '@csszyx/types':
         specifier: workspace:*
         version: link:../types
+      '@csszyx/unplugin':
+        specifier: workspace:*
+        version: link:../unplugin
       cac:
         specifier: ^6.7.14
         version: 6.7.14
