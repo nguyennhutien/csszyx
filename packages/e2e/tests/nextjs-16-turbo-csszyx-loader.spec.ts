@@ -1,0 +1,45 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { expect, test } from '@playwright/test';
+
+const loaderSafelistPath = fileURLToPath(
+    new URL('../../../playground/nextjs-16/.csszyx/next-loader-classes.html', import.meta.url),
+);
+const placeholderSource = '<!-- Next 16 csszyx Turbopack loader safelist placeholder. -->\n';
+
+test.describe('Next.js 16 Turbopack csszyx Loader', () => {
+    test.beforeAll(async () => {
+        await mkdir(dirname(loaderSafelistPath), { recursive: true });
+        await writeFile(loaderSafelistPath, placeholderSource);
+    });
+
+    test.afterAll(async () => {
+        await writeFile(loaderSafelistPath, placeholderSource);
+    });
+
+    test('transforms sz and materializes Tailwind classes through @source', async ({ page }) => {
+        await page.goto('/turbo-csszyx');
+
+        const target = page.getByTestId('next16-csszyx-loader-target');
+        await expect(target).toBeVisible();
+        await expect(target).toContainText('csszyx Turbopack loader transformed');
+
+        await expect
+            .poll(async () =>
+                target.evaluate(element => {
+                    const computed = getComputedStyle(element);
+                    return (
+                        computed.paddingTop === '40px' &&
+                        computed.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
+                        computed.backgroundColor !== 'transparent' &&
+                        computed.color === 'rgb(255, 255, 255)' &&
+                        computed.borderTopLeftRadius === '8px' &&
+                        computed.fontWeight === '600'
+                    );
+                }),
+            )
+            .toBe(true);
+    });
+});

@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@source "../csszyx-classes.html";
+@source "../.csszyx/next-loader-classes.html";
+
+@theme {
+    --color-csszyx-next: #2563eb;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+    background: #f8fafc;
+    color: #0f172a;
+    font-family: Arial, Helvetica, sans-serif;
+}

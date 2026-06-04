@@ -63,6 +63,16 @@
         "types": "./dist/css-mangler.d.cts",
         "default": "./dist/css-mangler.cjs"
       }
+    },
+    "./next-turbo-loader": {
+      "import": {
+        "types": "./dist/next-turbo-loader.d.mts",
+        "default": "./dist/next-turbo-loader.mjs"
+      },
+      "require": {
+        "types": "./dist/next-turbo-loader.d.cts",
+        "default": "./dist/next-turbo-loader.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",
