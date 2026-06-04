@@ -348,6 +348,85 @@ describe('Next safelist state', () => {
         expect(finalClasses).toEqual(['p-8']);
     });
 
+    it('treats a cross-host lock as live within the staleness window even if the local pid lookup would say otherwise', () => {
+        const root = tempRoot();
+        const lockPath = join(root, '.csszyx/cache/state.lock');
+        mkdirSync(join(root, '.csszyx/cache'), { recursive: true });
+        writeFileSync(
+            lockPath,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    pid: 4242,
+                    token: 'other-host-token',
+                    hostname: 'remote-build-runner.example',
+                    root,
+                    mode: 'development',
+                    command: 'csszyx next watch',
+                    startedAt: '2026-06-04T00:00:00.000Z',
+                    updatedAt: '2026-06-04T00:00:10.000Z',
+                },
+                null,
+                2,
+            )}\n`,
+            'utf8',
+        );
+
+        // The local pid 4242 would resolve to "not alive" on the current host;
+        // without the hostname guard the lock would be incorrectly stolen.
+        expect(() =>
+            acquireNextSafelistStateLock(lockPath, {
+                pid: 999,
+                root,
+                hostname: 'this-host.local',
+                now: Date.parse('2026-06-04T00:00:15.000Z'),
+                staleAfterMs: 30_000,
+                isProcessAlive: () => false,
+            }),
+        ).toThrow(/already locked/);
+    });
+
+    it('recovers a cross-host lock after staleAfterMs without consulting the local pid lookup', () => {
+        const root = tempRoot();
+        const lockPath = join(root, '.csszyx/cache/state.lock');
+        mkdirSync(join(root, '.csszyx/cache'), { recursive: true });
+        writeFileSync(
+            lockPath,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    pid: 4242,
+                    token: 'other-host-token',
+                    hostname: 'remote-build-runner.example',
+                    root,
+                    mode: 'development',
+                    command: 'csszyx next watch',
+                    startedAt: '2026-06-04T00:00:00.000Z',
+                    updatedAt: '2026-06-04T00:00:10.000Z',
+                },
+                null,
+                2,
+            )}\n`,
+            'utf8',
+        );
+
+        const lock = acquireNextSafelistStateLock(lockPath, {
+            pid: 9999,
+            root,
+            hostname: 'this-host.local',
+            now: Date.parse('2026-06-04T00:01:00.000Z'),
+            staleAfterMs: 30_000,
+            // Liveness should not even be consulted on cross-host stale locks;
+            // a thrown probe would fail the test if it was reached.
+            isProcessAlive: () => {
+                throw new Error('cross-host stale lock must not probe local pid');
+            },
+            token: 'recovered-token',
+        });
+        expect(readNextSafelistStateLockMetadata(lockPath)?.token).toBe('recovered-token');
+        lock.release();
+    });
+
     it('reports `changed: false` when the same shard content is rewritten', () => {
         const root = tempRoot();
         const sourcePath = join(root, 'src/Same.tsx');

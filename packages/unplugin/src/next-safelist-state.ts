@@ -77,6 +77,7 @@ export interface NextSafelistStateLockOptions {
     now?: number;
     staleAfterMs?: number;
     isProcessAlive?: (pid: number) => boolean;
+    hostname?: string;
     token?: string;
 }
 
@@ -553,6 +554,16 @@ function isLockLive(
     const now = options.now ?? Date.now();
     if (Number.isFinite(updatedAt) && now - updatedAt > staleAfterMs) {
         return false;
+    }
+    // Locks written by a different host cannot be probed with a local
+    // `process.kill(pid, 0)` check — that would compare the remote pid to
+    // local processes and either steal a live lock (when the pid is not
+    // present locally) or false-positive (when the pid happens to be reused
+    // by an unrelated local process). Treat cross-host locks as live within
+    // the staleness window; staleAfterMs is the only mechanism that lets
+    // another host recover a crashed peer.
+    if (metadata.hostname !== (options.hostname ?? hostname())) {
+        return true;
     }
     return (options.isProcessAlive ?? isProcessAlive)(metadata.pid);
 }
