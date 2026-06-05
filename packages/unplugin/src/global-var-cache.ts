@@ -66,12 +66,20 @@ export function writeGlobalVarScanCache(
     key: string,
     result: CssVarScanResult,
 ): void {
-    fs.mkdirSync(cacheDir, { recursive: true });
-    fs.writeFileSync(
-        globalVarScanCacheFile(cacheDir, key),
-        JSON.stringify({ key, result } satisfies GlobalVarScanCacheEntry),
-        'utf8',
-    );
+    // The scan cache is a build-time optimization, not a correctness input
+    // (reads already fall back to a fresh scan). A read-only or otherwise
+    // unwritable cache directory must not fail the build, so writes stay
+    // best-effort and mirror readGlobalVarScanCache's silent recovery.
+    try {
+        fs.mkdirSync(cacheDir, { recursive: true });
+        fs.writeFileSync(
+            globalVarScanCacheFile(cacheDir, key),
+            JSON.stringify({ key, result } satisfies GlobalVarScanCacheEntry),
+            'utf8',
+        );
+    } catch {
+        // Ignore cache write failures; the next scan recomputes the result.
+    }
 }
 
 /**
