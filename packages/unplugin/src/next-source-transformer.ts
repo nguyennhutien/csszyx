@@ -140,6 +140,36 @@ function stripJsCommentsAndStrings(source: string): string {
             index = Math.min(length, index + 2);
             continue;
         }
+        if (char === '/' && isRegexLiteralStart(out)) {
+            index++;
+            let inCharClass = false;
+            while (index < length) {
+                const current = source[index];
+                if (current === '\\' && index + 1 < length) {
+                    index += 2;
+                    continue;
+                }
+                if (current === '[') {
+                    inCharClass = true;
+                    index++;
+                    continue;
+                }
+                if (current === ']') {
+                    inCharClass = false;
+                    index++;
+                    continue;
+                }
+                if (current === '/' && !inCharClass) {
+                    index++;
+                    while (/[a-z]/i.test(source[index] ?? '')) {
+                        index++;
+                    }
+                    break;
+                }
+                index++;
+            }
+            continue;
+        }
         if (char === '"' || char === "'" || char === '`') {
             const quote = char;
             index++;
@@ -158,6 +188,16 @@ function stripJsCommentsAndStrings(source: string): string {
         index++;
     }
     return out;
+}
+
+/**
+ *
+ * @param emitted
+ */
+function isRegexLiteralStart(emitted: string): boolean {
+    const trimmed = emitted.trimEnd();
+    const previous = trimmed.length > 0 ? trimmed.charAt(trimmed.length - 1) : undefined;
+    return previous === undefined || /[({[=:;,!&|?+\-*%^~<>]/.test(previous);
 }
 
 /**

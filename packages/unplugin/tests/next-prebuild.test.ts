@@ -120,7 +120,7 @@ describe('Next Turbopack prebuild core', () => {
         expect(result.files).toHaveLength(1);
     });
 
-    it('records a transformed file with zero classes without writing a shard', () => {
+    it('records a transformed file with zero classes as an empty shard', () => {
         const root = tempRoot();
         const filename = writeSource(root, 'src/Plain.tsx', 'export const P=()=> <div />;');
 
@@ -129,9 +129,30 @@ describe('Next Turbopack prebuild core', () => {
         expect(result.transformedCount).toBe(1);
         expect(result.files).toHaveLength(1);
         expect(result.files[0]?.classCount).toBe(0);
-        expect(result.files[0]?.shardPath).toBeNull();
-        expect(result.sourceCount).toBe(0);
+        expect(result.files[0]?.shardPath && existsSync(result.files[0].shardPath)).toBe(true);
+        expect(result.sourceCount).toBe(1);
         expect(result.classCount).toBe(0);
+    });
+
+    it('removes stale classes when a file no longer contains sz syntax', () => {
+        const root = tempRoot();
+        const filename = writeSource(
+            root,
+            'src/App.tsx',
+            'export const App=()=> <div sz={{ p: 4 }} />;',
+        );
+
+        const first = runNextPrebuild(baseOptions(root, [filename]));
+        expect(readFileSync(first.safelistOutputPath, 'utf8')).toContain('p-4');
+
+        writeFileSync(filename, 'export const App=()=> <div />;', 'utf8');
+        const second = runNextPrebuild(baseOptions(root, [filename]));
+
+        expect(second.classCount).toBe(0);
+        expect(second.sourceCount).toBe(1);
+        expect(readFileSync(second.safelistOutputPath, 'utf8')).toBe(
+            '<!-- csszyx Next safelist: empty -->\n',
+        );
     });
 
     it('rejects production CSS variable mangling unless explicitly opted in', () => {

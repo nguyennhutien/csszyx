@@ -138,6 +138,30 @@ describe('Next source transformer', () => {
         expect(result.result.transformed).toBe(false);
         expect(result.result.code).toContain('sample text');
     });
+
+    it('does not fail closed when sz= appears only inside a regex literal', () => {
+        const result = transformNextSource(
+            input({
+                parserMode: 'babel',
+                source: 'export const hasSzText = /sz={{ p: 4 }}/.test(input);\n',
+                filename: '/repo/src/RegexOnly.ts',
+            }),
+        );
+
+        expect(result.result.transformed).toBe(false);
+        expect(result.result.code).toContain('/sz=');
+    });
+
+    it('still fails closed when a regex literal appears before real sz syntax', () => {
+        expect(() =>
+            transformNextSource(
+                input({
+                    parserMode: 'babel',
+                    source: 'const marker = /sz=/;\nconst App = <div sz={{ p: 4 }}',
+                }),
+            ),
+        ).toThrow();
+    });
 });
 
 function packageVersion(packageJsonPath: string): string {

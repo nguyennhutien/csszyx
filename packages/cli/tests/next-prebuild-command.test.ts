@@ -116,4 +116,46 @@ describe('csszyx next-prebuild command', () => {
             logSpy.mockRestore();
         }
     });
+
+    it('rejects invalid mode values with a JSON error', async () => {
+        const root = tempRoot();
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div />;');
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+            const code = await nextPrebuild({
+                root,
+                cwd: root,
+                mode: 'staging' as 'production',
+                json: true,
+            });
+            expect(code).toBe(1);
+            const printed = logSpy.mock.calls.flat().join('\n');
+            const summary = JSON.parse(printed) as { ok: boolean; reason: string };
+            expect(summary.ok).toBe(false);
+            expect(summary.reason).toContain('Invalid --mode');
+        } finally {
+            logSpy.mockRestore();
+        }
+    });
+
+    it('rejects invalid parser mode values with a JSON error', async () => {
+        const root = tempRoot();
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div />;');
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+            const code = await nextPrebuild({
+                root,
+                cwd: root,
+                parserMode: 'swc' as 'rust',
+                json: true,
+            });
+            expect(code).toBe(1);
+            const printed = logSpy.mock.calls.flat().join('\n');
+            const summary = JSON.parse(printed) as { ok: boolean; reason: string };
+            expect(summary.ok).toBe(false);
+            expect(summary.reason).toContain('Invalid --parser-mode');
+        } finally {
+            logSpy.mockRestore();
+        }
+    });
 });

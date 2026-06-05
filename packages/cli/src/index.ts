@@ -22,11 +22,43 @@ import { migrate } from './commands/migrate.js';
 import { nextPrebuild } from './commands/next-prebuild.js';
 
 const cli = cac('csszyx');
+normalizeNextCommandAlias(process.argv);
 
 /**
  * Package version (will be replaced by build process).
  */
 const VERSION = '0.0.0';
+
+interface CacNextPrebuildOptions {
+    cwd?: string;
+    root?: string;
+    mode?: 'development' | 'production';
+    parserMode?: 'rust' | 'oxc' | 'babel';
+    outputFile?: string;
+    cacheDir?: string;
+    ignore?: string;
+    json?: boolean;
+}
+
+async function runNextPrebuildCommand(
+    pattern: string | undefined,
+    options: CacNextPrebuildOptions,
+): Promise<void> {
+    const code = await nextPrebuild({
+        cwd: options.cwd,
+        root: options.root,
+        mode: options.mode,
+        parserMode: options.parserMode,
+        outputFile: options.outputFile,
+        cacheDir: options.cacheDir,
+        pattern,
+        extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        json: options.json,
+    });
+    if (code !== 0) {
+        process.exit(code);
+    }
+}
 
 // init command
 cli.command('init', 'Setup csszyx in your project')
@@ -137,22 +169,7 @@ cli.command(
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
     .option('--json', 'Emit a single JSON result instead of formatted text')
-    .action(async (pattern, options) => {
-        const code = await nextPrebuild({
-            cwd: options.cwd,
-            root: options.root,
-            mode: options.mode,
-            parserMode: options.parserMode,
-            outputFile: options.outputFile,
-            cacheDir: options.cacheDir,
-            pattern,
-            extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
-            json: options.json,
-        });
-        if (code !== 0) {
-            process.exit(code);
-        }
-    });
+    .action(runNextPrebuildCommand);
 
 // Default command (show help)
 cli.command('').action(() => {
@@ -188,3 +205,9 @@ export {
     flattenColors,
     scanTailwindConfig,
 } from './scanner/tailwind-scanner.js';
+
+function normalizeNextCommandAlias(argv: string[]): void {
+    if (argv[2] === 'next' && argv[3] === 'prebuild') {
+        argv.splice(2, 2, 'next-prebuild');
+    }
+}

@@ -133,32 +133,32 @@ export function runNextTurboLoader(
     let shardPath: string | null = null;
     let materialized = false;
 
-    if (metadata.classes.length > 0) {
-        const shardResult = writeNextSafelistShard(
-            context.safelist.shardsDir,
-            createNextSafelistShardFromMetadata(metadata, createShardCacheKey(context, metadata)),
-            options.writeOptions,
-        );
-        shardPath = shardResult.filePath;
+    const shardResult = writeNextSafelistShard(
+        context.safelist.shardsDir,
+        createNextSafelistShardFromMetadata(metadata, createShardCacheKey(context, metadata)),
+        options.writeOptions,
+    );
+    shardPath = shardResult.filePath;
 
-        // The shard write is content-addressed by (generation, source path,
-        // sourceHash). When `changed === false` the on-disk shard already
-        // matches the result we would produce, which means the safelist is
-        // already up to date for this file. Skipping the cycle here turns the
-        // loader from O(N) cycles per file in steady state into O(1), and the
-        // generation manifest written by the most recent cycle already covers
-        // this transform.
-        if (options.materializeSafelist !== false && shardResult.changed) {
-            runNextWatcherCycle(context, {
-                writeOptions: options.writeOptions,
-                lockOptions: {
-                    root: context.root,
-                    mode: context.manifestExpectation.mode,
-                    command: 'csszyx next turbo-loader',
-                },
-            });
-            materialized = true;
-        }
+    // The shard write is content-addressed by (generation, source path,
+    // sourceHash). When `changed === false` the on-disk shard already
+    // matches the result we would produce, which means the safelist is
+    // already up to date for this file. Skipping the cycle here turns the
+    // loader from O(N) cycles per file in steady state into O(1), and the
+    // generation manifest written by the most recent cycle already covers
+    // this transform. Empty class sets are still written as shards so removing
+    // the last `sz` prop from a file actively removes that file's old classes
+    // from the materialized Tailwind source.
+    if (options.materializeSafelist !== false && shardResult.changed) {
+        runNextWatcherCycle(context, {
+            writeOptions: options.writeOptions,
+            lockOptions: {
+                root: context.root,
+                mode: context.manifestExpectation.mode,
+                command: 'csszyx next turbo-loader',
+            },
+        });
+        materialized = true;
     }
 
     // The loader's transformed `code` is a pure function of `source` plus the

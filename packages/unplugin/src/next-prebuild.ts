@@ -142,22 +142,15 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         const metadata = collectNextTransformMetadata(transform.result, source, filename);
         transformedCount++;
 
-        let shardPath: string | null = null;
-        if (metadata.classes.length > 0) {
-            const shardResult = writeNextSafelistShard(
-                context.safelist.shardsDir,
-                createNextSafelistShardFromMetadata(
-                    metadata,
-                    createShardCacheKey(context, metadata),
-                ),
-                options.writeOptions,
-            );
-            shardPath = shardResult.filePath;
-        }
+        const shardResult = writeNextSafelistShard(
+            context.safelist.shardsDir,
+            createNextSafelistShardFromMetadata(metadata, createShardCacheKey(context, metadata)),
+            options.writeOptions,
+        );
 
         files.push({
             filename,
-            shardPath,
+            shardPath: shardResult.filePath,
             classCount: metadata.classes.length,
             cacheStatus: transform.cacheStatus,
             producer: transform.producer,

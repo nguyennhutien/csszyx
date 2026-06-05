@@ -140,6 +140,35 @@ describe('Next Turbopack loader core', () => {
         expect(existsSync(result.context.safelist.outputPath)).toBe(false);
     });
 
+    it('materializes an empty shard when the last sz prop is removed from a file', () => {
+        const root = tempRoot();
+        const withSz = 'export const App=()=> <div sz={{ p: 4 }} />;';
+        const withoutSz = 'export const App=()=> <div />;';
+        const filename = writeSource(root, withSz);
+        const ctx = loaderContext(root, filename);
+        const options = {
+            parserMode: 'babel' as const,
+            config: { mangleVars: false },
+            nextVersion: '16.2.7',
+            csszyxVersion: '0.9.0',
+            compilerVersion: '0.9.0',
+            nativeVersion: '0.9.0-test',
+            writeOptions: { retryDelayMs: 0 },
+        };
+
+        const first = runNextTurboLoader(withSz, ctx, options);
+        expect(readFileSync(first.context.safelist.outputPath, 'utf8')).toContain('p-4');
+
+        writeFileSync(filename, withoutSz, 'utf8');
+        const second = runNextTurboLoader(withoutSz, ctx, options);
+
+        expect(second.shardPath && existsSync(second.shardPath)).toBe(true);
+        expect(second.materialized).toBe(true);
+        expect(readFileSync(second.context.safelist.outputPath, 'utf8')).toBe(
+            '<!-- csszyx Next safelist: empty -->\n',
+        );
+    });
+
     it('fails closed in production when the generation manifest is absent', () => {
         const root = tempRoot();
         const source = 'export const App=()=> <div sz={{ p: 4 }} />;';

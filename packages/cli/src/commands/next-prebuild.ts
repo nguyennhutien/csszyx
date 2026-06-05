@@ -48,39 +48,40 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
     const cwd = path.resolve(options.cwd ?? process.cwd());
     const root = path.resolve(options.root ?? cwd);
     const pattern = options.pattern ?? DEFAULT_PATTERN;
-    const mode = options.mode ?? 'production';
-
-    const matches = await fg(pattern, {
-        cwd: root,
-        absolute: true,
-        ignore: [...DEFAULT_IGNORE, ...(options.extraIgnore ?? [])],
-        dot: false,
-        onlyFiles: true,
-    });
-
-    if (matches.length === 0) {
-        const message = `No source files matched pattern \`${pattern}\` under ${root}.`;
-        if (options.json) {
-            console.log(
-                JSON.stringify(
-                    { ok: false, reason: 'no-files-matched', root, pattern, mode },
-                    null,
-                    2,
-                ),
-            );
-        } else {
-            console.error(`${colors.error(icons.error)} ${message}`);
-        }
-        return 1;
-    }
 
     try {
+        const mode = normalizeMode(options.mode);
+        const parserMode = normalizeParserMode(options.parserMode);
+        const matches = await fg(pattern, {
+            cwd: root,
+            absolute: true,
+            ignore: [...DEFAULT_IGNORE, ...(options.extraIgnore ?? [])],
+            dot: false,
+            onlyFiles: true,
+        });
+
+        if (matches.length === 0) {
+            const message = `No source files matched pattern \`${pattern}\` under ${root}.`;
+            if (options.json) {
+                console.log(
+                    JSON.stringify(
+                        { ok: false, reason: 'no-files-matched', root, pattern, mode },
+                        null,
+                        2,
+                    ),
+                );
+            } else {
+                console.error(`${colors.error(icons.error)} ${message}`);
+            }
+            return 1;
+        }
+
         const result = runNextPrebuild({
             files: matches,
             explicitRoot: root,
             cwd,
             mode,
-            parserMode: options.parserMode,
+            parserMode,
             safelistOutputFile: options.outputFile,
             cacheDir: options.cacheDir,
             config: { mangleVars: false },
@@ -131,4 +132,26 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
         }
         return 1;
     }
+}
+
+function normalizeMode(mode: NextPrebuildCommandOptions['mode']): 'development' | 'production' {
+    if (mode === undefined) {
+        return 'production';
+    }
+    if (mode === 'development' || mode === 'production') {
+        return mode;
+    }
+    throw new Error(`Invalid --mode "${mode}". Expected "development" or "production".`);
+}
+
+function normalizeParserMode(
+    parserMode: NextPrebuildCommandOptions['parserMode'],
+): 'rust' | 'oxc' | 'babel' | undefined {
+    if (parserMode === undefined) {
+        return undefined;
+    }
+    if (parserMode === 'rust' || parserMode === 'oxc' || parserMode === 'babel') {
+        return parserMode;
+    }
+    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust", "oxc", or "babel".`);
 }
