@@ -95,6 +95,49 @@ describe('Next source transformer', () => {
             ),
         ).toThrow();
     });
+
+    // The fail-closed guard previously tripped on any `sz=` substring,
+    // including comments and string literals. The tightened guard strips
+    // line/block comments and string literals before the pattern match so
+    // benign annotations and payloads do not cause spurious failures.
+    it('does not fail closed when sz= appears only inside a line comment', () => {
+        const result = transformNextSource(
+            input({
+                parserMode: 'babel',
+                source: '// TODO: replace inline sz={{ p: 4 }} with a hook\nexport const X = 1;\n',
+                filename: '/repo/src/CommentOnly.tsx',
+            }),
+        );
+
+        expect(result.result.transformed).toBe(false);
+        expect(result.result.code).toContain('// TODO');
+    });
+
+    it('does not fail closed when sz: appears only inside a block comment', () => {
+        const result = transformNextSource(
+            input({
+                parserMode: 'babel',
+                source: '/* future: sz: { p: 4 } */\nexport const Y = 2;\n',
+                filename: '/repo/src/BlockOnly.tsx',
+            }),
+        );
+
+        expect(result.result.transformed).toBe(false);
+        expect(result.result.code).toContain('/* future:');
+    });
+
+    it('does not fail closed when sz= appears only inside a string literal', () => {
+        const result = transformNextSource(
+            input({
+                parserMode: 'babel',
+                source: 'export const Z = "sample text sz={{ p: 4 }} not real";\n',
+                filename: '/repo/src/StringOnly.tsx',
+            }),
+        );
+
+        expect(result.result.transformed).toBe(false);
+        expect(result.result.code).toContain('sample text');
+    });
 });
 
 function packageVersion(packageJsonPath: string): string {

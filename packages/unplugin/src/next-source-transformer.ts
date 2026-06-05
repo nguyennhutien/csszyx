@@ -102,7 +102,62 @@ function assertNoUnsafePassThrough(
  * @param source
  */
 function hasSzSyntax(source: string): boolean {
-    return source.includes('sz=') || /\bsz\s*:\s*["'{]/.test(source) || source.includes('sz: "');
+    // The fail-closed guard only fires when the compiler returned a
+    // pass-through result, so we are looking for sz syntax that the parser
+    // should have caught. Real sz props live in JSX attributes (`sz={...}`)
+    // or in object-literal positions (`sz: {...}`, `sz: "..."`); they never
+    // live inside comments or string literals. Stripping comments and
+    // strings before the pattern match prevents `// sz=` annotations and
+    // `'text with sz=...'` payloads from spuriously tripping the guard.
+    const cleaned = stripJsCommentsAndStrings(source);
+    return /\bsz\s*=/.test(cleaned) || /\bsz\s*:\s*[{"']/.test(cleaned);
+}
+
+/**
+ *
+ * @param source
+ */
+function stripJsCommentsAndStrings(source: string): string {
+    let out = '';
+    let index = 0;
+    const length = source.length;
+    while (index < length) {
+        const char = source[index];
+        const peek = index + 1 < length ? source[index + 1] : '';
+
+        if (char === '/' && peek === '/') {
+            index += 2;
+            while (index < length && source[index] !== '\n') {
+                index++;
+            }
+            continue;
+        }
+        if (char === '/' && peek === '*') {
+            index += 2;
+            while (index + 1 < length && !(source[index] === '*' && source[index + 1] === '/')) {
+                index++;
+            }
+            index = Math.min(length, index + 2);
+            continue;
+        }
+        if (char === '"' || char === "'" || char === '`') {
+            const quote = char;
+            index++;
+            while (index < length && source[index] !== quote) {
+                if (source[index] === '\\' && index + 1 < length) {
+                    index += 2;
+                } else {
+                    index++;
+                }
+            }
+            index++;
+            continue;
+        }
+
+        out += char;
+        index++;
+    }
+    return out;
 }
 
 /**
