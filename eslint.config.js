@@ -14,6 +14,8 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import regexp from 'eslint-plugin-regexp';
 import security from 'eslint-plugin-security';
 
+const repoRoot = import.meta.dirname;
+
 export default [
     // Ignore patterns — Biome owns everything ESLint used to lint, so this
     // config only runs on .ts/.tsx where it adds value over Biome.
@@ -77,6 +79,7 @@ export default [
             parser: tsParser,
             parserOptions: {
                 project: ['./tsconfig.eslint.json'],
+                tsconfigRootDir: repoRoot,
             },
         },
         rules: {
