@@ -24,6 +24,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveVsceArguments } from './package-utils.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
 // mkdtempSync atomically creates a unique directory with random suffix,
@@ -59,19 +61,10 @@ stagedPkg.name = 'csszyx';
 delete stagedPkg.private;
 writeFileSync(stagedPkgPath, `${JSON.stringify(stagedPkg, null, 4)}\n`);
 
-const args = process.argv.slice(2);
-const publishIdx = args.indexOf('--publish');
-const isPublish = publishIdx !== -1;
-const forwardArgs = isPublish ? args.filter((_, i) => i !== publishIdx) : args;
-
-const subcommand = isPublish ? 'publish' : 'package';
-// execFileSync with an argv array does not invoke a shell, which keeps
-// any future --publish-passthrough args from being reinterpreted as
-// shell metacharacters even when sourced from process.argv.
-const cmdArgs = ['@vscode/vsce', subcommand, '--no-dependencies', ...forwardArgs];
+const { isPublish, commandArgs } = resolveVsceArguments(process.argv.slice(2));
 
 try {
-    execFileSync('npx', cmdArgs, { cwd: outDir, stdio: 'inherit' });
+    execFileSync('npx', commandArgs, { cwd: outDir, stdio: 'inherit' });
     if (!isPublish) {
         const { version } = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
         const vsixName = readdirSync(outDir).find(f => f.endsWith('.vsix')) ?? `csszyx-${version}.vsix`;
