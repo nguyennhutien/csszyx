@@ -18,15 +18,20 @@
 //   node scripts/package.mjs --publish    # publish to Marketplace (requires `vsce login` first)
 //   node scripts/package.mjs --publish patch   # bump + publish
 
-import { rmSync, mkdirSync, cpSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { rmSync, mkdtempSync, cpSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveVsceArguments } from './package-utils.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgDir = path.resolve(__dirname, '..');
-const outDir = path.join(os.tmpdir(), `csszyx-vsce-${process.pid}`);
+// mkdtempSync atomically creates a unique directory with random suffix,
+// which avoids the predictable-path race that a static name would have
+// when another process targets the same tmpdir entry.
+const outDir = mkdtempSync(path.join(os.tmpdir(), 'csszyx-vsce-'));
 
 const SHIP_FILES = [
     'dist',
@@ -38,8 +43,6 @@ const SHIP_FILES = [
     'icon.png',
 ];
 
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(outDir, { recursive: true });
 for (const item of SHIP_FILES) {
     cpSync(path.join(pkgDir, item), path.join(outDir, item), { recursive: true });
 }
@@ -58,16 +61,10 @@ stagedPkg.name = 'csszyx';
 delete stagedPkg.private;
 writeFileSync(stagedPkgPath, `${JSON.stringify(stagedPkg, null, 4)}\n`);
 
-const args = process.argv.slice(2);
-const publishIdx = args.indexOf('--publish');
-const isPublish = publishIdx !== -1;
-const forwardArgs = isPublish ? args.filter((_, i) => i !== publishIdx) : args;
-
-const subcommand = isPublish ? 'publish' : 'package';
-const cmd = ['npx', '@vscode/vsce', subcommand, '--no-dependencies', ...forwardArgs].join(' ');
+const { isPublish, commandArgs } = resolveVsceArguments(process.argv.slice(2));
 
 try {
-    execSync(cmd, { cwd: outDir, stdio: 'inherit' });
+    execFileSync('npx', commandArgs, { cwd: outDir, stdio: 'inherit' });
     if (!isPublish) {
         const { version } = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
         const vsixName = readdirSync(outDir).find(f => f.endsWith('.vsix')) ?? `csszyx-${version}.vsix`;

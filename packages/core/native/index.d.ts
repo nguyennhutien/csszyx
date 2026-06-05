@@ -17,6 +17,21 @@ export interface NativeTransformFile {
     source: string;
 }
 
+/** Options passed to the native transform. */
+export interface NativeTransformOptions {
+    /** Whether dynamic CSS custom properties should use tiered short names. */
+    mangleVars?: boolean;
+    /** Maximum cascade depth for component-tier CSS variable hoisting. */
+    mangleVarHoistMaxDepth?: number;
+    /** Exact app-owned global custom-property aliases for static sz values. */
+    globalVarAliases?: Array<{
+        /** Original custom-property name, including `--`. */
+        original: string;
+        /** Alias custom-property name, including `--`. */
+        alias: string;
+    }>;
+}
+
 /** Native transform output shape returned per source file. */
 export interface NativeTransformResult {
     /** Rewritten source code. */
@@ -39,6 +54,13 @@ export interface NativeTransformResult {
         component: string;
         /** Source path associated with the token. */
         path: string;
+    }>;
+    /** CSS custom property mangle metadata. */
+    cssVariableMap: Array<{
+        /** Original csszyx-generated custom property name. */
+        original: string;
+        /** Mangled custom property name. */
+        mangled: string;
     }>;
     /** Native transform metadata used by unplugin and benchmarks. */
     metadata: {
@@ -97,9 +119,13 @@ export interface NativeBinding {
      * Transforms source files with the native Rust core.
      *
      * @param files Source files to transform.
+     * @param options Native transform options.
      * @returns Native transform results in input order.
      */
-    transformBatch(files: NativeTransformFile[]): NativeTransformResult[];
+    transformBatch(
+        files: NativeTransformFile[],
+        options?: NativeTransformOptions,
+    ): NativeTransformResult[];
 }
 
 /**
@@ -123,6 +149,10 @@ export function loadNativeBinding(
  * Transforms a batch of files with the native Rust core.
  *
  * @param files Source files to transform.
+ * @param options Native transform options.
  * @returns Native transform results in input order.
  */
-export function transformBatch(files: NativeTransformFile[]): NativeTransformResult[];
+export function transformBatch(
+    files: NativeTransformFile[],
+    options?: NativeTransformOptions,
+): NativeTransformResult[];

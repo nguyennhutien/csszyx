@@ -128,20 +128,49 @@ Controls production build behavior.
 ```ts
 interface ProductionConfig {
   mangle: boolean; // Minify class names (z, y, x, ...)
+  mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
+  mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
+  mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
   contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
   minify: boolean; // Minify output
 }
+
+interface GlobalVarMangleConfig {
+  enabled: boolean;
+  mode?: 'alias';
+  tokens?: string[];
+  autoPrefix?: string;
+  onUnsafeUsage?: 'error';
+  reserved?: string[];
+  emitMap?: boolean;
+}
 ```
 
-| Option             | Default | Description                                    |
-| ------------------ | ------- | ---------------------------------------------- |
-| `mangle`           | `true`  | Replace class names with short encoded symbols |
-| `contentHashing`   | `true`  | Hash CSS output for cache-busting              |
-| `injectChecksum`   | `true`  | Embed SHA-256 checksum in HTML                 |
-| `incrementalBuild` | `true`  | Cache build artifacts for faster rebuilds      |
-| `minify`           | `true`  | Minify emitted CSS and JS                      |
+| Option                   | Default | Description                                                                                                                                               |
+| ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mangle`                 | `true`  | Replace class names with short encoded symbols                                                                                                            |
+| `mangleVars`             | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
+| `mangleVarHoistMaxDepth` | `5`     | Maximum DOM ancestor distance for component-tier CSS variable hoisting when `mangleVars` is enabled.                                                      |
+| `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Phase H v1 is alias-only and keeps original public variables defined.          |
+| `contentHashing`         | `true`  | Hash CSS output for cache-busting                                                                                                                         |
+| `injectChecksum`         | `true`  | Embed SHA-256 checksum in HTML                                                                                                                            |
+| `incrementalBuild`       | `true`  | Cache build artifacts for faster rebuilds                                                                                                                 |
+| `minify`                 | `true`  | Minify emitted CSS and JS                                                                                                                                 |
+
+`mangleVars` does not define global theme-token aliases. It only rewrites the
+dynamic CSS variables csszyx emits for runtime `sz` values, such as `p: pad`,
+and keeps the feature opt-in while the global token tier remains a separate
+design surface.
+
+`mangleGlobalVars` enables the Phase H global token tier for explicit `tokens`.
+It is default-off, accepts only `mode: 'alias'`, and must not remove original
+CSS custom-property names. `autoPrefix` remains disabled until csszyx can build
+the same alias table before source transforms and CSS output validation.
+Set `emitMap: false` only when the standalone `.csszyx/global-var-map.json`
+tooling asset is not needed; `csszyx-manifest.json` still includes
+`globalVarAliases` when aliases exist.
 
 ### `build`
 
@@ -160,16 +189,16 @@ interface BuildConfig {
 }
 ```
 
-| Option           | Default                | Description                                                                                                                                                                                                                                               |
-| ---------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                                                                   |
-| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                                                               |
-| `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                                                                   |
-| `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                                                                   |
-| `cache`          | `true`                 | Enable the per-file transform cache. Set to `false` when debugging parser output or isolating cache-related issues.                                                                                                                                       |
-| `astBudgetLimit` | `50000`                | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`.                                        |
-| `parser`         | `'rust'`               | Source parser for JSX/TSX sz transforms. Default uses the native Rust engine through the matching optional `@csszyx/core-*` platform package; csszyx fails loudly when the package is missing. Set `'oxc'` to opt into the previous JavaScript oxc-parser path on unsupported platforms or for parser-edge-case triage; `'babel'` is the final compatibility escape hatch.                                       |
-| `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                                                      |
+| Option           | Default                | Description                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                                                                                                                                                                                    |
+| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                                                                                                                                                                                |
+| `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                                                                                                                                                                                    |
+| `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                                                                                                                                                                                    |
+| `cache`          | `true`                 | Enable the per-file transform cache. Set to `false` when debugging parser output or isolating cache-related issues.                                                                                                                                                                                                                                                        |
+| `astBudgetLimit` | `50000`                | Throws `ASTBudgetExceededError` past this — guards against pathologically large generated files. Raise (e.g. `100_000`) for repos with json-as-ts or schema fixtures, or exclude the file via top-level `exclude`.                                                                                                                                                         |
+| `parser`         | `'rust'`               | Source parser for JSX/TSX sz transforms. Default uses the native Rust engine through the matching optional `@csszyx/core-*` platform package; csszyx fails loudly when the package is missing. Set `'oxc'` to opt into the previous JavaScript oxc-parser path on unsupported platforms or for parser-edge-case triage; `'babel'` is the final compatibility escape hatch. |
+| `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                                                                                                                                                                       |
 
 ### File Filters
 

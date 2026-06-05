@@ -200,7 +200,7 @@ function MyCard({ className }) {
         // Button className untouched
         expect(result.code).toContain('<Button className="btn-base"');
         // div and span transformed
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain("fontWeight: 'medium'");
     });
 });
@@ -283,7 +283,7 @@ describe('real-world SA scenarios', () => {
         expect(result.code).toContain('ds-surface');
         expect(result.code).toContain('ds-elevation-2');
         // Standard TW classes go to sz
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain("fontWeight: 'semibold'");
     });
 
@@ -451,7 +451,7 @@ describe('real-world SA scenarios', () => {
         expect(result.code).toContain('className="fixed inset-0 bg-black/50"');
         expect(result.code).toContain('className="w-96 bg-white rounded-xl p-8 shadow-2xl"');
         // Inner div is transformed
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain("items: 'center'");
     });
 
@@ -553,7 +553,7 @@ import { cn } from '@/lib/utils';
 `;
         const result = migrate(source);
         expect(result.changed).toBe(true);
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         // ring-1 → sz ring:1; inset-ring → sz insetRing:true
         expect(result.code).toContain('ring: 1');
         expect(result.code).toContain('insetRing: true');
@@ -646,7 +646,7 @@ const Component = <T extends object>({ data, className }: { data: T; className?:
 `;
         const result = migrate(source);
         expect(result.changed).toBe(true);
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         // className={className} is an identifier → skipped
         expect(result.code).toContain('className={className}');
     });

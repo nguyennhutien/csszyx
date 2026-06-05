@@ -4,6 +4,11 @@
  * This module defines all configuration interfaces and types used
  * throughout the csszyx framework.
  */
+import {
+    CSSZYX_GLOBAL_ALIAS_PREFIX,
+    isCsszyxGlobalAliasCustomProperty,
+    isTailwindReservedCustomProperty,
+} from './tailwind-reserved.js';
 
 /**
  * Development mode configuration options.
@@ -38,6 +43,40 @@ export interface ProductionConfig {
     mangle: boolean;
 
     /**
+     * Enable CSS custom property name mangling and hoisting.
+     *
+     * This is an opt-in feature gate for the tiered CSS variable system.
+     * When disabled, dynamic `sz` values keep the existing `--_sz-*`
+     * variable names and no variable hoisting is applied.
+     *
+     * @default false
+     */
+    mangleVars: boolean;
+
+    /**
+     * Maximum cascade depth for component-tier CSS variable hoisting.
+     *
+     * Only used when `mangleVars` is enabled. Lower values prefer local scoped
+     * variables; higher values allow hoisting across deeper DOM subtrees.
+     *
+     * @default 5
+     */
+    mangleVarHoistMaxDepth: number;
+
+    /**
+     * Alias stable app-owned global CSS custom properties.
+     *
+     * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
+     * original public custom-property declarations remain defined, and
+     * csszyx-owned references may use short generated aliases. Explicit
+     * `tokens` are supported first; `autoPrefix` remains blocked until CSS
+     * pre-scan support exists.
+     *
+     * @default undefined (disabled)
+     */
+    mangleGlobalVars?: GlobalVarMangleConfig;
+
+    /**
      * Enable content hashing for immutable caching.
      *
      * @default true
@@ -64,6 +103,234 @@ export interface ProductionConfig {
      * @default true in production
      */
     minify: boolean;
+}
+
+/**
+ * Supported global custom-property optimization mode.
+ */
+export type GlobalVarMangleMode = 'alias';
+
+/**
+ * Reaction to unsafe global custom-property usage.
+ */
+export type GlobalVarUnsafeUsageMode = 'error';
+
+/**
+ * Configuration for app-owned global custom-property aliases.
+ */
+export interface GlobalVarMangleConfig {
+    /**
+     * Master switch for global custom-property aliasing.
+     *
+     * @default false
+     */
+    enabled: boolean;
+
+    /**
+     * Phase H v1 only supports alias mode.
+     *
+     * @default "alias"
+     */
+    mode?: GlobalVarMangleMode;
+
+    /**
+     * Explicit app-owned custom-property names to alias.
+     *
+     * Every token must include the leading `--`.
+     *
+     * @default []
+     */
+    tokens?: string[];
+
+    /**
+     * Optional app-owned prefix discovery. Empty string disables prefix
+     * discovery and requires explicit tokens.
+     *
+     * This must not default to a Tailwind namespace or the generated alias
+     * prefix.
+     *
+     * @default ""
+     */
+    autoPrefix?: string;
+
+    /**
+     * Prefix used for generated global aliases.
+     *
+     * Phase H v1 defaults to `---g`, then appends csszyx's z-y-x encoder
+     * output: `---gz`, `---gy`, `---gx`, ...
+     *
+     * @default "---g"
+     */
+    aliasPrefix?: string;
+
+    /**
+     * Unsafe usage handling. Phase H v1 keeps this as error-only.
+     *
+     * @default "error"
+     */
+    onUnsafeUsage?: GlobalVarUnsafeUsageMode;
+
+    /**
+     * Additional app-specific custom-property names or prefixes that must
+     * never be aliased. Tailwind-owned prefixes are reserved implicitly by the
+     * implementation.
+     *
+     * @default []
+     */
+    reserved?: string[];
+
+    /**
+     * Emit the standalone `.csszyx/global-var-map.json` tooling asset.
+     *
+     * `csszyx-manifest.json` still includes `globalVarAliases` when aliases
+     * exist, so disabling this only removes the extra dedicated map file.
+     *
+     * @default true
+     */
+    emitMap?: boolean;
+}
+
+/**
+ * Validates the Phase H global variable alias config shape.
+ *
+ * @param config User-provided global variable alias config.
+ * @returns Validation errors. Empty means the config shape is valid.
+ */
+export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | undefined): string[] {
+    if (!config) {
+        return [];
+    }
+
+    const errors: string[] = [];
+    if (config.mode !== undefined && config.mode !== 'alias') {
+        errors.push("production.mangleGlobalVars.mode only supports 'alias' in Phase H v1.");
+    }
+    if (config.onUnsafeUsage !== undefined && config.onUnsafeUsage !== 'error') {
+        errors.push(
+            "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
+        );
+    }
+    if (config.autoPrefix !== undefined && !isValidCustomPropertyPrefix(config.autoPrefix)) {
+        errors.push('production.mangleGlobalVars.autoPrefix must be empty or start with "--".');
+    } else if (
+        config.autoPrefix !== undefined &&
+        config.autoPrefix !== '' &&
+        isTailwindReservedCustomProperty(config.autoPrefix)
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.autoPrefix cannot target Tailwind reserved namespace "${config.autoPrefix}".`,
+        );
+    } else if (
+        config.autoPrefix !== undefined &&
+        config.autoPrefix !== '' &&
+        isCsszyxGlobalAliasCustomProperty(config.autoPrefix, resolveGlobalVarAliasPrefix(config))
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "${resolveGlobalVarAliasPrefix(config)}*".`,
+        );
+    }
+    if (
+        config.aliasPrefix !== undefined &&
+        (config.aliasPrefix === '' || !isValidCustomPropertyPrefix(config.aliasPrefix))
+    ) {
+        errors.push(
+            'production.mangleGlobalVars.aliasPrefix must be non-empty and start with "--".',
+        );
+    } else if (
+        config.aliasPrefix !== undefined &&
+        isTailwindReservedCustomProperty(config.aliasPrefix)
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.aliasPrefix cannot target Tailwind reserved namespace "${config.aliasPrefix}".`,
+        );
+    } else if (
+        config.autoPrefix !== undefined &&
+        config.autoPrefix !== '' &&
+        config.aliasPrefix !== undefined &&
+        prefixesOverlap(config.autoPrefix, config.aliasPrefix)
+    ) {
+        errors.push(
+            `production.mangleGlobalVars.aliasPrefix "${config.aliasPrefix}" must not overlap autoPrefix "${config.autoPrefix}".`,
+        );
+    }
+
+    validateCustomPropertyList(
+        config.tokens,
+        'tokens',
+        errors,
+        resolveGlobalVarAliasPrefix(config),
+    );
+    validateCustomPropertyList(config.reserved, 'reserved', errors);
+
+    return errors;
+}
+
+/**
+ * Checks whether a custom-property discovery prefix is valid.
+ *
+ * @param prefix User-provided prefix.
+ * @returns true when the prefix is empty or CSS custom-property-like.
+ */
+function isValidCustomPropertyPrefix(prefix: string): boolean {
+    return prefix === '' || prefix.startsWith('--');
+}
+
+/**
+ * Resolves the generated alias prefix.
+ *
+ * @param config User-provided global variable alias config.
+ * @returns Active alias prefix.
+ */
+function resolveGlobalVarAliasPrefix(config: GlobalVarMangleConfig): string {
+    return config.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+}
+
+/**
+ * Checks whether two custom-property prefixes overlap.
+ *
+ * @param left First prefix.
+ * @param right Second prefix.
+ * @returns true when either prefix can include the other.
+ */
+function prefixesOverlap(left: string, right: string): boolean {
+    return left.startsWith(right) || right.startsWith(left);
+}
+
+/**
+ * Validates an optional list of custom-property names.
+ *
+ * @param values User-provided list.
+ * @param field Field name for diagnostics.
+ * @param errors Mutable error list.
+ * @param aliasPrefix Active generated alias prefix.
+ */
+function validateCustomPropertyList(
+    values: string[] | undefined,
+    field: 'tokens' | 'reserved',
+    errors: string[],
+    aliasPrefix = CSSZYX_GLOBAL_ALIAS_PREFIX,
+): void {
+    if (!values) {
+        return;
+    }
+    for (const value of values) {
+        if (!value.startsWith('--')) {
+            errors.push(`production.mangleGlobalVars.${field} entries must start with "--".`);
+            return;
+        }
+        if (field === 'tokens' && isTailwindReservedCustomProperty(value)) {
+            errors.push(
+                `production.mangleGlobalVars.tokens cannot include Tailwind reserved namespace token "${value}".`,
+            );
+            return;
+        }
+        if (field === 'tokens' && isCsszyxGlobalAliasCustomProperty(value, aliasPrefix)) {
+            errors.push(
+                `production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token "${value}".`,
+            );
+            return;
+        }
+    }
 }
 
 /**
@@ -278,6 +545,8 @@ export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
  */
 export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: true,
+    mangleVars: false,
+    mangleVarHoistMaxDepth: 5,
     contentHashing: true,
     injectChecksum: true,
     incrementalBuild: true,

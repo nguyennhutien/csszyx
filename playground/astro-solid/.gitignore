@@ -1,0 +1,5 @@
+.astro/
+.csszyx/
+csszyx-classes.html
+dist/
+node_modules/

@@ -382,6 +382,23 @@ export const PROPERTY_MAP: Record<string, string> = {
 
     // Overflow
     overflow: 'overflow',
+
+    // Scrollbar (v4.3)
+    scrollbar: 'scrollbar',
+    scrollbarThumb: 'scrollbar-thumb',
+    scrollbarTrack: 'scrollbar-track',
+    scrollbarGutter: 'scrollbar-gutter',
+
+    // Zoom (v4.3)
+    zoom: 'zoom',
+
+    // Tab Size (v4.3)
+    tabSize: 'tab',
+
+    // Mask gradient color stops (v4.1)
+    maskFrom: 'mask-from',
+    maskVia: 'mask-via',
+    maskTo: 'mask-to',
 };
 
 // ============================================================================
@@ -504,6 +521,9 @@ export const SUGGESTION_MAP: Record<string, string> = {
     touchAction: 'touch',
     userSelect: 'select',
     captionSide: 'caption',
+    // Scrollbar (v4.3)
+    scrollbarColor: 'scrollbarThumb (thumb color) or scrollbarTrack (track color)',
+    scrollbarWidth: 'scrollbar',
     // Boolean remaps
     flexWrapReverse: "flexWrap: 'wrap-reverse'",
     flexNowrap: "flexWrap: 'nowrap'",
@@ -547,6 +567,19 @@ export const VARIANT_MAP: Record<string, string> = {
     pointerFine: 'pointer-fine',
     pointerCoarse: 'pointer-coarse',
     pointerNone: 'pointer-none',
+
+    // Any-pointer variants (v4.1)
+    anyPointerFine: 'any-pointer-fine',
+    anyPointerCoarse: 'any-pointer-coarse',
+    anyPointerNone: 'any-pointer-none',
+
+    // Form validation variants (v4.1)
+    userValid: 'user-valid',
+    userInvalid: 'user-invalid',
+
+    // Details / inverted-colors variants (v4.1)
+    detailsContent: 'details-content',
+    invertedColors: 'inverted-colors',
 
     // Screen orientation
     screenPortrait: 'portrait',
@@ -663,6 +696,25 @@ export const KNOWN_VARIANTS: Set<string> = new Set([
     'pointerFine',
     'pointerCoarse',
     'pointerNone',
+    // Any-pointer (v4.1)
+    'any-pointer-fine',
+    'any-pointer-coarse',
+    'any-pointer-none',
+    'anyPointerFine',
+    'anyPointerCoarse',
+    'anyPointerNone',
+    // Form validation (v4.1)
+    'user-valid',
+    'user-invalid',
+    'userValid',
+    'userInvalid',
+    // Details / inverted-colors (v4.1)
+    'details-content',
+    'detailsContent',
+    'inverted-colors',
+    'invertedColors',
+    // Noscript (v4.1)
+    'noscript',
     // Open
     'open',
     // RTL/LTR
@@ -1268,7 +1320,7 @@ function handleGroupPeer(type: 'group' | 'peer', nestedObj: SzObject, prefix: st
             if (result.className) {
                 classes.push(result.className);
             }
-        } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+        } else if (typeof nestedValue === 'object') {
             // { group: { name: { hover: { ... }}}} → group-hover/name:
             // Also handles data/aria inside named group:
             // { group: { card: { data: { active: { ... }}}}} → group-data-[active]/card:
@@ -1555,8 +1607,8 @@ export function transform(
         // ================================================================
         if (
             rawKey === 'bgImg' &&
-            typeof value === 'object' &&
             value !== null &&
+            typeof value === 'object' &&
             !Array.isArray(value)
         ) {
             const grad = value as { gradient?: string; dir?: string | number; in?: string };
@@ -1638,8 +1690,8 @@ export function transform(
         // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
         // ================================================================
         if (
-            typeof value === 'object' &&
             value !== null &&
+            typeof value === 'object' &&
             !Array.isArray(value) &&
             rawKey in PROPERTY_MAP &&
             'color' in (value as Record<string, unknown>)
@@ -1814,8 +1866,8 @@ export function transform(
                         }
                     } else if (
                         (mappedKey === '@min' || mappedKey === '@max') &&
-                        typeof nestedValue === 'object' &&
                         nestedValue !== null &&
+                        typeof nestedValue === 'object' &&
                         !KNOWN_BP.has(nestedKey) &&
                         !PROPERTY_MAP[nestedKey] &&
                         !BOOLEAN_SHORTHANDS.has(nestedKey)
@@ -1843,7 +1895,7 @@ export function transform(
                         if (result.className) {
                             classes.push(result.className);
                         }
-                    } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+                    } else if (typeof nestedValue === 'object') {
                         // It's a named container: @md/sidebar
                         const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
                         const result = transform(nestedValue as SzObject, nestedPrefix);

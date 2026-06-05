@@ -40,6 +40,9 @@ export type {
     CsszyxConfig,
     DevelopmentConfig,
     Environment,
+    GlobalVarMangleConfig,
+    GlobalVarMangleMode,
+    GlobalVarUnsafeUsageMode,
     HydrationConfig,
     PartialCsszyxConfig,
     PerformanceConfig,
@@ -53,6 +56,7 @@ export {
     DEFAULT_PERFORMANCE_CONFIG,
     DEFAULT_PRODUCTION_CONFIG,
     getCurrentEnvironment,
+    validateGlobalVarMangleConfig,
 } from './config.js';
 // Re-export core WASM contract
 export type { CsszyxCorePkg, CsszyxCoreWasm } from './core.js';
@@ -62,6 +66,8 @@ export type { SzProps, SzPropValue } from './jsx.js';
 export type {
     AuditLogEntry,
     ComponentPropsWithSz,
+    CssVariableMangleValue,
+    CsszyxDebugHelpers,
     CsszyxWindow,
     HydrationError,
     HydrationErrorType,
@@ -76,3 +82,9 @@ export type {
     VerificationResult,
 } from './runtime.js';
 export { isCsszyxWindow } from './runtime.js';
+export {
+    CSSZYX_GLOBAL_ALIAS_PREFIX,
+    isCsszyxGlobalAliasCustomProperty,
+    isTailwindReservedCustomProperty,
+    TAILWIND_RESERVED_PREFIXES,
+} from './tailwind-reserved.js';

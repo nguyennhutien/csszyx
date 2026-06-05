@@ -8,6 +8,7 @@
  * - audit: Performance analysis
  * - generate-types: Generate TypeScript declarations
  * - migrate: Convert Tailwind className to sz prop
+ * - next watch: Maintain Next.js Turbopack safelist state
  *
  * @module @csszyx/cli
  */
@@ -19,13 +20,74 @@ import { doctor } from './commands/doctor.js';
 import { generateTypes } from './commands/generate-types.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
+import { nextPrebuild } from './commands/next-prebuild.js';
+import { nextWatch } from './commands/next-watch.js';
 
 const cli = cac('csszyx');
+normalizeNextCommandAlias(process.argv);
 
 /**
  * Package version (will be replaced by build process).
  */
 const VERSION = '0.0.0';
+
+interface CacNextPrebuildOptions {
+    cwd?: string;
+    root?: string;
+    mode?: 'development' | 'production';
+    parserMode?: 'rust' | 'oxc' | 'babel';
+    outputFile?: string;
+    cacheDir?: string;
+    ignore?: string;
+    json?: boolean;
+}
+
+interface CacNextWatchOptions {
+    cwd?: string;
+    root?: string;
+    parserMode?: 'rust' | 'oxc' | 'babel';
+    outputFile?: string;
+    cacheDir?: string;
+    ignore?: string;
+    debounceMs?: number | string;
+}
+
+async function runNextPrebuildCommand(
+    pattern: string | undefined,
+    options: CacNextPrebuildOptions,
+): Promise<void> {
+    const code = await nextPrebuild({
+        cwd: options.cwd,
+        root: options.root,
+        mode: options.mode,
+        parserMode: options.parserMode,
+        outputFile: options.outputFile,
+        cacheDir: options.cacheDir,
+        pattern,
+        extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        json: options.json,
+    });
+    if (code !== 0) {
+        process.exit(code);
+    }
+}
+
+async function runNextWatchCommand(
+    pattern: string | undefined,
+    options: CacNextWatchOptions,
+): Promise<void> {
+    const code = await nextWatch({
+        cwd: options.cwd,
+        root: options.root,
+        parserMode: options.parserMode,
+        outputFile: options.outputFile,
+        cacheDir: options.cacheDir,
+        pattern,
+        extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        debounceMs: options.debounceMs,
+    });
+    process.exitCode = code;
+}
 
 // init command
 cli.command('init', 'Setup csszyx in your project')
@@ -120,6 +182,38 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
         });
     });
 
+// next-prebuild command
+cli.command(
+    'next-prebuild [pattern]',
+    'Seed the Next.js Turbopack csszyx safelist and generation manifest',
+)
+    .option('--root <dir>', 'Next app root (defaults to cwd)')
+    .option('--cwd <dir>', 'Current working directory')
+    .option('--mode <mode>', 'development | production (default: production)')
+    .option('--parser-mode <mode>', 'rust | oxc | babel (default: rust)')
+    .option(
+        '--output-file <path>',
+        'Tailwind @source safelist output (default: csszyx-classes.html)',
+    )
+    .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
+    .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option('--json', 'Emit a single JSON result instead of formatted text')
+    .action(runNextPrebuildCommand);
+
+// next-watch command
+cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safelist')
+    .option('--root <dir>', 'Next app root (defaults to cwd)')
+    .option('--cwd <dir>', 'Current working directory')
+    .option('--parser-mode <mode>', 'rust | oxc | babel (default: rust)')
+    .option(
+        '--output-file <path>',
+        'Tailwind @source safelist output (default: csszyx-classes.html)',
+    )
+    .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
+    .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option('--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)')
+    .action(runNextWatchCommand);
+
 // Default command (show help)
 cli.command('').action(() => {
     cli.outputHelp();
@@ -154,3 +248,9 @@ export {
     flattenColors,
     scanTailwindConfig,
 } from './scanner/tailwind-scanner.js';
+
+function normalizeNextCommandAlias(argv: string[]): void {
+    if (argv[2] === 'next' && (argv[3] === 'prebuild' || argv[3] === 'watch')) {
+        argv.splice(2, 2, `next-${argv[3]}`);
+    }
+}

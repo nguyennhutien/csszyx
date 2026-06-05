@@ -144,6 +144,84 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-dynamic-css-var-mangle-vars',
+        source: 'const X = ({ pad }) => <div sz={{ p: pad, bg: "blue-500" }} />;',
+        filename: 'dynamic-css-var-mangle-vars.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-hoist',
+        source: [
+            'const X = ({ pad }) => (',
+            '  <section>',
+            '    <div sz={{ p: pad }} />',
+            '    <button sz={{ p: pad }} />',
+            '  </section>',
+            ');',
+        ].join('\n'),
+        filename: 'dynamic-css-var-mangle-vars-hoist.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-component-boundary-diagnostic',
+        source: 'const X = ({ pad }) => <Card><div sz={{ p: pad }} /><button sz={{ p: pad }} /></Card>;',
+        filename: 'dynamic-css-var-mangle-vars-boundary.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-fragment-boundary-diagnostic',
+        source: 'const X = ({ pad }) => <><div sz={{ p: pad }} /><button sz={{ p: pad }} /></>;',
+        filename: 'dynamic-css-var-mangle-vars-fragment.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-hoist-max-depth',
+        source: [
+            'const X = ({ pad }) => (',
+            '  <section>',
+            '    <div>',
+            '      <article>',
+            '        <aside>',
+            '          <div>',
+            '            <span sz={{ p: pad }} />',
+            '          </div>',
+            '        </aside>',
+            '      </article>',
+            '    </div>',
+            '    <button sz={{ p: pad }} />',
+            '  </section>',
+            ');',
+        ].join('\n'),
+        filename: 'dynamic-css-var-mangle-vars-hoist-max-depth.tsx',
+        options: { mangleVars: true, mangleVarHoistMaxDepth: 6 },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-reserved-style-vars',
+        source: [
+            'const X = ({ pad, gap }) => (',
+            '  <section style={{ "--cz": "user" }}>',
+            '    <div style={{ "--sz": "local" }} sz={{ p: pad }} />',
+            '    <button sz={{ p: pad, gap }} />',
+            '  </section>',
+            ');',
+        ].join('\n'),
+        filename: 'dynamic-css-var-mangle-vars-reserved.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
+        name: 'sz-dynamic-css-var-mangle-vars-normalized-value-key',
+        source: 'const X = ({ pad }) => <section><div sz={{ p: pad }} /><button sz={{ p: (pad) }} /></section>;',
+        filename: 'dynamic-css-var-mangle-vars-normalized-value-key.tsx',
+        options: { mangleVars: true },
+        expected: 'parity',
+    },
+    {
         name: 'sz-dynamic-css-var-existing-class',
         source: 'const X = ({ pad }) => <div className="existing" sz={{ p: pad }} />;',
         filename: 'dynamic-existing-static-class.tsx',
@@ -238,7 +316,7 @@ describe('Rust native engine — parity vs oxc-JS', () => {
 
     for (const fixture of fixtures) {
         it(`${fixture.name} [${fixture.expected}]`, () => {
-            const comparison = compareRustVsOxc(fixture.source, fixture.filename);
+            const comparison = compareRustVsOxc(fixture.source, fixture.filename, fixture.options);
             expect(() => assertExpectedRustParity(fixture, comparison)).not.toThrow();
         });
     }

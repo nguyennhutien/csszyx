@@ -35,7 +35,46 @@ export interface TransformSourceCodeOptions {
      * are still safe to transform.
      */
     astBudget?: number;
+
+    /**
+     * Opt into tiered CSS custom property names for parser paths that support
+     * the CSS variable system. Unsupported parser paths must preserve existing
+     * `--_sz-*` output until they explicitly port this option.
+     *
+     * @default false
+     */
+    mangleVars?: boolean;
+
+    /**
+     * Maximum cascade depth for component-tier CSS variable hoisting.
+     *
+     * Only used when `mangleVars` is enabled. Defaults to 5 to keep the
+     * invalidation surface bounded.
+     */
+    mangleVarHoistMaxDepth?: number;
+
+    /**
+     * Explicit app-owned global CSS custom-property aliases. Parser paths that
+     * support Phase H rewrite exact static sz string values from original
+     * token names to aliases, for example `--brand-primary` -> `---gz`.
+     */
+    globalVarAliases?: GlobalVarAliasTableInput;
 }
+
+/**
+ * Accepted input shapes for global CSS custom-property alias tables.
+ */
+export type GlobalVarAliasTableInput =
+    | ReadonlyMap<string, string>
+    | ReadonlyArray<readonly [string, string]>
+    | Readonly<Record<string, string>>;
+
+/**
+ * CSS custom-property mangle metadata. Most originals map to one mangled name,
+ * but the same original can legitimately appear in both scoped and hoisted
+ * tiers in one build, e.g. `--_sz-p` -> `--sz` and `--cz`.
+ */
+export type CssVariableMangleValue = string | string[];
 
 /**
  * Source transform result shared by the Babel and oxc parser paths.
@@ -59,6 +98,8 @@ export interface SourceTransformResult {
     diagnostics: string[];
     /** Recovery tokens emitted by szRecover attributes. */
     recoveryTokens: Map<string, TokenData>;
+    /** CSS custom property original-to-mangled names emitted by mangleVars. */
+    cssVariableMap: Map<string, CssVariableMangleValue>;
 }
 
 /**
@@ -92,6 +133,7 @@ export function transformSourceCode(
     // by token (12-char hex hash); the unplugin aggregates these across all
     // files and serializes the result into the manifest script tag.
     const recoveryTokens = new Map<string, TokenData>();
+    const cssVariableMap = new Map<string, CssVariableMangleValue>();
 
     // Fast path: check if file contains 'sz' before parsing
     if (!source.includes('sz')) {
@@ -105,6 +147,7 @@ export function transformSourceCode(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     }
 
@@ -981,6 +1024,7 @@ export function transformSourceCode(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     } catch (e) {
         // Budget violations must propagate so the build aborts loudly with
@@ -1000,6 +1044,7 @@ export function transformSourceCode(
             rawClassNames,
             diagnostics,
             recoveryTokens,
+            cssVariableMap,
         };
     }
 }

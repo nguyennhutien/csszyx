@@ -6,8 +6,8 @@
 use napi_derive::napi;
 
 use crate::transform::{
-    transform_batch, ParserPath, RecoveryMode, TransformFile, TransformProducer, TransformResult,
-    TransformTimings,
+    transform_batch_with_options, GlobalVarAliasEntry, ParserPath, RecoveryMode, TransformFile,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings,
 };
 
 /// Source file passed from JavaScript to the native transform.
@@ -18,6 +18,28 @@ pub struct NativeTransformFile {
     pub filename: String,
     /// Source module contents.
     pub source: String,
+}
+
+/// Options passed from JavaScript to the native transform.
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeTransformOptions {
+    /// Whether dynamic CSS custom properties should use tiered short names.
+    pub mangle_vars: Option<bool>,
+    /// Maximum cascade depth for component-tier CSS variable hoisting.
+    pub mangle_var_hoist_max_depth: Option<u32>,
+    /// Exact app-owned global custom-property aliases for static sz values.
+    pub global_var_aliases: Option<Vec<NativeGlobalVarAliasEntry>>,
+}
+
+/// One exact app-owned global custom-property alias.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeGlobalVarAliasEntry {
+    /// Original custom-property name, including `--`.
+    pub original: String,
+    /// Alias custom-property name, including `--`.
+    pub alias: String,
 }
 
 /// Recovery token emitted by the native transform.
@@ -32,6 +54,16 @@ pub struct NativeRecoveryToken {
     pub component: String,
     /// Source path associated with the token.
     pub path: String,
+}
+
+/// CSS custom property mangle mapping emitted by the native transform.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeCssVariableMapEntry {
+    /// Original csszyx-generated custom property name.
+    pub original: String,
+    /// Mangled custom property name.
+    pub mangled: String,
 }
 
 /// Metadata describing which runtime helpers a native transform result needs.
@@ -95,6 +127,8 @@ pub struct NativeTransformResult {
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<NativeRecoveryToken>,
+    /// CSS custom property mangle metadata.
+    pub css_variable_map: Vec<NativeCssVariableMapEntry>,
     /// Native transform metadata used by unplugin and benchmarks.
     pub metadata: NativeTransformMetadata,
     /// Native parser lane used for this file.
@@ -109,6 +143,7 @@ pub struct NativeTransformResult {
 #[napi(js_name = "transformBatch")]
 pub fn transform_batch_native(
     files: Vec<NativeTransformFile>,
+    options: Option<NativeTransformOptions>,
 ) -> napi::Result<Vec<NativeTransformResult>> {
     let files = files
         .into_iter()
@@ -118,14 +153,33 @@ pub fn transform_batch_native(
         })
         .collect::<Vec<_>>();
 
-    transform_batch(&files)
-        .map(|results| {
-            results
+    let options = options.unwrap_or_default();
+
+    transform_batch_with_options(
+        &files,
+        TransformOptions {
+            mangle_vars: options.mangle_vars.unwrap_or(false),
+            mangle_var_hoist_max_depth: options
+                .mangle_var_hoist_max_depth
+                .map(|depth| depth as usize),
+            global_var_aliases: options
+                .global_var_aliases
+                .unwrap_or_default()
                 .into_iter()
-                .map(NativeTransformResult::from)
-                .collect()
-        })
-        .map_err(|err| napi::Error::from_reason(err.to_string()))
+                .map(|entry| GlobalVarAliasEntry {
+                    original: entry.original,
+                    alias: entry.alias,
+                })
+                .collect(),
+        },
+    )
+    .map(|results| {
+        results
+            .into_iter()
+            .map(NativeTransformResult::from)
+            .collect()
+    })
+    .map_err(|err| napi::Error::from_reason(err.to_string()))
 }
 
 impl From<TransformResult> for NativeTransformResult {
@@ -144,6 +198,14 @@ impl From<TransformResult> for NativeTransformResult {
                     mode: recovery_mode_to_js(token.mode).to_string(),
                     component: token.component,
                     path: token.path,
+                })
+                .collect(),
+            css_variable_map: result
+                .css_variable_map
+                .into_iter()
+                .map(|entry| NativeCssVariableMapEntry {
+                    original: entry.original,
+                    mangled: entry.mangled,
                 })
                 .collect(),
             metadata: NativeTransformMetadata {

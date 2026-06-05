@@ -44,7 +44,7 @@ describe('clsx/cn calls', () => {
         const result = migrate('<div className={cn("flex relative")} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('sz=');
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain('relative: true');
     });
 
@@ -153,7 +153,7 @@ describe('ternary expressions', () => {
         const result = migrate('<div className={isHidden ? "" : "block"} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('!isHidden &&');
-        expect(result.code).toContain('block: true');
+        expect(result.code).toContain("display: 'block'");
     });
 
     it('skips ternary with non-string branches', () => {
@@ -184,7 +184,7 @@ describe('logical AND expressions', () => {
         const result = migrate('<div className={isOpen && "flex items-center gap-4"} />');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('isOpen &&');
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
         expect(result.code).toContain("items: 'center'");
         expect(result.code).toContain('gap: 4');
     });
@@ -289,10 +289,19 @@ describe('edge cases', () => {
     });
 
     it('handles parse errors gracefully', () => {
-        // Invalid JSX should not throw
-        const result = migrate('this is not valid JSX at all <<<>>>```');
+        // Invalid JSX with className should not throw — fast-path requires
+        // the source to mention className before attempting to parse.
+        const result = migrate('this is not valid <<className=>>>``` JSX');
         expect(result.changed).toBe(false);
         expect(result.warnings.length).toBeGreaterThan(0);
+    });
+
+    it('fast-path skips files without className or cva', () => {
+        // Sources without className or cva references should return
+        // unchanged with no parse cost or warnings.
+        const result = migrate('export const x = 1; const y = "hello world";');
+        expect(result.changed).toBe(false);
+        expect(result.warnings).toEqual([]);
     });
 });
 

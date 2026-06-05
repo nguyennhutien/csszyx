@@ -129,7 +129,9 @@ export function loadMangleMapFromDOM(): MangleMap | null {
         return null;
     }
 
-    const scriptElement = document.getElementById('__SZ_MANGLE_MAP__');
+    const scriptElement =
+        document.getElementById('__CSSZYX_MANGLE_MAP__') ??
+        document.getElementById('__SZ_MANGLE_MAP__');
 
     if (!scriptElement) {
         return null;

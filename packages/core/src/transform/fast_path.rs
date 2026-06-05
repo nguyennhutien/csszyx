@@ -126,6 +126,8 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         });
         ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span,
+            parent_element_index: None,
+            can_host_style: true,
             sz_attribute_indices: vec![attribute_index],
             class_attribute_index: None,
             style_attribute_index: None,
@@ -133,6 +135,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             has_recovery_token_attribute: false,
             last_attribute_end: Some(u32::try_from(attribute_end).ok()?),
             element_name: element_name(opening)?,
+            hoisted_dynamic_css_vars: Vec::new(),
         });
 
         search_from = attribute_end;

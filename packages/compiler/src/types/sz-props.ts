@@ -1675,6 +1675,24 @@ export interface InteractivityProps {
 
     /** @see https://tailwindcss.com/docs/will-change */
     willChange?: 'auto' | 'scroll' | 'contents' | 'transform' | (string & {});
+
+    /** @see https://tailwindcss.com/docs/scrollbar-width */
+    scrollbar?: 'auto' | 'thin' | 'none';
+
+    /** @see https://tailwindcss.com/docs/scrollbar-color */
+    scrollbarThumb?: ColorPropValue;
+
+    /** @see https://tailwindcss.com/docs/scrollbar-color */
+    scrollbarTrack?: ColorPropValue;
+
+    /** @see https://tailwindcss.com/docs/scrollbar-gutter */
+    scrollbarGutter?: 'auto' | 'stable' | 'both';
+
+    /** @see https://tailwindcss.com/docs/zoom */
+    zoom?: number | (string & {});
+
+    /** @see https://tailwindcss.com/docs/tab-size */
+    tabSize?: number | (string & {});
 }
 
 // ============================================================================
@@ -1736,6 +1754,13 @@ export interface MaskProps {
     maskRepeat?: 'repeat' | 'no-repeat' | 'repeat-x' | 'repeat-y' | 'round' | 'space';
     /** CSS mask-type (shape-rendering) */
     maskShape?: 'alpha' | 'luminance';
+
+    /** Mask gradient from color stop (v4.1) */
+    maskFrom?: ColorPropValue;
+    /** Mask gradient via color stop (v4.1) */
+    maskVia?: ColorPropValue;
+    /** Mask gradient to color stop (v4.1) */
+    maskTo?: ColorPropValue;
 }
 
 // ============================================================================
@@ -1814,6 +1839,25 @@ export interface VariantModifiers {
     // Contrast preferences
     contrastMore?: SzPropsBase;
     contrastLess?: SzPropsBase;
+
+    // Pointer preferences
+    pointerFine?: SzPropsBase;
+    pointerCoarse?: SzPropsBase;
+    pointerNone?: SzPropsBase;
+
+    // Any-pointer preferences (v4.1)
+    anyPointerFine?: SzPropsBase;
+    anyPointerCoarse?: SzPropsBase;
+    anyPointerNone?: SzPropsBase;
+
+    // Form validation (v4.1)
+    userValid?: SzPropsBase;
+    userInvalid?: SzPropsBase;
+
+    // Details / inverted-colors / noscript (v4.1)
+    detailsContent?: SzPropsBase;
+    invertedColors?: SzPropsBase;
+    noscript?: SzPropsBase;
 
     // Print
     print?: SzPropsBase;

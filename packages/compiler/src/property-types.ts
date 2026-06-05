@@ -142,6 +142,11 @@ export const PROPERTY_CATEGORY_MAP: Record<string, PropertyCategory> = {
     via: PropertyCategory.COLOR,
     to: PropertyCategory.COLOR,
     dropShadowColor: PropertyCategory.COLOR,
+    scrollbarThumb: PropertyCategory.COLOR,
+    scrollbarTrack: PropertyCategory.COLOR,
+    maskFrom: PropertyCategory.COLOR,
+    maskVia: PropertyCategory.COLOR,
+    maskTo: PropertyCategory.COLOR,
 
     // ---- UNITLESS ----
     opacity: PropertyCategory.UNITLESS,
@@ -189,6 +194,8 @@ export const PROPERTY_CATEGORY_MAP: Record<string, PropertyCategory> = {
     outline: PropertyCategory.UNITLESS,
     leading: PropertyCategory.UNITLESS,
     decorationThickness: PropertyCategory.UNITLESS,
+    zoom: PropertyCategory.UNITLESS,
+    tabSize: PropertyCategory.UNITLESS,
 
     // ---- ANGLE ----
     rotate: PropertyCategory.ANGLE,

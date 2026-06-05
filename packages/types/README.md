@@ -52,6 +52,7 @@ import type {
   CsszyxConfig, // Main configuration interface
   DevelopmentConfig, // Development mode options
   ProductionConfig, // Production mode options
+  GlobalVarMangleConfig, // Global CSS variable alias options
   BuildConfig, // Build pipeline options
   HydrationConfig, // Hydration safety options
   PerformanceConfig, // Performance optimization options
@@ -77,6 +78,10 @@ const userConfig: PartialCsszyxConfig = {
   },
   production: {
     mangle: true,
+    mangleGlobalVars: {
+      enabled: true,
+      tokens: ["--brand-primary"],
+    },
   },
 };
 
@@ -89,6 +94,28 @@ const config: CsszyxConfig = {
   },
 };
 ```
+
+#### Global Variable Alias Safety
+
+`production.mangleGlobalVars` aliases explicit app-owned custom-property
+`tokens` in Phase H v1. Tailwind-owned `@theme` namespaces are rejected by
+shared config validation and must not be passed in `tokens` or `autoPrefix`.
+`autoPrefix` remains blocked until CSS pre-scan support exists.
+
+Use the option only for explicit tokens that are defined by the same production
+build. Alias mode preserves the original custom-property names, rewrites static
+`sz` references and CSS `var(--token)` references, and does not optimize runtime
+fallback `sz={expr}` shapes.
+
+`emitMap` defaults to `true` and emits `.csszyx/global-var-map.json` for tooling.
+Set it to `false` only when the standalone map file is not needed; the build
+manifest still carries `globalVarAliases`.
+
+The reserved namespace list is exported as `TAILWIND_RESERVED_PREFIXES`, with
+`isTailwindReservedCustomProperty(name)` for validation. It follows Tailwind's
+theme variable namespace documentation. If Tailwind adds a new namespace, update
+`packages/types/src/tailwind-reserved.ts` and add scanner/config tests in the
+same change.
 
 ### Runtime Types (`/runtime`)
 

@@ -7,6 +7,15 @@ import csszyxDarkTheme from './src/themes/csszyx-dark.json' with { type: 'json' 
 import csszyxLightTheme from './src/themes/csszyx-light.json' with { type: 'json' };
 import ecTwoslash from 'expressive-code-twoslash';
 
+const docsLandingGlobalVarTokens = [
+    '--lp-border',
+    '--lp-surface',
+    '--lp-text',
+    '--lp-text-muted',
+    '--trans-fast',
+    '--trans-smooth',
+];
+
 export default defineConfig({
     site: 'https://csszyx.com',
     redirects: {
@@ -119,6 +128,7 @@ export default defineConfig({
                     items: [
                         { label: 'Runtime Helpers', slug: 'docs/reference/runtime' },
                         { label: 'Plugin Config', slug: 'docs/reference/config' },
+                        { label: 'Global Variable Mangling', slug: 'docs/reference/global-var-mangling' },
                         { label: 'SSR Hydration API', slug: 'docs/reference/hydration' },
                     ],
                 },
@@ -126,17 +136,43 @@ export default defineConfig({
         }),
     ],
     vite: {
+        resolve: {
+            tsconfigPaths: false,
+        },
         plugins: [
             // csszyx MUST come before tailwindcss.
             // CSSZYX_BENCH_NO_CSSZYX=1 skips the csszyx plugin entirely so the
             // pipeline-profile bench can measure a Tailwind-only baseline.
             // CSSZYX_BENCH_NO_TAILWIND=1 additionally skips the Tailwind plugin
-            // so the bench can measure the Astro/Vite/React-only floor. Both
-            // are bench-only knobs; production builds must never set them.
+            // so the bench can measure the Astro/Vite/React-only floor.
+            // CSSZYX_BENCH_MANGLE_VARS=1 opts into CSS variable mangling for
+            // output-size benches only. These are opt-in validation knobs and
+            // are intentionally absent from normal production docs builds.
+            // CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1 opts into explicit g-tier
+            // aliases for docs landing tokens so Phase H can validate a
+            // real app without changing normal docs builds.
             ...(process.env.CSSZYX_BENCH_NO_CSSZYX === '1' ||
             process.env.CSSZYX_BENCH_NO_TAILWIND === '1'
                 ? []
-                : csszyx({ production: { mangle: true }, build: { scanCss: 'src/styles/landing.css' } })),
+                : csszyx({
+                        production: {
+                            mangle: true,
+                            mangleVars: process.env.CSSZYX_BENCH_MANGLE_VARS === '1',
+                            mangleGlobalVars:
+                                process.env.CSSZYX_BENCH_MANGLE_GLOBAL_VARS === '1'
+                                    ? {
+                                            enabled: true,
+                                            emitMap:
+                                                process.env
+                                                    .CSSZYX_BENCH_NO_GLOBAL_VAR_MAP === '1'
+                                                    ? false
+                                                    : undefined,
+                                            tokens: docsLandingGlobalVarTokens,
+                                        }
+                                    : undefined,
+                        },
+                        build: { scanCss: 'src/styles/landing.css' },
+                    })),
             ...(process.env.CSSZYX_BENCH_NO_TAILWIND === '1' ? [] : [tailwindcss()]),
         ],
     },

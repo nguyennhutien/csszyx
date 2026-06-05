@@ -5,17 +5,26 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 import {
+    type CssVariableMangleValue,
     ensureRustTransformAvailable,
     type SourceTransformResult,
     type TokenData,
+    type TransformSourceCodeOptions,
     transform,
     transformOxc,
     transformRust,
+    transformRustBatch,
     transformSourceCode,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
-import { DEFAULT_BUILD_CONFIG, type PartialCsszyxConfig } from '@csszyx/types';
+import {
+    CSSZYX_GLOBAL_ALIAS_PREFIX,
+    DEFAULT_BUILD_CONFIG,
+    type GlobalVarMangleConfig,
+    type PartialCsszyxConfig,
+    validateGlobalVarMangleConfig,
+} from '@csszyx/types';
 import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
@@ -26,7 +35,17 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 import { mangleCSSSync } from './css-mangler.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
+    createGlobalVarAliasValidationOptions,
+    type GlobalVarAliasValidationResult,
+    type GlobalVarCodeSource,
+    type GlobalVarCssAssetSource,
+    resolveGlobalVarScanCacheDir,
+    rewriteGlobalVarCssAliases,
+    validateGlobalVarAliasInputs,
+} from './global-var-scanner.js';
+import {
     buildRecoveryManifest,
+    createHydrationMangleMap,
     transformIndexHtml as injectHydrationData,
     injectRecoveryManifest,
 } from './html-transformer.js';
@@ -37,6 +56,7 @@ import {
     deleteRSCModuleRecord,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
+import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -44,6 +64,8 @@ import {
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
+    type TransformCacheKey,
+    type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
 import {
@@ -61,6 +83,10 @@ import {
 interface PluginState {
     classes: Set<string>;
     mangleMap: Record<string, string>;
+    varMangleEntriesByFile: Map<string, Array<[string, string]>>;
+    varMangleMap: Record<string, CssVariableMangleValue>;
+    cssVarMetricsByFile: Map<string, CSSVariableMetrics>;
+    cssVarMetrics: CSSVariableMetrics;
     checksum: string;
     finalized: boolean;
     rootDir: string;
@@ -73,6 +99,35 @@ interface PluginState {
     recoveryTokens: Map<string, TokenData>;
     /** RSC graph records collected from transformed TS/JS modules. */
     rscModules: Map<string, RSCModuleRecord>;
+    /** Source files observed by the transform hook for global-var diagnostics. */
+    globalVarSourceFilesByFile: Map<string, string>;
+    /** Last validated global-var alias result for the current output hook. */
+    globalVarValidationResult: GlobalVarAliasValidationResult | null;
+}
+
+/** CSS variable mangling and hoisting metrics emitted for debugging. */
+interface CSSVariableMetrics {
+    componentClassUses: number;
+    componentStyleDeclarations: number;
+    estimatedHoistedDeclarationsSaved: number;
+    scopedClassUses: number;
+    scopedStyleDeclarations: number;
+}
+
+/** Source file queued by the prescan walker. */
+interface PrescanSourceFile {
+    /** Absolute source path. */
+    filePath: string;
+    /** Source contents. */
+    content: string;
+}
+
+/** Prescan source file plus transform result. */
+interface PrescanTransformResult {
+    /** Absolute source path. */
+    filePath: string;
+    /** Compiler result for the file. */
+    result: SourceTransformResult;
 }
 
 /**
@@ -81,10 +136,13 @@ interface PluginState {
  */
 const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
 const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
+const VAR_MANGLE_MAP_PLACEHOLDER = '___CSSZYX_VAR_MANGLE_MAP___';
 const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
+const DEFAULT_VAR_MANGLE_MAP_MAX_BYTES = 100 * 1024;
+const GLOBAL_VAR_ALIAS_MAP_OWNER = '\0csszyx:global-var-aliases';
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
@@ -113,6 +171,597 @@ const PLUGIN_VERSION = findPackageVersionFromFile(
 const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', UNKNOWN_PACKAGE_VERSION);
 const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
 const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
+
+/**
+ * Reads CSS variable mangle metadata from compiler results. Older compiled
+ * compiler artifacts and pre-v4 cache entries do not have this field, so the
+ * unplugin treats it as empty instead of failing during dev/test transitions.
+ *
+ * @param result Compiler transform result.
+ * @returns CSS variable mangle metadata.
+ */
+function cssVariableEntries(result: SourceTransformResult): Array<[string, string]> {
+    const entries: Array<[string, string]> = [];
+    for (const [original, value] of result.cssVariableMap ?? []) {
+        if (Array.isArray(value)) {
+            for (const mangled of value) {
+                entries.push([original, mangled]);
+            }
+        } else {
+            entries.push([original, value]);
+        }
+    }
+    return entries;
+}
+
+/**
+ * Records the complete CSS variable mangle output owned by one source file.
+ *
+ * Rebuilding the public map from per-file entries prevents stale mappings when
+ * a dev-server transform reruns after a file changes or removes dynamic `sz`.
+ *
+ * @param state Plugin state to update.
+ * @param filename Source filename that owns the entries.
+ * @param entries Complete CSS variable entries emitted by this file.
+ */
+function recordFileVarMangleEntries(
+    state: Pick<PluginState, 'varMangleEntriesByFile' | 'varMangleMap'>,
+    filename: string,
+    entries: Array<[string, string]>,
+): void {
+    const normalizedFilename = normalizeSourceFilename(filename);
+    if (entries.length === 0) {
+        state.varMangleEntriesByFile.delete(normalizedFilename);
+    } else {
+        state.varMangleEntriesByFile.set(normalizedFilename, entries);
+    }
+    state.varMangleMap = buildVarMangleMap(state.varMangleEntriesByFile);
+}
+
+/**
+ * Records source text available before bundling/minification for Phase H
+ * global-var diagnostics.
+ *
+ * @param state Plugin state to update.
+ * @param filename Source filename that owns the text.
+ * @param code Source text, or null to clear this file.
+ */
+function recordGlobalVarSourceFile(
+    state: Pick<PluginState, 'globalVarSourceFilesByFile'>,
+    filename: string,
+    code: string | null,
+): void {
+    const normalizedFilename = normalizeSourceFilename(filename);
+    if (!/\.[tj]sx?(?:\?.*)?$/.test(normalizedFilename)) {
+        return;
+    }
+    if (code === null) {
+        state.globalVarSourceFilesByFile.delete(normalizedFilename);
+    } else {
+        state.globalVarSourceFilesByFile.set(normalizedFilename, code);
+    }
+}
+
+/**
+ * Builds stable source-file diagnostics input in filename order.
+ *
+ * @param state Plugin state to read.
+ * @returns Source files for global-var validation.
+ */
+function buildGlobalVarSourceFiles(
+    state: Pick<PluginState, 'globalVarSourceFilesByFile'>,
+): GlobalVarCodeSource[] {
+    return [...state.globalVarSourceFilesByFile.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([filePath, code]) => ({ filePath, code }));
+}
+
+/**
+ *
+ */
+interface RollupBundleAssetLike {
+    type: string;
+    fileName?: string;
+    source?: unknown;
+}
+
+/**
+ *
+ */
+interface WebpackAssetLike {
+    source(): unknown;
+}
+
+/**
+ * Extracts CSS assets from a Rollup/Vite output bundle for pure global-var
+ * validation before output mutation.
+ *
+ * @param bundle Rollup output bundle.
+ * @returns CSS assets in stable file-name order.
+ */
+function collectRollupGlobalVarCssAssets(
+    bundle: Record<string, RollupBundleAssetLike>,
+): GlobalVarCssAssetSource[] {
+    return Object.values(bundle)
+        .filter(
+            (
+                chunk,
+            ): chunk is RollupBundleAssetLike & {
+                fileName: string;
+                source: string | Uint8Array;
+            } =>
+                chunk.type === 'asset' &&
+                typeof chunk.fileName === 'string' &&
+                /\.css(?:$|\?)/.test(chunk.fileName) &&
+                (typeof chunk.source === 'string' || chunk.source instanceof Uint8Array),
+        )
+        .sort((left, right) => left.fileName.localeCompare(right.fileName))
+        .map(asset => ({
+            fileName: asset.fileName,
+            source: asset.source,
+        }));
+}
+
+/**
+ * Reads configured source CSS files for Phase H validation.
+ *
+ * Some framework pipelines, notably Astro prerender builds, can invoke an
+ * output hook before all user CSS is visible as a Rollup/Webpack asset. The
+ * source CSS inventory keeps explicit-token validation tied to real files
+ * while the later output rewrite still mutates only emitted assets.
+ *
+ * @param rootDir Project root used to resolve scan patterns.
+ * @param scanCss User configured CSS scan patterns.
+ * @returns CSS sources in stable file-name order.
+ */
+function collectConfiguredGlobalVarCssSources(
+    rootDir: string,
+    scanCss: string | string[] | undefined,
+): GlobalVarCssAssetSource[] {
+    if (!scanCss) {
+        return [];
+    }
+    return expandFilePatterns(rootDir, scanCss)
+        .filter(file => file.endsWith('.css'))
+        .sort((left, right) => left.localeCompare(right))
+        .flatMap(file => {
+            try {
+                const snapshot = readStableTextFileSnapshotSync(file);
+                return [
+                    {
+                        fileName: file,
+                        source: snapshot.source,
+                        mtimeMs: snapshot.mtimeMs,
+                    },
+                ];
+            } catch {
+                return [];
+            }
+        });
+}
+
+/**
+ * Extracts CSS assets from a Webpack asset map for pure global-var validation
+ * before output mutation.
+ *
+ * @param assets Webpack compilation assets.
+ * @returns CSS assets in stable file-name order.
+ */
+function collectWebpackGlobalVarCssAssets(
+    assets: Record<string, WebpackAssetLike>,
+): GlobalVarCssAssetSource[] {
+    return Object.entries(assets)
+        .flatMap(([fileName, asset]) => {
+            if (!/\.css(?:$|\?)/.test(fileName)) {
+                return [];
+            }
+            const source = asset.source();
+            if (typeof source !== 'string' && !(source instanceof Uint8Array)) {
+                return [];
+            }
+            return [{ fileName, source }];
+        })
+        .sort((left, right) => left.fileName.localeCompare(right.fileName))
+        .map(({ fileName, source }) => ({ fileName, source }));
+}
+
+/**
+ * Fails closed when the pure global-var validation pipeline reports unresolved
+ * CSS planning diagnostics or out-of-band source usages.
+ *
+ * @param result Global-var validation result.
+ */
+function assertNoGlobalVarAliasValidationErrors(result: GlobalVarAliasValidationResult): void {
+    const messages = [
+        ...result.plan.diagnostics.map(diagnostic => {
+            const location = diagnostic.location
+                ? ` (${diagnostic.location.filePath}:${diagnostic.location.line}:${diagnostic.location.column})`
+                : '';
+            return `[${diagnostic.code}] ${diagnostic.name}${location}: ${diagnostic.message}`;
+        }),
+        ...result.usageDiagnostics.map(diagnostic => {
+            const location = diagnostic.location;
+            return `[${diagnostic.kind}] ${diagnostic.name} (${location.filePath}:${location.line}:${location.column}): ${diagnostic.message}`;
+        }),
+    ];
+
+    if (messages.length > 0) {
+        throw new Error(
+            `[csszyx] production.mangleGlobalVars validation failed:\n${messages.join('\n')}`,
+        );
+    }
+}
+
+/**
+ * Rewrites a CSS asset with the already validated global-var alias plan.
+ *
+ * @param css CSS asset source.
+ * @param filePath CSS asset path for diagnostics.
+ * @param result Validated global-var result for this output hook.
+ * @returns Rewritten CSS, or the original source when no plan is active.
+ */
+function rewriteCssWithValidatedGlobalVarPlan(
+    css: string,
+    filePath: string,
+    result: GlobalVarAliasValidationResult | null,
+): string {
+    if (result === null || result.plan.entries.length === 0) {
+        return css;
+    }
+    const rewrite = rewriteGlobalVarCssAliases({
+        css,
+        plan: result.plan,
+        filePath,
+    });
+    assertNoGlobalVarAliasValidationErrors({
+        scans: result.scans,
+        plan: {
+            ...result.plan,
+            diagnostics: rewrite.diagnostics,
+        },
+        usageDiagnostics: [],
+    });
+    return rewrite.css;
+}
+
+/**
+ * Ensures the CSS-derived validation plan matches the early source-transform
+ * alias table exactly.
+ *
+ * @param result Validated CSS/source result.
+ * @param expectedEntries Early original-to-alias entries.
+ */
+function assertGlobalVarPlanMatchesEarlyAliases(
+    result: GlobalVarAliasValidationResult,
+    expectedEntries: ReadonlyArray<readonly [string, string]>,
+): void {
+    const actualEntries = [...result.plan.aliases.entries()].sort(([left], [right]) =>
+        left.localeCompare(right),
+    );
+    const expected = expectedEntries
+        .map(([original, alias]) => [original, alias])
+        .sort(([left], [right]) => left.localeCompare(right));
+    const expectedJson = JSON.stringify(expected);
+    const actualJson = JSON.stringify(actualEntries);
+    if (expectedJson !== actualJson) {
+        throw new Error(
+            '[csszyx] production.mangleGlobalVars validation failed:\n' +
+                `CSS alias plan ${actualJson} does not match source-transform alias table ${expectedJson}.`,
+        );
+    }
+}
+
+/**
+ * Builds a stable one-to-many CSS variable mangle map from per-file ownership.
+ *
+ * @param entriesByFile Per-file CSS variable metadata.
+ * @returns Public original-to-mangled map.
+ */
+function buildVarMangleMap(
+    entriesByFile: ReadonlyMap<string, Array<[string, string]>>,
+): Record<string, CssVariableMangleValue> {
+    const next: Record<string, CssVariableMangleValue> = {};
+    const files = [...entriesByFile.keys()].sort();
+    for (const file of files) {
+        for (const [original, mangled] of entriesByFile.get(file) ?? []) {
+            addVarMangleMapping(next, original, mangled);
+        }
+    }
+    return next;
+}
+
+/**
+ * Extracts Phase H global custom-property aliases for manifest/debug tooling.
+ *
+ * The legacy `varMangleMap` also carries dynamic s/c-tier CSS variables. This
+ * helper keeps manifest consumers from guessing tiers by exposing only aliases
+ * that use the active generated prefix.
+ *
+ * @param varMangleMap CSS variable mangle metadata.
+ * @param aliasPrefix Active generated alias prefix.
+ * @param validationResult Validated CSS alias plan to include CSS-only aliases.
+ * @returns Original global variable names mapped to their generated aliases.
+ */
+export function extractGlobalVarAliasesForManifest(
+    varMangleMap: Record<string, CssVariableMangleValue>,
+    aliasPrefix: string = CSSZYX_GLOBAL_ALIAS_PREFIX,
+    validationResult: GlobalVarAliasValidationResult | null = null,
+): Record<string, string> {
+    const aliases: Record<string, string> = {};
+    for (const [original, value] of Object.entries(varMangleMap).sort(([left], [right]) =>
+        left.localeCompare(right),
+    )) {
+        const values = Array.isArray(value) ? value : [value];
+        const alias = values.find(candidate => candidate.startsWith(aliasPrefix));
+        if (alias) {
+            aliases[original] = alias;
+        }
+    }
+    for (const entry of validationResult?.plan.entries ?? []) {
+        if (entry.alias.startsWith(aliasPrefix)) {
+            aliases[entry.original] = entry.alias;
+        }
+    }
+    return Object.fromEntries(
+        Object.entries(aliases).sort(([left], [right]) => left.localeCompare(right)),
+    );
+}
+
+/**
+ * Serializes the standalone global-var map asset when g-tier aliases exist.
+ *
+ * @param varMangleMap CSS variable mangle metadata.
+ * @param aliasPrefix Active generated alias prefix.
+ * @param validationResult Validated CSS alias plan to include CSS-only aliases.
+ * @returns JSON asset contents, or null when there are no global aliases.
+ */
+export function createGlobalVarMapAssetSource(
+    varMangleMap: Record<string, CssVariableMangleValue>,
+    aliasPrefix: string = CSSZYX_GLOBAL_ALIAS_PREFIX,
+    validationResult: GlobalVarAliasValidationResult | null = null,
+): string | null {
+    const aliases = extractGlobalVarAliasesForManifest(varMangleMap, aliasPrefix, validationResult);
+    return Object.keys(aliases).length > 0 ? JSON.stringify(aliases) : null;
+}
+
+/**
+ * Normalizes compiler global-var aliases for transform-cache identity.
+ *
+ * @param aliases Compiler option value.
+ * @returns Stable original-to-alias entries.
+ */
+export function normalizeGlobalVarAliasesForCache(
+    aliases: TransformSourceCodeOptions['globalVarAliases'],
+): Array<[string, string]> {
+    if (!aliases) {
+        return [];
+    }
+    const entries =
+        aliases instanceof Map
+            ? aliases.entries()
+            : Array.isArray(aliases)
+              ? aliases
+              : Object.entries(aliases);
+    const normalized = new Map<string, string>();
+    for (const [original, alias] of entries) {
+        if (original.startsWith('--') && alias.startsWith('--')) {
+            normalized.set(original, alias);
+        }
+    }
+    return [...normalized].sort(([left], [right]) => left.localeCompare(right));
+}
+
+/**
+ * Builds the early alias table used by source transforms before CSS assets
+ * exist. Only explicit tokens are safe here; prefix discovery still requires
+ * CSS scanning in the output hook.
+ *
+ * @param config User global-var mangle config.
+ * @param aliasPrefix Active generated alias prefix.
+ * @returns Deterministic original-to-alias entries.
+ */
+function createEarlyGlobalVarAliasEntries(
+    config: GlobalVarMangleConfig | undefined,
+    aliasPrefix: string,
+): Array<[string, string]> {
+    if (config?.enabled !== true || !config.tokens || config.tokens.length === 0) {
+        return [];
+    }
+    const tokens = [...new Set(config.tokens)].sort();
+    return tokens.map((original, index) => [original, `${aliasPrefix}${encode(index)}`]);
+}
+
+/**
+ * Checks whether csszyx should emit the standalone global-var map asset.
+ *
+ * `csszyx-manifest.json` still carries `globalVarAliases`; this controls only
+ * the dedicated `.csszyx/global-var-map.json` tooling file.
+ *
+ * @param config User global-var mangle config.
+ * @returns true when the standalone map should be emitted.
+ */
+function shouldEmitGlobalVarMapAsset(config: GlobalVarMangleConfig | undefined): boolean {
+    return config?.emitMap !== false;
+}
+
+/**
+ * Validates the CSS variable mangle map before it is emitted into HTML/assets.
+ *
+ * @param varMangleMap CSS variable mangle map.
+ * @param maxBytes Maximum serialized UTF-8 bytes.
+ */
+function assertVarMangleMapSize(
+    varMangleMap: Record<string, CssVariableMangleValue>,
+    maxBytes: number,
+): void {
+    const size = Buffer.byteLength(JSON.stringify(varMangleMap), 'utf8');
+    if (size <= maxBytes) {
+        return;
+    }
+    throw new Error(
+        `[csszyx] CSS variable mangle map is ${size} bytes, which exceeds the ` +
+            `${maxBytes} byte safety cap. Reduce production.mangleVars usage, split the bundle, ` +
+            'or raise CSSZYX_VAR_MANGLE_MAP_MAX_BYTES if this payload size is intentional.',
+    );
+}
+
+/**
+ * Reads the CSS variable mangle-map size cap from the environment.
+ *
+ * @returns Maximum serialized var-map bytes.
+ */
+function resolveVarMangleMapMaxBytes(): number {
+    const raw = process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES;
+    if (!raw) {
+        return DEFAULT_VAR_MANGLE_MAP_MAX_BYTES;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_VAR_MANGLE_MAP_MAX_BYTES;
+}
+
+/**
+ * Adds one CSS variable mapping to a metadata map.
+ *
+ * @param map Plugin metadata map to update.
+ * @param original Original generated CSS custom-property name.
+ * @param mangled Scoped or hoisted custom-property name.
+ */
+function addVarMangleMapping(
+    map: Record<string, CssVariableMangleValue>,
+    original: string,
+    mangled: string,
+): void {
+    const existing = map[original];
+    if (!existing) {
+        map[original] = mangled;
+        return;
+    }
+    const values = Array.isArray(existing) ? existing : [existing];
+    if (!values.includes(mangled)) {
+        map[original] = [...values, mangled];
+    }
+}
+
+/**
+ * Empty CSS variable metric counters.
+ *
+ * @returns Zeroed CSS variable metrics.
+ */
+function emptyCSSVariableMetrics(): CSSVariableMetrics {
+    return {
+        componentClassUses: 0,
+        componentStyleDeclarations: 0,
+        estimatedHoistedDeclarationsSaved: 0,
+        scopedClassUses: 0,
+        scopedStyleDeclarations: 0,
+    };
+}
+
+/**
+ * Records CSS variable hoisting metrics owned by one source file.
+ *
+ * @param state Plugin state to update.
+ * @param filename Source filename that owns the metrics.
+ * @param code Transformed source code, or null to clear this file.
+ */
+function recordFileCSSVariableMetrics(
+    state: Pick<PluginState, 'cssVarMetricsByFile' | 'cssVarMetrics'>,
+    filename: string,
+    code: string | null,
+): void {
+    const normalizedFilename = normalizeSourceFilename(filename);
+    if (!code) {
+        state.cssVarMetricsByFile.delete(normalizedFilename);
+    } else {
+        const metrics = collectCSSVariableMetrics(code);
+        if (hasCSSVariableMetrics(metrics)) {
+            state.cssVarMetricsByFile.set(normalizedFilename, metrics);
+        } else {
+            state.cssVarMetricsByFile.delete(normalizedFilename);
+        }
+    }
+    state.cssVarMetrics = buildCSSVariableMetrics(state.cssVarMetricsByFile);
+}
+
+/**
+ * Collects CSS variable hoisting metrics from one transformed module.
+ *
+ * @param code Transformed source code.
+ * @returns Metrics for component/scoped tier class uses and style declarations.
+ */
+function collectCSSVariableMetrics(code: string): CSSVariableMetrics {
+    const componentUses = new Map<string, number>();
+    const componentDeclarations = new Map<string, number>();
+    const metrics = emptyCSSVariableMetrics();
+
+    for (const match of code.matchAll(/\(--([cs][A-Za-z0-9]+)\)/g)) {
+        const name = `--${match[1]}`;
+        if (name.startsWith('--c')) {
+            metrics.componentClassUses++;
+            incrementCount(componentUses, name);
+        } else {
+            metrics.scopedClassUses++;
+        }
+    }
+    for (const match of code.matchAll(/["'](--([cs][A-Za-z0-9]+))["']\s*:/g)) {
+        const name = match[1];
+        if (name.startsWith('--c')) {
+            metrics.componentStyleDeclarations++;
+            incrementCount(componentDeclarations, name);
+        } else {
+            metrics.scopedStyleDeclarations++;
+        }
+    }
+    for (const [name, uses] of componentUses) {
+        const declarations = componentDeclarations.get(name) ?? 0;
+        metrics.estimatedHoistedDeclarationsSaved += Math.max(0, uses - declarations);
+    }
+    return metrics;
+}
+
+/**
+ * Aggregates CSS variable metrics in stable filename order.
+ *
+ * @param metricsByFile Per-file metrics.
+ * @returns Aggregated metrics.
+ */
+function buildCSSVariableMetrics(
+    metricsByFile: ReadonlyMap<string, CSSVariableMetrics>,
+): CSSVariableMetrics {
+    const total = emptyCSSVariableMetrics();
+    for (const file of [...metricsByFile.keys()].sort()) {
+        const metrics = metricsByFile.get(file);
+        if (!metrics) {
+            continue;
+        }
+        total.componentClassUses += metrics.componentClassUses;
+        total.componentStyleDeclarations += metrics.componentStyleDeclarations;
+        total.estimatedHoistedDeclarationsSaved += metrics.estimatedHoistedDeclarationsSaved;
+        total.scopedClassUses += metrics.scopedClassUses;
+        total.scopedStyleDeclarations += metrics.scopedStyleDeclarations;
+    }
+    return total;
+}
+
+/**
+ * Checks whether any CSS variable metrics were collected.
+ *
+ * @param metrics Metrics to inspect.
+ * @returns True when at least one counter is non-zero.
+ */
+function hasCSSVariableMetrics(metrics: CSSVariableMetrics): boolean {
+    return Object.values(metrics).some(value => value > 0);
+}
+
+/**
+ * Increments one counter in a map.
+ *
+ * @param map Counter map.
+ * @param key Counter key.
+ */
+function incrementCount(map: Map<string, number>, key: string): void {
+    map.set(key, (map.get(key) ?? 0) + 1);
+}
 
 /**
  * Emits opt-in benchmark timing logs for local profiling harnesses.
@@ -151,7 +800,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     const themes = sourceFiles
         .map(f => {
             try {
-                return parseThemeBlocks(fs.readFileSync(f, 'utf-8'));
+                return parseThemeBlocks(readStableTextFileSnapshotSync(f).source);
             } catch {
                 return null;
             }
@@ -166,16 +815,21 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
         _hasWarnedTsConfig = true;
         try {
             const checkFile = (cfgPath: string): boolean => {
-                if (fs.existsSync(cfgPath)) {
-                    const content = fs.readFileSync(cfgPath, 'utf-8');
-                    if (!content.includes('.csszyx')) {
-                        console.warn(
-                            '\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n',
-                        );
+                let content: string;
+                try {
+                    content = fs.readFileSync(cfgPath, 'utf-8');
+                } catch (err) {
+                    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+                        return false;
                     }
-                    return true;
+                    throw err;
                 }
-                return false;
+                if (!content.includes('.csszyx')) {
+                    console.warn(
+                        '\n\x1b[33m⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn\'t configured. Run "npx @csszyx/cli init" to fix.\x1b[0m\n',
+                    );
+                }
+                return true;
             };
 
             // Try standard Next.js / tsc config first
@@ -538,6 +1192,34 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
 }
 
 /**
+ * Validates the planned Phase H global-variable alias config before plugin
+ * state is created.
+ *
+ * @param options User plugin options.
+ */
+function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
+    const config = options.production?.mangleGlobalVars;
+    const errors = validateGlobalVarMangleConfig(config);
+    if (errors.length > 0) {
+        throw new Error(
+            `[csszyx] Invalid production.mangleGlobalVars config:\n${errors.join('\n')}`,
+        );
+    }
+    if (config?.enabled === true) {
+        if (!config.tokens || config.tokens.length === 0) {
+            throw new Error(
+                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens in Phase H v1.',
+            );
+        }
+        if (config.autoPrefix !== undefined && config.autoPrefix !== '') {
+            throw new Error(
+                '[csszyx] production.mangleGlobalVars.autoPrefix requires CSS pre-scan support and is not enabled in Phase H v1.',
+            );
+        }
+    }
+}
+
+/**
  * Core factory that creates the shared state and both pre/post plugins.
  * @param options configuration options
  * @returns pre and post plugins
@@ -546,6 +1228,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     prePlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
     postPlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
 } {
+    assertGlobalVarMangleConfig(options);
+
     const manglingEnabled = options.production?.mangle !== false;
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
@@ -555,6 +1239,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const cacheVersionsKnown =
         PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
     const cacheEnabled = cacheRequested && cacheVersionsKnown;
+    const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
+    const globalVarMangleConfig = options.production?.mangleGlobalVars;
+    const globalVarAliasPrefix = globalVarMangleConfig?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+    const encodedGlobalVarAliasPrefix = encodeURIComponent(globalVarAliasPrefix);
+    const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
+        globalVarMangleConfig,
+        globalVarAliasPrefix,
+    );
     if (cacheRequested && !cacheVersionsKnown && !_hasWarnedTransformCacheVersion) {
         _hasWarnedTransformCacheVersion = true;
         console.warn(
@@ -573,12 +1265,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const state: PluginState = {
         classes: new Set<string>(),
         mangleMap: {},
+        varMangleEntriesByFile: new Map(),
+        varMangleMap: Object.fromEntries(earlyGlobalVarAliasEntries),
+        cssVarMetricsByFile: new Map(),
+        cssVarMetrics: emptyCSSVariableMetrics(),
         checksum: '',
         finalized: false,
         rootDir: process.cwd(),
         recoveryTokens: new Map<string, TokenData>(),
         rscModules: new Map<string, RSCModuleRecord>(),
+        globalVarSourceFilesByFile: new Map<string, string>(),
+        globalVarValidationResult: null,
     };
+    if (earlyGlobalVarAliasEntries.length > 0) {
+        state.varMangleEntriesByFile.set(GLOBAL_VAR_ALIAS_MAP_OWNER, earlyGlobalVarAliasEntries);
+    }
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
     const SOURCE_EXTENSIONS = new Set(['.tsx', '.jsx', '.ts', '.js']);
@@ -604,6 +1305,56 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function isUserIncluded(id: string): boolean {
         return !options.include || matchesAnyPattern(id, options.include, state.rootDir);
+    }
+
+    /**
+     * Resolves the scan cache directory for pure global-var validation.
+     *
+     * @returns Cache directory when build cache is enabled.
+     */
+    function resolveGlobalVarValidationCacheDir(): string | undefined {
+        if (!cacheEnabled) {
+            return undefined;
+        }
+        const cacheRoot = path.resolve(
+            state.rootDir,
+            options.build?.cacheDir ?? DEFAULT_BUILD_CONFIG.cacheDir ?? '.csszyx/cache',
+        );
+        return resolveGlobalVarScanCacheDir(cacheRoot);
+    }
+
+    /**
+     * Validates CSS assets and observed source files before global-var output
+     * rewriting is allowed to mutate a production bundle.
+     *
+     * @param cssAssets Bundler CSS assets.
+     * @returns Validated global-var result when the feature is enabled.
+     */
+    function validateGlobalVarBundleInputs(
+        cssAssets: GlobalVarCssAssetSource[],
+    ): GlobalVarAliasValidationResult | null {
+        if (globalVarMangleConfig?.enabled !== true) {
+            return null;
+        }
+        const configuredCssAssets = collectConfiguredGlobalVarCssSources(
+            state.rootDir,
+            options.build?.scanCss,
+        );
+        const result = validateGlobalVarAliasInputs(
+            createGlobalVarAliasValidationOptions({
+                rootDir: state.rootDir,
+                cssAssets: [...configuredCssAssets, ...cssAssets],
+                sourceFiles: buildGlobalVarSourceFiles(state),
+                tokens: globalVarMangleConfig.tokens,
+                autoPrefix: globalVarMangleConfig.autoPrefix,
+                aliasPrefix: globalVarAliasPrefix,
+                reserved: globalVarMangleConfig.reserved,
+                cacheDir: resolveGlobalVarValidationCacheDir(),
+            }),
+        );
+        assertNoGlobalVarAliasValidationErrors(result);
+        assertGlobalVarPlanMatchesEarlyAliases(result, earlyGlobalVarAliasEntries);
+        return result;
     }
 
     /**
@@ -657,7 +1408,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Compiler transform result.
      */
     function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
-        const compilerOptions = { astBudget: astBudgetOverride };
+        const compilerOptions = createCompilerOptions();
         const effectiveFilename = normalizeSourceFilename(filename);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -665,15 +1416,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             evictTransformCacheOnce();
         }
 
-        const cacheInput = {
-            pluginVersion: PLUGIN_VERSION,
-            compilerVersion: COMPILER_VERSION,
-            parserMode,
-            producer: parserMode,
-            astBudget: astBudgetOverride,
-            filename: effectiveFilename,
+        const cacheInput = createConfiguredTransformCacheInput(
             source,
-        };
+            effectiveFilename,
+            compilerOptions,
+        );
 
         if (parserMode === 'rust') {
             ensureRustTransformAvailable();
@@ -731,6 +1478,184 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             rememberTransformCacheEntry(cacheKey.key, result);
         }
         return result;
+    }
+
+    /**
+     * Builds compiler options shared by single-file and prescan-batch transforms.
+     *
+     * @returns Compiler options.
+     */
+    function createCompilerOptions(): TransformSourceCodeOptions {
+        return {
+            astBudget: astBudgetOverride,
+            mangleVars: options.production?.mangleVars === true,
+            mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
+            globalVarAliases:
+                earlyGlobalVarAliasEntries.length > 0 ? earlyGlobalVarAliasEntries : undefined,
+        };
+    }
+
+    /**
+     * Builds cache identity for the configured parser/compiler options.
+     *
+     * @param source Source module contents.
+     * @param effectiveFilename Normalized source filename.
+     * @param compilerOptions Compiler options.
+     * @returns Transform cache input.
+     */
+    function createConfiguredTransformCacheInput(
+        source: string,
+        effectiveFilename: string,
+        compilerOptions: TransformSourceCodeOptions,
+    ): TransformCacheKeyInput {
+        return {
+            pluginVersion: PLUGIN_VERSION,
+            compilerVersion: COMPILER_VERSION,
+            parserMode,
+            producer: parserMode,
+            astBudget: astBudgetOverride,
+            mangleVars: compilerOptions.mangleVars,
+            mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
+            globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
+            filename: effectiveFilename,
+            source,
+        };
+    }
+
+    /**
+     * Transforms prescan files, batching Rust cache misses in one native call.
+     *
+     * @param files Source files discovered during prescan.
+     * @returns Transform results for files that compiled successfully.
+     */
+    function transformPrescanSources(files: PrescanSourceFile[]): PrescanTransformResult[] {
+        if (parserMode !== 'rust' || files.length <= 1) {
+            return transformPrescanSourcesIndividually(files);
+        }
+
+        const compilerOptions = createCompilerOptions();
+        const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
+        const results = new Map<string, SourceTransformResult>();
+        const misses: Array<{
+            filePath: string;
+            effectiveFilename: string;
+            content: string;
+            cacheInput: TransformCacheKeyInput;
+            cacheKey: TransformCacheKey | null;
+        }> = [];
+
+        if (cacheEnabled) {
+            evictTransformCacheOnce();
+        }
+        ensureRustTransformAvailable();
+
+        for (const file of files) {
+            const effectiveFilename = normalizeSourceFilename(file.filePath);
+            const cacheInput = createConfiguredTransformCacheInput(
+                file.content,
+                effectiveFilename,
+                compilerOptions,
+            );
+            const cacheKey = cacheEnabled ? createTransformCacheKey(cacheInput) : null;
+
+            if (cacheEnabled && cacheKey) {
+                const memoryCached = transformMemoryCache.get(cacheKey.key);
+                if (memoryCached) {
+                    transformMemoryCache.delete(cacheKey.key);
+                    transformMemoryCache.set(cacheKey.key, memoryCached);
+                    results.set(file.filePath, memoryCached);
+                    continue;
+                }
+
+                const cached = readTransformCache(cacheRoot, cacheInput, cacheKey);
+                if (cached) {
+                    rememberTransformCacheEntry(cacheKey.key, cached);
+                    results.set(file.filePath, cached);
+                    continue;
+                }
+            }
+
+            misses.push({
+                filePath: file.filePath,
+                effectiveFilename,
+                content: file.content,
+                cacheInput,
+                cacheKey,
+            });
+        }
+
+        if (misses.length === 0) {
+            return files
+                .map(file => {
+                    const result = results.get(file.filePath);
+                    return result ? { filePath: file.filePath, result } : null;
+                })
+                .filter((entry): entry is PrescanTransformResult => entry !== null);
+        }
+
+        try {
+            const batchResults = transformRustBatch(
+                misses.map(file => ({
+                    filename: file.effectiveFilename,
+                    source: file.content,
+                })),
+                compilerOptions,
+            );
+            for (let index = 0; index < misses.length; index++) {
+                const miss = misses[index];
+                const result = batchResults[index];
+                if (!miss || !result) {
+                    continue;
+                }
+                if (cacheEnabled && miss.cacheKey) {
+                    writeTransformCache(cacheRoot, miss.cacheInput, result, miss.cacheKey);
+                    rememberTransformCacheEntry(miss.cacheKey.key, result);
+                }
+                results.set(miss.filePath, result);
+            }
+        } catch {
+            for (const miss of misses) {
+                try {
+                    results.set(
+                        miss.filePath,
+                        transformConfiguredSource(miss.content, miss.effectiveFilename),
+                    );
+                } catch {
+                    // Preserve historical prescan behavior: a file that cannot
+                    // transform during safelist discovery is skipped.
+                }
+            }
+        }
+
+        return files
+            .map(file => {
+                const result = results.get(file.filePath);
+                return result ? { filePath: file.filePath, result } : null;
+            })
+            .filter((entry): entry is PrescanTransformResult => entry !== null);
+    }
+
+    /**
+     * Transforms prescan files one by one.
+     *
+     * @param files Source files discovered during prescan.
+     * @returns Transform results for files that compiled successfully.
+     */
+    function transformPrescanSourcesIndividually(
+        files: PrescanSourceFile[],
+    ): PrescanTransformResult[] {
+        const results: PrescanTransformResult[] = [];
+        for (const file of files) {
+            try {
+                results.push({
+                    filePath: file.filePath,
+                    result: transformConfiguredSource(file.content, file.filePath),
+                });
+            } catch {
+                // Preserve historical prescan behavior: skip files that fail to transform.
+            }
+        }
+        return results;
     }
 
     /**
@@ -793,9 +1718,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             `<div class="${classList}">x</div>` +
             '</div>\n';
         try {
-            const existing = fs.existsSync(safelistPath)
-                ? fs.readFileSync(safelistPath, 'utf-8')
-                : '';
+            let existing = '';
+            try {
+                existing = fs.readFileSync(safelistPath, 'utf-8');
+            } catch (err) {
+                if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+                    throw err;
+                }
+            }
             if (existing !== content) {
                 fs.writeFileSync(safelistPath, content);
             }
@@ -811,9 +1741,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * This writes a manifest file with all discovered class names so Tailwind can scan it.
      */
     function prescanAndWriteClasses(): void {
+        const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className attribute values — used only for TW JIT safelist, never for the mangle map.
         const rawDiscoveredClasses = new Set<string>();
+        const prescanSources: PrescanSourceFile[] = [];
 
         /**
          * Recursively walks directories to discover source files containing sz prop usage.
@@ -836,98 +1768,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (!shouldProcessSource(filePath)) {
                         continue;
                     }
+                    let content: string;
                     try {
-                        const content = fs.readFileSync(filePath, 'utf-8');
-                        if (!content.includes('sz=') && !content.includes('sz:')) {
-                            continue;
-                        }
-                        const result = transformConfiguredSource(content, filePath);
-                        if (!result.transformed) {
-                            continue;
-                        }
-                        // Piggyback: use classes collected inside the Babel JSXAttribute visitor.
-                        // Risk-free: only JSXAttribute nodes are visited, so text content, JSDoc,
-                        // comments, and string literals in other positions never produce false
-                        // positives (they are different AST node types and never reach the visitor).
-                        // result.classes = sz-generated → safelist + mangle map
-                        // result.rawClassNames = raw className attrs → safelist only (never mangled)
-                        for (const cls of result.classes) {
-                            discoveredClasses.add(cls);
-                        }
-                        for (const cls of result.rawClassNames) {
-                            rawDiscoveredClasses.add(cls);
-                        }
-                        for (const [token, data] of result.recoveryTokens) {
-                            state.recoveryTokens.set(token, data);
-                        }
-                        // Extract static classes from _sz() runtime calls.
-                        // When an sz prop has any dynamic value, the compiler wraps the
-                        // entire object in _sz({...}). Static values inside are invisible
-                        // to Tailwind's content scanner. Extract them here.
-                        if (result.usesRuntime) {
-                            const szCallRe = /_sz\(\s*\{/g;
-                            for (const szMatch of result.code.matchAll(szCallRe)) {
-                                let depth = 1;
-                                let idx = (szMatch.index ?? 0) + szMatch[0].length;
-                                while (idx < result.code.length && depth > 0) {
-                                    if (result.code[idx] === '{') {
-                                        depth++;
-                                    } else if (result.code[idx] === '}') {
-                                        depth--;
-                                    }
-                                    idx++;
-                                }
-                                const objStr = result.code.slice(
-                                    (szMatch.index ?? 0) + szMatch[0].length,
-                                    idx - 1,
-                                );
-                                // Extract key: 'string' or "string" pairs
-                                const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
-                                for (const kv of objStr.matchAll(strKv)) {
-                                    try {
-                                        const val = kv[2] ?? kv[3];
-                                        const r = transform({ [kv[1]]: val });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
-                                            discoveredClasses.add(c);
-                                        }
-                                    } catch {
-                                        /* skip invalid */
-                                    }
-                                }
-                                // Extract key: number pairs
-                                const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
-                                for (const kv of objStr.matchAll(numKv)) {
-                                    try {
-                                        const r = transform({ [kv[1]]: parseFloat(kv[2]) });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
-                                            discoveredClasses.add(c);
-                                        }
-                                    } catch {
-                                        /* skip invalid */
-                                    }
-                                }
-                                // Extract key: true/false pairs
-                                const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
-                                for (const kv of objStr.matchAll(boolKv)) {
-                                    try {
-                                        const r = transform({ [kv[1]]: kv[2] === 'true' });
-                                        for (const c of r.className.split(/\s+/).filter(Boolean)) {
-                                            discoveredClasses.add(c);
-                                        }
-                                    } catch {
-                                        /* skip invalid */
-                                    }
-                                }
-                            }
-                        }
+                        content = fs.readFileSync(filePath, 'utf-8');
                     } catch {
-                        // Skip files that fail to transform
+                        continue;
                     }
+                    if (!content.includes('sz=') && !content.includes('sz:')) {
+                        continue;
+                    }
+                    prescanSources.push({ filePath, content });
                 }
             }
         }
 
         scanDir(state.rootDir);
+
+        for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            if (!result.transformed) {
+                continue;
+            }
+            collectPrescanResult(result, filePath, discoveredClasses, rawDiscoveredClasses);
+        }
 
         // Add only sz-generated classes to state.classes (the mangle map source).
         // Raw className attribute values are intentionally excluded — they are custom CSS classes
@@ -940,6 +1802,144 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // so Tailwind JIT can detect any custom utilities that happen to shadow TW class names.
         const safelistClasses = new Set([...discoveredClasses, ...rawDiscoveredClasses]);
         writeSafelistFile(safelistClasses);
+        traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
+    }
+
+    /**
+     * Collects class and metadata side effects from one prescan transform.
+     *
+     * @param result Compiler result.
+     * @param filePath Source file path.
+     * @param discoveredClasses sz-generated class sink.
+     * @param rawDiscoveredClasses raw className sink.
+     */
+    function collectPrescanResult(
+        result: SourceTransformResult,
+        filePath: string,
+        discoveredClasses: Set<string>,
+        rawDiscoveredClasses: Set<string>,
+    ): void {
+        // Piggyback: use classes collected inside the JSXAttribute visitor.
+        // Risk-free: only JSXAttribute nodes are visited, so text content,
+        // JSDoc, comments, and string literals in other positions never
+        // produce false positives.
+        for (const cls of result.classes) {
+            discoveredClasses.add(cls);
+        }
+        for (const cls of result.rawClassNames) {
+            rawDiscoveredClasses.add(cls);
+        }
+        for (const [token, data] of result.recoveryTokens) {
+            state.recoveryTokens.set(token, data);
+        }
+        recordFileVarMangleEntries(state, filePath, cssVariableEntries(result));
+        recordFileCSSVariableMetrics(state, filePath, result.code);
+        collectRuntimeStaticClasses(result, discoveredClasses);
+    }
+
+    /**
+     * Extracts static classes hidden inside generated `_sz({...})` runtime calls.
+     *
+     * @param result Compiler result.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeStaticClasses(
+        result: SourceTransformResult,
+        discoveredClasses: Set<string>,
+    ): void {
+        if (!result.usesRuntime) {
+            return;
+        }
+        const szCallRe = /_sz\(\s*\{/g;
+        for (const szMatch of result.code.matchAll(szCallRe)) {
+            let depth = 1;
+            let idx = (szMatch.index ?? 0) + szMatch[0].length;
+            while (idx < result.code.length && depth > 0) {
+                if (result.code[idx] === '{') {
+                    depth++;
+                } else if (result.code[idx] === '}') {
+                    depth--;
+                }
+                idx++;
+            }
+            const objStr = result.code.slice((szMatch.index ?? 0) + szMatch[0].length, idx - 1);
+            collectRuntimeStringClasses(objStr, discoveredClasses);
+            collectRuntimeNumberClasses(objStr, discoveredClasses);
+            collectRuntimeBooleanClasses(objStr, discoveredClasses);
+        }
+    }
+
+    /**
+     * Extracts static string values from an `_sz({...})` object string.
+     *
+     * @param objStr Object source text.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeStringClasses(objStr: string, discoveredClasses: Set<string>): void {
+        const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
+        for (const kv of objStr.matchAll(strKv)) {
+            try {
+                const val = kv[2] ?? kv[3];
+                collectTransformClasses(transform({ [kv[1]]: val }), discoveredClasses);
+            } catch {
+                // Skip invalid runtime static fragments.
+            }
+        }
+    }
+
+    /**
+     * Extracts static number values from an `_sz({...})` object string.
+     *
+     * @param objStr Object source text.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeNumberClasses(objStr: string, discoveredClasses: Set<string>): void {
+        const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
+        for (const kv of objStr.matchAll(numKv)) {
+            try {
+                collectTransformClasses(
+                    transform({ [kv[1]]: parseFloat(kv[2]) }),
+                    discoveredClasses,
+                );
+            } catch {
+                // Skip invalid runtime static fragments.
+            }
+        }
+    }
+
+    /**
+     * Extracts static boolean values from an `_sz({...})` object string.
+     *
+     * @param objStr Object source text.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectRuntimeBooleanClasses(objStr: string, discoveredClasses: Set<string>): void {
+        const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
+        for (const kv of objStr.matchAll(boolKv)) {
+            try {
+                collectTransformClasses(
+                    transform({ [kv[1]]: kv[2] === 'true' }),
+                    discoveredClasses,
+                );
+            } catch {
+                // Skip invalid runtime static fragments.
+            }
+        }
+    }
+
+    /**
+     * Adds transform() className output to a class sink.
+     *
+     * @param result transform() result.
+     * @param discoveredClasses sz-generated class sink.
+     */
+    function collectTransformClasses(
+        result: ReturnType<typeof transform>,
+        discoveredClasses: Set<string>,
+    ): void {
+        for (const cls of result.className.split(/\s+/).filter(Boolean)) {
+            discoveredClasses.add(cls);
+        }
     }
 
     /**
@@ -1003,7 +2003,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             newMap[sortedClasses[i]] = encode(i);
         }
         state.mangleMap = newMap;
-        state.checksum = compute_mangle_checksum(state.mangleMap);
+        assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
+        state.checksum = compute_mangle_checksum(
+            createHydrationMangleMap(state.mangleMap, state.varMangleMap),
+        );
         state.finalized = true;
     }
 
@@ -1034,6 +2037,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
             result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
+        if (result.includes(VAR_MANGLE_MAP_PLACEHOLDER)) {
+            const jsonMap = JSON.stringify(state.varMangleMap);
+            const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
+            result = result.split(VAR_MANGLE_MAP_PLACEHOLDER).join(escapedMap);
+        }
         return result;
     }
 
@@ -1062,7 +2070,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             load(id) {
                 if (id === RESOLVED_VIRTUAL_MODULE_ID) {
                     finalizeMangleMap();
-                    return createMangleMapModule(state.mangleMap, state.checksum);
+                    return createMangleMapModule(
+                        state.mangleMap,
+                        state.checksum,
+                        state.varMangleMap,
+                        state.cssVarMetrics,
+                    );
                 }
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
                     finalizeMangleMap();
@@ -1096,6 +2109,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             transform(code, id) {
                 if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
                     return null;
+                }
+                if (shouldProcessSource(id)) {
+                    recordGlobalVarSourceFile(state, id, code);
                 }
 
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
@@ -1177,6 +2193,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         usesColorVar = result.usesColorVar;
                         transformed = result.transformed;
                         szClasses = result.classes;
+                        recordFileVarMangleEntries(state, id, cssVariableEntries(result));
+                        recordFileCSSVariableMetrics(state, id, result.code);
                         // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
                         // Suppressed in production to avoid leaking source paths into build output.
                         if (
@@ -1191,13 +2209,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             state.recoveryTokens.set(token, data);
                         }
                     }
+                } else if (shouldProcessSource(id)) {
+                    recordFileVarMangleEntries(state, id, []);
+                    recordFileCSSVariableMetrics(state, id, null);
                 }
 
                 // Layout injection (SSR frameworks like Next.js)
                 // Uses placeholders that are replaced in processAssets after all classes are collected
                 if (
                     transformedCode.includes('<html') &&
-                    /layout|Root|Document|app\\.tsx?$/i.test(id)
+                    /(?:layout|Root|Document|app)\.tsx?$/i.test(id)
                 ) {
                     const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
                     transformedCode = transformedCode.replace(
@@ -1206,7 +2227,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     );
 
                     // Inject mangle map debug script with placeholders
-                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var r={};for(var k in m)r[m[k]]=k;window.__csszyx={mangleMap:m,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${JSON.stringify(encodedGlobalVarAliasPrefix)});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
                     if (transformedCode.includes('<body')) {
                         transformedCode = transformedCode.replace(
                             /(<body[^>]*>)/i,
@@ -1313,6 +2334,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             watchChange(id, change) {
                 if (change.event === 'delete') {
                     deleteRSCModuleRecord(state.rscModules, id);
+                    recordGlobalVarSourceFile(state, id, null);
+                    recordFileVarMangleEntries(state, id, []);
+                    recordFileCSSVariableMetrics(state, id, null);
                 }
             },
 
@@ -1390,6 +2414,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
 
                     if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) {
+                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        recordFileVarMangleEntries(state, ctx.file, []);
+                        recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
@@ -1402,17 +2429,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             performance.now() - hmrTransformStarted,
                         );
                     } catch {
+                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        recordFileVarMangleEntries(state, ctx.file, []);
+                        recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     if (!result.transformed) {
+                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        recordFileVarMangleEntries(state, ctx.file, []);
+                        recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     const sizeBefore = state.classes.size;
+                    recordGlobalVarSourceFile(state, ctx.file, fileContent);
                     for (const cls of result.classes) {
                         state.classes.add(cls);
                     }
+                    recordFileVarMangleEntries(state, ctx.file, cssVariableEntries(result));
+                    recordFileCSSVariableMetrics(state, ctx.file, result.code);
                     for (const [token, data] of result.recoveryTokens) {
                         state.recoveryTokens.set(token, data);
                     }
@@ -1441,6 +2477,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             mode:
                                 options.production?.injectChecksum === false ? 'script' : 'script',
                             minify: process.env.NODE_ENV === 'production',
+                            varMangleMap: state.varMangleMap,
+                            globalVarAliasPrefix,
                         });
                         // Recovery manifest is a no-op when zero szRecover tokens were
                         // emitted across the build, so pages without recovery sites get
@@ -1498,6 +2536,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     },
                     assets => {
                         finalizeMangleMap();
+                        state.globalVarValidationResult = validateGlobalVarBundleInputs(
+                            collectWebpackGlobalVarCssAssets(assets),
+                        );
 
                         // Webpack dev mode wraps every module in eval("..."), which means
                         // className:"..." strings become className:\"...\" inside the eval.
@@ -1514,6 +2555,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             buildId: string;
                             classes: string[];
                             mangleMap?: Record<string, string>;
+                            varMangleMap?: Record<string, CssVariableMangleValue>;
+                            globalVarAliases?: Record<string, string>;
+                            cssVarMetrics?: CSSVariableMetrics;
                         } = {
                             version: '0.4.0',
                             buildId: state.checksum,
@@ -1526,32 +2570,60 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         ) {
                             manifestData.mangleMap = state.mangleMap;
                         }
+                        if (Object.keys(state.varMangleMap).length > 0) {
+                            manifestData.varMangleMap = state.varMangleMap;
+                        }
+                        const globalVarAliases = extractGlobalVarAliasesForManifest(
+                            state.varMangleMap,
+                            globalVarAliasPrefix,
+                            state.globalVarValidationResult,
+                        );
+                        if (Object.keys(globalVarAliases).length > 0) {
+                            manifestData.globalVarAliases = globalVarAliases;
+                        }
+                        if (hasCSSVariableMetrics(state.cssVarMetrics)) {
+                            manifestData.cssVarMetrics = state.cssVarMetrics;
+                        }
                         compilation.emitAsset(
                             'csszyx-manifest.json',
                             new compiler.webpack.sources.RawSource(JSON.stringify(manifestData)),
                         );
+                        if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
+                            const globalVarMapAsset = createGlobalVarMapAssetSource(
+                                state.varMangleMap,
+                                globalVarAliasPrefix,
+                                state.globalVarValidationResult,
+                            );
+                            if (globalVarMapAsset) {
+                                compilation.emitAsset(
+                                    '.csszyx/global-var-map.json',
+                                    new compiler.webpack.sources.RawSource(globalVarMapAsset),
+                                );
+                            }
+                        }
 
                         for (const file in assets) {
                             const asset = assets[file];
                             const source = asset.source().toString();
 
-                            if (
-                                manglingEnabled &&
-                                !isWebpackDevMode &&
-                                Object.keys(state.mangleMap).length > 0
-                            ) {
-                                if (file.endsWith('.css')) {
+                            if (file.endsWith('.css')) {
+                                let css = rewriteCssWithValidatedGlobalVarPlan(
+                                    source,
+                                    file,
+                                    state.globalVarValidationResult,
+                                );
+                                if (
+                                    manglingEnabled &&
+                                    !isWebpackDevMode &&
+                                    Object.keys(state.mangleMap).length > 0
+                                ) {
                                     try {
-                                        const result = mangleCSSSync(source, state.mangleMap, {
+                                        const result = mangleCSSSync(css, state.mangleMap, {
                                             debug: options.development?.debug,
                                             from: file,
                                         });
                                         if (result.transformedCount > 0) {
-                                            compilation.updateAsset(
-                                                file,
-                                                new compiler.webpack.sources.RawSource(result.css),
-                                            );
-                                            continue;
+                                            css = result.css;
                                         }
                                     } catch (e: unknown) {
                                         if (
@@ -1565,7 +2637,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                             throw e;
                                         }
                                     }
-                                } else if (file.endsWith('.html')) {
+                                }
+                                if (css !== source) {
+                                    compilation.updateAsset(
+                                        file,
+                                        new compiler.webpack.sources.RawSource(css),
+                                    );
+                                }
+                                continue;
+                            }
+
+                            if (
+                                manglingEnabled &&
+                                !isWebpackDevMode &&
+                                Object.keys(state.mangleMap).length > 0
+                            ) {
+                                if (file.endsWith('.html')) {
                                     // Mangle class attributes in HTML assets (SSR-generated pages)
                                     const mangledHtml = source
                                         .replace(
@@ -1640,6 +2727,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             generateBundle(_options, bundle) {
                 finalizeMangleMap();
+                state.globalVarValidationResult = validateGlobalVarBundleInputs(
+                    collectRollupGlobalVarCssAssets(bundle),
+                );
 
                 // Emit CSS manifest for @csszyx/dynamic delta check.
                 // Lists all original class names (and mangle map if mangling enabled)
@@ -1649,6 +2739,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     buildId: string;
                     classes: string[];
                     mangleMap?: Record<string, string>;
+                    varMangleMap?: Record<string, CssVariableMangleValue>;
+                    globalVarAliases?: Record<string, string>;
+                    cssVarMetrics?: CSSVariableMetrics;
                 } = {
                     version: '0.4.0',
                     buildId: state.checksum,
@@ -1657,25 +2750,58 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
                     manifestData.mangleMap = state.mangleMap;
                 }
+                if (Object.keys(state.varMangleMap).length > 0) {
+                    manifestData.varMangleMap = state.varMangleMap;
+                }
+                const globalVarAliases = extractGlobalVarAliasesForManifest(
+                    state.varMangleMap,
+                    globalVarAliasPrefix,
+                    state.globalVarValidationResult,
+                );
+                if (Object.keys(globalVarAliases).length > 0) {
+                    manifestData.globalVarAliases = globalVarAliases;
+                }
+                if (hasCSSVariableMetrics(state.cssVarMetrics)) {
+                    manifestData.cssVarMetrics = state.cssVarMetrics;
+                }
                 this.emitFile({
                     type: 'asset',
                     fileName: 'csszyx-manifest.json',
                     source: JSON.stringify(manifestData),
                 });
+                if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
+                    const globalVarMapAsset = createGlobalVarMapAssetSource(
+                        state.varMangleMap,
+                        globalVarAliasPrefix,
+                        state.globalVarValidationResult,
+                    );
+                    if (globalVarMapAsset) {
+                        this.emitFile({
+                            type: 'asset',
+                            fileName: '.csszyx/global-var-map.json',
+                            source: globalVarMapAsset,
+                        });
+                    }
+                }
 
                 for (const file in bundle) {
                     const chunk = bundle[file];
 
-                    if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                        if (chunk.type === 'asset' && chunk.fileName.endsWith('.css')) {
-                            const css = chunk.source.toString();
+                    if (chunk.type === 'asset' && chunk.fileName.endsWith('.css')) {
+                        const originalCss = chunk.source.toString();
+                        let css = rewriteCssWithValidatedGlobalVarPlan(
+                            originalCss,
+                            file,
+                            state.globalVarValidationResult,
+                        );
+                        if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
                             try {
                                 const result = mangleCSSSync(css, state.mangleMap, {
                                     debug: options.development?.debug,
                                     from: file,
                                 });
                                 if (result.transformedCount > 0) {
-                                    chunk.source = result.css;
+                                    css = result.css;
                                 }
                             } catch (e: unknown) {
                                 if (
@@ -1689,8 +2815,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     throw e;
                                 }
                             }
-                            continue;
-                        } else if (chunk.type === 'chunk') {
+                        }
+                        if (css !== originalCss) {
+                            chunk.source = css;
+                        }
+                        continue;
+                    }
+
+                    if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                        if (chunk.type === 'chunk') {
                             let mangledCode = mangleCodeClasses(chunk.code);
                             mangledCode = replacePlaceholders(mangledCode);
                             if (mangledCode !== chunk.code) {

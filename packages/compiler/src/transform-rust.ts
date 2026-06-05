@@ -4,7 +4,12 @@ import {
     transformBatch,
 } from '@csszyx/core/native';
 
-import type { SourceTransformResult, TransformSourceCodeOptions } from './transform.js';
+import type {
+    CssVariableMangleValue,
+    GlobalVarAliasTableInput,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
+} from './transform.js';
 
 /**
  * Source file passed to the Rust native batch transform.
@@ -95,13 +100,17 @@ export function transformRustBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
-    void options;
     try {
         return transformBatch(
             files.map((file, index) => ({
                 filename: file.filename ?? `file-${index}.tsx`,
                 source: file.source,
             })),
+            {
+                mangleVars: options?.mangleVars === true,
+                mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
+                globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
+            },
         ).map(fromNativeResult);
     } catch (err) {
         if (err instanceof OxcRustNotImplementedError) {
@@ -114,6 +123,29 @@ export function transformRustBatch(
         }
         throw err;
     }
+}
+
+/**
+ * Normalize compiler alias-table options for the native NAPI object shape.
+ *
+ * @param input Alias table input.
+ * @returns Native alias entries.
+ */
+function normalizeGlobalVarAliases(
+    input: GlobalVarAliasTableInput | undefined,
+): Array<{ original: string; alias: string }> {
+    if (!input) {
+        return [];
+    }
+    const entries =
+        input instanceof Map
+            ? input.entries()
+            : Array.isArray(input)
+              ? input
+              : Object.entries(input);
+    return [...entries]
+        .filter(([original, alias]) => original.startsWith('--') && alias.startsWith('--'))
+        .map(([original, alias]) => ({ original, alias }));
 }
 
 /**
@@ -142,5 +174,30 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
                 },
             ]),
         ),
+        cssVariableMap: aggregateCssVariableMap(result.cssVariableMap ?? []),
     };
+}
+
+/**
+ * Converts native CSS variable map entries into compiler metadata.
+ *
+ * @param entries Native original/mangled pairs.
+ * @returns Compiler metadata map with one-to-many fanout preserved.
+ */
+function aggregateCssVariableMap(
+    entries: Array<{ original: string; mangled: string }>,
+): Map<string, CssVariableMangleValue> {
+    const map = new Map<string, CssVariableMangleValue>();
+    for (const entry of entries) {
+        const existing = map.get(entry.original);
+        if (!existing) {
+            map.set(entry.original, entry.mangled);
+            continue;
+        }
+        const values = Array.isArray(existing) ? existing : [existing];
+        if (!values.includes(entry.mangled)) {
+            map.set(entry.original, [...values, entry.mangled]);
+        }
+    }
+    return map;
 }

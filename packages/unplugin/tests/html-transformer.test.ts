@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    createHydrationMangleMap,
     injectChecksum,
     injectHydrationData,
     injectMangleMapAttribute,
@@ -11,6 +12,9 @@ import {
 describe('html-transformer', () => {
     const sampleHtml = '<html lang="en"><head></head><body></body></html>';
     const sampleMap = { 'p-4': 'z', 'bg-red-500': 'y', 'text-white': 'x' };
+    const sampleVarMap = { '--_sz-p': '--sz', '--_sz-m': '--sz' };
+    const mixedTierVarMap = { '--_sz-p': ['--cz', '--sz'] };
+    const globalVarMap = { '--brand-primary': '---gz', '--_sz-p': '--sz' };
     const sampleChecksum = 'a1b2c3d4e5f67890';
 
     describe('injectChecksum', () => {
@@ -77,6 +81,88 @@ describe('html-transformer', () => {
             const result = injectMangleMapScript(sampleHtml, {});
             expect(result).toContain('>{}</script>');
         });
+
+        it('should include CSS variable map in checksum payload and debug helpers', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                varMangleMap: sampleVarMap,
+            });
+
+            expect(result).toContain(
+                JSON.stringify(createHydrationMangleMap(sampleMap, sampleVarMap)),
+            );
+            expect(result).toContain(`var vm=${JSON.stringify(sampleVarMap)}`);
+            expect(result).toContain('decodeVar:function');
+            expect(result).toContain('encodeVar:function');
+            expect(result).toContain('decodeGlobalVar:function');
+        });
+
+        it('should reverse one-to-many CSS variable maps for debug helpers', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                varMangleMap: mixedTierVarMap,
+            });
+
+            expect(result).toContain(`var vm=${JSON.stringify(mixedTierVarMap)}`);
+            expect(result).toContain('Array.isArray(vv)?vv:[vv]');
+        });
+
+        it('should decode global variable aliases without treating dynamic vars as global', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                varMangleMap: globalVarMap,
+            });
+            const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
+            expect(debugScript).toBeDefined();
+
+            const win = {} as {
+                __csszyx?: {
+                    decodeGlobalVar(alias: string): string | undefined;
+                };
+            };
+            const doc = {
+                documentElement: {
+                    getAttribute: () => sampleChecksum,
+                },
+            };
+            new Function('window', 'document', debugScript ?? '')(win, doc);
+
+            expect(win.__csszyx?.decodeGlobalVar('---gz')).toBe('--brand-primary');
+            expect(win.__csszyx?.decodeGlobalVar('--sz')).toBeUndefined();
+        });
+
+        it('should honor custom global variable alias prefixes in debug helpers', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                varMangleMap: { '--brand-primary': '--gxz', '--other': '---gz' },
+                globalVarAliasPrefix: '--gx',
+            });
+            const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
+            expect(debugScript).toBeDefined();
+
+            const win = {} as {
+                __csszyx?: {
+                    decodeGlobalVar(alias: string): string | undefined;
+                };
+            };
+            const doc = {
+                documentElement: {
+                    getAttribute: () => sampleChecksum,
+                },
+            };
+            new Function('window', 'document', debugScript ?? '')(win, doc);
+
+            expect(win.__csszyx?.decodeGlobalVar('--gxz')).toBe('--brand-primary');
+            expect(win.__csszyx?.decodeGlobalVar('---gz')).toBeUndefined();
+        });
+
+        it('escapes hostile alias prefixes before embedding executable script', () => {
+            const hostilePrefix = '</script><script>globalThis.pwned=true</script>\u2028';
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                globalVarAliasPrefix: hostilePrefix,
+            });
+
+            expect(result).not.toContain(hostilePrefix);
+            expect(result).not.toContain('</script><script>globalThis.pwned=true');
+            expect(result).toContain('\\u003C/script\\u003E');
+            expect(result).toContain('\\u2028');
+        });
     });
 
     describe('injectMangleMapAttribute', () => {
@@ -96,6 +182,13 @@ describe('html-transformer', () => {
             const noHtml = '<div>content</div>';
             const result = injectMangleMapAttribute(noHtml, sampleMap);
             expect(result).toBe(noHtml);
+        });
+
+        it('should include CSS variable map in inline checksum payload', () => {
+            const result = injectMangleMapAttribute(sampleHtml, sampleMap, false, sampleVarMap);
+            expect(result).toContain(
+                JSON.stringify(createHydrationMangleMap(sampleMap, sampleVarMap)),
+            );
         });
     });
 
@@ -146,6 +239,50 @@ describe('html-transformer', () => {
             const result = transformIndexHtml(sampleHtml, sampleMap, sampleChecksum, opts);
             const expected = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, opts);
             expect(result).toBe(expected);
+        });
+    });
+
+    describe('createHydrationMangleMap', () => {
+        it('preserves the historical class map when no var map exists', () => {
+            expect(createHydrationMangleMap(sampleMap)).toBe(sampleMap);
+        });
+
+        it('prefixes class and var namespaces when var map exists', () => {
+            expect(createHydrationMangleMap(sampleMap, sampleVarMap)).toEqual({
+                'class:p-4': 'z',
+                'class:bg-red-500': 'y',
+                'class:text-white': 'x',
+                'var:--_sz-p': '--sz',
+                'var:--_sz-m': '--sz',
+            });
+        });
+
+        it('keeps one-to-many CSS variable maps checksum-safe', () => {
+            expect(createHydrationMangleMap(sampleMap, mixedTierVarMap)).toEqual({
+                'class:p-4': 'z',
+                'class:bg-red-500': 'y',
+                'class:text-white': 'x',
+                'var:--_sz-p:--cz': '--cz',
+                'var:--_sz-p:--sz': '--sz',
+            });
+        });
+
+        it('includes global variable aliases in the checksum payload namespace', () => {
+            const payload = createHydrationMangleMap(sampleMap, globalVarMap);
+
+            expect(payload).toEqual({
+                'class:p-4': 'z',
+                'class:bg-red-500': 'y',
+                'class:text-white': 'x',
+                'var:--brand-primary': '---gz',
+                'var:--_sz-p': '--sz',
+            });
+            expect(payload).not.toEqual(
+                createHydrationMangleMap(sampleMap, {
+                    ...globalVarMap,
+                    '--brand-primary': '---gy',
+                }),
+            );
         });
     });
 });

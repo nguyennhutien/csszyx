@@ -303,3 +303,14 @@ Controls how multiple masks are combined.
 | `mask-repeat`    | `mask-{value}` / `mask-repeat-{x\|y}` | `mask-repeat`, `mask-repeat-x` |
 | `mask-origin`    | `mask-origin-{value}`                 | `mask-origin-border`           |
 | `mask-clip`      | `mask-clip-{value}`                   | `mask-clip-content`            |
+
+### Mask Gradient Color Stops (v4.1)
+
+Control the color stops used in mask gradient functions.
+
+| Concept      | CSS Rule              | Tailwind v4 Class   | `sz` Prop (Object Syntax) | Note |
+| :----------- | :-------------------- | :------------------ | :------------------------ | :--- |
+| **From**     | mask gradient start   | `mask-from-<color>` | `{ maskFrom: '<color>' }` |      |
+| **Via**      | mask gradient middle  | `mask-via-<color>`  | `{ maskVia: '<color>' }`  |      |
+| **To**       | mask gradient end     | `mask-to-<color>`   | `{ maskTo: '<color>' }`   |      |
+| **Variable** | `mask-from: var(--c)` | `mask-from-(--c)`   | `{ maskFrom: '--c' }`     |      |

@@ -34,6 +34,7 @@ try {
   }
 
   assertNativeEngineTransform(binding);
+  assertNativeEngineMangleVars(binding);
   console.log(
     `[native-engine-smoke] Loaded ${path.relative(repoRoot, nodePath)}`,
   );
@@ -309,6 +310,87 @@ function assertNativeEngineTransform(binding) {
     !recoveryToken.path.endsWith("fixtures/recover.tsx:1:27")
   ) {
     fail(`Unexpected recovery token data: ${JSON.stringify(recoveryToken)}`);
+  }
+}
+
+function assertNativeEngineMangleVars(binding) {
+  const [result, fanoutResult] = binding.transformBatch(
+    [
+      {
+        filename: path.join(repoRoot, "fixtures", "mangle-vars.tsx"),
+        source:
+          "const Vars = ({ pad }) => <section><div sz={{ p: pad }} /><button sz={{ p: pad }} /></section>;",
+      },
+      {
+        filename: path.join(repoRoot, "fixtures", "mangle-vars-fanout.tsx"),
+        source:
+          "const Vars = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><button sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;",
+      },
+    ],
+    { mangleVars: true },
+  );
+
+  if (!result || !fanoutResult) {
+    fail("Expected two mangleVars transform results.");
+  }
+  if (
+    result.code !==
+    'const Vars = ({ pad }) => <section style={{"--cz": `calc(${pad} * var(--spacing))`}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section>;'
+  ) {
+    fail(`Unexpected mangleVars code: ${result.code}`);
+  }
+  if (
+    JSON.stringify(result.classes) !== JSON.stringify(["p-(--cz)", "p-(--cz)"])
+  ) {
+    fail(`Unexpected mangleVars classes: ${JSON.stringify(result.classes)}`);
+  }
+  if (
+    JSON.stringify(result.cssVariableMap) !==
+    JSON.stringify([{ original: "--_sz-p", mangled: "--cz" }])
+  ) {
+    fail(
+      `Unexpected mangleVars cssVariableMap: ${JSON.stringify(result.cssVariableMap)}`,
+    );
+  }
+  if (
+    result.metadata?.transformed !== true ||
+    result.metadata?.producer !== "rust"
+  ) {
+    fail(`Unexpected mangleVars metadata: ${JSON.stringify(result.metadata)}`);
+  }
+
+  if (
+    fanoutResult.code !==
+    'const Vars = ({ pad, gap }) => <main><section style={{"--cz": `calc(${pad} * var(--spacing))`}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section><aside className="p-(--sz)" style={{"--sz": `calc(${gap} * var(--spacing))`}} /></main>;'
+  ) {
+    fail(`Unexpected mangleVars fanout code: ${fanoutResult.code}`);
+  }
+  if (
+    JSON.stringify(fanoutResult.classes) !==
+    JSON.stringify(["p-(--cz)", "p-(--cz)", "p-(--sz)"])
+  ) {
+    fail(
+      `Unexpected mangleVars fanout classes: ${JSON.stringify(fanoutResult.classes)}`,
+    );
+  }
+  if (
+    JSON.stringify(fanoutResult.cssVariableMap) !==
+    JSON.stringify([
+      { original: "--_sz-p", mangled: "--cz" },
+      { original: "--_sz-p", mangled: "--sz" },
+    ])
+  ) {
+    fail(
+      `Unexpected mangleVars fanout cssVariableMap: ${JSON.stringify(fanoutResult.cssVariableMap)}`,
+    );
+  }
+  if (
+    fanoutResult.metadata?.transformed !== true ||
+    fanoutResult.metadata?.producer !== "rust"
+  ) {
+    fail(
+      `Unexpected mangleVars fanout metadata: ${JSON.stringify(fanoutResult.metadata)}`,
+    );
   }
 }
 

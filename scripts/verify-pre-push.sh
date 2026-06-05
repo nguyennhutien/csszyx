@@ -45,16 +45,17 @@ if [ -n "$upstream" ] && [ "${#source_files[@]}" -eq 0 ]; then
 fi
 
 if [ -z "$upstream" ]; then
-    echo "[pre-push] No upstream — full verification."
-else
-    echo "[pre-push] ${#source_files[@]} source file(s), ${#lint_files[@]} lint-relevant file(s)."
+    echo "[pre-push] No upstream (new branch) — type-check only."
+    pnpm type-check
+    echo "[pre-push] Type-check green. Full CI runs after PR creation."
+    exit 0
 fi
+
+echo "[pre-push] ${#source_files[@]} source file(s), ${#lint_files[@]} lint-relevant file(s)."
 
 # ── Step 1: lint (scoped to changed files) ────────────────────────────
 echo "[pre-push] Step 1/3 — lint..."
-if [ -z "$upstream" ]; then
-    pnpm lint:check
-elif [ "${#lint_files[@]}" -gt 0 ]; then
+if [ "${#lint_files[@]}" -gt 0 ]; then
     pnpm exec biome check --no-errors-on-unmatched "${lint_files[@]}"
     pnpm exec eslint \
         --cache --cache-location node_modules/.cache/eslint \

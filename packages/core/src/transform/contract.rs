@@ -9,6 +9,26 @@ pub struct TransformFile {
     pub source: String,
 }
 
+/// Options passed to the Rust transform core.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TransformOptions {
+    /// Whether dynamic CSS custom properties should use tiered short names.
+    pub mangle_vars: bool,
+    /// Maximum cascade depth for component-tier CSS variable hoisting.
+    pub mangle_var_hoist_max_depth: Option<usize>,
+    /// Exact app-owned global custom-property aliases for static sz values.
+    pub global_var_aliases: Vec<GlobalVarAliasEntry>,
+}
+
+/// One exact app-owned global custom-property alias.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GlobalVarAliasEntry {
+    /// Original custom-property name, including `--`.
+    pub original: String,
+    /// Alias custom-property name, including `--`.
+    pub alias: String,
+}
+
 /// Recovery token emitted by a transform result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryToken {
@@ -20,6 +40,15 @@ pub struct RecoveryToken {
     pub component: String,
     /// Source path associated with the token.
     pub path: String,
+}
+
+/// CSS custom property mapping emitted by a transform.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CssVariableMapEntry {
+    /// Original csszyx-generated custom property name.
+    pub original: String,
+    /// Mangled custom property name.
+    pub mangled: String,
 }
 
 /// Recovery mode encoded in a token.
@@ -110,6 +139,8 @@ pub struct TransformResult {
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.
     pub recovery_tokens: Vec<RecoveryToken>,
+    /// CSS custom property mangle metadata.
+    pub css_variable_map: Vec<CssVariableMapEntry>,
     /// Native transform metadata used by unplugin and benchmarks.
     pub metadata: TransformMetadata,
     /// Native parser lane used for this file.

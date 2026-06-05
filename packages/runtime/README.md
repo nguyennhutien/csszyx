@@ -183,7 +183,8 @@ Guards the hydration process by verifying mangle map integrity.
 
 #### `loadMangleMapFromDOM(): MangleMap | null`
 
-Loads the mangle map from the DOM.
+Loads the checksum mangle map from `#__CSSZYX_MANGLE_MAP__`, with a fallback
+for the legacy `#__SZ_MANGLE_MAP__` id.
 
 #### `verifyMangleChecksum(expectedChecksum): boolean`
 

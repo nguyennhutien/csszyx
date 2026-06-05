@@ -4,6 +4,9 @@ import csszyx from 'csszyx/vite';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+    resolve: {
+        tsconfigPaths: false,
+    },
     plugins: [
         // csszyx MUST come before tailwindcss
         ...csszyx(),

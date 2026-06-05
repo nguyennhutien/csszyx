@@ -150,26 +150,35 @@ export function extractTemplate(source: string): {
     start: number;
     end: number;
 } | null {
-    // Match <template> tags (with or without attributes)
-    const templateRegex = /<template(\s[^>]*)?>[\s\S]*?<\/template>/gi;
-    const match = templateRegex.exec(source);
-
-    if (!match) {
-        return null;
+    // indexOf-based scan avoids the polynomial backtracking that a
+    // <template(\s[^>]*)?>...</template> regex would suffer on inputs
+    // with repeated "<template " prefixes.
+    const lowered = source.toLowerCase();
+    let openStart = -1;
+    let openEnd = -1;
+    let i = 0;
+    while (i < lowered.length) {
+        const candidate = lowered.indexOf('<template', i);
+        if (candidate === -1) return null;
+        const after = lowered.charAt(candidate + '<template'.length);
+        if (after === '>' || after === ' ' || after === '\t' || after === '\n' || after === '\r') {
+            const tagClose = lowered.indexOf('>', candidate);
+            if (tagClose === -1) return null;
+            openStart = candidate;
+            openEnd = tagClose + 1;
+            break;
+        }
+        i = candidate + 1;
     }
+    if (openStart === -1) return null;
 
-    // Find the actual content between template tags
-    const fullMatch = match[0];
-    const startTag = fullMatch.match(/<template(\s[^>]*)?>/i)?.[0] || '<template>';
-    const endTag = '</template>';
-
-    const contentStart = fullMatch.indexOf(startTag) + startTag.length;
-    const contentEnd = fullMatch.lastIndexOf(endTag);
+    const closeStart = lowered.indexOf('</template>', openEnd);
+    if (closeStart === -1) return null;
 
     return {
-        content: fullMatch.slice(contentStart, contentEnd),
-        start: match.index + contentStart,
-        end: match.index + contentEnd,
+        content: source.slice(openEnd, closeStart),
+        start: openEnd,
+        end: closeStart,
     };
 }
 
@@ -188,38 +197,125 @@ export function transformTemplate(
     template: string,
     options: VueAdapterOptions = {},
 ): PreprocessResult {
-    let result = template;
+    let result = '';
     let count = 0;
+    let cursor = 0;
 
-    // Pattern to match sz attributes
-    // Matches: sz="{ ... }", sz='{ ... }', :sz="{ ... }", v-bind:sz="{ ... }"
-    const szPattern = /(?:v-bind:|:)?sz=["'](\{[\s\S]*?\})["']/g;
+    while (cursor < template.length) {
+        const attribute = findVueSzAttribute(template, cursor);
+        if (!attribute) {
+            result += template.slice(cursor);
+            break;
+        }
+        result += template.slice(cursor, attribute.start);
+        const match = readQuotedSzAttribute(template, attribute.start, attribute.valueStart);
+        if (!match) {
+            result += template.slice(attribute.start, attribute.valueStart);
+            cursor = attribute.valueStart;
+            continue;
+        }
 
-    result = result.replace(szPattern, (match, objStr) => {
-        const szObj = parseObjectLiteral(objStr);
-
+        const szObj = parseObjectLiteral(match.objectSource);
         if (!szObj) {
             if (options.debug) {
-                console.warn(`[csszyx/vue] Failed to parse sz object: ${objStr}`);
+                console.warn(`[csszyx/vue] Failed to parse sz object: ${match.objectSource}`);
             }
-            return match; // Return unchanged if parsing fails
+            result += template.slice(attribute.start, match.end);
+        } else {
+            const className = transform(szObj).className;
+            count += 1;
+            if (options.debug) {
+                console.log(`[csszyx/vue] Transformed: ${match.objectSource} -> "${className}"`);
+            }
+            result += `class="${className}"`;
         }
-
-        const className = transform(szObj);
-        count++;
-
-        if (options.debug) {
-            console.log(`[csszyx/vue] Transformed: ${objStr} -> "${className}"`);
-        }
-
-        return `class="${className}"`;
-    });
+        cursor = match.end;
+    }
 
     return {
         code: result,
         transformed: count > 0,
         count,
     };
+}
+
+/**
+ * Bounds for a supported Vue `sz` attribute.
+ */
+interface VueSzAttribute {
+    start: number;
+    valueStart: number;
+}
+
+/**
+ * Parsed bounds and object source for a quoted Vue `sz` attribute.
+ */
+interface QuotedSzAttribute {
+    end: number;
+    objectSource: string;
+}
+
+/**
+ * Finds static Vue `sz`, `:sz`, and `v-bind:sz` attributes in linear time.
+ *
+ * @param template Vue template source.
+ * @param from Offset at which scanning begins.
+ * @returns Attribute bounds, or null when absent.
+ */
+function findVueSzAttribute(template: string, from: number): VueSzAttribute | null {
+    let szStart = template.indexOf('sz=', from);
+    while (szStart !== -1) {
+        for (const prefix of ['v-bind:', ':', '']) {
+            const start = szStart - prefix.length;
+            if (start < 0 || template.slice(start, szStart) !== prefix) {
+                continue;
+            }
+            const before = start === 0 ? '<' : template.charAt(start - 1);
+            if (isAttributeBoundary(before)) {
+                return { start, valueStart: szStart + 3 };
+            }
+        }
+        szStart = template.indexOf('sz=', szStart + 3);
+    }
+    return null;
+}
+
+/**
+ * Reads a quoted static object attribute without regular-expression backtracking.
+ *
+ * @param template Vue template source.
+ * @param start Start offset including the optional binding prefix.
+ * @param valueStart Offset immediately after `sz=`.
+ * @returns Parsed attribute, or null when unsupported or malformed.
+ */
+function readQuotedSzAttribute(
+    template: string,
+    start: number,
+    valueStart: number,
+): QuotedSzAttribute | null {
+    const quote = template.charAt(valueStart);
+    if (quote !== '"' && quote !== "'") {
+        return null;
+    }
+    const endQuote = template.indexOf(quote, valueStart + 1);
+    if (endQuote === -1) {
+        return null;
+    }
+    const objectSource = template.slice(valueStart + 1, endQuote);
+    if (!objectSource.startsWith('{') || !objectSource.endsWith('}')) {
+        return null;
+    }
+    return { end: endQuote + 1, objectSource };
+}
+
+/**
+ * Returns whether a character can precede an HTML attribute.
+ *
+ * @param char Character before an attribute.
+ * @returns Whether the character is an attribute boundary.
+ */
+function isAttributeBoundary(char: string): boolean {
+    return char === '<' || char === ' ' || char === '\t' || char === '\n' || char === '\r';
 }
 
 /**

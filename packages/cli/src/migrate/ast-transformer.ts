@@ -15,7 +15,6 @@
  */
 
 import { parse } from '@babel/parser';
-import _traverse from '@babel/traverse';
 import * as t from '@babel/types';
 
 import {
@@ -27,13 +26,6 @@ import {
 } from './dynamic-patterns.js';
 import { generateSzExpression, generateSzHtmlValue } from './sz-codegen.js';
 import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
-
-// ESM/CJS interop for @babel/traverse
-const traverse = (
-    typeof _traverse === 'function'
-        ? _traverse
-        : (_traverse as unknown as { default: typeof _traverse }).default
-) as typeof _traverse;
 
 // ============================================================================
 // TYPES
@@ -71,6 +63,16 @@ interface Replacement {
     text: string;
 }
 
+type VisitNode = t.Node | ReturnType<typeof parse>;
+
+interface AstVisitors {
+    ImportDeclaration?: (node: t.ImportDeclaration) => void;
+    CallExpression?: (node: t.CallExpression, ancestors: VisitNode[]) => void;
+    JSXAttribute?: (node: t.JSXAttribute, parent: VisitNode | null) => void;
+}
+
+const VISITOR_KEYS = (t as unknown as { VISITOR_KEYS: Record<string, string[]> }).VISITOR_KEYS;
+
 /**
  * Injects a @sz-todo JSX comment before the opening element
  * when injectTodos is enabled and there are unrecognized classes.
@@ -97,6 +99,45 @@ function injectTodoComment(
         end: parent.start,
         text: `\n{/* @sz-todo: ${unrecognized.join(', ')} */}\n`,
     });
+}
+
+// Walk only Babel AST child keys, avoiding @babel/traverse NodePath overhead.
+function walkAst(node: VisitNode, visitors: AstVisitors, ancestors: VisitNode[] = []): void {
+    if (t.isImportDeclaration(node)) {
+        visitors.ImportDeclaration?.(node);
+    } else if (t.isCallExpression(node)) {
+        visitors.CallExpression?.(node, ancestors);
+    } else if (t.isJSXAttribute(node)) {
+        visitors.JSXAttribute?.(node, ancestors[ancestors.length - 1] ?? null);
+    }
+
+    const keys = VISITOR_KEYS[node.type];
+    if (!keys) {
+        return;
+    }
+
+    ancestors.push(node);
+    for (const key of keys) {
+        const child = (node as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(child)) {
+            for (const item of child) {
+                if (isAstNode(item)) {
+                    walkAst(item, visitors, ancestors);
+                }
+            }
+        } else if (isAstNode(child)) {
+            walkAst(child, visitors, ancestors);
+        }
+    }
+    ancestors.pop();
+}
+
+function isAstNode(value: unknown): value is VisitNode {
+    return Boolean(value && typeof value === 'object' && 'type' in value);
+}
+
+function isClassNameJsxAttribute(node: VisitNode): boolean {
+    return t.isJSXAttribute(node) && t.isJSXIdentifier(node.name) && node.name.name === 'className';
 }
 
 // ============================================================================
@@ -142,6 +183,21 @@ export function transformSource(
     // We warn the user to migrate to szv() instead of silently skipping.
     let hasCvaImport = false;
 
+    // ── Fast-path: skip parse when source has nothing to transform ───────
+    // Real-world migrations process many files; a single indexOf scan
+    // saves the full Babel parse + AST walk cost on every irrelevant file.
+    // Must catch both className references (migration target) and cva
+    // imports (warning surface) — anything else is invisible to migrate.
+    if (source.indexOf('className') === -1 && source.indexOf('cva') === -1) {
+        return {
+            code: source,
+            changed: false,
+            warnings: [],
+            stats: { classNamesTransformed: 0, classNamesSkipped: 0, classesUnrecognized: [] },
+            potentiallyUnusedImports: [],
+        };
+    }
+
     // ── Step 1: Parse ────────────────────────────────────────────────────
     let ast: ReturnType<typeof parse>;
     try {
@@ -162,11 +218,10 @@ export function transformSource(
         };
     }
 
-    // ── Step 2: Traverse AST ─────────────────────────────────────────────
-    traverse(ast, {
-        // Track clsx-like and CVA imports
-        ImportDeclaration(path) {
-            const src = path.node.source.value;
+    // ── Step 2: Walk AST ─────────────────────────────────────────────────
+    walkAst(ast, {
+        ImportDeclaration(node) {
+            const src = node.source.value;
             // Common clsx/cn packages
             const clsxPackages = ['clsx', 'clsx/lite', 'classnames', 'tailwind-merge'];
             const isClsxPkg = clsxPackages.some(p => src === p || src.startsWith(`${p}/`));
@@ -178,7 +233,7 @@ export function transformSource(
                 hasCvaImport = true;
             }
 
-            for (const spec of path.node.specifiers) {
+            for (const spec of node.specifiers) {
                 const localName = spec.local.name;
                 if (isClsxPkg || isClsxLikeName(localName)) {
                     clsxImportNames.add(localName);
@@ -186,26 +241,18 @@ export function transformSource(
             }
         },
 
-        // Track clsx usage outside className
-        CallExpression(path) {
-            if (t.isIdentifier(path.node.callee) && clsxImportNames.has(path.node.callee.name)) {
-                // Check if this call is inside a className JSXAttribute
-                const inClassName = path.findParent(
-                    p =>
-                        t.isJSXAttribute(p.node) &&
-                        t.isJSXIdentifier(p.node.name) &&
-                        p.node.name.name === 'className',
-                );
+        CallExpression(node, ancestors) {
+            if (t.isIdentifier(node.callee) && clsxImportNames.has(node.callee.name)) {
+                const inClassName = ancestors.some(isClassNameJsxAttribute);
                 if (!inClassName) {
                     clsxUsedOutsideClassName = true;
                 }
             }
         },
 
-        // Main transformation: className → sz
-        JSXAttribute(path) {
+        JSXAttribute(node, parent) {
             // Only process className attributes
-            const attrName = path.node.name;
+            const attrName = node.name;
             if (!t.isJSXIdentifier(attrName) || attrName.name !== 'className') {
                 return;
             }
@@ -213,7 +260,6 @@ export function transformSource(
             // Skip className on custom (capitalized) components — they accept className
             // as a prop to pass down; we cannot replace it with sz on the call site.
             // e.g. <MyComponent className="..." /> — skip silently.
-            const parent = path.parent;
             if (t.isJSXOpeningElement(parent)) {
                 const elementName = parent.name;
                 const isCapitalized =
@@ -239,9 +285,9 @@ export function transformSource(
                 }
             }
 
-            const value = path.node.value;
-            const attrStart = path.node.start;
-            const attrEnd = path.node.end;
+            const value = node.value;
+            const attrStart = node.start;
+            const attrEnd = node.end;
             if (
                 attrStart === null ||
                 attrStart === undefined ||
@@ -258,7 +304,7 @@ export function transformSource(
                     replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
                     classNamesTransformed++;
                     classesUnrecognized.push(...result.unrecognized);
-                    injectTodoComment(result.unrecognized, path.parent, options, replacements);
+                    injectTodoComment(result.unrecognized, parent, options, replacements);
                 } else {
                     classNamesSkipped++;
                 }
@@ -280,7 +326,7 @@ export function transformSource(
                         });
                         classNamesTransformed++;
                         classesUnrecognized.push(...result.unrecognized);
-                        injectTodoComment(result.unrecognized, path.parent, options, replacements);
+                        injectTodoComment(result.unrecognized, parent, options, replacements);
                     } else {
                         classNamesSkipped++;
                     }
@@ -302,7 +348,7 @@ export function transformSource(
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
                     }
-                    injectTodoComment(result.unrecognized, path.parent, options, replacements);
+                    injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
                 }
 
@@ -328,7 +374,7 @@ export function transformSource(
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
                     }
-                    injectTodoComment(result.unrecognized, path.parent, options, replacements);
+                    injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
                 }
 
@@ -347,7 +393,7 @@ export function transformSource(
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
                     }
-                    injectTodoComment(result.unrecognized, path.parent, options, replacements);
+                    injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
                 }
 
@@ -366,7 +412,7 @@ export function transformSource(
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
                     }
-                    injectTodoComment(result.unrecognized, path.parent, options, replacements);
+                    injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
                 }
 

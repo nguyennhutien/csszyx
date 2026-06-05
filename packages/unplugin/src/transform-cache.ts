@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { SourceTransformResult, TokenData } from '@csszyx/compiler';
+import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 2;
+const CACHE_SCHEMA_VERSION = 6;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -23,6 +23,7 @@ interface SerializedTransformResult {
     rawClassNames: string[];
     diagnostics: string[];
     recoveryTokens: Array<[string, TokenData]>;
+    cssVariableMap: Array<[string, CssVariableMangleValue]>;
 }
 
 /** On-disk transform cache entry schema. */
@@ -33,6 +34,9 @@ interface TransformCacheEntry {
     parserMode: string;
     producer: TransformCacheProducer;
     astBudget: number | null;
+    mangleVars: boolean;
+    mangleVarHoistMaxDepth: number | null;
+    globalVarAliases: Array<[string, string]>;
     filename: string;
     inputSha256: string;
     timestamp: string;
@@ -61,6 +65,12 @@ export interface TransformCacheKeyInput {
     producer: TransformCacheProducer;
     /** Effective AST budget override, if configured. */
     astBudget?: number;
+    /** Whether dynamic CSS variable names are mangled by the compiler. */
+    mangleVars?: boolean;
+    /** Maximum cascade depth for component-tier CSS variable hoisting. */
+    mangleVarHoistMaxDepth?: number;
+    /** Exact global custom-property alias table used by compiler rewrites. */
+    globalVarAliases?: ReadonlyArray<readonly [string, string]>;
     /** Source filename; recovery tokens depend on it. */
     filename: string;
     /** Source file contents. */
@@ -94,6 +104,7 @@ export function resolveTransformCacheDir(rootDir: string, cacheDir?: string): st
  */
 export function createTransformCacheKey(input: TransformCacheKeyInput): TransformCacheKey {
     const inputSha256 = createHash('sha256').update(input.source).digest('hex');
+    const globalVarAliases = normalizeGlobalVarAliasEntries(input.globalVarAliases);
     const keyMaterial = [
         `schema=${CACHE_SCHEMA_VERSION}`,
         `plugin=${input.pluginVersion}`,
@@ -101,6 +112,9 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `parser=${input.parserMode}`,
         `producer=${input.producer}`,
         `astBudget=${input.astBudget ?? 'default'}`,
+        `mangleVars=${input.mangleVars === true}`,
+        `mangleVarHoistMaxDepth=${input.mangleVarHoistMaxDepth ?? 'default'}`,
+        `globalVarAliases=${JSON.stringify(globalVarAliases)}`,
         `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');
@@ -131,6 +145,7 @@ export function readTransformCache(
     // same source. Falling back to fresh derivation keeps the function
     // safe to use standalone.
     const { key, inputSha256 } = precomputedKey ?? createTransformCacheKey(input);
+    const globalVarAliases = normalizeGlobalVarAliasEntries(input.globalVarAliases);
     const file = cacheEntryPath(cacheRoot, key);
     let entry: TransformCacheEntry;
     try {
@@ -146,6 +161,9 @@ export function readTransformCache(
         entry.parserMode !== input.parserMode ||
         entry.producer !== input.producer ||
         entry.astBudget !== (input.astBudget ?? null) ||
+        entry.mangleVars !== (input.mangleVars === true) ||
+        entry.mangleVarHoistMaxDepth !== (input.mangleVarHoistMaxDepth ?? null) ||
+        !sameGlobalVarAliases(entry.globalVarAliases, globalVarAliases) ||
         entry.filename !== input.filename ||
         entry.inputSha256 !== inputSha256
     ) {
@@ -177,6 +195,7 @@ export function writeTransformCache(
     // cache-miss-then-write does not pay for two sha256 passes over the
     // same source.
     const { key, inputSha256 } = precomputedKey ?? createTransformCacheKey(input);
+    const globalVarAliases = normalizeGlobalVarAliasEntries(input.globalVarAliases);
     const file = cacheEntryPath(cacheRoot, key);
     const dir = path.dirname(file);
     const tmp = path.join(
@@ -190,6 +209,9 @@ export function writeTransformCache(
         parserMode: input.parserMode,
         producer: input.producer,
         astBudget: input.astBudget ?? null,
+        mangleVars: input.mangleVars === true,
+        mangleVarHoistMaxDepth: input.mangleVarHoistMaxDepth ?? null,
+        globalVarAliases,
         filename: input.filename,
         inputSha256,
         timestamp: new Date().toISOString(),
@@ -281,6 +303,7 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         rawClassNames: [...result.rawClassNames],
         diagnostics: [...result.diagnostics],
         recoveryTokens: [...result.recoveryTokens],
+        cssVariableMap: [...(result.cssVariableMap ?? new Map())],
     };
 }
 
@@ -301,7 +324,56 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         rawClassNames: new Set(result.rawClassNames),
         diagnostics: [...result.diagnostics],
         recoveryTokens: new Map(result.recoveryTokens),
+        cssVariableMap: new Map(result.cssVariableMap ?? []),
     };
+}
+
+/**
+ * Sort and dedupe alias pairs so cache identity is stable across Map/object
+ * insertion order differences.
+ *
+ * @param aliases Original-to-alias custom-property pairs.
+ * @returns Stable alias entries for cache keys and entries.
+ */
+function normalizeGlobalVarAliasEntries(
+    aliases: TransformCacheKeyInput['globalVarAliases'],
+): Array<[string, string]> {
+    if (!aliases || aliases.length === 0) {
+        return [];
+    }
+
+    const normalized = new Map<string, string>();
+    for (const [original, alias] of aliases) {
+        if (typeof original === 'string' && typeof alias === 'string') {
+            normalized.set(original, alias);
+        }
+    }
+    return [...normalized].sort(([left], [right]) => left.localeCompare(right));
+}
+
+/**
+ * Compare normalized alias entries.
+ *
+ * @param left Cached alias entries.
+ * @param right Current normalized alias entries.
+ * @returns Whether both alias tables are identical.
+ */
+function sameGlobalVarAliases(
+    left: TransformCacheEntry['globalVarAliases'] | undefined,
+    right: Array<[string, string]>,
+): boolean {
+    if (!Array.isArray(left) || left.length !== right.length) {
+        return false;
+    }
+
+    for (let index = 0; index < left.length; index++) {
+        const leftEntry = left[index];
+        const rightEntry = right[index];
+        if (leftEntry?.[0] !== rightEntry?.[0] || leftEntry?.[1] !== rightEntry?.[1]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /**

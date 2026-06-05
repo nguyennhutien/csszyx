@@ -135,7 +135,7 @@ describe('classNameToSzObject — customMap routes', () => {
                 'p-4 legacy-card flex',
                 customMap,
             );
-            expect(szObject).toEqual({ p: 4, flex: true });
+            expect(szObject).toEqual({ p: 4, display: 'flex' });
             expect(unrecognized).toEqual([]);
             expect(keepInClassName).toEqual([]);
         });
@@ -330,8 +330,8 @@ describe('classNameToSzObject — customMap routes', () => {
             expect(szObject.py).toBe(2);
             // TW string route (shadow-md recognized)
             expect(szObject.shadow).toBe('md');
-            // Boolean
-            expect(szObject.flex).toBe(true);
+            // Display utility
+            expect(szObject.display).toBe('flex');
             // sz:keep
             expect(keepInClassName).toContain('icon-sm');
             // sz:remove — gone from everywhere
@@ -432,7 +432,7 @@ describe('transformSource — customMap (--resolve-todos)', () => {
         expect(result.code).toContain('className="icon-sprite"');
         // TW classes go to sz
         expect(result.code).toContain('sz=');
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain("display: 'flex'");
     });
 
     it('sz:remove classes disappear completely', () => {

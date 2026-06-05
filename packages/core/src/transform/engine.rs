@@ -4,18 +4,28 @@
 //! result contract without enabling source rewrite yet.
 
 use super::{
+    css_var_planner::apply_css_variable_mangling,
     fast_path::{triage_source, FastPathTriage},
+    global_var_aliases::apply_global_var_aliases,
     lower::lower_source_ir_classes,
     parser::parse_source_shell,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
-    TransformProducer, TransformResult, TransformTimings,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings,
 };
 use std::time::Instant;
 
 /// Transform one file through fast-path triage and parser-backed static rewrite.
 pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
+    transform_file_with_options(file, TransformOptions::default())
+}
+
+/// Transform one file through fast-path triage and parser-backed static rewrite.
+pub(super) fn transform_file_with_options(
+    file: &TransformFile,
+    options: TransformOptions,
+) -> TransformResult {
     let total_start = Instant::now();
     let triage_start = Instant::now();
     match triage_source(file) {
@@ -27,11 +37,11 @@ pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
         }
         FastPathTriage::StaticIr(ir) => {
             let triage_ns = elapsed_ns(triage_start);
-            transform_fast_static_ir(file, &ir, triage_ns, total_start)
+            transform_fast_static_ir_with_options(file, &ir, triage_ns, total_start, &options)
         }
         FastPathTriage::NeedsParser(_) => {
             let triage_ns = elapsed_ns(triage_start);
-            transform_static_classes(file, triage_ns, total_start)
+            transform_static_classes_with_options(file, triage_ns, total_start, options)
         }
     }
 }
@@ -43,11 +53,32 @@ fn transform_fast_static_ir(
     triage_ns: u64,
     total_start: Instant,
 ) -> TransformResult {
+    transform_fast_static_ir_with_options(
+        file,
+        ir,
+        triage_ns,
+        total_start,
+        &TransformOptions::default(),
+    )
+}
+
+fn transform_fast_static_ir_with_options(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    triage_ns: u64,
+    total_start: Instant,
+    options: &TransformOptions,
+) -> TransformResult {
+    let global_var_aliases = (!options.global_var_aliases.is_empty())
+        .then(|| apply_global_var_aliases(ir, &options.global_var_aliases));
+    let lower_ir = global_var_aliases
+        .as_ref()
+        .map_or(ir, |aliases| &aliases.ir);
     let lower_start = Instant::now();
-    let lowered = lower_source_ir_classes(ir);
+    let lowered = lower_source_ir_classes(lower_ir);
     let lower_ns = elapsed_ns(lower_start);
     let rewrite_start = Instant::now();
-    let rewritten_code = rewrite_static_sz_attributes(&file.source, &file.filename, ir).ok();
+    let rewritten_code = rewrite_static_sz_attributes(&file.source, &file.filename, lower_ir).ok();
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
 
@@ -58,6 +89,9 @@ fn transform_fast_static_ir(
         raw_class_names: lowered.raw_class_names,
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
+        css_variable_map: global_var_aliases
+            .map(|aliases| aliases.variable_map)
+            .unwrap_or_default(),
         metadata: TransformMetadata {
             transformed,
             uses_runtime: false,
@@ -84,9 +118,30 @@ fn transform_static_classes(
     triage_ns: u64,
     total_start: Instant,
 ) -> TransformResult {
+    transform_static_classes_with_options(file, triage_ns, total_start, TransformOptions::default())
+}
+
+#[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
+fn transform_static_classes_with_options(
+    file: &TransformFile,
+    triage_ns: u64,
+    total_start: Instant,
+    options: TransformOptions,
+) -> TransformResult {
     let parsed = parse_source_shell(file);
+    let global_var_aliases = (!options.global_var_aliases.is_empty())
+        .then(|| apply_global_var_aliases(&parsed.ir, &options.global_var_aliases));
+    let alias_ir = global_var_aliases
+        .as_ref()
+        .map_or(&parsed.ir, |aliases| &aliases.ir);
+    let css_var_mangling = options.mangle_vars.then(|| {
+        apply_css_variable_mangling(alias_ir, &file.source, options.mangle_var_hoist_max_depth)
+    });
+    let lower_ir = css_var_mangling
+        .as_ref()
+        .map_or(alias_ir, |mangling| &mangling.ir);
     let lower_start = Instant::now();
-    let lowered = lower_source_ir_classes(&parsed.ir);
+    let lowered = lower_source_ir_classes(lower_ir);
     let lower_ns = elapsed_ns(lower_start);
     let recovery_start = Instant::now();
     let recovery_tokens = recovery_tokens(file, &parsed.ir);
@@ -107,12 +162,15 @@ fn transform_static_classes(
             file.filename
         ));
     }
+    if let Some(mangling) = &css_var_mangling {
+        diagnostics.extend(mangling.diagnostics.iter().cloned());
+    }
     let diagnostics_ns = elapsed_ns(diagnostics_start);
     let rewrite_start = Instant::now();
     let rewritten_code = if has_parser_errors || parsed.ast_budget_exceeded || parsed.panicked {
         None
     } else {
-        rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir).ok()
+        rewrite_static_sz_attributes(&file.source, &file.filename, lower_ir).ok()
     };
     let rewrite_ns = elapsed_ns(rewrite_start);
     let transformed = rewritten_code.is_some();
@@ -159,6 +217,10 @@ fn transform_static_classes(
         raw_class_names: lowered.raw_class_names,
         diagnostics,
         recovery_tokens,
+        css_variable_map: merge_variable_maps(
+            global_var_aliases.map(|aliases| aliases.variable_map),
+            css_var_mangling.map(|mangling| mangling.variable_map),
+        ),
         metadata: TransformMetadata {
             transformed,
             uses_runtime,
@@ -203,6 +265,26 @@ fn recovery_tokens(file: &TransformFile, ir: &super::SourceIr) -> Vec<RecoveryTo
         .collect()
 }
 
+fn merge_variable_maps(
+    first: Option<Vec<super::CssVariableMapEntry>>,
+    second: Option<Vec<super::CssVariableMapEntry>>,
+) -> Vec<super::CssVariableMapEntry> {
+    let mut merged = Vec::new();
+    for entry in first
+        .into_iter()
+        .flatten()
+        .chain(second.into_iter().flatten())
+    {
+        if merged.iter().any(|existing: &super::CssVariableMapEntry| {
+            existing.original == entry.original && existing.mangled == entry.mangled
+        }) {
+            continue;
+        }
+        merged.push(entry);
+    }
+    merged
+}
+
 fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.unsupported_sz_attribute_spans
         .iter()
@@ -235,6 +317,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         raw_class_names: Vec::new(),
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
+        css_variable_map: Vec::new(),
         metadata: TransformMetadata {
             transformed: false,
             uses_runtime: false,

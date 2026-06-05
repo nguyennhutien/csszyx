@@ -96,6 +96,10 @@ impl SourceIr {
 pub struct JsxOpeningElementIr {
     /// Full opening-element span.
     pub opening_span: TextSpan,
+    /// Parent JSX node index in [`SourceIr::jsx_opening_elements`].
+    pub parent_element_index: Option<usize>,
+    /// Whether this JSX node can receive hoisted style props.
+    pub can_host_style: bool,
     /// Static `sz` attribute indices in [`SourceIr::sz_attributes`].
     pub sz_attribute_indices: Vec<usize>,
     /// Class/className attribute index in [`SourceIr::class_attributes`].
@@ -110,6 +114,8 @@ pub struct JsxOpeningElementIr {
     pub last_attribute_end: Option<u32>,
     /// String form of the JSX element name used by recovery tokens.
     pub element_name: String,
+    /// Dynamic CSS custom properties hoisted from descendant `sz` attributes.
+    pub hoisted_dynamic_css_vars: Vec<DynamicCssVarIr>,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -199,6 +205,8 @@ pub struct DynamicCssVarIr {
     pub expression_span: TextSpan,
     /// Variant prefix chain as emitted by Tailwind, for example `md:hover`.
     pub variant_prefix: Option<String>,
+    /// Whether this declaration was hoisted to an ancestor style prop.
+    pub hoisted: bool,
 }
 
 /// Runtime value transform used when writing a CSS custom property.
@@ -376,6 +384,8 @@ mod tests {
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: vec![JsxOpeningElementIr {
                 opening_span: TextSpan::new(1, 73).expect("valid span"),
+                parent_element_index: None,
+                can_host_style: true,
                 sz_attribute_indices: vec![0],
                 class_attribute_index: Some(0),
                 style_attribute_index: None,
@@ -383,6 +393,7 @@ mod tests {
                 has_recovery_token_attribute: false,
                 last_attribute_end: Some(72),
                 element_name: "div".to_string(),
+                hoisted_dynamic_css_vars: Vec::new(),
             }],
         };
 

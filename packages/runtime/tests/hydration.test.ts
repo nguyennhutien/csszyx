@@ -16,6 +16,7 @@ import {
     type HydrationError,
     isCSRRecoveryAllowed,
     isHydrationAborted,
+    loadMangleMapFromDOM,
 } from '../src/hydration.js';
 
 describe('CSR Recovery', () => {
@@ -231,6 +232,41 @@ describe('guardHydration', () => {
         expect(result).toBe(false);
         expect(isHydrationAborted(document.documentElement)).toBe(true);
         expect(getHydrationErrors()[0]?.type).toBe('checksum_mismatch');
+    });
+});
+
+describe('loadMangleMapFromDOM', () => {
+    afterEach(() => {
+        document.getElementById('__CSSZYX_MANGLE_MAP__')?.remove();
+        document.getElementById('__SZ_MANGLE_MAP__')?.remove();
+    });
+
+    it('loads the current unplugin mangle map script id', () => {
+        const script = document.createElement('script');
+        script.id = '__CSSZYX_MANGLE_MAP__';
+        script.type = 'application/json';
+        script.textContent = JSON.stringify({
+            'class:p-4': 'z',
+            'var:--_sz-p:--cz': '--cz',
+            'var:--_sz-p:--sz': '--sz',
+        });
+        document.head.appendChild(script);
+
+        expect(loadMangleMapFromDOM()).toEqual({
+            'class:p-4': 'z',
+            'var:--_sz-p:--cz': '--cz',
+            'var:--_sz-p:--sz': '--sz',
+        });
+    });
+
+    it('keeps backward compatibility with the legacy script id', () => {
+        const script = document.createElement('script');
+        script.id = '__SZ_MANGLE_MAP__';
+        script.type = 'application/json';
+        script.textContent = JSON.stringify({ 'p-4': 'z' });
+        document.head.appendChild(script);
+
+        expect(loadMangleMapFromDOM()).toEqual({ 'p-4': 'z' });
     });
 });
 

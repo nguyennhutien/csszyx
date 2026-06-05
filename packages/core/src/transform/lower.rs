@@ -146,6 +146,13 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                 return None;
             }
 
+            if value.starts_with("--") {
+                return Some(css_var_type_hint(key).map_or_else(
+                    || format!("{prefix}{class_key}-({value})"),
+                    |type_hint| format!("{prefix}{class_key}-({type_hint}:{value})"),
+                ));
+            }
+
             let is_negative = value.starts_with('-');
             let base_value = if is_negative { &value[1..] } else { value };
             let final_value = if needs_brackets(base_value) {
@@ -160,6 +167,15 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                 Some(format!("{prefix}{class_key}-{final_value}"))
             }
         }
+    }
+}
+
+fn css_var_type_hint(key: &str) -> Option<&'static str> {
+    match key {
+        "fontFamily" => Some("family-name"),
+        "fontWeight" => Some("weight"),
+        "text" => Some("length"),
+        _ => None,
     }
 }
 

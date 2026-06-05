@@ -69,6 +69,35 @@ Tailwind strings are converted.
 `--resolve-todos` is **read-only** — it never writes to the todo file. Still-unresolved
 `sz:todo` entries appear in the console and log only.
 
+## Display Utilities
+
+When migrating Tailwind display classes, csszyx emits the canonical `display`
+property instead of boolean sugar:
+
+| Tailwind | Migrated sz |
+|---|---|
+| `block` | `{ display: 'block' }` |
+| `inline` | `{ display: 'inline' }` |
+| `flex` | `{ display: 'flex' }` |
+| `inline-flex` | `{ display: 'inline-flex' }` |
+| `hidden` | `{ display: 'none' }` |
+
+Manual `sz` authoring can still use sugar such as `{ flex: true }`, but the
+migration output is canonical so duplicate display classes share one object key
+surface. If a class list contains conflicting display utilities in the same
+variant scope, csszyx fails closed and leaves those classes in `className` /
+todo output instead of guessing which one should win.
+
+```tsx
+// Safe: display and flex shorthand are different CSS properties
+className="flex flex-1"
+// → sz={{ display: 'flex', flex: '1' }}
+
+// Unsafe: two display values in the same scope
+className="block flex"
+// → stays unresolved for manual review
+```
+
 ## `--inject-todos` — Mark Unresolved Classes in Code
 
 ```bash

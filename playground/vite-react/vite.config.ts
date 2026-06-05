@@ -5,6 +5,9 @@ import csszyx from 'csszyx/vite';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+  resolve: {
+    tsconfigPaths: false,
+  },
   plugins: [
     // IMPORTANT: csszyx must run BEFORE react plugin AND tailwindcss
     // csszyx transforms sz="" to className="" BEFORE JSX transformation
@@ -15,6 +18,7 @@ export default defineConfig({
       },
       production: {
         injectChecksum: true,
+        mangleVars: process.env.CSSZYX_BENCH_MANGLE_VARS === '0' ? false : true,
       },
     }),
     tailwindcss(),

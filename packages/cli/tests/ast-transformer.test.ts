@@ -140,13 +140,12 @@ describe('ast-transformer (simple)', () => {
         expect(result.stats.classNamesTransformed).toBe(1);
     });
 
-    it('boolean classes', () => {
+    it('keeps conflicting display classes in className', () => {
         const source = '<div className="flex relative hidden" />';
         const result = transformSourceSimple(source, 'test.tsx');
         expect(result.changed).toBe(true);
-        expect(result.code).toContain('flex: true');
+        expect(result.code).toContain('className="flex hidden"');
         expect(result.code).toContain('relative: true');
-        expect(result.code).toContain('hidden: true');
     });
 
     it('preserves non-className content', () => {

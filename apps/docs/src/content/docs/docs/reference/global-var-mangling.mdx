@@ -1,0 +1,88 @@
+---
+title: Global Variable Mangling
+description: Alias-only config for app-owned global CSS custom properties.
+---
+
+:::caution[Opt-in]
+`production.mangleGlobalVars` is default-off and only supports explicit
+`tokens` in Phase H v1. `autoPrefix` remains blocked until CSS pre-scan support
+exists.
+:::
+
+Global variable mangling is an opt-in way to shorten repeated app-owned CSS
+custom property references. Phase H v1 is **alias-only**: original public
+custom-property names remain defined, and csszyx-owned references may use short
+`---g*` aliases.
+
+## Contract
+
+```ts
+csszyx({
+  production: {
+    mangleGlobalVars: {
+      enabled: true,
+      mode: 'alias',
+      tokens: ['--brand-primary', '--brand-primary-hover'],
+      onUnsafeUsage: 'error',
+      emitMap: true,
+    },
+  },
+});
+```
+
+Phase H v1 must preserve original variables:
+
+```css
+:root {
+  --brand-primary: #3b82f6;
+  ---gz: var(--brand-primary);
+}
+```
+
+Full rename mode is not part of Phase H. It requires a separate spec after
+real-app validation proves csszyx can safely own all declarations and usages.
+
+## Reserved Names
+
+Tailwind v4 `@theme` namespaces are never aliasable. For example,
+`--color-*`, `--spacing-*`, `--font-*`, `--font-weight-*`,
+`--radius-*`, `--shadow-*`, `--breakpoint-*`, `--tab-size-*`, and
+`--zoom-*` are reserved.
+
+Use app-owned names such as `--brand-primary` or `--ds-button-radius`
+instead of Tailwind-owned names such as `--color-primary`.
+
+## Current Behavior
+
+`enabled: true` requires explicit `tokens`. csszyx builds one deterministic
+alias table from the sorted tokens, rewrites static `sz` references through that
+table, validates emitted CSS defines the same tokens, then rewrites matching CSS
+`var(--token)` references through the validated aliases.
+
+Builds fail closed when a token is missing from emitted CSS, when unsafe
+out-of-band JS usage is detected, or when CSS validation produces a different
+alias plan than source transforms used.
+
+Runtime fallback `sz={expr}` shapes are not aliased in Phase H v1. They remain
+correct because alias mode keeps the original custom properties defined, but
+they should not be counted as optimized references in size or performance
+reports.
+
+`emitMap` controls only the standalone `.csszyx/global-var-map.json` tooling
+asset. Leave it enabled when external tools need a dedicated original-to-alias
+map. Set `emitMap: false` to avoid that extra file; `csszyx-manifest.json`
+still includes `globalVarAliases`.
+
+## When to Use
+
+Use Phase H v1 only when all of these are true:
+
+- The variables are app-owned public tokens, not Tailwind `@theme` namespaces.
+- The full token list is explicit in `tokens`.
+- The emitted CSS defines every token in the same production build.
+- The expected savings come from static `sz` values and CSS `var(--token)`
+  references, not runtime fallback `sz={expr}`.
+
+Do not use `autoPrefix` or rename mode yet. They require additional validation
+because source transforms need the same alias table before CSS output rewriting
+runs.

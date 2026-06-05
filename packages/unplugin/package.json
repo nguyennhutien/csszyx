@@ -63,6 +63,36 @@
         "types": "./dist/css-mangler.d.cts",
         "default": "./dist/css-mangler.cjs"
       }
+    },
+    "./next-turbo-loader": {
+      "import": {
+        "types": "./dist/next-turbo-loader.d.mts",
+        "default": "./dist/next-turbo-loader.mjs"
+      },
+      "require": {
+        "types": "./dist/next-turbo-loader.d.cts",
+        "default": "./dist/next-turbo-loader.cjs"
+      }
+    },
+    "./next-prebuild": {
+      "import": {
+        "types": "./dist/next-prebuild.d.mts",
+        "default": "./dist/next-prebuild.mjs"
+      },
+      "require": {
+        "types": "./dist/next-prebuild.d.cts",
+        "default": "./dist/next-prebuild.cjs"
+      }
+    },
+    "./next-watcher": {
+      "import": {
+        "types": "./dist/next-watcher.d.mts",
+        "default": "./dist/next-watcher.mjs"
+      },
+      "require": {
+        "types": "./dist/next-watcher.d.cts",
+        "default": "./dist/next-watcher.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",
@@ -86,17 +116,20 @@
     "@csszyx/vue-adapter": "workspace:*",
     "postcss": "^8.4.35",
     "postcss-selector-parser": "^6.0.15",
+    "postcss-value-parser": "^4.2.0",
+    "proper-lockfile": "^4.1.2",
     "unplugin": "^1.10.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/proper-lockfile": "^4.1.4",
     "esbuild": "^0.27.2",
     "rollup": "^4.56.0",
     "typescript": "^6.0.3",
+    "unbuild": "^3.6.1",
     "vite": "^8.0.13",
     "vitest": "^4.1.6",
-    "webpack": "^5.104.1",
-    "unbuild": "^3.6.1"
+    "webpack": "^5.104.1"
   },
   "sideEffects": false,
   "engines": {

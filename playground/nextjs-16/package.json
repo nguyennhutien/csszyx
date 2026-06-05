@@ -1,0 +1,42 @@
+{
+    "name": "@csszyx/playground-nextjs-16",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "ensure:sources": "node scripts/ensure-sources.mjs",
+        "dev": "pnpm run ensure:sources && next dev --webpack -p 3016",
+        "dev:turbo": "pnpm run ensure:sources && concurrently --kill-others-on-fail -n csszyx,next -c cyan,green \"pnpm run watch:turbo\" \"pnpm run dev:turbo:next\"",
+        "dev:turbo:next": "cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next dev --turbo -p 3018",
+        "watch:turbo": "node node_modules/@csszyx/cli/dist/index.mjs next watch --root . --output-file .csszyx/next-loader-classes.html",
+        "dev:source": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 next dev --turbo -p 3018",
+        "dev:loader": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 next dev --turbo -p 3019",
+        "dev:csszyx-loader": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next dev --turbo -p 3020",
+        "build": "pnpm run ensure:sources && next build --webpack",
+        "build:turbo": "pnpm run ensure:sources && pnpm run prebuild:turbo && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next build --turbo",
+        "prebuild:turbo": "node node_modules/@csszyx/cli/dist/index.mjs next prebuild --root . --output-file .csszyx/next-loader-classes.html",
+        "start": "next start -p 3017",
+        "clean:build": "rm -rf .next"
+    },
+    "dependencies": {
+        "@csszyx/runtime": "workspace:*",
+        "@csszyx/unplugin": "workspace:*",
+        "@tailwindcss/postcss": "4.3.0",
+        "csszyx": "workspace:*",
+        "next": "16.2.7",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+        "tailwindcss": "4.3.0"
+    },
+    "devDependencies": {
+        "@csszyx/cli": "workspace:*",
+        "@csszyx/compiler": "workspace:*",
+        "@csszyx/types": "workspace:*",
+        "@types/node": "^20.19.41",
+        "@types/react": "^19.2.16",
+        "@types/react-dom": "^19.2.3",
+        "concurrently": "^9.2.1",
+        "cross-env": "^7.0.3",
+        "typescript": "^6.0.3"
+    }
+}

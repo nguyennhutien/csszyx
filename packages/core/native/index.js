@@ -60,9 +60,9 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     return binding;
 }
 
-export function transformBatch(_files) {
+export function transformBatch(_files, options) {
     const binding = loadNativeBinding();
-    return binding.transformBatch(_files);
+    return binding.transformBatch(_files, options);
 }
 
 function isModuleNotFoundForPackage(err, packageName) {

@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
                 },
                 production: {
                     injectChecksum: true,
+                    mangleVars: true,
                     // mangle: false,
                 },
             }),

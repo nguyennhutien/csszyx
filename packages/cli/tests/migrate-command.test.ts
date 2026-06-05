@@ -252,7 +252,7 @@ export default () => <div className="flex items-center sprite-icon" />;
         const output = readFile('src/App.tsx');
         expect(output).toContain('className="sprite-icon"');
         expect(output).toContain('sz=');
-        expect(output).toContain('flex: true');
+        expect(output).toContain("display: 'flex'");
     });
 
     it('sz:remove: class disappears from output', async () => {
@@ -576,7 +576,7 @@ export default () => (
 
         const output = readFile('src/App.tsx');
         // div transformed
-        expect(output).toContain('flex: true');
+        expect(output).toContain("display: 'flex'");
         // Button classNames preserved as-is
         expect(output).toContain('<Button className="btn-primary px-6 py-3">');
         expect(output).toContain('<Button className="btn-secondary px-6 py-3"');

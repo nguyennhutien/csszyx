@@ -559,6 +559,25 @@ Edit the file to tell csszyx what to do with each class:
 the class happens to be a valid Tailwind class. This prevents accidental conversion
 of classes the developer has explicitly flagged as "not yet decided."
 
+### Display utilities
+
+`csszyx migrate` emits canonical display props, not boolean sugar:
+
+| Tailwind      | Migrated sz                  |
+| ------------- | ---------------------------- |
+| `block`       | `{ display: 'block' }`       |
+| `inline`      | `{ display: 'inline' }`      |
+| `flex`        | `{ display: 'flex' }`        |
+| `inline-flex` | `{ display: 'inline-flex' }` |
+| `hidden`      | `{ display: 'none' }`        |
+
+Manual authoring can still use `{ flex: true }`, `{ inlineFlex: true }`, etc.
+The migrate command uses `display` so duplicate display utilities are visible as
+one semantic CSS property. Conflicting display utilities in the same variant
+scope, such as `block flex` or `md:block md:flex`, are left unresolved instead
+of guessed. `flex flex-1` is safe and migrates to
+`{ display: 'flex', flex: '1' }`.
+
 ### `--resolve-todos` — apply the resolution map
 
 ```bash

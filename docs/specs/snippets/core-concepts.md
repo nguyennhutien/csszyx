@@ -193,20 +193,24 @@ Advanced content styling.
 
 Environment-based styling.
 
-| Concept               | Tailwind v4 Class              | `sz` Prop (Object Syntax)                           | Note                          |
-| :-------------------- | :----------------------------- | :-------------------------------------------------- | :---------------------------- |
-| **Breakpoints**       | `md:block lg:flex`             | `{ md: { block: true }, lg: { flex: true } }`       |                               |
-| **Container Queries** | `@md:block @lg:flex`           | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
-| **Reduced Motion**    | `motion-reduce:hidden`         | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
-| **Prefers Contrast**  | `contrast-more:border`         | `{ contrastMore: { border: true } }`                |                               |
-| **Forced Colors**     | `forced-colors:border-gray`    | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
-| **Inverted Colors**   | `inverted-colors:invert`       | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
-| **Pointer**           | `pointer-coarse:p-4`           | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
-| **Print**             | `print:hidden`                 | `{ print: { hidden: true } }`                       |                               |
-| **Orientation**       | `portrait:hidden`              | `{ portrait: { hidden: true } }`                    |                               |
-| **Scripting**         | `noscript:block`               | `{ noscript: { block: true } }`                     |                               |
-| **Supports**          | `supports-[display:grid]:grid` | `{ supports: { 'display:grid': { grid: true } } }`  |                               |
-| **Starting Style**    | `starting:opacity-0`           | `{ starting: { opacity: 0 } }`                      |                               |
+| Concept               | Tailwind v4 Class                 | `sz` Prop (Object Syntax)                           | Note                          |
+| :-------------------- | :-------------------------------- | :-------------------------------------------------- | :---------------------------- |
+| **Breakpoints**       | `md:block lg:flex`                | `{ md: { block: true }, lg: { flex: true } }`       |                               |
+| **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
+| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
+| **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                |                               |
+| **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
+| **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
+| **Pointer**           | `pointer-coarse:p-4`              | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
+| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`         | v4.1. **Sugar**: CamelCase.   |
+| **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`       | v4.1. Form validation state.  |
+| **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`       | v4.1. Form validation state.  |
+| **Details Content**   | `details-content:block`           | `{ detailsContent: { block: true } }`               | v4.1. **Sugar**: CamelCase.   |
+| **Print**             | `print:hidden`                    | `{ print: { hidden: true } }`                       |                               |
+| **Orientation**       | `portrait:hidden`                 | `{ portrait: { hidden: true } }`                    |                               |
+| **Scripting**         | `noscript:block`                  | `{ noscript: { block: true } }`                     |                               |
+| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { grid: true } } }`  |                               |
+| **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                      |                               |
 
 ## Attribute Selectors
 

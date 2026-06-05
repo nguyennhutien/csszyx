@@ -61,6 +61,46 @@ export default defineConfig({
             },
         },
         {
+            name: 'nextjs-16-webpack',
+            testMatch: /nextjs-16-webpack/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3017',
+            },
+        },
+        {
+            name: 'nextjs-16-tailwind-source',
+            testMatch: /nextjs-16-tailwind-source/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3018',
+            },
+        },
+        {
+            name: 'nextjs-16-turbo-loader',
+            testMatch: /nextjs-16-turbo-loader/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3018',
+            },
+        },
+        {
+            name: 'nextjs-16-turbo-add-dependency',
+            testMatch: /nextjs-16-turbo-add-dependency/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3018',
+            },
+        },
+        {
+            name: 'nextjs-16-turbo-csszyx-loader',
+            testMatch: /nextjs-16-turbo-csszyx-loader/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3018',
+            },
+        },
+        {
             name: 'edge-cases',
             testMatch: /edge-cases/,
             use: {
@@ -92,6 +132,24 @@ export default defineConfig({
             command: 'pnpm run build && pnpm run start',
             cwd: '../../playground/nextjs-ssr',
             url: 'http://localhost:3002',
+            reuseExistingServer: !process.env.CI,
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: 120000,
+        },
+        {
+            command: 'pnpm run build && pnpm run start',
+            cwd: '../../playground/nextjs-16',
+            url: 'http://localhost:3017',
+            reuseExistingServer: !process.env.CI,
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: 120000,
+        },
+        {
+            command: 'pnpm run dev:turbo',
+            cwd: '../../playground/nextjs-16',
+            url: 'http://localhost:3018/tailwind-source',
             reuseExistingServer: !process.env.CI,
             stdout: 'pipe',
             stderr: 'pipe',

@@ -3,9 +3,9 @@ use oxc_ast::{
     ast::{
         Argument, ArrayExpression, ArrayExpressionElement, CallExpression, ConditionalExpression,
         Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue,
-        JSXElementName, JSXExpression, JSXMemberExpression, JSXMemberExpressionObject,
-        JSXOpeningElement, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
-        UnaryOperator,
+        JSXElement, JSXElementName, JSXExpression, JSXFragment, JSXMemberExpression,
+        JSXMemberExpressionObject, JSXOpeningElement, ObjectExpression, ObjectProperty,
+        ObjectPropertyKind, PropertyKey, UnaryOperator,
     },
     AstKind,
 };
@@ -69,6 +69,7 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
             ast_budget_exceeded: false,
             scope: &scope,
             program: &parsed.program,
+            element_stack: Vec::new(),
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
@@ -109,6 +110,8 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// Backing program used together with `scope` to look up identifier
     /// initializer expressions during static lowering.
     program: &'p oxc_ast::ast::Program<'p>,
+    /// JSX element/fragment index stack for parent-tree lowering.
+    element_stack: Vec<usize>,
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
@@ -117,6 +120,51 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         if self.node_count > AST_BUDGET {
             self.ast_budget_exceeded = true;
         }
+    }
+
+    fn visit_jsx_element(&mut self, element: &JSXElement<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        let before = self.ir.jsx_opening_elements.len();
+        self.visit_jsx_opening_element(&element.opening_element);
+        if self.ir.jsx_opening_elements.len() > before {
+            let index = self.ir.jsx_opening_elements.len() - 1;
+            self.element_stack.push(index);
+            self.visit_jsx_children(&element.children);
+            self.element_stack.pop();
+        } else {
+            self.visit_jsx_children(&element.children);
+        }
+        if let Some(closing_element) = &element.closing_element {
+            self.visit_jsx_closing_element(closing_element);
+        }
+    }
+
+    fn visit_jsx_fragment(&mut self, fragment: &JSXFragment<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        let index = self.ir.jsx_opening_elements.len();
+        self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
+            opening_span: text_span(fragment.span),
+            parent_element_index: self.element_stack.last().copied(),
+            can_host_style: false,
+            sz_attribute_indices: Vec::new(),
+            class_attribute_index: None,
+            style_attribute_index: None,
+            recovery_attribute_index: None,
+            has_recovery_token_attribute: false,
+            last_attribute_end: None,
+            element_name: "<>".to_string(),
+            hoisted_dynamic_css_vars: Vec::new(),
+        });
+
+        self.element_stack.push(index);
+        self.visit_jsx_children(&fragment.children);
+        self.element_stack.pop();
     }
 
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
@@ -174,21 +222,20 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             }
         }
 
-        if !sz_attribute_indices.is_empty()
-            || class_attribute_index.is_some()
-            || recovery_attribute_index.is_some()
-        {
-            self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
-                opening_span: text_span(element.span),
-                sz_attribute_indices,
-                class_attribute_index,
-                style_attribute_index,
-                recovery_attribute_index,
-                has_recovery_token_attribute,
-                last_attribute_end,
-                element_name: jsx_element_name(&element.name),
-            });
-        }
+        let element_name = jsx_element_name(&element.name);
+        self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
+            opening_span: text_span(element.span),
+            parent_element_index: self.element_stack.last().copied(),
+            can_host_style: is_style_host_element_name(&element_name),
+            sz_attribute_indices,
+            class_attribute_index,
+            style_attribute_index,
+            recovery_attribute_index,
+            has_recovery_token_attribute,
+            last_attribute_end,
+            element_name,
+            hoisted_dynamic_css_vars: Vec::new(),
+        });
 
         walk::walk_jsx_opening_element(self, element);
     }
@@ -432,6 +479,12 @@ fn jsx_element_name(name: &JSXElementName<'_>) -> String {
         JSXElementName::MemberExpression(member) => jsx_member_expression_name(member),
         JSXElementName::ThisExpression(_) => "this".to_string(),
     }
+}
+
+fn is_style_host_element_name(name: &str) -> bool {
+    name.chars()
+        .next()
+        .is_some_and(|ch| ch == '-' || ch.is_ascii_lowercase())
 }
 
 fn jsx_member_expression_name(member: &JSXMemberExpression<'_>) -> String {
@@ -1071,6 +1124,7 @@ fn dynamic_css_var_from_property(
         category: dynamic_css_var_category(key),
         expression_span,
         variant_prefix: variant_prefix.map(ToString::to_string),
+        hoisted: false,
     }
 }
 
@@ -1492,24 +1546,37 @@ mod tests {
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(parsed.ir.sz_attributes.len(), 2);
         assert_eq!(parsed.ir.class_attributes.len(), 1);
-        assert_eq!(parsed.ir.jsx_opening_elements.len(), 2);
-        assert_eq!(parsed.ir.jsx_opening_elements[0].sz_attribute_indices, [0]);
-        assert_eq!(parsed.ir.jsx_opening_elements[0].element_name, "div");
+        assert_eq!(parsed.ir.jsx_opening_elements.len(), 3);
+        assert_eq!(parsed.ir.jsx_opening_elements[0].element_name, "<>");
+        assert_eq!(parsed.ir.jsx_opening_elements[0].parent_element_index, None);
+        assert!(!parsed.ir.jsx_opening_elements[0].can_host_style);
+        assert_eq!(parsed.ir.jsx_opening_elements[1].sz_attribute_indices, [0]);
+        assert_eq!(parsed.ir.jsx_opening_elements[1].element_name, "div");
         assert_eq!(
-            parsed.ir.jsx_opening_elements[0].class_attribute_index,
+            parsed.ir.jsx_opening_elements[1].parent_element_index,
+            Some(0)
+        );
+        assert!(parsed.ir.jsx_opening_elements[1].can_host_style);
+        assert_eq!(
+            parsed.ir.jsx_opening_elements[1].class_attribute_index,
             Some(0)
         );
         assert_eq!(
-            parsed.ir.jsx_opening_elements[0].recovery_attribute_index,
+            parsed.ir.jsx_opening_elements[1].recovery_attribute_index,
             None
         );
-        assert!(!parsed.ir.jsx_opening_elements[0].has_recovery_token_attribute);
-        assert!(parsed.ir.jsx_opening_elements[0]
+        assert!(!parsed.ir.jsx_opening_elements[1].has_recovery_token_attribute);
+        assert!(parsed.ir.jsx_opening_elements[1]
             .last_attribute_end
             .is_some());
-        assert_eq!(parsed.ir.jsx_opening_elements[1].sz_attribute_indices, [1]);
+        assert_eq!(parsed.ir.jsx_opening_elements[2].sz_attribute_indices, [1]);
+        assert_eq!(parsed.ir.jsx_opening_elements[2].element_name, "span");
         assert_eq!(
-            parsed.ir.jsx_opening_elements[1].class_attribute_index,
+            parsed.ir.jsx_opening_elements[2].parent_element_index,
+            Some(0)
+        );
+        assert_eq!(
+            parsed.ir.jsx_opening_elements[2].class_attribute_index,
             None
         );
     }

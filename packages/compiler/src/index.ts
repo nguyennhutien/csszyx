@@ -10,6 +10,13 @@
 
 // Export transform functionality
 export { CsszyxCompiler } from './compiler.js';
+export {
+    type GlobalVarUsageDiagnostic,
+    type GlobalVarUsageKind,
+    type GlobalVarUsageLocation,
+    type ScanGlobalVarUsagesOptions,
+    scanGlobalVarUsages,
+} from './global-var-diagnostics.js';
 // Export hoisting utilities
 export {
     buildParentMap,
@@ -45,11 +52,14 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export {
+    type CssVariableMangleValue,
+    type GlobalVarAliasTableInput,
     isValidSzProp,
     normalizeClassName,
     type SourceTransformResult,
     type SzObject,
     type SzValue,
+    type TransformSourceCodeOptions,
     transform,
     transformSourceCode,
 } from './transform.js';

@@ -51,7 +51,12 @@
     "corpus:extract": "node --import tsx/esm scripts/extract-corpus.ts",
     "compiler:profile-hotpath": "node --import tsx/esm scripts/profile-compiler-hotpath.ts",
     "bench:transform-cache": "node --import tsx/esm scripts/bench-transform-cache.ts",
+    "bench:css-vars": "node --import tsx/esm scripts/bench-css-var-system.ts",
+    "bench:cli-migrate": "node --import tsx/esm scripts/bench-cli-migrate.ts",
+    "bench:global-vars": "node --import tsx/esm scripts/bench-global-var-mangling.ts",
     "bench:docs-build": "node --import tsx/esm scripts/bench-docs-build.ts",
+    "bench:docs-size": "node --import tsx/esm scripts/bench-docs-output-size.ts",
+    "bench:vite-react-size": "node --import tsx/esm scripts/bench-vite-react-output-size.ts",
     "bench:docs-hmr": "node --import tsx/esm scripts/bench-docs-hmr.ts",
     "observe:rust-parser-paths": "node --import tsx/esm scripts/observe-rust-parser-paths.ts",
     "pages:build": "bash scripts/build-cf-pages.sh"

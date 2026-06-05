@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
 
 test.describe('Next.js SSR Playground', () => {
     test.beforeEach(async ({ page }) => {
@@ -48,4 +48,63 @@ test.describe('Next.js SSR Playground', () => {
         expect(checksum).toBeTruthy();
         expect(checksum).toHaveLength(16);
     });
+
+    test('should expose hoisted css variable mangling metadata', async ({ page }) => {
+        const fixture = page.getByTestId('next-css-var-fixture');
+        const cardA = page.getByTestId('next-css-var-card-a');
+        const cardB = page.getByTestId('next-css-var-card-b');
+        const scoped = page.getByTestId('next-css-var-scoped');
+
+        await expect(fixture).toBeVisible();
+        await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(4 \* var\(--spacing\)\)/);
+        const encodedClass = await page.evaluate(() => window.__csszyx?.encode?.('p-(--cz)'));
+        expect(encodedClass).toBeTruthy();
+        const cardAClasses = (await cardA.getAttribute('class'))?.split(/\s+/) ?? [];
+        const cardBClasses = (await cardB.getAttribute('class'))?.split(/\s+/) ?? [];
+        expect(cardAClasses).toContain(encodedClass);
+        expect(cardBClasses).toContain(encodedClass);
+
+        const initialCardAPadding = await paddingTopPx(cardA);
+        const initialCardBPadding = await paddingTopPx(cardB);
+        expect(initialCardAPadding).toBeGreaterThan(0);
+        expect(initialCardBPadding).toBe(initialCardAPadding);
+
+        const encodedScopedClass = await page.evaluate(() => window.__csszyx?.encode?.('p-(--sz)'));
+        expect(encodedScopedClass).toBeTruthy();
+        const scopedClasses = (await scoped.getAttribute('class'))?.split(/\s+/) ?? [];
+        expect(scopedClasses).toContain(encodedScopedClass);
+        await expect(scoped).toHaveAttribute('style', /--sz:\s*calc\(5 \* var\(--spacing\)\)/);
+        const initialScopedPadding = await paddingTopPx(scoped);
+        expect(initialScopedPadding).toBeGreaterThan(initialCardAPadding);
+
+        await page.getByTestId('next-css-var-button').click();
+        await expect(fixture).toHaveAttribute('style', /--cz:\s*calc\(5 \* var\(--spacing\)\)/);
+        await expect(scoped).toHaveAttribute('style', /--sz:\s*calc\(6 \* var\(--spacing\)\)/);
+        await expect.poll(() => paddingTopPx(cardA)).toBeGreaterThan(initialCardAPadding);
+        await expect.poll(() => paddingTopPx(cardB)).toBeGreaterThan(initialCardBPadding);
+        await expect.poll(() => paddingTopPx(scoped)).toBeGreaterThan(initialScopedPadding);
+
+        const varMap = await page.evaluate(() => window.__csszyx?.varMangleMap);
+        expect(new Set(asArray(varMap?.['--_sz-p']))).toEqual(new Set(['--cz', '--sz']));
+
+        const decoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--cz'));
+        expect(decoded).toEqual(['--_sz-p']);
+        const scopedDecoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--sz'));
+        expect(scopedDecoded).toContain('--_sz-p');
+    });
 });
+
+function asArray<T>(value: T | T[] | undefined): T[] {
+    return value === undefined ? [] : Array.isArray(value) ? value : [value];
+}
+
+/**
+ * Reads computed padding-top from a locator.
+ *
+ * @param locator element locator
+ * @returns numeric padding-top in px
+ */
+async function paddingTopPx(locator: Locator): Promise<number> {
+    const value = await locator.evaluate(element => getComputedStyle(element).paddingTop);
+    return Number.parseFloat(value);
+}
