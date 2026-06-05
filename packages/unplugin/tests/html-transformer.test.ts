@@ -151,6 +151,18 @@ describe('html-transformer', () => {
             expect(win.__csszyx?.decodeGlobalVar('--gxz')).toBe('--brand-primary');
             expect(win.__csszyx?.decodeGlobalVar('---gz')).toBeUndefined();
         });
+
+        it('escapes hostile alias prefixes before embedding executable script', () => {
+            const hostilePrefix = '</script><script>globalThis.pwned=true</script>\u2028';
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                globalVarAliasPrefix: hostilePrefix,
+            });
+
+            expect(result).not.toContain(hostilePrefix);
+            expect(result).not.toContain('</script><script>globalThis.pwned=true');
+            expect(result).toContain('\\u003C/script\\u003E');
+            expect(result).toContain('\\u2028');
+        });
     });
 
     describe('injectMangleMapAttribute', () => {

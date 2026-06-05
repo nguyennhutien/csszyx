@@ -56,6 +56,7 @@ import {
     deleteRSCModuleRecord,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
+import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -325,12 +326,12 @@ function collectConfiguredGlobalVarCssSources(
         .sort((left, right) => left.localeCompare(right))
         .flatMap(file => {
             try {
-                const stat = fs.statSync(file);
+                const snapshot = readStableTextFileSnapshotSync(file);
                 return [
                     {
                         fileName: file,
-                        source: fs.readFileSync(file, 'utf-8'),
-                        mtimeMs: stat.mtimeMs,
+                        source: snapshot.source,
+                        mtimeMs: snapshot.mtimeMs,
                     },
                 ];
             } catch {
@@ -1241,6 +1242,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
     const globalVarMangleConfig = options.production?.mangleGlobalVars;
     const globalVarAliasPrefix = globalVarMangleConfig?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
+    const encodedGlobalVarAliasPrefix = encodeURIComponent(globalVarAliasPrefix);
     const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
         globalVarMangleConfig,
         globalVarAliasPrefix,
@@ -2225,7 +2227,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     );
 
                     // Inject mangle map debug script with placeholders
-                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=${JSON.stringify(globalVarAliasPrefix)};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${JSON.stringify(encodedGlobalVarAliasPrefix)});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
                     if (transformedCode.includes('<body')) {
                         transformedCode = transformedCode.replace(
                             /(<body[^>]*>)/i,

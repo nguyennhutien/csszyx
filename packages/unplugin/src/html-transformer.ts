@@ -25,7 +25,7 @@ import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
  * @param prettyPrint - When true, indent the JSON output by two spaces.
  * @returns Sanitized JSON string safe to inline inside `<script>...</script>`.
  */
-function safeJsonForScriptTag(value: unknown, prettyPrint = false): string {
+export function safeJsonForScriptTag(value: unknown, prettyPrint = false): string {
     const json = prettyPrint ? JSON.stringify(value, null, 2) : JSON.stringify(value);
     return json
         .replace(/</g, '\\u003C')
@@ -151,7 +151,8 @@ export function injectMangleMapScript(
     const varMapContent = safeJsonForScriptTag(varMangleMap);
 
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
-    const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var gp=${JSON.stringify(globalVarAliasPrefix)};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
+    const prefixContent = safeJsonForScriptTag(globalVarAliasPrefix);
+    const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var gp=${prefixContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
 
     // Inject before </head> or before </html> if no head
     const combined = `${scriptTag}\n${debugScript}`;
