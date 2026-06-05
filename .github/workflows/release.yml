@@ -17,10 +17,6 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
-  # id-token: write is required so `npm publish --provenance` can mint a
-  # short-lived OIDC token from the runner. Without it, provenance claims
-  # silently disappear from the published tarballs.
-  id-token: write
 
 jobs:
   # release-please reads conventional-commit history since the last release
@@ -227,10 +223,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Inherit id-token: write at the job level so the OIDC issuer reachable
-      # from inside `npm publish --provenance`. The job-level read default
-      # would otherwise drop the workflow-level grant.
-      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -294,16 +286,16 @@ jobs:
       - name: Build all packages
         run: pnpm build
 
-      # pnpm respects `private: true` so vscode + adapters + mcp-server are
-      # automatically skipped. --no-git-checks bypasses pnpm's interactive
-      # branch confirmation prompt.
+      # Publish one package at a time in workspace dependency order. The
+      # script verifies exact immutable versions before each publish, so a
+      # workflow_dispatch can safely resume a release that stopped halfway.
+      # Transient registry conflicts are retried and the job only succeeds
+      # after every public workspace version is visible on npm.
       #
-      # --provenance is omitted for now: first-time publish of new scoped
-      # packages (the 8 native @csszyx/core-* platform packages) fails
-      # with E404 when OIDC attestation is requested for a package that
-      # does not yet exist on the registry. Re-enable --provenance after
-      # all packages have been published at least once.
+      # --provenance is omitted for now because OIDC attestation fails with
+      # E404 on the first publish of a new scoped package. Re-enable it after
+      # every public workspace package has been published at least once.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
+        run: node .github/scripts/publish-workspace.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
