@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -150,6 +158,7 @@ describe('Next Turbopack prebuild core', () => {
 
         expect(second.classCount).toBe(0);
         expect(second.sourceCount).toBe(1);
+        expect(readdirSync(second.context.safelist.shardsDir)).toHaveLength(1);
         expect(readFileSync(second.safelistOutputPath, 'utf8')).toBe(
             '<!-- csszyx Next safelist: empty -->\n',
         );

@@ -238,7 +238,5 @@ function createShardCacheKey(context: NextStateContext, metadata: NextTransformM
         .update(context.identity.generation)
         .update('\0')
         .update(path.relative(context.root, metadata.sourcePath).replace(/\\/g, '/'))
-        .update('\0')
-        .update(metadata.sourceHash)
         .digest('hex');
 }

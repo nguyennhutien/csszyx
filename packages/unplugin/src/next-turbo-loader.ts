@@ -140,15 +140,13 @@ export function runNextTurboLoader(
     );
     shardPath = shardResult.filePath;
 
-    // The shard write is content-addressed by (generation, source path,
-    // sourceHash). When `changed === false` the on-disk shard already
-    // matches the result we would produce, which means the safelist is
-    // already up to date for this file. Skipping the cycle here turns the
-    // loader from O(N) cycles per file in steady state into O(1), and the
-    // generation manifest written by the most recent cycle already covers
-    // this transform. Empty class sets are still written as shards so removing
-    // the last `sz` prop from a file actively removes that file's old classes
-    // from the materialized Tailwind source.
+    // The shard path is canonical for (generation, source path), while
+    // `sourceHash` determines whether its contents need replacement. This
+    // prevents one source edit from leaving multiple timestamp-ordered shards
+    // behind. When `changed === false` the on-disk shard already matches the
+    // result we would produce, which means the safelist is already up to date
+    // for this file. Empty class sets are still written so removing the last
+    // `sz` prop actively removes that file's old classes.
     if (options.materializeSafelist !== false && shardResult.changed) {
         runNextWatcherCycle(context, {
             writeOptions: options.writeOptions,
@@ -312,7 +310,5 @@ function createShardCacheKey(
         .update(context.identity.generation)
         .update('\0')
         .update(path.relative(context.root, metadata.sourcePath).replace(/\\/g, '/'))
-        .update('\0')
-        .update(metadata.sourceHash)
         .digest('hex');
 }

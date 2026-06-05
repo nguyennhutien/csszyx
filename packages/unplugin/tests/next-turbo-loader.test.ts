@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -163,6 +171,8 @@ describe('Next Turbopack loader core', () => {
         const second = runNextTurboLoader(withoutSz, ctx, options);
 
         expect(second.shardPath && existsSync(second.shardPath)).toBe(true);
+        expect(second.shardPath).toBe(first.shardPath);
+        expect(readdirSync(second.context.safelist.shardsDir)).toHaveLength(1);
         expect(second.materialized).toBe(true);
         expect(readFileSync(second.context.safelist.outputPath, 'utf8')).toBe(
             '<!-- csszyx Next safelist: empty -->\n',
