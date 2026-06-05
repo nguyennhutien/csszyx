@@ -156,7 +156,7 @@ function formatValue(value: unknown, indent: number): string {
         return `[${items.join(', ')}]`;
     }
 
-    if (value !== null && typeof value === 'object') {
+    if (typeof value === 'object') {
         // Color+opacity object: { color: 'blue-500', op: 50 }
         if (isColorOpacityObj(value)) {
             const parts = [`color: '${escapeString(String(value.color))}'`];

@@ -1320,7 +1320,7 @@ function handleGroupPeer(type: 'group' | 'peer', nestedObj: SzObject, prefix: st
             if (result.className) {
                 classes.push(result.className);
             }
-        } else if (nestedValue !== null && typeof nestedValue === 'object') {
+        } else if (typeof nestedValue === 'object') {
             // { group: { name: { hover: { ... }}}} → group-hover/name:
             // Also handles data/aria inside named group:
             // { group: { card: { data: { active: { ... }}}}} → group-data-[active]/card:
@@ -1895,7 +1895,7 @@ export function transform(
                         if (result.className) {
                             classes.push(result.className);
                         }
-                    } else if (nestedValue !== null && typeof nestedValue === 'object') {
+                    } else if (typeof nestedValue === 'object') {
                         // It's a named container: @md/sidebar
                         const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
                         const result = transform(nestedValue as SzObject, nestedPrefix);
