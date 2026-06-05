@@ -218,6 +218,18 @@ describe('RSC boundary guard', () => {
         ).toBe('_sz');
     });
 
+    it('flags multiline namespace imports without regex backtracking', () => {
+        const source = `
+            'use server';
+            import *
+                as runtime
+                from '@csszyx/runtime';
+            export const action = async () => runtime._sz({ p: 4 });
+        `;
+
+        expect(findRSCBoundaryViolation(source, '/app/actions.ts')?.symbol).toBe('_sz');
+    });
+
     it('fails when a server route imports a child module that imports a forbidden runtime helper', () => {
         const records = new Map<string, RSCModuleRecord>([
             [
@@ -411,6 +423,15 @@ describe('RSC audit regressions and known issues', () => {
             }
         `;
         expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+    });
+
+    it('handles large hostile import clauses without regex backtracking', () => {
+        const padding = ' '.repeat(500_000);
+        const code = `'use server';\nimport {${padding}_sz as cx} from '@csszyx/runtime';`;
+        const startedAt = performance.now();
+
+        expect(() => assertNoRSCBoundaryViolation(code, SERVER_FILE)).toThrow('csszyxRSCViolation');
+        expect(performance.now() - startedAt).toBeLessThan(2_000);
     });
 
     it('allows commented-out forbidden imports without triggering the guard', () => {

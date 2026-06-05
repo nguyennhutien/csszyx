@@ -800,7 +800,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     const themes = sourceFiles
         .map(f => {
             try {
-                return parseThemeBlocks(fs.readFileSync(f, 'utf-8'));
+                return parseThemeBlocks(readStableTextFileSnapshotSync(f).source);
             } catch {
                 return null;
             }

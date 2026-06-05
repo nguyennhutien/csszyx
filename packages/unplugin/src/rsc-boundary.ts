@@ -424,26 +424,19 @@ function skipWhitespaceAndComments(code: string, start: number): number {
 function findRuntimeImports(code: string): Array<{ source: string; symbols: string[] }> {
     const imports: Array<{ source: string; symbols: string[] }> = [];
     const scanCode = stripCommentsForImportScan(code);
-    const staticImportRe = /import\s+(?!type\b)(\S(?:.*\S)?)\s+from\s+['"]([^'"]+)['"]/g;
-    const sideEffectImportRe = /import\s+['"]([^'"]+)['"]/g;
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-    for (const match of scanCode.matchAll(staticImportRe)) {
-        const clause = match[1];
-        const source = match[2];
+    for (const { clause, source } of findStaticImports(scanCode)) {
         if (!isRuntimeImportSource(source)) {
             continue;
         }
-        imports.push({ source, symbols: readRuntimeImportSymbols(source, clause) });
-    }
-
-    for (const match of scanCode.matchAll(sideEffectImportRe)) {
-        const source = match[1];
-        if (isRuntimeImportSource(source)) {
+        if (clause === null) {
             imports.push({
                 source,
                 symbols: isWholeRuntimeModuleForbidden(source) ? Array.from(FORBIDDEN_SYMBOLS) : [],
             });
+        } else {
+            imports.push({ source, symbols: readRuntimeImportSymbols(source, clause) });
         }
     }
 
@@ -455,6 +448,146 @@ function findRuntimeImports(code: string): Array<{ source: string; symbols: stri
     }
 
     return imports;
+}
+
+/**
+ * Static import clause and module source.
+ */
+interface StaticImport {
+    clause: string | null;
+    source: string;
+}
+
+/**
+ * Finds static imports with a linear lexical scan that supports multiline clauses.
+ *
+ * @param code Module source with comments removed.
+ * @returns Discovered static imports.
+ */
+function findStaticImports(code: string): StaticImport[] {
+    const imports: StaticImport[] = [];
+    let cursor = 0;
+    while (cursor < code.length) {
+        const importStart = code.indexOf('import', cursor);
+        if (importStart === -1) {
+            break;
+        }
+        cursor = importStart + 6;
+        if (
+            (importStart > 0 && isIdentifierPart(code.charCodeAt(importStart - 1))) ||
+            isIdentifierPart(code.charCodeAt(cursor))
+        ) {
+            continue;
+        }
+
+        let position = skipAsciiWhitespace(code, cursor);
+        const opener = code.charAt(position);
+        if (opener === '(') {
+            continue;
+        }
+        if (opener === '"' || opener === "'") {
+            const literal = readQuotedString(code, position);
+            if (literal) {
+                imports.push({ clause: null, source: literal.value });
+                cursor = literal.end;
+            }
+            continue;
+        }
+
+        const clauseStart = position;
+        let fromStart = -1;
+        while (position < code.length) {
+            if (
+                code.startsWith('from', position) &&
+                (position === clauseStart || !isIdentifierPart(code.charCodeAt(position - 1))) &&
+                !isIdentifierPart(code.charCodeAt(position + 4))
+            ) {
+                fromStart = position;
+                break;
+            }
+            if (code.charAt(position) === ';') {
+                break;
+            }
+            position += 1;
+        }
+        if (fromStart === -1) {
+            continue;
+        }
+
+        const clause = code.slice(clauseStart, fromStart).trim();
+        if (splitAsciiWhitespace(clause)[0] === 'type') {
+            cursor = fromStart + 4;
+            continue;
+        }
+        position = skipAsciiWhitespace(code, fromStart + 4);
+        const literal = readQuotedString(code, position);
+        if (literal) {
+            imports.push({ clause, source: literal.value });
+            cursor = literal.end;
+        }
+    }
+    return imports;
+}
+
+/**
+ * Reads a single- or double-quoted JavaScript string literal.
+ *
+ * @param code Module source.
+ * @param start Opening quote offset.
+ * @returns Decoded string and ending offset, or null when malformed.
+ */
+function readQuotedString(code: string, start: number): { end: number; value: string } | null {
+    const quote = code.charAt(start);
+    if (quote !== '"' && quote !== "'") {
+        return null;
+    }
+    let value = '';
+    for (let index = start + 1; index < code.length; index += 1) {
+        const char = code.charAt(index);
+        if (char === '\\') {
+            if (index + 1 >= code.length) {
+                return null;
+            }
+            value += code.charAt(index + 1);
+            index += 1;
+        } else if (char === quote) {
+            return { end: index + 1, value };
+        } else if (char === '\n' || char === '\r') {
+            return null;
+        } else {
+            value += char;
+        }
+    }
+    return null;
+}
+
+/**
+ * Advances past JavaScript ASCII whitespace.
+ *
+ * @param code Module source.
+ * @param start Initial offset.
+ * @returns First non-whitespace offset.
+ */
+function skipAsciiWhitespace(code: string, start: number): number {
+    let index = start;
+    while (index < code.length) {
+        const charCode = code.charCodeAt(index);
+        if (charCode !== 9 && charCode !== 10 && charCode !== 13 && charCode !== 32) {
+            break;
+        }
+        index += 1;
+    }
+    return index;
+}
+
+/**
+ * Returns whether a character code can continue an ASCII identifier.
+ *
+ * @param code Character code.
+ * @returns Whether the character can continue an identifier.
+ */
+function isIdentifierPart(code: number): boolean {
+    return isIdentifierStart(code) || (code >= 48 && code <= 57);
 }
 
 /**
@@ -578,10 +711,17 @@ function resolveLocalModule(importer: string, source: string): string | null {
     ];
 
     for (const candidate of candidates) {
-        if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        try {
+            if (!fs.statSync(candidate).isFile()) {
+                continue;
+            }
             const resolved = normalizeModuleId(candidate);
             resolvedLocalModuleCache.set(cacheKey, resolved);
             return resolved;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                throw error;
+            }
         }
     }
 
@@ -636,7 +776,13 @@ function readImportedSymbols(clause: string): string[] {
         }
     }
 
-    if (/\*\s+as\s+\w+/.test(clause)) {
+    const namespaceParts = splitAsciiWhitespace(clause);
+    if (
+        namespaceParts.length >= 3 &&
+        namespaceParts[0] === '*' &&
+        namespaceParts[1] === 'as' &&
+        isIdentifier(namespaceParts[2] ?? '')
+    ) {
         symbols.push(...FORBIDDEN_SYMBOLS);
     }
 
@@ -646,13 +792,68 @@ function readImportedSymbols(clause: string): string[] {
         braceStart !== -1 && braceEnd !== -1
             ? clause.slice(0, braceStart) + clause.slice(braceEnd + 1)
             : clause;
-    const defaultImport = stripped.match(/^\s*([A-Z_$][\w$]*)\s*(?:,|$)/i);
-    const defaultSymbol = defaultImport?.[1];
+    const defaultCandidate = stripped.trimStart().split(',', 1)[0]?.trim() ?? '';
+    const defaultSymbol = isIdentifier(defaultCandidate) ? defaultCandidate : undefined;
     if (defaultSymbol && FORBIDDEN_SYMBOLS.has(defaultSymbol)) {
         symbols.push(defaultSymbol);
     }
 
     return symbols;
+}
+
+/**
+ * Checks whether a token is a JavaScript identifier accepted in import
+ * clauses. Import parsing only needs ASCII because csszyx runtime helper names
+ * are ASCII.
+ *
+ * @param value Candidate import token.
+ * @returns Whether the token is an identifier.
+ */
+function isIdentifier(value: string): boolean {
+    if (value.length === 0 || !isIdentifierStart(value.charCodeAt(0))) {
+        return false;
+    }
+    for (let index = 1; index < value.length; index += 1) {
+        const code = value.charCodeAt(index);
+        if (!isIdentifierStart(code) && (code < 48 || code > 57)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Returns whether a character code can start an ASCII identifier.
+ *
+ * @param code Character code.
+ * @returns Whether the character can start an identifier.
+ */
+function isIdentifierStart(code: number): boolean {
+    return code === 36 || code === 95 || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+/**
+ * Splits import syntax on JavaScript ASCII whitespace in linear time.
+ *
+ * @param value Import syntax fragment.
+ * @returns Non-empty tokens.
+ */
+function splitAsciiWhitespace(value: string): string[] {
+    const parts: string[] = [];
+    let start = -1;
+    for (let index = 0; index <= value.length; index += 1) {
+        const code = index < value.length ? value.charCodeAt(index) : 32;
+        const whitespace = code === 9 || code === 10 || code === 13 || code === 32;
+        if (whitespace) {
+            if (start !== -1) {
+                parts.push(value.slice(start, index));
+                start = -1;
+            }
+        } else if (start === -1) {
+            start = index;
+        }
+    }
+    return parts;
 }
 
 /**
