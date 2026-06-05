@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 
+import lockfile from 'proper-lockfile';
+
 const DEFAULT_RENAME_RETRIES = 5;
 const DEFAULT_RENAME_RETRY_DELAY_MS = 10;
 const DEFAULT_STALE_LOCK_MS = 30_000;
@@ -221,30 +223,40 @@ export function acquireNextSafelistStateLock(
     const options: NextSafelistStateLockOptions =
         typeof pidOrOptions === 'number' ? { pid: pidOrOptions } : pidOrOptions;
     const metadata = createLockMetadata(options);
+    const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_LOCK_MS;
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+
+    let releaseAdvisory: (() => void) | undefined;
     try {
-        fs.writeFileSync(lockPath, `${JSON.stringify(metadata, null, 2)}\n`, {
-            encoding: 'utf8',
-            flag: 'wx',
+        releaseAdvisory = lockfile.lockSync(lockPath, {
+            realpath: false,
+            stale: staleAfterMs,
+            update: Math.max(1_000, Math.floor(staleAfterMs / 2)),
+            retries: 0,
         });
     } catch (error) {
-        if (!isFileExistsError(error)) {
-            throw error;
-        }
         const existing = readLockMetadata(lockPath);
-        if (existing && isLockLive(existing, options)) {
+        if (existing) {
             throw new Error(formatLiveLockError(existing));
         }
-        fs.writeFileSync(lockPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+        throw error;
+    }
+
+    const existing = readLockMetadata(lockPath);
+    if (existing && isLockLive(existing, options)) {
+        releaseAdvisory();
+        throw new Error(formatLiveLockError(existing));
+    }
+    try {
+        atomicWriteFileSync(lockPath, `${JSON.stringify(metadata, null, 2)}\n`);
+    } catch (error) {
+        releaseAdvisory();
+        throw error;
     }
 
     let released = false;
     const writeCurrentMetadata = (updatedAt: string): void => {
-        fs.writeFileSync(
-            lockPath,
-            `${JSON.stringify({ ...metadata, updatedAt }, null, 2)}\n`,
-            'utf8',
-        );
+        atomicWriteFileSync(lockPath, `${JSON.stringify({ ...metadata, updatedAt }, null, 2)}\n`);
     };
 
     return {
@@ -266,6 +278,12 @@ export function acquireNextSafelistStateLock(
                 }
             } catch {
                 // Lock release is best-effort during process teardown.
+            } finally {
+                try {
+                    releaseAdvisory?.();
+                } catch {
+                    // Advisory release is best-effort during process teardown.
+                }
             }
         },
     };
@@ -593,16 +611,6 @@ function formatLiveLockError(metadata: NextSafelistStateLockMetadata): string {
         `host=${metadata.hostname}`,
         `updatedAt=${metadata.updatedAt}`,
     ].join(' ');
-}
-
-/**
- *
- * @param error
- */
-function isFileExistsError(error: unknown): boolean {
-    return (
-        typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST'
-    );
 }
 
 /**
