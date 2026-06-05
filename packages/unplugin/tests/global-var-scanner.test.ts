@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -614,5 +614,67 @@ describe('rewriteGlobalVarCssAliases', () => {
 
         expect(result.css).toContain('@media (width > var(--brand-breakpoint))');
         expect(result.css).toContain('width: var(---gz);');
+    });
+});
+
+// Regression guard for the scan cache being a best-effort optimization, not a
+// correctness input. A non-writable cache directory (read-only volume,
+// sandboxed runner, or — as first seen in CI — a non-root process pointed at an
+// unwritable absolute path) must never fail the build. This reproduces that
+// failure deterministically on every platform by nesting the cache under a
+// regular file, so `mkdirSync` raises ENOTDIR the way the original EACCES did.
+describe('global variable scan cache resilience', () => {
+    function unwritableCacheDir(): { cacheDir: string; cleanup: () => void } {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-gv-cache-'));
+        const blocker = join(root, 'blocker');
+        writeFileSync(blocker, 'not a directory');
+        // resolveGlobalVarScanCacheDir nests under the file, so any mkdir fails.
+        return {
+            cacheDir: resolveGlobalVarScanCacheDir(blocker),
+            cleanup: () => rmSync(root, { recursive: true, force: true }),
+        };
+    }
+
+    it('does not throw when the cache directory cannot be created', () => {
+        const { cacheDir, cleanup } = unwritableCacheDir();
+        try {
+            const result = scanGlobalVarCss(':root { --brand-primary: red; }');
+            const key = createGlobalVarScanCacheKey({
+                filePath: '/repo/assets/app.css',
+                mtimeMs: 1,
+                css: ':root { --brand-primary: red; }',
+            });
+
+            expect(() => writeGlobalVarScanCache(cacheDir, key, result)).not.toThrow();
+            // The write was swallowed, so a subsequent read misses and the
+            // caller recomputes instead of trusting a half-written entry.
+            expect(readGlobalVarScanCache(cacheDir, key)).toBeNull();
+        } finally {
+            cleanup();
+        }
+    });
+
+    it('completes validation when the scan cache directory is unwritable', () => {
+        const { cacheDir, cleanup } = unwritableCacheDir();
+        try {
+            const result = validateGlobalVarAliasInputs({
+                cssFiles: [
+                    {
+                        filePath: '/repo/assets/app.css',
+                        css: ':root { --brand-primary: red; }',
+                        mtimeMs: 1,
+                    },
+                ],
+                tokens: ['--brand-primary'],
+                aliasPrefix: '---g',
+                cacheDir,
+            });
+
+            expect(result.plan.entries.map(entry => [entry.original, entry.alias])).toEqual([
+                ['--brand-primary', '---gz'],
+            ]);
+        } finally {
+            cleanup();
+        }
     });
 });

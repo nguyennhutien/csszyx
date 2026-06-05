@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -67,10 +67,14 @@ describe('Next safelist state', () => {
         expect(readFileSync(paths.outputPath, 'utf8')).toBe(
             '<div class="bg-red-500"></div>\n<div class="p-8"></div>\n',
         );
-        // The snapshot serializes source paths with forward slashes for
-        // deterministic, cross-platform output, so normalize the OS-native
-        // separators before matching (no-op on POSIX, required on Windows).
-        expect(readFileSync(paths.snapshotPath, 'utf8')).toContain(sourcePath.replace(/\\/g, '/'));
+        // The snapshot stores resolved OS-native paths, and JSON escapes
+        // Windows backslashes to `\\`, so a raw substring match against the
+        // single-backslash path is brittle (it fails on Windows). Decode the
+        // snapshot and compare structured entries instead of raw bytes.
+        const snapshot = JSON.parse(readFileSync(paths.snapshotPath, 'utf8')) as {
+            sources: Array<[string, string[]]>;
+        };
+        expect(snapshot.sources.map(([entry]) => entry)).toContain(resolve(sourcePath));
     });
 
     it('ignores corrupt shard files without dropping valid shards', () => {
