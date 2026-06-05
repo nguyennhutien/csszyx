@@ -150,65 +150,151 @@ export function transformMarkup(
     content: string,
     options: SvelteAdapterOptions = {},
 ): { code: string; count: number } {
-    let result = content;
+    let result = '';
     let count = 0;
+    let cursor = 0;
 
-    // Pattern 1: sz="{{ ... }}" or sz="{ ... }" (double braces for escaped or single braces)
-    // In Svelte, double braces {{ }} are escaped and render as literal { }.
-    // The negated [^"] character class avoids the polynomial backtracking
-    // that [\s\S]*? would suffer on inputs with repeated sz="{{ openings.
-    const staticPattern = /sz="(\{[^"]*\}\}?)"/g;
-
-    result = result.replace(staticPattern, (match, objStr) => {
-        // Handle double braces (escaped) - convert to single
-        let normalizedObjStr = objStr;
-        if (objStr.startsWith('{{') && objStr.endsWith('}}')) {
-            normalizedObjStr = objStr.slice(1, -1);
+    while (cursor < content.length) {
+        const attributeStart = findSzAttribute(content, cursor);
+        if (attributeStart === -1) {
+            result += content.slice(cursor);
+            break;
         }
 
-        const szObj = parseObjectLiteral(normalizedObjStr);
+        result += content.slice(cursor, attributeStart);
+        const match = readSzAttribute(content, attributeStart);
+        if (!match) {
+            result += content.slice(attributeStart, attributeStart + 3);
+            cursor = attributeStart + 3;
+            continue;
+        }
 
+        const szObj = parseObjectLiteral(match.objectSource);
         if (!szObj) {
             if (options.debug) {
-                console.warn(`[csszyx/svelte] Failed to parse sz object: ${objStr}`);
+                console.warn(`[csszyx/svelte] Failed to parse sz object: ${match.objectSource}`);
             }
-            return match; // Return unchanged if parsing fails
-        }
-
-        const className = transform(szObj);
-        count++;
-
-        if (options.debug) {
-            console.log(`[csszyx/svelte] Transformed: ${objStr} -> "${className}"`);
-        }
-
-        return `class="${className}"`;
-    });
-
-    // Pattern 2: sz={...} (Svelte expression binding with static object)
-    const bindPattern = /sz=\{(\{[\s\S]*?\})\}/g;
-
-    result = result.replace(bindPattern, (match, objStr) => {
-        const szObj = parseObjectLiteral(objStr);
-
-        if (!szObj) {
+            result += content.slice(attributeStart, match.end);
+        } else {
+            const className = transform(szObj).className;
+            count += 1;
             if (options.debug) {
-                console.warn(`[csszyx/svelte] Failed to parse sz binding: ${objStr}`);
+                console.log(`[csszyx/svelte] Transformed: ${match.objectSource} -> "${className}"`);
             }
-            return match; // Return unchanged if parsing fails
+            result += `class="${className}"`;
         }
-
-        const className = transform(szObj);
-        count++;
-
-        if (options.debug) {
-            console.log(`[csszyx/svelte] Transformed binding: ${objStr} -> "${className}"`);
-        }
-
-        return `class="${className}"`;
-    });
+        cursor = match.end;
+    }
 
     return { code: result, count };
+}
+
+/**
+ * Parsed bounds and object source for a static `sz` attribute.
+ */
+interface SzAttributeMatch {
+    end: number;
+    objectSource: string;
+}
+
+/**
+ * Finds the next standalone `sz=` attribute without regex backtracking.
+ *
+ * @param content Svelte markup source.
+ * @param from Offset at which scanning begins.
+ * @returns Attribute start offset, or -1 when absent.
+ */
+function findSzAttribute(content: string, from: number): number {
+    let index = content.indexOf('sz=', from);
+    while (index !== -1) {
+        const before = index === 0 ? '<' : content.charAt(index - 1);
+        if (
+            before === '<' ||
+            before === ' ' ||
+            before === '\t' ||
+            before === '\n' ||
+            before === '\r'
+        ) {
+            return index;
+        }
+        index = content.indexOf('sz=', index + 3);
+    }
+    return -1;
+}
+
+/**
+ * Reads a quoted or bound static object from an `sz=` attribute.
+ *
+ * @param content Svelte markup source.
+ * @param start Offset of the `sz=` token.
+ * @returns Parsed attribute bounds, or null when unsupported or malformed.
+ */
+function readSzAttribute(content: string, start: number): SzAttributeMatch | null {
+    const valueStart = start + 3;
+    const opener = content.charAt(valueStart);
+    if (opener === '"' || opener === "'") {
+        const endQuote = content.indexOf(opener, valueStart + 1);
+        if (endQuote === -1) {
+            return null;
+        }
+        let objectSource = content.slice(valueStart + 1, endQuote);
+        if (objectSource.startsWith('{{') && objectSource.endsWith('}}')) {
+            objectSource = objectSource.slice(1, -1);
+        }
+        if (!objectSource.startsWith('{') || !objectSource.endsWith('}')) {
+            return null;
+        }
+        return { end: endQuote + 1, objectSource };
+    }
+
+    if (opener !== '{' || content.charAt(valueStart + 1) !== '{') {
+        return null;
+    }
+    const end = findBalancedBraceEnd(content, valueStart);
+    if (end === -1) {
+        return null;
+    }
+    return {
+        end: end + 1,
+        objectSource: content.slice(valueStart + 1, end),
+    };
+}
+
+/**
+ * Finds the closing brace for a JavaScript expression in linear time.
+ *
+ * @param content Svelte markup source.
+ * @param start Offset of the opening expression brace.
+ * @returns Closing brace offset, or -1 when unbalanced.
+ */
+function findBalancedBraceEnd(content: string, start: number): number {
+    let depth = 0;
+    let quote = '';
+    let escaped = false;
+    for (let index = start; index < content.length; index += 1) {
+        const char = content.charAt(index);
+        if (quote) {
+            if (escaped) {
+                escaped = false;
+            } else if (char === '\\') {
+                escaped = true;
+            } else if (char === quote) {
+                quote = '';
+            }
+            continue;
+        }
+        if (char === '"' || char === "'" || char === '`') {
+            quote = char;
+        } else if (char === '{') {
+            depth += 1;
+        } else if (char === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                return index;
+            }
+        }
+    }
+    return -1;
 }
 
 /**

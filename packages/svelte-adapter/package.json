@@ -24,6 +24,7 @@
   "scripts": {
     "build": "unbuild",
     "dev": "unbuild --stub",
+    "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -42,7 +43,8 @@
     "@types/node": "^20.11.0",
     "svelte": "^5.0.0",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.6"
   },
   "keywords": [
     "csszyx",
