@@ -40,9 +40,11 @@ export function isNextSafelistShardPath(shardsDir: string, filePath: string): bo
     const relative = path.relative(path.resolve(shardsDir), path.resolve(filePath));
     return (
         relative.length > 0 &&
-        !relative.startsWith('.') &&
+        relative !== '..' &&
+        !relative.startsWith(`..${path.sep}`) &&
         !path.isAbsolute(relative) &&
         !relative.includes(path.sep) &&
+        !relative.startsWith('.') &&
         relative.endsWith('.json')
     );
 }
@@ -60,7 +62,12 @@ export function isNextAppSourcePath(root: string, filePath: string): boolean {
     }
 
     const relative = path.relative(path.resolve(root), path.resolve(filePath));
-    return relative.length > 0 && !relative.startsWith('.') && !path.isAbsolute(relative);
+    return (
+        relative.length > 0 &&
+        relative !== '..' &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative)
+    );
 }
 
 /**

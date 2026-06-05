@@ -96,6 +96,7 @@ describe('Next safelist watcher controller', () => {
 
         expect(isNextAppSourcePath(root, path.join(root, 'src/App.tsx'))).toBe(true);
         expect(isNextAppSourcePath(root, path.join(root, 'src/nested/Card.tsx'))).toBe(true);
+        expect(isNextAppSourcePath(root, path.join(root, '.generated/App.tsx'))).toBe(true);
         expect(isNextAppSourcePath(root, path.join(root, '..', 'docs/src/App.tsx'))).toBe(false);
         expect(isNextAppSourcePath(root, 'src/App.tsx')).toBe(false);
     });
