@@ -48,6 +48,22 @@ export function isNextSafelistShardPath(shardsDir: string, filePath: string): bo
 }
 
 /**
+ * Validate that an absolute source event path belongs to the resolved app root.
+ *
+ * @param root Absolute Next app root.
+ * @param filePath Absolute event path.
+ * @returns Whether the source is inside the app root.
+ */
+export function isNextAppSourcePath(root: string, filePath: string): boolean {
+    if (!path.isAbsolute(filePath)) {
+        return false;
+    }
+
+    const relative = path.relative(path.resolve(root), path.resolve(filePath));
+    return relative.length > 0 && !relative.startsWith('.') && !path.isAbsolute(relative);
+}
+
+/**
  * Lifecycle controller between an OS file watcher and the materialization loop.
  *
  * This class deliberately does not import `chokidar` or `fs.watch`. A CLI can
@@ -55,6 +71,7 @@ export function isNextSafelistShardPath(shardsDir: string, filePath: string): bo
  * remains deterministic and package-size neutral.
  */
 export class NextSafelistWatcher {
+    private readonly root: string;
     private readonly shardsDir: string;
     private readonly loop: NextWatcherLoop;
     private started = false;
@@ -65,6 +82,7 @@ export class NextSafelistWatcher {
      * @param options
      */
     constructor(options: NextSafelistWatcherOptions) {
+        this.root = path.resolve(options.context.root);
         this.shardsDir = path.resolve(options.context.safelist.shardsDir);
         this.loop = new NextWatcherLoop(options);
     }
@@ -123,6 +141,21 @@ export class NextSafelistWatcher {
         }
 
         this.loop.notify(`shard:${event}`);
+        return true;
+    }
+
+    /**
+     * Queue tombstone cleanup after a source file is removed.
+     *
+     * @param filePath Absolute deleted source path.
+     * @returns Whether the event was accepted.
+     */
+    notifySourceRemoval(filePath: string): boolean {
+        if (this.closed || !this.started || !isNextAppSourcePath(this.root, filePath)) {
+            return false;
+        }
+
+        this.loop.notify('source:unlink');
         return true;
     }
 

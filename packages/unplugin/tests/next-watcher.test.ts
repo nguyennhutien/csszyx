@@ -3,7 +3,11 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { createNextStateContext } from '../src/next-state-context.js';
-import { isNextSafelistShardPath, NextSafelistWatcher } from '../src/next-watcher.js';
+import {
+    isNextAppSourcePath,
+    isNextSafelistShardPath,
+    NextSafelistWatcher,
+} from '../src/next-watcher.js';
 import type { NextWatcherLoopCycleRunner } from '../src/next-watcher-loop.js';
 
 describe('Next safelist watcher controller', () => {
@@ -87,6 +91,15 @@ describe('Next safelist watcher controller', () => {
         expect(isNextSafelistShardPath(shardsDir, 'abc.json')).toBe(false);
     });
 
+    it('accepts source removal paths only inside the app root', () => {
+        const root = context().root;
+
+        expect(isNextAppSourcePath(root, path.join(root, 'src/App.tsx'))).toBe(true);
+        expect(isNextAppSourcePath(root, path.join(root, 'src/nested/Card.tsx'))).toBe(true);
+        expect(isNextAppSourcePath(root, path.join(root, '..', 'docs/src/App.tsx'))).toBe(false);
+        expect(isNextAppSourcePath(root, 'src/App.tsx')).toBe(false);
+    });
+
     it('coalesces relevant shard events and ignores unrelated cache events', () => {
         const timers = scheduler();
         const reasons: readonly string[][] = [];
@@ -139,6 +152,31 @@ describe('Next safelist watcher controller', () => {
 
         timers.runAll();
         expect(callCount).toBe(2);
+    });
+
+    it('coalesces in-root source removal with shard events for tombstone cleanup', () => {
+        const timers = scheduler();
+        const reasons: readonly string[][] = [];
+        const ctx = context();
+        const watcher = new NextSafelistWatcher({
+            context: ctx,
+            runCycle: (_context, _options, cycleReasons) => {
+                (reasons as string[][]).push([...cycleReasons]);
+                return cycleResult(reasons.length);
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+        });
+        watcher.start();
+
+        expect(watcher.notifySourceRemoval(path.join(ctx.root, 'src/App.tsx'))).toBe(true);
+        expect(watcher.notifySourceRemoval(path.join(ctx.root, '..', 'docs/src/App.tsx'))).toBe(
+            false,
+        );
+        watcher.notify('unlink', path.join(ctx.safelist.shardsDir, 'a.json'));
+        timers.runAll();
+
+        expect(reasons).toEqual([['initial'], ['source:unlink', 'shard:unlink']]);
     });
 
     it('cannot restart after close or accept events before start', () => {
