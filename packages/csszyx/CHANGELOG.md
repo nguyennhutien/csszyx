@@ -1,5 +1,30 @@
 # csszyx
 
+## [0.9.1](https://github.com/nguyennhutien/csszyx/compare/v0.9.0...v0.9.1) (2026-06-05)
+
+
+### Features
+
+* **cli:** add Next.js Turbopack prebuild and safelist watcher commands ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **compiler:** add opt-in dynamic CSS variable mangling and global token aliases ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **compiler:** add Tailwind v4.3 utilities and variants ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **unplugin:** support Next.js 16 Turbopack compile and safelist workflows ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+
+
+### Bug Fixes
+
+* **cli:** canonicalize conflicting display utilities during Tailwind migrations ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **release:** publish the Svelte and Vue adapters required by unplugin ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **runtime:** load the current hydration map script with legacy fallback ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **security:** harden template scanners, file snapshots, and packaging inputs ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **vite:** support Tailwind v4.3 resolver options on Vite 8 ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+
+
+### Performance
+
+* **cli:** replace Babel traversal in Tailwind migration ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+* **unplugin:** batch Rust prescan transforms ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
+
 ## [0.9.0](https://github.com/nguyennhutien/csszyx/compare/v0.8.0...v0.9.0) (2026-05-24)
 
 
