@@ -2,9 +2,9 @@ import { existsSync } from 'node:fs';
 
 import { acquireNextSafelistStateLock } from '../../src/next-safelist-state.js';
 
-const [lockPath, barrierPath, holdMsValue, staleAfterMsValue] = process.argv.slice(2);
-if (!lockPath || !barrierPath) {
-    throw new Error('Expected lockPath and barrierPath worker arguments.');
+const [lockPath, barrierPath, releasePath, staleAfterMsValue] = process.argv.slice(2);
+if (!lockPath || !barrierPath || !releasePath) {
+    throw new Error('Expected lockPath, barrierPath, and releasePath worker arguments.');
 }
 
 process.stdout.write('ready\n');
@@ -21,7 +21,9 @@ try {
         token: `worker-${process.pid}`,
     });
     process.stdout.write(`acquired:${process.pid}\n`);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(holdMsValue ?? 1_000));
+    while (!existsSync(releasePath)) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+    }
     lock.release();
     process.exitCode = 0;
 } catch (error) {

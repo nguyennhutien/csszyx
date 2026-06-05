@@ -23,6 +23,7 @@ interface WorkerResult {
 
 interface WorkerHandle {
     ready: Promise<void>;
+    acquired: Promise<boolean>;
     result: Promise<WorkerResult>;
 }
 
@@ -35,20 +36,12 @@ function tempRoot(): string {
 function spawnWorker(
     lockPath: string,
     barrierPath: string,
-    holdMs = 1_000,
+    releasePath: string,
     staleAfterMs = 2_000,
 ): WorkerHandle {
     const child = spawn(
         process.execPath,
-        [
-            '--import',
-            'tsx',
-            workerPath,
-            lockPath,
-            barrierPath,
-            String(holdMs),
-            String(staleAfterMs),
-        ],
+        ['--import', 'tsx', workerPath, lockPath, barrierPath, releasePath, String(staleAfterMs)],
         {
             cwd: process.cwd(),
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -57,9 +50,14 @@ function spawnWorker(
     let stdout = '';
     let stderr = '';
     let readyResolved = false;
+    let acquiredResolved = false;
     let resolveReady: () => void = () => {};
+    let resolveAcquired: (value: boolean) => void = () => {};
     const ready = new Promise<void>(resolve => {
         resolveReady = resolve;
+    });
+    const acquired = new Promise<boolean>(resolve => {
+        resolveAcquired = resolve;
     });
 
     child.stdout.setEncoding('utf8');
@@ -69,6 +67,10 @@ function spawnWorker(
             readyResolved = true;
             resolveReady();
         }
+        if (!acquiredResolved && stdout.includes('acquired:')) {
+            acquiredResolved = true;
+            resolveAcquired(true);
+        }
     });
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', chunk => {
@@ -77,8 +79,13 @@ function spawnWorker(
 
     return {
         ready,
+        acquired,
         result: new Promise(resolve => {
             child.on('close', code => {
+                if (!acquiredResolved) {
+                    acquiredResolved = true;
+                    resolveAcquired(false);
+                }
                 resolve({ code, stdout, stderr });
             });
         }),
@@ -91,6 +98,7 @@ describe('Next safelist advisory lock across processes', () => {
         const lockPath = join(root, '.csszyx/cache/state.lock');
         const advisoryPath = `${lockPath}.lock`;
         const barrierPath = join(root, 'start-workers');
+        const releasePath = join(root, 'release-winner');
         mkdirSync(advisoryPath, { recursive: true });
         writeFileSync(
             lockPath,
@@ -110,9 +118,17 @@ describe('Next safelist advisory lock across processes', () => {
         const staleTime = new Date(Date.now() - 10_000);
         utimesSync(advisoryPath, staleTime, staleTime);
 
-        const workers = Array.from({ length: 12 }, () => spawnWorker(lockPath, barrierPath));
+        const workers = Array.from({ length: 12 }, () =>
+            spawnWorker(lockPath, barrierPath, releasePath),
+        );
         await Promise.all(workers.map(worker => worker.ready));
         writeFileSync(barrierPath, 'go\n', 'utf8');
+        const acquisitions = await Promise.all(workers.map(worker => worker.acquired));
+        try {
+            expect(acquisitions.filter(Boolean)).toHaveLength(1);
+        } finally {
+            writeFileSync(releasePath, 'release\n', 'utf8');
+        }
         const results = await Promise.all(workers.map(worker => worker.result));
 
         const winners = results.filter(result => result.stdout.includes('acquired:'));
@@ -130,20 +146,30 @@ describe('Next safelist advisory lock across processes', () => {
         const root = tempRoot();
         const lockPath = join(root, '.csszyx/cache/state.lock');
         const ownerBarrier = join(root, 'start-owner');
+        const ownerRelease = join(root, 'release-owner');
         const contenderBarrier = join(root, 'start-contenders');
+        const contenderRelease = join(root, 'release-contenders');
         mkdirSync(dirname(lockPath), { recursive: true });
 
-        const owner = spawnWorker(lockPath, ownerBarrier, 1_500);
+        const owner = spawnWorker(lockPath, ownerBarrier, ownerRelease);
         await owner.ready;
         writeFileSync(ownerBarrier, 'go\n', 'utf8');
-        await waitFor(() => existsSync(lockPath));
+        await expect(owner.acquired).resolves.toBe(true);
 
         const contenders = Array.from({ length: 8 }, () =>
-            spawnWorker(lockPath, contenderBarrier, 10),
+            spawnWorker(lockPath, contenderBarrier, contenderRelease),
         );
         await Promise.all(contenders.map(worker => worker.ready));
         writeFileSync(contenderBarrier, 'go\n', 'utf8');
-        const contenderResults = await Promise.all(contenders.map(worker => worker.result));
+        let contenderResults: WorkerResult[];
+        try {
+            await expect(Promise.all(contenders.map(worker => worker.acquired))).resolves.toEqual(
+                Array.from({ length: 8 }, () => false),
+            );
+            contenderResults = await Promise.all(contenders.map(worker => worker.result));
+        } finally {
+            writeFileSync(ownerRelease, 'release\n', 'utf8');
+        }
         const ownerResult = await owner.result;
 
         expect(ownerResult.code).toBe(0);
@@ -155,14 +181,3 @@ describe('Next safelist advisory lock across processes', () => {
         ).toBe(true);
     }, 15_000);
 });
-
-async function waitFor(assertion: () => boolean, timeoutMs = 3_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        if (assertion()) {
-            return;
-        }
-        await new Promise(resolve => setTimeout(resolve, 10));
-    }
-    throw new Error('Timed out waiting for process lock state.');
-}
