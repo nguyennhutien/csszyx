@@ -285,18 +285,19 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
     ];
 
     let configPath: string | undefined;
+    let content: string | null = null;
     for (const c of candidates) {
-        if (fs.existsSync(c)) {
+        const existing = await readFileOrNull(c);
+        if (existing !== null) {
             configPath = c;
+            content = existing;
             break;
         }
     }
 
-    if (!configPath) {
+    if (!configPath || content === null) {
         return false;
     }
-
-    let content = await fs.readFile(configPath, 'utf8');
 
     // Skip if already has csszyx import
     if (content.includes('csszyx')) {
@@ -345,7 +346,7 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
  * @param cwd - Project root directory.
  * @returns True if injection succeeded.
  */
-async function injectNextPlugin(cwd: string): Promise<boolean> {
+export async function injectNextPlugin(cwd: string): Promise<boolean> {
     const candidates = [
         path.join(cwd, 'next.config.ts'),
         path.join(cwd, 'next.config.mjs'),
@@ -353,9 +354,12 @@ async function injectNextPlugin(cwd: string): Promise<boolean> {
     ];
 
     let configPath: string | undefined;
+    let content: string | null = null;
     for (const c of candidates) {
-        if (fs.existsSync(c)) {
+        const existing = await readFileOrNull(c);
+        if (existing !== null) {
             configPath = c;
+            content = existing;
             break;
         }
     }
@@ -368,8 +372,7 @@ async function injectNextPlugin(cwd: string): Promise<boolean> {
         return true;
     }
 
-    const content = await fs.readFile(configPath, 'utf8');
-    if (content.includes('csszyx')) {
+    if (content?.includes('csszyx')) {
         return true;
     }
 
