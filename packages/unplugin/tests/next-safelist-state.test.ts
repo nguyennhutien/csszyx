@@ -67,7 +67,10 @@ describe('Next safelist state', () => {
         expect(readFileSync(paths.outputPath, 'utf8')).toBe(
             '<div class="bg-red-500"></div>\n<div class="p-8"></div>\n',
         );
-        expect(readFileSync(paths.snapshotPath, 'utf8')).toContain(sourcePath);
+        // The snapshot serializes source paths with forward slashes for
+        // deterministic, cross-platform output, so normalize the OS-native
+        // separators before matching (no-op on POSIX, required on Windows).
+        expect(readFileSync(paths.snapshotPath, 'utf8')).toContain(sourcePath.replace(/\\/g, '/'));
     });
 
     it('ignores corrupt shard files without dropping valid shards', () => {
