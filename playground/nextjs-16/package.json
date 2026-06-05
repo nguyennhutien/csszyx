@@ -13,6 +13,8 @@
         "dev:loader": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 next dev --turbo -p 3019",
         "dev:csszyx-loader": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next dev --turbo -p 3020",
         "build": "pnpm run ensure:sources && next build --webpack",
+        "build:turbo": "pnpm run ensure:sources && pnpm run prebuild:turbo && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next build --turbo",
+        "prebuild:turbo": "csszyx next prebuild --root . --output-file .csszyx/next-loader-classes.html",
         "start": "next start -p 3017",
         "clean:build": "rm -rf .next"
     },

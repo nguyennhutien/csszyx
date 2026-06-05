@@ -32,7 +32,6 @@ if (enableTurboCsszyxLoader) {
                 loader: '@csszyx/unplugin/next-turbo-loader',
                 options: {
                     parserMode: 'rust',
-                    mode: 'development',
                     safelistOutputFile: '.csszyx/next-loader-classes.html',
                     config: {
                         mangleVars: false,

@@ -19,5 +19,10 @@ pnpm run watch:turbo
 pnpm run dev:turbo:next
 ```
 
+`pnpm build:turbo` runs the required production prebuild before
+`next build --turbo`. The loader derives production mode from Next instead of
+hardcoding development, so a missing or mismatched generation manifest fails
+the build before stale state can be consumed.
+
 Turbopack production class/CSS-variable mangling stays unsupported until csszyx
 has a safe public finalization path for CSS/JS asset rewriting.
