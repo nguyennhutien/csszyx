@@ -64,6 +64,36 @@ describe('csszyx next-prebuild command', () => {
         }
     });
 
+    it('discovers a root-level Next app directory by default', async () => {
+        const root = tempRoot();
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(
+            join(root, 'app/page.tsx'),
+            'export default function Page(){return <main sz={{ p: 6 }} />;}',
+        );
+
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+            const code = await nextPrebuild({
+                root,
+                cwd: root,
+                mode: 'development',
+                parserMode: 'babel',
+                json: true,
+            });
+            expect(code).toBe(0);
+            const printed = logSpy.mock.calls.flat().join('\n');
+            const summary = JSON.parse(printed) as {
+                scannedCount: number;
+                safelistOutputPath: string;
+            };
+            expect(summary.scannedCount).toBe(1);
+            expect(readFileSync(summary.safelistOutputPath, 'utf8')).toContain('p-6');
+        } finally {
+            logSpy.mockRestore();
+        }
+    });
+
     it('exits non-zero with reason when the pattern matches no files', async () => {
         const root = tempRoot();
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

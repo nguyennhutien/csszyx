@@ -120,6 +120,9 @@ importers:
       cac:
         specifier: ^6.7.14
         version: 6.7.14
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
       execa:
         specifier: ^8.0.1
         version: 8.0.1
@@ -129,6 +132,9 @@ importers:
       fs-extra:
         specifier: ^11.2.0
         version: 11.3.4
+      minimatch:
+        specifier: ^10.2.4
+        version: 10.2.4
       ora:
         specifier: ^8.0.1
         version: 8.2.0

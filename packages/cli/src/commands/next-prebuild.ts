@@ -14,6 +14,7 @@ import { runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
 
 import { colors, icons } from '../utils/terminal-ui.js';
+import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 /** Options accepted by the `next-prebuild` CLI command. */
 export interface NextPrebuildCommandOptions {
@@ -28,16 +29,6 @@ export interface NextPrebuildCommandOptions {
     json?: boolean;
 }
 
-const DEFAULT_PATTERN = 'src/**/*.{ts,tsx,js,jsx,mjs,cjs}';
-const DEFAULT_IGNORE = [
-    'node_modules/**',
-    '.next/**',
-    '.next-turbo-*/**',
-    '.csszyx/**',
-    'dist/**',
-    'build/**',
-];
-
 /**
  * Run the Next.js Turbopack csszyx prebuild from CLI arguments.
  *
@@ -47,7 +38,7 @@ const DEFAULT_IGNORE = [
 export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Promise<number> {
     const cwd = path.resolve(options.cwd ?? process.cwd());
     const root = path.resolve(options.root ?? cwd);
-    const pattern = options.pattern ?? DEFAULT_PATTERN;
+    const pattern = options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN;
 
     try {
         const mode = normalizeMode(options.mode);
@@ -55,7 +46,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
         const matches = await fg(pattern, {
             cwd: root,
             absolute: true,
-            ignore: [...DEFAULT_IGNORE, ...(options.extraIgnore ?? [])],
+            ignore: [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])],
             dot: false,
             onlyFiles: true,
         });
