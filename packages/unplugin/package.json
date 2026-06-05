@@ -83,6 +83,16 @@
         "types": "./dist/next-prebuild.d.cts",
         "default": "./dist/next-prebuild.cjs"
       }
+    },
+    "./next-watcher": {
+      "import": {
+        "types": "./dist/next-watcher.d.mts",
+        "default": "./dist/next-watcher.mjs"
+      },
+      "require": {
+        "types": "./dist/next-watcher.d.cts",
+        "default": "./dist/next-watcher.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",

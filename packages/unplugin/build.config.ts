@@ -10,6 +10,7 @@ export default defineBuildConfig({
         './src/css-mangler',
         './src/next-turbo-loader',
         './src/next-prebuild',
+        './src/next-watcher',
     ],
     declaration: 'node16',
     rollup: {
