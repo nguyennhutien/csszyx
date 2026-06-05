@@ -799,13 +799,13 @@ of classes the developer has explicitly flagged as "not yet decided."
 
 `csszyx migrate` emits canonical display props, not boolean sugar:
 
-| Tailwind | Migrated sz |
-| -------- | ----------- |
-| `block` | `{ display: 'block' }` |
-| `inline` | `{ display: 'inline' }` |
-| `flex` | `{ display: 'flex' }` |
+| Tailwind      | Migrated sz                  |
+| ------------- | ---------------------------- |
+| `block`       | `{ display: 'block' }`       |
+| `inline`      | `{ display: 'inline' }`      |
+| `flex`        | `{ display: 'flex' }`        |
 | `inline-flex` | `{ display: 'inline-flex' }` |
-| `hidden` | `{ display: 'none' }` |
+| `hidden`      | `{ display: 'none' }`        |
 
 Manual authoring can still use `{ flex: true }`, `{ inlineFlex: true }`, etc.
 The migrate command uses `display` so duplicate display utilities are visible as
