@@ -348,6 +348,11 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     isolate: 'isolate',
     ordinal: 'ordinal',
     'slashed-zero': 'slashedZero',
+    // Bare `transition` (common transition property) and the `group`/`peer`
+    // marker classes round-trip through the compiler as boolean sugar.
+    transition: 'transition',
+    group: 'group',
+    peer: 'peer',
 
     // Divide/Space reverse
     'divide-x-reverse': 'divideXReverse',
