@@ -30,11 +30,15 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
         .cloned()
         .chain(ir.sz_attributes.iter().flat_map(lower_sz_attribute_classes))
         .collect();
+    // Split each static class attribute into individual class tokens, matching
+    // the oxc path: consumers (safelist, mangle) iterate raw_class_names as
+    // single classes, so a whole `"flex gap-2"` string would be treated as one
+    // bogus class on the default rust parser.
     let raw_class_names = ir
         .class_attributes
         .iter()
         .filter(|attr| attr.expression_span.is_none())
-        .map(|attr| attr.value.clone())
+        .flat_map(|attr| attr.value.split_whitespace().map(ToString::to_string))
         .collect();
 
     LoweredSourceClasses {
