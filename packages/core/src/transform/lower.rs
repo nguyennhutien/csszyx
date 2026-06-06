@@ -186,6 +186,17 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                     format!("{prefix}isolation-{value}")
                 });
             }
+            // Bare numeric fractions (1/2, 3/4) are sizing values, not the
+            // `color/op` slash strings the guard below suppresses. Fraction-
+            // friendly properties keep them native (w-1/2, basis-1/3); the rest
+            // wrap them as arbitrary (p-[1/2]). Mirrors the Babel/oxc transform.
+            if is_bare_fraction(value) {
+                return Some(if is_fraction_supported_prop(key) {
+                    format!("{prefix}{class_key}-{value}")
+                } else {
+                    format!("{prefix}{class_key}-[{value}]")
+                });
+            }
 
             if has_slash_opacity(value) {
                 return None;
@@ -437,6 +448,64 @@ fn has_slash_opacity(value: &str) -> bool {
     })
 }
 
+/// Matches a bare numeric fraction such as `1/2` or `3/4` (the `^\d+/\d+$` form).
+fn is_bare_fraction(value: &str) -> bool {
+    let mut parts = value.split('/');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(numerator), Some(denominator), None) => {
+            !numerator.is_empty()
+                && !denominator.is_empty()
+                && numerator.bytes().all(|byte| byte.is_ascii_digit())
+                && denominator.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+/// Properties that accept native Tailwind fractions (w-1/2, basis-1/3) instead
+/// of arbitrary brackets. Mirrors `FRACTION_SUPPORTED_PROPS` in the oxc path.
+fn is_fraction_supported_prop(key: &str) -> bool {
+    matches!(
+        key,
+        "w" | "width"
+            | "min-w"
+            | "minW"
+            | "minWidth"
+            | "max-w"
+            | "maxW"
+            | "maxWidth"
+            | "h"
+            | "height"
+            | "min-h"
+            | "minH"
+            | "minHeight"
+            | "max-h"
+            | "maxH"
+            | "maxHeight"
+            | "size"
+            | "basis"
+            | "flexBasis"
+            | "flex"
+            | "inset"
+            | "inset-x"
+            | "insetX"
+            | "inset-y"
+            | "insetY"
+            | "top"
+            | "right"
+            | "bottom"
+            | "left"
+            | "start"
+            | "end"
+            | "translate"
+            | "translate-x"
+            | "translateX"
+            | "translate-y"
+            | "translateY"
+            | "aspect"
+    )
+}
+
 fn needs_brackets(value: &str) -> bool {
     if value.starts_with('[') && value.ends_with(']') {
         return false;
@@ -671,6 +740,22 @@ mod tests {
         );
         // No `op` member → plain color utility, no slash.
         assert_eq!(color_op("bg", "white", None), ["bg-white"]);
+    }
+
+    #[test]
+    fn lowers_bare_fractions_native_or_arbitrary() {
+        let supported = StaticSzObject {
+            properties: vec![
+                property("w", StaticSzValue::String("1/2".to_string())),
+                property("basis", StaticSzValue::String("1/3".to_string())),
+            ],
+        };
+        assert_eq!(lower_static_sz_object(&supported), ["w-1/2", "basis-1/3"]);
+
+        let arbitrary = StaticSzObject {
+            properties: vec![property("p", StaticSzValue::String("1/2".to_string()))],
+        };
+        assert_eq!(lower_static_sz_object(&arbitrary), ["p-[1/2]"]);
     }
 
     #[test]

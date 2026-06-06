@@ -17,11 +17,6 @@ use csszyx_core::transform::StaticSzObject;
 /// sz objects whose rust lowering is known to diverge from the oxc path,
 /// pending a port. Each entry must be removed once the gap is closed.
 const KNOWN_DIVERGENCES: &[&str] = &[
-    // Numeric fractions: the rust path suppresses any `<digit>/<digit>` as a
-    // slash-opacity string, but TS emits the native (`w-1/2`) or arbitrary
-    // (`p-[1/2]`) fraction depending on the property.
-    r#"{"p":"1/2"}"#,
-    r#"{"w":"1/2"}"#,
     // Unknown boolean shorthand key is not kebab-cased (TS: `break-word`).
     r#"{"breakWord":true}"#,
     // Variant subsystem: `group`/`peer` scope sugar combines with the nested
