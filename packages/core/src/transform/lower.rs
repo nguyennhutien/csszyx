@@ -141,6 +141,28 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if key == "content" {
                 return Some(format_content(value, prefix));
             }
+            // display / position / visibility carry their value as the bare
+            // Tailwind utility (`flex`, `grid`, `absolute`, `visible`), not a
+            // `display-flex` style prefix-value pair. This mirrors the Babel/oxc
+            // transform so both parser paths emit classes Tailwind actually
+            // generates.
+            if key == "display" {
+                return Some(if value == "none" {
+                    format!("{prefix}hidden")
+                } else {
+                    format!("{prefix}{value}")
+                });
+            }
+            if key == "position" {
+                return Some(format!("{prefix}{value}"));
+            }
+            if key == "visibility" {
+                return Some(if value == "hidden" {
+                    format!("{prefix}invisible")
+                } else {
+                    format!("{prefix}{value}")
+                });
+            }
 
             if has_slash_opacity(value) {
                 return None;
@@ -497,6 +519,36 @@ mod tests {
                 "before:bg-no-repeat",
                 "before:content-['']"
             ]
+        );
+    }
+
+    #[test]
+    fn lowers_display_position_visibility_to_bare_utilities() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("display", StaticSzValue::String("flex".to_string())),
+                property("position", StaticSzValue::String("absolute".to_string())),
+                property("visibility", StaticSzValue::String("visible".to_string())),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["flex", "absolute", "visible"]
+        );
+    }
+
+    #[test]
+    fn lowers_display_none_and_visibility_hidden_to_aliases() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("display", StaticSzValue::String("none".to_string())),
+                property("visibility", StaticSzValue::String("hidden".to_string())),
+                property("display", StaticSzValue::String("inline-flex".to_string())),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["hidden", "invisible", "inline-flex"]
         );
     }
 
