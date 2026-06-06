@@ -178,7 +178,10 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             let is_negative = value.starts_with('-');
             let base_value = if is_negative { &value[1..] } else { value };
             let final_value = if needs_brackets(base_value) {
-                format!("[{base_value}]")
+                // Tailwind arbitrary values cannot contain raw spaces (the class
+                // attribute would split into separate tokens), so collapse
+                // whitespace to underscores, matching the Babel/oxc transform.
+                format!("[{}]", normalize_arbitrary_value(base_value))
             } else {
                 base_value.to_string()
             };
@@ -549,6 +552,20 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&object),
             ["hidden", "invisible", "inline-flex"]
+        );
+    }
+
+    #[test]
+    fn escapes_spaces_in_arbitrary_values() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "gridCols",
+                StaticSzValue::String("280px minmax(0,1fr)".to_string()),
+            )],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["grid-cols-[280px_minmax(0,1fr)]"]
         );
     }
 

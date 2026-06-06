@@ -183,6 +183,10 @@ describe('flexbox & grid — grid template columns', () => {
         expect(t({ gridCols: '200px' })).toBe('grid-cols-[200px]');
     });
 
+    it('{ gridCols: "280px minmax(0,1fr)" } → grid-cols-[280px_minmax(0,1fr)] (spaces underscored)', () => {
+        expect(t({ gridCols: '280px minmax(0,1fr)' })).toBe('grid-cols-[280px_minmax(0,1fr)]');
+    });
+
     it('{ gridCols: "--grid-cols" } → grid-cols-(--grid-cols) (css variable)', () => {
         expect(t({ gridCols: '--grid-cols' })).toBe('grid-cols-(--grid-cols)');
     });
