@@ -179,6 +179,13 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                     format!("{prefix}{value}")
                 });
             }
+            if key == "isolation" {
+                return Some(if value == "isolate" {
+                    format!("{prefix}isolate")
+                } else {
+                    format!("{prefix}isolation-{value}")
+                });
+            }
 
             if has_slash_opacity(value) {
                 return None;
@@ -593,11 +600,12 @@ mod tests {
                 property("display", StaticSzValue::String("flex".to_string())),
                 property("position", StaticSzValue::String("absolute".to_string())),
                 property("visibility", StaticSzValue::String("visible".to_string())),
+                property("isolation", StaticSzValue::String("isolate".to_string())),
             ],
         };
         assert_eq!(
             lower_static_sz_object(&object),
-            ["flex", "absolute", "visible"]
+            ["flex", "absolute", "visible", "isolate"]
         );
     }
 
