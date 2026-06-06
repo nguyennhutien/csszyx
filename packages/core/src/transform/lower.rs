@@ -89,6 +89,22 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     continue;
                 }
 
+                // Color-with-opacity object — { bg: { color: 'blue-500', op: 20 } }
+                // → bg-blue-500/20. Distinguished from variant nesting by a
+                // `color` member on a key that maps to a color utility, matching
+                // the Babel/oxc transform; without this it lowered as a nested
+                // variant into broken classes like `bg:text-white` / `bg:op-20`.
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    if let Some(class_name) =
+                        format_color_opacity_object(&property.key, nested, prefix)
+                    {
+                        classes.push(class_name);
+                    }
+                    continue;
+                }
+
                 let variant = variant_prefix(&property.key).unwrap_or(&property.key);
                 let mut next_prefix = String::with_capacity(prefix.len() + property.key.len() + 1);
                 next_prefix.push_str(prefix);
@@ -267,6 +283,51 @@ fn object_string_property<'a>(object: &'a StaticSzObject, key: &str) -> Option<&
             StaticSzValue::String(value) => Some(value.as_str()),
             _ => None,
         })
+}
+
+fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str) -> Option<String> {
+    let tw_prefix = property_prefix(key)?;
+    let raw_color = object_string_property(object, "color")?;
+
+    let color_base = if raw_color.starts_with("--") {
+        format!("({raw_color})")
+    } else if needs_brackets(raw_color) {
+        format!("[{}]", normalize_arbitrary_value(raw_color))
+    } else {
+        normalize_arbitrary_value(raw_color)
+    };
+
+    let op_value = object
+        .properties
+        .iter()
+        .find(|prop| prop.key == "op")
+        .map(|prop| &prop.value);
+
+    match op_value {
+        Some(op_value) => {
+            let op_str = format_opacity_value(op_value)?;
+            Some(format!("{prefix}{tw_prefix}-{color_base}/{op_str}"))
+        }
+        None => Some(format!("{prefix}{tw_prefix}-{color_base}")),
+    }
+}
+
+fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
+    match value {
+        // Integers and half steps (0, 0.5, 50, 75.5 …) stay plain; other
+        // decimals (0.05, 0.02 …) become arbitrary `/[0.05]`. Mirrors the
+        // Babel/oxc `formatOpacity`.
+        StaticSzValue::Number(op) => {
+            if (op * 2.0).fract() == 0.0 {
+                Some(format_abs_number(*op))
+            } else {
+                Some(format!("[{}]", format_abs_number(*op)))
+            }
+        }
+        StaticSzValue::String(op) if op.starts_with("--") => Some(format!("({op})")),
+        StaticSzValue::String(op) => Some(format!("[{op}]")),
+        _ => None,
+    }
 }
 
 fn format_bg_img_string(value: &str, prefix: &str) -> String {
@@ -553,6 +614,55 @@ mod tests {
             lower_static_sz_object(&object),
             ["hidden", "invisible", "inline-flex"]
         );
+    }
+
+    fn color_op(prop: &str, color: &str, op: Option<StaticSzValue>) -> Vec<String> {
+        let mut props = vec![property("color", StaticSzValue::String(color.to_string()))];
+        if let Some(op) = op {
+            props.push(property("op", op));
+        }
+        let object = StaticSzObject {
+            properties: vec![property(
+                prop,
+                StaticSzValue::Object(StaticSzObject { properties: props }),
+            )],
+        };
+        lower_static_sz_object(&object)
+    }
+
+    #[test]
+    fn lowers_color_opacity_objects() {
+        assert_eq!(
+            color_op("bg", "blue-500", Some(StaticSzValue::Number(20.0))),
+            ["bg-blue-500/20"]
+        );
+        assert_eq!(
+            color_op("bg", "--my-color", Some(StaticSzValue::Number(50.0))),
+            ["bg-(--my-color)/50"]
+        );
+        assert_eq!(
+            color_op("bg", "#0d0d12", Some(StaticSzValue::Number(90.0))),
+            ["bg-[#0d0d12]/90"]
+        );
+        assert_eq!(
+            color_op("bg", "black", Some(StaticSzValue::Number(0.05))),
+            ["bg-black/[0.05]"]
+        );
+        assert_eq!(
+            color_op(
+                "bg",
+                "pink-500",
+                Some(StaticSzValue::String("78%".to_string()))
+            ),
+            ["bg-pink-500/[78%]"]
+        );
+        // `color` maps to the `text` utility, mirroring the property map.
+        assert_eq!(
+            color_op("color", "white", Some(StaticSzValue::Number(70.0))),
+            ["text-white/70"]
+        );
+        // No `op` member → plain color utility, no slash.
+        assert_eq!(color_op("bg", "white", None), ["bg-white"]);
     }
 
     #[test]
