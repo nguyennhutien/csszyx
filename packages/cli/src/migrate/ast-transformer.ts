@@ -360,6 +360,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -386,6 +392,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -405,6 +417,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -424,6 +442,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
