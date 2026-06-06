@@ -7,7 +7,9 @@
 use std::borrow::Cow;
 
 use super::{
-    generated::tables::{boolean_class, property_prefix, variant_prefix},
+    generated::tables::{
+        boolean_class, is_aria_state, is_known_variant, property_prefix, variant_prefix,
+    },
     SourceIr, StaticSzObject, StaticSzValue,
 };
 
@@ -107,10 +109,9 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     continue;
                 }
 
-                // Parametric variants combine with `-` and bracket their
-                // parameter rather than chaining a plain `:` like simple
-                // variants do. (group/peer/has/aria additionally need the
-                // variant/aria-state tables and are still handled generically.)
+                // Parametric / scope variants combine with `-` and bracket their
+                // parameter rather than chaining a plain `:` like simple variants
+                // do, matching the Babel/oxc transform.
                 match property.key.as_str() {
                     "supports" => {
                         lower_bracket_param_variant(nested, prefix, "supports", classes);
@@ -122,6 +123,22 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     }
                     "not" => {
                         lower_not_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    "aria" => {
+                        lower_aria_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    "has" => {
+                        lower_has_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    "group" => {
+                        lower_group_peer_variant("group", nested, prefix, classes);
+                        continue;
+                    }
+                    "peer" => {
+                        lower_group_peer_variant("peer", nested, prefix, classes);
                         continue;
                     }
                     _ => {}
@@ -192,6 +209,145 @@ fn lower_not_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
 /// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
 fn get_variant_prefix(key: &str) -> Cow<'static, str> {
     variant_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed)
+}
+
+/// Lowers the `aria` variant: `{ aria: { checked: {...} } }` → `aria-checked:…`
+/// for standard states, `{ aria: { 'busy=true': {...} } }` → `aria-[busy=true]:…`
+/// otherwise.
+fn lower_aria_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        if let StaticSzValue::Object(body) = &property.value {
+            let next_prefix = if is_aria_state(&property.key) {
+                format!("{prefix}aria-{}:", property.key)
+            } else {
+                format!("{prefix}aria-[{}]:", property.key)
+            };
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Lowers the `has` variant: `{ has: { checked: {...} } }` → `has-[:checked]:…`
+/// for states, `{ has: { img: {...} } }` → `has-[img]:…` for raw selectors.
+fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        if let StaticSzValue::Object(body) = &property.value {
+            let selector = property.key.as_str();
+            let next_prefix = if selector.starts_with(':') {
+                format!("{prefix}has-[{selector}]:")
+            } else if is_known_variant(selector) {
+                format!("{prefix}has-[:{selector}]:")
+            } else {
+                format!("{prefix}has-[{selector}]:")
+            };
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Lowers the `group`/`peer` scope variants, mirroring the oxc `handleGroupPeer`:
+/// known variants combine with `-` (group-hover), has/data/aria nest as
+/// parameters, arbitrary selectors bracket, and a named scope appends `/name`.
+fn lower_group_peer_variant(
+    scope: &str,
+    object: &StaticSzObject,
+    prefix: &str,
+    classes: &mut Vec<String>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let nested_key = property.key.as_str();
+
+        match nested_key {
+            "has" => {
+                for selector in &nested.properties {
+                    if let StaticSzValue::Object(body) = &selector.value {
+                        let np = format!("{prefix}{scope}-has-[{}]:", selector.key);
+                        lower_object_into(body, &np, classes);
+                    }
+                }
+                continue;
+            }
+            "data" => {
+                for attr in &nested.properties {
+                    if let StaticSzValue::Object(body) = &attr.value {
+                        let np = format!("{prefix}{scope}-data-[{}]:", attr.key);
+                        lower_object_into(body, &np, classes);
+                    }
+                }
+                continue;
+            }
+            "aria" => {
+                for attr in &nested.properties {
+                    if let StaticSzValue::Object(body) = &attr.value {
+                        let np = if is_aria_state(&attr.key) {
+                            format!("{prefix}{scope}-aria-{}:", attr.key)
+                        } else {
+                            format!("{prefix}{scope}-aria-[{}]:", attr.key)
+                        };
+                        lower_object_into(body, &np, classes);
+                    }
+                }
+                continue;
+            }
+            _ => {}
+        }
+
+        if nested_key.starts_with('.')
+            || nested_key.starts_with('#')
+            || nested_key.starts_with('[')
+            || nested_key.starts_with(':')
+        {
+            let np = format!("{prefix}{scope}-[{nested_key}]:");
+            lower_object_into(nested, &np, classes);
+            continue;
+        }
+
+        if is_known_variant(nested_key) || is_known_variant(get_variant_prefix(nested_key).as_ref())
+        {
+            let mapped = get_variant_prefix(nested_key);
+            let np = format!("{prefix}{scope}-{mapped}:");
+            lower_object_into(nested, &np, classes);
+            continue;
+        }
+
+        // Named scope: { group: { name: { hover: {...} } } } → group-hover/name:
+        for state in &nested.properties {
+            let StaticSzValue::Object(state_body) = &state.value else {
+                continue;
+            };
+            match state.key.as_str() {
+                "data" => {
+                    for attr in &state_body.properties {
+                        if let StaticSzValue::Object(body) = &attr.value {
+                            let np = format!("{prefix}{scope}-data-[{}]/{nested_key}:", attr.key);
+                            lower_object_into(body, &np, classes);
+                        }
+                    }
+                }
+                "aria" => {
+                    for attr in &state_body.properties {
+                        if let StaticSzValue::Object(body) = &attr.value {
+                            let aria_segment = if is_aria_state(&attr.key) {
+                                format!("aria-{}", attr.key)
+                            } else {
+                                format!("aria-[{}]", attr.key)
+                            };
+                            let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
+                            lower_object_into(body, &np, classes);
+                        }
+                    }
+                }
+                _ => {
+                    let mapped = get_variant_prefix(&state.key);
+                    let np = format!("{prefix}{scope}-{mapped}/{nested_key}:");
+                    lower_object_into(state_body, &np, classes);
+                }
+            }
+        }
+    }
 }
 
 fn false_boolean_class(key: &str) -> Option<&'static str> {

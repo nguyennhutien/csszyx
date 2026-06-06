@@ -2914,6 +2914,532 @@
         "oxc": "peer-focus:text-red-500"
     },
     {
+        "sz": "{\"peer\":{\"checked\":{\"bg\":\"green-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "peer",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "checked",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "green-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "peer-checked:bg-green-500"
+    },
+    {
+        "sz": "{\"group\":{\"has\":{\"input\":{\"block\":true}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "has",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "input",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "block",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "boolean",
+                                                                        "value": true
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-has-[input]:block"
+    },
+    {
+        "sz": "{\"group\":{\"data\":{\"active\":{\"bg\":\"blue-500\"}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "data",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "active",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "bg",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "string",
+                                                                        "value": "blue-500"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-data-[active]:bg-blue-500"
+    },
+    {
+        "sz": "{\"group\":{\"aria\":{\"checked\":{\"bg\":\"blue-500\"}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "aria",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "checked",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "bg",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "string",
+                                                                        "value": "blue-500"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-aria-checked:bg-blue-500"
+    },
+    {
+        "sz": "{\"group\":{\".is-published\":{\"block\":true}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": ".is-published",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "block",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "boolean",
+                                                        "value": true
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-[.is-published]:block"
+    },
+    {
+        "sz": "{\"group\":{\"sidebar\":{\"hover\":{\"color\":\"white\"}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "sidebar",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "hover",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "color",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "string",
+                                                                        "value": "white"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-hover/sidebar:text-white"
+    },
+    {
+        "sz": "{\"has\":{\"checked\":{\"bg\":\"blue-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "has",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "checked",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "blue-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "has-[:checked]:bg-blue-500"
+    },
+    {
+        "sz": "{\"has\":{\"img\":{\"rounded\":\"lg\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "has",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "img",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "rounded",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "lg"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "has-[img]:rounded-lg"
+    },
+    {
+        "sz": "{\"aria\":{\"checked\":{\"bg\":\"blue-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "aria",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "checked",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "blue-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "aria-checked:bg-blue-500"
+    },
+    {
+        "sz": "{\"aria\":{\"busy=true\":{\"p\":2}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "aria",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "busy=true",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "p",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "number",
+                                                        "value": 2
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "aria-[busy=true]:p-2"
+    },
+    {
         "sz": "{\"group-hover\":{\"dark\":{\"text\":\"white\"}}}",
         "ir": {
             "properties": [
