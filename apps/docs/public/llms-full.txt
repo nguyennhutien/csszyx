@@ -3578,10 +3578,10 @@ Convert `className=` (JSX/TSX) or `class=` (HTML) to `sz=` props:
 ### Basic usage
 
 ```bash
-npx csszyx migrate src/           # migrate all JSX/TSX/HTML under src/
-npx csszyx migrate --dry-run      # preview changes without writing files
-npx csszyx migrate --ignore "**/*.test.tsx,**/fixtures/**"
-npx csszyx migrate --pattern "src/components/**/*.tsx"
+npx @csszyx/cli migrate src/           # migrate all JSX/TSX/HTML under src/
+npx @csszyx/cli migrate --dry-run      # preview changes without writing files
+npx @csszyx/cli migrate --ignore "**/*.test.tsx,**/fixtures/**"
+npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
 ```
 
 Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
@@ -3589,7 +3589,7 @@ Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
 ### Audit — discover unrecognized classes
 
 ```bash
-npx csszyx migrate --audit        # scan + write .csszyx-todo.json (no file edits)
+npx @csszyx/cli migrate --audit        # scan + write .csszyx-todo.json (no file edits)
 ```
 
 `.csszyx-todo.json` is a snapshot map of every class csszyx couldn't recognize.
@@ -3641,7 +3641,7 @@ of guessed. `flex flex-1` is safe and migrates to
 ### `--resolve-todos` — apply the resolution map
 
 ```bash
-npx csszyx migrate --resolve-todos .csszyx-todo.json
+npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json
 ```
 
 Reads `.csszyx-todo.json` and applies it during migration.
@@ -3652,7 +3652,7 @@ Re-run `--audit` to get a fresh snapshot when ready.
 ### `--inject-todos` — mark unrecognized classes in code
 
 ```bash
-npx csszyx migrate --inject-todos
+npx @csszyx/cli migrate --inject-todos
 ```
 
 Inserts `{/* @sz-todo: classname1, classname2 */}` above elements with unrecognized
@@ -3664,20 +3664,20 @@ for still-unresolved classes.
 
 ```bash
 # 1. Dry run to preview
-npx csszyx migrate --dry-run
+npx @csszyx/cli migrate --dry-run
 
 # 2. Audit to find unknowns
-npx csszyx migrate --audit
+npx @csszyx/cli migrate --audit
 # → writes .csszyx-todo.json
 
 # 3. Edit .csszyx-todo.json
 # → set "sz:keep", "sz:remove", or direct sz objects for each entry
 
 # 4. Apply with resolution map
-npx csszyx migrate --resolve-todos .csszyx-todo.json
+npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json
 
 # 5. Re-audit if anything remains unresolved
-npx csszyx migrate --audit
+npx @csszyx/cli migrate --audit
 ```
 
 ### HTML files
@@ -3689,13 +3689,13 @@ Converts `class="..."` → `sz="..."`. FOUC prevention CSS is injected into
 
 ```bash
 # CDN runtime (default URL: https://cdn.csszyx.com/runtime.js)
-npx csszyx migrate public/ --inject-runtime cdn
+npx @csszyx/cli migrate public/ --inject-runtime cdn
 # Local runtime (default path: csszyx-runtime.js)
-npx csszyx migrate public/ --inject-runtime local
+npx @csszyx/cli migrate public/ --inject-runtime local
 # Custom URLs
-npx csszyx migrate public/ --inject-runtime cdn --cdn-url https://my-cdn.com/csszyx.js
-npx csszyx migrate public/ --inject-runtime local --local-path ./vendor/csszyx-runtime.js
+npx @csszyx/cli migrate public/ --inject-runtime cdn --cdn-url https://my-cdn.com/csszyx.js
+npx @csszyx/cli migrate public/ --inject-runtime local --local-path ./vendor/csszyx-runtime.js
 # Format and FOUC options
-npx csszyx migrate public/ --braces    # sz="{ p: 4 }" instead of sz="p: 4"
-npx csszyx migrate public/ --no-fouc  # skip FOUC prevention CSS injection
+npx @csszyx/cli migrate public/ --braces    # sz="{ p: 4 }" instead of sz="p: 4"
+npx @csszyx/cli migrate public/ --no-fouc  # skip FOUC prevention CSS injection
 ```
