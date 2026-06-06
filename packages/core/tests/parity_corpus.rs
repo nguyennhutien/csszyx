@@ -17,13 +17,11 @@ use csszyx_core::transform::StaticSzObject;
 /// sz objects whose rust lowering is known to diverge from the oxc path,
 /// pending a port. Each entry must be removed once the gap is closed.
 const KNOWN_DIVERGENCES: &[&str] = &[
-    // Variant subsystem: `group`/`peer` scope sugar combines with the nested
-    // variant via `-` (group-hover), and `supports`/`not` are parametric
-    // variants; the rust path chains every nesting level with a plain `:`.
+    // Variant subsystem: `group`/`peer` scope sugar combines the scope with the
+    // nested variant via `-` (group-hover) and needs the variant/aria tables;
+    // the rust path still chains each nesting level with a plain `:`.
     r#"{"group":{"hover":{"color":"white"}}}"#,
     r#"{"peer":{"focus":{"text":"red-500"}}}"#,
-    r#"{"supports":{"display:grid":{"grid":true}}}"#,
-    r#"{"not":{"first":{"mt":4}}}"#,
 ];
 
 #[derive(serde::Deserialize)]

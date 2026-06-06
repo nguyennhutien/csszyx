@@ -206,7 +206,12 @@ const corpus = [
     { md: { hover: { text: 'white' } } },
     { '[&>span]': { p: 1 } },
     { supports: { 'display:grid': { grid: true } } },
+    { supports: { 'backdrop-filter:blur(1px)': { rounded: 'lg' } } },
     { not: { first: { mt: 4 } } },
+    { not: { hover: { opacity: 75 } } },
+    { not: { supports: { 'display:grid': { block: true } } } },
+    { data: { active: { bg: 'blue-500' } } },
+    { data: { 'state=open': { p: 2 } } },
     { firstChild: { ml: 0 } },
     // combinations / multiple props / important
     { p: 4, bg: 'red-500', flex: true },

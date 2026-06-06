@@ -107,6 +107,26 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     continue;
                 }
 
+                // Parametric variants combine with `-` and bracket their
+                // parameter rather than chaining a plain `:` like simple
+                // variants do. (group/peer/has/aria additionally need the
+                // variant/aria-state tables and are still handled generically.)
+                match property.key.as_str() {
+                    "supports" => {
+                        lower_bracket_param_variant(nested, prefix, "supports", classes);
+                        continue;
+                    }
+                    "data" => {
+                        lower_bracket_param_variant(nested, prefix, "data", classes);
+                        continue;
+                    }
+                    "not" => {
+                        lower_not_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    _ => {}
+                }
+
                 let variant = variant_prefix(&property.key).unwrap_or(&property.key);
                 let mut next_prefix = String::with_capacity(prefix.len() + property.key.len() + 1);
                 next_prefix.push_str(prefix);
@@ -126,6 +146,52 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
             }
         }
     }
+}
+
+/// Lowers a parametric bracket variant such as `supports`/`data`:
+/// `{ supports: { 'display:grid': {...} } }` → `supports-[display:grid]:…`,
+/// `{ data: { active: {...} } }` → `data-[active]:…`.
+fn lower_bracket_param_variant(
+    object: &StaticSzObject,
+    prefix: &str,
+    name: &str,
+    classes: &mut Vec<String>,
+) {
+    for property in &object.properties {
+        if let StaticSzValue::Object(body) = &property.value {
+            let next_prefix = format!("{prefix}{name}-[{}]:", property.key);
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Lowers the `not` variant: `{ not: { first: {...} } }` → `not-first:…`, with a
+/// nested supports condition bracketed
+/// (`{ not: { supports: { 'x': {...} } } }` → `not-supports-[x]:…`).
+fn lower_not_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        let StaticSzValue::Object(body) = &property.value else {
+            continue;
+        };
+        if property.key == "supports" {
+            for condition in &body.properties {
+                if let StaticSzValue::Object(inner) = &condition.value {
+                    let next_prefix = format!("{prefix}not-supports-[{}]:", condition.key);
+                    lower_object_into(inner, &next_prefix, classes);
+                }
+            }
+        } else {
+            let variant = get_variant_prefix(&property.key);
+            let next_prefix = format!("{prefix}not-{variant}:");
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
+/// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
+fn get_variant_prefix(key: &str) -> Cow<'static, str> {
+    variant_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed)
 }
 
 fn false_boolean_class(key: &str) -> Option<&'static str> {
