@@ -4,6 +4,8 @@
 //! It is kept separate from rewrite so class-generation parity can be tested
 //! before any source mutation ships.
 
+use std::borrow::Cow;
+
 use super::{
     generated::tables::{boolean_class, property_prefix, variant_prefix},
     SourceIr, StaticSzObject, StaticSzValue,
@@ -135,15 +137,20 @@ fn false_boolean_class(key: &str) -> Option<&'static str> {
 }
 
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
-    let class_key = property_prefix(key).unwrap_or(key);
+    // Unknown keys fall back to a kebab-cased utility name (breakWord →
+    // break-word) the way the oxc path does, instead of the raw camelCase key.
+    let class_key: Cow<str> =
+        property_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed);
 
     match value {
         StaticSzValue::Boolean(true) => Some(format!(
             "{prefix}{}",
-            boolean_class(key).unwrap_or(class_key)
+            boolean_class(key).unwrap_or_else(|| class_key.as_ref())
         )),
         StaticSzValue::Boolean(false) | StaticSzValue::Object(_) => None,
-        StaticSzValue::Number(value) => Some(format_number_class(class_key, *value, prefix)),
+        StaticSzValue::Number(value) => {
+            Some(format_number_class(class_key.as_ref(), *value, prefix))
+        }
         StaticSzValue::String(value) => {
             if key == "bgImg" {
                 return Some(format_bg_img_string(value, prefix));
@@ -448,6 +455,27 @@ fn has_slash_opacity(value: &str) -> bool {
     })
 }
 
+/// Kebab-cases a camelCase key the way the oxc fallback does:
+/// inserts a `-` between a lowercase/digit and an uppercase letter, then
+/// lowercases (breakWord → break-word).
+fn kebab_case(key: &str) -> String {
+    let mut out = String::with_capacity(key.len() + 2);
+    let mut prev_lower_or_digit = false;
+    for ch in key.chars() {
+        if ch.is_ascii_uppercase() {
+            if prev_lower_or_digit {
+                out.push('-');
+            }
+            out.push(ch.to_ascii_lowercase());
+            prev_lower_or_digit = false;
+        } else {
+            out.push(ch.to_ascii_lowercase());
+            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+        }
+    }
+    out
+}
+
 /// Matches a bare numeric fraction such as `1/2` or `3/4` (the `^\d+/\d+$` form).
 fn is_bare_fraction(value: &str) -> bool {
     let mut parts = value.split('/');
@@ -740,6 +768,14 @@ mod tests {
         );
         // No `op` member → plain color utility, no slash.
         assert_eq!(color_op("bg", "white", None), ["bg-white"]);
+    }
+
+    #[test]
+    fn kebab_cases_unknown_keys() {
+        let object = StaticSzObject {
+            properties: vec![property("breakWord", StaticSzValue::Boolean(true))],
+        };
+        assert_eq!(lower_static_sz_object(&object), ["break-word"]);
     }
 
     #[test]

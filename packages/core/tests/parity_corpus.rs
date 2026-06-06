@@ -17,8 +17,6 @@ use csszyx_core::transform::StaticSzObject;
 /// sz objects whose rust lowering is known to diverge from the oxc path,
 /// pending a port. Each entry must be removed once the gap is closed.
 const KNOWN_DIVERGENCES: &[&str] = &[
-    // Unknown boolean shorthand key is not kebab-cased (TS: `break-word`).
-    r#"{"breakWord":true}"#,
     // Variant subsystem: `group`/`peer` scope sugar combines with the nested
     // variant via `-` (group-hover), and `supports`/`not` are parametric
     // variants; the rust path chains every nesting level with a plain `:`.
