@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/dynamic",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Runtime CSS injection engine for @csszyx — injects only CSS not already in the pre-built stylesheet",
   "type": "module",
   "main": "./dist/index.mjs",

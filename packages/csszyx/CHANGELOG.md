@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.9.3](https://github.com/nguyennhutien/csszyx/compare/v0.9.2...v0.9.3) (2026-06-07)
+
+
+### Features
+
+* **unplugin:** Turbopack production-build support — csszyxTurbopack helper + @csszyx/runtime resolution ([#34](https://github.com/nguyennhutien/csszyx/issues/34)) ([412626e](https://github.com/nguyennhutien/csszyx/commit/412626e918a0717566ee1cb36be45b9b86d7b406))
+
 ## [0.9.2](https://github.com/nguyennhutien/csszyx/compare/v0.9.1...v0.9.2) (2026-06-07)
 
 
