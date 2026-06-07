@@ -341,6 +341,7 @@ pub(crate) fn variant_prefix(key: &str) -> Option<&'static str> {
         "userInvalid" => Some("user-invalid"),
         "detailsContent" => Some("details-content"),
         "invertedColors" => Some("inverted-colors"),
+        "forcedColors" => Some("forced-colors"),
         "screenPortrait" => Some("portrait"),
         "screenLandscape" => Some("landscape"),
         "@maxSm" => Some("@max-sm"),
@@ -564,6 +565,10 @@ pub(crate) fn is_known_variant(key: &str) -> bool {
             | "inverted-colors"
             | "invertedColors"
             | "noscript"
+            | "forced-colors"
+            | "forcedColors"
+            | "starting"
+            | "inert"
             | "open"
             | "ltr"
             | "rtl"
