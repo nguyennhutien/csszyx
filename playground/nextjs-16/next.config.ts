@@ -66,9 +66,10 @@ if (enableTurboBroad) {
         safelistOutputFile: '.csszyx/next-loader-classes.html',
         config: { mangleVars: false },
     });
-    if (forceBroadAs) {
+    if (forceBroadAs && turbopack && turbopack.rules) {
         // Guard: reintroduce the bug so the suite proves `as` breaks the build.
-        (turbopack.rules?.['./app/turbo-broad/*.tsx'] as { as?: string }).as = '*.tsx';
+        const broadRule = turbopack.rules['./app/turbo-broad/*.tsx'] as { as?: string };
+        broadRule.as = '*.tsx';
     }
 }
 
