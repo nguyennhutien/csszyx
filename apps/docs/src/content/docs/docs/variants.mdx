@@ -20,9 +20,16 @@ is another sz object with the styles to apply.
 ```
 
 State modifiers: `hover`, `focus`, `active`, `disabled`, `visited`, `target`,
-`first`, `last`, `odd`, `even`, `only`, `empty`.
+`first`, `last`, `odd`, `even`, `only`, `empty`, `inert`.
 
 Camel-cased aliases: `focusWithin`, `focusVisible`, `firstOfType`.
+
+The `starting` variant maps to `@starting-style` for entry transitions:
+
+```tsx
+<div sz={{ starting: { opacity: 0 }, transition: 'opacity' }} />
+// → starting:opacity-0 transition-opacity
+```
 
 ## Responsive Breakpoints
 

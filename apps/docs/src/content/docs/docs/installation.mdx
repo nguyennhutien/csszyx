@@ -91,6 +91,19 @@ scans those strings to generate CSS. Then React handles JSX compilation.
   </TabItem>
 </Tabs>
 
+:::caution[Next.js 16: use webpack mode for full support]
+The webpack plugin is the full-parity path — `sz` transform, production
+class/CSS-variable mangling, and SSR-safe hydration. Next.js 16 defaults to
+Turbopack, so run `next dev --webpack` and `next build --webpack` to use it.
+
+Turbopack support is **experimental** and currently covers the compile +
+Tailwind `@source` safelist flow only — wire `@csszyx/unplugin/next-turbo-loader`
+in `turbopack.rules` and keep the safelist fresh with `csszyx next prebuild`
+(before `next build --turbo`) and `csszyx next watch` (during `next dev --turbo`).
+**Production class and CSS-variable mangling are not available under Turbopack
+yet** — use webpack mode when you need them.
+:::
+
 ## Tailwind CSS v4 Entry Point
 
 CSSzyx requires Tailwind CSS v4. Create a CSS entry point:

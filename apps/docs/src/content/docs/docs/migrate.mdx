@@ -22,6 +22,30 @@ npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
 
 Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
 
+## Understanding the Migration Report
+
+After each run, migrate prints a summary (also written to `.csszyx/logs/`)
+grouped by what happened to each class. The buckets tell you exactly what, if
+anything, still needs manual attention:
+
+| Report line | What it means | What to do |
+|---|---|---|
+| `classNames converted: N` | Recognized utilities moved into `sz={...}` | Nothing |
+| `classNames kept on components (no sz support): N` | `className` on a **custom component** (`<Card className="…" />`), not a DOM element. `sz` only applies to host/DOM elements, so these are left untouched | Convert by hand if the component forwards styles; otherwise leave as-is |
+| `classNames skipped (dynamic): N` | A `clsx` / ternary / template-literal expression migrate could not safely rewrite | Review by hand — simple dynamic cases are converted automatically |
+| `Unrecognized classes (N): …` | Classes with no Tailwind/`sz` mapping (e.g. a project class like `sport-neon`). They **stay in `className`** and are listed here | Feed into `--audit` → `.csszyx-todo.json` and resolve |
+
+Two behaviors to call out explicitly:
+
+- **Unknown _static_ classes stay put.** A class like `sport-neon` is a regular
+  static CSS class, not an atomic utility — migrate leaves it in `className` and
+  reports it as unrecognized. It is **never** folded into a dynamic `_szMerge`
+  call alongside converted classes.
+- **Unrecognized classes inside skipped dynamic patterns are still surfaced.**
+  When a `clsx`/ternary/template expression is skipped, any unmapped classes
+  inside it still appear in the `Unrecognized classes` list — nothing slips
+  through silently, so the audit map stays complete.
+
 ## Audit — Discover Unrecognized Classes
 
 Before migrating, run an audit to see what csszyx cannot automatically convert:
