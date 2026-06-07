@@ -9,6 +9,7 @@
  * | csszyx://reference     | Full API reference (llms-full) |
  * | csszyx://property-map  | PROPERTY_MAP as JSON           |
  * | csszyx://variants      | standard + parametric variants |
+ * | csszyx://setup         | install + framework setup guide|
  */
 
 import fs from 'node:fs';
@@ -22,11 +23,84 @@ import { KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS } from '@csszyx/compiler
 const packageRoot = path.resolve(fileURLToPath(import.meta.url), '../../..');
 const LLMS_FULL_PATH = path.join(packageRoot, 'llms-full.txt');
 
+/**
+ * Project setup guide. Kept in sync with docs/installation. Exposed so an AI
+ * tool wiring csszyx into an app produces a working setup — the common failure
+ * modes are a missing `csszyx-env.d.ts`, `@csszyx/runtime` not being a direct
+ * dependency, and a Turbopack rule with an `as` field.
+ */
+const SETUP_GUIDE = `# csszyx setup
+
+Fastest path: run \`csszyx init\` (it does everything below). Manual steps:
+
+## 1. Install
+\`\`\`bash
+pnpm add csszyx @csszyx/runtime
+pnpm add -D @csszyx/types @csszyx/cli tailwindcss
+\`\`\`
+\`@csszyx/runtime\` and \`@csszyx/types\` MUST be DIRECT dependencies: the
+transform injects a bare \`import { _szMerge } from '@csszyx/runtime'\`, and
+\`@csszyx/types\` provides the \`sz\` JSX types. Strict package managers (pnpm) do
+not resolve them transitively.
+
+## 2. Bundler config
+### Vite
+\`\`\`ts
+import csszyx from 'csszyx/vite';
+import tailwindcss from '@tailwindcss/vite';
+export default defineConfig({ plugins: [...csszyx(), tailwindcss(), react()] });
+// Order matters: csszyx BEFORE tailwindcss BEFORE react.
+\`\`\`
+### Next.js — webpack (full parity, recommended)
+\`\`\`ts
+// next.config.ts
+export default {
+  webpack: (config) => {
+    config.plugins.push(require('@csszyx/unplugin/webpack').default());
+    return config;
+  },
+};
+// Run: next dev --webpack / next build --webpack
+\`\`\`
+### Next.js — Turbopack (experimental; no production class/CSS-var mangling)
+\`\`\`js
+// next.config.mjs
+import { csszyxTurbopack } from '@csszyx/unplugin/next';
+export default {
+  turbopack: csszyxTurbopack({}, { safelistOutputFile: '.csszyx/next-loader-classes.html' }),
+};
+\`\`\`
+- Do NOT set an \`as\` field on the loader rule — the helper omits it; an \`as\`
+  makes the loader output self-match into \`./X.tsx.tsx\` (Module not found).
+- Keep the safelist fresh: \`csszyx next watch\` (dev) and \`csszyx next prebuild\`
+  before \`next build --turbopack\`. Point Tailwind \`@source\` at the safelist file.
+
+## 3. Tailwind v4 entry
+\`\`\`css
+/* src/index.css */
+@import "tailwindcss";
+\`\`\`
+Import it from your app entry.
+
+## 4. TypeScript — enable the \`sz\` prop types
+Create \`csszyx-env.d.ts\` at the project root (kept in tsconfig \`include\`):
+\`\`\`ts
+/// <reference types="@csszyx/types/jsx" />
+\`\`\`
+Without it: \`Property 'sz' does not exist on type 'DetailedHTMLProps<...>'\`.
+
+## Usage
+\`\`\`tsx
+<div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
+\`\`\`
+`;
+
 /** All resource URIs served by this MCP server. */
 export const RESOURCE_URIS = [
     'csszyx://reference',
     'csszyx://property-map',
     'csszyx://variants',
+    'csszyx://setup',
 ] as const;
 
 /**
@@ -59,6 +133,13 @@ export function listResources(): Array<{
             description:
                 'JSON with `standard` variants (hover, focus, dark, sm, md, …) and `parametric` scope variants (group, peer, has, not, data, aria, supports) that take a nested target',
             mimeType: 'application/json',
+        },
+        {
+            uri: 'csszyx://setup',
+            name: 'CSSzyx Setup Guide',
+            description:
+                'How to install and wire csszyx into a project (Vite / Next.js webpack / Next.js Turbopack) — direct @csszyx/runtime + @csszyx/types deps, the sz JSX types (csszyx-env.d.ts), and the Turbopack no-`as` rule',
+            mimeType: 'text/markdown',
         },
     ];
 }
@@ -112,6 +193,11 @@ export function readResource(uri: string): {
                         ),
                     },
                 ],
+            };
+
+        case 'csszyx://setup':
+            return {
+                contents: [{ uri, mimeType: 'text/markdown', text: SETUP_GUIDE }],
             };
 
         default:
