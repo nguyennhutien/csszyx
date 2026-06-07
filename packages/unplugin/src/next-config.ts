@@ -1,20 +1,24 @@
 /**
  * Next.js Turbopack config helper for csszyx.
  *
- * Wires the `turbopack` block correctly so apps avoid the two known foot-guns:
+ * Wires the `turbopack` block so apps avoid the Turbopack foot-guns:
  *
  * 1. The `*.tsx` loader rule must **not** set `as`. csszyx is a same-type
  *    `.tsx -> .tsx` transform; `as: '*.tsx'` makes the loader output re-match
  *    its own rule and Turbopack resolves imports to `./X.tsx.tsx`
  *    (`Module not found`). This helper omits `as`.
- * 2. The transform injects `import { _szMerge } from '@csszyx/runtime'`. A
- *    Turbopack loader cannot resolve bare specifiers (no `resolveId` hook), and
- *    under strict package managers the transitive runtime is not importable by
- *    name, so this helper aliases `@csszyx/runtime` to its resolved path.
+ * 2. `config` defaults to `{ mangleVars: false }` to match what
+ *    `csszyx next prebuild` bakes into the production manifest hash; a mismatch
+ *    fails the loader's config-hash gate ("config hash changed").
+ *
+ * The transform also injects a bare `import { _szMerge } from '@csszyx/runtime'`.
+ * That cannot be fixed from here — a Turbopack `resolveAlias` to an absolute path
+ * is treated as project-relative and breaks — so **`@csszyx/runtime` must be a
+ * direct dependency of the app** (it is declared as a peer dependency; add it to
+ * your `package.json`). See the installation docs.
  *
  * @module
  */
-import { createRequire } from 'node:module';
 
 /** Options forwarded to the csszyx Next Turbopack loader. */
 export interface CsszyxTurbopackOptions {
@@ -60,27 +64,18 @@ export function csszyxTurbopack(
     existing: TurbopackConfig = {},
     options: CsszyxTurbopackOptions = {},
 ): TurbopackConfig {
-    const { glob = '*.tsx', parserMode = 'rust', safelistOutputFile, config } = options;
+    const { glob = '*.tsx', parserMode = 'rust', safelistOutputFile } = options;
+    // Must match `csszyx next prebuild`'s default (it bakes { mangleVars: false }
+    // into the production manifest hash) or the loader's config-hash gate fails.
+    const config = options.config ?? { mangleVars: false };
 
-    const loaderOptions: Record<string, unknown> = { parserMode };
+    const loaderOptions: Record<string, unknown> = { parserMode, config };
     if (safelistOutputFile !== undefined) {
         loaderOptions.safelistOutputFile = safelistOutputFile;
     }
-    if (config !== undefined) {
-        loaderOptions.config = config;
-    }
 
-    const resolveAlias: Record<string, string> = { ...(existing.resolveAlias ?? {}) };
-    if (resolveAlias['@csszyx/runtime'] === undefined) {
-        try {
-            const require = createRequire(import.meta.url);
-            resolveAlias['@csszyx/runtime'] = require.resolve('@csszyx/runtime');
-        } catch {
-            // Not resolvable from here — the @csszyx/runtime peerDependency
-            // (auto-installed by pnpm/npm) and the install docs cover resolution.
-        }
-    }
-
+    // `...existing` preserves the caller's own `resolveAlias` (e.g. maplibre).
+    // We intentionally do NOT alias @csszyx/runtime — see the module doc.
     return {
         ...existing,
         rules: {
@@ -95,6 +90,5 @@ export function csszyxTurbopack(
                 // No `as` field — same-type .tsx -> .tsx transform.
             },
         },
-        resolveAlias,
     };
 }

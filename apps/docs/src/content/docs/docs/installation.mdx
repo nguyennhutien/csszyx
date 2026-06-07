@@ -30,19 +30,21 @@ build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
 or install with `pnpm add -D @csszyx/cli`.
 
-:::note[Add `@csszyx/runtime` for production]
+:::caution[`@csszyx/runtime` must be a direct dependency]
 The build injects runtime helpers as `import { _szMerge } from '@csszyx/runtime'`
 into components that merge or compute classes. Under strict node-linking package
-managers (e.g. pnpm), a *transitive* dependency is not importable by name, so add
-it as a direct dependency:
+managers (e.g. pnpm) a *transitive* dependency is not importable by name — and an
+auto-installed peer stays under `.pnpm/`, not at the top level — so a production
+build fails with `Cannot resolve '@csszyx/runtime'`. **Add it explicitly:**
 
 ```bash
 pnpm add @csszyx/runtime
 ```
 
-`@csszyx/unplugin` declares it as a peer dependency, so package managers with
-auto-install-peers add it automatically; the explicit install guarantees
-production builds (any bundler) resolve it.
+`@csszyx/unplugin` lists it as a peer dependency so your package manager warns
+when it is missing, but you must add it to your own `package.json`. The
+`csszyxTurbopack()` helper does not alias it (a raw absolute Turbopack alias is
+treated as project-relative and breaks).
 :::
 
 ## Setup by Platform

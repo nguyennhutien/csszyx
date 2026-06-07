@@ -61,10 +61,11 @@ if (enableTurboBroad) {
     // a multi-file group rule with NO `as` + the @csszyx/runtime resolveAlias.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { csszyxTurbopack } = require('@csszyx/unplugin/next');
+    // Intentionally omit `config` so the suite exercises the helper's DEFAULT
+    // (must match `csszyx next prebuild`'s hash — the 0.9.3 real-app failure).
     turbopack = csszyxTurbopack(turbopack ?? {}, {
         glob: './app/turbo-broad/*.tsx',
         safelistOutputFile: '.csszyx/next-loader-classes.html',
-        config: { mangleVars: false },
     });
     if (forceBroadAs && turbopack && turbopack.rules) {
         // Guard: reintroduce the bug. The .tsx.tsx self-match needs `as` to equal
