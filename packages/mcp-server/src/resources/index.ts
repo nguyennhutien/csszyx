@@ -8,14 +8,14 @@
  * |------------------------|--------------------------------|
  * | csszyx://reference     | Full API reference (llms-full) |
  * | csszyx://property-map  | PROPERTY_MAP as JSON           |
- * | csszyx://variants      | KNOWN_VARIANTS as JSON array   |
+ * | csszyx://variants      | standard + parametric variants |
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { KNOWN_VARIANTS, PROPERTY_MAP } from '@csszyx/compiler';
+import { KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS } from '@csszyx/compiler';
 
 // Resolve llms-full.txt relative to the package root, not CWD.
 // Works whether the package is installed globally, locally, or run from monorepo.
@@ -56,7 +56,8 @@ export function listResources(): Array<{
         {
             uri: 'csszyx://variants',
             name: 'CSSzyx Variant List',
-            description: 'JSON array of all known variant names (hover, focus, dark, sm, md, etc.)',
+            description:
+                'JSON with `standard` variants (hover, focus, dark, sm, md, …) and `parametric` scope variants (group, peer, has, not, data, aria, supports) that take a nested target',
             mimeType: 'application/json',
         },
     ];
@@ -101,7 +102,14 @@ export function readResource(uri: string): {
                     {
                         uri,
                         mimeType: 'application/json',
-                        text: JSON.stringify([...KNOWN_VARIANTS].sort(), null, 2),
+                        text: JSON.stringify(
+                            {
+                                standard: [...KNOWN_VARIANTS].sort(),
+                                parametric: [...SPECIAL_VARIANTS].sort(),
+                            },
+                            null,
+                            2,
+                        ),
                     },
                 ],
             };
