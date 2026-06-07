@@ -1,5 +1,14 @@
 # csszyx
 
+## [0.9.4](https://github.com/nguyennhutien/csszyx/compare/v0.9.3...v0.9.4) (2026-06-07)
+
+
+### Bug Fixes
+
+* **unplugin:** csszyxTurbopack config/runtime defects + release-pipeline improvements ([#36](https://github.com/nguyennhutien/csszyx/issues/36)) ([0b16ed1](https://github.com/nguyennhutien/csszyx/commit/0b16ed1d5978c3bf4efa6eb12d636d537b0ac113))
+* **unplugin:** default `csszyxTurbopack()` `config` to `{ mangleVars: false }` so it matches the `csszyx next prebuild` manifest hash — the Turbopack production build no longer fails the config-hash gate ([#36](https://github.com/nguyennhutien/csszyx/issues/36))
+* **unplugin:** drop the broken `@csszyx/runtime` resolveAlias (a raw absolute path is treated as project-relative); the injected runtime import resolves when `@csszyx/runtime` is a direct dependency ([#36](https://github.com/nguyennhutien/csszyx/issues/36))
+
 ## [0.9.3](https://github.com/nguyennhutien/csszyx/compare/v0.9.2...v0.9.3) (2026-06-07)
 
 

@@ -3,7 +3,7 @@
   "private": true,
   "displayName": "CSSzyx",
   "description": "IntelliSense, hover docs, and diagnostics for CSSzyx sz props",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "publisher": "csszyx",
   "license": "MIT",
   "icon": "icon.png",
