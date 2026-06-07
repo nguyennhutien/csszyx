@@ -51,6 +51,8 @@ const sources = [
     'const A = () => <div title="sz={{ z: 9 }}" sz={{ p: 4 }} />;',
     'const A = () => <div sz={{ "before:content": "\'\'", before: { p: 1 } }} />;',
     'const A = () => <div sz={{ rounded: "lg", border: 2, shadow: "md" }} />;',
+    'const A = () => <div sz={{ forcedColors: { borderColor: "gray" } }} />;',
+    'const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;',
 ];
 
 const records = sources.map(source => {

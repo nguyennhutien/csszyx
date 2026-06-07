@@ -108,5 +108,15 @@
         "source": "const A = () => <div sz={{ rounded: \"lg\", border: 2, shadow: \"md\" }} />;",
         "classes": ["border-2", "rounded-lg", "shadow-md"],
         "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ forcedColors: { borderColor: \"gray\" } }} />;",
+        "classes": ["forced-colors:border-gray"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;",
+        "classes": ["inert:opacity-50", "starting:opacity-0"],
+        "rawClassNames": []
     }
 ]
