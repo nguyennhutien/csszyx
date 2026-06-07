@@ -90,9 +90,22 @@ jobs:
               gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
                 --field "ref=refs/tags/v${version}" \
                 --field "sha=${sha}" > /dev/null
-              gh release create "v${version}" \
-                --title "v${version}" \
-                --generate-notes > /dev/null
+              # Prefer the CHANGELOG section for this version (rich + consistent
+              # with the file) over GitHub's PR-list auto-notes. Fetch via the
+              # API (no checkout needed) and fall back to --generate-notes if the
+              # section is missing.
+              gh api "repos/${GH_REPO}/contents/packages/csszyx/CHANGELOG.md?ref=${sha}" \
+                --jq '.content' 2>/dev/null | base64 -d > /tmp/changelog-full.md || true
+              awk -v ver="$version" \
+                'index($0, "## ["ver"]") == 1 { p=1; print; next } p && /^## \[/ { exit } p { print }' \
+                /tmp/changelog-full.md > /tmp/release-notes.md || true
+              if [ -s /tmp/release-notes.md ]; then
+                gh release create "v${version}" --title "v${version}" \
+                  --notes-file /tmp/release-notes.md > /dev/null
+              else
+                gh release create "v${version}" --title "v${version}" \
+                  --generate-notes > /dev/null
+              fi
               recovered=$((recovered + 1))
             fi
             gh pr edit "${num}" \
