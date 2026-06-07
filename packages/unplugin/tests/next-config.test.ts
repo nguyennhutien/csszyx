@@ -46,16 +46,17 @@ describe('csszyxTurbopack', () => {
         expect(tp.resolveAlias?.['maplibre-gl']).toBe('maplibre-gl/dist/maplibre-gl.js');
     });
 
-    it('aliases @csszyx/runtime when resolvable, never clobbers a user alias', () => {
-        // User-provided alias always wins.
-        const withUser = csszyxTurbopack({
-            resolveAlias: { '@csszyx/runtime': '/custom/runtime.js' },
-        });
-        expect(withUser.resolveAlias?.['@csszyx/runtime']).toBe('/custom/runtime.js');
+    it('defaults config to { mangleVars: false } to match the prebuild hash', () => {
+        const rule = csszyxTurbopack().rules?.['*.tsx'] as {
+            loaders: Array<{ options: { config: unknown } }>;
+        };
+        expect(rule.loaders[0].options.config).toEqual({ mangleVars: false });
+    });
 
-        // Otherwise it is either a resolved path string or absent (best-effort).
-        const auto = csszyxTurbopack();
-        const alias = auto.resolveAlias?.['@csszyx/runtime'];
-        expect(alias === undefined || typeof alias === 'string').toBe(true);
+    it('does NOT auto-add a @csszyx/runtime alias (must be a direct dep)', () => {
+        // A raw absolute resolveAlias breaks Turbopack (treated as relative), so
+        // the helper adds no @csszyx/runtime alias — only the caller's own.
+        expect(csszyxTurbopack().resolveAlias?.['@csszyx/runtime']).toBeUndefined();
+        expect(csszyxTurbopack({ resolveAlias: { x: 'y' } }).resolveAlias).toEqual({ x: 'y' });
     });
 });

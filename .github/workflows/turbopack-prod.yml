@@ -56,6 +56,11 @@ jobs:
       - name: Setup WASM toolchain
         uses: ./.github/actions/setup-wasm
 
+      - name: Cache cargo (native build)
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: host-native
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
