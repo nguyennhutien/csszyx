@@ -208,8 +208,26 @@ via the `szRecover` JSX attribute on individual elements; see
 
 ## TypeScript
 
-The `sz` prop is automatically available on all HTML elements once `csszyx` is
-installed. No extra configuration needed:
+The `sz` prop comes from a JSX type augmentation in `@csszyx/types`. It is
+picked up automatically when you `import` from `csszyx` in a hoisting package
+manager. With a **strict package manager (pnpm)**, or if your app uses `sz`
+without importing `csszyx` directly, add a one-line reference so TypeScript
+loads the augmentation:
+
+1. Install the types so the reference resolves at the top level:
+
+   ```bash
+   pnpm add -D @csszyx/types
+   ```
+
+2. Add a `csszyx-env.d.ts` at your project root (kept in your `tsconfig.json`
+   `include`):
+
+   ```ts
+   /// <reference types="@csszyx/types/jsx" />
+   ```
+
+Then the `sz` prop is typed on every element:
 
 ```tsx
 // ✅ TypeScript knows this is valid
@@ -253,8 +271,11 @@ Fix: explicitly declare `tailwindcss` as a dependency in each package that uses 
 **Plugin order warnings** — CSSzyx must be **before** Tailwind and React in
 the plugins array.
 
-**TypeScript errors with `sz` prop** — make sure `csszyx` is installed. The
-JSX type augmentation is included in the package.
+**TypeScript errors with `sz` prop** (`Property 'sz' does not exist on type
+'DetailedHTMLProps<...>'`) — the JSX augmentation is not loaded. Add
+`@csszyx/types` and a `csszyx-env.d.ts` with
+`/// <reference types="@csszyx/types/jsx" />`; see [TypeScript](#typescript)
+above. This is common under pnpm and when `csszyx` is never imported directly.
 
 **Hydration warnings in Next.js** — initialize the runtime in your root layout
 and opt in to per-element recovery with `<section szRecover="csr">…</section>`
