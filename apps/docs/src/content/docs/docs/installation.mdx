@@ -108,40 +108,48 @@ scans those strings to generate CSS. Then React handles JSX compilation.
   </TabItem>
 </Tabs>
 
-:::caution[Next.js 16: use webpack mode for full support]
-The webpack plugin is the full-parity path — `sz` transform, production
-class/CSS-variable mangling, and SSR-safe hydration. Next.js 16 defaults to
-Turbopack, so run `next dev --webpack` and `next build --webpack` to use it.
+:::caution[Next.js 16: webpack vs Turbopack]
+**Webpack mode is the full-parity path** — `sz` transform, production class /
+CSS-variable mangling, and SSR-safe hydration. The `webpack` config above works
+as-is; run `next dev --webpack` and `next build --webpack` (Next.js 16 defaults
+to Turbopack).
 
-Turbopack support is **experimental** and currently covers the compile +
-Tailwind `@source` safelist flow only — wire `@csszyx/unplugin/next-turbo-loader`
-in `turbopack.rules` and keep the safelist fresh with `csszyx next prebuild`
-(before `next build --turbo`) and `csszyx next watch` (during `next dev --turbo`).
-
-When you add the rule, use a `*.tsx` glob with the loader and **do not set an
-`as` field**. csszyx is a same-type `.tsx → .tsx` transform; setting
-`as: '*.tsx'` makes the loader output re-match its own rule and Turbopack
-resolves imports to `./X.tsx.tsx` → `Module not found`. (`as` is only for
-loaders that change a file's type, e.g. `.svg → *.js`.)
-
-**Production class and CSS-variable mangling are not available under Turbopack
-yet** — use webpack mode when you need them.
+**Turbopack mode is experimental** — it covers the `sz` transform and the
+Tailwind `@source` safelist, but **not** production class / CSS-variable
+mangling. Use webpack mode when you need those.
 :::
 
-The `@csszyx/unplugin/next` helper wires the rule (no `as`) and the
-`@csszyx/runtime` alias for you, so you avoid both foot-guns:
+### Next.js Turbopack setup
 
-```js
-// next.config.mjs
-import { csszyxTurbopack } from '@csszyx/unplugin/next';
+1. **Add `@csszyx/runtime` as a direct dependency.** The transform injects a
+   bare `import { _szMerge } from '@csszyx/runtime'`, which a strict package
+   manager (pnpm) does not resolve as a transitive dependency.
 
-export default {
-  turbopack: csszyxTurbopack(
-    {}, // your existing turbopack config (resolveAlias, other rules) is merged
-    { safelistOutputFile: '.csszyx/next-loader-classes.html' },
-  ),
-};
-```
+   ```bash
+   pnpm add @csszyx/runtime
+   ```
+
+2. **Wire the loader with the `csszyxTurbopack()` helper.** It sets the `*.tsx`
+   loader rule correctly (without `as`, which would otherwise self-match into
+   `./X.tsx.tsx`) and merges your existing `turbopack` config.
+
+   ```js
+   // next.config.mjs
+   import { csszyxTurbopack } from '@csszyx/unplugin/next';
+
+   export default {
+     turbopack: csszyxTurbopack(
+       {}, // your existing turbopack config (resolveAlias, other rules) is merged
+       { safelistOutputFile: '.csszyx/next-loader-classes.html' },
+     ),
+   };
+   ```
+
+3. **Keep the Tailwind safelist fresh.** Point `@source` at the safelist file
+   and run the csszyx watcher/prebuild around Next:
+
+   - dev: `csszyx next watch` (alongside `next dev --turbopack`)
+   - build: `csszyx next prebuild` before `next build --turbopack`
 
 ## Tailwind CSS v4 Entry Point
 
