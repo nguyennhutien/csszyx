@@ -64,6 +64,16 @@
         "default": "./dist/css-mangler.cjs"
       }
     },
+    "./next": {
+      "import": {
+        "types": "./dist/next-config.d.mts",
+        "default": "./dist/next-config.mjs"
+      },
+      "require": {
+        "types": "./dist/next-config.d.cts",
+        "default": "./dist/next-config.cjs"
+      }
+    },
     "./next-turbo-loader": {
       "import": {
         "types": "./dist/next-turbo-loader.d.mts",
@@ -119,6 +129,9 @@
     "postcss-value-parser": "^4.2.0",
     "proper-lockfile": "^4.1.2",
     "unplugin": "^1.10.1"
+  },
+  "peerDependencies": {
+    "@csszyx/runtime": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

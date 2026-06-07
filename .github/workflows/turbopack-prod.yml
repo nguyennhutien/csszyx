@@ -1,0 +1,69 @@
+name: Turbopack Production Build
+
+# Conditional regression suite for the Next.js Turbopack production-build path
+# (csszyxTurbopack helper + broad-glob recipe + @csszyx/runtime resolution).
+# It is expensive (native engine + a real `next build --turbopack`), so it does
+# NOT run on every push. It triggers only when the thing it guards can change:
+#   - the Turbopack/Next version (playground/nextjs-16/package.json)
+#   - the csszyx Turbopack integration code (packages/unplugin/src/next-*)
+#   - the fixture / recipe / this workflow / the verify script
+# Plus manual `workflow_dispatch` to re-run on demand (e.g. after a Next release).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'playground/nextjs-16/package.json'
+      - 'playground/nextjs-16/next.config.ts'
+      - 'playground/nextjs-16/app/turbo-broad/**'
+      - 'packages/unplugin/src/next-*.ts'
+      - 'scripts/verify-turbopack-prod.sh'
+      - '.github/workflows/turbopack-prod.yml'
+  pull_request:
+    paths:
+      - 'playground/nextjs-16/package.json'
+      - 'playground/nextjs-16/next.config.ts'
+      - 'playground/nextjs-16/app/turbo-broad/**'
+      - 'packages/unplugin/src/next-*.ts'
+      - 'scripts/verify-turbopack-prod.sh'
+      - '.github/workflows/turbopack-prod.yml'
+
+jobs:
+  turbo-prod:
+    name: Turbopack prod build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Setup WASM toolchain
+        uses: ./.github/actions/setup-wasm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Verify Turbopack production build (broad glob + helper + runtime)
+        run: bash scripts/verify-turbopack-prod.sh

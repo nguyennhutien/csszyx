@@ -451,6 +451,9 @@ importers:
       '@csszyx/core':
         specifier: workspace:*
         version: link:../core
+      '@csszyx/runtime':
+        specifier: workspace:^
+        version: link:../runtime
       '@csszyx/svelte-adapter':
         specifier: workspace:*
         version: link:../svelte-adapter

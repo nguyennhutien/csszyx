@@ -30,6 +30,21 @@ build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
 or install with `pnpm add -D @csszyx/cli`.
 
+:::note[Add `@csszyx/runtime` for production]
+The build injects runtime helpers as `import { _szMerge } from '@csszyx/runtime'`
+into components that merge or compute classes. Under strict node-linking package
+managers (e.g. pnpm), a *transitive* dependency is not importable by name, so add
+it as a direct dependency:
+
+```bash
+pnpm add @csszyx/runtime
+```
+
+`@csszyx/unplugin` declares it as a peer dependency, so package managers with
+auto-install-peers add it automatically; the explicit install guarantees
+production builds (any bundler) resolve it.
+:::
+
 ## Setup by Platform
 
 <Tabs>
@@ -100,9 +115,31 @@ Turbopack support is **experimental** and currently covers the compile +
 Tailwind `@source` safelist flow only — wire `@csszyx/unplugin/next-turbo-loader`
 in `turbopack.rules` and keep the safelist fresh with `csszyx next prebuild`
 (before `next build --turbo`) and `csszyx next watch` (during `next dev --turbo`).
+
+When you add the rule, use a `*.tsx` glob with the loader and **do not set an
+`as` field**. csszyx is a same-type `.tsx → .tsx` transform; setting
+`as: '*.tsx'` makes the loader output re-match its own rule and Turbopack
+resolves imports to `./X.tsx.tsx` → `Module not found`. (`as` is only for
+loaders that change a file's type, e.g. `.svg → *.js`.)
+
 **Production class and CSS-variable mangling are not available under Turbopack
 yet** — use webpack mode when you need them.
 :::
+
+The `@csszyx/unplugin/next` helper wires the rule (no `as`) and the
+`@csszyx/runtime` alias for you, so you avoid both foot-guns:
+
+```js
+// next.config.mjs
+import { csszyxTurbopack } from '@csszyx/unplugin/next';
+
+export default {
+  turbopack: csszyxTurbopack(
+    {}, // your existing turbopack config (resolveAlias, other rules) is merged
+    { safelistOutputFile: '.csszyx/next-loader-classes.html' },
+  ),
+};
+```
 
 ## Tailwind CSS v4 Entry Point
 

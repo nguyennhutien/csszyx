@@ -11,6 +11,7 @@ export default defineBuildConfig({
         './src/next-turbo-loader',
         './src/next-prebuild',
         './src/next-watcher',
+        './src/next-config',
     ],
     declaration: 'node16',
     rollup: {
