@@ -212,7 +212,12 @@ The `sz` prop comes from a JSX type augmentation in `@csszyx/types`. It is
 picked up automatically when you `import` from `csszyx` in a hoisting package
 manager. With a **strict package manager (pnpm)**, or if your app uses `sz`
 without importing `csszyx` directly, add a one-line reference so TypeScript
-loads the augmentation:
+loads the augmentation.
+
+:::tip
+`csszyx init` does the two steps below for you (creates `csszyx-env.d.ts` and
+adds `@csszyx/types` + `@csszyx/runtime`). Do this manually for existing apps:
+:::
 
 1. Install the types so the reference resolves at the top level:
 
