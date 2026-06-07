@@ -5,6 +5,7 @@ CSS-in-JS framework for the AI era — Tailwind-v4 object syntax, build-time cla
 > **Pronunciation:** "css-zyx". Class names are encoded in reversed tier order `z → y → x → … → A` for maximum compression of the most common utilities.
 
 [![npm version](https://img.shields.io/npm/v/csszyx.svg)](https://www.npmjs.com/package/csszyx)
+[![npm downloads](https://img.shields.io/npm/dm/csszyx.svg)](https://www.npmjs.com/package/csszyx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://img.shields.io/github/actions/workflow/status/nguyennhutien/csszyx/ci.yml?branch=main)](https://github.com/nguyennhutien/csszyx/actions/workflows/ci.yml)
 
@@ -152,11 +153,13 @@ window.__csszyx.checksum; // SHA-256 hex
 
 ## Project Status
 
-- **Version:** 0.9.0 (pre-release)
-- **Tests:** 2479 unit (vitest) + 34 E2E (Playwright) across 14 workspace packages
+Pre-1.0 — the API may still change before a 1.0 release. The badges above
+track the current published version and CI; run `pnpm test` for the live test
+count. The package list is in [Packages](#packages).
+
 - **Tailwind:** v4 only (v3 planned)
 - **Release cadence:** automated via [release-please](https://github.com/googleapis/release-please-action); see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
-- **Build pipeline:** source transform uses the native Rust engine (`@csszyx/core-*` napi-rs addon) by default since v0.9.0. The JavaScript `oxc-parser` path is available via `build.parser: 'oxc'` or `CSSZYX_PARSER=oxc` for platforms without native binaries. Babel remains as a final compatibility escape hatch via `build.parser: 'babel'`.
+- **Build pipeline:** source transform uses the native Rust engine (`@csszyx/core-*` napi-rs addon) by default. The JavaScript `oxc-parser` path is available via `build.parser: 'oxc'` or `CSSZYX_PARSER=oxc` for platforms without native binaries. Babel remains as a final compatibility escape hatch via `build.parser: 'babel'`.
 
 ## Contributing
 
