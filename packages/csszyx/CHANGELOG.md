@@ -6,6 +6,8 @@
 ### Features
 
 * zero-friction csszyx setup (init types, MCP setup resource, docs) ([#38](https://github.com/nguyennhutien/csszyx/issues/38)) ([924b007](https://github.com/nguyennhutien/csszyx/commit/924b0075cdbcd5e87fb12ec08dbc6f8d3822b145))
+* **cli:** `csszyx init` now adds `@csszyx/runtime` + `@csszyx/types` as direct dependencies and generates `csszyx-env.d.ts`, so the `sz` prop types work out of the box (no more "Property 'sz' does not exist") ([#38](https://github.com/nguyennhutien/csszyx/issues/38))
+* **mcp-server:** add a `csszyx://setup` resource so AI tools wire csszyx correctly — direct runtime/types deps, the `sz` JSX types, and the Turbopack no-`as` rule ([#38](https://github.com/nguyennhutien/csszyx/issues/38))
 
 ## [0.9.4](https://github.com/nguyennhutien/csszyx/compare/v0.9.3...v0.9.4) (2026-06-07)
 
