@@ -108,40 +108,48 @@ scans those strings to generate CSS. Then React handles JSX compilation.
   </TabItem>
 </Tabs>
 
-:::caution[Next.js 16: use webpack mode for full support]
-The webpack plugin is the full-parity path — `sz` transform, production
-class/CSS-variable mangling, and SSR-safe hydration. Next.js 16 defaults to
-Turbopack, so run `next dev --webpack` and `next build --webpack` to use it.
+:::caution[Next.js 16: webpack vs Turbopack]
+**Webpack mode is the full-parity path** — `sz` transform, production class /
+CSS-variable mangling, and SSR-safe hydration. The `webpack` config above works
+as-is; run `next dev --webpack` and `next build --webpack` (Next.js 16 defaults
+to Turbopack).
 
-Turbopack support is **experimental** and currently covers the compile +
-Tailwind `@source` safelist flow only — wire `@csszyx/unplugin/next-turbo-loader`
-in `turbopack.rules` and keep the safelist fresh with `csszyx next prebuild`
-(before `next build --turbo`) and `csszyx next watch` (during `next dev --turbo`).
-
-When you add the rule, use a `*.tsx` glob with the loader and **do not set an
-`as` field**. csszyx is a same-type `.tsx → .tsx` transform; setting
-`as: '*.tsx'` makes the loader output re-match its own rule and Turbopack
-resolves imports to `./X.tsx.tsx` → `Module not found`. (`as` is only for
-loaders that change a file's type, e.g. `.svg → *.js`.)
-
-**Production class and CSS-variable mangling are not available under Turbopack
-yet** — use webpack mode when you need them.
+**Turbopack mode is experimental** — it covers the `sz` transform and the
+Tailwind `@source` safelist, but **not** production class / CSS-variable
+mangling. Use webpack mode when you need those.
 :::
 
-The `@csszyx/unplugin/next` helper wires the rule (no `as`) and the
-`@csszyx/runtime` alias for you, so you avoid both foot-guns:
+### Next.js Turbopack setup
 
-```js
-// next.config.mjs
-import { csszyxTurbopack } from '@csszyx/unplugin/next';
+1. **Add `@csszyx/runtime` as a direct dependency.** The transform injects a
+   bare `import { _szMerge } from '@csszyx/runtime'`, which a strict package
+   manager (pnpm) does not resolve as a transitive dependency.
 
-export default {
-  turbopack: csszyxTurbopack(
-    {}, // your existing turbopack config (resolveAlias, other rules) is merged
-    { safelistOutputFile: '.csszyx/next-loader-classes.html' },
-  ),
-};
-```
+   ```bash
+   pnpm add @csszyx/runtime
+   ```
+
+2. **Wire the loader with the `csszyxTurbopack()` helper.** It sets the `*.tsx`
+   loader rule correctly (without `as`, which would otherwise self-match into
+   `./X.tsx.tsx`) and merges your existing `turbopack` config.
+
+   ```js
+   // next.config.mjs
+   import { csszyxTurbopack } from '@csszyx/unplugin/next';
+
+   export default {
+     turbopack: csszyxTurbopack(
+       {}, // your existing turbopack config (resolveAlias, other rules) is merged
+       { safelistOutputFile: '.csszyx/next-loader-classes.html' },
+     ),
+   };
+   ```
+
+3. **Keep the Tailwind safelist fresh.** Point `@source` at the safelist file
+   and run the csszyx watcher/prebuild around Next:
+
+   - dev: `csszyx next watch` (alongside `next dev --turbopack`)
+   - build: `csszyx next prebuild` before `next build --turbopack`
 
 ## Tailwind CSS v4 Entry Point
 
@@ -200,8 +208,31 @@ via the `szRecover` JSX attribute on individual elements; see
 
 ## TypeScript
 
-The `sz` prop is automatically available on all HTML elements once `csszyx` is
-installed. No extra configuration needed:
+The `sz` prop comes from a JSX type augmentation in `@csszyx/types`. It is
+picked up automatically when you `import` from `csszyx` in a hoisting package
+manager. With a **strict package manager (pnpm)**, or if your app uses `sz`
+without importing `csszyx` directly, add a one-line reference so TypeScript
+loads the augmentation.
+
+:::tip
+`csszyx init` does the two steps below for you (creates `csszyx-env.d.ts` and
+adds `@csszyx/types` + `@csszyx/runtime`). Do this manually for existing apps:
+:::
+
+1. Install the types so the reference resolves at the top level:
+
+   ```bash
+   pnpm add -D @csszyx/types
+   ```
+
+2. Add a `csszyx-env.d.ts` at your project root (kept in your `tsconfig.json`
+   `include`):
+
+   ```ts
+   /// <reference types="@csszyx/types/jsx" />
+   ```
+
+Then the `sz` prop is typed on every element:
 
 ```tsx
 // ✅ TypeScript knows this is valid
@@ -245,8 +276,11 @@ Fix: explicitly declare `tailwindcss` as a dependency in each package that uses 
 **Plugin order warnings** — CSSzyx must be **before** Tailwind and React in
 the plugins array.
 
-**TypeScript errors with `sz` prop** — make sure `csszyx` is installed. The
-JSX type augmentation is included in the package.
+**TypeScript errors with `sz` prop** (`Property 'sz' does not exist on type
+'DetailedHTMLProps<...>'`) — the JSX augmentation is not loaded. Add
+`@csszyx/types` and a `csszyx-env.d.ts` with
+`/// <reference types="@csszyx/types/jsx" />`; see [TypeScript](#typescript)
+above. This is common under pnpm and when `csszyx` is never imported directly.
 
 **Hydration warnings in Next.js** — initialize the runtime in your root layout
 and opt in to per-element recovery with `<section szRecover="csr">…</section>`

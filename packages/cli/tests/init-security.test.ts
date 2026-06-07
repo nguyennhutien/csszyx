@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { injectNextPlugin } from '../src/commands/init.js';
+import { injectNextPlugin, setupSzTypes } from '../src/commands/init.js';
 
 const tempDirs: string[] = [];
 
@@ -44,5 +44,35 @@ describe('init config file safety', () => {
 
         await expect(injectNextPlugin(root)).resolves.toBe(false);
         expect(readFileSync(configPath, 'utf8')).toBe(original);
+    });
+});
+
+describe('init sz JSX types', () => {
+    it('creates csszyx-env.d.ts with the @csszyx/types/jsx reference', async () => {
+        const root = tempRoot();
+
+        await setupSzTypes(root);
+
+        const env = readFileSync(join(root, 'csszyx-env.d.ts'), 'utf8');
+        expect(env).toContain('/// <reference types="@csszyx/types/jsx" />');
+    });
+
+    it('does not duplicate the reference when run twice', async () => {
+        const root = tempRoot();
+
+        await setupSzTypes(root);
+        await setupSzTypes(root);
+
+        const env = readFileSync(join(root, 'csszyx-env.d.ts'), 'utf8');
+        expect(env.match(/@csszyx\/types\/jsx/g)).toHaveLength(1);
+    });
+
+    it('adds the env file to an existing tsconfig include array', async () => {
+        const root = tempRoot();
+        writeFileSync(join(root, 'tsconfig.json'), '{\n  "include": ["src"]\n}\n');
+
+        await setupSzTypes(root);
+
+        expect(readFileSync(join(root, 'tsconfig.json'), 'utf8')).toContain('csszyx-env.d.ts');
     });
 });
