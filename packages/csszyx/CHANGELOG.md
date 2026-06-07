@@ -6,6 +6,8 @@
 ### Features
 
 * **unplugin:** Turbopack production-build support — csszyxTurbopack helper + @csszyx/runtime resolution ([#34](https://github.com/nguyennhutien/csszyx/issues/34)) ([412626e](https://github.com/nguyennhutien/csszyx/commit/412626e918a0717566ee1cb36be45b9b86d7b406))
+* **unplugin:** add the `@csszyx/unplugin/next` `csszyxTurbopack()` config helper — emits the Turbopack `*.tsx` loader rule without `as` (a broad-glob `as` self-matches into `./X.tsx.tsx`) and aliases `@csszyx/runtime` ([#34](https://github.com/nguyennhutien/csszyx/issues/34))
+* **unplugin:** declare `@csszyx/runtime` as a peer dependency so production Turbopack builds resolve the injected runtime helpers ([#34](https://github.com/nguyennhutien/csszyx/issues/34))
 
 ## [0.9.2](https://github.com/nguyennhutien/csszyx/compare/v0.9.1...v0.9.2) (2026-06-07)
 
