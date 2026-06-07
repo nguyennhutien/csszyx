@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.9.2](https://github.com/nguyennhutien/csszyx/compare/v0.9.1...v0.9.2) (2026-06-07)
+
+
+### Features
+
+* rust transform parity, new variants, and migrate/MCP tooling ([#32](https://github.com/nguyennhutien/csszyx/issues/32)) ([40ca7d4](https://github.com/nguyennhutien/csszyx/commit/40ca7d4047ef64e29031f3deff5073af7f0bc6c7))
+
 ## [0.9.1](https://github.com/nguyennhutien/csszyx/compare/v0.9.0...v0.9.1) (2026-06-05)
 
 
