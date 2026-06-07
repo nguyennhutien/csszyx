@@ -67,9 +67,11 @@ if (enableTurboBroad) {
         config: { mangleVars: false },
     });
     if (forceBroadAs && turbopack && turbopack.rules) {
-        // Guard: reintroduce the bug so the suite proves `as` breaks the build.
+        // Guard: reintroduce the bug. The .tsx.tsx self-match needs `as` to equal
+        // the rule's own key glob (KLTN used key '*.tsx' + as '*.tsx'); a generic
+        // `as: '*.tsx'` against a scoped key does not self-match.
         const broadRule = turbopack.rules['./app/turbo-broad/*.tsx'] as { as?: string };
-        broadRule.as = '*.tsx';
+        broadRule.as = './app/turbo-broad/*.tsx';
     }
 }
 

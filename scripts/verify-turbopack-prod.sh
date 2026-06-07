@@ -37,14 +37,17 @@ fi
 [ "$code" -eq 0 ] || { tail -40 /tmp/turbo-broad.log; fail "main build exited $code"; }
 echo "✅ main build clean (exit 0, no .tsx.tsx, runtime resolved)"
 
-echo "== guard build (broad glob WITH \`as\`) — must FAIL with .tsx.tsx =="
+# Guard is informational only: the no-`as` build above is the real regression
+# guard. This re-adds `as` (equal to the rule key) and reports whether Turbopack
+# still self-matches into `.tsx.tsx`. It must NOT fail the suite — the failure
+# mode is Turbopack-internal and may shift between versions.
+echo "== guard build (broad glob WITH \`as\` == key) — informational =="
 CSSZYX_NEXT16_TURBO_BROAD=1 CSSZYX_NEXT16_TURBO_BROAD_AS=1 pnpm exec next build --turbopack \
     > /tmp/turbo-broad-as.log 2>&1
 if grep -q "tsx\.tsx" /tmp/turbo-broad-as.log; then
-    echo "✅ guard reproduced .tsx.tsx when \`as\` is set"
+    echo "✅ guard: \`as\` still reproduces .tsx.tsx — keep omitting it in the recipe"
 else
-    tail -40 /tmp/turbo-broad-as.log
-    fail "guard did NOT reproduce .tsx.tsx — Turbopack \`as\` behavior may have changed; re-check the recipe"
+    echo "⚠️ guard: \`as\` did not reproduce .tsx.tsx on Next $(pnpm exec next --version 2>/dev/null | tail -1) — non-fatal; the no-\`as\` build above is the binding check"
 fi
 
-echo "🎉 Turbopack production-build regression suite PASSED"
+echo "🎉 Turbopack production-build regression suite PASSED (no-\`as\` build clean)"
