@@ -6,6 +6,25 @@
 ### Features
 
 * rust transform parity, new variants, and migrate/MCP tooling ([#32](https://github.com/nguyennhutien/csszyx/issues/32)) ([40ca7d4](https://github.com/nguyennhutien/csszyx/commit/40ca7d4047ef64e29031f3deff5073af7f0bc6c7))
+* **compiler:** recognize forced-colors, starting, and inert variants ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **mcp-server:** expose parametric variants and refresh prompt examples ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+
+
+### Bug Fixes
+
+* **core:** emit bare display/position/visibility utilities in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** escape spaces in arbitrary values in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** lower color-opacity objects in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** lower isolation to the bare isolate utility in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** lower bare numeric fractions in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** kebab-case unknown property keys in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** lower supports, data, and not variants in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** lower group, peer, has, and aria variants in the rust path ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **core:** split static class attributes into individual tokens ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **cli:** recognize transition and group/peer markers in migrate ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **cli:** report component classNames kept by migrate separately ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **cli:** surface unrecognized classes from skipped dynamic patterns ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
+* **cli:** read the CLI version from the package manifest at runtime ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
 
 ## [0.9.1](https://github.com/nguyennhutien/csszyx/compare/v0.9.0...v0.9.1) (2026-06-05)
 
