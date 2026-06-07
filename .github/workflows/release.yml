@@ -179,6 +179,16 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Cache cargo registry + target/ per platform. The native build compiles
+      # heavy crates (oxc, etc.) from scratch on every release otherwise; zig
+      # cross-compile keeps everything on the host runner (no Docker), so the
+      # cache applies to all 8 targets. Keyed per platform to avoid cross-target
+      # target/ thrash.
+      - name: Cache cargo (native build)
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}
+
       - name: Install zig (cross-compile)
         if: matrix.cross
         uses: mlugg/setup-zig@v2
