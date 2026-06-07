@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.9.4](https://github.com/nguyennhutien/csszyx/compare/v0.9.3...v0.9.4) (2026-06-07)
+
+
+### Bug Fixes
+
+* **unplugin:** csszyxTurbopack config/runtime defects + release-pipeline improvements ([#36](https://github.com/nguyennhutien/csszyx/issues/36)) ([0b16ed1](https://github.com/nguyennhutien/csszyx/commit/0b16ed1d5978c3bf4efa6eb12d636d537b0ac113))
+
 ## [0.9.3](https://github.com/nguyennhutien/csszyx/compare/v0.9.2...v0.9.3) (2026-06-07)
 
 
