@@ -1,0 +1,4134 @@
+[
+    {
+        "sz": "{\"p\":4}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "p",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                }
+            ]
+        },
+        "oxc": "p-4"
+    },
+    {
+        "sz": "{\"px\":2}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "px",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 2
+                    }
+                }
+            ]
+        },
+        "oxc": "px-2"
+    },
+    {
+        "sz": "{\"py\":8}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "py",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 8
+                    }
+                }
+            ]
+        },
+        "oxc": "py-8"
+    },
+    {
+        "sz": "{\"m\":\"auto\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "m",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "auto"
+                    }
+                }
+            ]
+        },
+        "oxc": "m-auto"
+    },
+    {
+        "sz": "{\"m\":-2}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "m",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": -2
+                    }
+                }
+            ]
+        },
+        "oxc": "-m-2"
+    },
+    {
+        "sz": "{\"gap\":6}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gap",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 6
+                    }
+                }
+            ]
+        },
+        "oxc": "gap-6"
+    },
+    {
+        "sz": "{\"p\":\"100px\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "p",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "100px"
+                    }
+                }
+            ]
+        },
+        "oxc": "p-[100px]"
+    },
+    {
+        "sz": "{\"mx\":\"--space\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "mx",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "--space"
+                    }
+                }
+            ]
+        },
+        "oxc": "mx-(--space)"
+    },
+    {
+        "sz": "{\"p\":\"1/2\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "p",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "1/2"
+                    }
+                }
+            ]
+        },
+        "oxc": "p-[1/2]"
+    },
+    {
+        "sz": "{\"gap\":\"[10px]\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gap",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "[10px]"
+                    }
+                }
+            ]
+        },
+        "oxc": "gap-[10px]"
+    },
+    {
+        "sz": "{\"w\":4}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "w",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                }
+            ]
+        },
+        "oxc": "w-4"
+    },
+    {
+        "sz": "{\"w\":\"full\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "w",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "full"
+                    }
+                }
+            ]
+        },
+        "oxc": "w-full"
+    },
+    {
+        "sz": "{\"w\":\"1/2\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "w",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "1/2"
+                    }
+                }
+            ]
+        },
+        "oxc": "w-1/2"
+    },
+    {
+        "sz": "{\"h\":\"screen\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "h",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "screen"
+                    }
+                }
+            ]
+        },
+        "oxc": "h-screen"
+    },
+    {
+        "sz": "{\"minW\":\"3px\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "minW",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "3px"
+                    }
+                }
+            ]
+        },
+        "oxc": "min-w-[3px]"
+    },
+    {
+        "sz": "{\"maxW\":\"prose\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "maxW",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "prose"
+                    }
+                }
+            ]
+        },
+        "oxc": "max-w-prose"
+    },
+    {
+        "sz": "{\"size\":10}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "size",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 10
+                    }
+                }
+            ]
+        },
+        "oxc": "size-10"
+    },
+    {
+        "sz": "{\"w\":\"calc(100%-1rem)\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "w",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "calc(100%-1rem)"
+                    }
+                }
+            ]
+        },
+        "oxc": "w-[calc(100%-1rem)]"
+    },
+    {
+        "sz": "{\"h\":\"[var(--h)]\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "h",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "[var(--h)]"
+                    }
+                }
+            ]
+        },
+        "oxc": "h-[var(--h)]"
+    },
+    {
+        "sz": "{\"display\":\"block\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "block"
+                    }
+                }
+            ]
+        },
+        "oxc": "block"
+    },
+    {
+        "sz": "{\"display\":\"inline-block\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "inline-block"
+                    }
+                }
+            ]
+        },
+        "oxc": "inline-block"
+    },
+    {
+        "sz": "{\"display\":\"flex\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "flex"
+                    }
+                }
+            ]
+        },
+        "oxc": "flex"
+    },
+    {
+        "sz": "{\"display\":\"inline-flex\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "inline-flex"
+                    }
+                }
+            ]
+        },
+        "oxc": "inline-flex"
+    },
+    {
+        "sz": "{\"display\":\"grid\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "grid"
+                    }
+                }
+            ]
+        },
+        "oxc": "grid"
+    },
+    {
+        "sz": "{\"display\":\"none\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "none"
+                    }
+                }
+            ]
+        },
+        "oxc": "hidden"
+    },
+    {
+        "sz": "{\"display\":\"contents\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "contents"
+                    }
+                }
+            ]
+        },
+        "oxc": "contents"
+    },
+    {
+        "sz": "{\"display\":\"table-cell\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "table-cell"
+                    }
+                }
+            ]
+        },
+        "oxc": "table-cell"
+    },
+    {
+        "sz": "{\"display\":\"flow-root\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "flow-root"
+                    }
+                }
+            ]
+        },
+        "oxc": "flow-root"
+    },
+    {
+        "sz": "{\"position\":\"absolute\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "position",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "absolute"
+                    }
+                }
+            ]
+        },
+        "oxc": "absolute"
+    },
+    {
+        "sz": "{\"position\":\"fixed\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "position",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "fixed"
+                    }
+                }
+            ]
+        },
+        "oxc": "fixed"
+    },
+    {
+        "sz": "{\"position\":\"sticky\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "position",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "sticky"
+                    }
+                }
+            ]
+        },
+        "oxc": "sticky"
+    },
+    {
+        "sz": "{\"visibility\":\"visible\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "visibility",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "visible"
+                    }
+                }
+            ]
+        },
+        "oxc": "visible"
+    },
+    {
+        "sz": "{\"visibility\":\"hidden\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "visibility",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "hidden"
+                    }
+                }
+            ]
+        },
+        "oxc": "invisible"
+    },
+    {
+        "sz": "{\"visibility\":\"collapse\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "visibility",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "collapse"
+                    }
+                }
+            ]
+        },
+        "oxc": "collapse"
+    },
+    {
+        "sz": "{\"float\":\"left\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "float",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "left"
+                    }
+                }
+            ]
+        },
+        "oxc": "float-left"
+    },
+    {
+        "sz": "{\"clear\":\"both\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "clear",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "both"
+                    }
+                }
+            ]
+        },
+        "oxc": "clear-both"
+    },
+    {
+        "sz": "{\"object\":\"cover\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "object",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "cover"
+                    }
+                }
+            ]
+        },
+        "oxc": "object-cover"
+    },
+    {
+        "sz": "{\"overflow\":\"hidden\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "overflow",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "hidden"
+                    }
+                }
+            ]
+        },
+        "oxc": "overflow-hidden"
+    },
+    {
+        "sz": "{\"z\":10}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "z",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 10
+                    }
+                }
+            ]
+        },
+        "oxc": "z-10"
+    },
+    {
+        "sz": "{\"z\":\"auto\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "z",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "auto"
+                    }
+                }
+            ]
+        },
+        "oxc": "z-auto"
+    },
+    {
+        "sz": "{\"inset\":0}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "inset",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 0
+                    }
+                }
+            ]
+        },
+        "oxc": "inset-0"
+    },
+    {
+        "sz": "{\"top\":4}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "top",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                }
+            ]
+        },
+        "oxc": "top-4"
+    },
+    {
+        "sz": "{\"isolation\":\"isolate\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "isolation",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "isolate"
+                    }
+                }
+            ]
+        },
+        "oxc": "isolate"
+    },
+    {
+        "sz": "{\"flex\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "flex",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "flex"
+    },
+    {
+        "sz": "{\"flex\":1}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "flex",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 1
+                    }
+                }
+            ]
+        },
+        "oxc": "flex-1"
+    },
+    {
+        "sz": "{\"flex\":\"auto\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "flex",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "auto"
+                    }
+                }
+            ]
+        },
+        "oxc": "flex-auto"
+    },
+    {
+        "sz": "{\"flexDir\":\"row\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "flexDir",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "row"
+                    }
+                }
+            ]
+        },
+        "oxc": "flex-row"
+    },
+    {
+        "sz": "{\"flexDir\":\"col\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "flexDir",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "col"
+                    }
+                }
+            ]
+        },
+        "oxc": "flex-col"
+    },
+    {
+        "sz": "{\"items\":\"center\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "items",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "center"
+                    }
+                }
+            ]
+        },
+        "oxc": "items-center"
+    },
+    {
+        "sz": "{\"justify\":\"between\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "justify",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "between"
+                    }
+                }
+            ]
+        },
+        "oxc": "justify-between"
+    },
+    {
+        "sz": "{\"self\":\"end\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "self",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "end"
+                    }
+                }
+            ]
+        },
+        "oxc": "self-end"
+    },
+    {
+        "sz": "{\"content\":\"center\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "content",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "center"
+                    }
+                }
+            ]
+        },
+        "oxc": "content-[center]"
+    },
+    {
+        "sz": "{\"grow\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "grow",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "grow"
+    },
+    {
+        "sz": "{\"shrink\":0}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "shrink",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 0
+                    }
+                }
+            ]
+        },
+        "oxc": "shrink-0"
+    },
+    {
+        "sz": "{\"order\":2}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "order",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 2
+                    }
+                }
+            ]
+        },
+        "oxc": "order-2"
+    },
+    {
+        "sz": "{\"basis\":\"14.28%\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "basis",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "14.28%"
+                    }
+                }
+            ]
+        },
+        "oxc": "basis-[14.28%]"
+    },
+    {
+        "sz": "{\"gridCols\":3}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gridCols",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 3
+                    }
+                }
+            ]
+        },
+        "oxc": "grid-cols-3"
+    },
+    {
+        "sz": "{\"gridCols\":\"none\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gridCols",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "none"
+                    }
+                }
+            ]
+        },
+        "oxc": "grid-cols-none"
+    },
+    {
+        "sz": "{\"gridCols\":\"200px\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gridCols",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "200px"
+                    }
+                }
+            ]
+        },
+        "oxc": "grid-cols-[200px]"
+    },
+    {
+        "sz": "{\"gridCols\":\"280px minmax(0,1fr)\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gridCols",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "280px minmax(0,1fr)"
+                    }
+                }
+            ]
+        },
+        "oxc": "grid-cols-[280px_minmax(0,1fr)]"
+    },
+    {
+        "sz": "{\"gridCols\":\"1fr auto\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gridCols",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "1fr auto"
+                    }
+                }
+            ]
+        },
+        "oxc": "grid-cols-[1fr_auto]"
+    },
+    {
+        "sz": "{\"gridRows\":\"subgrid\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "gridRows",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "subgrid"
+                    }
+                }
+            ]
+        },
+        "oxc": "grid-rows-subgrid"
+    },
+    {
+        "sz": "{\"bg\":\"red-500\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "red-500"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-red-500"
+    },
+    {
+        "sz": "{\"bg\":\"--my-color\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "--my-color"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-(--my-color)"
+    },
+    {
+        "sz": "{\"bg\":\"#0d0d12\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "#0d0d12"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-[#0d0d12]"
+    },
+    {
+        "sz": "{\"bg\":\"transparent\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "transparent"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-transparent"
+    },
+    {
+        "sz": "{\"bg\":{\"color\":\"blue-500\",\"op\":20}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "blue-500"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 20
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-blue-500/20"
+    },
+    {
+        "sz": "{\"bg\":{\"color\":\"--my-color\",\"op\":50}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "--my-color"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 50
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-(--my-color)/50"
+    },
+    {
+        "sz": "{\"bg\":{\"color\":\"#0d0d12\",\"op\":90}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "#0d0d12"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 90
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-[#0d0d12]/90"
+    },
+    {
+        "sz": "{\"bg\":{\"color\":\"black\",\"op\":0.05}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "black"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 0.05
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-black/[0.05]"
+    },
+    {
+        "sz": "{\"bg\":{\"color\":\"pink-500\",\"op\":\"78%\"}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "pink-500"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "78%"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-pink-500/[78%]"
+    },
+    {
+        "sz": "{\"bg\":{\"color\":\"white\"}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "white"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-white"
+    },
+    {
+        "sz": "{\"color\":\"gray-900\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "color",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "gray-900"
+                    }
+                }
+            ]
+        },
+        "oxc": "text-gray-900"
+    },
+    {
+        "sz": "{\"color\":{\"color\":\"white\",\"op\":70}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "color",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "white"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 70
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "text-white/70"
+    },
+    {
+        "sz": "{\"border\":\"red-200\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "border",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "red-200"
+                    }
+                }
+            ]
+        },
+        "oxc": "border-red-200"
+    },
+    {
+        "sz": "{\"ring\":{\"color\":\"blue-500\",\"op\":50}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "ring",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "color",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "blue-500"
+                                    }
+                                },
+                                {
+                                    "key": "op",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 50
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "ring-blue-500/50"
+    },
+    {
+        "sz": "{\"text\":\"sm\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "text",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "sm"
+                    }
+                }
+            ]
+        },
+        "oxc": "text-sm"
+    },
+    {
+        "sz": "{\"text\":\"lg\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "text",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "lg"
+                    }
+                }
+            ]
+        },
+        "oxc": "text-lg"
+    },
+    {
+        "sz": "{\"text\":\"[13px]\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "text",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "[13px]"
+                    }
+                }
+            ]
+        },
+        "oxc": "text-[13px]"
+    },
+    {
+        "sz": "{\"font\":\"bold\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "font",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "bold"
+                    }
+                }
+            ]
+        },
+        "oxc": "font-bold"
+    },
+    {
+        "sz": "{\"font\":\"mono\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "font",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "mono"
+                    }
+                }
+            ]
+        },
+        "oxc": "font-mono"
+    },
+    {
+        "sz": "{\"leading\":7}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "leading",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 7
+                    }
+                }
+            ]
+        },
+        "oxc": "leading-7"
+    },
+    {
+        "sz": "{\"leading\":\"tight\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "leading",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "tight"
+                    }
+                }
+            ]
+        },
+        "oxc": "leading-tight"
+    },
+    {
+        "sz": "{\"tracking\":\"wide\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "tracking",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "wide"
+                    }
+                }
+            ]
+        },
+        "oxc": "tracking-wide"
+    },
+    {
+        "sz": "{\"align\":\"middle\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "align",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "middle"
+                    }
+                }
+            ]
+        },
+        "oxc": "align-middle"
+    },
+    {
+        "sz": "{\"whitespace\":\"nowrap\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "whitespace",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "nowrap"
+                    }
+                }
+            ]
+        },
+        "oxc": "whitespace-nowrap"
+    },
+    {
+        "sz": "{\"italic\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "italic",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "italic"
+    },
+    {
+        "sz": "{\"italic\":false}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "italic",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": false
+                    }
+                }
+            ]
+        },
+        "oxc": "not-italic"
+    },
+    {
+        "sz": "{\"underline\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "underline",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "underline"
+    },
+    {
+        "sz": "{\"weight\":600}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "weight",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 600
+                    }
+                }
+            ]
+        },
+        "oxc": "font-600"
+    },
+    {
+        "sz": "{\"indent\":4}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "indent",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                }
+            ]
+        },
+        "oxc": "indent-4"
+    },
+    {
+        "sz": "{\"breakWord\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "breakWord",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "break-word"
+    },
+    {
+        "sz": "{\"rounded\":\"lg\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "rounded",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "lg"
+                    }
+                }
+            ]
+        },
+        "oxc": "rounded-lg"
+    },
+    {
+        "sz": "{\"rounded\":\"full\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "rounded",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "full"
+                    }
+                }
+            ]
+        },
+        "oxc": "rounded-full"
+    },
+    {
+        "sz": "{\"rounded\":\"[4px]\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "rounded",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "[4px]"
+                    }
+                }
+            ]
+        },
+        "oxc": "rounded-[4px]"
+    },
+    {
+        "sz": "{\"border\":2}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "border",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 2
+                    }
+                }
+            ]
+        },
+        "oxc": "border-2"
+    },
+    {
+        "sz": "{\"borderStyle\":\"dashed\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "borderStyle",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "dashed"
+                    }
+                }
+            ]
+        },
+        "oxc": "border-dashed"
+    },
+    {
+        "sz": "{\"divide\":\"gray-200\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "divide",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "gray-200"
+                    }
+                }
+            ]
+        },
+        "oxc": "divide-gray-200"
+    },
+    {
+        "sz": "{\"outline\":2}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "outline",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 2
+                    }
+                }
+            ]
+        },
+        "oxc": "outline-2"
+    },
+    {
+        "sz": "{\"ring\":4}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "ring",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                }
+            ]
+        },
+        "oxc": "ring-4"
+    },
+    {
+        "sz": "{\"ringOffset\":2}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "ringOffset",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 2
+                    }
+                }
+            ]
+        },
+        "oxc": "ring-offset-2"
+    },
+    {
+        "sz": "{\"bgSize\":\"cover\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bgSize",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "cover"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-cover"
+    },
+    {
+        "sz": "{\"bgSize\":\"8px 8px\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bgSize",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "8px 8px"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-size-[8px_8px]"
+    },
+    {
+        "sz": "{\"bgRepeat\":\"no-repeat\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bgRepeat",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "no-repeat"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-no-repeat"
+    },
+    {
+        "sz": "{\"bgPos\":\"center\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bgPos",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "center"
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-center"
+    },
+    {
+        "sz": "{\"bgImg\":{\"gradient\":\"linear\",\"dir\":45}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "bgImg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "gradient",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "linear"
+                                    }
+                                },
+                                {
+                                    "key": "dir",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 45
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "bg-linear-45"
+    },
+    {
+        "sz": "{\"shadow\":\"lg\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "shadow",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "lg"
+                    }
+                }
+            ]
+        },
+        "oxc": "shadow-lg"
+    },
+    {
+        "sz": "{\"shadow\":\"0 35px 60px -15px rgba(0,0,0,0.3)\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "shadow",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "0 35px 60px -15px rgba(0,0,0,0.3)"
+                    }
+                }
+            ]
+        },
+        "oxc": "shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]"
+    },
+    {
+        "sz": "{\"opacity\":80}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "opacity",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 80
+                    }
+                }
+            ]
+        },
+        "oxc": "opacity-80"
+    },
+    {
+        "sz": "{\"mixBlend\":\"multiply\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "mixBlend",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "multiply"
+                    }
+                }
+            ]
+        },
+        "oxc": "mix-blend-multiply"
+    },
+    {
+        "sz": "{\"blur\":\"sm\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "blur",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "sm"
+                    }
+                }
+            ]
+        },
+        "oxc": "blur-sm"
+    },
+    {
+        "sz": "{\"brightness\":110}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "brightness",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 110
+                    }
+                }
+            ]
+        },
+        "oxc": "brightness-110"
+    },
+    {
+        "sz": "{\"grayscale\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "grayscale",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "grayscale"
+    },
+    {
+        "sz": "{\"scale\":110}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "scale",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 110
+                    }
+                }
+            ]
+        },
+        "oxc": "scale-110"
+    },
+    {
+        "sz": "{\"rotate\":45}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "rotate",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 45
+                    }
+                }
+            ]
+        },
+        "oxc": "rotate-45"
+    },
+    {
+        "sz": "{\"rotate\":-90}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "rotate",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": -90
+                    }
+                }
+            ]
+        },
+        "oxc": "-rotate-90"
+    },
+    {
+        "sz": "{\"translateX\":4}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "translateX",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                }
+            ]
+        },
+        "oxc": "translate-x-4"
+    },
+    {
+        "sz": "{\"transition\":\"colors\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "transition",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "colors"
+                    }
+                }
+            ]
+        },
+        "oxc": "transition-colors"
+    },
+    {
+        "sz": "{\"duration\":300}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "duration",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 300
+                    }
+                }
+            ]
+        },
+        "oxc": "duration-300"
+    },
+    {
+        "sz": "{\"ease\":\"in-out\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "ease",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "in-out"
+                    }
+                }
+            ]
+        },
+        "oxc": "ease-in-out"
+    },
+    {
+        "sz": "{\"delay\":150}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "delay",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 150
+                    }
+                }
+            ]
+        },
+        "oxc": "delay-150"
+    },
+    {
+        "sz": "{\"cursor\":\"pointer\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "cursor",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "pointer"
+                    }
+                }
+            ]
+        },
+        "oxc": "cursor-pointer"
+    },
+    {
+        "sz": "{\"select\":\"none\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "select",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "none"
+                    }
+                }
+            ]
+        },
+        "oxc": "select-none"
+    },
+    {
+        "sz": "{\"pointer\":\"none\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "pointer",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "none"
+                    }
+                }
+            ]
+        },
+        "oxc": "pointer-none"
+    },
+    {
+        "sz": "{\"scroll\":\"smooth\"}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "scroll",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "smooth"
+                    }
+                }
+            ]
+        },
+        "oxc": "scroll-smooth"
+    },
+    {
+        "sz": "{\"md\":{\"flex\":true}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "md",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "flex",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "boolean",
+                                        "value": true
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "md:flex"
+    },
+    {
+        "sz": "{\"lg\":{\"gridCols\":4}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "lg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "gridCols",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 4
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "lg:grid-cols-4"
+    },
+    {
+        "sz": "{\"sm\":{\"p\":2}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "sm",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "p",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 2
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "sm:p-2"
+    },
+    {
+        "sz": "{\"hover\":{\"bg\":\"blue-600\"}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "hover",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "bg",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "blue-600"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "hover:bg-blue-600"
+    },
+    {
+        "sz": "{\"focus\":{\"ring\":2}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "focus",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "ring",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 2
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "focus:ring-2"
+    },
+    {
+        "sz": "{\"active\":{\"scale\":95}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "active",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "scale",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 95
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "active:scale-95"
+    },
+    {
+        "sz": "{\"dark\":{\"bg\":\"gray-900\"}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "dark",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "bg",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "gray-900"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "dark:bg-gray-900"
+    },
+    {
+        "sz": "{\"group\":{\"hover\":{\"color\":\"white\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "hover",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "color",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "white"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-hover:text-white"
+    },
+    {
+        "sz": "{\"peer\":{\"focus\":{\"text\":\"red-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "peer",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "focus",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "text",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "red-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "peer-focus:text-red-500"
+    },
+    {
+        "sz": "{\"peer\":{\"checked\":{\"bg\":\"green-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "peer",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "checked",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "green-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "peer-checked:bg-green-500"
+    },
+    {
+        "sz": "{\"group\":{\"has\":{\"input\":{\"block\":true}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "has",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "input",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "block",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "boolean",
+                                                                        "value": true
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-has-[input]:block"
+    },
+    {
+        "sz": "{\"group\":{\"data\":{\"active\":{\"bg\":\"blue-500\"}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "data",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "active",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "bg",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "string",
+                                                                        "value": "blue-500"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-data-[active]:bg-blue-500"
+    },
+    {
+        "sz": "{\"group\":{\"aria\":{\"checked\":{\"bg\":\"blue-500\"}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "aria",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "checked",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "bg",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "string",
+                                                                        "value": "blue-500"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-aria-checked:bg-blue-500"
+    },
+    {
+        "sz": "{\"group\":{\".is-published\":{\"block\":true}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": ".is-published",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "block",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "boolean",
+                                                        "value": true
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-[.is-published]:block"
+    },
+    {
+        "sz": "{\"group\":{\"sidebar\":{\"hover\":{\"color\":\"white\"}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "sidebar",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "hover",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "color",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "string",
+                                                                        "value": "white"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-hover/sidebar:text-white"
+    },
+    {
+        "sz": "{\"has\":{\"checked\":{\"bg\":\"blue-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "has",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "checked",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "blue-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "has-[:checked]:bg-blue-500"
+    },
+    {
+        "sz": "{\"has\":{\"img\":{\"rounded\":\"lg\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "has",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "img",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "rounded",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "lg"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "has-[img]:rounded-lg"
+    },
+    {
+        "sz": "{\"aria\":{\"checked\":{\"bg\":\"blue-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "aria",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "checked",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "blue-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "aria-checked:bg-blue-500"
+    },
+    {
+        "sz": "{\"aria\":{\"busy=true\":{\"p\":2}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "aria",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "busy=true",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "p",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "number",
+                                                        "value": 2
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "aria-[busy=true]:p-2"
+    },
+    {
+        "sz": "{\"group-hover\":{\"dark\":{\"text\":\"white\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "group-hover",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "dark",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "text",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "white"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "group-hover:dark:text-white"
+    },
+    {
+        "sz": "{\"md\":{\"hover\":{\"text\":\"white\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "md",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "hover",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "text",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "white"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "md:hover:text-white"
+    },
+    {
+        "sz": "{\"[&>span]\":{\"p\":1}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "[&>span]",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "p",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 1
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "[&>span]:p-1"
+    },
+    {
+        "sz": "{\"supports\":{\"display:grid\":{\"grid\":true}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "supports",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "display:grid",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "grid",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "boolean",
+                                                        "value": true
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "supports-[display:grid]:grid"
+    },
+    {
+        "sz": "{\"supports\":{\"backdrop-filter:blur(1px)\":{\"rounded\":\"lg\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "supports",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "backdrop-filter:blur(1px)",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "rounded",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "lg"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "supports-[backdrop-filter:blur(1px)]:rounded-lg"
+    },
+    {
+        "sz": "{\"not\":{\"first\":{\"mt\":4}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "not",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "first",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "mt",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "number",
+                                                        "value": 4
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "not-first:mt-4"
+    },
+    {
+        "sz": "{\"not\":{\"hover\":{\"opacity\":75}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "not",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "hover",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "opacity",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "number",
+                                                        "value": 75
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "not-hover:opacity-75"
+    },
+    {
+        "sz": "{\"not\":{\"supports\":{\"display:grid\":{\"block\":true}}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "not",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "supports",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "display:grid",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "object",
+                                                        "value": {
+                                                            "properties": [
+                                                                {
+                                                                    "key": "block",
+                                                                    "span": {
+                                                                        "start": 0,
+                                                                        "end": 0
+                                                                    },
+                                                                    "value": {
+                                                                        "kind": "boolean",
+                                                                        "value": true
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "not-supports-[display:grid]:block"
+    },
+    {
+        "sz": "{\"data\":{\"active\":{\"bg\":\"blue-500\"}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "data",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "active",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "bg",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "string",
+                                                        "value": "blue-500"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "data-[active]:bg-blue-500"
+    },
+    {
+        "sz": "{\"data\":{\"state=open\":{\"p\":2}}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "data",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "state=open",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "object",
+                                        "value": {
+                                            "properties": [
+                                                {
+                                                    "key": "p",
+                                                    "span": {
+                                                        "start": 0,
+                                                        "end": 0
+                                                    },
+                                                    "value": {
+                                                        "kind": "number",
+                                                        "value": 2
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "data-[state=open]:p-2"
+    },
+    {
+        "sz": "{\"firstChild\":{\"ml\":0}}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "firstChild",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "ml",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 0
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "oxc": "first:ml-0"
+    },
+    {
+        "sz": "{\"p\":4,\"bg\":\"red-500\",\"flex\":true}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "p",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 4
+                    }
+                },
+                {
+                    "key": "bg",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "red-500"
+                    }
+                },
+                {
+                    "key": "flex",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "boolean",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        "oxc": "p-4 bg-red-500 flex"
+    },
+    {
+        "sz": "{\"display\":\"flex\",\"items\":\"center\",\"gap\":3}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "flex"
+                    }
+                },
+                {
+                    "key": "items",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "center"
+                    }
+                },
+                {
+                    "key": "gap",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 3
+                    }
+                }
+            ]
+        },
+        "oxc": "flex items-center gap-3"
+    },
+    {
+        "sz": "{\"md\":{\"display\":\"grid\",\"gridCols\":2},\"p\":6}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "md",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "object",
+                        "value": {
+                            "properties": [
+                                {
+                                    "key": "display",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "string",
+                                        "value": "grid"
+                                    }
+                                },
+                                {
+                                    "key": "gridCols",
+                                    "span": {
+                                        "start": 0,
+                                        "end": 0
+                                    },
+                                    "value": {
+                                        "kind": "number",
+                                        "value": 2
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "key": "p",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 6
+                    }
+                }
+            ]
+        },
+        "oxc": "md:grid md:grid-cols-2 p-6"
+    },
+    {
+        "sz": "{\"mt\":6,\"display\":\"flex\",\"flexWrap\":\"wrap\",\"gap\":3}",
+        "ir": {
+            "properties": [
+                {
+                    "key": "mt",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 6
+                    }
+                },
+                {
+                    "key": "display",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "flex"
+                    }
+                },
+                {
+                    "key": "flexWrap",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "string",
+                        "value": "wrap"
+                    }
+                },
+                {
+                    "key": "gap",
+                    "span": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "value": {
+                        "kind": "number",
+                        "value": 3
+                    }
+                }
+            ]
+        },
+        "oxc": "mt-6 flex flex-wrap gap-3"
+    }
+]

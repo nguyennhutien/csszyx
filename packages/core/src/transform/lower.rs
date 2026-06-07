@@ -4,8 +4,12 @@
 //! It is kept separate from rewrite so class-generation parity can be tested
 //! before any source mutation ships.
 
+use std::borrow::Cow;
+
 use super::{
-    generated::tables::{boolean_class, property_prefix, variant_prefix},
+    generated::tables::{
+        boolean_class, is_aria_state, is_known_variant, property_prefix, variant_prefix,
+    },
     SourceIr, StaticSzObject, StaticSzValue,
 };
 
@@ -26,11 +30,15 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
         .cloned()
         .chain(ir.sz_attributes.iter().flat_map(lower_sz_attribute_classes))
         .collect();
+    // Split each static class attribute into individual class tokens, matching
+    // the oxc path: consumers (safelist, mangle) iterate raw_class_names as
+    // single classes, so a whole `"flex gap-2"` string would be treated as one
+    // bogus class on the default rust parser.
     let raw_class_names = ir
         .class_attributes
         .iter()
         .filter(|attr| attr.expression_span.is_none())
-        .map(|attr| attr.value.clone())
+        .flat_map(|attr| attr.value.split_whitespace().map(ToString::to_string))
         .collect();
 
     LoweredSourceClasses {
@@ -89,6 +97,57 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     continue;
                 }
 
+                // Color-with-opacity object — { bg: { color: 'blue-500', op: 20 } }
+                // → bg-blue-500/20. Distinguished from variant nesting by a
+                // `color` member on a key that maps to a color utility, matching
+                // the Babel/oxc transform; without this it lowered as a nested
+                // variant into broken classes like `bg:text-white` / `bg:op-20`.
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    if let Some(class_name) =
+                        format_color_opacity_object(&property.key, nested, prefix)
+                    {
+                        classes.push(class_name);
+                    }
+                    continue;
+                }
+
+                // Parametric / scope variants combine with `-` and bracket their
+                // parameter rather than chaining a plain `:` like simple variants
+                // do, matching the Babel/oxc transform.
+                match property.key.as_str() {
+                    "supports" => {
+                        lower_bracket_param_variant(nested, prefix, "supports", classes);
+                        continue;
+                    }
+                    "data" => {
+                        lower_bracket_param_variant(nested, prefix, "data", classes);
+                        continue;
+                    }
+                    "not" => {
+                        lower_not_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    "aria" => {
+                        lower_aria_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    "has" => {
+                        lower_has_variant(nested, prefix, classes);
+                        continue;
+                    }
+                    "group" => {
+                        lower_group_peer_variant("group", nested, prefix, classes);
+                        continue;
+                    }
+                    "peer" => {
+                        lower_group_peer_variant("peer", nested, prefix, classes);
+                        continue;
+                    }
+                    _ => {}
+                }
+
                 let variant = variant_prefix(&property.key).unwrap_or(&property.key);
                 let mut next_prefix = String::with_capacity(prefix.len() + property.key.len() + 1);
                 next_prefix.push_str(prefix);
@@ -110,6 +169,191 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     }
 }
 
+/// Lowers a parametric bracket variant such as `supports`/`data`:
+/// `{ supports: { 'display:grid': {...} } }` → `supports-[display:grid]:…`,
+/// `{ data: { active: {...} } }` → `data-[active]:…`.
+fn lower_bracket_param_variant(
+    object: &StaticSzObject,
+    prefix: &str,
+    name: &str,
+    classes: &mut Vec<String>,
+) {
+    for property in &object.properties {
+        if let StaticSzValue::Object(body) = &property.value {
+            let next_prefix = format!("{prefix}{name}-[{}]:", property.key);
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Lowers the `not` variant: `{ not: { first: {...} } }` → `not-first:…`, with a
+/// nested supports condition bracketed
+/// (`{ not: { supports: { 'x': {...} } } }` → `not-supports-[x]:…`).
+fn lower_not_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        let StaticSzValue::Object(body) = &property.value else {
+            continue;
+        };
+        if property.key == "supports" {
+            for condition in &body.properties {
+                if let StaticSzValue::Object(inner) = &condition.value {
+                    let next_prefix = format!("{prefix}not-supports-[{}]:", condition.key);
+                    lower_object_into(inner, &next_prefix, classes);
+                }
+            }
+        } else {
+            let variant = get_variant_prefix(&property.key);
+            let next_prefix = format!("{prefix}not-{variant}:");
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
+/// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
+fn get_variant_prefix(key: &str) -> Cow<'static, str> {
+    variant_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed)
+}
+
+/// Lowers the `aria` variant: `{ aria: { checked: {...} } }` → `aria-checked:…`
+/// for standard states, `{ aria: { 'busy=true': {...} } }` → `aria-[busy=true]:…`
+/// otherwise.
+fn lower_aria_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        if let StaticSzValue::Object(body) = &property.value {
+            let next_prefix = if is_aria_state(&property.key) {
+                format!("{prefix}aria-{}:", property.key)
+            } else {
+                format!("{prefix}aria-[{}]:", property.key)
+            };
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Lowers the `has` variant: `{ has: { checked: {...} } }` → `has-[:checked]:…`
+/// for states, `{ has: { img: {...} } }` → `has-[img]:…` for raw selectors.
+fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        if let StaticSzValue::Object(body) = &property.value {
+            let selector = property.key.as_str();
+            let next_prefix = if selector.starts_with(':') {
+                format!("{prefix}has-[{selector}]:")
+            } else if is_known_variant(selector) {
+                format!("{prefix}has-[:{selector}]:")
+            } else {
+                format!("{prefix}has-[{selector}]:")
+            };
+            lower_object_into(body, &next_prefix, classes);
+        }
+    }
+}
+
+/// Lowers the `group`/`peer` scope variants, mirroring the oxc `handleGroupPeer`:
+/// known variants combine with `-` (group-hover), has/data/aria nest as
+/// parameters, arbitrary selectors bracket, and a named scope appends `/name`.
+fn lower_group_peer_variant(
+    scope: &str,
+    object: &StaticSzObject,
+    prefix: &str,
+    classes: &mut Vec<String>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let nested_key = property.key.as_str();
+
+        match nested_key {
+            "has" => {
+                for selector in &nested.properties {
+                    if let StaticSzValue::Object(body) = &selector.value {
+                        let np = format!("{prefix}{scope}-has-[{}]:", selector.key);
+                        lower_object_into(body, &np, classes);
+                    }
+                }
+                continue;
+            }
+            "data" => {
+                for attr in &nested.properties {
+                    if let StaticSzValue::Object(body) = &attr.value {
+                        let np = format!("{prefix}{scope}-data-[{}]:", attr.key);
+                        lower_object_into(body, &np, classes);
+                    }
+                }
+                continue;
+            }
+            "aria" => {
+                for attr in &nested.properties {
+                    if let StaticSzValue::Object(body) = &attr.value {
+                        let np = if is_aria_state(&attr.key) {
+                            format!("{prefix}{scope}-aria-{}:", attr.key)
+                        } else {
+                            format!("{prefix}{scope}-aria-[{}]:", attr.key)
+                        };
+                        lower_object_into(body, &np, classes);
+                    }
+                }
+                continue;
+            }
+            _ => {}
+        }
+
+        if nested_key.starts_with('.')
+            || nested_key.starts_with('#')
+            || nested_key.starts_with('[')
+            || nested_key.starts_with(':')
+        {
+            let np = format!("{prefix}{scope}-[{nested_key}]:");
+            lower_object_into(nested, &np, classes);
+            continue;
+        }
+
+        if is_known_variant(nested_key) || is_known_variant(get_variant_prefix(nested_key).as_ref())
+        {
+            let mapped = get_variant_prefix(nested_key);
+            let np = format!("{prefix}{scope}-{mapped}:");
+            lower_object_into(nested, &np, classes);
+            continue;
+        }
+
+        // Named scope: { group: { name: { hover: {...} } } } → group-hover/name:
+        for state in &nested.properties {
+            let StaticSzValue::Object(state_body) = &state.value else {
+                continue;
+            };
+            match state.key.as_str() {
+                "data" => {
+                    for attr in &state_body.properties {
+                        if let StaticSzValue::Object(body) = &attr.value {
+                            let np = format!("{prefix}{scope}-data-[{}]/{nested_key}:", attr.key);
+                            lower_object_into(body, &np, classes);
+                        }
+                    }
+                }
+                "aria" => {
+                    for attr in &state_body.properties {
+                        if let StaticSzValue::Object(body) = &attr.value {
+                            let aria_segment = if is_aria_state(&attr.key) {
+                                format!("aria-{}", attr.key)
+                            } else {
+                                format!("aria-[{}]", attr.key)
+                            };
+                            let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
+                            lower_object_into(body, &np, classes);
+                        }
+                    }
+                }
+                _ => {
+                    let mapped = get_variant_prefix(&state.key);
+                    let np = format!("{prefix}{scope}-{mapped}/{nested_key}:");
+                    lower_object_into(state_body, &np, classes);
+                }
+            }
+        }
+    }
+}
+
 fn false_boolean_class(key: &str) -> Option<&'static str> {
     match key {
         "italic" => Some("not-italic"),
@@ -119,15 +363,20 @@ fn false_boolean_class(key: &str) -> Option<&'static str> {
 }
 
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
-    let class_key = property_prefix(key).unwrap_or(key);
+    // Unknown keys fall back to a kebab-cased utility name (breakWord →
+    // break-word) the way the oxc path does, instead of the raw camelCase key.
+    let class_key: Cow<str> =
+        property_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed);
 
     match value {
         StaticSzValue::Boolean(true) => Some(format!(
             "{prefix}{}",
-            boolean_class(key).unwrap_or(class_key)
+            boolean_class(key).unwrap_or_else(|| class_key.as_ref())
         )),
         StaticSzValue::Boolean(false) | StaticSzValue::Object(_) => None,
-        StaticSzValue::Number(value) => Some(format_number_class(class_key, *value, prefix)),
+        StaticSzValue::Number(value) => {
+            Some(format_number_class(class_key.as_ref(), *value, prefix))
+        }
         StaticSzValue::String(value) => {
             if key == "bgImg" {
                 return Some(format_bg_img_string(value, prefix));
@@ -140,6 +389,46 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             }
             if key == "content" {
                 return Some(format_content(value, prefix));
+            }
+            // display / position / visibility carry their value as the bare
+            // Tailwind utility (`flex`, `grid`, `absolute`, `visible`), not a
+            // `display-flex` style prefix-value pair. This mirrors the Babel/oxc
+            // transform so both parser paths emit classes Tailwind actually
+            // generates.
+            if key == "display" {
+                return Some(if value == "none" {
+                    format!("{prefix}hidden")
+                } else {
+                    format!("{prefix}{value}")
+                });
+            }
+            if key == "position" {
+                return Some(format!("{prefix}{value}"));
+            }
+            if key == "visibility" {
+                return Some(if value == "hidden" {
+                    format!("{prefix}invisible")
+                } else {
+                    format!("{prefix}{value}")
+                });
+            }
+            if key == "isolation" {
+                return Some(if value == "isolate" {
+                    format!("{prefix}isolate")
+                } else {
+                    format!("{prefix}isolation-{value}")
+                });
+            }
+            // Bare numeric fractions (1/2, 3/4) are sizing values, not the
+            // `color/op` slash strings the guard below suppresses. Fraction-
+            // friendly properties keep them native (w-1/2, basis-1/3); the rest
+            // wrap them as arbitrary (p-[1/2]). Mirrors the Babel/oxc transform.
+            if is_bare_fraction(value) {
+                return Some(if is_fraction_supported_prop(key) {
+                    format!("{prefix}{class_key}-{value}")
+                } else {
+                    format!("{prefix}{class_key}-[{value}]")
+                });
             }
 
             if has_slash_opacity(value) {
@@ -156,7 +445,10 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             let is_negative = value.starts_with('-');
             let base_value = if is_negative { &value[1..] } else { value };
             let final_value = if needs_brackets(base_value) {
-                format!("[{base_value}]")
+                // Tailwind arbitrary values cannot contain raw spaces (the class
+                // attribute would split into separate tokens), so collapse
+                // whitespace to underscores, matching the Babel/oxc transform.
+                format!("[{}]", normalize_arbitrary_value(base_value))
             } else {
                 base_value.to_string()
             };
@@ -242,6 +534,51 @@ fn object_string_property<'a>(object: &'a StaticSzObject, key: &str) -> Option<&
             StaticSzValue::String(value) => Some(value.as_str()),
             _ => None,
         })
+}
+
+fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str) -> Option<String> {
+    let tw_prefix = property_prefix(key)?;
+    let raw_color = object_string_property(object, "color")?;
+
+    let color_base = if raw_color.starts_with("--") {
+        format!("({raw_color})")
+    } else if needs_brackets(raw_color) {
+        format!("[{}]", normalize_arbitrary_value(raw_color))
+    } else {
+        normalize_arbitrary_value(raw_color)
+    };
+
+    let op_value = object
+        .properties
+        .iter()
+        .find(|prop| prop.key == "op")
+        .map(|prop| &prop.value);
+
+    match op_value {
+        Some(op_value) => {
+            let op_str = format_opacity_value(op_value)?;
+            Some(format!("{prefix}{tw_prefix}-{color_base}/{op_str}"))
+        }
+        None => Some(format!("{prefix}{tw_prefix}-{color_base}")),
+    }
+}
+
+fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
+    match value {
+        // Integers and half steps (0, 0.5, 50, 75.5 …) stay plain; other
+        // decimals (0.05, 0.02 …) become arbitrary `/[0.05]`. Mirrors the
+        // Babel/oxc `formatOpacity`.
+        StaticSzValue::Number(op) => {
+            if (op * 2.0).fract() == 0.0 {
+                Some(format_abs_number(*op))
+            } else {
+                Some(format!("[{}]", format_abs_number(*op)))
+            }
+        }
+        StaticSzValue::String(op) if op.starts_with("--") => Some(format!("({op})")),
+        StaticSzValue::String(op) => Some(format!("[{op}]")),
+        _ => None,
+    }
 }
 
 fn format_bg_img_string(value: &str, prefix: &str) -> String {
@@ -342,6 +679,85 @@ fn has_slash_opacity(value: &str) -> bool {
                 .get(pos - 1)
                 .is_some_and(u8::is_ascii_digit)
     })
+}
+
+/// Kebab-cases a camelCase key the way the oxc fallback does:
+/// inserts a `-` between a lowercase/digit and an uppercase letter, then
+/// lowercases (breakWord → break-word).
+fn kebab_case(key: &str) -> String {
+    let mut out = String::with_capacity(key.len() + 2);
+    let mut prev_lower_or_digit = false;
+    for ch in key.chars() {
+        if ch.is_ascii_uppercase() {
+            if prev_lower_or_digit {
+                out.push('-');
+            }
+            out.push(ch.to_ascii_lowercase());
+            prev_lower_or_digit = false;
+        } else {
+            out.push(ch.to_ascii_lowercase());
+            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+        }
+    }
+    out
+}
+
+/// Matches a bare numeric fraction such as `1/2` or `3/4` (the `^\d+/\d+$` form).
+fn is_bare_fraction(value: &str) -> bool {
+    let mut parts = value.split('/');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(numerator), Some(denominator), None) => {
+            !numerator.is_empty()
+                && !denominator.is_empty()
+                && numerator.bytes().all(|byte| byte.is_ascii_digit())
+                && denominator.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+/// Properties that accept native Tailwind fractions (w-1/2, basis-1/3) instead
+/// of arbitrary brackets. Mirrors `FRACTION_SUPPORTED_PROPS` in the oxc path.
+fn is_fraction_supported_prop(key: &str) -> bool {
+    matches!(
+        key,
+        "w" | "width"
+            | "min-w"
+            | "minW"
+            | "minWidth"
+            | "max-w"
+            | "maxW"
+            | "maxWidth"
+            | "h"
+            | "height"
+            | "min-h"
+            | "minH"
+            | "minHeight"
+            | "max-h"
+            | "maxH"
+            | "maxHeight"
+            | "size"
+            | "basis"
+            | "flexBasis"
+            | "flex"
+            | "inset"
+            | "inset-x"
+            | "insetX"
+            | "inset-y"
+            | "insetY"
+            | "top"
+            | "right"
+            | "bottom"
+            | "left"
+            | "start"
+            | "end"
+            | "translate"
+            | "translate-x"
+            | "translateX"
+            | "translate-y"
+            | "translateY"
+            | "aspect"
+    )
 }
 
 fn needs_brackets(value: &str) -> bool {
@@ -497,6 +913,124 @@ mod tests {
                 "before:bg-no-repeat",
                 "before:content-['']"
             ]
+        );
+    }
+
+    #[test]
+    fn lowers_display_position_visibility_to_bare_utilities() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("display", StaticSzValue::String("flex".to_string())),
+                property("position", StaticSzValue::String("absolute".to_string())),
+                property("visibility", StaticSzValue::String("visible".to_string())),
+                property("isolation", StaticSzValue::String("isolate".to_string())),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["flex", "absolute", "visible", "isolate"]
+        );
+    }
+
+    #[test]
+    fn lowers_display_none_and_visibility_hidden_to_aliases() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("display", StaticSzValue::String("none".to_string())),
+                property("visibility", StaticSzValue::String("hidden".to_string())),
+                property("display", StaticSzValue::String("inline-flex".to_string())),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["hidden", "invisible", "inline-flex"]
+        );
+    }
+
+    fn color_op(prop: &str, color: &str, op: Option<StaticSzValue>) -> Vec<String> {
+        let mut props = vec![property("color", StaticSzValue::String(color.to_string()))];
+        if let Some(op) = op {
+            props.push(property("op", op));
+        }
+        let object = StaticSzObject {
+            properties: vec![property(
+                prop,
+                StaticSzValue::Object(StaticSzObject { properties: props }),
+            )],
+        };
+        lower_static_sz_object(&object)
+    }
+
+    #[test]
+    fn lowers_color_opacity_objects() {
+        assert_eq!(
+            color_op("bg", "blue-500", Some(StaticSzValue::Number(20.0))),
+            ["bg-blue-500/20"]
+        );
+        assert_eq!(
+            color_op("bg", "--my-color", Some(StaticSzValue::Number(50.0))),
+            ["bg-(--my-color)/50"]
+        );
+        assert_eq!(
+            color_op("bg", "#0d0d12", Some(StaticSzValue::Number(90.0))),
+            ["bg-[#0d0d12]/90"]
+        );
+        assert_eq!(
+            color_op("bg", "black", Some(StaticSzValue::Number(0.05))),
+            ["bg-black/[0.05]"]
+        );
+        assert_eq!(
+            color_op(
+                "bg",
+                "pink-500",
+                Some(StaticSzValue::String("78%".to_string()))
+            ),
+            ["bg-pink-500/[78%]"]
+        );
+        // `color` maps to the `text` utility, mirroring the property map.
+        assert_eq!(
+            color_op("color", "white", Some(StaticSzValue::Number(70.0))),
+            ["text-white/70"]
+        );
+        // No `op` member → plain color utility, no slash.
+        assert_eq!(color_op("bg", "white", None), ["bg-white"]);
+    }
+
+    #[test]
+    fn kebab_cases_unknown_keys() {
+        let object = StaticSzObject {
+            properties: vec![property("breakWord", StaticSzValue::Boolean(true))],
+        };
+        assert_eq!(lower_static_sz_object(&object), ["break-word"]);
+    }
+
+    #[test]
+    fn lowers_bare_fractions_native_or_arbitrary() {
+        let supported = StaticSzObject {
+            properties: vec![
+                property("w", StaticSzValue::String("1/2".to_string())),
+                property("basis", StaticSzValue::String("1/3".to_string())),
+            ],
+        };
+        assert_eq!(lower_static_sz_object(&supported), ["w-1/2", "basis-1/3"]);
+
+        let arbitrary = StaticSzObject {
+            properties: vec![property("p", StaticSzValue::String("1/2".to_string()))],
+        };
+        assert_eq!(lower_static_sz_object(&arbitrary), ["p-[1/2]"]);
+    }
+
+    #[test]
+    fn escapes_spaces_in_arbitrary_values() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "gridCols",
+                StaticSzValue::String("280px minmax(0,1fr)".to_string()),
+            )],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["grid-cols-[280px_minmax(0,1fr)]"]
         );
     }
 

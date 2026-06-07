@@ -68,6 +68,7 @@ export {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
+    SPECIAL_VARIANTS,
     SUGGESTION_MAP,
 } from './transform-core.js';
 export {

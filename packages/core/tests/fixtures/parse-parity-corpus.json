@@ -1,0 +1,122 @@
+[
+    {
+        "source": "const A = () => <div sz={{ p: 4 }} />;",
+        "classes": ["p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ p: 4, bg: \"red-500\", flex: true }} />;",
+        "classes": ["bg-red-500", "flex", "p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ m: -2, gap: \"1/2\" }} />;",
+        "classes": ["-m-2", "gap-[1/2]"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ w: \"280px minmax(0,1fr)\" }} />;",
+        "classes": ["w-[280px_minmax(0,1fr)]"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ display: \"flex\" }} />;",
+        "classes": ["flex"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ md: { flex: true }, p: 6 }} />;",
+        "classes": ["md:flex", "p-6"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ hover: { bg: \"blue-600\" } }} />;",
+        "classes": ["hover:bg-blue-600"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ group: { hover: { color: \"white\" } } }} />;",
+        "classes": ["group-hover:text-white"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ supports: { \"display:grid\": { grid: true } } }} />;",
+        "classes": ["supports-[display:grid]:grid"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ bg: { color: \"blue-500\", op: 20 } }} />;",
+        "classes": ["bg-blue-500/20"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ p: pad }} />;",
+        "classes": ["p-(--_sz-p)"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ p: 4, m: gap }} />;",
+        "classes": ["m-(--_sz-m)", "p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={cond ? { p: 4 } : { m: 2 }} />;",
+        "classes": ["m-2", "p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div className=\"flex gap-2\" sz={{ p: 4 }} />;",
+        "classes": ["p-4"],
+        "rawClassNames": ["flex", "gap-2"]
+    },
+    {
+        "source": "const A = () => <div className=\"sport-neon p-4\" />;",
+        "classes": [],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div className={`a ${x}`} />;",
+        "classes": [],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => (<section><span sz={{ m: 2 }} /><p sz={{ p: 1, text: \"sm\" }} /></section>);",
+        "classes": ["m-2", "p-1", "text-sm"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <Card sz={{ p: 4 }} />;",
+        "classes": ["p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ p: 4 }}>{/* sz={{ m: 9 }} in a comment */}</div>;",
+        "classes": ["p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div title=\"sz={{ z: 9 }}\" sz={{ p: 4 }} />;",
+        "classes": ["p-4"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ \"before:content\": \"''\", before: { p: 1 } }} />;",
+        "classes": ["before:content-''", "before:p-1"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ rounded: \"lg\", border: 2, shadow: \"md\" }} />;",
+        "classes": ["border-2", "rounded-lg", "shadow-md"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ forcedColors: { borderColor: \"gray\" } }} />;",
+        "classes": ["forced-colors:border-gray"],
+        "rawClassNames": []
+    },
+    {
+        "source": "const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;",
+        "classes": ["inert:opacity-50", "starting:opacity-0"],
+        "rawClassNames": []
+    }
+]

@@ -214,6 +214,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
     let totalTransformed = 0;
     let totalSkipped = 0;
+    let totalSkippedComponent = 0;
     let totalFiles = 0;
     const allUnrecognized: string[] = [];
     const allWarnings: string[] = [];
@@ -262,6 +263,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
             totalFiles++;
             totalTransformed += result.stats.classNamesTransformed;
             totalSkipped += result.stats.classNamesSkipped;
+            totalSkippedComponent += result.stats.classNamesSkippedComponent;
             allUnrecognized.push(...result.stats.classesUnrecognized);
 
             // Track potentially unused imports
@@ -305,6 +307,10 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     if (totalSkipped > 0) {
         printWarn(`classNames skipped (dynamic): ${totalSkipped}`);
         log.writeLine(`classNames skipped (dynamic): ${totalSkipped}`);
+    }
+    if (totalSkippedComponent > 0) {
+        printWarn(`classNames kept on components (no sz support): ${totalSkippedComponent}`);
+        log.writeLine(`classNames kept on components (no sz support): ${totalSkippedComponent}`);
     }
     if (allUnrecognized.length > 0) {
         const unique = [...new Set(allUnrecognized)];

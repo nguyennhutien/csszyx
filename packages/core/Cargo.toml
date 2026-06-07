@@ -6,6 +6,8 @@ edition = "2021"
 description = "Performance-critical core for csszyx CSS-in-JS framework"
 license = "MIT"
 repository = "https://github.com/nguyennhutien/csszyx"
+keywords = ["css-in-js", "tailwind", "css", "compiler", "transform"]
+categories = ["web-programming", "compilers"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

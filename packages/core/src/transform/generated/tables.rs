@@ -297,6 +297,15 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "tableLayout" => Some("table"),
         "caption" => Some("caption"),
         "overflow" => Some("overflow"),
+        "scrollbar" => Some("scrollbar"),
+        "scrollbarThumb" => Some("scrollbar-thumb"),
+        "scrollbarTrack" => Some("scrollbar-track"),
+        "scrollbarGutter" => Some("scrollbar-gutter"),
+        "zoom" => Some("zoom"),
+        "tabSize" => Some("tab"),
+        "maskFrom" => Some("mask-from"),
+        "maskVia" => Some("mask-via"),
+        "maskTo" => Some("mask-to"),
         _ => None,
     }
 }
@@ -325,6 +334,14 @@ pub(crate) fn variant_prefix(key: &str) -> Option<&'static str> {
         "pointerFine" => Some("pointer-fine"),
         "pointerCoarse" => Some("pointer-coarse"),
         "pointerNone" => Some("pointer-none"),
+        "anyPointerFine" => Some("any-pointer-fine"),
+        "anyPointerCoarse" => Some("any-pointer-coarse"),
+        "anyPointerNone" => Some("any-pointer-none"),
+        "userValid" => Some("user-valid"),
+        "userInvalid" => Some("user-invalid"),
+        "detailsContent" => Some("details-content"),
+        "invertedColors" => Some("inverted-colors"),
+        "forcedColors" => Some("forced-colors"),
         "screenPortrait" => Some("portrait"),
         "screenLandscape" => Some("landscape"),
         "@maxSm" => Some("@max-sm"),
@@ -443,5 +460,138 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
             | "spaceYReverse"
             | "ring"
             | "outline"
+    )
+}
+
+/// Returns true when a key is a known csszyx variant name.
+pub(crate) fn is_known_variant(key: &str) -> bool {
+    matches!(
+        key,
+        "sm" | "md"
+            | "lg"
+            | "xl"
+            | "2xl"
+            | "@sm"
+            | "@md"
+            | "@lg"
+            | "@xl"
+            | "@2xl"
+            | "dark"
+            | "light"
+            | "print"
+            | "portrait"
+            | "landscape"
+            | "motion-reduce"
+            | "motion-safe"
+            | "motionReduce"
+            | "motionSafe"
+            | "contrast-more"
+            | "contrast-less"
+            | "contrastMore"
+            | "contrastLess"
+            | "hover"
+            | "focus"
+            | "focus-within"
+            | "focus-visible"
+            | "focusWithin"
+            | "focusVisible"
+            | "active"
+            | "visited"
+            | "target"
+            | "disabled"
+            | "enabled"
+            | "checked"
+            | "indeterminate"
+            | "default"
+            | "required"
+            | "valid"
+            | "invalid"
+            | "in-range"
+            | "out-of-range"
+            | "inRange"
+            | "outOfRange"
+            | "placeholder-shown"
+            | "placeholderShown"
+            | "autofill"
+            | "read-only"
+            | "readOnly"
+            | "first"
+            | "last"
+            | "only"
+            | "odd"
+            | "even"
+            | "empty"
+            | "first-of-type"
+            | "last-of-type"
+            | "only-of-type"
+            | "firstOfType"
+            | "lastOfType"
+            | "onlyOfType"
+            | "first-child"
+            | "last-child"
+            | "only-child"
+            | "firstChild"
+            | "lastChild"
+            | "onlyChild"
+            | "before"
+            | "after"
+            | "placeholder"
+            | "file"
+            | "marker"
+            | "selection"
+            | "first-line"
+            | "first-letter"
+            | "firstLine"
+            | "firstLetter"
+            | "backdrop"
+            | "pointer-fine"
+            | "pointer-coarse"
+            | "pointer-none"
+            | "pointerFine"
+            | "pointerCoarse"
+            | "pointerNone"
+            | "any-pointer-fine"
+            | "any-pointer-coarse"
+            | "any-pointer-none"
+            | "anyPointerFine"
+            | "anyPointerCoarse"
+            | "anyPointerNone"
+            | "user-valid"
+            | "user-invalid"
+            | "userValid"
+            | "userInvalid"
+            | "details-content"
+            | "detailsContent"
+            | "inverted-colors"
+            | "invertedColors"
+            | "noscript"
+            | "forced-colors"
+            | "forcedColors"
+            | "starting"
+            | "inert"
+            | "open"
+            | "ltr"
+            | "rtl"
+    )
+}
+
+/// Returns true when a key is a standard ARIA state.
+pub(crate) fn is_aria_state(key: &str) -> bool {
+    matches!(
+        key,
+        "checked"
+            | "disabled"
+            | "expanded"
+            | "hidden"
+            | "pressed"
+            | "readonly"
+            | "required"
+            | "selected"
+            | "busy"
+            | "current"
+            | "invalid"
+            | "live"
+            | "atomic"
+            | "modal"
     )
 }

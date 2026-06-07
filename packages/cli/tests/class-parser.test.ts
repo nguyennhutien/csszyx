@@ -24,6 +24,18 @@ describe('class-parser', () => {
             expect(parseClass('list-item')).toEqual({ prop: 'listItem', value: true });
         });
 
+        it('transition and group/peer markers', () => {
+            // Bare `transition` round-trips through the compiler as boolean sugar,
+            // and the prefixed form still resolves to a value, not a no-op.
+            expect(parseClass('transition')).toEqual({ prop: 'transition', value: true });
+            expect(parseClass('transition-colors')).toEqual({
+                prop: 'transition',
+                value: 'colors',
+            });
+            expect(parseClass('group')).toEqual({ prop: 'group', value: true });
+            expect(parseClass('peer')).toEqual({ prop: 'peer', value: true });
+        });
+
         it('canonical display mode', () => {
             expect(parseClass('block', { display: 'canonical' })).toEqual({
                 prop: 'display',

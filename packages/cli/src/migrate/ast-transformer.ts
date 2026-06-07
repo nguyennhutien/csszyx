@@ -41,6 +41,8 @@ export interface TransformResult {
     stats: {
         classNamesTransformed: number;
         classNamesSkipped: number;
+        /** className kept on capitalized components (they do not accept sz). */
+        classNamesSkippedComponent: number;
         classesUnrecognized: string[];
     };
     /** Imports that may be unused after migration (e.g., clsx, cn). */
@@ -171,6 +173,7 @@ export function transformSource(
     const warnings: string[] = [];
     let classNamesTransformed = 0;
     let classNamesSkipped = 0;
+    let classNamesSkippedComponent = 0;
     const classesUnrecognized: string[] = [];
     const replacements: Replacement[] = [];
 
@@ -193,7 +196,12 @@ export function transformSource(
             code: source,
             changed: false,
             warnings: [],
-            stats: { classNamesTransformed: 0, classNamesSkipped: 0, classesUnrecognized: [] },
+            stats: {
+                classNamesTransformed: 0,
+                classNamesSkipped: 0,
+                classNamesSkippedComponent: 0,
+                classesUnrecognized: [],
+            },
             potentiallyUnusedImports: [],
         };
     }
@@ -213,7 +221,12 @@ export function transformSource(
             code: source,
             changed: false,
             warnings: [`Parse error in ${filePath}: ${msg}`],
-            stats: { classNamesTransformed: 0, classNamesSkipped: 0, classesUnrecognized: [] },
+            stats: {
+                classNamesTransformed: 0,
+                classNamesSkipped: 0,
+                classNamesSkippedComponent: 0,
+                classesUnrecognized: [],
+            },
             potentiallyUnusedImports: [],
         };
     }
@@ -266,7 +279,7 @@ export function transformSource(
                     (t.isJSXIdentifier(elementName) && /^[A-Z]/.test(elementName.name)) ||
                     t.isJSXMemberExpression(elementName);
                 if (isCapitalized) {
-                    classNamesSkipped++;
+                    classNamesSkippedComponent++;
                     return;
                 }
             }
@@ -347,6 +360,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -373,6 +392,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -392,6 +417,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -411,6 +442,12 @@ export function transformSource(
                     } else {
                         classNamesSkipped++;
                         warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
+                        // Even when the dynamic pattern is skipped, its static
+                        // parts were scanned. Surface any unrecognized custom
+                        // classes (e.g. design-system tokens) so they appear in
+                        // the summary and audit todo file instead of being hidden
+                        // behind a single "skipped" count.
+                        classesUnrecognized.push(...result.unrecognized);
                     }
                     injectTodoComment(result.unrecognized, parent, options, replacements);
                     return;
@@ -456,7 +493,12 @@ export function transformSource(
         code: output,
         changed: replacements.length > 0,
         warnings,
-        stats: { classNamesTransformed, classNamesSkipped, classesUnrecognized },
+        stats: {
+            classNamesTransformed,
+            classNamesSkipped,
+            classNamesSkippedComponent,
+            classesUnrecognized,
+        },
         potentiallyUnusedImports,
     };
 }
@@ -571,6 +613,7 @@ export function transformHtmlSourceSimple(
     const warnings: string[] = [];
     let classNamesTransformed = 0;
     let classNamesSkipped = 0;
+    const classNamesSkippedComponent = 0;
     const classesUnrecognized: string[] = [];
     let changed = false;
 
@@ -639,7 +682,12 @@ export function transformHtmlSourceSimple(
         code: output,
         changed,
         warnings,
-        stats: { classNamesTransformed, classNamesSkipped, classesUnrecognized },
+        stats: {
+            classNamesTransformed,
+            classNamesSkipped,
+            classNamesSkippedComponent,
+            classesUnrecognized,
+        },
         potentiallyUnusedImports: [],
     };
 }

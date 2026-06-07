@@ -1859,8 +1859,15 @@ export interface VariantModifiers {
     invertedColors?: SzPropsBase;
     noscript?: SzPropsBase;
 
+    // Forced-colors media variant
+    forcedColors?: SzPropsBase;
+
     // Print
     print?: SzPropsBase;
+
+    // Starting-style + inert state variants
+    starting?: SzPropsBase;
+    inert?: SzPropsBase;
 
     // Orientation
     portrait?: SzPropsBase;

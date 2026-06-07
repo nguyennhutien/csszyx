@@ -13,6 +13,8 @@
  * @module @csszyx/cli
  */
 
+import { readFileSync } from 'node:fs';
+
 import cac from 'cac';
 
 import { audit } from './commands/audit.js';
@@ -27,9 +29,26 @@ const cli = cac('csszyx');
 normalizeNextCommandAlias(process.argv);
 
 /**
- * Package version (will be replaced by build process).
+ * Reads the CLI version from the installed package manifest at runtime.
+ *
+ * The bundle ships no build-time string replacement, so a hardcoded constant
+ * would publish as `0.0.0`. Resolving `package.json` relative to the emitted
+ * entry keeps `--version` and the help banner truthful for installed users.
+ *
+ * @returns The package version, or `0.0.0` when the manifest cannot be read.
  */
-const VERSION = '0.0.0';
+function readCliVersion(): string {
+    try {
+        const manifest = JSON.parse(
+            readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+        ) as { version?: unknown };
+        return typeof manifest.version === 'string' ? manifest.version : '0.0.0';
+    } catch {
+        return '0.0.0';
+    }
+}
+
+const VERSION = readCliVersion();
 
 interface CacNextPrebuildOptions {
     cwd?: string;

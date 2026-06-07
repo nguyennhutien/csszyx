@@ -1,0 +1,241 @@
+#!/usr/bin/env node
+/**
+ * Generates the TS↔Rust lowering parity corpus.
+ *
+ * For every sz object below it records the canonical Babel/oxc `transform()`
+ * className and serializes the object into the Rust `StaticSzObject` IR shape.
+ * `packages/core/tests/parity_corpus.rs` replays the same objects through the
+ * native `lower_static_sz_object` and asserts identical class output, so a
+ * divergence between the two parser paths fails closed instead of shipping a
+ * silent default-parser bug.
+ *
+ * Usage: pnpm gen:parity-corpus
+ */
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { transform } from '../packages/compiler/src/transform.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const outFile = resolve(here, '../packages/core/tests/fixtures/parity-corpus.json');
+
+/** Converts a JS sz value into the serde `StaticSzValue` tagged shape. */
+function toIrValue(value) {
+    if (value === null) {
+        return { kind: 'string', value: '' };
+    }
+    if (typeof value === 'string') {
+        return { kind: 'string', value };
+    }
+    if (typeof value === 'number') {
+        return { kind: 'number', value };
+    }
+    if (typeof value === 'boolean') {
+        return { kind: 'boolean', value };
+    }
+    if (typeof value === 'object') {
+        return { kind: 'object', value: toIrObject(value) };
+    }
+    return { kind: 'string', value: String(value) };
+}
+
+/** Converts a JS sz object into the serde `StaticSzObject` shape (order kept). */
+function toIrObject(object) {
+    return {
+        properties: Object.entries(object).map(([key, value]) => ({
+            key,
+            span: { start: 0, end: 0 },
+            value: toIrValue(value),
+        })),
+    };
+}
+
+// Representative, spec-aligned sz objects across every category, plus the
+// edge cases the KLTN dogfood surfaced (display, color opacity, arbitrary
+// spaces) and variant/nesting forms. Nonsensical-for-a-key values are fine:
+// the harness asserts the two paths AGREE, not that the value is meaningful.
+const corpus = [
+    // spacing
+    { p: 4 },
+    { px: 2 },
+    { py: 8 },
+    { m: 'auto' },
+    { m: -2 },
+    { gap: 6 },
+    { p: '100px' },
+    { mx: '--space' },
+    { p: '1/2' },
+    { gap: '[10px]' },
+    // sizing
+    { w: 4 },
+    { w: 'full' },
+    { w: '1/2' },
+    { h: 'screen' },
+    { minW: '3px' },
+    { maxW: 'prose' },
+    { size: 10 },
+    { w: 'calc(100%-1rem)' },
+    { h: '[var(--h)]' },
+    // layout — display / position / visibility (KLTN P0-1)
+    { display: 'block' },
+    { display: 'inline-block' },
+    { display: 'flex' },
+    { display: 'inline-flex' },
+    { display: 'grid' },
+    { display: 'none' },
+    { display: 'contents' },
+    { display: 'table-cell' },
+    { display: 'flow-root' },
+    { position: 'absolute' },
+    { position: 'fixed' },
+    { position: 'sticky' },
+    { visibility: 'visible' },
+    { visibility: 'hidden' },
+    { visibility: 'collapse' },
+    { float: 'left' },
+    { clear: 'both' },
+    { object: 'cover' },
+    { overflow: 'hidden' },
+    { z: 10 },
+    { z: 'auto' },
+    { inset: 0 },
+    { top: 4 },
+    { isolation: 'isolate' },
+    // flex / grid (KLTN P1-4 arbitrary spaces)
+    { flex: true },
+    { flex: 1 },
+    { flex: 'auto' },
+    { flexDir: 'row' },
+    { flexDir: 'col' },
+    { items: 'center' },
+    { justify: 'between' },
+    { self: 'end' },
+    { content: 'center' },
+    { grow: true },
+    { shrink: 0 },
+    { order: 2 },
+    { basis: '14.28%' },
+    { gridCols: 3 },
+    { gridCols: 'none' },
+    { gridCols: '200px' },
+    { gridCols: '280px minmax(0,1fr)' },
+    { gridCols: '1fr auto' },
+    { gridRows: 'subgrid' },
+    // colors + opacity object (KLTN P1-3)
+    { bg: 'red-500' },
+    { bg: '--my-color' },
+    { bg: '#0d0d12' },
+    { bg: 'transparent' },
+    { bg: { color: 'blue-500', op: 20 } },
+    { bg: { color: '--my-color', op: 50 } },
+    { bg: { color: '#0d0d12', op: 90 } },
+    { bg: { color: 'black', op: 0.05 } },
+    { bg: { color: 'pink-500', op: '78%' } },
+    { bg: { color: 'white' } },
+    { color: 'gray-900' },
+    { color: { color: 'white', op: 70 } },
+    { border: 'red-200' },
+    { ring: { color: 'blue-500', op: 50 } },
+    // typography
+    { text: 'sm' },
+    { text: 'lg' },
+    { text: '[13px]' },
+    { font: 'bold' },
+    { font: 'mono' },
+    { leading: 7 },
+    { leading: 'tight' },
+    { tracking: 'wide' },
+    { align: 'middle' },
+    { whitespace: 'nowrap' },
+    { italic: true },
+    { italic: false },
+    { underline: true },
+    { weight: 600 },
+    { indent: 4 },
+    { breakWord: true },
+    // borders
+    { rounded: 'lg' },
+    { rounded: 'full' },
+    { rounded: '[4px]' },
+    { border: 2 },
+    { borderStyle: 'dashed' },
+    { divide: 'gray-200' },
+    { outline: 2 },
+    { ring: 4 },
+    { ringOffset: 2 },
+    // backgrounds
+    { bgSize: 'cover' },
+    { bgSize: '8px 8px' },
+    { bgRepeat: 'no-repeat' },
+    { bgPos: 'center' },
+    { bgImg: { gradient: 'linear', dir: 45 } },
+    // effects / filters
+    { shadow: 'lg' },
+    { shadow: '0 35px 60px -15px rgba(0,0,0,0.3)' },
+    { opacity: 80 },
+    { mixBlend: 'multiply' },
+    { blur: 'sm' },
+    { brightness: 110 },
+    { grayscale: true },
+    // transforms / transitions
+    { scale: 110 },
+    { rotate: 45 },
+    { rotate: -90 },
+    { translateX: 4 },
+    { transition: 'colors' },
+    { duration: 300 },
+    { ease: 'in-out' },
+    { delay: 150 },
+    // interactivity
+    { cursor: 'pointer' },
+    { select: 'none' },
+    { pointer: 'none' },
+    { scroll: 'smooth' },
+    // variants — responsive / state / dark / group / peer / arbitrary / supports
+    { md: { flex: true } },
+    { lg: { gridCols: 4 } },
+    { sm: { p: 2 } },
+    { hover: { bg: 'blue-600' } },
+    { focus: { ring: 2 } },
+    { active: { scale: 95 } },
+    { dark: { bg: 'gray-900' } },
+    { group: { hover: { color: 'white' } } },
+    { peer: { focus: { text: 'red-500' } } },
+    { peer: { checked: { bg: 'green-500' } } },
+    { group: { has: { input: { block: true } } } },
+    { group: { data: { active: { bg: 'blue-500' } } } },
+    { group: { aria: { checked: { bg: 'blue-500' } } } },
+    { group: { '.is-published': { block: true } } },
+    { group: { sidebar: { hover: { color: 'white' } } } },
+    { has: { checked: { bg: 'blue-500' } } },
+    { has: { img: { rounded: 'lg' } } },
+    { aria: { checked: { bg: 'blue-500' } } },
+    { aria: { 'busy=true': { p: 2 } } },
+    { 'group-hover': { dark: { text: 'white' } } },
+    { md: { hover: { text: 'white' } } },
+    { '[&>span]': { p: 1 } },
+    { supports: { 'display:grid': { grid: true } } },
+    { supports: { 'backdrop-filter:blur(1px)': { rounded: 'lg' } } },
+    { not: { first: { mt: 4 } } },
+    { not: { hover: { opacity: 75 } } },
+    { not: { supports: { 'display:grid': { block: true } } } },
+    { data: { active: { bg: 'blue-500' } } },
+    { data: { 'state=open': { p: 2 } } },
+    { firstChild: { ml: 0 } },
+    // combinations / multiple props / important
+    { p: 4, bg: 'red-500', flex: true },
+    { display: 'flex', items: 'center', gap: 3 },
+    { md: { display: 'grid', gridCols: 2 }, p: 6 },
+    { mt: 6, display: 'flex', flexWrap: 'wrap', gap: 3 },
+];
+
+const records = corpus.map(sz => ({
+    sz: JSON.stringify(sz),
+    ir: toIrObject(sz),
+    oxc: transform(sz).className,
+}));
+
+mkdirSync(dirname(outFile), { recursive: true });
+writeFileSync(outFile, `${JSON.stringify(records, null, 2)}\n`, 'utf8');
+console.log(`Wrote ${records.length} parity records to ${outFile}`);

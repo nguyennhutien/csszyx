@@ -140,6 +140,25 @@ describe('ast-transformer (simple)', () => {
         expect(result.stats.classNamesTransformed).toBe(1);
     });
 
+    it('counts component classNames separately from dynamic skips', () => {
+        const source = '<div className="p-4"><Card className="m-2" /></div>';
+        const result = transformSourceSimple(source, 'test.tsx');
+        expect(result.stats.classNamesTransformed).toBe(1);
+        expect(result.stats.classNamesSkipped).toBe(0);
+        expect(result.stats.classNamesSkippedComponent).toBe(1);
+        // The component className is intentionally left untouched.
+        expect(result.code).toContain('<Card className="m-2"');
+    });
+
+    it('reports unrecognized classes inside a skipped template literal', () => {
+        // The template literal is skipped (arbitrary call), but its static
+        // custom class must still surface in the report instead of being hidden.
+        const source = 'const A = () => <div className={`text-sm sport-neon ${color(x)}`} />;';
+        const result = transformSourceSimple(source, 'test.tsx');
+        expect(result.changed).toBe(false);
+        expect(result.stats.classesUnrecognized).toContain('sport-neon');
+    });
+
     it('keeps conflicting display classes in className', () => {
         const source = '<div className="flex relative hidden" />';
         const result = transformSourceSimple(source, 'test.tsx');

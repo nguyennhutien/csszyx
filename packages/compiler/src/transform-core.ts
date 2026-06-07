@@ -581,6 +581,9 @@ export const VARIANT_MAP: Record<string, string> = {
     detailsContent: 'details-content',
     invertedColors: 'inverted-colors',
 
+    // Forced-colors media variant
+    forcedColors: 'forced-colors',
+
     // Screen orientation
     screenPortrait: 'portrait',
     screenLandscape: 'landscape',
@@ -594,9 +597,20 @@ export const VARIANT_MAP: Record<string, string> = {
 };
 
 // ============================================================================
-// SPECIAL_VARIANTS: Variants that use `-` separator instead of `:`
+// SPECIAL_VARIANTS: Parametric/scope variants that take a nested target and
+// combine with `-`/bracket syntax instead of a plain `:` (e.g. group-hover,
+// has-[:checked], supports-[display:grid]). Kept separate from KNOWN_VARIANTS
+// because they are not standalone variant names.
 // ============================================================================
-// const SPECIAL_VARIANTS = new Set(['group', 'peer', 'has', 'not', 'data', 'aria', 'supports']);
+export const SPECIAL_VARIANTS: Set<string> = new Set([
+    'group',
+    'peer',
+    'has',
+    'not',
+    'data',
+    'aria',
+    'supports',
+]);
 
 // ============================================================================
 // KNOWN_VARIANTS: All known variant names for disambiguation
@@ -715,6 +729,12 @@ export const KNOWN_VARIANTS: Set<string> = new Set([
     'invertedColors',
     // Noscript (v4.1)
     'noscript',
+    // Forced-colors media variant
+    'forced-colors',
+    'forcedColors',
+    // Starting-style + inert state variants
+    'starting',
+    'inert',
     // Open
     'open',
     // RTL/LTR
@@ -2678,15 +2698,8 @@ export function transform(
                 rawKey.startsWith('@') ||
                 // Variants that fell through (e.g. empty object)
                 KNOWN_VARIANTS.has(rawKey) ||
-                // Groups/Peers
-                rawKey === 'group' ||
-                rawKey === 'peer' ||
-                // Special variant objects
-                rawKey === 'has' ||
-                rawKey === 'not' ||
-                rawKey === 'data' ||
-                rawKey === 'aria' ||
-                rawKey === 'supports' ||
+                // Parametric/scope variants (group, peer, has, not, data, aria, supports)
+                SPECIAL_VARIANTS.has(rawKey) ||
                 rawKey === 'min' ||
                 rawKey === 'max';
 

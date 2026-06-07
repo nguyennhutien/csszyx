@@ -27,6 +27,8 @@
     "prepare": "lefthook install",
     "postinstall": "[ -f .agent/fix-linux-arm64-binaries.sh ] && bash .agent/fix-linux-arm64-binaries.sh || true",
     "gen:llms": "node scripts/gen-llms.mjs",
+    "gen:parity-corpus": "node --import tsx/esm scripts/gen-rust-parity-corpus.mjs",
+    "gen:parse-parity-corpus": "node --import tsx/esm scripts/gen-rust-parse-parity-corpus.mjs",
     "gen:rust-tables": "node scripts/generate-rust-transform-tables.mjs",
     "gen:rust-tables:check": "node scripts/generate-rust-transform-tables.mjs --check",
     "build": "pnpm run gen:llms && turbo run build",

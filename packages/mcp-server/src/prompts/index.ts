@@ -77,11 +77,15 @@ Please:
 
 Key csszyx rules:
 - Numbers are bare: { p: 4 } → p-4
-- Colors are strings: { bg: 'blue-500' } → bg-blue-500  
+- Colors are strings: { bg: 'blue-500' } → bg-blue-500
+- Color + opacity is an object: { bg: { color: 'blue-500', op: 50 } } → bg-blue-500/50
 - Variants nest: { hover: { bg: 'blue-700' } } → hover:bg-blue-700
 - Boolean sugar: { flex: true } → flex
+- Fractions stay native: { w: '1/2' } → w-1/2
 - Arbitrary values: { p: '5px' } → p-[5px]
-- CSS variables: { p: '--my-var' } → p-(--my-var)`,
+- CSS variables: { p: '--my-var' } → p-(--my-var)
+- Scope variants: { group: { hover: { bg: 'blue-700' } } } → group-hover:bg-blue-700 (also peer)
+- Conditional/feature variants: { has: { checked: { ... } } } → has-[:checked]:…, { supports: { 'display:grid': { ... } } } → supports-[display:grid]:… (also not/data/aria)`,
                         },
                     },
                 ],
@@ -110,7 +114,9 @@ Key csszyx syntax:
 - <div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
 - <div sz={{ flex: true, items: 'center', gap: 4 }} />
 - <div sz={{ md: { gridCols: 3 }, gridCols: 1, gap: 6 }} />
-- <div sz={{ dark: { bg: 'gray-900', color: 'white' } }} />`,
+- <div sz={{ dark: { bg: 'gray-900', color: 'white' } }} />
+- <div sz={{ bg: { color: 'blue-500', op: 50 }, w: '1/2' }} />  (color opacity + fraction)
+- <div sz={{ group: { hover: { bg: 'blue-700' } } }} />  (group/peer scope variants)`,
                         },
                     },
                 ],
