@@ -1206,16 +1206,41 @@ fn static_object_from_object_expression(
                 if is_skippable_static_value(&property.value) {
                     continue;
                 }
-                properties.push(static_property_from_object_property(property, ctx)?);
+                merge_static_property(
+                    &mut properties,
+                    static_property_from_object_property(property, ctx)?,
+                );
             }
             ObjectPropertyKind::SpreadProperty(spread) => {
-                properties
-                    .extend(static_object_from_spread_argument(&spread.argument, ctx)?.properties);
+                merge_static_properties(
+                    &mut properties,
+                    static_object_from_spread_argument(&spread.argument, ctx)?.properties,
+                );
             }
         }
     }
 
     Some(StaticSzObject { properties })
+}
+
+fn merge_static_properties(
+    properties: &mut Vec<StaticSzProperty>,
+    incoming: impl IntoIterator<Item = StaticSzProperty>,
+) {
+    for property in incoming {
+        merge_static_property(properties, property);
+    }
+}
+
+fn merge_static_property(properties: &mut Vec<StaticSzProperty>, incoming: StaticSzProperty) {
+    if let Some(existing) = properties
+        .iter_mut()
+        .find(|property| property.key == incoming.key)
+    {
+        *existing = incoming;
+    } else {
+        properties.push(incoming);
+    }
 }
 
 fn static_object_from_spread_argument(

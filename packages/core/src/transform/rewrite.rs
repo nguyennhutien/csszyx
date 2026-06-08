@@ -661,6 +661,50 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_static_object_with_last_property_wins_semantics() {
+        let source = "const App = () => <div sz={{ p: 2, m: 1, p: 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"p-4 m-1\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_identifier_spread_with_trailing_override() {
+        let source = "const ITEM = { p: 2, rounded: 'md' } as const;\nconst App = () => <div sz={{ ...ITEM, p: 8 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const ITEM = { p: 2, rounded: 'md' } as const;\nconst App = () => <div className=\"p-8 rounded-md\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_nested_variant_override_as_replacement() {
+        let source = "const BASE = { hover: { p: 2, m: 1 } } as const;\nconst App = () => <div sz={{ ...BASE, hover: { p: 4 } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const BASE = { hover: { p: 2, m: 1 } } as const;\nconst App = () => <div className=\"hover:p-4\" />;"
+        );
+    }
+
+    #[test]
+    fn keeps_array_entries_as_composed_style_objects() {
+        let source = "const App = () => <div sz={[{ p: 2, m: 1 }, { p: 4 }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"p-2 m-1 p-4\" />;"
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_array_sz_attribute() {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
         let rewritten = rewrite(source).expect("rewritten");
