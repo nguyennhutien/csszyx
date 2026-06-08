@@ -1767,3 +1767,171 @@ function buildCSSVarClassName(info: DynamicPropInfo): string {
     const variantPrefix = variantChain ? `${getVariantPrefix(variantChain)}:` : '';
     return `${variantPrefix}${twPrefix}-(${varName})`;
 }
+
+/**
+ * Scans the source for any static szv() variant configurations or dynamic() calls,
+ * extracts their variant combinations, compiles them to classes, and returns the set.
+ *
+ * @param source Source module contents.
+ * @param filename Optional filename.
+ * @returns Set of extracted catalog classes.
+ */
+export function extractCatalogClasses(source: string, filename?: string): Set<string> {
+    const collectedClasses = new Set<string>();
+
+    if (!source.includes('szv') && !source.includes('dynamic')) {
+        return collectedClasses;
+    }
+
+    try {
+        babel.transformSync(source, {
+            filename: filename ?? 'file.tsx',
+            configFile: false,
+            babelrc: false,
+            ast: false,
+            code: false,
+            parserOpts: {
+                plugins: ['typescript', 'jsx'],
+            },
+            plugins: [
+                () => ({
+                    visitor: {
+                        VariableDeclarator(path: babel.NodePath<t.VariableDeclarator>) {
+                            const init = path.node.init;
+                            if (!t.isCallExpression(init)) {
+                                return;
+                            }
+                            if (!t.isIdentifier(init.callee) || init.callee.name !== 'szv') {
+                                return;
+                            }
+                            if (init.arguments.length === 0) {
+                                return;
+                            }
+                            if (!t.isIdentifier(path.node.id)) {
+                                return;
+                            }
+
+                            const configArg = init.arguments[0];
+                            if (!t.isObjectExpression(configArg)) {
+                                return;
+                            }
+                            const config = evaluateStaticObject(configArg);
+                            if (!config) {
+                                return;
+                            }
+
+                            const base = (config.base ?? {}) as SzObject;
+                            const variants = (config.variants ?? {}) as Record<
+                                string,
+                                Record<string, SzObject>
+                            >;
+
+                            const classStrings: string[] = [];
+
+                            const baseResult = transform(base);
+                            const baseCls =
+                                typeof baseResult === 'string' ? baseResult : baseResult.className;
+                            if (baseCls) {
+                                classStrings.push(baseCls);
+                            }
+
+                            for (const variantValues of Object.values(variants)) {
+                                for (const variantObj of Object.values(variantValues)) {
+                                    if (!variantObj || typeof variantObj !== 'object') {
+                                        continue;
+                                    }
+                                    const merged: SzObject = {
+                                        ...base,
+                                        ...(variantObj as SzObject),
+                                    };
+                                    const result = transform(merged);
+                                    const cls =
+                                        typeof result === 'string' ? result : result.className;
+                                    if (cls) {
+                                        classStrings.push(cls);
+                                    }
+                                }
+                            }
+
+                            for (const combined of classStrings) {
+                                for (const c of combined.split(/\s+/)) {
+                                    if (c) {
+                                        collectedClasses.add(c);
+                                    }
+                                }
+                            }
+                        },
+
+                        CallExpression(path: babel.NodePath<t.CallExpression>) {
+                            const callee = path.node.callee;
+                            if (!t.isIdentifier(callee) || callee.name !== 'dynamic') {
+                                return;
+                            }
+                            if (path.node.arguments.length === 0) {
+                                return;
+                            }
+
+                            const arg = path.node.arguments[0];
+
+                            if (t.isObjectExpression(arg)) {
+                                const staticObj = evaluateStaticObject(arg);
+                                if (!staticObj) {
+                                    return;
+                                }
+                                const { className } = transform(staticObj as SzObject);
+                                for (const c of className.split(/\s+/)) {
+                                    if (c) {
+                                        collectedClasses.add(c);
+                                    }
+                                }
+                                return;
+                            }
+
+                            let argExpr: t.Expression = arg as t.Expression;
+                            while (
+                                t.isTSAsExpression(argExpr) ||
+                                t.isTSSatisfiesExpression(argExpr)
+                            ) {
+                                argExpr = argExpr.expression;
+                            }
+                            if (t.isIdentifier(argExpr)) {
+                                const binding = path.scope.getBinding(argExpr.name);
+                                if (!binding) {
+                                    return;
+                                }
+                                const declarator = binding.path.node;
+                                if (!t.isVariableDeclarator(declarator) || !declarator.init) {
+                                    return;
+                                }
+                                let initExpr = declarator.init;
+                                while (
+                                    t.isTSAsExpression(initExpr) ||
+                                    t.isTSSatisfiesExpression(initExpr)
+                                ) {
+                                    initExpr = initExpr.expression;
+                                }
+                                if (!t.isObjectExpression(initExpr)) {
+                                    return;
+                                }
+                                const staticObj = evaluateStaticObject(initExpr);
+                                if (!staticObj) {
+                                    return;
+                                }
+                                const { className } = transform(staticObj as SzObject);
+                                for (const c of className.split(/\s+/)) {
+                                    if (c) {
+                                        collectedClasses.add(c);
+                                    }
+                                }
+                            }
+                        },
+                    },
+                }),
+            ],
+        });
+    } catch (e) {
+        console.warn('[csszyx] Catalog classes extraction failed:', e);
+    }
+
+    return collectedClasses;
+}

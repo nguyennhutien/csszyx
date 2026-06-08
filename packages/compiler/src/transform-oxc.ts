@@ -42,10 +42,11 @@ import {
     PropertyCategory,
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
-import type {
-    CssVariableMangleValue,
-    SourceTransformResult,
-    TransformSourceCodeOptions,
+import {
+    type CssVariableMangleValue,
+    extractCatalogClasses,
+    type SourceTransformResult,
+    type TransformSourceCodeOptions,
 } from './transform.js';
 import {
     transform as compileSzObject,
@@ -601,6 +602,11 @@ export function transformOxc(
         }
         transformed = true;
     });
+
+    const catalogClasses = extractCatalogClasses(source, filename);
+    for (const c of catalogClasses) {
+        classes.add(c);
+    }
 
     return {
         code: transformed ? edits.toString() : source,
