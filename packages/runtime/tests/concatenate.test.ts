@@ -40,6 +40,20 @@ describe('_sz', () => {
         const hasError = false;
         expect(_sz('base', isActive && 'active', hasError && 'error')).toBe('base active');
     });
+
+    it('should handle array arguments', () => {
+        expect(_sz(['a', 'b'])).toBe('a b');
+        expect(_sz(['a', false && 'b', 'c'])).toBe('a c');
+    });
+
+    it('should handle nested array arguments recursively', () => {
+        expect(_sz(['a', ['b', 'c']])).toBe('a b c');
+    });
+
+    it('should handle array arguments with objects', () => {
+        expect(_sz([{ w: 8, h: 8 }, false && { textAlign: 'right' }])).toBe('w-8 h-8');
+        expect(_sz([{ w: 8, h: 8 }, true && { textAlign: 'right' }])).toBe('w-8 h-8 text-right');
+    });
 });
 
 describe('_sz2', () => {
@@ -165,5 +179,13 @@ describe('_szMerge', () => {
 
     it('should handle multiple spaces', () => {
         expect(_szMerge('a  b   c', 'd  e')).toBe('a b c d e');
+    });
+
+    it('should handle array arguments', () => {
+        expect(_szMerge(['a b', 'c d'], 'e f')).toBe('a b c d e f');
+    });
+
+    it('should handle array arguments with objects and remove duplicates', () => {
+        expect(_szMerge([{ p: 4 }, [{ p: 4 }, { m: 4 }]])).toBe('p-4 m-4');
     });
 });
