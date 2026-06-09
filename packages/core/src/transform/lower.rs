@@ -363,6 +363,21 @@ fn false_boolean_class(key: &str) -> Option<&'static str> {
 }
 
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    if key == "animationDelay" {
+        let ms = match value {
+            StaticSzValue::Number(num) => {
+                if num.fract() == 0.0 {
+                    format!("{}ms", *num as i64)
+                } else {
+                    format!("{}ms", num)
+                }
+            }
+            StaticSzValue::String(s) => s.to_string(),
+            _ => return None,
+        };
+        return Some(format!("{prefix}[animation-delay:{ms}]"));
+    }
+
     // Unknown keys fall back to a kebab-cased utility name (breakWord →
     // break-word) the way the oxc path does, instead of the raw camelCase key.
     let class_key: Cow<str> =

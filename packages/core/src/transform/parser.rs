@@ -624,6 +624,9 @@ fn candidate_classes_from_jsx_expression(
     ctx: ResolveContext<'_>,
 ) -> Vec<String> {
     match expression {
+        JSXExpression::ObjectExpression(object) => {
+            candidate_classes_from_object_expression(object, ctx, None)
+        }
         JSXExpression::ArrayExpression(array) => {
             candidate_classes_from_array_expression(array, ctx)
         }
@@ -639,6 +642,25 @@ fn candidate_classes_from_jsx_expression(
         JSXExpression::ParenthesizedExpression(parenthesized) => {
             candidate_classes_from_expression(&parenthesized.expression, ctx)
         }
+        JSXExpression::Identifier(identifier) => {
+            if let Some(initializer) = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            ) {
+                candidate_classes_from_expression(initializer, ctx)
+            } else {
+                Vec::new()
+            }
+        }
+        JSXExpression::ConditionalExpression(conditional) => {
+            let mut classes = candidate_classes_from_expression(&conditional.consequent, ctx);
+            classes.extend(candidate_classes_from_expression(&conditional.alternate, ctx));
+            classes
+        }
+        JSXExpression::LogicalExpression(logical) => {
+            candidate_classes_from_expression(&logical.right, ctx)
+        }
         _ => Vec::new(),
     }
 }
@@ -649,6 +671,30 @@ fn candidate_classes_from_expression(
 ) -> Vec<String> {
     match expression {
         Expression::ArrayExpression(array) => candidate_classes_from_array_expression(array, ctx),
+        Expression::ObjectExpression(object) => {
+            candidate_classes_from_object_expression(object, ctx, None)
+        }
+        Expression::Identifier(identifier) => {
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            );
+            println!("RUST DEBUG: Identifier name = {}, resolved = {}", identifier.name, initializer.is_some());
+            if let Some(initializer) = initializer {
+                candidate_classes_from_expression(initializer, ctx)
+            } else {
+                Vec::new()
+            }
+        }
+        Expression::ConditionalExpression(conditional) => {
+            let mut classes = candidate_classes_from_expression(&conditional.consequent, ctx);
+            classes.extend(candidate_classes_from_expression(&conditional.alternate, ctx));
+            classes
+        }
+        Expression::LogicalExpression(logical) => {
+            candidate_classes_from_expression(&logical.right, ctx)
+        }
         Expression::ParenthesizedExpression(value) => {
             candidate_classes_from_expression(&value.expression, ctx)
         }
@@ -663,6 +709,59 @@ fn candidate_classes_from_expression(
         }
         _ => Vec::new(),
     }
+}
+
+fn candidate_classes_from_object_expression(
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_prefix: Option<&str>,
+) -> Vec<String> {
+    let mut classes = Vec::new();
+    for property in &object.properties {
+        match property {
+            ObjectPropertyKind::ObjectProperty(property) => {
+                if let Some(key) = static_property_key(&property.key) {
+                    let val = unwrap_expression(&property.value);
+                    match val {
+                        Expression::ObjectExpression(nested) => {
+                            let variant = variant_prefix_string(variant_prefix, &key);
+                            classes.extend(candidate_classes_from_object_expression(nested, ctx, Some(variant.as_str())));
+                        }
+                        Expression::ConditionalExpression(conditional) => {
+                            if let Some(consequent) = static_value_from_expression(&conditional.consequent, ctx) {
+                                classes.extend(conditional_property_classes(&key, consequent, variant_prefix));
+                            } else {
+                                classes.extend(candidate_classes_from_expression(&conditional.consequent, ctx));
+                            }
+                            if let Some(alternate) = static_value_from_expression(&conditional.alternate, ctx) {
+                                classes.extend(conditional_property_classes(&key, alternate, variant_prefix));
+                            } else {
+                                classes.extend(candidate_classes_from_expression(&conditional.alternate, ctx));
+                            }
+                        }
+                        _ => {
+                            if let Some(static_property) = static_property_from_object_property(property, ctx) {
+                                let single_object = StaticSzObject {
+                                    properties: vec![static_property],
+                                };
+                                classes.extend(lower_static_sz_object(&single_object));
+                            } else {
+                                classes.extend(candidate_classes_from_expression(val, ctx));
+                            }
+                        }
+                    }
+                }
+            }
+            ObjectPropertyKind::SpreadProperty(spread) => {
+                if let Some(static_obj) = static_object_from_spread_argument(&spread.argument, ctx) {
+                    classes.extend(lower_static_sz_object(&static_obj));
+                } else {
+                    classes.extend(candidate_classes_from_expression(&spread.argument, ctx));
+                }
+            }
+        }
+    }
+    classes
 }
 
 fn candidate_classes_from_array_expression(
