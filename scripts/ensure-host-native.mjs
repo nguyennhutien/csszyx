@@ -12,10 +12,10 @@ const resolved = getHostNativePackage(repoRoot);
 const { platformKey, nodePath } = resolved;
 
 if (!nodePath) {
-    console.warn(
-        `[ensure-host-native] Native platform not supported or package info missing for key: ${platformKey}. Fallback to oxc/babel parser.`,
+    console.error(
+        `[ensure-host-native] Native platform not supported or package info missing for key: ${platformKey}.`,
     );
-    process.exit(0);
+    process.exit(1);
 }
 
 if (existsSync(nodePath)) {
@@ -32,21 +32,20 @@ console.log(
 // Check if cargo is in PATH
 const cargoCheck = spawnSync('cargo', ['--version']);
 if (cargoCheck.status !== 0) {
-    console.warn(`[ensure-host-native] Warning: 'cargo' command not found in PATH.`);
-    console.warn(
+    console.error(`[ensure-host-native] 'cargo' command not found in PATH.`);
+    console.error(
         `[ensure-host-native] Please install Rust toolchain (or run 'mise install') to compile native binary.`,
     );
-    console.warn(
-        `[ensure-host-native] Continuing build anyway. Project will fallback to JS parser ('oxc' / 'babel') unless build.parser is set to 'rust'.`,
-    );
-    process.exit(0);
+    process.exit(1);
 }
 
 // Build native binary
-console.log(`[ensure-host-native] Running: pnpm --filter @csszyx/core native:build -- --clean`);
+console.log(
+    `[ensure-host-native] Running: pnpm --filter @csszyx/core native:build -- --clean --native-engine`,
+);
 const buildResult = spawnSync(
     'pnpm',
-    ['--filter', '@csszyx/core', 'native:build', '--', '--clean'],
+    ['--filter', '@csszyx/core', 'native:build', '--', '--clean', '--native-engine'],
     {
         cwd: repoRoot,
         stdio: 'inherit',
@@ -56,9 +55,7 @@ const buildResult = spawnSync(
 
 if (buildResult.status !== 0) {
     console.error(`[ensure-host-native] Failed to compile native binary.`);
-    console.warn(
-        `[ensure-host-native] Warning: Project built without native Rust module. Use 'parserMode: "oxc"' in your config.`,
-    );
+    process.exit(buildResult.status ?? 1);
 } else {
     console.log(`[ensure-host-native] Successfully compiled and verified native binary!`);
 }
