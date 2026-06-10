@@ -89,6 +89,9 @@
     "pnpm": ">=10.0.0"
   },
   "pnpm": {
+    "overrides": {
+      "shell-quote": ">=1.8.4"
+    },
     "supportedArchitectures": {
       "os": [
         "darwin",
