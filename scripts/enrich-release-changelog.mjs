@@ -168,9 +168,21 @@ function gh(args) {
 async function main() {
     try {
         const repo = process.env.GH_REPO;
-        const branch = process.env.RELEASE_BRANCH || 'release-please--branches--main';
         if (!repo) {
             console.log('[enrich] GH_REPO unset — skipping');
+            return;
+        }
+        // The release branch shape depends on release-please config
+        // (separate-pull-requests appends --components--<name>), so resolve
+        // it from the open release PR instead of hardcoding one shape.
+        let branch = process.env.RELEASE_BRANCH;
+        if (!branch) {
+            const open = JSON.parse(gh(['api', `repos/${repo}/pulls?state=open&per_page=50`]));
+            branch = open.find(p => p.head.ref.startsWith('release-please--branches--main'))?.head
+                .ref;
+        }
+        if (!branch) {
+            console.log('[enrich] no open release PR branch found — skipping');
             return;
         }
         const repoUrl = `https://github.com/${repo}`;

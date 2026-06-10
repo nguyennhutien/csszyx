@@ -5,7 +5,7 @@
   "bump-patch-for-minor-pre-major": true,
   "include-component-in-tag": false,
   "include-v-in-tag": true,
-  "separate-pull-requests": false,
+  "separate-pull-requests": true,
   "pull-request-title-pattern": "chore${scope}: release ${component} v${version}",
   "bootstrap-sha": "18ce86cf3547b7d94c812e3966f78b7feb835d14",
   "changelog-sections": [

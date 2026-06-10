@@ -39,11 +39,14 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "$HEAD_REF" = "release-please--branches--main" ]; then
-            echo "is_release_please=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_release_please=false" >> "$GITHUB_OUTPUT"
-          fi
+          case "$HEAD_REF" in
+            release-please--branches--main*)
+              echo "is_release_please=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "is_release_please=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
 
       - uses: actions/checkout@v6
 
