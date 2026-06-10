@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 6;
+const CACHE_SCHEMA_VERSION = 7;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -31,6 +31,7 @@ interface TransformCacheEntry {
     version: number;
     pluginVersion: string;
     compilerVersion: string;
+    nativeIdentity: string | null;
     parserMode: string;
     producer: TransformCacheProducer;
     astBudget: number | null;
@@ -59,6 +60,14 @@ export interface TransformCacheKeyInput {
     pluginVersion: string;
     /** @csszyx/compiler package version. */
     compilerVersion: string;
+    /**
+     * Identity of the native engine binary that produces rust-mode output
+     * (version plus binary mtime/size). Package versions alone cannot
+     * invalidate the cache when the same version is rebuilt from changed
+     * sources in a workspace, which served stale transforms after engine
+     * fixes. Unset for parsers that do not call the native engine.
+     */
+    nativeIdentity?: string;
     /** Active parser mode. */
     parserMode: string;
     /** Parser implementation that must have produced the cached output. */
@@ -109,6 +118,7 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `schema=${CACHE_SCHEMA_VERSION}`,
         `plugin=${input.pluginVersion}`,
         `compiler=${input.compilerVersion}`,
+        `native=${input.nativeIdentity ?? 'none'}`,
         `parser=${input.parserMode}`,
         `producer=${input.producer}`,
         `astBudget=${input.astBudget ?? 'default'}`,
@@ -158,6 +168,7 @@ export function readTransformCache(
         entry.version !== CACHE_SCHEMA_VERSION ||
         entry.pluginVersion !== input.pluginVersion ||
         entry.compilerVersion !== input.compilerVersion ||
+        entry.nativeIdentity !== (input.nativeIdentity ?? null) ||
         entry.parserMode !== input.parserMode ||
         entry.producer !== input.producer ||
         entry.astBudget !== (input.astBudget ?? null) ||
@@ -206,6 +217,7 @@ export function writeTransformCache(
         version: CACHE_SCHEMA_VERSION,
         pluginVersion: input.pluginVersion,
         compilerVersion: input.compilerVersion,
+        nativeIdentity: input.nativeIdentity ?? null,
         parserMode: input.parserMode,
         producer: input.producer,
         astBudget: input.astBudget ?? null,
