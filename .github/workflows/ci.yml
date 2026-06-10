@@ -33,6 +33,10 @@ jobs:
       code_rust: ${{ steps.filter.outputs.code_rust }}
       runtime_critical: ${{ steps.filter.outputs.runtime_critical }}
       next_state: ${{ steps.filter.outputs.next_state }}
+      # 'true' only for PRs whose changes are confined to workspace
+      # packages — the case where turbo's `--affected` is provably safe.
+      # Pushes (main) and full_surface changes always run the full set.
+      turbo_affected: ${{ github.event_name == 'pull_request' && steps.filter.outputs.full_surface != 'true' }}
     steps:
       - name: Detect release-please branch
         id: head-ref
@@ -115,6 +119,32 @@ jobs:
               - 'packages/unplugin/tests/fixtures/next-lock-worker.ts'
               - 'packages/unplugin/package.json'
               - '.github/workflows/ci.yml'
+            # Surfaces OUTSIDE the workspace package graph. Turbo's
+            # `--affected` cannot see that these feed builds/tests (root
+            # scripts, spec fixtures, repo configs, workflows), so when any
+            # of them change the affected-scoping below is bypassed and
+            # turbo runs the full workspace — fail-open. `pnpm-lock.yaml`
+            # is intentionally NOT listed: turbo 2 maps a lockfile diff to
+            # exactly the packages it touches (verified empirically), and
+            # over-running on lock changes is the waste this gate removes.
+            full_surface:
+              - '.github/**'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'docs/**'
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+              - 'biome.json'
+              - 'eslint.config.*'
+              - 'lefthook.yml'
+              - 'cog.toml'
+              - '.mise.toml'
+              - 'rust-toolchain.toml'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'vitest.config.*'
+              - 'playwright.config.*'
 
   # Always-runs tripwire. Catches release-please config issues that path
   # filters and `release_please` skipping would otherwise let through.
@@ -253,6 +283,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history so turbo `--affected` can diff against the PR base.
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -287,16 +320,26 @@ jobs:
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
-      # available to all tests in this job.
+      # available to all tests in this job. Runs even under --affected: tests
+      # of compiler/unplugin exercise the rust parser regardless of whether
+      # @csszyx/core itself changed.
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
-      # `test:unit` is `turbo run test --filter=!@csszyx/e2e`. Playwright
-      # tests live in @csszyx/e2e and run in their own job below — they
-      # need a different gate (runtime_critical, not just code_ts) and a
-      # different setup (browser install + production playgrounds).
+      # Mirrors `test:unit` (`turbo run test --filter=!@csszyx/e2e` — keep in
+      # sync with package.json). Playwright tests live in @csszyx/e2e and run
+      # in their own job below — they need a different gate (runtime_critical,
+      # not just code_ts) and a different setup (browser install + production
+      # playgrounds). On package-confined PRs turbo additionally scopes to
+      # packages affected since the PR base; turbo 2 maps even lockfile-only
+      # diffs to the packages they touch, so a dep bump no longer tests the
+      # whole workspace. Coverage upload below is partial on scoped runs.
       - name: Run unit tests
-        run: pnpm test:unit
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+        run: >
+          pnpm exec turbo run test --filter=!@csszyx/e2e
+          ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
 
       # Explicit native-engine package smoke. Unit tests already exercise the
       # Rust parser branch when the host addon exists, but this step verifies
@@ -439,6 +482,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history so turbo `--affected` can diff against the PR base.
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -477,8 +523,16 @@ jobs:
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+      # Mirrors `pnpm build` (`gen:llms` + `turbo run build` — keep in sync
+      # with package.json). On package-confined PRs turbo scopes the build to
+      # affected packages + their dependents; pushes to main and full_surface
+      # PRs build the whole workspace.
       - name: Build
-        run: pnpm build
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pnpm run gen:llms
+          pnpm exec turbo run build ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
 
   # Aggregator. Always runs. Branch protection should require this single
   # check rather than the individual jobs above — those may be legitimately
