@@ -230,7 +230,9 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert_eq!(checksum.len(), 16);
-        // Debug builds: <5ms, Release builds: <1ms
-        assert!(elapsed.as_millis() < 5);
+        // Loose ceiling only — guards against accidental quadratic blowup, not
+        // real performance (typically <5ms in debug builds). A tight wall-clock
+        // bound is flaky on loaded CI runners.
+        assert!(elapsed.as_millis() < 500);
     }
 }
