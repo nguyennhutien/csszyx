@@ -65,6 +65,12 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         .collect::<Vec<_>>();
     classes.extend(lower_static_sz_object(&attribute.object));
     classes.extend(attribute.candidate_classes.iter().cloned());
+    classes.extend(
+        attribute
+            .array_parts
+            .iter()
+            .flat_map(|part| part.classes.iter().cloned()),
+    );
     classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
         let variant = prop
             .variant_prefix
@@ -83,13 +89,83 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
     let mut classes = Vec::with_capacity(object.properties.len());
     lower_object_into(object, "", &mut classes);
+    merge_text_size_and_leading(classes)
+}
+
+fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
+    let mut consumed = vec![false; classes.len()];
+
+    for text_index in 0..classes.len() {
+        let Some((text_prefix, text_size)) = text_size_class_parts(&classes[text_index]) else {
+            continue;
+        };
+        for leading_index in 0..classes.len() {
+            if consumed[leading_index] || leading_index == text_index {
+                continue;
+            }
+            let Some((leading_prefix, leading_value)) =
+                leading_class_parts(&classes[leading_index])
+            else {
+                continue;
+            };
+            if text_prefix != leading_prefix {
+                continue;
+            }
+            classes[text_index] = format!("{text_prefix}text-{text_size}/{leading_value}");
+            consumed[leading_index] = true;
+            break;
+        }
+    }
+
     classes
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, class_name)| (!consumed[index]).then_some(class_name))
+        .collect()
+}
+
+fn text_size_class_parts(class_name: &str) -> Option<(&str, &str)> {
+    let (prefix, base) = split_variant_prefix(class_name);
+    let size = base.strip_prefix("text-")?;
+    let known_size = matches!(
+        size,
+        "xs" | "sm"
+            | "base"
+            | "lg"
+            | "xl"
+            | "2xl"
+            | "3xl"
+            | "4xl"
+            | "5xl"
+            | "6xl"
+            | "7xl"
+            | "8xl"
+            | "9xl"
+    ) || (size.starts_with('[') && size.ends_with(']'))
+        || (size.starts_with('(') && size.ends_with(')'));
+    known_size.then_some((prefix, size))
+}
+
+fn leading_class_parts(class_name: &str) -> Option<(&str, &str)> {
+    let (prefix, base) = split_variant_prefix(class_name);
+    Some((prefix, base.strip_prefix("leading-")?))
+}
+
+fn split_variant_prefix(class_name: &str) -> (&str, &str) {
+    class_name
+        .rfind(':')
+        .map_or(("", class_name), |index| class_name.split_at(index + 1))
 }
 
 fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
     for property in &object.properties {
         match &property.value {
             StaticSzValue::Object(nested) => {
+                if property.key == "css" {
+                    lower_css_properties(nested, prefix, classes);
+                    continue;
+                }
+
                 if property.key == "bgImg" {
                     if let Some(class_name) = format_bg_img_object(nested, prefix) {
                         classes.push(class_name);
@@ -166,6 +242,22 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                 }
             }
         }
+    }
+}
+
+fn lower_css_properties(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
+    for property in &object.properties {
+        let value = match &property.value {
+            StaticSzValue::String(value) => value.clone(),
+            StaticSzValue::Number(value) => format_abs_number(*value),
+            StaticSzValue::Boolean(value) => value.to_string(),
+            StaticSzValue::Object(_) => continue,
+        };
+        classes.push(format!(
+            "{prefix}[{}:{}]",
+            kebab_case(&property.key),
+            normalize_arbitrary_value(&value)
+        ));
     }
 }
 
@@ -365,14 +457,8 @@ fn false_boolean_class(key: &str) -> Option<&'static str> {
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
         let ms = match value {
-            StaticSzValue::Number(num) => {
-                if num.fract() == 0.0 {
-                    format!("{}ms", *num as i64)
-                } else {
-                    format!("{}ms", num)
-                }
-            }
-            StaticSzValue::String(s) => s.to_string(),
+            StaticSzValue::Number(num) => format!("{}ms", format_abs_number(*num)),
+            StaticSzValue::String(s) => s.clone(),
             _ => return None,
         };
         return Some(format!("{prefix}[animation-delay:{ms}]"));
@@ -907,6 +993,40 @@ mod tests {
     }
 
     #[test]
+    fn lowers_arbitrary_css_sub_properties() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "hover",
+                StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property(
+                        "css",
+                        StaticSzValue::Object(StaticSzObject {
+                            properties: vec![
+                                property(
+                                    "writingMode",
+                                    StaticSzValue::String("vertical-lr".to_string()),
+                                ),
+                                property(
+                                    "--brand",
+                                    StaticSzValue::String("rgb(1 2 3)".to_string()),
+                                ),
+                            ],
+                        }),
+                    )],
+                }),
+            )],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "hover:[writing-mode:vertical-lr]",
+                "hover:[--brand:rgb(1_2_3)]"
+            ]
+        );
+    }
+
+    #[test]
     fn lowers_background_size_and_content_special_cases() {
         let object = StaticSzObject {
             properties: vec![property(
@@ -1092,6 +1212,7 @@ mod tests {
                 literal_class_name: None,
                 rewrites_empty_class: false,
                 ternary: None,
+                array_parts: Vec::new(),
                 runtime_fallback: false,
                 candidate_classes: Vec::new(),
                 dynamic_css_vars: Vec::new(),

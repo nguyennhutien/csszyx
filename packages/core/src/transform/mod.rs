@@ -41,8 +41,8 @@ pub use contract::{
 };
 pub use ir::{
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
-    RecoveryAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
-    StaticTernaryIr, StyleAttributeIr, SzAttributeIr, TextSpan,
+    RecoveryAttributeIr, SourceIr, StaticArrayPartIr, StaticSzObject, StaticSzProperty,
+    StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr, TextSpan,
 };
 
 /// Error returned when the Rust transform engine cannot run in this build.

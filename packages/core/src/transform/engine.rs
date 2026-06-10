@@ -185,13 +185,22 @@ fn transform_static_classes_with_options(
     // against one producer stay valid for the other.
     let uses_merge = transformed
         && parsed.ir.jsx_opening_elements.iter().any(|element| {
+            if element
+                .sz_attribute_indices
+                .iter()
+                .any(|index| !parsed.ir.sz_attributes[*index].array_parts.is_empty())
+            {
+                return true;
+            }
             let Some(class_index) = element.class_attribute_index else {
                 return false;
             };
             let class_attribute = &parsed.ir.class_attributes[class_index];
             let has_runtime_like_sz = element.sz_attribute_indices.iter().any(|index| {
                 let attribute = &parsed.ir.sz_attributes[*index];
-                attribute.runtime_fallback || attribute.ternary.is_some()
+                attribute.runtime_fallback
+                    || attribute.ternary.is_some()
+                    || !attribute.array_parts.is_empty()
             });
             let has_static_sz = !element.sz_attribute_indices.is_empty();
             has_runtime_like_sz || (class_attribute.expression_span.is_some() && has_static_sz)
@@ -202,7 +211,7 @@ fn transform_static_classes_with_options(
                 .ir
                 .sz_attributes
                 .iter()
-                .any(|attr| attr.runtime_fallback));
+                .any(|attr| attr.runtime_fallback || !attr.array_parts.is_empty()));
     let uses_color_var = transformed
         && parsed.ir.sz_attributes.iter().any(|attr| {
             attr.dynamic_css_vars
@@ -523,7 +532,7 @@ mod tests {
         );
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
-        assert!(result.classes.is_empty());
+        assert_eq!(result.classes, ["p-4", "p-8"]);
         assert!(result.diagnostics.is_empty());
     }
 

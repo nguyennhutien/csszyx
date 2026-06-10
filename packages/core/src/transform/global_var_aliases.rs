@@ -39,6 +39,11 @@ pub fn apply_global_var_aliases(
         if let Some(ternary) = &mut attribute.ternary {
             rewrite_ternary_classes(ternary, &alias_map, &mut variable_map);
         }
+        for part in &mut attribute.array_parts {
+            for class_name in &mut part.classes {
+                rewrite_class_name(class_name, &alias_map, &mut variable_map);
+            }
+        }
     }
 
     GlobalVarAliasApplication {
@@ -146,6 +151,7 @@ mod tests {
             literal_class_name: None,
             rewrites_empty_class: false,
             ternary: None,
+            array_parts: Vec::new(),
             runtime_fallback: false,
             candidate_classes: Vec::new(),
             dynamic_css_vars: Vec::new(),

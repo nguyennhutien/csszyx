@@ -138,6 +138,9 @@ pub struct SzAttributeIr {
     /// `sz` attribute. When unset the attribute follows the regular static
     /// object/literal path.
     pub ternary: Option<StaticTernaryIr>,
+    /// Statically compiled array parts. Conditional parts retain only the
+    /// condition span; their object payload is lowered to a class string.
+    pub array_parts: Vec<StaticArrayPartIr>,
     /// Runtime fallback marker — set when the sz expression contains shapes
     /// the static lowering layer cannot fully resolve at compile time but
     /// that the runtime `_sz(...)` helper still handles correctly (today:
@@ -166,6 +169,15 @@ pub struct StaticTernaryIr {
     pub consequent_classes: Vec<String>,
     /// Classes produced by lowering the alternate branch, in source order.
     pub alternate_classes: Vec<String>,
+}
+
+/// One precompiled item from an `sz={[...]}` expression.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaticArrayPartIr {
+    /// Condition span for `condition && object`; absent for unconditional items.
+    pub condition_span: Option<TextSpan>,
+    /// Classes produced by the static object item.
+    pub classes: Vec<String>,
 }
 
 /// Class/className attribute.
@@ -367,6 +379,7 @@ mod tests {
                 literal_class_name: None,
                 rewrites_empty_class: false,
                 ternary: None,
+                array_parts: Vec::new(),
                 runtime_fallback: false,
                 candidate_classes: Vec::new(),
                 dynamic_css_vars: Vec::new(),
