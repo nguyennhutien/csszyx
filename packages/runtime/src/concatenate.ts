@@ -9,7 +9,59 @@
  * @module @csszyx/runtime/concatenate
  */
 
-import { type SzObject, transform } from '@csszyx/compiler/browser';
+import { transform as rawTransform, type SzObject } from '@csszyx/compiler/browser';
+
+/** Result of a runtime sz transform: the className plus any style attributes. */
+interface TransformResult {
+    className: string;
+    attributes: Record<string, string>;
+}
+
+/** A frozen map of original class names to their mangled SSR equivalents. */
+type RuntimeMangleMap = Readonly<Record<string, string>>;
+
+/** Global slots that may expose the SSR/runtime mangle map. */
+interface CsszyxMangleGlobals {
+    __csszyx_ssr_mangle_map?: RuntimeMangleMap;
+    __csszyx?: {
+        mangleMap?: RuntimeMangleMap;
+    };
+}
+
+/**
+ * Wraps rawTransform to apply runtime class-name mangling when a mangle map is
+ * present on the global (SSR) or window object.
+ * @param szProp - The sz object to transform into a className.
+ * @returns The transform result, with class names mangled when a map is active.
+ */
+function transform(szProp: SzObject): TransformResult {
+    const res = rawTransform(szProp);
+    const className = res.className;
+    if (!className) {
+        return res;
+    }
+
+    const globals = globalThis as typeof globalThis & CsszyxMangleGlobals;
+    const ssrMangleMap = globals.__csszyx_ssr_mangle_map || globals.__csszyx?.mangleMap;
+    const browserMangleMap =
+        typeof window !== 'undefined'
+            ? (window as Window & CsszyxMangleGlobals).__csszyx?.mangleMap
+            : undefined;
+    const activeMangleMap = ssrMangleMap || browserMangleMap;
+
+    if (activeMangleMap) {
+        const mangled = className
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((c: string) => activeMangleMap[c] || c)
+            .join(' ');
+        return {
+            className: mangled,
+            attributes: res.attributes,
+        };
+    }
+    return res;
+}
 
 /**
  * Type for sz input - can be a pre-compiled string, SzObject, or recursive array.
