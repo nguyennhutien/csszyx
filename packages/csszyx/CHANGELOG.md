@@ -4,15 +4,10 @@
 
 ### Bug Fixes
 
-* **core:** compile static sz business logic at build time in the rust engine ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **core:** honor trailing sz object overrides in rust ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **compiler:** extract static szv and dynamic classes in rust and oxc parsers ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **runtime:** support array inputs in runtime concatenation helpers ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **compiler:** implement static candidate class extraction in Rust parser ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **core:** resolve static sz business logic at build time in the rust engine ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **runtime:** compose array and nested inputs in the concatenation helpers ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **compiler:** compile static sz beside one conditional prop in every engine ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
-* **unplugin:** key the transform cache on the native engine binary identity ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **core:** compile static `sz` business logic at build time in the rust engine — trailing object overrides, static and conditional arrays, `dynamic()`/`szv()` catalogs (identifier-backed and numeric-keyed), `css` arbitrary properties, `text`/`leading` compounds, structured values such as gradients, and a static const spread beside one conditional prop (only the conditional stays runtime) ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **compiler:** the same static-beside-conditional fix in the oxc path; the rust and oxc wrappers no longer run a secondary catalog pass ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **unplugin:** key the transform cache on the native engine binary identity, so a rebuilt engine never serves stale transforms ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **runtime:** concatenation helpers compose array and recursively nested inputs ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
 
 ## [0.9.5](https://github.com/nguyennhutien/csszyx/compare/v0.9.4...v0.9.5) (2026-06-07)
 
