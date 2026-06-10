@@ -1,7 +1,15 @@
 # csszyx
 
-## [0.9.5](https://github.com/nguyennhutien/csszyx/compare/v0.9.4...v0.9.5) (2026-06-07)
+## [0.9.6](https://github.com/nguyennhutien/csszyx/compare/v0.9.5...v0.9.6) (2026-06-10)
 
+### Bug Fixes
+
+* **core:** compile static `sz` business logic at build time in the rust engine — trailing object overrides, static and conditional arrays, `dynamic()`/`szv()` catalogs (identifier-backed and numeric-keyed), `css` arbitrary properties, `text`/`leading` compounds, structured values such as gradients, and a static const spread beside one conditional prop (only the conditional stays runtime) ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **compiler:** the same static-beside-conditional fix in the oxc path; the rust and oxc wrappers no longer run a secondary catalog pass ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **unplugin:** key the transform cache on the native engine binary identity, so a rebuilt engine never serves stale transforms ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+* **runtime:** concatenation helpers compose array and recursively nested inputs ([#40](https://github.com/nguyennhutien/csszyx/issues/40))
+
+## [0.9.5](https://github.com/nguyennhutien/csszyx/compare/v0.9.4...v0.9.5) (2026-06-07)
 
 ### Features
 
@@ -11,7 +19,6 @@
 
 ## [0.9.4](https://github.com/nguyennhutien/csszyx/compare/v0.9.3...v0.9.4) (2026-06-07)
 
-
 ### Bug Fixes
 
 * **unplugin:** csszyxTurbopack config/runtime defects + release-pipeline improvements ([#36](https://github.com/nguyennhutien/csszyx/issues/36)) ([0b16ed1](https://github.com/nguyennhutien/csszyx/commit/0b16ed1d5978c3bf4efa6eb12d636d537b0ac113))
@@ -19,7 +26,6 @@
 * **unplugin:** drop the broken `@csszyx/runtime` resolveAlias (a raw absolute path is treated as project-relative); the injected runtime import resolves when `@csszyx/runtime` is a direct dependency ([#36](https://github.com/nguyennhutien/csszyx/issues/36))
 
 ## [0.9.3](https://github.com/nguyennhutien/csszyx/compare/v0.9.2...v0.9.3) (2026-06-07)
-
 
 ### Features
 
@@ -29,13 +35,11 @@
 
 ## [0.9.2](https://github.com/nguyennhutien/csszyx/compare/v0.9.1...v0.9.2) (2026-06-07)
 
-
 ### Features
 
 * rust transform parity, new variants, and migrate/MCP tooling ([#32](https://github.com/nguyennhutien/csszyx/issues/32)) ([40ca7d4](https://github.com/nguyennhutien/csszyx/commit/40ca7d4047ef64e29031f3deff5073af7f0bc6c7))
 * **compiler:** recognize forced-colors, starting, and inert variants ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
 * **mcp-server:** expose parametric variants and refresh prompt examples ([#32](https://github.com/nguyennhutien/csszyx/issues/32))
-
 
 ### Bug Fixes
 
@@ -55,14 +59,12 @@
 
 ## [0.9.1](https://github.com/nguyennhutien/csszyx/compare/v0.9.0...v0.9.1) (2026-06-05)
 
-
 ### Features
 
 * **cli:** add Next.js Turbopack prebuild and safelist watcher commands ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 * **compiler:** add opt-in dynamic CSS variable mangling and global token aliases ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 * **compiler:** add Tailwind v4.3 utilities and variants ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 * **unplugin:** support Next.js 16 Turbopack compile and safelist workflows ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
-
 
 ### Bug Fixes
 
@@ -72,14 +74,12 @@
 * **security:** harden template scanners, file snapshots, and packaging inputs ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 * **vite:** support Tailwind v4.3 resolver options on Vite 8 ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 
-
 ### Performance
 
 * **cli:** replace Babel traversal in Tailwind migration ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 * **unplugin:** batch Rust prescan transforms ([590deb2](https://github.com/nguyennhutien/csszyx/commit/590deb291953b3ce9a9f46ac584b70b5bdc5b9f9))
 
 ## [0.9.0](https://github.com/nguyennhutien/csszyx/compare/v0.8.0...v0.9.0) (2026-05-24)
-
 
 ### ⚠ BREAKING CHANGES
 
