@@ -1,0 +1,61 @@
+name: Deploy Docs
+
+# Owns the docs deploy trigger instead of Cloudflare's GitHub webhook
+# integration, which has silently stopped delivering push events before.
+# A push to main touching the docs build closure POSTs the CF Pages
+# deploy hook; Cloudflare then pulls main and builds as usual.
+#
+# The path list mirrors the sz-transform closure from
+# scripts/build-cf-pages.sh. pnpm-lock.yaml is included on purpose:
+# lock-only bumps (pnpm update/dedupe, transitive CSS tooling) can change
+# docs output, and a wasted rebuild is cheaper than a stale site.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/docs/**'
+      - 'packages/csszyx/**'
+      - 'packages/unplugin/**'
+      - 'packages/compiler/**'
+      - 'packages/core/**'
+      - 'packages/runtime/**'
+      - 'pnpm-lock.yaml'
+      - 'turbo.json'
+      - 'scripts/build-cf-pages.sh'
+      - 'rust-toolchain.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-docs
+  cancel-in-progress: false
+
+jobs:
+  trigger-cf-pages:
+    name: Trigger Cloudflare Pages build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST deploy hook
+        env:
+          HOOK_URL: ${{ secrets.CF_PAGES_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK_URL" ]; then
+            echo "::error::CF_PAGES_DEPLOY_HOOK_URL secret is not set. Create a Deploy Hook in the Cloudflare Pages project (Settings -> Builds -> Deploy hooks) and store its URL as a repository secret."
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if curl -fsS -X POST "$HOOK_URL" -o /dev/null; then
+              echo "Deploy hook triggered (attempt $attempt)."
+              exit 0
+            fi
+            echo "Deploy hook POST failed (attempt $attempt); retrying..."
+            sleep $((attempt * 10))
+          done
+          echo "::error::Deploy hook failed after 3 attempts."
+          exit 1
