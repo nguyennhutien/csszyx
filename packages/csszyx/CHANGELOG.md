@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.9.6](https://github.com/nguyennhutien/csszyx/compare/v0.9.5...v0.9.6) (2026-06-10)
+
+
+### Bug Fixes
+
+* **core:** compile static sz business logic at build time in the rust engine ([#40](https://github.com/nguyennhutien/csszyx/issues/40)) ([5ca79a1](https://github.com/nguyennhutien/csszyx/commit/5ca79a15203e1176693704d63b9fd2eac31d2f8b))
+
 ## [0.9.5](https://github.com/nguyennhutien/csszyx/compare/v0.9.4...v0.9.5) (2026-06-07)
 
 
