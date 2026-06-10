@@ -1,34 +1,35 @@
 {
-    "$schema": "https://turbo.build/schema.json",
-    "globalDependencies": ["**/.env.*local"],
-    "pipeline": {
-        "build": {
-            "dependsOn": ["^build"],
-            "outputs": ["dist/**", "lib/**", "pkg/**", "pkg-node/**"],
-            "env": ["NODE_ENV"]
-        },
-        "dev": {
-            "cache": false,
-            "persistent": true
-        },
-        "test": {
-            "dependsOn": ["^build"],
-            "outputs": ["coverage/**"],
-            "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
-        },
-        "test:watch": {
-            "cache": false,
-            "persistent": true
-        },
-        "lint": {
-            "outputs": []
-        },
-        "type-check": {
-            "dependsOn": ["^build"],
-            "outputs": []
-        },
-        "clean": {
-            "cache": false
-        }
+  "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "envMode": "loose",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "lib/**", "pkg/**", "pkg-node/**"],
+      "env": ["NODE_ENV"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "type-check": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
     }
+  }
 }
