@@ -40,8 +40,21 @@ describe('_sz', () => {
         const hasError = false;
         expect(_sz('base', isActive && 'active', hasError && 'error')).toBe('base active');
     });
-});
 
+    it('should handle array arguments', () => {
+        expect(_sz(['a', 'b'])).toBe('a b');
+        expect(_sz(['a', false && 'b', 'c'])).toBe('a c');
+    });
+
+    it('should handle nested array arguments recursively', () => {
+        expect(_sz(['a', ['b', 'c']])).toBe('a b c');
+    });
+
+    it('should handle array arguments with objects', () => {
+        expect(_sz([{ w: 8, h: 8 }, false && { textAlign: 'right' }])).toBe('w-8 h-8');
+        expect(_sz([{ w: 8, h: 8 }, true && { textAlign: 'right' }])).toBe('w-8 h-8 text-right');
+    });
+});
 describe('_sz2', () => {
     it('should concatenate two classes', () => {
         expect(_sz2('a', 'b')).toBe('a b');
@@ -165,5 +178,79 @@ describe('_szMerge', () => {
 
     it('should handle multiple spaces', () => {
         expect(_szMerge('a  b   c', 'd  e')).toBe('a b c d e');
+    });
+
+    it('should handle array arguments', () => {
+        expect(_szMerge(['a b', 'c d'], 'e f')).toBe('a b c d e f');
+    });
+
+    it('should handle array arguments with objects and remove duplicates', () => {
+        expect(_szMerge([{ p: 4 }, [{ p: 4 }, { m: 4 }]])).toBe('p-4 m-4');
+    });
+});
+
+describe('runtime class name mangling', () => {
+    it('should mangle dynamically transformed objects using globalThis.__csszyx_ssr_mangle_map', () => {
+        // Setup mangle map
+        (globalThis as any).__csszyx_ssr_mangle_map = {
+            'w-8': 'u4',
+            'h-8': 'u3',
+            'bg-linear-to-br': 'u2',
+            'from-indigo-800': 'u1',
+            'to-indigo-900': 'u0',
+            'shrink-0': 'v6',
+        };
+
+        try {
+            const res = _sz([
+                {
+                    w: 8,
+                    h: 8,
+                    bgImg: { gradient: 'linear', dir: 'to-br' },
+                    from: 'indigo-800',
+                    to: 'indigo-900',
+                    shrink: 0,
+                },
+            ]);
+            // 'w-8 h-8 bg-linear-to-br from-indigo-800 to-indigo-900 shrink-0' should be mangled to 'u4 u3 u2 u1 u0 v6'
+            expect(res).toBe('u4 u3 u2 u1 u0 v6');
+        } finally {
+            // Cleanup
+            delete (globalThis as any).__csszyx_ssr_mangle_map;
+        }
+    });
+
+    it('should mangle dynamically transformed objects using window.__csszyx.mangleMap', () => {
+        // Setup window object
+        (globalThis as any).window = {
+            __csszyx: {
+                mangleMap: {
+                    'p-4': 'x7',
+                    'm-4': 'k2',
+                },
+            },
+        };
+
+        try {
+            const res = _szMerge([{ p: 4 }, { m: 4 }]);
+            expect(res).toBe('x7 k2');
+        } finally {
+            // Cleanup
+            delete (globalThis as any).window;
+        }
+    });
+
+    it('should not mangle already mangled string inputs', () => {
+        (globalThis as any).__csszyx_ssr_mangle_map = {
+            'w-8': 'u4',
+        };
+
+        try {
+            // String inputs bypass transform, so they are returned as is
+            const res = _sz('w-8');
+            expect(res).toBe('w-8');
+        } finally {
+            delete (globalThis as any).__csszyx_ssr_mangle_map;
+        }
     });
 });

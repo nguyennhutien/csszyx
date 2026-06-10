@@ -831,6 +831,11 @@ export function transformSourceCode(
                                 const szCall = t.callExpression(t.identifier('_sz'), [
                                     expression as t.Expression,
                                 ]);
+                                collectCandidatesFromBabelExpr(
+                                    expression as t.Expression,
+                                    path,
+                                    collectedClasses,
+                                );
                                 path.node.value = createMergedClassNameValue(szCall);
                                 usesRuntime = true;
                                 transformed = true;
@@ -1346,9 +1351,7 @@ function resolveObjectSpreads(
 // CSS VARIABLE AUTO-COMPILE: Partial Object Evaluation
 // ============================================================================
 
-/**
- *
- */
+/** A runtime-valued sz prop compiled to a scoped CSS variable reference. */
 interface DynamicPropInfo {
     expression: t.Expression;
     category: PropertyCategory;
@@ -1358,18 +1361,14 @@ interface DynamicPropInfo {
     skipClass?: boolean;
 }
 
-/**
- *
- */
+/** A conditional sz prop pre-lowered to its two compiled class branches. */
 interface ConditionalClassEntry {
     test: t.Expression;
     consequent: string; // compiled Tailwind class(es) for truthy branch
     alternate: string; // compiled Tailwind class(es) for falsy branch
 }
 
-/**
- *
- */
+/** Partial evaluation of one sz object: static, dynamic, and conditional parts. */
 interface PartialObjectResult {
     staticProps: SzObject;
     dynamicProps: Map<string, DynamicPropInfo>;
@@ -1753,6 +1752,227 @@ function collectFromExpr(node: t.Expression, classes: Set<string>): void {
         collectFromExpr(node.consequent as t.Expression, classes);
         collectFromExpr(node.alternate as t.Expression, classes);
     }
+}
+
+/**
+ * Collect Tailwind candidate classes from any statically analysable expression.
+ *
+ * @param node Candidate expression (object, array, identifier, conditional, logical).
+ * @param path Babel path used to resolve identifier bindings.
+ * @param classes Output set collecting candidate classes for the catalog.
+ */
+function collectCandidatesFromBabelExpr(
+    node: t.Expression,
+    path: babel.NodePath,
+    classes: Set<string>,
+): void {
+    if (
+        t.isTSAsExpression(node) ||
+        t.isTSSatisfiesExpression(node) ||
+        t.isTSNonNullExpression(node) ||
+        t.isTSInstantiationExpression(node)
+    ) {
+        collectCandidatesFromBabelExpr(node.expression as t.Expression, path, classes);
+    } else if (t.isArrayExpression(node)) {
+        for (const element of node.elements) {
+            if (element === null || t.isSpreadElement(element)) {
+                continue;
+            }
+            const cand =
+                t.isLogicalExpression(element) && element.operator === '&&'
+                    ? (element.right as t.Expression)
+                    : (element as t.Expression);
+            collectCandidatesFromBabelExpr(cand, path, classes);
+        }
+    } else if (t.isObjectExpression(node)) {
+        collectCandidatesFromBabelObj(node, path, classes, '');
+    } else if (t.isIdentifier(node)) {
+        const binding = path.scope.getBinding(node.name);
+        if (binding?.path.isVariableDeclarator()) {
+            let init = binding.path.node.init;
+            if (init) {
+                while (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
+                    init = init.expression;
+                }
+                collectCandidatesFromBabelExpr(init as t.Expression, path, classes);
+            }
+        }
+    } else if (t.isConditionalExpression(node)) {
+        collectCandidatesFromBabelExpr(node.consequent as t.Expression, path, classes);
+        collectCandidatesFromBabelExpr(node.alternate as t.Expression, path, classes);
+    } else if (t.isLogicalExpression(node) && node.operator === '&&') {
+        collectCandidatesFromBabelExpr(node.right as t.Expression, path, classes);
+    }
+}
+
+/**
+ * Collect candidate classes from one object expression, including variant nests.
+ *
+ * @param node Object expression to compile for candidates.
+ * @param path Babel path used to resolve identifier bindings.
+ * @param classes Output set collecting candidate classes for the catalog.
+ * @param variantPrefix Variant chain to prefix onto collected classes.
+ */
+function collectCandidatesFromBabelObj(
+    node: t.ObjectExpression,
+    path: babel.NodePath,
+    classes: Set<string>,
+    variantPrefix: string,
+): void {
+    const getBinding = (name: string): ReturnType<typeof path.scope.getBinding> =>
+        path.scope.getBinding(name);
+
+    for (const prop of node.properties) {
+        if (t.isSpreadElement(prop)) {
+            const spreadArg = prop.argument;
+            if (t.isIdentifier(spreadArg)) {
+                const binding = getBinding(spreadArg.name);
+                if (binding?.path.isVariableDeclarator()) {
+                    let init = binding.path.node.init;
+                    if (init) {
+                        while (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
+                            init = init.expression;
+                        }
+                        if (t.isObjectExpression(init)) {
+                            collectCandidatesFromBabelObj(init, path, classes, variantPrefix);
+                            continue;
+                        }
+                    }
+                }
+            }
+            collectCandidatesFromBabelExpr(spreadArg as t.Expression, path, classes);
+        } else if (t.isObjectProperty(prop)) {
+            let key: string;
+            if (t.isIdentifier(prop.key)) {
+                key = prop.key.name;
+            } else if (t.isStringLiteral(prop.key)) {
+                key = prop.key.value;
+            } else if (t.isNumericLiteral(prop.key)) {
+                key = String(prop.key.value);
+            } else {
+                continue;
+            }
+
+            const val = prop.value as t.Expression;
+            if (t.isObjectExpression(val)) {
+                if (isKnownBabelVariant(key)) {
+                    const nestedVariant = variantPrefix ? `${variantPrefix}:${key}` : key;
+                    collectCandidatesFromBabelObj(val, path, classes, nestedVariant);
+                } else {
+                    const flatVal = resolveObjectSpreads(val, getBinding) ?? val;
+                    const staticObj = evaluateStaticObject(flatVal);
+                    if (staticObj !== null) {
+                        const { className } = transform({ [key]: staticObj });
+                        const prefixed = variantPrefix
+                            ? prefixClasses(className, variantPrefix)
+                            : className;
+                        for (const c of prefixed.split(/\s+/)) {
+                            if (c) classes.add(c);
+                        }
+                    } else {
+                        collectCandidatesFromBabelExpr(val, path, classes);
+                    }
+                }
+            } else if (t.isConditionalExpression(val)) {
+                const consequent = val.consequent as t.Expression;
+                const alternate = val.alternate as t.Expression;
+
+                const staticCons =
+                    t.isStringLiteral(consequent) ||
+                    t.isNumericLiteral(consequent) ||
+                    t.isBooleanLiteral(consequent) ||
+                    t.isObjectExpression(consequent)
+                        ? evaluateStaticObject(
+                              t.objectExpression([t.objectProperty(t.identifier(key), consequent)]),
+                          )
+                        : null;
+                if (staticCons !== null) {
+                    const { className } = transform(staticCons);
+                    const prefixed = variantPrefix
+                        ? prefixClasses(className, variantPrefix)
+                        : className;
+                    for (const c of prefixed.split(/\s+/)) {
+                        if (c) classes.add(c);
+                    }
+                } else {
+                    collectCandidatesFromBabelExpr(consequent, path, classes);
+                }
+
+                const staticAlt =
+                    t.isStringLiteral(alternate) ||
+                    t.isNumericLiteral(alternate) ||
+                    t.isBooleanLiteral(alternate) ||
+                    t.isObjectExpression(alternate)
+                        ? evaluateStaticObject(
+                              t.objectExpression([t.objectProperty(t.identifier(key), alternate)]),
+                          )
+                        : null;
+                if (staticAlt !== null) {
+                    const { className } = transform(staticAlt);
+                    const prefixed = variantPrefix
+                        ? prefixClasses(className, variantPrefix)
+                        : className;
+                    for (const c of prefixed.split(/\s+/)) {
+                        if (c) classes.add(c);
+                    }
+                } else {
+                    collectCandidatesFromBabelExpr(alternate, path, classes);
+                }
+            } else {
+                const staticVal =
+                    t.isStringLiteral(val) || t.isNumericLiteral(val) || t.isBooleanLiteral(val)
+                        ? evaluateStaticObject(
+                              t.objectExpression([t.objectProperty(t.identifier(key), val)]),
+                          )
+                        : null;
+                if (staticVal !== null) {
+                    const { className } = transform(staticVal);
+                    const prefixed = variantPrefix
+                        ? /**
+                           *
+                           * @param classesStr
+                           * @param variantChain
+                           */
+                          prefixClasses(className, variantPrefix)
+                        : className;
+                    for (const c of prefixed.split(/\s+/)) {
+                        if (c) classes.add(c);
+                    }
+                } else {
+                    collectCandidatesFromBabelExpr(val, path, classes);
+                }
+                /**
+                 *
+                 * @param key
+                 */
+            }
+        }
+    }
+}
+
+/**
+ * Prefix every class in a space-separated list with a variant chain.
+ *
+ * @param classesStr Space-separated class list.
+ * @param variantChain Variant chain key (camelCase or kebab-case).
+ * @returns The list with each class prefixed, e.g. `hover:p-4`.
+ */
+function prefixClasses(classesStr: string, variantChain: string): string {
+    const variantPrefix = getVariantPrefix(variantChain);
+    return classesStr
+        .split(/\s+/)
+        .map(c => (c ? `${variantPrefix}:${c}` : ''))
+        .join(' ');
+}
+
+/**
+ * Check whether a property key is a known variant container.
+ *
+ * @param key sz object key.
+ * @returns True for known variants.
+ */
+function isKnownBabelVariant(key: string): boolean {
+    return KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key));
 }
 
 /**

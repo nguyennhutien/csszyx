@@ -8,7 +8,7 @@ use string_wizard::{MagicString, UpdateOptions};
 
 use super::{
     css_var_planner::apply_css_variable_mangling,
-    lower::lower_sz_attribute_classes,
+    lower::{lower_static_sz_object, lower_sz_attribute_classes},
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     DynamicCssVarCategory, DynamicCssVarIr, SourceIr,
 };
@@ -77,6 +77,17 @@ pub fn rewrite_static_sz_attributes_with_options(
         }
 
         if !element.sz_attribute_indices.is_empty() {
+            let has_array_parts = element
+                .sz_attribute_indices
+                .iter()
+                .any(|index| !ir.sz_attributes[*index].array_parts.is_empty());
+
+            if has_array_parts {
+                rewrite_array_sz_attribute(source, ir, element, &mut magic)?;
+                rewrote = true;
+                continue;
+            }
+
             let has_ternary = element
                 .sz_attribute_indices
                 .iter()
@@ -118,6 +129,70 @@ pub fn rewrite_static_sz_attributes_with_options(
     }
 
     Ok(magic.to_string())
+}
+
+fn rewrite_array_sz_attribute(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) -> Result<(), StaticRewriteUnsupported> {
+    if element.sz_attribute_indices.len() != 1 {
+        return Err(StaticRewriteUnsupported::EmptyClassList);
+    }
+    let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
+    if attribute.array_parts.is_empty() {
+        return Err(StaticRewriteUnsupported::EmptyClassList);
+    }
+
+    let mut arguments = Vec::with_capacity(
+        attribute.array_parts.len() + usize::from(element.class_attribute_index.is_some()),
+    );
+    if let Some(class_index) = element.class_attribute_index {
+        arguments.push(class_merge_argument(
+            source,
+            &ir.class_attributes[class_index],
+        ));
+    }
+    for part in &attribute.array_parts {
+        let classes = js_string_literal(&part.classes.join(" "));
+        arguments.push(part.condition_span.map_or_else(
+            || classes.clone(),
+            |span| {
+                let condition = &source[span.start as usize..span.end as usize];
+                format!("{condition} && {classes}")
+            },
+        ));
+    }
+    let replacement = format!("className={{_szMerge({})}}", arguments.join(", "));
+
+    if let Some(class_index) = element.class_attribute_index {
+        let class_attribute = &ir.class_attributes[class_index];
+        magic.update_with(
+            class_attribute.attribute_span.start as usize,
+            class_attribute.attribute_span.end as usize,
+            replacement,
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+        magic.remove(
+            whitespace_start(source, attribute.attribute_span.start as usize),
+            attribute.attribute_span.end as usize,
+        );
+    } else {
+        magic.update_with(
+            attribute.attribute_span.start as usize,
+            attribute.attribute_span.end as usize,
+            replacement,
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+    }
+    Ok(())
 }
 
 fn rewrite_static_sz_element(
@@ -224,13 +299,27 @@ fn rewrite_ternary_sz_attribute(
     let consequent = ternary.consequent_classes.join(" ");
     let alternate = ternary.alternate_classes.join(" ");
     let ternary_source = format!("{test_source} ? \"{consequent}\" : \"{alternate}\"");
+
+    // Static classes accompanying the conditional (e.g. from a `...CONST` spread
+    // or sibling static props): only the conditional stays runtime. Lower just
+    // the static object so the ternary's own branch classes are not duplicated.
+    let static_classes = lower_static_sz_object(&only_attribute.object);
+
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
         let existing = class_merge_argument(source, class_attribute);
+        let merge_args = if static_classes.is_empty() {
+            format!("{existing}, {ternary_source}")
+        } else {
+            format!(
+                "{existing}, {}, {ternary_source}",
+                js_string_literal(&static_classes.join(" "))
+            )
+        };
         magic.update_with(
             class_attribute.attribute_span.start as usize,
             class_attribute.attribute_span.end as usize,
-            format!("className={{_szMerge({existing}, {ternary_source})}}"),
+            format!("className={{_szMerge({merge_args})}}"),
             UpdateOptions {
                 overwrite: true,
                 ..UpdateOptions::default()
@@ -241,10 +330,20 @@ fn rewrite_ternary_sz_attribute(
             only_attribute.attribute_span.end as usize,
         );
     } else {
+        // No companion class: emit the conditional alone, or a template literal
+        // `\`<static> ${cond ? "…" : "…"}\`` when static classes accompany it.
+        let replacement = if static_classes.is_empty() {
+            format!("className={{{ternary_source}}}")
+        } else {
+            format!(
+                "className={{`{} ${{{ternary_source}}}`}}",
+                static_classes.join(" ")
+            )
+        };
         magic.update_with(
             only_attribute.attribute_span.start as usize,
             only_attribute.attribute_span.end as usize,
-            format!("className={{{ternary_source}}}"),
+            replacement,
             UpdateOptions {
                 overwrite: true,
                 ..UpdateOptions::default()
@@ -661,6 +760,50 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_static_object_with_last_property_wins_semantics() {
+        let source = "const App = () => <div sz={{ p: 2, m: 1, p: 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"p-4 m-1\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_identifier_spread_with_trailing_override() {
+        let source = "const ITEM = { p: 2, rounded: 'md' } as const;\nconst App = () => <div sz={{ ...ITEM, p: 8 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const ITEM = { p: 2, rounded: 'md' } as const;\nconst App = () => <div className=\"p-8 rounded-md\" />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_nested_variant_override_as_replacement() {
+        let source = "const BASE = { hover: { p: 2, m: 1 } } as const;\nconst App = () => <div sz={{ ...BASE, hover: { p: 4 } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const BASE = { hover: { p: 2, m: 1 } } as const;\nconst App = () => <div className=\"hover:p-4\" />;"
+        );
+    }
+
+    #[test]
+    fn keeps_array_entries_as_composed_style_objects() {
+        let source = "const App = () => <div sz={[{ p: 2, m: 1 }, { p: 4 }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = () => <div className=\"p-2 m-1 p-4\" />;"
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_array_sz_attribute() {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
         let rewritten = rewrite(source).expect("rewritten");
@@ -823,6 +966,25 @@ mod tests {
         assert_eq!(
             rewritten,
             "const X = ({ styles }) => <div className={_szMerge(\"existing\", _sz(styles))} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_conditional_array_objects_to_static_merge_arguments() {
+        let source =
+            "const base = { p: 4 }; const App = ({ active }) => <div sz={[base, active && { m: 2 }]} />;";
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        };
+        let parsed = parse_source_shell(&file);
+
+        let rewritten =
+            rewrite_static_sz_attributes(source, &file.filename, &parsed.ir).expect("rewrite");
+
+        assert_eq!(
+            rewritten,
+            "const base = { p: 4 }; const App = ({ active }) => <div className={_szMerge(\"p-4\", active && \"m-2\")} />;"
         );
     }
 

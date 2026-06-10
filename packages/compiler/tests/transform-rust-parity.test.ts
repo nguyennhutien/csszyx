@@ -93,6 +93,24 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'sz-identifier-spread-trailing-override',
+        source: [
+            'const ITEM = { p: 2, rounded: "md" } as const;',
+            'const X = () => <div sz={{ ...ITEM, p: 8 }} />;',
+        ].join('\n'),
+        filename: 'ident-spread-override.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'sz-nested-variant-trailing-override',
+        source: [
+            'const BASE = { hover: { p: 2, m: 1 } } as const;',
+            'const X = () => <div sz={{ ...BASE, hover: { p: 4 } }} />;',
+        ].join('\n'),
+        filename: 'nested-variant-override.tsx',
+        expected: 'parity',
+    },
+    {
         name: 'sz-conditional-spread',
         source: [
             'const BASE = { p: 4 } as const;',

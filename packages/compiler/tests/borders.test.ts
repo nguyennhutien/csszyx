@@ -149,6 +149,26 @@ describe('borders — border color', () => {
         expect(t({ borderTColor: 'red-500' })).toBe('border-t-red-500');
     });
 
+    it('{ borderRColor: "red-500" } → border-r-red-500', () => {
+        expect(t({ borderRColor: 'red-500' })).toBe('border-r-red-500');
+    });
+
+    it('{ borderBColor: "red-500" } → border-b-red-500', () => {
+        expect(t({ borderBColor: 'red-500' })).toBe('border-b-red-500');
+    });
+
+    it('{ borderLColor: "red-500" } → border-l-red-500', () => {
+        expect(t({ borderLColor: 'red-500' })).toBe('border-l-red-500');
+    });
+
+    it('{ borderXColor: "red-500" } → border-x-red-500', () => {
+        expect(t({ borderXColor: 'red-500' })).toBe('border-x-red-500');
+    });
+
+    it('{ borderYColor: "red-500" } → border-y-red-500', () => {
+        expect(t({ borderYColor: 'red-500' })).toBe('border-y-red-500');
+    });
+
     it('{ borderColor: "#50d71e" } → border-[#50d71e] (arbitrary)', () => {
         expect(t({ borderColor: '#50d71e' })).toBe('border-[#50d71e]');
     });

@@ -17,6 +17,7 @@ import {
     transformSourceCode,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
+import { getNativePackageName } from '@csszyx/core/native';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
@@ -169,6 +170,43 @@ const PLUGIN_VERSION = findPackageVersionFromFile(
     UNKNOWN_PACKAGE_VERSION,
 );
 const COMPILER_VERSION = findPackageVersionFromModule('@csszyx/compiler', UNKNOWN_PACKAGE_VERSION);
+
+let cachedNativeCacheIdentity: string | null = null;
+
+/**
+ * Identity of the installed native engine binary for transform-cache keys.
+ *
+ * Rust-mode output depends on the `.node` binary, and its package version is
+ * not enough: rebuilding the same version from changed sources (workspace
+ * development) previously kept serving stale cached transforms. Combine the
+ * native package version with the resolved binary's mtime and size so an
+ * engine rebuild invalidates the cache; a re-install can only cause an extra
+ * miss, never a stale hit.
+ *
+ * @returns A stable identity string, or a sentinel when unresolvable.
+ */
+export function resolveNativeCacheIdentity(): string {
+    if (cachedNativeCacheIdentity !== null) {
+        return cachedNativeCacheIdentity;
+    }
+    try {
+        const packageName = getNativePackageName();
+        if (!packageName) {
+            cachedNativeCacheIdentity = 'unavailable';
+            return cachedNativeCacheIdentity;
+        }
+        const version = (requireFromHere(`${packageName}/package.json`) as { version?: string })
+            .version;
+        const binaryPath = requireFromHere.resolve(packageName);
+        const stats = fs.statSync(binaryPath);
+        cachedNativeCacheIdentity = `${packageName}@${version ?? '0'}:${Math.floor(
+            stats.mtimeMs,
+        )}:${stats.size}`;
+    } catch {
+        cachedNativeCacheIdentity = 'unresolved';
+    }
+    return cachedNativeCacheIdentity;
+}
 const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
 const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
 
@@ -1511,6 +1549,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
+            nativeIdentity: parserMode === 'rust' ? resolveNativeCacheIdentity() : undefined,
             parserMode,
             producer: parserMode,
             astBudget: astBudgetOverride,

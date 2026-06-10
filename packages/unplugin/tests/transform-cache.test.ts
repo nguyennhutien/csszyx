@@ -162,8 +162,22 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":6');
+        expect(content).toContain('"version":7');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
+    });
+
+    it('keys and validates entries on the native engine identity', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const rustInput = (nativeIdentity?: string): TransformCacheKeyInput =>
+            input({ parserMode: 'rust', producer: 'rust', nativeIdentity });
+
+        writeTransformCache(cacheRoot, rustInput('core@0.9.5:111:222'), result());
+
+        expect(readTransformCache(cacheRoot, rustInput('core@0.9.5:111:222'))).not.toBeNull();
+        // A rebuilt binary (new mtime/size) must miss instead of serving the
+        // previous engine's output.
+        expect(readTransformCache(cacheRoot, rustInput('core@0.9.5:999:222'))).toBeNull();
+        expect(readTransformCache(cacheRoot, rustInput(undefined))).toBeNull();
     });
 
     it('evicts old or corrupt entries', () => {

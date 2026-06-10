@@ -656,6 +656,7 @@ mod tests {
             literal_class_name: None,
             rewrites_empty_class: false,
             ternary: None,
+            array_parts: Vec::new(),
             runtime_fallback: false,
             candidate_classes: Vec::new(),
             dynamic_css_vars,

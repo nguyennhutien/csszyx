@@ -33,6 +33,9 @@ jobs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       recovered: ${{ steps.recovery.outputs.recovered }}
     steps:
+      # Checkout so the enrich step below can run scripts/ and read the config.
+      - uses: actions/checkout@v6
+
       # v5 removed the `command` input — the action runs both release-pr
       # and github-release in a single invocation automatically.
       - name: Release Please
@@ -115,6 +118,19 @@ jobs:
           rm -f /tmp/pending-prs.tsv
           echo "recovered=${recovered}" >> "$GITHUB_OUTPUT"
           echo "Recovery complete — ${recovered} release(s) repaired."
+
+      # When release-please has only opened/updated a release PR (no release cut
+      # yet), rebuild that PR's CHANGELOG section from the squash commit bodies so
+      # a bundled PR still yields rich, grouped notes (release-please only reads
+      # the squash subject). Best-effort: the script never throws and the step is
+      # continue-on-error, so a failure leaves the thin release-please output.
+      - name: Enrich release PR CHANGELOG from squash commits
+        if: ${{ steps.release.outputs.releases_created != 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/enrich-release-changelog.mjs
 
   build-native-artifacts:
     name: Build native package artifacts

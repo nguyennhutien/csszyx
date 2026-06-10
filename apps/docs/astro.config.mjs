@@ -171,7 +171,7 @@ export default defineConfig({
                                         }
                                     : undefined,
                         },
-                        build: { scanCss: 'src/styles/landing.css' },
+                        build: { parser: 'rust', scanCss: 'src/styles/landing.css' },
                     })),
             ...(process.env.CSSZYX_BENCH_NO_TAILWIND === '1' ? [] : [tailwindcss()]),
         ],

@@ -10,7 +10,7 @@ import {
     resolveTransformCacheDir,
     type TransformCacheKeyInput,
 } from '../src/transform-cache.js';
-import { vitePlugin } from '../src/unplugin.js';
+import { resolveNativeCacheIdentity, vitePlugin } from '../src/unplugin.js';
 
 type TransformHook = {
     configResolved?: (config: { root: string }) => void;
@@ -59,6 +59,7 @@ describe('rust parser real-source canary', () => {
         return {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
+            nativeIdentity: resolveNativeCacheIdentity(),
             parserMode: 'rust',
             producer: 'rust',
             filename: '/repo/src/App.tsx',

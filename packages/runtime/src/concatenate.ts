@@ -9,12 +9,64 @@
  * @module @csszyx/runtime/concatenate
  */
 
-import { type SzObject, transform } from '@csszyx/compiler/browser';
+import { transform as rawTransform, type SzObject } from '@csszyx/compiler/browser';
+
+/** Result of a runtime sz transform: the className plus any style attributes. */
+interface TransformResult {
+    className: string;
+    attributes: Record<string, string>;
+}
+
+/** A frozen map of original class names to their mangled SSR equivalents. */
+type RuntimeMangleMap = Readonly<Record<string, string>>;
+
+/** Global slots that may expose the SSR/runtime mangle map. */
+interface CsszyxMangleGlobals {
+    __csszyx_ssr_mangle_map?: RuntimeMangleMap;
+    __csszyx?: {
+        mangleMap?: RuntimeMangleMap;
+    };
+}
 
 /**
- * Type for sz input - can be a pre-compiled string or SzObject.
+ * Wraps rawTransform to apply runtime class-name mangling when a mangle map is
+ * present on the global (SSR) or window object.
+ * @param szProp - The sz object to transform into a className.
+ * @returns The transform result, with class names mangled when a map is active.
  */
-export type SzInput = string | SzObject | null | undefined | false;
+function transform(szProp: SzObject): TransformResult {
+    const res = rawTransform(szProp);
+    const className = res.className;
+    if (!className) {
+        return res;
+    }
+
+    const globals = globalThis as typeof globalThis & CsszyxMangleGlobals;
+    const ssrMangleMap = globals.__csszyx_ssr_mangle_map || globals.__csszyx?.mangleMap;
+    const browserMangleMap =
+        typeof window !== 'undefined'
+            ? (window as Window & CsszyxMangleGlobals).__csszyx?.mangleMap
+            : undefined;
+    const activeMangleMap = ssrMangleMap || browserMangleMap;
+
+    if (activeMangleMap) {
+        const mangled = className
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((c: string) => activeMangleMap[c] || c)
+            .join(' ');
+        return {
+            className: mangled,
+            attributes: res.attributes,
+        };
+    }
+    return res;
+}
+
+/**
+ * Type for sz input - can be a pre-compiled string, SzObject, or recursive array.
+ */
+export type SzInput = string | SzObject | SzInput[] | null | undefined | false;
 
 /**
  * Zero-overhead className passthrough/concatenation helper.
@@ -52,6 +104,9 @@ export function _sz(...classes: SzInput[]): string {
         if (!cls) {
             return '';
         }
+        if (Array.isArray(cls)) {
+            return _sz(...(cls as SzInput[]));
+        }
         const res = transform(cls);
         return typeof res === 'string' ? res : res.className;
     }
@@ -64,6 +119,19 @@ export function _sz(...classes: SzInput[]): string {
 
         // Skip falsy values
         if (!cls) {
+            continue;
+        }
+
+        if (Array.isArray(cls)) {
+            const str = _sz(...(cls as SzInput[]));
+            if (!str) {
+                continue;
+            }
+            if (needsSpace) {
+                result += ' ';
+            }
+            result += str;
+            needsSpace = true;
             continue;
         }
 
@@ -120,6 +188,9 @@ export function _szIf(condition: boolean, truthyValue: SzInput, falsyValue?: SzI
     if (typeof value === 'string') {
         return value;
     }
+    if (Array.isArray(value)) {
+        return _sz(...(value as SzInput[]));
+    }
     const res = transform(value);
     return typeof res === 'string' ? res : res.className;
 }
@@ -156,6 +227,9 @@ export function _szSwitch(
             if (typeof value === 'string') {
                 return value;
             }
+            if (Array.isArray(value)) {
+                return _sz(...(value as SzInput[]));
+            }
             const res = transform(value);
             return typeof res === 'string' ? res : res.className;
         }
@@ -166,6 +240,9 @@ export function _szSwitch(
     }
     if (typeof defaultValue === 'string') {
         return defaultValue;
+    }
+    if (Array.isArray(defaultValue)) {
+        return _sz(...(defaultValue as SzInput[]));
     }
     const res = transform(defaultValue);
     return typeof res === 'string' ? res : res.className;
@@ -195,6 +272,22 @@ export function _szMerge(...classes: SzInput[]): string {
     for (let i = 0; i < classes.length; i++) {
         const cls = classes[i];
         if (!cls) {
+            continue;
+        }
+
+        if (Array.isArray(cls)) {
+            const str = _szMerge(...(cls as SzInput[]));
+            if (!str) {
+                continue;
+            }
+            const parts = str.split(/\s+/);
+            for (let j = 0; j < parts.length; j++) {
+                const part = parts[j];
+                if (part && !seen.has(part)) {
+                    seen.add(part);
+                    result.push(part);
+                }
+            }
             continue;
         }
 
