@@ -4,12 +4,11 @@ import {
     transformBatch,
 } from '@csszyx/core/native';
 
-import {
-    type CssVariableMangleValue,
-    extractCatalogClasses,
-    type GlobalVarAliasTableInput,
-    type SourceTransformResult,
-    type TransformSourceCodeOptions,
+import type {
+    CssVariableMangleValue,
+    GlobalVarAliasTableInput,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
 } from './transform.js';
 
 /**
@@ -112,17 +111,7 @@ export function transformRustBatch(
                 mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
                 globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
             },
-        ).map((res, index) => {
-            const file = files[index];
-            const result = fromNativeResult(res);
-            if (file) {
-                const catalogClasses = extractCatalogClasses(file.source, file.filename);
-                for (const c of catalogClasses) {
-                    result.classes.add(c);
-                }
-            }
-            return result;
-        });
+        ).map(fromNativeResult);
     } catch (err) {
         if (err instanceof OxcRustNotImplementedError) {
             throw err;

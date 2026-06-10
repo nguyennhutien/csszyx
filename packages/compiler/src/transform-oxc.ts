@@ -42,11 +42,10 @@ import {
     PropertyCategory,
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
-import {
-    type CssVariableMangleValue,
-    extractCatalogClasses,
-    type SourceTransformResult,
-    type TransformSourceCodeOptions,
+import type {
+    CssVariableMangleValue,
+    SourceTransformResult,
+    TransformSourceCodeOptions,
 } from './transform.js';
 import {
     transform as compileSzObject,
@@ -150,6 +149,12 @@ export function transformOxc(
     walk(parsed.program, node => {
         if (node.type === 'CallExpression') {
             collectDynamicCallClasses(
+                node as CallExpressionNode,
+                effectiveFilename,
+                objectBindings,
+                classes,
+            );
+            collectSzvCallClasses(
                 node as CallExpressionNode,
                 effectiveFilename,
                 objectBindings,
@@ -376,6 +381,37 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'ArrayExpression') {
+                const arrayMergeExpression = buildArrayMergeExpression(
+                    expression as ArrayExpressionNode,
+                    effectiveFilename,
+                    objectBindings,
+                    globalVarAliases,
+                    cssVariableMap,
+                    source,
+                    classes,
+                );
+                if (arrayMergeExpression) {
+                    const existingExpression = classNameAttr
+                        ? classNameMergeArgument(classNameAttr, source)
+                        : null;
+                    const mergeExpression = existingExpression
+                        ? `_szMerge(${existingExpression}, ${arrayMergeExpression})`
+                        : `_szMerge(${arrayMergeExpression})`;
+                    if (classNameAttr) {
+                        edits.overwrite(
+                            classNameAttr.start,
+                            classNameAttr.end,
+                            `className={${mergeExpression}}`,
+                        );
+                        edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
+                    } else {
+                        edits.overwrite(szAttr.start, szAttr.end, `className={${mergeExpression}}`);
+                    }
+                    usesRuntime = true;
+                    usesMerge = true;
+                    transformed = true;
+                    return;
+                }
                 const arrayClasses = astArrayToStaticClasses(
                     expression as ArrayExpressionNode,
                     effectiveFilename,
@@ -389,6 +425,7 @@ export function transformOxc(
                         effectiveFilename,
                         objectBindings,
                         classes,
+                        '',
                     );
                     runtimeFallbackExpr = expression;
                     runtimeFallbackAttr = szAttr;
@@ -448,7 +485,14 @@ export function transformOxc(
                         reservedCSSVariableNames,
                         globalVarAliases,
                     );
-                    if (partial && szAttrs.length === 1) {
+                    // A conditional partial beside an existing className would
+                    // inline both branches into the merge, so that combination
+                    // stays on the runtime fallback below.
+                    if (
+                        partial &&
+                        szAttrs.length === 1 &&
+                        !(partial.hasConditional && classNameAttr)
+                    ) {
                         const mergedStyleProps =
                             hoistedStyleProps.length > 0
                                 ? [...hoistedStyleProps, ...partial.styleProps]
@@ -551,6 +595,13 @@ export function transformOxc(
             if (runtimeFallbackExpr.type !== 'ArrayExpression') {
                 diagnostics.push(buildRuntimeFallbackDiagnostic(runtimeFallbackExpr, source));
             }
+            collectCandidateClassesFromExpression(
+                runtimeFallbackExpr,
+                effectiveFilename,
+                objectBindings,
+                classes,
+                '',
+            );
             edits.overwrite(
                 runtimeFallbackAttr.start,
                 runtimeFallbackAttr.end,
@@ -602,11 +653,6 @@ export function transformOxc(
         }
         transformed = true;
     });
-
-    const catalogClasses = extractCatalogClasses(source, filename);
-    for (const c of catalogClasses) {
-        classes.add(c);
-    }
 
     return {
         code: transformed ? edits.toString() : source,
@@ -868,6 +914,8 @@ interface OxcPartialTransform {
     classNameAttr: string;
     styleProps: string[];
     usesColorVar: boolean;
+    /** True when the emitted attribute embeds a runtime conditional branch. */
+    hasConditional: boolean;
 }
 
 /** Hoist decisions indexed for the source rewrite pass. */
@@ -1006,6 +1054,100 @@ function astArrayToStaticClasses(
 }
 
 /**
+ * Compile a conditional sz array (`[base, cond && extra]`) to `_szMerge` args.
+ *
+ * @param node Array expression used as the sz value.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap Original-to-mangled CSS variable map to populate.
+ * @param source Original source for preserving condition expressions.
+ * @param classes Output set collecting every compiled class for the catalog.
+ * @returns Comma-joined `_szMerge` arguments, or null when fully static or unresolvable.
+ */
+function buildArrayMergeExpression(
+    node: ArrayExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
+    source: string,
+    classes: Set<string>,
+): string | null {
+    const parts: string[] = [];
+    let hasConditional = false;
+
+    for (const element of node.elements) {
+        if (!element || isFalsyLiteral(element)) {
+            continue;
+        }
+        const unwrapped = unwrapExpression(element);
+        let condition: OxcNode | null = null;
+        let candidate = unwrapped;
+        if (
+            unwrapped.type === 'LogicalExpression' &&
+            (unwrapped as LogicalExpressionNode).operator === '&&'
+        ) {
+            const logical = unwrapped as LogicalExpressionNode;
+            condition = logical.left;
+            candidate = unwrapExpression(logical.right);
+            hasConditional = true;
+        }
+        const objectNode = resolveObjectExpression(candidate, bindings);
+        if (!objectNode) {
+            return null;
+        }
+        let result: ReturnType<typeof compileSzObject>;
+        try {
+            result = compileSzObject(
+                applyGlobalVarAliasesToSzObject(
+                    astObjectToSzObject(objectNode, filename, bindings),
+                    globalVarAliases,
+                    cssVariableMap,
+                ),
+            );
+        } catch (err) {
+            if (err instanceof OxcNotImplementedError) {
+                return null;
+            }
+            throw err;
+        }
+        for (const cls of result.className.split(/\s+/)) {
+            if (cls) {
+                classes.add(cls);
+            }
+        }
+        const classLiteral = JSON.stringify(result.className);
+        parts.push(
+            condition
+                ? `${source.slice(condition.start, condition.end)} && ${classLiteral}`
+                : classLiteral,
+        );
+    }
+
+    return hasConditional ? parts.join(', ') : null;
+}
+
+/**
+ * Build the `_szMerge` argument that preserves an existing className attribute.
+ *
+ * @param attribute Existing `className` JSX attribute.
+ * @param source Original source for slicing expression values.
+ * @returns A JS expression string for the existing className value.
+ */
+function classNameMergeArgument(attribute: JsxAttributeNode, source: string): string {
+    const staticValue = stringLiteralValue(attribute.value);
+    if (staticValue !== null) {
+        return JSON.stringify(staticValue);
+    }
+    if (attribute.value?.type === 'JSXExpressionContainer') {
+        const expression = (attribute.value as unknown as { expression: OxcNode }).expression;
+        return source.slice(expression.start, expression.end);
+    }
+    return '""';
+}
+
+/**
  * Collect statically visible classes from an array that still needs runtime fallback.
  *
  * @param node Array expression used as the sz value.
@@ -1013,55 +1155,283 @@ function astArrayToStaticClasses(
  * @param bindings Local object-literal bindings.
  * @param classes Class set to populate.
  */
+/**
+ * Collect statically visible classes from an array that still needs runtime fallback.
+ *
+ * @param node Array expression used as the sz value.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param classes Class set to populate.
+ * @param variantPrefix Current variant prefix chain.
+ */
 function collectArrayCandidateClasses(
     node: ArrayExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     classes: Set<string>,
+    variantPrefix: string,
 ): void {
     for (const element of node.elements) {
         if (!element || isFalsyLiteral(element)) {
             continue;
         }
+        /**
+         *
+         * @param node
+         * @param filename
+         * @param bindings
+         * @param classes
+         * @param variantPrefix
+         */
         const candidate =
             element.type === 'LogicalExpression' &&
             (element as LogicalExpressionNode).operator === '&&'
                 ? (element as LogicalExpressionNode).right
                 : element;
-        collectStaticObjectCandidateClasses(candidate, filename, bindings, classes);
+        collectCandidateClassesFromExpression(
+            candidate,
+            filename,
+            bindings,
+            classes,
+            variantPrefix,
+        );
     }
 }
 
 /**
- * Collect classes from a statically resolvable object candidate.
+ * Collect Tailwind candidate classes from any statically analysable expression.
  *
- * @param node Candidate node.
+ * @param node Candidate expression (object, array, identifier, conditional, logical).
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
- * @param classes Class set to populate.
+ * @param classes Output set collecting candidate classes for the catalog.
+ * @param variantPrefix Variant chain to prefix onto collected classes.
  */
-function collectStaticObjectCandidateClasses(
+function collectCandidateClassesFromExpression(
     node: OxcNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     classes: Set<string>,
+    variantPrefix: string,
 ): void {
-    const objectNode = resolveObjectExpression(node, bindings);
-    if (!objectNode) {
-        return;
-    }
-    let result: ReturnType<typeof compileSzObject>;
-    try {
-        result = compileSzObject(astObjectToSzObject(objectNode, filename, bindings));
-    } catch (err) {
-        if (err instanceof OxcNotImplementedError) {
-            return;
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'ArrayExpression') {
+        collectArrayCandidateClasses(
+            unwrapped as ArrayExpressionNode,
+            filename,
+            bindings,
+            classes,
+            variantPrefix,
+        );
+    } else if (unwrapped.type === 'ObjectExpression') {
+        collectCandidateClassesFromObjectExpression(
+            unwrapped as ObjectExpressionNode,
+            filename,
+            bindings,
+            classes,
+            variantPrefix,
+        );
+    } else if (unwrapped.type === 'Identifier') {
+        const bound = bindings.get(String((unwrapped as IdentifierNode).name));
+        if (bound) {
+            collectCandidateClassesFromExpression(
+                bound,
+                filename,
+                bindings,
+                classes,
+                variantPrefix,
+            );
         }
-        throw err;
+    } else if (unwrapped.type === 'ConditionalExpression') {
+        const cond = unwrapped as ConditionalExpressionNode;
+        collectCandidateClassesFromExpression(
+            cond.consequent,
+            filename,
+            bindings,
+            classes,
+            variantPrefix,
+        );
+        collectCandidateClassesFromExpression(
+            cond.alternate,
+            filename,
+            bindings,
+            classes,
+            variantPrefix,
+        );
+    } else if (
+        unwrapped.type === 'LogicalExpression' &&
+        (unwrapped as LogicalExpressionNode).operator === '&&'
+    ) {
+        const logical = unwrapped as LogicalExpressionNode;
+        collectCandidateClassesFromExpression(
+            logical.right,
+            filename,
+            bindings,
+            classes,
+            variantPrefix,
+        );
     }
-    for (const cls of result.className.split(/\s+/)) {
-        if (cls) {
-            classes.add(cls);
+}
+
+/**
+ * Collect candidate classes from one object expression, including variant nests.
+ *
+ * @param node Object expression to compile for candidates.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param classes Output set collecting candidate classes for the catalog.
+ * @param variantPrefix Variant chain to prefix onto collected classes.
+ */
+function collectCandidateClassesFromObjectExpression(
+    node: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    classes: Set<string>,
+    variantPrefix: string,
+): void {
+    try {
+        const compiled = compileSzObject(astObjectToSzObject(node, filename, bindings));
+        for (const cls of prefixVariantClasses(compiled.className, variantPrefix).split(/\s+/)) {
+            if (cls) {
+                classes.add(cls);
+            }
+        }
+        return;
+    } catch (err) {
+        if (!(err instanceof OxcNotImplementedError)) {
+            throw err;
+        }
+    }
+
+    for (const propRaw of node.properties) {
+        if (propRaw.type === 'SpreadElement') {
+            const spread = propRaw as SpreadElementNode;
+            const spreadArg = unwrapExpression(spread.argument);
+            if (spreadArg.type === 'Identifier') {
+                const bound = bindings.get(String((spreadArg as IdentifierNode).name));
+                if (bound) {
+                    collectCandidateClassesFromObjectExpression(
+                        bound,
+                        filename,
+                        bindings,
+                        classes,
+                        variantPrefix,
+                    );
+                }
+            } else {
+                collectCandidateClassesFromExpression(
+                    spread.argument,
+                    filename,
+                    bindings,
+                    classes,
+                    variantPrefix,
+                );
+            }
+        } else if (propRaw.type === 'Property') {
+            const prop = propRaw as PropertyNode;
+            if (prop.computed) {
+                continue;
+            }
+            const key = extractKeyName(prop.key);
+            if (key === null) {
+                continue;
+            }
+            const val = unwrapExpression(prop.value);
+            if (val.type === 'ObjectExpression') {
+                if (isKnownVariant(key)) {
+                    const nestedVariant = variantPrefix ? `${variantPrefix}:${key}` : key;
+                    collectCandidateClassesFromObjectExpression(
+                        val as ObjectExpressionNode,
+                        filename,
+                        bindings,
+                        classes,
+                        nestedVariant,
+                    );
+                } else {
+                    try {
+                        const propertyVal = astObjectToSzObject(
+                            val as ObjectExpressionNode,
+                            filename,
+                            bindings,
+                        );
+                        const singleObject = { [key]: propertyVal };
+                        const compiled = compileSzObject(singleObject);
+                        for (const c of prefixVariantClasses(
+                            compiled.className,
+                            variantPrefix,
+                        ).split(/\s+/)) {
+                            if (c) classes.add(c);
+                        }
+                    } catch {
+                        collectCandidateClassesFromExpression(
+                            val,
+                            filename,
+                            bindings,
+                            classes,
+                            variantPrefix,
+                        );
+                    }
+                }
+            } else if (val.type === 'ConditionalExpression') {
+                const cond = val as ConditionalExpressionNode;
+                try {
+                    const consequentVal = astValueToSzValue(cond.consequent, filename, bindings);
+                    const singleConsequent = { [key]: consequentVal };
+                    const compiledConsequent = compileSzObject(singleConsequent);
+                    for (const c of prefixVariantClasses(
+                        compiledConsequent.className,
+                        variantPrefix,
+                    ).split(/\s+/)) {
+                        if (c) classes.add(c);
+                    }
+                } catch {
+                    collectCandidateClassesFromExpression(
+                        cond.consequent,
+                        filename,
+                        bindings,
+                        classes,
+                        variantPrefix,
+                    );
+                }
+                try {
+                    const alternateVal = astValueToSzValue(cond.alternate, filename, bindings);
+                    const singleAlternate = { [key]: alternateVal };
+                    const compiledAlternate = compileSzObject(singleAlternate);
+                    for (const c of prefixVariantClasses(
+                        compiledAlternate.className,
+                        variantPrefix,
+                    ).split(/\s+/)) {
+                        if (c) classes.add(c);
+                    }
+                } catch {
+                    collectCandidateClassesFromExpression(
+                        cond.alternate,
+                        filename,
+                        bindings,
+                        classes,
+                        variantPrefix,
+                    );
+                }
+            } else {
+                try {
+                    const propertyVal = astValueToSzValue(val, filename, bindings);
+                    const singleObject = { [key]: propertyVal };
+                    const compiled = compileSzObject(singleObject);
+                    for (const c of prefixVariantClasses(compiled.className, variantPrefix).split(
+                        /\s+/,
+                    )) {
+                        if (c) classes.add(c);
+                    }
+                } catch {
+                    collectCandidateClassesFromExpression(
+                        val,
+                        filename,
+                        bindings,
+                        classes,
+                        variantPrefix,
+                    );
+                }
+            }
         }
     }
 }
@@ -1136,6 +1506,92 @@ function collectDynamicCallClasses(
             classes.add(cls);
         }
     }
+}
+
+/**
+ * Collect every static class reachable from an szv configuration.
+ *
+ * @param node Call expression to inspect.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param classes Class set to populate.
+ */
+function collectSzvCallClasses(
+    node: CallExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    classes: Set<string>,
+): void {
+    if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'szv') {
+        return;
+    }
+    const [firstArg] = node.arguments;
+    if (!firstArg) {
+        return;
+    }
+    /**
+     *
+     * @param object
+     * @param classes
+     */
+    const configNode = resolveObjectExpression(firstArg, bindings);
+    if (!configNode) {
+        return;
+    }
+
+    let config: SzObject;
+    try {
+        config = astObjectToSzObject(configNode, filename, bindings);
+    } catch (err) {
+        /**
+         *
+         * @param value
+         */
+        if (err instanceof OxcNotImplementedError) {
+            return;
+        }
+        throw err;
+    }
+
+    const base = isSzObject(config.base) ? config.base : {};
+    addCompiledClasses(base, classes);
+    const variants = isSzObject(config.variants) ? config.variants : {};
+    for (const variantValues of Object.values(variants)) {
+        if (!isSzObject(variantValues)) {
+            continue;
+        }
+        for (const variantObject of Object.values(variantValues)) {
+            if (!isSzObject(variantObject)) {
+                continue;
+            }
+            addCompiledClasses({ ...base, ...variantObject }, classes);
+        }
+    }
+}
+
+/**
+ * Compile an sz object and add each resulting class to the catalog set.
+ *
+ * @param object sz object to compile.
+ * @param classes Output set collecting the compiled classes.
+ */
+function addCompiledClasses(object: SzObject, classes: Set<string>): void {
+    const result = compileSzObject(object);
+    for (const cls of result.className.split(/\s+/)) {
+        if (cls) {
+            classes.add(cls);
+        }
+    }
+}
+
+/**
+ * Narrow an unknown value to a plain (non-array) sz object.
+ *
+ * @param value Candidate value.
+ * @returns True when the value is a plain object usable as an sz config.
+ */
+function isSzObject(value: unknown): value is SzObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -1311,11 +1767,12 @@ function buildPartialObjectTransform(
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
         return null;
     }
+    // One conditional prop may coexist with static props (the static part stays
+    // build-time, only the conditional becomes a runtime ternary). Mixing a
+    // conditional with runtime css vars still falls back to the runtime.
     if (
         partial.conditionalClasses.length > 0 &&
-        (partial.conditionalClasses.length !== 1 ||
-            partial.dynamicProps.size > 0 ||
-            Object.keys(partial.staticProps).length > 0)
+        (partial.conditionalClasses.length !== 1 || partial.dynamicProps.size > 0)
     ) {
         return null;
     }
@@ -1353,7 +1810,13 @@ function buildPartialObjectTransform(
             ([, info]) =>
                 `${JSON.stringify(info.varName)}: ${generateStyleValueSource(info, source)}`,
         );
-    return { className, classNameAttr, styleProps, usesColorVar: partial.usesColorVar };
+    return {
+        className,
+        classNameAttr,
+        styleProps,
+        usesColorVar: partial.usesColorVar,
+        hasConditional: partial.conditionalClasses.length > 0,
+    };
 }
 
 /**
@@ -2234,9 +2697,16 @@ function buildConditionalClassSource(
     conditionals: OxcConditionalClassEntry[],
     source: string,
 ): string {
-    if (conditionals.length === 1 && classParts.length === 2) {
+    if (conditionals.length === 1) {
         const [entry] = conditionals;
-        return `${source.slice(entry.test.start, entry.test.end)} ? ${JSON.stringify(entry.consequent)} : ${JSON.stringify(entry.alternate)}`;
+        const ternary = `${source.slice(entry.test.start, entry.test.end)} ? ${JSON.stringify(entry.consequent)} : ${JSON.stringify(entry.alternate)}`;
+        // classParts ends with the conditional's [consequent, alternate]; what
+        // precedes them is the build-time static class list.
+        const staticParts = classParts.slice(0, -2).filter(Boolean);
+        if (staticParts.length === 0) {
+            return ternary;
+        }
+        return `\`${staticParts.join(' ')} \${${ternary}}\``;
     }
     return JSON.stringify(classParts.filter(Boolean).join(' '));
 }
