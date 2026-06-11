@@ -42,13 +42,27 @@ jobs:
         id: head-ref
         env:
           HEAD_REF: ${{ github.head_ref }}
+          # On a pull_request, head_ref is the source branch. On the push that
+          # merges the release PR there is no head_ref, so also match the
+          # release-please commit subject — a pure version/CHANGELOG bump with
+          # no code to validate. Without this the merge commit runs the full
+          # matrix (the version bump touches package.json paths), including the
+          # cross-process lock stress test that flakes under release-time load.
+          HEAD_COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           case "$HEAD_REF" in
             release-please--branches--main*)
               echo "is_release_please=true" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "is_release_please=false" >> "$GITHUB_OUTPUT"
+              case "$HEAD_COMMIT_MSG" in
+                "chore(main): release "* | "chore: release "*)
+                  echo "is_release_please=true" >> "$GITHUB_OUTPUT"
+                  ;;
+                *)
+                  echo "is_release_please=false" >> "$GITHUB_OUTPUT"
+                  ;;
+              esac
               ;;
           esac
 
