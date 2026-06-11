@@ -50,6 +50,7 @@ import {
     transformIndexHtml as injectHydrationData,
     injectRecoveryManifest,
 } from './html-transformer.js';
+import { escapeJsonForInlineScript } from './inline-script-escape.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -2069,7 +2070,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             result = result.split(CHECKSUM_PLACEHOLDER).join(state.checksum);
         }
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
-            const jsonMap = JSON.stringify(state.mangleMap);
+            // Map keys are class names, and arbitrary-value classes can carry
+            // backticks, ${ or </script — escape so the JSON cannot break out
+            // of the template literal / script tag it gets pasted into.
+            const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.mangleMap));
             // Webpack dev mode wraps each module in eval("..."). Inside that eval string,
             // double-quotes must be escaped as \" or they will terminate the string literal early.
             // Detect eval-wrapped output by checking if the file uses eval().
@@ -2077,7 +2081,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         if (result.includes(VAR_MANGLE_MAP_PLACEHOLDER)) {
-            const jsonMap = JSON.stringify(state.varMangleMap);
+            const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.varMangleMap));
             const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
             result = result.split(VAR_MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
@@ -2266,7 +2270,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     );
 
                     // Inject mangle map debug script with placeholders
-                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${JSON.stringify(encodedGlobalVarAliasPrefix)});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
                     if (transformedCode.includes('<body')) {
                         transformedCode = transformedCode.replace(
                             /(<body[^>]*>)/i,
