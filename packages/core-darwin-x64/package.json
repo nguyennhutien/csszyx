@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/core-darwin-x64",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "macOS x64 native binding for @csszyx/core",
   "license": "MIT",
   "os": [

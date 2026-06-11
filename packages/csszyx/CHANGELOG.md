@@ -1,5 +1,11 @@
 # csszyx
 
+## [0.9.7](https://github.com/nguyennhutien/csszyx/compare/v0.9.6...v0.9.7) (2026-06-11)
+
+### Bug Fixes
+
+* **mcp-server:** upgrade the MCP SDK past its ReDoS advisory ([#46](https://github.com/nguyennhutien/csszyx/issues/46))
+
 ## [0.9.6](https://github.com/nguyennhutien/csszyx/compare/v0.9.5...v0.9.6) (2026-06-10)
 
 ### Bug Fixes
