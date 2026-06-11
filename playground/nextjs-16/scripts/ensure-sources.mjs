@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,8 +17,12 @@ const files = [
 for (const [file, content] of files) {
     await mkdir(dirname(file), { recursive: true });
     try {
-        await access(file);
-    } catch {
-        await writeFile(file, content);
+        // 'wx' creates atomically and fails if the file already exists —
+        // no check-then-write window for a concurrent process to exploit.
+        await writeFile(file, content, { flag: 'wx' });
+    } catch (error) {
+        if (error?.code !== 'EEXIST') {
+            throw error;
+        }
     }
 }
