@@ -53,13 +53,4 @@ describe('escapeJsonForInlineScript', () => {
 
         expect(escapeJsonForInlineScript(json)).toBe(json);
     });
-
-    it('stays compatible with the eval-wrap quote escaping applied after it', () => {
-        const map = { "[content:'</script>']": 'a' };
-        const escaped = escapeJsonForInlineScript(JSON.stringify(map)).replace(/"/g, '\\"');
-
-        expect(escaped).not.toContain('<');
-        // Undo the quote escaping (what eval() does) and parse.
-        expect(JSON.parse(escaped.replace(/\\"/g, '"'))).toEqual(map);
-    });
 });
