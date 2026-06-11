@@ -82,7 +82,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.53.0",
     "unbuild": "3.6.1",
-    "vite": "^8.0.13"
+    "vite": "^8.0.14"
   },
   "engines": {
     "node": ">=22.12.0",
