@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/core-win32-x64-msvc",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "Windows x64 MSVC native binding for @csszyx/core",
   "license": "MIT",
   "os": [
