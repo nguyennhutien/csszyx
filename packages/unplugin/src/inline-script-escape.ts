@@ -30,3 +30,19 @@ export function escapeJsonForInlineScript(json: string): string {
         .replace(/\u2028/g, '\\u2028') // line separator — legal JSON, risky JS
         .replace(/\u2029/g, '\\u2029'); // paragraph separator — same
 }
+
+/**
+ * Escape a string for embedding inside a double-quoted JavaScript string
+ * literal. Webpack dev mode wraps each module as `eval("…module source…")`,
+ * so a string spliced into that module is parsed twice: once as the outer
+ * `eval` string, then as the module. Escaping only `"` is incomplete — any
+ * backslash in the input (e.g. the `<`-style escapes from
+ * `escapeJsonForInlineScript`) would be consumed by the outer string parse,
+ * undoing the escaping. Escape backslashes first, then quotes, so the value
+ * survives the extra parse byte-for-byte.
+ * @param value - The string to embed (already JSON/inline-script safe).
+ * @returns The string with backslashes and double quotes escaped.
+ */
+export function escapeForDoubleQuotedString(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}

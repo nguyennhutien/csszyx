@@ -50,7 +50,7 @@ import {
     transformIndexHtml as injectHydrationData,
     injectRecoveryManifest,
 } from './html-transformer.js';
-import { escapeJsonForInlineScript } from './inline-script-escape.js';
+import { escapeForDoubleQuotedString, escapeJsonForInlineScript } from './inline-script-escape.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -2074,15 +2074,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // backticks, ${ or </script — escape so the JSON cannot break out
             // of the template literal / script tag it gets pasted into.
             const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.mangleMap));
-            // Webpack dev mode wraps each module in eval("..."). Inside that eval string,
-            // double-quotes must be escaped as \" or they will terminate the string literal early.
-            // Detect eval-wrapped output by checking if the file uses eval().
-            const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
+            // Webpack dev mode wraps each module in eval("..."), so the map is
+            // parsed twice — escape backslashes and quotes for that outer string.
+            const escapedMap = result.includes('eval(')
+                ? escapeForDoubleQuotedString(jsonMap)
+                : jsonMap;
             result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         if (result.includes(VAR_MANGLE_MAP_PLACEHOLDER)) {
             const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.varMangleMap));
-            const escapedMap = result.includes('eval(') ? jsonMap.replace(/"/g, '\\"') : jsonMap;
+            const escapedMap = result.includes('eval(')
+                ? escapeForDoubleQuotedString(jsonMap)
+                : jsonMap;
             result = result.split(VAR_MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         return result;
