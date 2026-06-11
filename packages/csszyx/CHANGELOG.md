@@ -2,11 +2,10 @@
 
 ## [0.9.8](https://github.com/nguyennhutien/csszyx/compare/v0.9.7...v0.9.8) (2026-06-11)
 
-
 ### Bug Fixes
 
-* **unplugin:** complete the eval-wrap escaping of the embedded mangle map ([#52](https://github.com/nguyennhutien/csszyx/issues/52)) ([7b06b9e](https://github.com/nguyennhutien/csszyx/commit/7b06b9e9be51d04d9fa3c1f8f902cc0fc573727a))
-* **unplugin:** escape mangle-map JSON embedded in generated inline scripts ([#50](https://github.com/nguyennhutien/csszyx/issues/50)) ([395319e](https://github.com/nguyennhutien/csszyx/commit/395319ef0f7d46cf1e8b0fb84c4a90a29b7f24b1))
+* **unplugin:** escape mangle-map JSON embedded in generated inline scripts ([#50](https://github.com/nguyennhutien/csszyx/issues/50))
+* **unplugin:** complete the eval-wrap escaping of the embedded mangle map ([#52](https://github.com/nguyennhutien/csszyx/issues/52))
 
 ## [0.9.7](https://github.com/nguyennhutien/csszyx/compare/v0.9.6...v0.9.7) (2026-06-11)
 
