@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { escapeJsonForInlineScript } from '../src/inline-script-escape.js';
+import {
+    escapeForDoubleQuotedString,
+    escapeJsonForInlineScript,
+} from '../src/inline-script-escape.js';
 
 const LS = String.fromCharCode(0x2028);
 const PS = String.fromCharCode(0x2029);
@@ -52,5 +55,28 @@ describe('escapeJsonForInlineScript', () => {
         const json = JSON.stringify(map);
 
         expect(escapeJsonForInlineScript(json)).toBe(json);
+    });
+});
+
+describe('escapeForDoubleQuotedString', () => {
+    it('escapes backslashes before quotes so the value survives the eval() reparse', () => {
+        const map = { "[content:'</script>']": 'z', 'a`b${c}': 'y' };
+        // Production path: inline-script escape, then double-quote-string escape
+        // for the webpack-dev eval("...") wrapper.
+        const embedded = escapeForDoubleQuotedString(
+            escapeJsonForInlineScript(JSON.stringify(map)),
+        );
+
+        // The outer eval string parse must yield back the inline-script-escaped
+        // JSON exactly — including the \uXXXX escapes (so `<` stays neutralised).
+        // biome-ignore lint/security/noGlobalEval: reparsing the embedded string is the property under test
+        const afterEvalParse = eval(`"${embedded}"`) as string;
+        expect(afterEvalParse).toBe(escapeJsonForInlineScript(JSON.stringify(map)));
+        expect(afterEvalParse).not.toContain('<');
+        expect(JSON.parse(afterEvalParse)).toEqual(map);
+    });
+
+    it('is a no-op for strings with no backslashes or quotes', () => {
+        expect(escapeForDoubleQuotedString('p-4 md:flex')).toBe('p-4 md:flex');
     });
 });
