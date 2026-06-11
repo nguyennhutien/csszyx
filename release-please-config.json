@@ -6,7 +6,7 @@
   "include-component-in-tag": false,
   "include-v-in-tag": true,
   "separate-pull-requests": true,
-  "pull-request-title-pattern": "chore${scope}: release ${component} v${version}",
+  "pull-request-title-pattern": "chore${scope}: release csszyx v${version}",
   "bootstrap-sha": "18ce86cf3547b7d94c812e3966f78b7feb835d14",
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
