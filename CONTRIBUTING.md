@@ -134,3 +134,18 @@ Lefthook runs pre-commit checks on changed files and the commit-msg
 validator. The commit-msg hook runs `scripts/verify-commit-message.sh`,
 which calls `cog verify --file` and then enforces csszyx's release-please
 rules.
+
+## Devcontainer security envelope
+
+The repo ships a devcontainer whose risk model assumes a **standard
+devcontainer runtime** (VS Code Dev Containers, GitHub Codespaces, Docker
+Desktop): `runArgs` capabilities are honored, the Dockerfile's firewall
+tooling is present, and `init-firewall.sh` enforces an outbound network
+allowlist for AI tool sessions.
+
+Some runtimes silently strip those primitives. A post-start check
+(`.devcontainer/security-envelope-check.sh`) probes the live container and
+prints a loud `SECURITY ENVELOPE DEGRADED` banner when the sandbox is not
+actually enforcing. If you see that banner, treat AI tool sessions in the
+container as having unrestricted outbound network access and apply your own
+judgment before granting them credentials.
