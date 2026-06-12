@@ -74,6 +74,12 @@ Full walkthrough: <https://csszyx.com>
 | Vue 3               | Experimental     | `@csszyx/vue-adapter`      |
 | Svelte 4/5          | Experimental     | `@csszyx/svelte-adapter`   |
 
+> The Vue and Svelte adapters are **experimental early previews** — not
+> production-ready, and without detailed usage docs yet. They need real
+> projects to harden and finish. Want to help develop one? Open an issue at
+> [csszyx/issues](https://github.com/nguyennhutien/csszyx/issues) or email
+> <hello@csszyx.com>.
+
 ## Packages
 
 | Package                  | Description                                                                        |
