@@ -1113,6 +1113,63 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     //
     // Skip `className:"..."`, `className:'...'`, `className:\`...\`` — Pass 1/1.5
     // handle those; re-mangling would corrupt already-mangled tokens.
+
+    /**
+     * Scans a class-value expression starting at `from` and returns its end.
+     * Stops at depth-0 terminators (, ; newline } ] )) so adjacent object
+     * properties and call arguments are never consumed.
+     * @param source - code being scanned
+     * @param from - index of the first expression character
+     * @returns index one past the last expression character
+     */
+    function scanClassExpression(source: string, from: number): number {
+        let depth = 0;
+        let j = from;
+        while (j < source.length) {
+            const ch = source[j];
+            if (ch === '(' || ch === '[') {
+                depth++;
+            } else if (ch === ')' || ch === ']') {
+                if (depth === 0) {
+                    break;
+                }
+                depth--;
+            } else if (depth === 0 && (ch === ',' || ch === ';' || ch === '\n' || ch === '}')) {
+                break;
+            }
+            j++;
+        }
+        return j;
+    }
+
+    /**
+     * Mangles every double-quoted class string inside a ternary expression.
+     * @param expr - expression known to sit in a class-attribute position
+     * @returns mangled expression, or null when nothing changed
+     */
+    function mangleTernaryClassStrings(expr: string): string | null {
+        // Only process if there is a ternary operator — otherwise leave untouched
+        // (e.g. className:someVar has no quoted strings to mangle anyway).
+        const qIdx = expr.indexOf('?');
+        if (qIdx === -1 || !expr.slice(qIdx).includes(':')) {
+            return null;
+        }
+        let changed = false;
+        const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
+            const parts = inner.split(/\s+/).filter(Boolean);
+            if (parts.length === 0) {
+                return qm;
+            }
+            const mangledStr = parts.map((p: string) => mangleMap[p] || p).join(' ');
+            if (mangledStr !== inner) {
+                changed = true;
+                return `"${mangledStr}"`;
+            }
+            return qm;
+        });
+        return changed ? mangled : null;
+    }
+
     {
         const marker = 'className:';
         let searchFrom = 0;
@@ -1136,54 +1193,50 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
                 searchFrom = afterColon;
                 continue;
             }
-            // Extract the full expression using paren-depth tracking.
-            // Stop at depth-0 terminators: , ; \n } ] )
-            // The comma terminator prevents over-reaching into adjacent object properties
-            // (e.g. {className:cond?"a":"b",title:"flex"} — must not mangle "flex" in title).
-            // Commas INSIDE function calls are at depth > 0, so they are not terminators:
-            //   className:r("static",cond?"a":"b") — the comma between args is depth-1, fine.
-            let depth = 0;
-            let j = afterColon;
-            while (j < result.length) {
-                const ch = result[j];
-                if (ch === '(' || ch === '[') {
-                    depth++;
-                } else if (ch === ')' || ch === ']') {
-                    if (depth === 0) {
-                        break;
-                    }
-                    depth--;
-                } else if (depth === 0 && (ch === ',' || ch === ';' || ch === '\n' || ch === '}')) {
-                    break;
-                }
-                j++;
-            }
+            const j = scanClassExpression(result, afterColon);
             const expr = result.slice(afterColon, j);
-            // Only process if there is a ternary operator — otherwise leave untouched
-            // (e.g. className:someVar has no quoted strings to mangle anyway).
-            const qIdx = expr.indexOf('?');
-            if (qIdx === -1 || !expr.slice(qIdx).includes(':')) {
-                out += expr;
-                searchFrom = j;
-                continue;
-            }
-            let changed = false;
-            const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
-                const parts = inner.split(/\s+/).filter(Boolean);
-                if (parts.length === 0) {
-                    return qm;
-                }
-                const mangledStr = parts.map((p: string) => mangleMap[p] || p).join(' ');
-                if (mangledStr !== inner) {
-                    changed = true;
-                    return `"${mangledStr}"`;
-                }
-                return qm;
-            });
-            out += changed ? mangled : expr;
+            out += mangleTernaryClassStrings(expr) ?? expr;
             searchFrom = j;
         }
         result = out;
+    }
+
+    // Pass 2.5: class values passed as the argument AFTER a quoted "class" /
+    // "className" attribute-name string. Produced by SolidJS compilation of
+    // dynamic class expressions, on both lanes:
+    //   SSR:    ssrAttribute("class", cond?"class-a":"class-b", false)
+    //   client: l(el, "className", cond?"class-a":"class-b")
+    // Pass 1/2 miss these because the attribute name is itself a string
+    // literal (`"class",`), not a `class=`/`className:` prefix. The marker
+    // requires the trailing comma so quoted object KEYS (`"className": x`)
+    // never match, and the ternary requirement plus class-position context
+    // keep rewrites scoped exactly like Pass 2.
+    {
+        const markerRe = /"class(?:Name)?"\s*,\s*/g;
+        let out = '';
+        let copiedTo = 0;
+        let m: RegExpExecArray | null = markerRe.exec(result);
+        while (m !== null) {
+            const exprStart = m.index + m[0].length;
+            const firstChar = result[exprStart];
+            // Static string → not a ternary; Pass 3's argument heuristic owns it.
+            if (firstChar === '"' || firstChar === "'" || firstChar === '`') {
+                m = markerRe.exec(result);
+                continue;
+            }
+            const j = scanClassExpression(result, exprStart);
+            const expr = result.slice(exprStart, j);
+            const mangled = mangleTernaryClassStrings(expr);
+            if (mangled !== null) {
+                out += result.slice(copiedTo, exprStart) + mangled;
+                copiedTo = j;
+            }
+            markerRe.lastIndex = j;
+            m = markerRe.exec(result);
+        }
+        if (copiedTo > 0) {
+            result = out + result.slice(copiedTo);
+        }
     }
 
     // Pass 3: Mangle quoted string arguments to csszyx runtime helpers (_szMerge, _szIf, etc.)

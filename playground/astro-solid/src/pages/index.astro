@@ -1,5 +1,6 @@
 ---
 import NewsApp from '../components/NewsApp';
+import ToneCallout from '../components/ToneCallout';
 import { articles } from '../data/articles';
 import '../styles.css';
 ---
@@ -12,6 +13,8 @@ import '../styles.css';
         <title>CSSzyx Solid News Playground</title>
     </head>
     <body>
+        <ToneCallout tone="info" message="Server-rendered conditional spread." />
+        <ToneCallout tone="warn" message="Hydrated conditional spread." client:load />
         <NewsApp articles={articles} client:load />
     </body>
 </html>

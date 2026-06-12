@@ -47,7 +47,7 @@ export default function NewsApp(props: NewsAppProps) {
                     <h1 sz={{ text: '4xl', md: { text: '6xl' }, fontWeight: 'bold' }}>
                         Astro Solid Demo
                     </h1>
-                    <p sz={{ maxW: '2xl', color: 'slate-300', lineHeight: 'relaxed' }}>
+                    <p sz={{ maxW: '2xl', color: 'slate-300', leading: 'relaxed' }}>
                         A small platform playground for validating Solid JSX transforms, plugin
                         ordering, and static sz extraction.
                     </p>
@@ -105,7 +105,7 @@ function ArticleCard(props: ArticleCardProps) {
                 shadow: 'lg',
             }}
         >
-            <div sz={{ display: 'flex', alignItems: 'center', justify: 'between', gap: 3 }}>
+            <div sz={{ display: 'flex', items: 'center', justify: 'between', gap: 3 }}>
                 <span sz={{ text: 'xs', color: 'emerald-300', fontWeight: 'semibold' }}>
                     {local.article.category}
                 </span>
@@ -115,8 +115,8 @@ function ArticleCard(props: ArticleCardProps) {
                     </span>
                 </Show>
             </div>
-            <h2 sz={{ text: 'xl', fontWeight: 'bold', lineHeight: 'tight' }}>{local.article.title}</h2>
-            <p sz={{ color: 'slate-300', lineHeight: 'relaxed' }}>{local.article.summary}</p>
+            <h2 sz={{ text: 'xl', fontWeight: 'bold', leading: 'tight' }}>{local.article.title}</h2>
+            <p sz={{ color: 'slate-300', leading: 'relaxed' }}>{local.article.summary}</p>
             <footer sz={{ color: 'slate-500', text: 'sm' }}>{local.article.minutes} min read</footer>
         </article>
     );
