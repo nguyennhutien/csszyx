@@ -30,6 +30,9 @@
     "dist",
     "llms-full.txt"
   ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@csszyx/compiler": "workspace:*",
