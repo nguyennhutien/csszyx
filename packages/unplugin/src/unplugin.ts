@@ -2109,6 +2109,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             },
 
             /**
+             * Restricts the load hook to csszyx's own virtual modules.
+             *
+             * Without this, unplugin's webpack adapter registers its load
+             * loader with `type: 'javascript/auto'` for every module (its
+             * include defaults to all ids when no loadInclude exists). That
+             * corrupts binary asset modules (images, fonts) in webpack apps —
+             * Next.js builds fail with "not a valid image file" / "Module
+             * parse failed" on assets that build fine without csszyx.
+             * @param id - the module ID webpack is about to load
+             * @returns true only for csszyx virtual modules
+             */
+            loadInclude(id) {
+                return id === RESOLVED_VIRTUAL_MODULE_ID || id === RESOLVED_VIRTUAL_CHECKSUM_ID;
+            },
+
+            /**
              * Loads virtual module content — generates mangle map or checksum module code.
              * @param id - the resolved module ID to load
              * @returns generated module source if virtual, null otherwise
