@@ -62,6 +62,15 @@ for (const expected of NATIVE_PLATFORM_PACKAGES) {
   assertEqual(pkg.main, `./${expected.node}`, `${expected.dir} main`);
   assertArray(pkg.files, [expected.node], `${expected.dir} files`);
 
+  // npm provenance verifies the published tarball against the building repo,
+  // so every published package needs a non-empty repository.url. An empty one
+  // fails publish with a 422 (it happened to the native stubs once).
+  const repoUrl =
+    typeof pkg.repository === "string" ? pkg.repository : pkg.repository?.url;
+  if (!repoUrl) {
+    fail(`${expected.dir} is missing repository.url (required for npm provenance)`);
+  }
+
   if (requireBinaries) {
     const nodePath = path.join(repoRoot, expected.dir, expected.node);
     if (!existsSync(nodePath)) {

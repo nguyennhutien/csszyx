@@ -3,6 +3,11 @@
   "version": "0.9.9",
   "description": "macOS arm64 native binding for @csszyx/core",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/core-darwin-arm64"
+  },
   "os": [
     "darwin"
   ],
