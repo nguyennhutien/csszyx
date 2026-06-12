@@ -231,7 +231,34 @@ const btn = szv({
 
 :::note[Falsy values]
 `false`, `null`, `undefined`, and `0` are silently skipped — no error, no empty class.
-Only truthy objects contribute classes.
+Only truthy objects contribute classes. Prefer `undefined` over an empty
+object for "no styling": `sz={cond ? { pl: 4 } : undefined}` — an empty
+object branch compiles to an empty class string (`class=""` in the output),
+while `undefined` keeps the output clean.
+:::
+
+:::caution[Keep conditional branches statically resolvable]
+Tailwind only emits CSS for classes the compiler can see at build time. Inline
+object literals and same-file `const` bindings are resolved statically — every
+branch lands in the Tailwind safelist even if it never renders during the
+build. **Imported objects and member access** (`styles.active`,
+`variants[kind]`) cannot be resolved: those elements fall back to runtime
+`_sz()` and their classes are **missing from the generated CSS** — the markup
+renders with class names that have no selector.
+
+```tsx
+// ✅ statically discoverable — both branches reach Tailwind
+const active = { bg: 'blue-500' } as const;
+<div sz={[{ p: 4 }, isActive && active]} />
+<div sz={{ p: 4, ...(isActive ? { bg: 'blue-500' } : { bg: 'gray-100' }) }} />
+
+// ❌ NOT discoverable — bg-blue-500 ships without CSS
+import { variants } from './styles';
+<div sz={[{ p: 4 }, isActive && variants.active]} />
+```
+
+For style maps keyed at runtime, use [`szv()`](/docs/szv) (variants are
+declared statically) or [`dynamic()`](/docs/dynamic) (injects CSS at runtime).
 :::
 
 ## Shared Style Objects
@@ -286,12 +313,15 @@ This works as long as:
 
 When either condition isn't met, the compiler falls back gracefully (see below).
 
-:::note[Graceful fallback]
+:::caution[Graceful fallback — but classes skip Tailwind]
 Spreads that can't be fully resolved at build time — imported variables,
 function calls, or multiple conditional spreads — fall back to `_sz()` at
-runtime. In development, the compiler emits a build-time warning explaining
-why the fallback occurred and suggesting the right alternative (`szv()` for
-static variants, `dynamic()` for runtime data).
+runtime. The element still renders correct class names, but **those classes
+never reach the Tailwind safelist**, so no CSS is generated for them unless
+the same classes also appear statically elsewhere. In development, the
+compiler emits a build-time warning explaining why the fallback occurred and
+suggesting the right alternative (`szv()` for static variants, `dynamic()`
+for runtime data).
 :::
 
 ## Combining with className
