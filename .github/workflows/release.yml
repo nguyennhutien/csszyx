@@ -273,6 +273,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Mint the short-lived OIDC token Sigstore uses to sign the npm
+      # provenance attestation (the "verified" badge on each published
+      # version). Required whenever NPM_CONFIG_PROVENANCE is set below.
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -349,3 +353,7 @@ jobs:
         run: node .github/scripts/publish-workspace.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Attach a signed provenance attestation to each published package
+          # (npm + pnpm both honour this config). Pairs with id-token: write
+          # above; the publish fails closed if the OIDC token is unavailable.
+          NPM_CONFIG_PROVENANCE: "true"

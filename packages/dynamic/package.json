@@ -3,6 +3,11 @@
   "version": "0.9.8",
   "description": "Runtime CSS injection engine for @csszyx — injects only CSS not already in the pre-built stylesheet",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/dynamic"
+  },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",

@@ -3,6 +3,11 @@
   "version": "0.9.8",
   "description": "CSS custom property helpers — inject and patch CSS variables for runtime-driven styling",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/vars"
+  },
   "exports": {
     ".": {
       "import": "./src/index.ts",
