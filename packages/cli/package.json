@@ -20,7 +20,7 @@
   },
   "type": "module",
   "bin": {
-    "csszyx": "./dist/index.mjs"
+    "csszyx": "./dist/bin.mjs"
   },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
