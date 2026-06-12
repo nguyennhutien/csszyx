@@ -232,6 +232,13 @@ adds `@csszyx/types` + `@csszyx/runtime`). Do this manually for existing apps:
    /// <reference types="@csszyx/types/jsx" />
    ```
 
+   **SolidJS** keeps its own JSX namespace, so reference the Solid
+   augmentation instead:
+
+   ```ts
+   /// <reference types="@csszyx/types/jsx-solid" />
+   ```
+
 Then the `sz` prop is typed on every element:
 
 ```tsx
