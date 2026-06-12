@@ -1,10 +1,14 @@
 {
   "name": "@csszyx/mcp-server",
   "version": "0.9.8",
-  "private": true,
   "description": "Model Context Protocol (MCP) server for csszyx — enables AI agents to understand and generate sz props",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/mcp-server"
+  },
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
