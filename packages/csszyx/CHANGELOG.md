@@ -1,5 +1,10 @@
 # csszyx
 
+## [0.9.9](https://github.com/nguyennhutien/csszyx/compare/v0.9.8...v0.9.9) (2026-06-12)
+
+
+* **mcp-server:** add a package README and node engine, and cut the release ([4595027](https://github.com/nguyennhutien/csszyx/commit/4595027f96b56254325213c5374a8826212a05d3))
+
 ## [0.9.8](https://github.com/nguyennhutien/csszyx/compare/v0.9.7...v0.9.8) (2026-06-11)
 
 ### Bug Fixes
