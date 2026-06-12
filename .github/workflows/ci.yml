@@ -31,8 +31,16 @@ jobs:
       release_please: ${{ steps.head-ref.outputs.is_release_please }}
       code_ts: ${{ steps.filter.outputs.code_ts }}
       code_rust: ${{ steps.filter.outputs.code_rust }}
-      runtime_critical: ${{ steps.filter.outputs.runtime_critical }}
-      next_state: ${{ steps.filter.outputs.next_state }}
+      # package.json edits are gated by CONTENT, not path: a change to
+      # dependencies/exports/scripts/... sets pkg_code; a metadata-only edit
+      # (version, repository, engines, description, files) does not. This is
+      # what lets release/provenance-style commits skip the heavy matrix.
+      pkg_code: ${{ steps.pkg-gate.outputs.pkg_code }}
+      # runtime_critical / next_state are refined from the raw path filters:
+      # markdown files never count, package.json files count only when
+      # pkg_code is true, anything else counts as-is (fail-open).
+      runtime_critical: ${{ steps.refine.outputs.runtime_real }}
+      next_state: ${{ steps.refine.outputs.next_real }}
       # 'true' only for PRs whose changes are confined to workspace
       # packages — the case where turbo's `--affected` is provably safe.
       # Pushes (main) and full_surface changes always run the full set.
@@ -67,11 +75,16 @@ jobs:
           esac
 
       - uses: actions/checkout@v6
+        with:
+          # Full history so the pkg-gate step can `git show` package.json at
+          # the base ref to diff field-level content.
+          fetch-depth: 0
 
       - name: Detect file paths changed
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          list-files: csv
           # The filters here are intentionally a superset of "changes that
           # could affect TS/Rust outputs". When in doubt, run the job —
           # path filtering is an optimisation, not the only safety net.
@@ -95,7 +108,9 @@ jobs:
               - 'playground/**/*.jsx'
               - 'scripts/**/*.ts'
               - 'scripts/**/*.mts'
-              - '**/package.json'
+              # package.json is intentionally NOT here — those edits go
+              # through the content-aware pkg-gate step below instead, so a
+              # version/repository/engines-only edit does not run the matrix.
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'tsconfig*.json'
@@ -133,6 +148,8 @@ jobs:
               - 'packages/unplugin/tests/fixtures/next-lock-worker.ts'
               - 'packages/unplugin/package.json'
               - '.github/workflows/ci.yml'
+            pkg_json:
+              - '**/package.json'
             # Surfaces OUTSIDE the workspace package graph. Turbo's
             # `--affected` cannot see that these feed builds/tests (root
             # scripts, spec fixtures, repo configs, workflows), so when any
@@ -160,6 +177,45 @@ jobs:
               - 'vitest.config.*'
               - 'playwright.config.*'
 
+      # Content-aware gate for package.json edits: only dependency / exports /
+      # scripts / bin-style fields count as code; version, repository, engines
+      # and other publish metadata do not. Fails open when the base ref is
+      # unusable.
+      - name: Gate package.json changes by content
+        id: pkg-gate
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CHANGED_PKG_JSON_CSV: ${{ steps.filter.outputs.pkg_json_files }}
+        run: |
+          CHANGED_PKG_JSON="$(printf '%s' "$CHANGED_PKG_JSON_CSV" | tr ',' '\n')" \
+            node .github/scripts/detect-pkg-code-changes.mjs
+
+      # Refine the path-only filters: markdown never triggers a job, and
+      # package.json files only trigger one when the pkg-gate above says the
+      # change is code-relevant. Any other matched file counts (fail-open).
+      - name: Refine runtime/next-state triggers
+        id: refine
+        env:
+          RUNTIME_FILES: ${{ steps.filter.outputs.runtime_critical_files }}
+          NEXT_FILES: ${{ steps.filter.outputs.next_state_files }}
+          PKG_CODE: ${{ steps.pkg-gate.outputs.pkg_code }}
+        run: |
+          refine() {
+            local files_csv=$1 result=false f
+            IFS=',' read -ra files <<< "$files_csv"
+            for f in "${files[@]}"; do
+              [ -z "$f" ] && continue
+              case "$f" in
+                *.md) ;;
+                *package.json) [ "$PKG_CODE" = "true" ] && result=true ;;
+                *) result=true ;;
+              esac
+            done
+            echo "$result"
+          }
+          echo "runtime_real=$(refine "$RUNTIME_FILES")" >> "$GITHUB_OUTPUT"
+          echo "next_real=$(refine "$NEXT_FILES")" >> "$GITHUB_OUTPUT"
+
   # Always-runs tripwire. Catches release-please config issues that path
   # filters and `release_please` skipping would otherwise let through.
   # Cheap (~5 s) — node + a small validation script, no install.
@@ -176,6 +232,8 @@ jobs:
         run: node .github/scripts/validate-release-please-config.mjs
       - name: Test resumable npm publisher
         run: node --test .github/scripts/publish-workspace.test.mjs
+      - name: Test package.json content gate
+        run: node --test .github/scripts/detect-pkg-code-changes.test.mjs
       - name: Validate native package metadata
         run: node packages/core/scripts/validate-native-packages.mjs
 
@@ -190,7 +248,7 @@ jobs:
     needs: detect-changes
     if: |
       needs.detect-changes.outputs.release_please != 'true' &&
-      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
+      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true' || needs.detect-changes.outputs.pkg_code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -221,7 +279,7 @@ jobs:
     #   - no TS/Rust code changed (e.g. docs-only PR).
     if: |
       needs.detect-changes.outputs.release_please != 'true' &&
-      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
+      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true' || needs.detect-changes.outputs.pkg_code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -292,7 +350,7 @@ jobs:
     needs: detect-changes
     if: |
       needs.detect-changes.outputs.release_please != 'true' &&
-      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
+      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true' || needs.detect-changes.outputs.pkg_code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -491,7 +549,7 @@ jobs:
     needs: detect-changes
     if: |
       needs.detect-changes.outputs.release_please != 'true' &&
-      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true')
+      (needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true' || needs.detect-changes.outputs.pkg_code == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
