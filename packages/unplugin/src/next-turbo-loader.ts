@@ -258,7 +258,18 @@ function assertProductionManifestReady(
     );
     if (!validation.ok) {
         throw new Error(
-            `[csszyx] Next Turbopack production cache is not ready for ${context.root}: ${validation.reason}. Run csszyx next prebuild before next build --turbo.`,
+            [
+                `[csszyx] Next Turbopack production cache is not ready for ${context.root}: ${validation.reason}.`,
+                'Production builds with Turbopack need the csszyx safelist seeded first:',
+                '',
+                "  npx csszyx next prebuild 'app/**/*.tsx'",
+                '',
+                'Wire it into package.json so plain builds keep working:',
+                '',
+                '  "build": "csszyx next prebuild \'app/**/*.tsx\' && next build"',
+                '',
+                'Docs: https://csszyx.com/docs/installation#nextjs-turbopack-setup',
+            ].join('\n'),
         );
     }
 }
