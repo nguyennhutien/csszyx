@@ -9,21 +9,24 @@ export default defineBuildConfig({
     // `Validator<T> = undefined` declaration mangles to
     // `Validator<T> = undefined<T>` — invalid TypeScript — which crashes
     // every downstream consumer's tsc pass (Next.js playground, etc.).
-    externals: ['@csszyx/compiler', 'react', 'react-dom'],
+    externals: ['@csszyx/compiler', 'react', 'react-dom', 'solid-js'],
     entries: ['./src/index', './src/config', './src/runtime', './src/compiler'],
     // node16: emit .d.mts + .d.cts only (no legacy .d.ts).
     declaration: 'node16',
     rollup: {
         emitCJS: true,
     },
-    // jsx.d.ts is a hand-written type file copied to dist as-is by a hook.
+    // jsx.d.ts / jsx-solid.d.ts are hand-written type files copied to dist
+    // as-is by a hook.
     hooks: {
         async 'build:done'(ctx) {
             const fs = await import('node:fs/promises');
             const path = await import('node:path');
-            const src = path.resolve(ctx.options.rootDir, 'src/jsx.d.ts');
-            const dest = path.resolve(ctx.options.outDir, 'jsx.d.ts');
-            await fs.copyFile(src, dest);
+            for (const file of ['jsx.d.ts', 'jsx-solid.d.ts']) {
+                const src = path.resolve(ctx.options.rootDir, 'src', file);
+                const dest = path.resolve(ctx.options.outDir, file);
+                await fs.copyFile(src, dest);
+            }
         },
     },
 });

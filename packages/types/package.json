@@ -45,6 +45,9 @@
     },
     "./jsx": {
       "types": "./dist/jsx.d.ts"
+    },
+    "./jsx-solid": {
+      "types": "./dist/jsx-solid.d.ts"
     }
   },
   "files": [
