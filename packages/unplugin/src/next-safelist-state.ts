@@ -9,6 +9,10 @@ import lockfile from 'proper-lockfile';
 const DEFAULT_RENAME_RETRIES = 5;
 const DEFAULT_RENAME_RETRY_DELAY_MS = 10;
 const DEFAULT_STALE_LOCK_MS = 30_000;
+// proper-lockfile floors `stale` to 2s and uses it to drive its (non
+// single-winner) internal recovery. A far-future value disables that recovery
+// so its `mkdir` is a pure mutex; recoverStaleAdvisoryLock owns staleness.
+const STALE_RECOVERY_DISABLED_MS = 2_147_483_647;
 
 /** Complete class metadata for one transformed source file. */
 export interface NextSafelistShardInput {
@@ -226,11 +230,21 @@ export function acquireNextSafelistStateLock(
     const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_LOCK_MS;
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
 
+    // Clear any stale advisory lock with a single elected winner before
+    // proper-lockfile sees it, so its non-single-winner internal recovery
+    // never runs. See recoverStaleAdvisoryLock.
+    recoverStaleAdvisoryLock(lockPath, staleAfterMs);
+
     let releaseAdvisory: (() => void) | undefined;
     try {
         releaseAdvisory = lockfile.lockSync(lockPath, {
             realpath: false,
-            stale: staleAfterMs,
+            // Disable proper-lockfile's own stale recovery: its rmdir+remake is
+            // not single-winner under concurrent recovery. recoverStaleAdvisoryLock
+            // above clears stale locks with one elected winner, so here mkdir is a
+            // pure single-winner mutex. A live owner keeps the advisory mtime fresh
+            // via `update`, so staleness is still detected — just by us, not here.
+            stale: STALE_RECOVERY_DISABLED_MS,
             update: Math.max(1_000, Math.floor(staleAfterMs / 2)),
             retries: 0,
         });
@@ -555,6 +569,85 @@ function readLockMetadata(lockPath: string): NextSafelistStateLockMetadata | nul
         };
     } catch {
         return null;
+    }
+}
+
+/**
+ * Whether an advisory lock directory is stale (or absent).
+ *
+ * @param advisoryPath The proper-lockfile advisory directory.
+ * @param staleAfterMs Age past which the lock is considered stale.
+ * @returns True when the directory is missing or older than the threshold.
+ */
+function isAdvisoryLockStale(advisoryPath: string, staleAfterMs: number): boolean {
+    try {
+        return fs.statSync(advisoryPath).mtimeMs < Date.now() - staleAfterMs;
+    } catch {
+        return false; // Absent — nothing to recover.
+    }
+}
+
+/**
+ * Recover a stale advisory lock with a single, deterministic winner.
+ *
+ * proper-lockfile's own stale recovery (`rmdir` of the stale lock, then a
+ * fresh `mkdir`) is not single-winner: when several processes recover the
+ * same stale lock simultaneously, one can `rmdir` the lock another just
+ * remade, so both believe they hold it. Reproduced under CI-level load (~3%
+ * of rounds with 16 racing recoverers). proper-lockfile's internal recovery
+ * is therefore disabled at the call site (a far-future `stale`), and the
+ * stale lock is cleared here instead, before acquisition.
+ *
+ * A single recoverer is elected with an atomic `mkdir` on a sibling election
+ * directory. The elected process removes the stale lock dir; everyone else
+ * skips. No process can create a *fresh* lock while the stale dir is still
+ * present (proper-lockfile's `mkdir` would get `EEXIST`), so the recoverer
+ * never races a freshly-acquired lock — the failure mode the rename approach
+ * suffered. Acquisition is then the sole mutex: `lockSync`'s atomic `mkdir`
+ * on the now-empty path elects exactly one winner.
+ *
+ * The election dir is itself reclaimed if a crashed recoverer leaks it; that
+ * reclaim can double-run harmlessly, because removing an already-absent stale
+ * dir is idempotent and acquisition — not recovery — decides the winner.
+ *
+ * @param lockPath Lock file path (the advisory dir is `${lockPath}.lock`).
+ * @param staleAfterMs Age past which an advisory lock is considered stale.
+ */
+function recoverStaleAdvisoryLock(lockPath: string, staleAfterMs: number): void {
+    const advisoryPath = `${lockPath}.lock`;
+    if (!isAdvisoryLockStale(advisoryPath, staleAfterMs)) {
+        return; // Fresh (live owner heartbeating) or absent.
+    }
+    const electionPath = `${lockPath}.recover`;
+    // Reclaim a leaked election dir from a crashed recoverer (best-effort).
+    if (isAdvisoryLockStale(electionPath, staleAfterMs)) {
+        try {
+            fs.rmdirSync(electionPath);
+        } catch {
+            // Another process reclaimed it first; fall through to mkdir.
+        }
+    }
+    try {
+        fs.mkdirSync(electionPath);
+    } catch {
+        return; // Another process is recovering. We contend on acquisition.
+    }
+    try {
+        // Sole recoverer. The stale dir cannot have become fresh: a fresh lock
+        // needs an empty advisory path, but the stale dir still occupies it.
+        if (isAdvisoryLockStale(advisoryPath, staleAfterMs)) {
+            try {
+                fs.rmdirSync(advisoryPath);
+            } catch {
+                // Already gone, or non-empty on a foreign FS — acquisition copes.
+            }
+        }
+    } finally {
+        try {
+            fs.rmdirSync(electionPath);
+        } catch {
+            // Best-effort release; a leaked dir is reclaimed on the next run.
+        }
     }
 }
 
