@@ -18,7 +18,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/playground/nextjs-16"
-CLI="$ROOT/packages/cli/dist/index.mjs"
+CLI="$ROOT/packages/cli/dist/bin.mjs"
 SAFELIST=".csszyx/next-loader-classes.html"
 
 cd "$APP" || { echo "❌ playground/nextjs-16 not found"; exit 1; }
