@@ -146,10 +146,26 @@ mangling. Use webpack mode when you need those.
    ```
 
 3. **Keep the Tailwind safelist fresh.** Point `@source` at the safelist file
-   and run the csszyx watcher/prebuild around Next:
+   and run the csszyx watcher/prebuild around Next. Production builds
+   fail-closed (`Next Turbopack production cache is not ready`) until
+   `csszyx next prebuild` has seeded the safelist and generation manifest,
+   so wire both flows into your scripts:
 
-   - dev: `csszyx next watch` (alongside `next dev --turbopack`)
-   - build: `csszyx next prebuild` before `next build --turbopack`
+   ```jsonc
+   // package.json
+   {
+     "scripts": {
+       "dev": "concurrently \"csszyx next watch 'app/**/*.tsx'\" \"next dev --turbopack\"",
+       "build": "csszyx next prebuild 'app/**/*.tsx' && next build --turbopack"
+     }
+   }
+   ```
+
+   - dev: `csszyx next watch` maintains the safelist while `next dev` runs
+     (the example uses [concurrently](https://www.npmjs.com/package/concurrently);
+     a second terminal works just as well)
+   - build: `csszyx next prebuild` must finish before `next build` starts —
+     running it as part of the `build` script keeps plain `pnpm build` working
 
 ## Tailwind CSS v4 Entry Point
 

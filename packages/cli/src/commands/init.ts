@@ -209,7 +209,14 @@ export async function init(options: InitOptions = {}): Promise<void> {
     if (projectInfo.hasTypeScript) {
         console.log('  • The `sz` prop is typed via csszyx-env.d.ts');
     }
-    console.log('  • Check the docs at https://csszyx.dev');
+    if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) {
+        console.log('  • Using Turbopack? Production builds fail-closed until the safelist');
+        console.log('    is seeded — wire the build script as:');
+        console.log('      "build": "csszyx next prebuild \'app/**/*.tsx\' && next build"');
+        console.log('    and run `csszyx next watch` alongside `next dev`.');
+        console.log('    Setup guide: https://csszyx.com/docs/installation#nextjs-turbopack-setup');
+    }
+    console.log('  • Check the docs at https://csszyx.com');
 }
 
 /**
