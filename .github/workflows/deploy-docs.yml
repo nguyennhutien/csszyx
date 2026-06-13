@@ -9,6 +9,12 @@ name: Deploy Docs
 # scripts/build-cf-pages.sh. pnpm-lock.yaml is included on purpose:
 # lock-only bumps (pnpm update/dedupe, transitive CSS tooling) can change
 # docs output, and a wasted rebuild is cheaper than a stale site.
+#
+# Push-to-main is the only trigger: there is intentionally no
+# workflow_dispatch. The deploy hook only ever rebuilds whatever is on
+# main, so a manual dispatch button adds no capability a push doesn't —
+# it only widens who/what can fire a deploy. For an ad-hoc rebuild without
+# a commit (e.g. cache bust), use the Cloudflare Pages dashboard.
 
 on:
   push:
@@ -27,7 +33,6 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/deploy-docs.yml'
-  workflow_dispatch:
 
 permissions: {}
 

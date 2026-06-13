@@ -8,16 +8,20 @@ name: Release VS Code Extension
 #
 # Auto-trigger: release-please creates a single `v<version>` tag (e.g.
 # v0.7.0) when the umbrella release PR is merged on main. This workflow
-# listens for that tag pattern and runs Marketplace publish without
-# further human action. The version itself is read from
+# listens for that tag pattern; the publish job then pauses on the
+# `vscode-publish` environment for maintainer approval before any
+# Marketplace API call. The version itself is read from
 # packages/vscode/package.json — extra-files keeps that field in sync
 # with every release.
 #
 # Manual trigger: workflow_dispatch with optional dry_run (build .vsix
-# without publishing) for verification.
+# without publishing) for verification. A real publish via dispatch is
+# possible but, like the tag path, waits for environment approval.
 #
 # The VSCE_PAT secret must be set in repo settings (Azure DevOps PAT with
-# Marketplace publish scope).
+# Marketplace publish scope). The `vscode-publish` environment must exist
+# in repo Settings → Environments with a required reviewer — the YAML
+# reference alone does not gate anything without it.
 
 on:
   push:
@@ -40,6 +44,10 @@ jobs:
   publish:
     name: Build and publish to Marketplace
     runs-on: ubuntu-latest
+    # Holds the job until a maintainer approves the deployment, the same
+    # gate as the npm `npm-publish` environment. Closes the path where a
+    # workflow_dispatch (default dry_run='false') would publish unattended.
+    environment: vscode-publish
     permissions:
       contents: read
     steps:
