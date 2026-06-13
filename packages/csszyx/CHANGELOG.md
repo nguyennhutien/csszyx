@@ -1,7 +1,21 @@
 # csszyx
 
-## [0.9.9](https://github.com/nguyennhutien/csszyx/compare/v0.9.8...v0.9.9) (2026-06-12)
+## [0.9.10](https://github.com/nguyennhutien/csszyx/compare/v0.9.9...v0.9.10) (2026-06-13)
 
+### Features
+
+* **types:** ship the SolidJS sz prop JSX augmentation ([#59](https://github.com/nguyennhutien/csszyx/issues/59))
+
+### Bug Fixes
+
+* **cli:** split the executable from the library entry ([#55](https://github.com/nguyennhutien/csszyx/issues/55))
+* **cli:** point the turbopack verify script at the executable entry ([#55](https://github.com/nguyennhutien/csszyx/issues/55))
+* **unplugin:** make the Turbopack prebuild requirement actionable ([#56](https://github.com/nguyennhutien/csszyx/issues/56))
+* **unplugin:** stop the webpack load loader from capturing every module ([#57](https://github.com/nguyennhutien/csszyx/issues/57))
+* **unplugin:** mangle Solid-compiled dynamic class expressions ([#58](https://github.com/nguyennhutien/csszyx/issues/58))
+* **unplugin:** make stale Next safelist lock recovery single-winner ([#60](https://github.com/nguyennhutien/csszyx/issues/60))
+
+## [0.9.9](https://github.com/nguyennhutien/csszyx/compare/v0.9.8...v0.9.9) (2026-06-12)
 
 * **mcp-server:** add a package README and node engine, and cut the release ([4595027](https://github.com/nguyennhutien/csszyx/commit/4595027f96b56254325213c5374a8826212a05d3))
 
