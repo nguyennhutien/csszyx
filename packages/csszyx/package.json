@@ -73,7 +73,7 @@
     "@csszyx/dynamic": "workspace:*"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1"
   },
