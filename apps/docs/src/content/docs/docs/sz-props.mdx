@@ -230,11 +230,21 @@ const btn = szv({
 ```
 
 :::note[Falsy values]
-`false`, `null`, `undefined`, and `0` are silently skipped — no error, no empty class.
-Only truthy objects contribute classes. Prefer `undefined` over an empty
-object for "no styling": `sz={cond ? { pl: 4 } : undefined}` — an empty
-object branch compiles to an empty class string (`class=""` in the output),
-while `undefined` keeps the output clean.
+Inside an array, `false`, `null`, `undefined`, and `0` are silently skipped —
+only truthy objects contribute classes.
+:::
+
+:::caution[A conditional `sz` can still render `class=""`]
+When a conditional `sz` is **statically lowered**, an empty branch produces an
+empty class string, e.g. `sz={cond ? { pl: 4 } : {}}` →
+`className={cond ? "pl-4" : ""}`. Using `undefined` instead of `{}` does **not**
+always avoid this: if the expression can't be lowered (for example a dynamic
+ternary on a SolidJS element), it compiles to a runtime `_sz(cond ? { pl: 4 } :
+undefined)` call which returns `""` for the empty branch, so the framework still
+sets `class=""`. It is harmless (an empty attribute) but noisy in generated
+HTML. To omit the attribute entirely, render the two cases as separate elements
+so the styleless one carries no `sz` prop at all (e.g. SolidJS `<Show>` with a
+`fallback`).
 :::
 
 :::caution[Keep conditional branches statically resolvable]

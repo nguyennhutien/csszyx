@@ -255,6 +255,12 @@ adds `@csszyx/types` + `@csszyx/runtime`). Do this manually for existing apps:
    /// <reference types="@csszyx/types/jsx-solid" />
    ```
 
+   Solid consumers must add `@csszyx/types` as a **direct** dev dependency
+   (`pnpm add -D @csszyx/types`) — unlike the React augmentation, the Solid
+   one is not picked up transitively through `csszyx`, so without the direct
+   dependency `astro check` / `tsc` report `Property 'sz' does not exist` on
+   Solid elements.
+
 Then the `sz` prop is typed on every element:
 
 ```tsx
