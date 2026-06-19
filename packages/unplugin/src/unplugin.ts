@@ -212,6 +212,34 @@ const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
 const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
 
 /**
+ * Appends an `@source "<relPath>";` directive to a CSS module so Tailwind v4
+ * scans the csszyx-generated safelist file.
+ *
+ * `@source` is position-independent in Tailwind v4 — it can appear anywhere in
+ * the compiled CSS — so the directive is **appended as its own statement**
+ * rather than spliced next to the `@import "tailwindcss…"` line. Matching the
+ * import syntax is the source of a real defect: the split / manual Tailwind v4
+ * setup (`@import "tailwindcss/utilities.css" layer(…)` or `… source(…)`, or an
+ * import without a trailing `;`) does not match an import-anchored regex, so the
+ * injection silently no-ops and every csszyx-only class (e.g. the static
+ * `bg-primary/50` produced by `sz={{ bg: { color, op } }}`) gets no CSS while a
+ * raw `className` still works. Appending is correct for every import form.
+ *
+ * @param code - CSS module source already known to import tailwindcss.
+ * @param relPath - safelist path relative to this CSS file (posix, `./`-prefixed).
+ * @returns the code with the directive appended, or `null` if it is already
+ *   present (idempotent — re-running the transform must not stack directives).
+ */
+export function appendTailwindSourceDirective(code: string, relPath: string): string | null {
+    const directive = `@source "${relPath}";`;
+    if (code.includes(directive)) {
+        return null;
+    }
+    const separator = code.length === 0 || code.endsWith('\n') ? '' : '\n';
+    return `${code}${separator}${directive}\n`;
+}
+
+/**
  * Reads CSS variable mangle metadata from compiler results. Older compiled
  * compiler artifacts and pre-v4 cache entries do not have this field, so the
  * unplugin treats it as empty instead of failing during dev/test transitions.
@@ -2201,12 +2229,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
             /**
              * Filters files for the pre-transform phase — source files plus CSS files.
-             * CSS files need special handling to inject @source inline() for Tailwind class discovery.
+             * CSS files need special handling to append an @source directive for Tailwind class discovery.
              * @param id - the file path to check for inclusion
              * @returns true if the file should be transformed, false otherwise
              */
             transformInclude(id) {
-                // Handle CSS files to inject discovered classes as @source inline()
+                // Handle CSS files to point Tailwind at the discovered-class safelist via @source
                 if (shouldProcessCss(id)) {
                     return true;
                 }
@@ -2216,7 +2244,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
             /**
              * Core transform: detects sz prop, compiles to className, injects runtime, collects classes.
-             * For CSS files: injects @source inline() so Tailwind generates CSS for sz-derived classes.
+             * For CSS files: appends an @source directive so Tailwind generates CSS for sz-derived classes.
              * @param code - the source code to transform
              * @param id - the file path of the module being transformed
              * @returns transformed code with source map, or null if no changes were made
@@ -2235,20 +2263,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
                 // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
-                // is not imported anywhere, so it's invisible to Tailwind. Injecting @source
-                // directly into the CSS that imports tailwindcss is the only reliable way to ensure
+                // is not imported anywhere, so it's invisible to Tailwind. Appending an @source
+                // directive to the CSS that imports tailwindcss is the reliable way to ensure
                 // Tailwind generates CSS for the classes that csszyx transforms sz props into.
                 if (/\.css(\?.*)?$/.test(id)) {
                     const hasTailwindImport =
                         code.includes('@import "tailwindcss') ||
                         code.includes("@import 'tailwindcss");
                     if (hasTailwindImport && state.classes.size > 0) {
-                        // Only include classes that look like real Tailwind candidates:
+                        // Only inject when there is at least one real Tailwind candidate:
                         // at least 2 chars, starts with a letter, not pure mangled symbols.
-                        const candidates = Array.from(state.classes)
-                            .filter(c => c.length >= 2 && /^[a-z]/.test(c))
-                            .join(' ');
-                        if (candidates) {
+                        const hasCandidate = Array.from(state.classes).some(
+                            c => c.length >= 2 && /^[a-z]/.test(c),
+                        );
+                        if (hasCandidate) {
                             const safelistPath = path
                                 .join(state.rootDir, SAFELIST_FILENAME)
                                 .replace(/\\/g, '/');
@@ -2257,12 +2285,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             if (!relPath.startsWith('.')) {
                                 relPath = `./${relPath}`;
                             }
-                            const sourceDirective = `@source "${relPath}";\n`;
-                            const transformed = code.replace(
-                                /(@import\s+["']tailwindcss[^"']*["'];)/,
-                                `$1\n${sourceDirective}`,
-                            );
-                            if (transformed !== code) {
+                            const transformed = appendTailwindSourceDirective(code, relPath);
+                            if (transformed !== null) {
                                 return { code: transformed, map: null };
                             }
                         }
