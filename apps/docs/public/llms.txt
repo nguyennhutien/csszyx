@@ -48,19 +48,29 @@ module.exports = {
 <div className="flex items-center p-4 bg-blue-500 rounded-lg" />
 
 // After (CSSzyx)
-<div sz={{ flex: true, items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
+<div sz={{ display: 'flex', items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
 ```
 
 The compiler transforms `sz` props → Tailwind classes at build time. The browser never sees `sz`.
 
-### Boolean shorthand
+### Canonical vs boolean sugar
 
-Many display/position properties accept `true`:
+Single-property props (`display`, `position`, `visibility`, `isolation`) have a
+canonical form and a boolean-sugar alias. Prefer the canonical form — it is the
+default used throughout — and never set the same property through both forms
+(emits duplicate/conflicting classes).
 
 ```tsx
-<div sz={{ flex: true, relative: true, hidden: true }} />
-// → className="flex relative hidden"
+// Canonical — recommended
+<div sz={{ display: 'flex', position: 'relative', visibility: 'hidden' }} />
+// → className="flex relative invisible"
+
+// Boolean sugar — equivalent
+<div sz={{ flex: true, relative: true, invisible: true }} />
 ```
+
+Genuinely on/off utilities (`truncate`, `uppercase`, `italic`, `srOnly`) stay
+boolean — they have no single-property canonical form.
 
 ### Arbitrary values
 
@@ -195,7 +205,7 @@ sz={{ placeholder: { color: 'gray-400' } }}
 ### Container queries
 
 ```tsx
-sz={{ '@container': true, '@md': { flex: true } }}
+sz={{ '@container': true, '@md': { display: 'flex' } }}
 // → className="@container @md:flex"
 ```
 
@@ -221,7 +231,7 @@ sz={{ '@container': true, '@md': { flex: true } }}
 <div className="p-4" sz={{ m: 2 }} />  // Wrong — use sz only
 
 // ✅ Correct
-{ p: 4, bg: 'blue-500', flex: true, flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
+{ p: 4, bg: 'blue-500', display: 'flex', flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
 ```
 
 ## Common Props Reference
@@ -273,20 +283,20 @@ sz={{ '@container': true, '@md': { flex: true } }}
 
 ```tsx
 {
-  flex: true;
-} // display: flex     → flex
+  display: "flex";
+} // → flex
 {
-  grid: true;
-} // display: grid     → grid
+  display: "grid";
+} // → grid
 {
-  hidden: true;
-} // display: none     → hidden
+  display: "none";
+} // → hidden
 {
-  absolute: true;
-} // position          → absolute
+  position: "absolute";
+} // → absolute
 {
-  relative: true;
-} // position          → relative
+  position: "relative";
+} // → relative
 {
   overflow: "hidden";
 } // overflow          → overflow-hidden
@@ -489,7 +499,7 @@ Static items are pre-computed at build time; conditional items use `_szMerge` at
 ```tsx
 <div
   sz={[
-    { flex: true, items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
     isActive && { bg: "blue-500" }, // runtime conditional
     isDisabled && { opacity: 50, cursor: "not-allowed" },
   ]}

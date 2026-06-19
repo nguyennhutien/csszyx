@@ -47,20 +47,20 @@
 
 ```tsx
 {
-  flex: true;
-} // display: flex     → flex
+  display: "flex";
+} // → flex
 {
-  grid: true;
-} // display: grid     → grid
+  display: "grid";
+} // → grid
 {
-  hidden: true;
-} // display: none     → hidden
+  display: "none";
+} // → hidden
 {
-  absolute: true;
-} // position          → absolute
+  position: "absolute";
+} // → absolute
 {
-  relative: true;
-} // position          → relative
+  position: "relative";
+} // → relative
 {
   overflow: "hidden";
 } // overflow          → overflow-hidden

@@ -41,7 +41,7 @@ screen sizes, nested props apply at the given breakpoint and up:
   w: 'full',           // mobile: full width
   md: { w: '1/2' },   // ≥768px: half width
   lg: { w: '1/3' },   // ≥1024px: one third
-  xl: { flex: true },  // ≥1280px: flex layout
+  xl: { display: 'flex' },  // ≥1280px: flex layout
 }} />
 ```
 
@@ -53,7 +53,7 @@ Available breakpoints: `sm` (640px), `md` (768px), `lg` (1024px), `xl`
 ```tsx
 <div sz={{
   md: {
-    maxLg: { hidden: true },  // md:max-lg:hidden (768–1023px range)
+    maxLg: { display: 'none' },  // md:max-lg:hidden (768–1023px range)
   },
 }} />
 ```
@@ -85,7 +85,7 @@ Available breakpoints: `sm` (640px), `md` (768px), `lg` (1024px), `xl`
 ```tsx
 <div sz={{ '@container': true }}>
   <div sz={{
-    '@md': { flex: true },
+    '@md': { display: 'flex' },
     '@lg': { gridCols: 3 },
   }} />
 </div>
@@ -285,8 +285,8 @@ attributes emit bracket form (`group-aria-[current=page]:`).
 ```tsx
 <div sz={{
   motionReduce: { transition: 'none' },
-  print:        { hidden: true },
-  portrait:     { flex: true },
+  print:        { display: 'none' },
+  portrait:     { display: 'flex' },
   forcedColors: { border: 2 },
 }} />
 ```

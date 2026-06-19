@@ -13,7 +13,7 @@ Simple property-value mappings.
 | **Text Color**       | `color: white`                           | `text-white`      | `{ color: 'white' }`  |
 | **Border Radius**    | `border-radius: var(--radius-lg)`        | `rounded-lg`      | `{ rounded: 'lg' }`   |
 | **Box Shadow**       | `box-shadow: var(--shadow-xl)`           | `shadow-xl`       | `{ shadow: 'xl' }`    |
-| **Flex Container**   | `display: flex`                          | `flex`            | `{ flex: true }`      |
+| **Flex Container**   | `display: flex`                          | `flex`            | `{ display: 'flex' }` |
 
 ## State Modifiers (Hover, Focus)
 
@@ -30,11 +30,11 @@ Handling pseudo-classes using nested objects or string prefixes.
 
 Handling media queries via properties.
 
-| Concept              | CSS Rule                            | Tailwind v4 Class | `sz` Prop (Object Syntax) |
-| :------------------- | :---------------------------------- | :---------------- | :------------------------ |
-| **Small Breakpoint** | `@media (width >= 40rem) { (etc) }` | `sm:grid-cols-3`  | `{ sm: { gridCols: 3 } }` |
-| **Medium Layout**    | `@media (width >= 48rem) { (etc) }` | `md:flex`         | `{ md: { flex: true } }`  |
-| **Large Spacing**    | `@media (width >= 64rem) { (etc) }` | `lg:px-8`         | `{ lg: { px: 8 } }`       |
+| Concept              | CSS Rule                            | Tailwind v4 Class | `sz` Prop (Object Syntax)     |
+| :------------------- | :---------------------------------- | :---------------- | :---------------------------- |
+| **Small Breakpoint** | `@media (width >= 40rem) { (etc) }` | `sm:grid-cols-3`  | `{ sm: { gridCols: 3 } }`     |
+| **Medium Layout**    | `@media (width >= 48rem) { (etc) }` | `md:flex`         | `{ md: { display: 'flex' } }` |
+| **Large Spacing**    | `@media (width >= 64rem) { (etc) }` | `lg:px-8`         | `{ lg: { px: 8 } }`           |
 
 ## Dark Mode
 
@@ -113,8 +113,8 @@ Standard interactive states.
 | **Hover, Focus, Active** | `hover:bg-red focus:bg-blue active:bg-green` | `{ hover: { bg: 'red' }, focus: { bg: 'blue' }, active: { bg: 'green' } }` |                             |
 | **First/Last Child**     | `first:pt-0 last:pb-0`                       | `{ first: { pt: 0 }, last: { pb: 0 } }`                                    |                             |
 | **Odd/Even Child**       | `odd:bg-white even:bg-gray`                  | `{ odd: { bg: 'white' }, even: { bg: 'gray' } }`                           |                             |
-| **First of Type**        | `first-of-type:block`                        | `{ firstOfType: { block: true } }`                                         | **Sugar**: CamelCase alias. |
-| **Only Child**           | `only:block`                                 | `{ only: { block: true } }`                                                |                             |
+| **First of Type**        | `first-of-type:block`                        | `{ firstOfType: { display: 'block' } }`                                    | **Sugar**: CamelCase alias. |
+| **Only Child**           | `only:block`                                 | `{ only: { display: 'block' } }`                                           |                             |
 | **Empty**                | `empty:hidden`                               | `{ empty: { hidden: true } }`                                              |                             |
 | **Visited**              | `visited:text-purple`                        | `{ visited: { color: 'purple' } }`                                         |                             |
 | **Focus Within**         | `focus-within:ring`                          | `{ focusWithin: { ring: true } }`                                          | **Sugar**: CamelCase alias. |
@@ -125,11 +125,11 @@ Standard interactive states.
 
 Styling based on descendants.
 
-| Concept            | Tailwind v4 Class           | `sz` Prop (Object Syntax)                       | Note                                  |
-| :----------------- | :-------------------------- | :---------------------------------------------- | :------------------------------------ |
-| **Has Descendant** | `has-[img]:bg-blue`         | `{ has: { img: { bg: 'blue' } } }`              | **Sugar**: Nested selector.           |
-| **Has State**      | `has-[:checked]:bg-blue`    | `{ has: { checked: { bg: 'blue' } } }`          | **Sugar**: Auto-detects pseudo-class. |
-| **Arbitrary Has**  | `has-[.custom-class]:block` | `{ has: { '.custom-class': { block: true } } }` |                                       |
+| Concept            | Tailwind v4 Class           | `sz` Prop (Object Syntax)                            | Note                                  |
+| :----------------- | :-------------------------- | :--------------------------------------------------- | :------------------------------------ |
+| **Has Descendant** | `has-[img]:bg-blue`         | `{ has: { img: { bg: 'blue' } } }`                   | **Sugar**: Nested selector.           |
+| **Has State**      | `has-[:checked]:bg-blue`    | `{ has: { checked: { bg: 'blue' } } }`               | **Sugar**: Auto-detects pseudo-class. |
+| **Arbitrary Has**  | `has-[.custom-class]:block` | `{ has: { '.custom-class': { display: 'block' } } }` |                                       |
 
 ## Styling based on parent state (Groups)
 
@@ -141,38 +141,38 @@ Styling children based on parent `group` class.
 | **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                        |                                      |
 | **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                       |                                      |
 | **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`              | **Sugar**: Scope name as nested key. |
-| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { block: true } } }`                 |                                      |
-| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { block: true } } } }`                      |                                      |
+| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { display: 'block' } } }`            |                                      |
+| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { display: 'block' } } } }`                 |                                      |
 | **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`              | **Sugar**: Nested `data` key.        |
 | **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
-| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { block: true } } } }`          | `=` in key → bracket form always.    |
-| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { block: true } } } }`              | Standard states: bare form.          |
+| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`     | `=` in key → bracket form always.    |
+| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`         | Standard states: bare form.          |
 | **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }` | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 
 Styling based on previous sibling `peer` class.
 
-| Concept                     | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                  | Note                                 |
-| :-------------------------- | :---------------------------------- | :--------------------------------------------------------- | :----------------------------------- |
-| **Peer Hover**              | `peer-hover:text-white`             | `{ peer: { hover: { color: 'white' } } }`                  | **Sugar**: Nested scope.             |
-| **Peer Checked**            | `peer-checked:bg-blue`              | `{ peer: { checked: { bg: 'blue' } } }`                    |                                      |
-| **Differentiating Peers**   | `peer-checked/name:bg-blue`         | `{ peer: { name: { checked: { bg: 'blue' } } } }`          | **Sugar**: Scope name as nested key. |
-| **Arbitrary Peers**         | `peer-[.is-dirty]:block`            | `{ peer: { '.is-dirty': { block: true } } }`               |                                      |
-| **Peer Data**               | `peer-data-[active]:text-blue`      | `{ peer: { data: { active: { color: 'blue' } } } }`        | **Sugar**: Nested `data` key.        |
-| **Peer Data (value match)** | `peer-data-[state=open]:block`      | `{ peer: { data: { 'state=open': { block: true } } } }`    | `=` in key → bracket form always.    |
-| **Peer ARIA**               | `peer-aria-checked:bg-blue`         | `{ peer: { aria: { checked: { bg: 'blue' } } } }`          | Standard states: bare form.          |
-| **Peer ARIA (arbitrary)**   | `peer-aria-[invalid=true]:text-red` | `{ peer: { aria: { 'invalid=true': { color: 'red' } } } }` | Non-standard: bracket form.          |
+| Concept                     | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                    | Note                                 |
+| :-------------------------- | :---------------------------------- | :----------------------------------------------------------- | :----------------------------------- |
+| **Peer Hover**              | `peer-hover:text-white`             | `{ peer: { hover: { color: 'white' } } }`                    | **Sugar**: Nested scope.             |
+| **Peer Checked**            | `peer-checked:bg-blue`              | `{ peer: { checked: { bg: 'blue' } } }`                      |                                      |
+| **Differentiating Peers**   | `peer-checked/name:bg-blue`         | `{ peer: { name: { checked: { bg: 'blue' } } } }`            | **Sugar**: Scope name as nested key. |
+| **Arbitrary Peers**         | `peer-[.is-dirty]:block`            | `{ peer: { '.is-dirty': { display: 'block' } } }`            |                                      |
+| **Peer Data**               | `peer-data-[active]:text-blue`      | `{ peer: { data: { active: { color: 'blue' } } } }`          | **Sugar**: Nested `data` key.        |
+| **Peer Data (value match)** | `peer-data-[state=open]:block`      | `{ peer: { data: { 'state=open': { display: 'block' } } } }` | `=` in key → bracket form always.    |
+| **Peer ARIA**               | `peer-aria-checked:bg-blue`         | `{ peer: { aria: { checked: { bg: 'blue' } } } }`            | Standard states: bare form.          |
+| **Peer ARIA (arbitrary)**   | `peer-aria-[invalid=true]:text-red` | `{ peer: { aria: { 'invalid=true': { color: 'red' } } } }`   | Non-standard: bracket form.          |
 
 ## :not()
 
 Inverse conditions.
 
-| Concept          | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                    | Note |
-| :--------------- | :---------------------------------- | :----------------------------------------------------------- | :--- |
-| **Not Hover**    | `not-hover:opacity-75`              | `{ not: { hover: { opacity: 75 } } }`                        |      |
-| **Not First**    | `not-first:mt-4`                    | `{ not: { first: { mt: 4 } } }`                              |      |
-| **Not Supports** | `not-supports-[display:grid]:block` | `{ not: { supports: { 'display:grid': { block: true } } } }` |      |
+| Concept          | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                         | Note |
+| :--------------- | :---------------------------------- | :---------------------------------------------------------------- | :--- |
+| **Not Hover**    | `not-hover:opacity-75`              | `{ not: { hover: { opacity: 75 } } }`                             |      |
+| **Not First**    | `not-first:mt-4`                    | `{ not: { first: { mt: 4 } } }`                                   |      |
+| **Not Supports** | `not-supports-[display:grid]:block` | `{ not: { supports: { 'display:grid': { display: 'block' } } } }` |      |
 
 ## Pseudo-elements
 
@@ -193,24 +193,24 @@ Advanced content styling.
 
 Environment-based styling.
 
-| Concept               | Tailwind v4 Class                 | `sz` Prop (Object Syntax)                           | Note                          |
-| :-------------------- | :-------------------------------- | :-------------------------------------------------- | :---------------------------- |
-| **Breakpoints**       | `md:block lg:flex`                | `{ md: { block: true }, lg: { flex: true } }`       |                               |
-| **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
-| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
-| **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                |                               |
-| **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
-| **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
-| **Pointer**           | `pointer-coarse:p-4`              | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
-| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`         | v4.1. **Sugar**: CamelCase.   |
-| **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`       | v4.1. Form validation state.  |
-| **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`       | v4.1. Form validation state.  |
-| **Details Content**   | `details-content:block`           | `{ detailsContent: { block: true } }`               | v4.1. **Sugar**: CamelCase.   |
-| **Print**             | `print:hidden`                    | `{ print: { hidden: true } }`                       |                               |
-| **Orientation**       | `portrait:hidden`                 | `{ portrait: { hidden: true } }`                    |                               |
-| **Scripting**         | `noscript:block`                  | `{ noscript: { block: true } }`                     |                               |
-| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { grid: true } } }`  |                               |
-| **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                      |                               |
+| Concept               | Tailwind v4 Class                 | `sz` Prop (Object Syntax)                                     | Note                          |
+| :-------------------- | :-------------------------------- | :------------------------------------------------------------ | :---------------------------- |
+| **Breakpoints**       | `md:block lg:flex`                | `{ md: { display: 'block' }, lg: { display: 'flex' } }`       |                               |
+| **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { display: 'block' }, '@lg': { display: 'flex' } }` | **Note**: String key for `@`. |
+| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { hidden: true } }`                          | **Sugar**: CamelCase.         |
+| **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                          |                               |
+| **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`                   | **Sugar**: CamelCase.         |
+| **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`                        | **Sugar**: CamelCase.         |
+| **Pointer**           | `pointer-coarse:p-4`              | `{ pointerCoarse: { p: 4 } }`                                 | **Sugar**: CamelCase.         |
+| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`                   | v4.1. **Sugar**: CamelCase.   |
+| **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`                 | v4.1. Form validation state.  |
+| **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`                 | v4.1. Form validation state.  |
+| **Details Content**   | `details-content:block`           | `{ detailsContent: { display: 'block' } }`                    | v4.1. **Sugar**: CamelCase.   |
+| **Print**             | `print:hidden`                    | `{ print: { hidden: true } }`                                 |                               |
+| **Orientation**       | `portrait:hidden`                 | `{ portrait: { hidden: true } }`                              |                               |
+| **Scripting**         | `noscript:block`                  | `{ noscript: { display: 'block' } }`                          |                               |
+| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { grid: true } } }`            |                               |
+| **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                                |                               |
 
 ## Attribute Selectors
 
@@ -248,8 +248,8 @@ Targeting specific screen sizes and container states.
 | Concept                  | CSS Rule                    | Tailwind v4 Class         | `sz` Prop (Object Syntax)                         | Note                                |
 | :----------------------- | :-------------------------- | :------------------------ | :------------------------------------------------ | :---------------------------------- |
 | **Mobile First**         | `min-width: (etc)`          | `w-full md:w-1/2`         | `{ w: 'full', md: { w: '1/2' } }`                 | Unprefixed utilities target mobile. |
-| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { flex: true } } }`               | **Sugar**: CamelCase for `max-xl`.  |
-| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { flex: true } } }`               | Target specific range.              |
+| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { display: 'flex' } } }`          | **Sugar**: CamelCase for `max-xl`.  |
+| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { display: 'flex' } } }`          | Target specific range.              |
 | **Custom Breakpoint**    | `@media (min-width: 320px)` | `min-[320px]:text-center` | `{ min: { '[320px]': { textAlign: 'center' } } }` | Arbitrary one-off breakpoint.       |
 | **Max-Width Breakpoint** | `@media (max-width: 600px)` | `max-[600px]:bg-sky-300`  | `{ max: { '[600px]': { bg: 'sky-300' } } }`       |                                     |
 
@@ -269,15 +269,15 @@ The `container` class sets `width: 100%` and applies responsive max-widths.
 
 The `@container` class enables CSS container queries.
 
-| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                   | Note                                      |
-| :----------------------- | :------------------- | :------------------------------------------ | :---------------------------------------- |
-| **Mark Container**       | `@container`         | `{ '@container': true }`                    |                                           |
-| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`               | **Sugar**: Value string = container name. |
-| **Container Breakpoint** | `@md:flex`           | `{ '@md': { flex: true } }`                 | **Note**: `@` prefix in key.              |
-| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { block: true } } }`   | **Sugar**: Nest name inside query key.    |
-| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { block: true } } }`  |                                           |
-| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { flex: true } } }` |                                           |
-| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                            |                                           |
+| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                        | Note                                      |
+| :----------------------- | :------------------- | :----------------------------------------------- | :---------------------------------------- |
+| **Mark Container**       | `@container`         | `{ '@container': true }`                         |                                           |
+| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`                    | **Sugar**: Value string = container name. |
+| **Container Breakpoint** | `@md:flex`           | `{ '@md': { display: 'flex' } }`                 | **Note**: `@` prefix in key.              |
+| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { display: 'block' } } }`   | **Sugar**: Nest name inside query key.    |
+| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { display: 'block' } } }`  |                                           |
+| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { display: 'flex' } } }` |                                           |
+| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                                 |                                           |
 
 ## Dark mode
 

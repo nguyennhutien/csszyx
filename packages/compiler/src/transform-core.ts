@@ -1561,6 +1561,75 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
 // ============================================================================
 
 /**
+ * Boolean-sugar aliases mapped to the canonical single-property key they would
+ * collide with. Setting a CSS property through both its canonical key and a
+ * sugar alias in the same object emits duplicate/conflicting classes
+ * (`{ position: 'absolute', relative: true }` → `absolute relative`), so a
+ * dev-mode diagnostic flags it. Only aliases that represent one value of a
+ * single CSS property belong here — genuinely on/off utilities (`truncate`,
+ * `italic`, ...) have no canonical key to clash with.
+ */
+const SHORTHAND_CANONICAL_KEY: Record<string, string> = {
+    // display
+    block: 'display',
+    inline: 'display',
+    inlineBlock: 'display',
+    flex: 'display',
+    inlineFlex: 'display',
+    grid: 'display',
+    inlineGrid: 'display',
+    hidden: 'display',
+    contents: 'display',
+    table: 'display',
+    tableRow: 'display',
+    tableCell: 'display',
+    flowRoot: 'display',
+    listItem: 'display',
+    // position
+    static: 'position',
+    fixed: 'position',
+    absolute: 'position',
+    relative: 'position',
+    sticky: 'position',
+    // visibility
+    visible: 'visibility',
+    invisible: 'visibility',
+    collapse: 'visibility',
+    // isolation
+    isolate: 'isolation',
+};
+
+/**
+ * Dev-mode warning: a CSS property set by both its canonical key and a boolean
+ * sugar alias in the same object emits duplicate/conflicting classes. The sugar
+ * only counts when written as `true` — `{ flex: 1 }` is the flex shorthand, not
+ * the `display: flex` sugar, so it never clashes with `display`.
+ * @param szProp - The sz object being transformed.
+ */
+function warnOnCanonicalSugarConflict(szProp: SzObject): void {
+    const canonicalPresent = new Set<string>();
+    const sugarByGroup = new Map<string, string>();
+    for (const [k, v] of Object.entries(szProp)) {
+        if (k === 'display' || k === 'position' || k === 'visibility' || k === 'isolation') {
+            canonicalPresent.add(k);
+        } else if (v === true) {
+            const group = SHORTHAND_CANONICAL_KEY[k];
+            if (group && !sugarByGroup.has(group)) {
+                sugarByGroup.set(group, k);
+            }
+        }
+    }
+    for (const group of canonicalPresent) {
+        const sugar = sugarByGroup.get(group);
+        if (sugar) {
+            console.warn(
+                `[csszyx] "${group}" is set by both the canonical key "${group}" and the boolean sugar "${sugar}" in the same sz object — this emits duplicate/conflicting classes. Use one form.`,
+            );
+        }
+    }
+}
+
+/**
  * Transforms a csszyx sz object into a Tailwind CSS className string and extracted attributes.
  *
  * @param {SzObject} szProp - The sz object from JSX
@@ -1576,6 +1645,11 @@ export function transform(
     // Input validation
     if (!szProp || typeof szProp !== 'object') {
         return { className: '', attributes: {} };
+    }
+
+    // Dev-mode: flag canonical/sugar collisions on the same CSS property.
+    if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+        warnOnCanonicalSugarConflict(szProp);
     }
 
     const classes: string[] = [];

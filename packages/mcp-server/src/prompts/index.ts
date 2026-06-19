@@ -80,7 +80,7 @@ Key csszyx rules:
 - Colors are strings: { bg: 'blue-500' } → bg-blue-500
 - Color + opacity is an object: { bg: { color: 'blue-500', op: 50 } } → bg-blue-500/50
 - Variants nest: { hover: { bg: 'blue-700' } } → hover:bg-blue-700
-- Boolean sugar: { flex: true } → flex
+- Single-property props use the canonical form: { display: 'flex' } → flex, { position: 'absolute' } → absolute (boolean sugar { flex: true }/{ absolute: true } also works, but never set the same property via both — emits duplicate classes)
 - Fractions stay native: { w: '1/2' } → w-1/2
 - Arbitrary values: { p: '5px' } → p-[5px]
 - CSS variables: { p: '--my-var' } → p-(--my-var)
@@ -112,7 +112,7 @@ Please:
 
 Key csszyx syntax:
 - <div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
-- <div sz={{ flex: true, items: 'center', gap: 4 }} />
+- <div sz={{ display: 'flex', items: 'center', gap: 4 }} />
 - <div sz={{ md: { gridCols: 3 }, gridCols: 1, gap: 6 }} />
 - <div sz={{ dark: { bg: 'gray-900', color: 'white' } }} />
 - <div sz={{ bg: { color: 'blue-500', op: 50 }, w: '1/2' }} />  (color opacity + fraction)

@@ -49,7 +49,7 @@ Pass an array to compose multiple objects. The compiler merges fully-static arra
 build time; conditional elements use `_szMerge` at runtime:
 
 ```tsx
-const layout = { flex: true, items: 'center', gap: 3 } as const;
+const layout = { display: 'flex', items: 'center', gap: 3 } as const;
 const text   = { text: 'sm', fontWeight: 'medium' } as const;
 
 // Static — single className string, zero runtime
@@ -125,8 +125,8 @@ const label = { text: 'sm', fontWeight: 'medium', color: 'gray-600' } as const;
 
 function SpaceXDemo() {
     return (
-        <div sz={{ flex: true, gap: 4 }}>
-            <div sz={{ flex: true, spaceX: 2 }}>
+        <div sz={{ display: 'flex', gap: 4 }}>
+            <div sz={{ display: 'flex', spaceX: 2 }}>
                 <div sz={item}>A</div>
                 <div sz={item}>B</div>
                 <span sz={{ ...label, ml: 2 }}>spaceX-2</span>
