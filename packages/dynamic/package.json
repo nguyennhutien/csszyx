@@ -48,7 +48,7 @@
     "@csszyx/compiler": "workspace:*"
   },
   "peerDependencies": {
-    "react": ">=18.0.0"
+    "react": ">=17.0.0"
   },
   "peerDependenciesMeta": {
     "react": {
