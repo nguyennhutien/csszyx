@@ -240,6 +240,70 @@ export function appendTailwindSourceDirective(code: string, relPath: string): st
 }
 
 /**
+ * Whether a CSS module actually imports the `tailwindcss` package, so the
+ * `@source` directive should be appended.
+ *
+ * Tighter than a substring check on purpose: block comments are stripped first
+ * (a commented-out `@import` must not trigger injection), and the package name
+ * must end at a quote or a `/` subpath so a different package whose name merely
+ * starts with `tailwindcss` (e.g. `tailwindcss-animate`) does not match. Import
+ * options after the closing quote (`layer(…)`, `source(…)`) are irrelevant — the
+ * match ends at the quote — so every real Tailwind v4 import form is covered.
+ *
+ * @param code - CSS module source.
+ * @returns true if the module imports tailwindcss (exact or a subpath).
+ */
+export function cssImportsTailwind(code: string): boolean {
+    const withoutBlockComments = code.replace(/\/\*[\s\S]*?\*\//g, '');
+    return /@import\s+["']tailwindcss(?:\/[^"']*)?["']/.test(withoutBlockComments);
+}
+
+/**
+ * Whether the discovered class set contains at least one real Tailwind
+ * candidate worth injecting an `@source` for — at least two characters and
+ * starting with a letter, which excludes pure mangled symbols.
+ *
+ * @param classes - the discovered class set.
+ * @returns true if any class is an injectable candidate.
+ */
+export function hasInjectableTailwindCandidate(classes: Iterable<string>): boolean {
+    for (const c of classes) {
+        if (c.length >= 2 && /^[a-z]/.test(c)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Computes the `@source` target path for a CSS module: the location of the
+ * generated safelist file relative to the CSS file, in posix form and always
+ * `./`- or `../`-prefixed so Tailwind treats it as a relative path.
+ *
+ * This is the real-world failure surface — a wrong relative path makes Tailwind
+ * silently scan nothing (no error, no CSS), the same symptom as a missing
+ * directive — so it is extracted and unit-tested rather than left inline.
+ *
+ * @param rootDir - project root where the safelist file is written.
+ * @param safelistFilename - the safelist file name (e.g. `csszyx-classes.html`).
+ * @param cssId - absolute path of the CSS module receiving the directive.
+ * @returns the posix relative path from the CSS file to the safelist file.
+ */
+export function computeSafelistRelPath(
+    rootDir: string,
+    safelistFilename: string,
+    cssId: string,
+): string {
+    const safelistPath = path.join(rootDir, safelistFilename).replace(/\\/g, '/');
+    const cssDir = path.dirname(cssId).replace(/\\/g, '/');
+    let relPath = path.posix.relative(cssDir, safelistPath);
+    if (!relPath.startsWith('.')) {
+        relPath = `./${relPath}`;
+    }
+    return relPath;
+}
+
+/**
  * Reads CSS variable mangle metadata from compiler results. Older compiled
  * compiler artifacts and pre-v4 cache entries do not have this field, so the
  * unplugin treats it as empty instead of failing during dev/test transitions.
@@ -2267,28 +2331,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // directive to the CSS that imports tailwindcss is the reliable way to ensure
                 // Tailwind generates CSS for the classes that csszyx transforms sz props into.
                 if (/\.css(\?.*)?$/.test(id)) {
-                    const hasTailwindImport =
-                        code.includes('@import "tailwindcss') ||
-                        code.includes("@import 'tailwindcss");
-                    if (hasTailwindImport && state.classes.size > 0) {
-                        // Only inject when there is at least one real Tailwind candidate:
-                        // at least 2 chars, starts with a letter, not pure mangled symbols.
-                        const hasCandidate = Array.from(state.classes).some(
-                            c => c.length >= 2 && /^[a-z]/.test(c),
+                    if (
+                        cssImportsTailwind(code) &&
+                        hasInjectableTailwindCandidate(state.classes)
+                    ) {
+                        const relPath = computeSafelistRelPath(
+                            state.rootDir,
+                            SAFELIST_FILENAME,
+                            id,
                         );
-                        if (hasCandidate) {
-                            const safelistPath = path
-                                .join(state.rootDir, SAFELIST_FILENAME)
-                                .replace(/\\/g, '/');
-                            const cssDir = path.dirname(id).replace(/\\/g, '/');
-                            let relPath = path.posix.relative(cssDir, safelistPath);
-                            if (!relPath.startsWith('.')) {
-                                relPath = `./${relPath}`;
-                            }
-                            const transformed = appendTailwindSourceDirective(code, relPath);
-                            if (transformed !== null) {
-                                return { code: transformed, map: null };
-                            }
+                        const transformed = appendTailwindSourceDirective(code, relPath);
+                        if (transformed !== null) {
+                            return { code: transformed, map: null };
                         }
                     }
                     return null;
