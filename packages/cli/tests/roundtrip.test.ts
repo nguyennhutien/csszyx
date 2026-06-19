@@ -191,28 +191,64 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     // BOOLEAN CLASSES
     // ========================================================================
-    describe('boolean classes', () => {
+    describe('boolean / kept shorthands', () => {
+        it.each(['truncate', 'container', 'grow', 'shrink', 'ring', 'outline'])('%s', cls => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+    });
+
+    // ========================================================================
+    // SINGLE-PROPERTY UTILITIES — every class whose sugar alias was removed must
+    // migrate to its canonical key and compile back to the exact same class.
+    // This is the strongest correctness proof for the migrate breaking change:
+    // it verifies migrate is the precise inverse of the compiler for all 8 groups.
+    // ========================================================================
+    describe('single-property canonical round-trips', () => {
         it.each([
+            // display (14)
             'block',
-            'flex',
-            'grid',
-            'hidden',
             'inline',
+            'inline-block',
+            'flex',
+            'inline-flex',
+            'grid',
+            'inline-grid',
+            'hidden',
+            'contents',
+            'table',
+            'table-row',
+            'table-cell',
+            'flow-root',
+            'list-item',
+            // position (5)
             'static',
             'fixed',
             'absolute',
             'relative',
             'sticky',
+            // visibility (3)
             'visible',
             'invisible',
-            'truncate',
+            'collapse',
+            // isolation (1)
+            'isolate',
+            // text-transform (4)
             'uppercase',
             'lowercase',
             'capitalize',
-            'underline',
+            'normal-case',
+            // font-style (2)
             'italic',
-            'container',
-        ])('%s', cls => {
+            'not-italic',
+            // text-decoration-line (4)
+            'underline',
+            'overline',
+            'line-through',
+            'no-underline',
+            // font-smoothing (2)
+            'antialiased',
+            'subpixel-antialiased',
+        ])('%s → migrate → compile → %s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });

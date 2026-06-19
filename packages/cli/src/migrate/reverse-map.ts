@@ -292,8 +292,11 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     // Typography (composite)
     truncate: 'truncate',
 
-    // Flexbox
-    // flexWrap is string-based, not boolean — removed from boolean map
+    // Flexbox (default-or-value: bare `grow`/`shrink` mean grow/shrink: true,
+    // while grow-0/shrink-0 carry a value via REVERSE_PROPERTY_MAP).
+    // flexWrap is string-based, not boolean — kept out of this map.
+    grow: 'grow',
+    shrink: 'shrink',
 
     // Filters (defaults)
     blur: 'blur',
