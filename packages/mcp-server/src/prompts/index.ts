@@ -80,7 +80,7 @@ Key csszyx rules:
 - Colors are strings: { bg: 'blue-500' } → bg-blue-500
 - Color + opacity is an object: { bg: { color: 'blue-500', op: 50 } } → bg-blue-500/50
 - Variants nest: { hover: { bg: 'blue-700' } } → hover:bg-blue-700
-- Single-property props use the canonical form: { display: 'flex' } → flex, { position: 'absolute' } → absolute (boolean sugar { flex: true }/{ absolute: true } also works, but never set the same property via both — emits duplicate classes)
+- ONE way per property — single-property props use the canonical key with a value, never a boolean alias. display/position/visibility/isolation/textTransform/fontStyle/fontSmoothing/decoration: { display: 'flex' } → flex, { position: 'absolute' } → absolute, { fontStyle: 'italic' } → italic, { decoration: 'underline' } → underline, { fontSmoothing: 'grayscale' } → antialiased. Boolean aliases like { flex: true }/{ italic: true } were REMOVED and emit nothing.
 - Fractions stay native: { w: '1/2' } → w-1/2
 - Arbitrary values: { p: '5px' } → p-[5px]
 - CSS variables: { p: '--my-var' } → p-(--my-var)

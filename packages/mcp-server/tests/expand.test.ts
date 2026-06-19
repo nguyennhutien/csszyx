@@ -26,9 +26,9 @@ describe('csszyx_expand', () => {
         expect(data.className).toContain('lg:text-2xl');
     });
 
-    it('expands boolean shorthand', () => {
+    it('expands a canonical single-property prop', () => {
         const data = JSON.parse(
-            handleExpand({ sz: { flex: true, items: 'center' } }).content[0].text,
+            handleExpand({ sz: { display: 'flex', items: 'center' } }).content[0].text,
         );
         expect(data.className).toContain('flex');
         expect(data.className).toContain('items-center');

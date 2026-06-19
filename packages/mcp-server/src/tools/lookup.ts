@@ -89,7 +89,7 @@ const EXAMPLES: Record<string, string[]> = {
     position: ["{ position: 'absolute' }", "{ position: 'relative' }"],
     flex: ['{ flex: 1 }', "{ flex: 'auto' }"],
     flexDir: ["{ flexDir: 'col' }", "{ flexDir: 'row' }"],
-    grid: ["{ display: 'grid' }", '{ grid: true }'],
+    grid: ["{ display: 'grid' }"],
     gridCols: ['{ gridCols: 3 }', "{ gridCols: 'none' }"],
     gap: ['{ gap: 4 }'],
     items: ["{ items: 'center' }", "{ items: 'start' }"],
