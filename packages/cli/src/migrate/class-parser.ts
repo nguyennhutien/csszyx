@@ -77,7 +77,7 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
     }
 
     // 1. Try exact boolean match first (highest priority)
-    const boolResult = tryBooleanMatch(input, options);
+    const boolResult = tryBooleanMatch(input);
     if (boolResult) {
         return applyImportant(boolResult, important);
     }
@@ -101,7 +101,10 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
             }
             // For properties like "ring", "outline" — boolean true
             if (REVERSE_BOOLEAN_MAP[source]) {
-                return applyImportant(booleanClassToParsed(source, options), important);
+                return applyImportant(
+                    { prop: REVERSE_BOOLEAN_MAP[source], value: true },
+                    important,
+                );
             }
             // For divide-x, divide-y without value → boolean
             if (prefix === 'divide-x' || prefix === 'divide-y') {
@@ -155,12 +158,6 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
         }
     }
 
-    // 4. Handle display/position shorthand values
-    const displayResult = tryDisplay(input, options);
-    if (displayResult) {
-        return applyImportant(displayResult, important);
-    }
-
     // 5. Try CSS custom property declaration: [--var:value]
     if (input.startsWith('[') && input.endsWith(']') && input.includes(':')) {
         const inner = input.slice(1, -1);
@@ -189,15 +186,16 @@ function applyImportant(result: ParsedClass, important: boolean): ParsedClass {
     if (!important) {
         return result;
     }
+    const base = result.cssProperty ? { cssProperty: result.cssProperty } : {};
     if (typeof result.value === 'string') {
-        return { prop: result.prop, value: `${result.value}!` };
+        return { ...base, prop: result.prop, value: `${result.value}!` };
     }
     if (typeof result.value === 'boolean') {
-        return { prop: result.prop, value: '!' };
+        return { ...base, prop: result.prop, value: '!' };
     }
     // For numeric values, convert to string + !
     if (typeof result.value === 'number') {
-        return { prop: result.prop, value: `${String(result.value)}!` };
+        return { ...base, prop: result.prop, value: `${String(result.value)}!` };
     }
     return result;
 }
@@ -205,19 +203,20 @@ function applyImportant(result: ParsedClass, important: boolean): ParsedClass {
 /**
  * Attempts to match a class as a boolean value.
  * @param cls - The class string to match
- * @param options - Parser output policy.
  * @returns {ParsedClass | null} Parsed result or null if no match
  */
-function tryBooleanMatch(cls: string, options: ParseClassOptions): ParsedClass | null {
-    // Check BOOLEAN_VALUE_MAP for classes with non-boolean values
+function tryBooleanMatch(cls: string): ParsedClass | null {
+    // Canonical value classes (display/position/visibility/text-transform/…) and
+    // other class→{prop,value} mappings resolve here first. cssProperty (when set)
+    // lets the variant parser fail closed on a same-scope conflict.
     if (BOOLEAN_VALUE_MAP[cls]) {
-        const { prop, value } = BOOLEAN_VALUE_MAP[cls];
-        return { prop, value };
+        const { prop, value, cssProperty } = BOOLEAN_VALUE_MAP[cls];
+        return cssProperty ? { prop, value, cssProperty } : { prop, value };
     }
 
-    // Check REVERSE_BOOLEAN_MAP for true booleans
+    // Remaining true-boolean shorthands (ring, outline, truncate, grow, …).
     if (REVERSE_BOOLEAN_MAP[cls]) {
-        return booleanClassToParsed(cls, options);
+        return { prop: REVERSE_BOOLEAN_MAP[cls], value: true };
     }
 
     return null;
@@ -229,63 +228,6 @@ function tryBooleanMatch(cls: string, options: ParseClassOptions): ParsedClass |
  * @param options - Parser output policy.
  * @returns {ParsedClass | null} Parsed result or null if no match
  */
-function tryDisplay(cls: string, options: ParseClassOptions): ParsedClass | null {
-    // Handle display-* not caught by booleans
-    const displayValues = new Set([
-        'block',
-        'inline',
-        'inline-block',
-        'flex',
-        'inline-flex',
-        'grid',
-        'inline-grid',
-        'hidden',
-        'contents',
-        'table',
-        'table-row',
-        'table-cell',
-        'flow-root',
-        'list-item',
-    ]);
-    // These are already handled by boolean map; this is a fallback
-    if (displayValues.has(cls)) {
-        return REVERSE_BOOLEAN_MAP[cls] ? booleanClassToParsed(cls, options) : null;
-    }
-    return null;
-}
-
-/**
- * Convert a boolean Tailwind utility class into a parsed sz pair.
- *
- * @param cls Tailwind utility class.
- * @param options Parser output options.
- * @returns Parsed class metadata.
- */
-function booleanClassToParsed(cls: string, options: ParseClassOptions): ParsedClass {
-    const displayValue = DISPLAY_CLASS_VALUES[cls];
-    if (options.display === 'canonical' && displayValue) {
-        return { prop: 'display', value: displayValue, cssProperty: 'display' };
-    }
-    return { prop: REVERSE_BOOLEAN_MAP[cls], value: true };
-}
-
-const DISPLAY_CLASS_VALUES: Record<string, string> = {
-    block: 'block',
-    inline: 'inline',
-    'inline-block': 'inline-block',
-    flex: 'flex',
-    'inline-flex': 'inline-flex',
-    grid: 'grid',
-    'inline-grid': 'inline-grid',
-    hidden: 'none',
-    contents: 'contents',
-    table: 'table',
-    'table-row': 'table-row',
-    'table-cell': 'table-cell',
-    'flow-root': 'flow-root',
-    'list-item': 'list-item',
-};
-
 // ============================================================================
 // GRADIENT PARSING
 // ============================================================================

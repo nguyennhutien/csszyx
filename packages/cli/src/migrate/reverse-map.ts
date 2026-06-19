@@ -283,49 +283,14 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
 // ============================================================================
 // REVERSE BOOLEAN MAP: TW class name → sz prop (value = true)
 // ============================================================================
+// Single-property value-alias classes (display/position/visibility/isolation/
+// text-transform/font-style/text-decoration-line/font-smoothing) are NOT here —
+// they migrate to their canonical { key: value } form via BOOLEAN_VALUE_MAP.
+// Only genuinely on/off utilities (composite, additive, default-or-value, plugin)
+// remain true boolean shorthands.
 export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
-    // Display
-    block: 'block',
-    inline: 'inline',
-    'inline-block': 'inlineBlock',
-    flex: 'flex',
-    'inline-flex': 'inlineFlex',
-    grid: 'grid',
-    'inline-grid': 'inlineGrid',
-    hidden: 'hidden',
-    contents: 'contents',
-    table: 'table',
-    'table-row': 'tableRow',
-    'table-cell': 'tableCell',
-    'flow-root': 'flowRoot',
-    'list-item': 'listItem',
-
-    // Position
-    static: 'static',
-    fixed: 'fixed',
-    absolute: 'absolute',
-    relative: 'relative',
-    sticky: 'sticky',
-
-    // Visibility
-    visible: 'visible',
-    invisible: 'invisible',
-    collapse: 'collapse',
-
-    // Typography
+    // Typography (composite)
     truncate: 'truncate',
-    uppercase: 'uppercase',
-    lowercase: 'lowercase',
-    capitalize: 'capitalize',
-    'normal-case': 'normalCase',
-    underline: 'underline',
-    overline: 'overline',
-    'line-through': 'lineThrough',
-    'no-underline': 'noUnderline',
-    italic: 'italic',
-    'not-italic': 'notItalic',
-    antialiased: 'antialiased',
-    'subpixel-antialiased': 'subpixelAntialiased',
 
     // Flexbox
     // flexWrap is string-based, not boolean — removed from boolean map
@@ -406,8 +371,14 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'appearance-auto': 'appearance',
 };
 
-// Values that mean "use the prop name as-is with value true"
-export const BOOLEAN_VALUE_MAP: Record<string, { prop: string; value: unknown }> = {
+// Values that mean "use the prop name as-is with value true". `cssProperty`
+// marks single-property utilities so the variant parser fails closed on a
+// scope conflict (e.g. `block flex` → two display values). Additive utilities
+// (font-variant-numeric) intentionally omit it — they combine, not conflict.
+export const BOOLEAN_VALUE_MAP: Record<
+    string,
+    { prop: string; value: unknown; cssProperty?: string }
+> = {
     // Snap types
     'snap-none': { prop: 'snapType', value: 'none' },
     'snap-x': { prop: 'snapType', value: 'x' },
@@ -446,6 +417,61 @@ export const BOOLEAN_VALUE_MAP: Record<string, { prop: string; value: unknown }>
     'transform-none': { prop: 'transform', value: 'none' },
     'transform-gpu': { prop: 'transform', value: 'gpu' },
     'transform-cpu': { prop: 'transform', value: 'cpu' },
+
+    // Single-property utilities — migrated to their canonical { key: value }
+    // form. The boolean-sugar aliases (flex/absolute/italic/...) were removed,
+    // so these never emit `{ flex: true }`; one key per CSS property.
+    // display
+    block: { prop: 'display', value: 'block', cssProperty: 'display' },
+    inline: { prop: 'display', value: 'inline', cssProperty: 'display' },
+    'inline-block': { prop: 'display', value: 'inline-block', cssProperty: 'display' },
+    flex: { prop: 'display', value: 'flex', cssProperty: 'display' },
+    'inline-flex': { prop: 'display', value: 'inline-flex', cssProperty: 'display' },
+    grid: { prop: 'display', value: 'grid', cssProperty: 'display' },
+    'inline-grid': { prop: 'display', value: 'inline-grid', cssProperty: 'display' },
+    hidden: { prop: 'display', value: 'none', cssProperty: 'display' },
+    contents: { prop: 'display', value: 'contents', cssProperty: 'display' },
+    table: { prop: 'display', value: 'table', cssProperty: 'display' },
+    'table-row': { prop: 'display', value: 'table-row', cssProperty: 'display' },
+    'table-cell': { prop: 'display', value: 'table-cell', cssProperty: 'display' },
+    'flow-root': { prop: 'display', value: 'flow-root', cssProperty: 'display' },
+    'list-item': { prop: 'display', value: 'list-item', cssProperty: 'display' },
+    // position
+    static: { prop: 'position', value: 'static', cssProperty: 'position' },
+    fixed: { prop: 'position', value: 'fixed', cssProperty: 'position' },
+    absolute: { prop: 'position', value: 'absolute', cssProperty: 'position' },
+    relative: { prop: 'position', value: 'relative', cssProperty: 'position' },
+    sticky: { prop: 'position', value: 'sticky', cssProperty: 'position' },
+    // visibility
+    visible: { prop: 'visibility', value: 'visible', cssProperty: 'visibility' },
+    invisible: { prop: 'visibility', value: 'hidden', cssProperty: 'visibility' },
+    collapse: { prop: 'visibility', value: 'collapse', cssProperty: 'visibility' },
+    // isolation
+    isolate: { prop: 'isolation', value: 'isolate', cssProperty: 'isolation' },
+    // text-transform
+    uppercase: { prop: 'textTransform', value: 'uppercase', cssProperty: 'text-transform' },
+    lowercase: { prop: 'textTransform', value: 'lowercase', cssProperty: 'text-transform' },
+    capitalize: { prop: 'textTransform', value: 'capitalize', cssProperty: 'text-transform' },
+    'normal-case': { prop: 'textTransform', value: 'none', cssProperty: 'text-transform' },
+    // font-style
+    italic: { prop: 'fontStyle', value: 'italic', cssProperty: 'font-style' },
+    'not-italic': { prop: 'fontStyle', value: 'normal', cssProperty: 'font-style' },
+    // text-decoration-line
+    underline: { prop: 'decoration', value: 'underline', cssProperty: 'text-decoration-line' },
+    overline: { prop: 'decoration', value: 'overline', cssProperty: 'text-decoration-line' },
+    'line-through': {
+        prop: 'decoration',
+        value: 'line-through',
+        cssProperty: 'text-decoration-line',
+    },
+    'no-underline': { prop: 'decoration', value: 'none', cssProperty: 'text-decoration-line' },
+    // font-smoothing
+    antialiased: { prop: 'fontSmoothing', value: 'grayscale', cssProperty: 'font-smoothing' },
+    'subpixel-antialiased': {
+        prop: 'fontSmoothing',
+        value: 'subpixel',
+        cssProperty: 'font-smoothing',
+    },
 };
 
 // ============================================================================
