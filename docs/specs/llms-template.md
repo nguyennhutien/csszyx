@@ -53,24 +53,31 @@ module.exports = {
 
 The compiler transforms `sz` props → Tailwind classes at build time. The browser never sees `sz`.
 
-### Canonical vs boolean sugar
+### One key per property
 
-Single-property props (`display`, `position`, `visibility`, `isolation`) have a
-canonical form and a boolean-sugar alias. Prefer the canonical form — it is the
-default used throughout — and never set the same property through both forms
-(emits duplicate/conflicting classes).
+Single-property props use their canonical key with a value — one way, no
+aliases. display/position/visibility/isolation/textTransform/fontStyle/
+fontSmoothing/decoration:
 
 ```tsx
-// Canonical — recommended
-<div sz={{ display: 'flex', position: 'relative', visibility: 'hidden' }} />
-// → className="flex relative invisible"
-
-// Boolean sugar — equivalent
-<div sz={{ flex: true, relative: true, invisible: true }} />
+<div
+  sz={{
+    display: "flex",
+    position: "relative",
+    visibility: "hidden",
+    fontStyle: "italic",
+  }}
+/>
+// → className="flex relative invisible italic"
 ```
 
-Genuinely on/off utilities (`truncate`, `uppercase`, `italic`, `srOnly`) stay
-boolean — they have no single-property canonical form.
+Boolean aliases (`{ flex: true }`, `{ italic: true }`, `{ uppercase: true }`)
+were **removed** — they emit nothing and warn; run `csszyx migrate` to rewrite.
+Each property has exactly one key, so it can never be set twice in one object.
+
+Genuinely on/off utilities — composite (`truncate`, `srOnly`), stackable
+font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
+`ring`, `blur`), plugin (`container`, `prose`) — stay boolean.
 
 ### Arbitrary values
 
@@ -581,12 +588,13 @@ of classes the developer has explicitly flagged as "not yet decided."
 | `inline-flex` | `{ display: 'inline-flex' }` |
 | `hidden`      | `{ display: 'none' }`        |
 
-Manual authoring can still use `{ flex: true }`, `{ inlineFlex: true }`, etc.
+Boolean sugar like `{ flex: true }` was removed — use `{ display: 'flex' }`.
 The migrate command uses `display` so duplicate display utilities are visible as
 one semantic CSS property. Conflicting display utilities in the same variant
 scope, such as `block flex` or `md:block md:flex`, are left unresolved instead
 of guessed. `flex flex-1` is safe and migrates to
-`{ display: 'flex', flex: '1' }`.
+`{ display: 'flex', flex: '1' }` (the `flex` shorthand stays — only the
+`flex: true` display alias was removed).
 
 ### `--resolve-todos` — apply the resolution map
 

@@ -9,8 +9,8 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
 ## Flexbox Container
 
 <PropTable rows={[
-  { sz: "{ flex: true }", tw: "flex", viz: <FlexViz direction="row" /> },
-  { sz: "{ inlineFlex: true }", tw: "inline-flex" },
+  { sz: "{ display: 'flex' }", tw: "flex", viz: <FlexViz direction="row" /> },
+  { sz: "{ display: 'inline-flex' }", tw: "inline-flex" },
   { sz: "{ flexDir: 'row' }", tw: "flex-row", viz: <FlexViz direction="row" /> },
   { sz: "{ flexDir: 'col' }", tw: "flex-col", viz: <FlexViz direction="column" /> },
   { sz: "{ flexDir: 'row-reverse' }", tw: "flex-row-reverse", viz: <FlexViz direction="row-reverse" /> },
@@ -76,8 +76,8 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
 ## Grid Container
 
 <PropTable rows={[
-  { sz: "{ grid: true }", tw: "grid", viz: <ColsViz cols={1} /> },
-  { sz: "{ inlineGrid: true }", tw: "inline-grid" },
+  { sz: "{ display: 'grid' }", tw: "grid", viz: <ColsViz cols={1} /> },
+  { sz: "{ display: 'inline-grid' }", tw: "inline-grid" },
   { sz: "{ gridCols: 3 }", tw: "grid-cols-3", viz: <ColsViz cols={3} /> },
   { sz: "{ gridCols: 'none' }", tw: "grid-cols-none" },
   { sz: "{ gridRows: 3 }", tw: "grid-rows-3" },
@@ -140,7 +140,7 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
   px: 6,
   py: 4,
 }}>
-  <div sz={{ flex: true, items: 'center', gap: 8 }}>
+  <div sz={{ display: 'flex', items: 'center', gap: 8 }}>
     <Logo />
     <Links />
   </div>
@@ -148,7 +148,7 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
 </nav>
 
 // Sidebar layout
-<div sz={{ flex: true, gap: 8, minH: 'screen' }}>
+<div sz={{ display: 'flex', gap: 8, minH: 'screen' }}>
   <aside sz={{ w: 64, shrink: 0 }} />
   <main sz={{ grow: true }} />
 </div>

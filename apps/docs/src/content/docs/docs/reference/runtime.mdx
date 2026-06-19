@@ -231,7 +231,7 @@ import { szv } from '@csszyx/runtime';
 import { szv } from 'csszyx';
 
 const buttonSz = szv({
-  base: { inlineFlex: true, items: 'center', rounded: 'md' },
+  base: { display: 'inline-flex', items: 'center', rounded: 'md' },
   variants: {
     variant: {
       default: { bg: 'primary', text: 'primary-foreground' },
@@ -285,7 +285,7 @@ Pass an array to the `sz` prop to compose multiple sz objects with conditional i
 // Static items → extracted at build time (zero runtime)
 // Conditional items → _szMerge at runtime
 <div sz={[
-  { flex: true, items: 'center', p: 4 },
+  { display: 'flex', items: 'center', p: 4 },
   isActive   && { bg: 'blue-500' },
   isDisabled && { opacity: 50, cursor: 'not-allowed' },
 ]} />

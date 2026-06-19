@@ -95,9 +95,9 @@ import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, Letter
   { sz: "{ textAlign: 'center' }", tw: "text-center" },
   { sz: "{ textAlign: 'right' }", tw: "text-right" },
   { sz: "{ textAlign: 'justify' }", tw: "text-justify" },
-  { sz: "{ uppercase: true }", tw: "uppercase" },
-  { sz: "{ lowercase: true }", tw: "lowercase" },
-  { sz: "{ capitalize: true }", tw: "capitalize" },
+  { sz: "{ textTransform: 'uppercase' }", tw: "uppercase" },
+  { sz: "{ textTransform: 'lowercase' }", tw: "lowercase" },
+  { sz: "{ textTransform: 'capitalize' }", tw: "capitalize" },
 ]} />
 
 <TextAlignment />
@@ -105,9 +105,9 @@ import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, Letter
 ## Text Decoration
 
 <PropTable rows={[
-  { sz: "{ underline: true }", tw: "underline" },
-  { sz: "{ lineThrough: true }", tw: "line-through" },
-  { sz: "{ noUnderline: true }", tw: "no-underline" },
+  { sz: "{ decoration: 'underline' }", tw: "underline" },
+  { sz: "{ decoration: 'line-through' }", tw: "line-through" },
+  { sz: "{ decoration: 'none' }", tw: "no-underline" },
   { sz: "{ decoration: 'dashed' }", tw: "decoration-dashed" },
   { sz: "{ decorationColor: 'blue-500' }", tw: "decoration-blue-500" },
   { sz: "{ underlineOffset: 4 }", tw: "underline-offset-4" },
@@ -128,10 +128,10 @@ import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, Letter
 ## Font Style & Smoothing
 
 <PropTable rows={[
-  { sz: "{ italic: true }", tw: "italic" },
-  { sz: "{ notItalic: true }", tw: "not-italic" },
-  { sz: "{ antialiased: true }", tw: "antialiased" },
-  { sz: "{ subpixelAntialiased: true }", tw: "subpixel-antialiased" },
+  { sz: "{ fontStyle: 'italic' }", tw: "italic" },
+  { sz: "{ fontStyle: 'normal' }", tw: "not-italic" },
+  { sz: "{ fontSmoothing: 'grayscale' }", tw: "antialiased" },
+  { sz: "{ fontSmoothing: 'subpixel' }", tw: "subpixel-antialiased" },
 ]} />
 
 ## Font Features (v4.2)

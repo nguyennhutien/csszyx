@@ -74,12 +74,12 @@ Controlling font-feature-settings. Added in Tailwind v4.2.
 
 Controlling the font style and smoothing.
 
-| Concept         | CSS Rule                              | Tailwind v4 Class      | `sz` Prop (Object Syntax)       | Note                                                   |
-| :-------------- | :------------------------------------ | :--------------------- | :------------------------------ | :----------------------------------------------------- |
-| **Italic**      | `font-style: italic`                  | `italic`               | `{ italic: true }`              |                                                        |
-| **Not Italic**  | `font-style: normal`                  | `not-italic`           | `{ notItalic: true }`           | `false` = NOOP; use `notItalic: true` to reset.        |
-| **Antialiased** | `-webkit-font-smoothing: antialiased` | `antialiased`          | `{ antialiased: true }`         |                                                        |
-| **Subpixel**    | `-webkit-font-smoothing: auto`        | `subpixel-antialiased` | `{ subpixelAntialiased: true }` | `false` = NOOP; use `subpixelAntialiased` to override. |
+| Concept         | CSS Rule                              | Tailwind v4 Class      | `sz` Prop (Object Syntax)        | Note                         |
+| :-------------- | :------------------------------------ | :--------------------- | :------------------------------- | :--------------------------- |
+| **Italic**      | `font-style: italic`                  | `italic`               | `{ fontStyle: 'italic' }`        |                              |
+| **Not Italic**  | `font-style: normal`                  | `not-italic`           | `{ fontStyle: 'normal' }`        | Resets to upright.           |
+| **Antialiased** | `-webkit-font-smoothing: antialiased` | `antialiased`          | `{ fontSmoothing: 'grayscale' }` | Grayscale antialiasing.      |
+| **Subpixel**    | `-webkit-font-smoothing: auto`        | `subpixel-antialiased` | `{ fontSmoothing: 'subpixel' }`  | Subpixel (RGB) antialiasing. |
 
 ## Letter Spacing (Tracking)
 
@@ -144,28 +144,23 @@ Controlling the text color.
 
 Controlling the decoration of text.
 
-| Concept            | CSS Rule                              | Tailwind v4 Class                                                                                                                     | `sz` Prop (Object Syntax)           | Note                                                          |
-| :----------------- | :------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------- | :------------------------------------------------------------ |
-| **Line (string)**  | `text-decoration-line: underline`     | `underline`, `overline`, `line-through`, `no-underline`                                                                               | `{ decoration: 'underline' }` etc.  | String key. `'none'` → `no-underline` (resets ALL decoration) |
-| **Style**          | `text-decoration-style: solid`        | `decoration-solid`, `decoration-dashed`, `decoration-dotted`, `decoration-double`, `decoration-wavy`                                  | `{ decorationStyle: 'solid' }` etc. |                                                               |
-| **Thickness**      | `text-decoration-thickness: auto`     | `decoration-0`, `decoration-1`, `decoration-2`, `decoration-4`, `decoration-8`, `decoration-auto`, `decoration-from-font`             | `{ decorationThickness: 1 }` etc.   |                                                               |
-| **Offset**         | `text-underline-offset: auto`         | `underline-offset-0`, `underline-offset-1`, `underline-offset-2`, `underline-offset-4`, `underline-offset-8`, `underline-offset-auto` | `{ underlineOffset: 1 }` etc.       |                                                               |
-| **Color**          | `text-decoration-color: currentColor` | `decoration-blue-500`                                                                                                                 | `{ decorationColor: 'blue-500' }`   |                                                               |
-| **Arbitrary**      | `text-decoration: (value)`            | `decoration-[3px]`                                                                                                                    | `{ decorationThickness: '3px' }`    |                                                               |
-| **Var**            | `text-decoration: (value)`            | `decoration-(--v)`                                                                                                                    | `{ decorationThickness: '--v' }`    | **Sugar**: Auto-detects `--`.                                 |
-| **Bool underline** | `text-decoration-line: underline`     | `underline`                                                                                                                           | `{ underline: true }`               | **Sugar**. `false` = NOOP.                                    |
-| **Bool overline**  | `text-decoration-line: overline`      | `overline`                                                                                                                            | `{ overline: true }`                | **Sugar**. `false` = NOOP.                                    |
-| **Bool through**   | `text-decoration-line: line-through`  | `line-through`                                                                                                                        | `{ lineThrough: true }`             | **Sugar**. `false` = NOOP.                                    |
-| **Bool reset**     | `text-decoration-line: none`          | `no-underline`                                                                                                                        | `{ noUnderline: true }`             | **Sugar**. Resets ALL decoration. Use for responsive reset.   |
+| Concept           | CSS Rule                                       | Tailwind v4 Class                                                                                                                     | `sz` Prop (Object Syntax)           | Note                                                          |
+| :---------------- | :--------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------- | :------------------------------------------------------------ |
+| **Line (string)** | `text-decoration-line: underline`              | `underline`, `overline`, `line-through`, `no-underline`                                                                               | `{ decoration: 'underline' }` etc.  | String key. `'none'` → `no-underline` (resets ALL decoration) |
+| **Style**         | `text-decoration-style: solid`                 | `decoration-solid`, `decoration-dashed`, `decoration-dotted`, `decoration-double`, `decoration-wavy`                                  | `{ decorationStyle: 'solid' }` etc. |                                                               |
+| **Thickness**     | `text-decoration-thickness: auto`              | `decoration-0`, `decoration-1`, `decoration-2`, `decoration-4`, `decoration-8`, `decoration-auto`, `decoration-from-font`             | `{ decorationThickness: 1 }` etc.   |                                                               |
+| **Offset**        | `text-underline-offset: auto`                  | `underline-offset-0`, `underline-offset-1`, `underline-offset-2`, `underline-offset-4`, `underline-offset-8`, `underline-offset-auto` | `{ underlineOffset: 1 }` etc.       |                                                               |
+| **Color**         | `text-decoration-color: var(--color-blue-500)` | `decoration-blue-500`                                                                                                                 | `{ decorationColor: 'blue-500' }`   |                                                               |
+| **Arbitrary**     | `text-decoration: (value)`                     | `decoration-[3px]`                                                                                                                    | `{ decorationThickness: '3px' }`    |                                                               |
+| **Var**           | `text-decoration: (value)`                     | `decoration-(--v)`                                                                                                                    | `{ decorationThickness: '--v' }`    | **Sugar**: Auto-detects `--`.                                 |
 
 ## Text Transform
 
 Controlling the capitalization of text.
 
-| Concept             | CSS Rule                    | Tailwind v4 Class                                     | `sz` Prop (Object Syntax)             | Note                                   |
-| :------------------ | :-------------------------- | :---------------------------------------------------- | :------------------------------------ | :------------------------------------- |
-| **Transform**       | `text-transform: uppercase` | `uppercase`, `lowercase`, `capitalize`, `normal-case` | `{ textTransform: 'uppercase' }` etc. |                                        |
-| **Boolean (Sugar)** | `text-transform: uppercase` | `uppercase`                                           | `{ uppercase: true }`                 | **Sugar**. Overwrites `textTransform`. |
+| Concept       | CSS Rule                    | Tailwind v4 Class                                     | `sz` Prop (Object Syntax)                                                       | Note                   |
+| :------------ | :-------------------------- | :---------------------------------------------------- | :------------------------------------------------------------------------------ | :--------------------- |
+| **Transform** | `text-transform: uppercase` | `uppercase`, `lowercase`, `capitalize`, `normal-case` | `{ textTransform: 'uppercase' }` (also `'lowercase'`, `'capitalize'`, `'none'`) | `'none'` → normal-case |
 
 ## Text Overflow & Whitespace
 

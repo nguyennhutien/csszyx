@@ -115,7 +115,7 @@ Standard interactive states.
 | **Odd/Even Child**       | `odd:bg-white even:bg-gray`                  | `{ odd: { bg: 'white' }, even: { bg: 'gray' } }`                           |                             |
 | **First of Type**        | `first-of-type:block`                        | `{ firstOfType: { display: 'block' } }`                                    | **Sugar**: CamelCase alias. |
 | **Only Child**           | `only:block`                                 | `{ only: { display: 'block' } }`                                           |                             |
-| **Empty**                | `empty:hidden`                               | `{ empty: { hidden: true } }`                                              |                             |
+| **Empty**                | `empty:hidden`                               | `{ empty: { display: 'none' } }`                                           |                             |
 | **Visited**              | `visited:text-purple`                        | `{ visited: { color: 'purple' } }`                                         |                             |
 | **Focus Within**         | `focus-within:ring`                          | `{ focusWithin: { ring: true } }`                                          | **Sugar**: CamelCase alias. |
 | **Focus Visible**        | `focus-visible:ring`                         | `{ focusVisible: { ring: true } }`                                         | **Sugar**: CamelCase alias. |
@@ -178,16 +178,16 @@ Inverse conditions.
 
 Advanced content styling.
 
-| Concept          | Tailwind v4 Class       | `sz` Prop (Object Syntax)            | Note                  |
-| :--------------- | :---------------------- | :----------------------------------- | :-------------------- |
-| **Before/After** | `before:content-['']`   | `{ before: { (etc) } }`              | Defaults used.        |
-| **Placeholder**  | `placeholder:text-gray` | `{ placeholder: { color: 'gray' } }` |                       |
-| **File**         | `file:border`           | `{ file: { border: true } }`         |                       |
-| **Marker**       | `marker:text-blue`      | `{ marker: { color: 'blue' } }`      |                       |
-| **Selection**    | `selection:bg-pink`     | `{ selection: { bg: 'pink' } }`      |                       |
-| **First Line**   | `first-line:uppercase`  | `{ firstLine: { uppercase: true } }` | **Sugar**: CamelCase. |
-| **First Letter** | `first-letter:text-7xl` | `{ firstLetter: { text: '7xl' } }`   | **Sugar**: CamelCase. |
-| **Backdrop**     | `backdrop:blur`         | `{ backdrop: { blur: true } }`       |                       |
+| Concept          | Tailwind v4 Class       | `sz` Prop (Object Syntax)                       | Note                  |
+| :--------------- | :---------------------- | :---------------------------------------------- | :-------------------- |
+| **Before/After** | `before:content-['']`   | `{ before: { (etc) } }`                         | Defaults used.        |
+| **Placeholder**  | `placeholder:text-gray` | `{ placeholder: { color: 'gray' } }`            |                       |
+| **File**         | `file:border`           | `{ file: { border: true } }`                    |                       |
+| **Marker**       | `marker:text-blue`      | `{ marker: { color: 'blue' } }`                 |                       |
+| **Selection**    | `selection:bg-pink`     | `{ selection: { bg: 'pink' } }`                 |                       |
+| **First Line**   | `first-line:uppercase`  | `{ firstLine: { textTransform: 'uppercase' } }` | **Sugar**: CamelCase. |
+| **First Letter** | `first-letter:text-7xl` | `{ firstLetter: { text: '7xl' } }`              | **Sugar**: CamelCase. |
+| **Backdrop**     | `backdrop:blur`         | `{ backdrop: { blur: true } }`                  |                       |
 
 ## Media & Feature Queries
 
@@ -197,7 +197,7 @@ Environment-based styling.
 | :-------------------- | :-------------------------------- | :------------------------------------------------------------ | :---------------------------- |
 | **Breakpoints**       | `md:block lg:flex`                | `{ md: { display: 'block' }, lg: { display: 'flex' } }`       |                               |
 | **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { display: 'block' }, '@lg': { display: 'flex' } }` | **Note**: String key for `@`. |
-| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { hidden: true } }`                          | **Sugar**: CamelCase.         |
+| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { display: 'none' } }`                       | **Sugar**: CamelCase.         |
 | **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                          |                               |
 | **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`                   | **Sugar**: CamelCase.         |
 | **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`                        | **Sugar**: CamelCase.         |
@@ -206,10 +206,10 @@ Environment-based styling.
 | **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`                 | v4.1. Form validation state.  |
 | **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`                 | v4.1. Form validation state.  |
 | **Details Content**   | `details-content:block`           | `{ detailsContent: { display: 'block' } }`                    | v4.1. **Sugar**: CamelCase.   |
-| **Print**             | `print:hidden`                    | `{ print: { hidden: true } }`                                 |                               |
-| **Orientation**       | `portrait:hidden`                 | `{ portrait: { hidden: true } }`                              |                               |
+| **Print**             | `print:hidden`                    | `{ print: { display: 'none' } }`                              |                               |
+| **Orientation**       | `portrait:hidden`                 | `{ portrait: { display: 'none' } }`                           |                               |
 | **Scripting**         | `noscript:block`                  | `{ noscript: { display: 'block' } }`                          |                               |
-| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { grid: true } } }`            |                               |
+| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { display: 'grid' } } }`       |                               |
 | **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                                |                               |
 
 ## Attribute Selectors

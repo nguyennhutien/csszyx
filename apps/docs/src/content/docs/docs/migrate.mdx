@@ -110,7 +110,7 @@ property instead of boolean sugar:
 | `inline-flex` | `{ display: 'inline-flex' }` |
 | `hidden` | `{ display: 'none' }` |
 
-Manual `sz` authoring can still use sugar such as `{ flex: true }`, but the
+Boolean sugar such as `{ flex: true }` was removed; use `{ display: 'flex' }`. The
 migration output is canonical so duplicate display classes share one object key
 surface. If a class list contains conflicting display utilities in the same
 variant scope, csszyx fails closed and leaves those classes in `className` /

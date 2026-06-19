@@ -37,42 +37,43 @@ Tailwind class names map to camelCase sz prop keys:
 | `flex` | `{ display: 'flex' }` |
 | `hidden` | `{ display: 'none' }` |
 
-## Canonical vs Boolean Sugar
+## One key per property
 
-Props that set a single CSS property — `display`, `position`, `visibility`,
-`isolation` — have a **canonical form** (the CSS property name with a value)
-and a **boolean-sugar form** (one alias per value). Prefer the canonical form;
-it is the default this guide uses everywhere.
+Props that set a single CSS property are written with their **canonical key and
+a value** — one way, no aliases:
+
+| CSS property | sz key | Example |
+|---|---|---|
+| display | `display` | `{ display: 'flex' }`, `{ display: 'none' }` |
+| position | `position` | `{ position: 'absolute' }` |
+| visibility | `visibility` | `{ visibility: 'hidden' }` |
+| isolation | `isolation` | `{ isolation: 'isolate' }` |
+| text-transform | `textTransform` | `{ textTransform: 'uppercase' }` |
+| font-style | `fontStyle` | `{ fontStyle: 'italic' }` |
+| font-smoothing | `fontSmoothing` | `{ fontSmoothing: 'grayscale' }` |
+| text-decoration-line | `decoration` | `{ decoration: 'underline' }` |
 
 ```tsx
-// Canonical — recommended
-<div sz={{ display: 'flex', position: 'absolute', visibility: 'hidden' }} />
-
-// Boolean sugar — equivalent, but one key per value
-<div sz={{ flex: true, absolute: true, invisible: true }} />
+<div sz={{ display: 'flex', position: 'absolute', fontStyle: 'italic' }} />
 ```
 
-Both compile to the same classes. The canonical form keeps one key per CSS
-property, so it reads like CSS and there is no second alias to remember.
-
-:::caution[Don't mix both forms for the same property]
-Setting a property through both the canonical key and a sugar alias emits
-duplicate/conflicting classes — `{ position: 'absolute', relative: true }`
-yields `absolute relative`. Pick one form per property.
+:::caution[Boolean sugar was removed]
+Earlier versions accepted boolean aliases like `{ flex: true }`, `{ absolute: true }`,
+`{ italic: true }`. These are **removed** — they emit nothing and warn in dev.
+Use the canonical key above, or run `csszyx migrate` to rewrite them automatically.
+Because each property has exactly one key, the same property can never be set
+twice in one object.
 :::
 
-### Sugar-only utilities
+### True boolean utilities
 
-Some utilities are genuinely on/off and have no single-property canonical form —
-keep these as booleans:
+Some utilities are genuinely on/off — not a value of a single property — and stay
+boolean: composite helpers (`truncate`, `srOnly`), stackable font-variant-numeric
+flags (`ordinal`, `tabularNums`), default-or-value toggles (`grow`, `ring`,
+`blur`), and plugin components (`container`, `prose`).
 
 ```tsx
-<div sz={{
-  truncate: true,    // overflow + text-overflow + white-space
-  uppercase: true,   // text-transform: uppercase
-  italic: true,      // font-style: italic
-  srOnly: true,      // visually-hidden helper
-}} />
+<div sz={{ truncate: true, tabularNums: true, grow: true, container: true }} />
 ```
 
 ## Nested Variants
