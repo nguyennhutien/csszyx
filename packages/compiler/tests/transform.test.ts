@@ -17,13 +17,13 @@ describe('transform', () => {
         expect(result.className).toBe('bg-red-500 text-white');
     });
 
-    it('should transform boolean true to property name', () => {
-        const result = transform({ flex: true, block: true });
-        expect(result.className).toBe('flex block');
+    it('should transform a kept boolean shorthand to its class', () => {
+        const result = transform({ truncate: true, grow: true });
+        expect(result.className).toBe('truncate grow');
     });
 
     it('should skip boolean false values', () => {
-        const result = transform({ p: 4, hidden: false, m: 2 });
+        const result = transform({ p: 4, m: 2, grow: false });
         expect(result.className).toBe('p-4 m-2');
     });
 
@@ -59,7 +59,7 @@ describe('transform', () => {
         const result = transform({
             p: 4,
             bg: 'red-500',
-            flex: true,
+            display: 'flex',
             hidden: false,
             hover: {
                 bg: 'blue-600',
@@ -154,7 +154,7 @@ describe('unknown property warnings', () => {
 
     it('should not warn for known properties', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        transform({ p: 4, bg: 'blue-500', flex: true });
+        transform({ p: 4, bg: 'blue-500', display: 'flex' });
         expect(warnSpy).not.toHaveBeenCalled();
         warnSpy.mockRestore();
     });

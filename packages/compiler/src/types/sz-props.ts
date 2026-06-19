@@ -307,34 +307,13 @@ export interface LayoutProps {
         | 'list-item'
         | 'none';
 
-    /** Boolean sugar for display: block */
-    block?: boolean;
-    /** Boolean sugar for display: inline-block */
-    inlineBlock?: boolean;
-    /** Boolean sugar for display: inline */
-    inline?: boolean;
-    /** Boolean sugar for display: flex */
-    flex?: boolean | 'auto' | 'initial' | 'none' | 1 | (string & {});
-    /** Boolean sugar for display: inline-flex */
-    inlineFlex?: boolean;
-    /** Boolean sugar for display: grid */
-    grid?: boolean;
-    /** Boolean sugar for display: inline-grid */
-    inlineGrid?: boolean;
-    /** Boolean sugar for display: table */
-    table?: boolean;
-    /** Boolean sugar for display: table-row */
-    tableRow?: boolean;
-    /** Boolean sugar for display: table-cell */
-    tableCell?: boolean;
-    /** Boolean sugar for display: flow-root */
-    flowRoot?: boolean;
-    /** Boolean sugar for display: list-item */
-    listItem?: boolean;
-    /** Boolean sugar for display: contents */
-    contents?: boolean;
-    /** Boolean sugar for display: hidden/none */
-    hidden?: boolean;
+    /**
+     * Flex shorthand (flex-grow/shrink/basis). `flex: 1` → flex-1,
+     * `flex: 'auto'` → flex-auto. This is NOT the removed `display: flex` sugar —
+     * for display use `display: 'flex'`.
+     * @see https://tailwindcss.com/docs/flex
+     */
+    flex?: 'auto' | 'initial' | 'none' | number | (string & {});
     /** Boolean sugar for sr-only */
     srOnly?: boolean;
     /** Boolean sugar for not-sr-only */
@@ -354,7 +333,6 @@ export interface LayoutProps {
 
     /** @see https://tailwindcss.com/docs/isolation */
     isolation?: 'isolate' | 'auto';
-    isolate?: boolean;
 
     /** @see https://tailwindcss.com/docs/object-fit */
     objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
@@ -384,11 +362,6 @@ export interface LayoutProps {
 
     /** @see https://tailwindcss.com/docs/position */
     position?: 'static' | 'fixed' | 'absolute' | 'relative' | 'sticky';
-    static?: boolean;
-    fixed?: boolean;
-    absolute?: boolean;
-    relative?: boolean;
-    sticky?: boolean;
 
     /** @see https://tailwindcss.com/docs/top-right-bottom-left */
     inset?: SpacingValue;
@@ -411,9 +384,6 @@ export interface LayoutProps {
 
     /** @see https://tailwindcss.com/docs/visibility */
     visibility?: 'visible' | 'hidden' | 'collapse';
-    visible?: boolean;
-    invisible?: boolean;
-    collapse?: boolean;
 
     /** @see https://tailwindcss.com/docs/z-index */
     z?: 'auto' | 0 | 10 | 20 | 30 | 40 | 50 | number | (string & {});
@@ -931,13 +901,19 @@ export interface TypographyProps {
         | '9xl'
         | (string & {});
 
-    /** @see https://tailwindcss.com/docs/font-smoothing */
-    antialiased?: boolean;
-    subpixelAntialiased?: boolean;
+    /**
+     * Font smoothing. `'grayscale'` → antialiased, `'subpixel'` → subpixel-antialiased.
+     * The values name the rendering technique. (Distinct from the `grayscale` filter.)
+     * @see https://tailwindcss.com/docs/font-smoothing
+     */
+    fontSmoothing?: 'grayscale' | 'subpixel';
 
-    /** @see https://tailwindcss.com/docs/font-style */
-    italic?: boolean;
-    notItalic?: boolean;
+    /**
+     * Font style. `'italic'` → italic, `'normal'` → not-italic. Tailwind models
+     * only these two; for oblique use `css: { fontStyle: 'oblique 10deg' }`.
+     * @see https://tailwindcss.com/docs/font-style
+     */
+    fontStyle?: 'italic' | 'normal';
 
     /** @see https://tailwindcss.com/docs/font-weight */
     fontWeight?:
@@ -1025,12 +1001,12 @@ export interface TypographyProps {
     /** @see https://tailwindcss.com/docs/text-color */
     color?: ColorPropValue;
 
-    /** @see https://tailwindcss.com/docs/text-decoration */
-    underline?: boolean;
-    overline?: boolean;
-    lineThrough?: boolean;
-    noUnderline?: boolean;
-    /** String-keyed text-decoration prop for arbitrary values */
+    /**
+     * Text decoration line. `'underline'`, `'overline'`, `'line-through'`,
+     * `'none'` (→ no-underline). Decoration color/style/thickness are separate
+     * keys (decorationColor/decorationStyle/decorationThickness).
+     * @see https://tailwindcss.com/docs/text-decoration-line
+     */
     decoration?: 'underline' | 'overline' | 'line-through' | 'none' | (string & {});
 
     /** @see https://tailwindcss.com/docs/text-decoration-color */
@@ -1045,11 +1021,12 @@ export interface TypographyProps {
     /** @see https://tailwindcss.com/docs/text-underline-offset */
     underlineOffset?: 'auto' | 0 | 1 | 2 | 4 | 8 | (string & {});
 
-    /** @see https://tailwindcss.com/docs/text-transform */
-    uppercase?: boolean;
-    lowercase?: boolean;
-    capitalize?: boolean;
-    normalCase?: boolean;
+    /**
+     * Text transform. `'uppercase'`, `'lowercase'`, `'capitalize'`,
+     * `'none'` (→ normal-case).
+     * @see https://tailwindcss.com/docs/text-transform
+     */
+    textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
 
     /** @see https://tailwindcss.com/docs/text-overflow */
     truncate?: boolean;

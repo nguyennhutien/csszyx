@@ -112,24 +112,24 @@ describe('group variant', () => {
 
     // --- Group with has ---
     it('group-has-[a]', () => {
-        expect(t({ group: { has: { a: { block: true } } } })).toBe('group-has-[a]:block');
+        expect(t({ group: { has: { a: { display: 'block' } } } })).toBe('group-has-[a]:block');
     });
 
     it('group-has with multiple selectors', () => {
-        const result = t({ group: { has: { img: { hidden: true }, a: { block: true } } } });
+        const result = t({ group: { has: { img: { display: 'none' }, a: { display: 'block' } } } });
         expect(result).toContain('group-has-[img]:hidden');
         expect(result).toContain('group-has-[a]:block');
     });
 
     // --- Arbitrary selector ---
     it('arbitrary: group-[.is-published]', () => {
-        expect(t({ group: { '.is-published': { block: true } } })).toBe(
+        expect(t({ group: { '.is-published': { display: 'block' } } })).toBe(
             'group-[.is-published]:block',
         );
     });
 
     it('arbitrary: group-[#main]', () => {
-        expect(t({ group: { '#main': { flex: true } } })).toBe('group-[#main]:flex');
+        expect(t({ group: { '#main': { display: 'flex' } } })).toBe('group-[#main]:flex');
     });
 
     it('arbitrary: group-[[data-active]]', () => {
@@ -158,7 +158,7 @@ describe('group variant', () => {
     });
 
     it('group-data-[closed]: closed state', () => {
-        expect(t({ group: { data: { closed: { hidden: true } } } })).toBe(
+        expect(t({ group: { data: { closed: { display: 'none' } } } })).toBe(
             'group-data-[closed]:hidden',
         );
     });
@@ -189,7 +189,7 @@ describe('group variant', () => {
     });
 
     it('group-data-[orientation=horizontal]: Radix orientation', () => {
-        expect(t({ group: { data: { 'orientation=horizontal': { flex: true } } } })).toBe(
+        expect(t({ group: { data: { 'orientation=horizontal': { display: 'flex' } } } })).toBe(
             'group-data-[orientation=horizontal]:flex',
         );
     });
@@ -215,7 +215,7 @@ describe('group variant', () => {
     });
 
     it('group-aria-expanded', () => {
-        expect(t({ group: { aria: { expanded: { block: true } } } })).toBe(
+        expect(t({ group: { aria: { expanded: { display: 'block' } } } })).toBe(
             'group-aria-expanded:block',
         );
     });
@@ -234,7 +234,7 @@ describe('group variant', () => {
     });
 
     it('peer-data-[state=open]: value match', () => {
-        expect(t({ peer: { data: { 'state=open': { block: true } } } })).toBe(
+        expect(t({ peer: { data: { 'state=open': { display: 'block' } } } })).toBe(
             'peer-data-[state=open]:block',
         );
     });
@@ -273,7 +273,9 @@ describe('peer variant', () => {
     });
 
     it('peer-has-[a]', () => {
-        expect(t({ peer: { has: { a: { underline: true } } } })).toBe('peer-has-[a]:underline');
+        expect(t({ peer: { has: { a: { decoration: 'underline' } } } })).toBe(
+            'peer-has-[a]:underline',
+        );
     });
 });
 
@@ -304,7 +306,7 @@ describe('not variant', () => {
 
     // --- Nested supports ---
     it('not-supports-[display:grid]', () => {
-        expect(t({ not: { supports: { 'display:grid': { block: true } } } })).toBe(
+        expect(t({ not: { supports: { 'display:grid': { display: 'block' } } } })).toBe(
             'not-supports-[display:grid]:block',
         );
     });
@@ -422,7 +424,7 @@ describe('aria variant', () => {
 
 describe('supports variant', () => {
     it('supports-[display:grid]', () => {
-        expect(t({ supports: { 'display:grid': { grid: true } } })).toBe(
+        expect(t({ supports: { 'display:grid': { display: 'grid' } } })).toBe(
             'supports-[display:grid]:grid',
         );
     });
@@ -461,7 +463,7 @@ describe('container queries', () => {
 
     // --- Container query breakpoints ---
     it('@md:flex', () => {
-        expect(t({ '@md': { flex: true } })).toBe('@md:flex');
+        expect(t({ '@md': { display: 'flex' } })).toBe('@md:flex');
     });
 
     it('@lg:grid-cols-3', () => {
@@ -469,35 +471,35 @@ describe('container queries', () => {
     });
 
     it('@sm:hidden', () => {
-        expect(t({ '@sm': { hidden: true } })).toBe('@sm:hidden');
+        expect(t({ '@sm': { display: 'none' } })).toBe('@sm:hidden');
     });
 
     // --- Named container query ---
     it('@md/sidebar:flex', () => {
-        expect(t({ '@md': { sidebar: { flex: true } } })).toBe('@md/sidebar:flex');
+        expect(t({ '@md': { sidebar: { display: 'flex' } } })).toBe('@md/sidebar:flex');
     });
 
     // --- Arbitrary container breakpoint ---
     it('@min-[475px]:flex', () => {
-        expect(t({ '@min': { '[475px]': { flex: true } } })).toBe('@min-[475px]:flex');
+        expect(t({ '@min': { '[475px]': { display: 'flex' } } })).toBe('@min-[475px]:flex');
     });
 
     it('@max-[640px]:hidden', () => {
-        expect(t({ '@max': { '[640px]': { hidden: true } } })).toBe('@max-[640px]:hidden');
+        expect(t({ '@max': { '[640px]': { display: 'none' } } })).toBe('@max-[640px]:hidden');
     });
 
     // Bracket-free keys: compiler auto-wraps in []
     it('@min bracket-free: @min-[475px]:flex', () => {
-        expect(t({ '@min': { '475px': { flex: true } } })).toBe('@min-[475px]:flex');
+        expect(t({ '@min': { '475px': { display: 'flex' } } })).toBe('@min-[475px]:flex');
     });
 
     it('@max bracket-free: @max-[640px]:hidden', () => {
-        expect(t({ '@max': { '640px': { hidden: true } } })).toBe('@max-[640px]:hidden');
+        expect(t({ '@max': { '640px': { display: 'none' } } })).toBe('@max-[640px]:hidden');
     });
 
     // --- Multiple container properties ---
     it('multiple @md properties', () => {
-        const result = t({ '@md': { flex: true, gap: 4 } });
+        const result = t({ '@md': { display: 'flex', gap: 4 } });
         expect(result).toContain('@md:flex');
         expect(result).toContain('@md:gap-4');
     });
@@ -509,11 +511,11 @@ describe('container queries', () => {
 
 describe('min/max breakpoints', () => {
     it('min-md:flex', () => {
-        expect(t({ min: { md: { flex: true } } })).toBe('min-md:flex');
+        expect(t({ min: { md: { display: 'flex' } } })).toBe('min-md:flex');
     });
 
     it('max-lg:hidden', () => {
-        expect(t({ max: { lg: { hidden: true } } })).toBe('max-lg:hidden');
+        expect(t({ max: { lg: { display: 'none' } } })).toBe('max-lg:hidden');
     });
 
     it('min-[320px]:p-2', () => {

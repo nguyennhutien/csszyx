@@ -8,7 +8,8 @@ use std::borrow::Cow;
 
 use super::{
     generated::tables::{
-        boolean_class, is_aria_state, is_known_variant, property_prefix, variant_prefix,
+        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar, property_prefix,
+        variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzValue,
 };
@@ -446,14 +447,14 @@ fn lower_group_peer_variant(
     }
 }
 
-fn false_boolean_class(key: &str) -> Option<&'static str> {
-    match key {
-        "italic" => Some("not-italic"),
-        "antialiased" => Some("subpixel-antialiased"),
-        _ => None,
-    }
+const fn false_boolean_class(_key: &str) -> Option<&'static str> {
+    // The italic/antialiased `false` aliases were removed along with the boolean
+    // sugar. Use the canonical key with a value instead ({ fontStyle: 'normal' },
+    // { fontSmoothing: 'subpixel' }). No key currently maps a `false` to a class.
+    None
 }
 
+#[allow(clippy::too_many_lines)]
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
         let ms = match value {
@@ -470,6 +471,10 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
         property_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed);
 
     match value {
+        // Removed boolean-sugar aliases (flex/absolute/italic/...): emit nothing.
+        // The canonical key with a value is the only spelling now. Guarded on the
+        // `true` form so the flex shorthand (`flex: 1`, handled below) is untouched.
+        StaticSzValue::Boolean(true) if is_removed_boolean_sugar(key) => None,
         StaticSzValue::Boolean(true) => Some(format!(
             "{prefix}{}",
             boolean_class(key).unwrap_or_else(|| class_key.as_ref())
@@ -518,6 +523,40 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                     format!("{prefix}isolate")
                 } else {
                     format!("{prefix}isolation-{value}")
+                });
+            }
+            // Single-property typography utilities carry their value as a bare
+            // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),
+            // mirroring the Babel/oxc transform. The boolean-sugar aliases were
+            // removed, so these canonical string forms are the only spelling.
+            if key == "textTransform" {
+                return Some(match value.as_str() {
+                    "none" | "normal-case" => format!("{prefix}normal-case"),
+                    "uppercase" | "lowercase" | "capitalize" => format!("{prefix}{value}"),
+                    _ => return None,
+                });
+            }
+            if key == "fontStyle" {
+                return Some(match value.as_str() {
+                    "italic" => format!("{prefix}italic"),
+                    "normal" => format!("{prefix}not-italic"),
+                    _ => return None,
+                });
+            }
+            if key == "fontSmoothing" {
+                return Some(match value.as_str() {
+                    "grayscale" => format!("{prefix}antialiased"),
+                    "subpixel" => format!("{prefix}subpixel-antialiased"),
+                    _ => return None,
+                });
+            }
+            if key == "decoration" {
+                return Some(match value.as_str() {
+                    "none" => format!("{prefix}no-underline"),
+                    "underline" | "overline" | "line-through" | "no-underline" => {
+                        format!("{prefix}{value}")
+                    }
+                    _ => return None,
                 });
             }
             // Bare numeric fractions (1/2, 3/4) are sizing values, not the
@@ -932,7 +971,7 @@ mod tests {
             properties: vec![
                 property("p", StaticSzValue::Number(4.0)),
                 property("bg", StaticSzValue::String("red-500".to_string())),
-                property("italic", StaticSzValue::Boolean(true)),
+                property("fontStyle", StaticSzValue::String("italic".to_string())),
             ],
         };
 
@@ -947,7 +986,7 @@ mod tests {
         let object = StaticSzObject {
             properties: vec![
                 property("start", StaticSzValue::Number(4.0)),
-                property("inlineBlock", StaticSzValue::Boolean(true)),
+                property("display", StaticSzValue::String("inline-block".to_string())),
                 property("bgImg", StaticSzValue::String("url(/hero.png)".to_string())),
             ],
         };
@@ -1170,16 +1209,61 @@ mod tests {
     }
 
     #[test]
-    fn lowers_negative_and_false_boolean_special_cases() {
+    fn lowers_negative_and_skips_false_booleans() {
+        // A `false` value emits nothing. The italic/antialiased `false` aliases
+        // were removed with the boolean sugar — use { fontStyle: 'normal' }.
         let object = StaticSzObject {
             properties: vec![
                 property("m", StaticSzValue::Number(-2.0)),
-                property("italic", StaticSzValue::Boolean(false)),
-                property("hidden", StaticSzValue::Boolean(false)),
+                property("grow", StaticSzValue::Boolean(false)),
+                property("fontStyle", StaticSzValue::String("normal".to_string())),
             ],
         };
 
         assert_eq!(lower_static_sz_object(&object), ["-m-2", "not-italic"]);
+    }
+
+    #[test]
+    fn drops_removed_boolean_sugar_and_keeps_flex_shorthand() {
+        // { flex: true } (removed display sugar) emits nothing; { flex: 1 }
+        // (flex-grow shorthand) is untouched.
+        let removed = StaticSzObject {
+            properties: vec![
+                property("flex", StaticSzValue::Boolean(true)),
+                property("absolute", StaticSzValue::Boolean(true)),
+                property("italic", StaticSzValue::Boolean(true)),
+                property("p", StaticSzValue::Number(4.0)),
+            ],
+        };
+        assert_eq!(lower_static_sz_object(&removed), ["p-4"]);
+
+        let shorthand = StaticSzObject {
+            properties: vec![property("flex", StaticSzValue::Number(1.0))],
+        };
+        assert_eq!(lower_static_sz_object(&shorthand), ["flex-1"]);
+    }
+
+    #[test]
+    fn lowers_canonical_single_property_typography() {
+        let object = StaticSzObject {
+            properties: vec![
+                property(
+                    "textTransform",
+                    StaticSzValue::String("uppercase".to_string()),
+                ),
+                property("decoration", StaticSzValue::String("underline".to_string())),
+                property(
+                    "fontSmoothing",
+                    StaticSzValue::String("grayscale".to_string()),
+                ),
+                property("textTransform", StaticSzValue::String("none".to_string())),
+            ],
+        };
+        // Source order preserved; textTransform appears twice (last is the reset).
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["uppercase", "underline", "antialiased", "normal-case"]
+        );
     }
 
     #[test]

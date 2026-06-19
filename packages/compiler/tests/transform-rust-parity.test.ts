@@ -282,7 +282,7 @@ const fixtures: readonly RustParityFixture[] = [
     {
         name: 'sz-array-identifier-elements',
         source: [
-            'const layout = { flex: true, gap: 4 };',
+            'const layout = { display: "flex", gap: 4 };',
             'const color = { bg: "blue-500" };',
             'const X = () => <div sz={[layout, color]} />;',
         ].join('\n'),

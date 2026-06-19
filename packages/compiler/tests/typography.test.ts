@@ -105,20 +105,20 @@ describe('typography — font features', () => {
 });
 
 describe('typography — font style & smoothing', () => {
-    it('{ italic: true } → italic', () => {
-        expect(t({ italic: true })).toBe('italic');
+    it('{ fontStyle: "italic" } → italic', () => {
+        expect(t({ fontStyle: 'italic' })).toBe('italic');
     });
 
-    it('{ notItalic: true } → not-italic', () => {
-        expect(t({ notItalic: true })).toBe('not-italic');
+    it('{ fontStyle: "normal" } → not-italic', () => {
+        expect(t({ fontStyle: 'normal' })).toBe('not-italic');
     });
 
-    it('{ antialiased: true } → antialiased', () => {
-        expect(t({ antialiased: true })).toBe('antialiased');
+    it('{ fontSmoothing: "grayscale" } → antialiased', () => {
+        expect(t({ fontSmoothing: 'grayscale' })).toBe('antialiased');
     });
 
-    it('{ subpixelAntialiased: true } → subpixel-antialiased', () => {
-        expect(t({ subpixelAntialiased: true })).toBe('subpixel-antialiased');
+    it('{ fontSmoothing: "subpixel" } → subpixel-antialiased', () => {
+        expect(t({ fontSmoothing: 'subpixel' })).toBe('subpixel-antialiased');
     });
 });
 
@@ -232,20 +232,20 @@ describe('typography — text decoration', () => {
         expect(t({ decorationThickness: '--v' })).toBe('decoration-(--v)');
     });
 
-    it('{ underline: true } → underline', () => {
-        expect(t({ underline: true })).toBe('underline');
+    it('{ decoration: "underline" } → underline', () => {
+        expect(t({ decoration: 'underline' })).toBe('underline');
     });
 
-    it('{ overline: true } → overline', () => {
-        expect(t({ overline: true })).toBe('overline');
+    it('{ decoration: "overline" } → overline', () => {
+        expect(t({ decoration: 'overline' })).toBe('overline');
     });
 
-    it('{ lineThrough: true } → line-through', () => {
-        expect(t({ lineThrough: true })).toBe('line-through');
+    it('{ decoration: "line-through" } → line-through', () => {
+        expect(t({ decoration: 'line-through' })).toBe('line-through');
     });
 
-    it('{ noUnderline: true } → no-underline', () => {
-        expect(t({ noUnderline: true })).toBe('no-underline');
+    it('{ decoration: "none" } → no-underline', () => {
+        expect(t({ decoration: 'none' })).toBe('no-underline');
     });
 });
 
@@ -254,8 +254,8 @@ describe('typography — text transform', () => {
         expect(t({ textTransform: 'uppercase' })).toBe('uppercase');
     });
 
-    it('{ uppercase: true } → uppercase', () => {
-        expect(t({ uppercase: true })).toBe('uppercase');
+    it('{ textTransform: "uppercase" } → uppercase', () => {
+        expect(t({ textTransform: 'uppercase' })).toBe('uppercase');
     });
 });
 

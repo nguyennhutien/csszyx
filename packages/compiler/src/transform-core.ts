@@ -205,6 +205,10 @@ export const PROPERTY_MAP: Record<string, string> = {
     weight: 'font',
     fontFamily: 'font',
     fontStretch: 'font-stretch',
+    // fontStyle/fontSmoothing are emitted by closed direct-output handlers; the
+    // prefix here only marks them as known props (diagnostics, editor tooling).
+    fontStyle: 'font-style',
+    fontSmoothing: 'font-smoothing',
     textAlign: 'text',
     decoration: 'decoration',
     decorationColor: 'decoration',
@@ -231,6 +235,9 @@ export const PROPERTY_MAP: Record<string, string> = {
 
     // Flex & Grid
     basis: 'basis',
+    // `flex` is the flex shorthand (flex: 1 → flex-1, flex: 'auto' → flex-auto).
+    // The `flex: true` display sugar was removed (use display: 'flex').
+    flex: 'flex',
     flexDir: 'flex',
     flexWrap: 'flex',
     grow: 'grow',
@@ -468,9 +475,8 @@ export const SUGGESTION_MAP: Record<string, string> = {
     zIndex: 'z',
     // Typography
     font: 'fontWeight (for weight) or fontFamily (for family)',
-    fontStyle: 'italic/notItalic (boolean)',
     weight: 'fontWeight',
-    textDecoration: 'decoration or underline/lineThrough/noUnderline (boolean)',
+    textDecoration: 'decoration',
     textDecorationColor: 'decorationColor',
     textDecorationStyle: 'decorationStyle',
     textDecorationThickness: 'decorationThickness',
@@ -771,46 +777,17 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
+// Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
+// value-alias of a single mutually-exclusive CSS property: composite utilities
+// (truncate, srOnly), additive/stackable flags (font-variant-numeric, which
+// combine), default-or-value toggles (grow/ring/blur — true means the default,
+// a value means a specific one), plugin components (container/prose), and
+// directional reverse flags. Value-alias sugar for display/position/visibility/
+// isolation/text-transform/font-style/text-decoration-line/font-smoothing was
+// removed — those are written with their canonical key (see REMOVED_BOOLEAN_SUGAR).
 export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
-    // Display
-    'block',
-    'inline',
-    'inlineBlock',
-    'flex',
-    'inlineFlex',
-    'grid',
-    'inlineGrid',
-    'hidden',
-    'contents',
-    'table',
-    'tableRow',
-    'tableCell',
-    'flowRoot',
-    'listItem',
-    // Position
-    'static',
-    'fixed',
-    'absolute',
-    'relative',
-    'sticky',
-    // Visibility
-    'visible',
-    'invisible',
-    'collapse',
-    // Typography
+    // Typography (composite — no single-property canonical form)
     'truncate',
-    'uppercase',
-    'lowercase',
-    'capitalize',
-    'normalCase',
-    'underline',
-    'overline',
-    'lineThrough',
-    'noUnderline',
-    'italic',
-    'notItalic',
-    'antialiased',
-    'subpixelAntialiased',
     // Flexbox (grow/shrink only — flexWrap uses string values)
     'grow',
     'shrink',
@@ -829,10 +806,9 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     'proseInvert',
     'srOnly',
     'notSrOnly',
-    'isolate',
     'ordinal',
     'slashedZero',
-    // Font variant numeric
+    // Font variant numeric (additive — these combine, so they stay boolean flags)
     'liningNums',
     'oldstyleNums',
     'proportionalNums',
@@ -850,22 +826,61 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     'outline',
 ]);
 
+// Removed boolean-sugar keys → the canonical { key, value } they map to. Used
+// both for the dev-mode deprecation warning and the `csszyx migrate` codemod.
+// Setting any of these at build/runtime now emits no class and warns; authors
+// write the canonical form, which is a single key per CSS property so the same
+// property cannot be set twice in one object.
+export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string }> = {
+    // display
+    block: { key: 'display', value: 'block' },
+    inline: { key: 'display', value: 'inline' },
+    inlineBlock: { key: 'display', value: 'inline-block' },
+    flex: { key: 'display', value: 'flex' },
+    inlineFlex: { key: 'display', value: 'inline-flex' },
+    grid: { key: 'display', value: 'grid' },
+    inlineGrid: { key: 'display', value: 'inline-grid' },
+    hidden: { key: 'display', value: 'none' },
+    contents: { key: 'display', value: 'contents' },
+    table: { key: 'display', value: 'table' },
+    tableRow: { key: 'display', value: 'table-row' },
+    tableCell: { key: 'display', value: 'table-cell' },
+    flowRoot: { key: 'display', value: 'flow-root' },
+    listItem: { key: 'display', value: 'list-item' },
+    // position
+    static: { key: 'position', value: 'static' },
+    fixed: { key: 'position', value: 'fixed' },
+    absolute: { key: 'position', value: 'absolute' },
+    relative: { key: 'position', value: 'relative' },
+    sticky: { key: 'position', value: 'sticky' },
+    // visibility
+    visible: { key: 'visibility', value: 'visible' },
+    invisible: { key: 'visibility', value: 'hidden' },
+    collapse: { key: 'visibility', value: 'collapse' },
+    // isolation
+    isolate: { key: 'isolation', value: 'isolate' },
+    // text-transform
+    uppercase: { key: 'textTransform', value: 'uppercase' },
+    lowercase: { key: 'textTransform', value: 'lowercase' },
+    capitalize: { key: 'textTransform', value: 'capitalize' },
+    normalCase: { key: 'textTransform', value: 'none' },
+    // font-style
+    italic: { key: 'fontStyle', value: 'italic' },
+    notItalic: { key: 'fontStyle', value: 'normal' },
+    // text-decoration-line
+    underline: { key: 'decoration', value: 'underline' },
+    overline: { key: 'decoration', value: 'overline' },
+    lineThrough: { key: 'decoration', value: 'line-through' },
+    noUnderline: { key: 'decoration', value: 'none' },
+    // font-smoothing
+    antialiased: { key: 'fontSmoothing', value: 'grayscale' },
+    subpixelAntialiased: { key: 'fontSmoothing', value: 'subpixel' },
+};
+
 // ============================================================================
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
 const BOOLEAN_TO_CLASS: Record<string, string> = {
-    inlineBlock: 'inline-block',
-    inlineFlex: 'inline-flex',
-    inlineGrid: 'inline-grid',
-    tableRow: 'table-row',
-    tableCell: 'table-cell',
-    flowRoot: 'flow-root',
-    listItem: 'list-item',
-    normalCase: 'normal-case',
-    lineThrough: 'line-through',
-    noUnderline: 'no-underline',
-    notItalic: 'not-italic',
-    subpixelAntialiased: 'subpixel-antialiased',
     backdropBlur: 'backdrop-blur',
     backdropGrayscale: 'backdrop-grayscale',
     backdropInvert: 'backdrop-invert',
@@ -1561,75 +1576,6 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
 // ============================================================================
 
 /**
- * Boolean-sugar aliases mapped to the canonical single-property key they would
- * collide with. Setting a CSS property through both its canonical key and a
- * sugar alias in the same object emits duplicate/conflicting classes
- * (`{ position: 'absolute', relative: true }` → `absolute relative`), so a
- * dev-mode diagnostic flags it. Only aliases that represent one value of a
- * single CSS property belong here — genuinely on/off utilities (`truncate`,
- * `italic`, ...) have no canonical key to clash with.
- */
-const SHORTHAND_CANONICAL_KEY: Record<string, string> = {
-    // display
-    block: 'display',
-    inline: 'display',
-    inlineBlock: 'display',
-    flex: 'display',
-    inlineFlex: 'display',
-    grid: 'display',
-    inlineGrid: 'display',
-    hidden: 'display',
-    contents: 'display',
-    table: 'display',
-    tableRow: 'display',
-    tableCell: 'display',
-    flowRoot: 'display',
-    listItem: 'display',
-    // position
-    static: 'position',
-    fixed: 'position',
-    absolute: 'position',
-    relative: 'position',
-    sticky: 'position',
-    // visibility
-    visible: 'visibility',
-    invisible: 'visibility',
-    collapse: 'visibility',
-    // isolation
-    isolate: 'isolation',
-};
-
-/**
- * Dev-mode warning: a CSS property set by both its canonical key and a boolean
- * sugar alias in the same object emits duplicate/conflicting classes. The sugar
- * only counts when written as `true` — `{ flex: 1 }` is the flex shorthand, not
- * the `display: flex` sugar, so it never clashes with `display`.
- * @param szProp - The sz object being transformed.
- */
-function warnOnCanonicalSugarConflict(szProp: SzObject): void {
-    const canonicalPresent = new Set<string>();
-    const sugarByGroup = new Map<string, string>();
-    for (const [k, v] of Object.entries(szProp)) {
-        if (k === 'display' || k === 'position' || k === 'visibility' || k === 'isolation') {
-            canonicalPresent.add(k);
-        } else if (v === true) {
-            const group = SHORTHAND_CANONICAL_KEY[k];
-            if (group && !sugarByGroup.has(group)) {
-                sugarByGroup.set(group, k);
-            }
-        }
-    }
-    for (const group of canonicalPresent) {
-        const sugar = sugarByGroup.get(group);
-        if (sugar) {
-            console.warn(
-                `[csszyx] "${group}" is set by both the canonical key "${group}" and the boolean sugar "${sugar}" in the same sz object — this emits duplicate/conflicting classes. Use one form.`,
-            );
-        }
-    }
-}
-
-/**
  * Transforms a csszyx sz object into a Tailwind CSS className string and extracted attributes.
  *
  * @param {SzObject} szProp - The sz object from JSX
@@ -1647,31 +1593,32 @@ export function transform(
         return { className: '', attributes: {} };
     }
 
-    // Dev-mode: flag canonical/sugar collisions on the same CSS property.
-    if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
-        warnOnCanonicalSugarConflict(szProp);
-    }
-
     const classes: string[] = [];
     const attributes: Record<string, string> = {};
 
     for (const [rawKey, value] of Object.entries(szProp)) {
-        // Special handling for boolean false that maps to specific classes
-        // { italic: false } → not-italic
-        // { antialiased: false } → subpixel-antialiased
-        if (value === false) {
-            if (rawKey === 'italic') {
-                classes.push(`${prefix}not-italic`);
-            } else if (rawKey === 'antialiased') {
-                classes.push(`${prefix}subpixel-antialiased`);
-            }
-            // Skip other false values
+        // Skip false/null/undefined values (a false toggle emits nothing).
+        if (value === false || value === null || value === undefined) {
             continue;
         }
 
-        // Skip null/undefined values
-        if (value === null || value === undefined) {
-            continue;
+        // Removed boolean-sugar keys (flex/absolute/italic/...): emit nothing and,
+        // in dev, point to the canonical form. Only the boolean `true` form was sugar;
+        // `flex` also names the flex-grow shorthand (`flex: 1`, `flex: 'auto'`), which is
+        // NOT sugar and must pass through, so the intercept is guarded on `value === true`.
+        // The canonical key is one-per-property, so duplicates like
+        // { position:'absolute', relative:true } can no longer occur.
+        if (value === true) {
+            const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
+            if (removed) {
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                    console.warn(
+                        `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
+                            `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
+                    );
+                }
+                continue;
+            }
         }
 
         // ================================================================
@@ -2193,13 +2140,67 @@ export function transform(
                 }
             }
 
-            // textTransform: 'uppercase' | 'lowercase' | 'capitalize' | 'normal-case' → direct output
+            // textTransform: 'uppercase' | 'lowercase' | 'capitalize' | 'normal-case' → direct
+            // output. The CSS off-value `none` is accepted as an alias for normal-case (its
+            // Tailwind class), since text-transform: none is what normal-case emits.
             if (rawKey === 'textTransform') {
-                if (['uppercase', 'lowercase', 'capitalize', 'normal-case'].includes(value)) {
+                if (['uppercase', 'lowercase', 'capitalize'].includes(value)) {
                     className += value;
                     classes.push(className);
                     continue;
                 }
+                if (value === 'normal-case' || value === 'none') {
+                    className += 'normal-case';
+                    classes.push(className);
+                    continue;
+                }
+            }
+
+            // fontStyle: 'italic' → italic, 'normal' → not-italic. Tailwind only models these
+            // two; oblique has no class. The handler is closed — an unsupported value warns and
+            // emits nothing rather than falling through to a broken `font-style-*` class.
+            if (rawKey === 'fontStyle') {
+                if (value === 'italic') {
+                    className += 'italic';
+                    classes.push(className);
+                    continue;
+                }
+                if (value === 'normal') {
+                    className += 'not-italic';
+                    classes.push(className);
+                    continue;
+                }
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                    console.warn(
+                        `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
+                            `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
+                    );
+                }
+                continue;
+            }
+
+            // fontSmoothing: 'grayscale' → antialiased, 'subpixel' → subpixel-antialiased.
+            // Both set -webkit-/-moz- font-smoothing; the values name the rendering technique
+            // (grayscale vs subpixel/RGB) rather than Tailwind's misleading "antialiased" name.
+            // Closed handler — an unsupported value warns and emits nothing.
+            if (rawKey === 'fontSmoothing') {
+                if (value === 'grayscale') {
+                    className += 'antialiased';
+                    classes.push(className);
+                    continue;
+                }
+                if (value === 'subpixel') {
+                    className += 'subpixel-antialiased';
+                    classes.push(className);
+                    continue;
+                }
+                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                    console.warn(
+                        `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
+                            `'grayscale' or 'subpixel'.`,
+                    );
+                }
+                continue;
             }
 
             // fontVariant: 'normal-nums' | 'ordinal' | etc → direct output

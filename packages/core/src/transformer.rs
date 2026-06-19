@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
-use crate::transform::generated::tables::{boolean_class, property_prefix, variant_prefix};
+use crate::transform::generated::tables::{
+    boolean_class, is_removed_boolean_sugar, property_prefix, variant_prefix,
+};
 
 /// Value types supported by the sz prop.
 #[derive(Serialize, Deserialize, Debug)]
@@ -68,6 +70,9 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
     let class_key = property_prefix(key).unwrap_or(key);
 
     match value {
+        // Removed boolean-sugar aliases (flex/absolute/italic/...) emit nothing;
+        // the canonical key with a value is the only spelling now.
+        PrimitiveValue::Bool(true) if is_removed_boolean_sugar(key) => String::new(),
         PrimitiveValue::Bool(true) => {
             let class_name = boolean_class(key).unwrap_or(class_key);
             format!("{prefix}{class_name}")
@@ -101,6 +106,14 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
                 return String::new();
             }
 
+            // Single-property utilities carry their value as a bare Tailwind
+            // class (`flex`, `absolute`, `uppercase`, `italic`, `underline`,
+            // `antialiased`), not a `display-flex` prefix-value pair. Mirrors the
+            // static lowering path (transform/lower.rs).
+            if let Some(class_name) = single_property_class(key, s) {
+                return format!("{prefix}{class_name}");
+            }
+
             let is_negative = s.starts_with('-');
             let base_val = if is_negative { &s[1..] } else { s };
 
@@ -119,6 +132,53 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
                 format!("{prefix}{class_key}-{final_val}")
             }
         }
+    }
+}
+
+/// Maps a single-property utility (display/position/visibility/isolation/
+/// text-transform/font-style/font-smoothing/text-decoration-line) to its bare
+/// Tailwind class. Mirrors the string special-cases in transform/lower.rs and
+/// the TypeScript transform. Returns `None` for any other key or an unsupported
+/// value (which then warns/falls through at the TypeScript boundary).
+fn single_property_class(key: &str, value: &str) -> Option<String> {
+    match key {
+        "display" => Some(if value == "none" {
+            "hidden".to_string()
+        } else {
+            value.to_string()
+        }),
+        "position" => Some(value.to_string()),
+        "visibility" => Some(if value == "hidden" {
+            "invisible".to_string()
+        } else {
+            value.to_string()
+        }),
+        "isolation" => Some(if value == "isolate" {
+            "isolate".to_string()
+        } else {
+            format!("isolation-{value}")
+        }),
+        "textTransform" => match value {
+            "none" | "normal-case" => Some("normal-case".to_string()),
+            "uppercase" | "lowercase" | "capitalize" => Some(value.to_string()),
+            _ => None,
+        },
+        "fontStyle" => match value {
+            "italic" => Some("italic".to_string()),
+            "normal" => Some("not-italic".to_string()),
+            _ => None,
+        },
+        "fontSmoothing" => match value {
+            "grayscale" => Some("antialiased".to_string()),
+            "subpixel" => Some("subpixel-antialiased".to_string()),
+            _ => None,
+        },
+        "decoration" => match value {
+            "none" => Some("no-underline".to_string()),
+            "underline" | "overline" | "line-through" | "no-underline" => Some(value.to_string()),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -239,8 +299,8 @@ mod tests {
             SzValue::Primitive(PrimitiveValue::Number(4.0)),
         );
         obj.insert(
-            "inlineBlock".to_string(),
-            SzValue::Primitive(PrimitiveValue::Bool(true)),
+            "display".to_string(),
+            SzValue::Primitive(PrimitiveValue::String("inline-block".to_string())),
         );
 
         let mut classes = Vec::new();
@@ -248,6 +308,52 @@ mod tests {
 
         assert!(classes.contains(&"inset-s-4".to_string()));
         assert!(classes.contains(&"inline-block".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_drops_removed_sugar_and_lowers_canonical() {
+        // Removed boolean sugar emits nothing at runtime; the canonical string
+        // forms emit the bare utility; the flex shorthand is untouched.
+        let mut obj = HashMap::new();
+        obj.insert(
+            "flex".to_string(),
+            SzValue::Primitive(PrimitiveValue::Bool(true)),
+        );
+        obj.insert(
+            "italic".to_string(),
+            SzValue::Primitive(PrimitiveValue::Bool(true)),
+        );
+        let mut removed = Vec::new();
+        process_sz_object(&obj, "", &mut removed);
+        assert!(removed.is_empty(), "removed sugar must emit nothing");
+
+        let cases = [
+            ("display", "flex", "flex"),
+            ("position", "absolute", "absolute"),
+            ("fontStyle", "italic", "italic"),
+            ("decoration", "underline", "underline"),
+            ("fontSmoothing", "grayscale", "antialiased"),
+            ("textTransform", "uppercase", "uppercase"),
+        ];
+        for (key, value, expected) in cases {
+            let mut single = HashMap::new();
+            single.insert(
+                key.to_string(),
+                SzValue::Primitive(PrimitiveValue::String(value.to_string())),
+            );
+            let mut out = Vec::new();
+            process_sz_object(&single, "", &mut out);
+            assert_eq!(out, [expected.to_string()], "{key}: {value}");
+        }
+
+        let mut shorthand = HashMap::new();
+        shorthand.insert(
+            "flex".to_string(),
+            SzValue::Primitive(PrimitiveValue::Number(1.0)),
+        );
+        let mut out = Vec::new();
+        process_sz_object(&shorthand, "", &mut out);
+        assert_eq!(out, ["flex-1".to_string()]);
     }
 
     #[test]

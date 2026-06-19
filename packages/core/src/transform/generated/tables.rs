@@ -142,6 +142,8 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "weight" => Some("font"),
         "fontFamily" => Some("font"),
         "fontStretch" => Some("font-stretch"),
+        "fontStyle" => Some("font-style"),
+        "fontSmoothing" => Some("font-smoothing"),
         "textAlign" => Some("text"),
         "decoration" => Some("decoration"),
         "decorationColor" => Some("decoration"),
@@ -166,6 +168,7 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "listPos" => Some("list"),
         "listImg" => Some("list-image"),
         "basis" => Some("basis"),
+        "flex" => Some("flex"),
         "flexDir" => Some("flex"),
         "flexWrap" => Some("flex"),
         "grow" => Some("grow"),
@@ -362,18 +365,6 @@ pub(crate) fn variant_prefix(key: &str) -> Option<&'static str> {
 /// Lookup emitted classes for boolean shorthand keys with custom class names.
 pub(crate) fn boolean_class(key: &str) -> Option<&'static str> {
     match key {
-        "inlineBlock" => Some("inline-block"),
-        "inlineFlex" => Some("inline-flex"),
-        "inlineGrid" => Some("inline-grid"),
-        "tableRow" => Some("table-row"),
-        "tableCell" => Some("table-cell"),
-        "flowRoot" => Some("flow-root"),
-        "listItem" => Some("list-item"),
-        "normalCase" => Some("normal-case"),
-        "lineThrough" => Some("line-through"),
-        "noUnderline" => Some("no-underline"),
-        "notItalic" => Some("not-italic"),
-        "subpixelAntialiased" => Some("subpixel-antialiased"),
         "backdropBlur" => Some("backdrop-blur"),
         "backdropGrayscale" => Some("backdrop-grayscale"),
         "backdropInvert" => Some("backdrop-invert"),
@@ -401,6 +392,45 @@ pub(crate) fn boolean_class(key: &str) -> Option<&'static str> {
 pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     matches!(
         key,
+        "truncate"
+            | "grow"
+            | "shrink"
+            | "blur"
+            | "grayscale"
+            | "invert"
+            | "sepia"
+            | "backdropBlur"
+            | "backdropGrayscale"
+            | "backdropInvert"
+            | "backdropSepia"
+            | "container"
+            | "prose"
+            | "proseInvert"
+            | "srOnly"
+            | "notSrOnly"
+            | "ordinal"
+            | "slashedZero"
+            | "liningNums"
+            | "oldstyleNums"
+            | "proportionalNums"
+            | "tabularNums"
+            | "diagonalFractions"
+            | "stackedFractions"
+            | "divideXReverse"
+            | "divideYReverse"
+            | "spaceXReverse"
+            | "spaceYReverse"
+            | "ring"
+            | "outline"
+    )
+}
+
+/// Returns true when a key is a removed boolean-sugar alias (flex/absolute/
+/// italic/...). A `true` value on such a key emits no class — the canonical
+/// key with a value is the only spelling.
+pub(crate) fn is_removed_boolean_sugar(key: &str) -> bool {
+    matches!(
+        key,
         "block"
             | "inline"
             | "inlineBlock"
@@ -423,49 +453,19 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
             | "visible"
             | "invisible"
             | "collapse"
-            | "truncate"
+            | "isolate"
             | "uppercase"
             | "lowercase"
             | "capitalize"
             | "normalCase"
+            | "italic"
+            | "notItalic"
             | "underline"
             | "overline"
             | "lineThrough"
             | "noUnderline"
-            | "italic"
-            | "notItalic"
             | "antialiased"
             | "subpixelAntialiased"
-            | "grow"
-            | "shrink"
-            | "blur"
-            | "grayscale"
-            | "invert"
-            | "sepia"
-            | "backdropBlur"
-            | "backdropGrayscale"
-            | "backdropInvert"
-            | "backdropSepia"
-            | "container"
-            | "prose"
-            | "proseInvert"
-            | "srOnly"
-            | "notSrOnly"
-            | "isolate"
-            | "ordinal"
-            | "slashedZero"
-            | "liningNums"
-            | "oldstyleNums"
-            | "proportionalNums"
-            | "tabularNums"
-            | "diagonalFractions"
-            | "stackedFractions"
-            | "divideXReverse"
-            | "divideYReverse"
-            | "spaceXReverse"
-            | "spaceYReverse"
-            | "ring"
-            | "outline"
     )
 }
 

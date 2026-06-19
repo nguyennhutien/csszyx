@@ -38,7 +38,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('should keep static boolean props static', () => {
-            const source = 'const App = () => <div sz={{ flex: true, p: dynamicValue }} />';
+            const source = 'const App = () => <div sz={{ display: "flex", p: dynamicValue }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('flex');
