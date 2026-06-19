@@ -67,7 +67,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@babel/core": "^7.23.7",
+    "@babel/core": "^7.29.6",
     "@babel/traverse": "^7.23.7",
     "@babel/types": "^7.23.6",
     "@csszyx/core": "workspace:*",
