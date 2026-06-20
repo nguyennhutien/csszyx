@@ -1,0 +1,104 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+    isCompilePackageOptedIn,
+    isHardIgnoredPath,
+    isPackagesSkippedSource,
+    skippedSzFilesMessage,
+} from '../src/unplugin.js';
+
+// The compilePackages opt-in + skip diagnostic decide which workspace-package
+// files csszyx compiles vs. silently skips. The build wiring runs in a worker
+// (see missing-tailwind-entry.test.ts), so the precedence — node_modules/.next
+// stay hard regardless of compilePackages — is asserted on the pure functions.
+
+describe('isHardIgnoredPath', () => {
+    it('relaxes /packages/<name>/ when the package is opted in', () => {
+        expect(isHardIgnoredPath('/repo/packages/vui/src/Button.tsx', ['vui'])).toBe(
+            false,
+        );
+    });
+
+    it('still ignores /packages/ source that is not opted in', () => {
+        expect(isHardIgnoredPath('/repo/packages/vui/src/Button.tsx', [])).toBe(true);
+        expect(isHardIgnoredPath('/repo/packages/other/x.tsx', ['vui'])).toBe(true);
+    });
+
+    it('never relaxes node_modules, even when the name is listed (safety)', () => {
+        expect(isHardIgnoredPath('/repo/node_modules/vui/index.js', ['vui'])).toBe(
+            true,
+        );
+        // A nested workspace package inside node_modules stays ignored too.
+        expect(
+            isHardIgnoredPath('/repo/node_modules/x/packages/vui/i.js', ['vui']),
+        ).toBe(true);
+    });
+
+    it('keeps .next ignored except its static assets, regardless of opt-in', () => {
+        expect(isHardIgnoredPath('/repo/.next/server/page.js', ['vui'])).toBe(true);
+        expect(isHardIgnoredPath('/repo/.next/static/chunk.js', [])).toBe(false);
+    });
+
+    it('does not ignore ordinary app source', () => {
+        expect(isHardIgnoredPath('/repo/src/app.tsx', ['vui'])).toBe(false);
+    });
+
+    it('matches the legacy behavior when compilePackages is unset', () => {
+        // node_modules || /packages/ || (.next && !static)
+        expect(isHardIgnoredPath('/repo/node_modules/a/i.js')).toBe(true);
+        expect(isHardIgnoredPath('/repo/packages/a/i.tsx')).toBe(true);
+        expect(isHardIgnoredPath('/repo/.next/server/i.js')).toBe(true);
+        expect(isHardIgnoredPath('/repo/.next/static/i.js')).toBe(false);
+        expect(isHardIgnoredPath('/repo/src/i.tsx')).toBe(false);
+    });
+});
+
+describe('isCompilePackageOptedIn', () => {
+    it('matches the package name as a /packages/ path segment', () => {
+        expect(isCompilePackageOptedIn('/repo/packages/vui/x.tsx', ['vui'])).toBe(true);
+        expect(isCompilePackageOptedIn('/repo/packages/app/x.tsx', ['vui'])).toBe(
+            false,
+        );
+    });
+
+    it('never opts in node_modules paths (safety)', () => {
+        expect(
+            isCompilePackageOptedIn('/repo/node_modules/x/packages/vui/i.js', ['vui']),
+        ).toBe(false);
+    });
+
+    it('is false for an empty allowlist', () => {
+        expect(isCompilePackageOptedIn('/repo/packages/vui/x.tsx', [])).toBe(false);
+    });
+});
+
+describe('isPackagesSkippedSource', () => {
+    it('flags /packages/ source not opted into compilePackages', () => {
+        expect(isPackagesSkippedSource('/repo/packages/vui/x.tsx', [])).toBe(true);
+        expect(isPackagesSkippedSource('/repo/packages/app/x.tsx', ['vui'])).toBe(true);
+    });
+
+    it('does not flag opted-in packages', () => {
+        expect(isPackagesSkippedSource('/repo/packages/vui/x.tsx', ['vui'])).toBe(false);
+    });
+
+    it('never flags node_modules or .next, or ordinary source', () => {
+        expect(isPackagesSkippedSource('/repo/node_modules/x/i.js', [])).toBe(false);
+        expect(isPackagesSkippedSource('/repo/.next/server/i.js', [])).toBe(false);
+        expect(isPackagesSkippedSource('/repo/src/app.tsx', [])).toBe(false);
+    });
+});
+
+describe('skippedSzFilesMessage', () => {
+    it('names the count, the files, and the actionable fix', () => {
+        const message = skippedSzFilesMessage([
+            '/repo/packages/vui/Button.tsx',
+            '/repo/packages/vui/Card.tsx',
+        ]);
+        expect(message).toContain('2 file(s) under packages/');
+        expect(message).toContain('/repo/packages/vui/Button.tsx');
+        expect(message).toContain('/repo/packages/vui/Card.tsx');
+        expect(message).toContain('compilePackages');
+        expect(message).toContain('no CSS');
+    });
+});
