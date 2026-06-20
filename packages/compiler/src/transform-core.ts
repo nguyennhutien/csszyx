@@ -2749,7 +2749,7 @@ export function transform(
                 if (STANDARD_ORIGINS.has(value)) {
                     className += `perspective-origin-${value}`;
                 } else {
-                    className += `perspective-origin-[${value}]`;
+                    className += `perspective-origin-[${normalizeArbitraryValue(value)}]`;
                 }
                 classes.push(className);
                 continue;
