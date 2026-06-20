@@ -414,6 +414,13 @@ jobs:
       - name: Check Rust transform tables are current
         run: pnpm gen:rust-tables:check
 
+      # The per-key matrix fixture and the parity corpus are derived independently
+      # from the snippets; the staleness checks only prove each is internally
+      # fresh. Assert the corpus actually covers every per-key forward case, so the
+      # Rust default engine can't silently lose coverage for a key.
+      - name: Check parity corpus covers the per-key matrix
+        run: pnpm check:key-corpus
+
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
