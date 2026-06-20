@@ -25,6 +25,7 @@ import cac from 'cac';
 
 import { audit } from './commands/audit.js';
 import { doctor } from './commands/doctor.js';
+import { explain } from './commands/explain.js';
 import { generateTypes } from './commands/generate-types.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
@@ -136,6 +137,12 @@ cli.command('doctor', 'Diagnose mangling issues')
             verbose: options.verbose,
             cwd: options.cwd,
         });
+    });
+
+// explain command
+cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles to')
+    .action((sz: string) => {
+        explain(sz);
     });
 
 // audit command
