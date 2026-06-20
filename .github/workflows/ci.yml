@@ -408,6 +408,12 @@ jobs:
       - name: Check Rust parity corpus is current
         run: pnpm gen:parity-corpus:check
 
+      # The Rust transform lookup tables are generated from the TS compiler's
+      # PROPERTY_MAP/VARIANT_MAP. Fail if regenerating would change them, so the
+      # native engine can't drift from the TS source of truth.
+      - name: Check Rust transform tables are current
+        run: pnpm gen:rust-tables:check
+
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
