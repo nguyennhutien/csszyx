@@ -207,6 +207,8 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "opacity" => Some("opacity"),
         "mixBlend" => Some("mix-blend"),
         "bgBlend" => Some("bg-blend"),
+        "filter" => Some("filter"),
+        "backdropFilter" => Some("backdrop-filter"),
         "blur" => Some("blur"),
         "brightness" => Some("brightness"),
         "contrast" => Some("contrast"),

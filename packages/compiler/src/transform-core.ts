@@ -282,6 +282,8 @@ export const PROPERTY_MAP: Record<string, string> = {
     bgBlend: 'bg-blend',
 
     // Filters
+    filter: 'filter',
+    backdropFilter: 'backdrop-filter',
     blur: 'blur',
     brightness: 'brightness',
     contrast: 'contrast',
@@ -2273,7 +2275,9 @@ export function transform(
             // Fix 4: Line Clamp 7+ Arbitrary
             if (rawKey === 'lineClamp') {
                 const sValue = String(value);
-                if (sValue.startsWith('--')) {
+                if (sValue === 'none') {
+                    className += 'line-clamp-none';
+                } else if (sValue.startsWith('--')) {
                     className += `line-clamp-(${sValue})`;
                 } else {
                     // Tailwind v4: line-clamp accepts any number dynamically
