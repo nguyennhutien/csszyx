@@ -417,6 +417,16 @@ jobs:
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+      # Build the core WASM (pkg-node) explicitly so the WASM-dependent unit
+      # tests are deterministic regardless of turbo's build ordering. The
+      # runtime parity gate (tests/wasm-runtime-parity.test.ts) replays the
+      # parity corpus through the WASM transform_sz and compares to the TS
+      # source of truth — the runtime twin of the static parity_corpus.rs, so a
+      # drift in either Rust forward path fails here. integration.test.ts needs
+      # the same artefact.
+      - name: Build core WASM
+        run: pnpm --filter @csszyx/core build
+
       # Mirrors `test:unit` (`turbo run test --filter=!@csszyx/e2e` — keep in
       # sync with package.json). Playwright tests live in @csszyx/e2e and run
       # in their own job below — they need a different gate (runtime_critical,
