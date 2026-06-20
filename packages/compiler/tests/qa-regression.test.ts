@@ -8,6 +8,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
+import { transformOxc } from '../src/transform-oxc.js';
+
+/** Whether the transform flagged a class-string with the unresolvable-spread marker. */
+function warnsSpread(source: string): boolean {
+    return transformOxc(source, 'App.tsx').diagnostics.some(d =>
+        d.includes('unresolvable sz spread'),
+    );
+}
 
 /** Read a sibling workspace package manifest. */
 function manifest(pkg: string): { peerDependencies?: Record<string, string> } {
@@ -79,5 +87,22 @@ describe('React 17 peer support', () => {
 
     it('the default runtime declares no React peer', () => {
         expect(manifest('runtime').peerDependencies?.react).toBeUndefined();
+    });
+});
+
+describe('an unresolvable sz spread warns, other fallbacks stay quiet', () => {
+    it('a top-level spread the parser cannot resolve is flagged', () => {
+        expect(warnsSpread('const X = ({ props }) => <div sz={{ ...props }} />;')).toBe(true);
+    });
+
+    it.each([
+        // dynamic value-object sub-field — falls back to runtime, no top-level spread
+        'const X = ({ v }) => <div sz={{ bg: { color: "black", op: v } }} />;',
+        // dynamic value — resolves via the CSS-var path, not a fallback
+        'const X = ({ c }) => <div sz={{ bg: c }} />;',
+        // fully static
+        'const X = () => <div sz={{ p: 4 }} />;',
+    ])('does not flag %s', source => {
+        expect(warnsSpread(source)).toBe(false);
     });
 });
