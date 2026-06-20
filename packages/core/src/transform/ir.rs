@@ -150,6 +150,13 @@ pub struct SzAttributeIr {
     /// import injection picks the helper up. No classes are collected from
     /// these attributes because the runtime is the source of truth.
     pub runtime_fallback: bool,
+    /// Set when the runtime fallback was forced specifically by a top-level
+    /// object spread (`sz={{ ...x }}`) the static layer cannot resolve — as
+    /// opposed to other runtime-fallback shapes (e.g. a dynamic value-object
+    /// sub-field). Drives a build-log diagnostic so an unresolvable spread is
+    /// not silently dropped in production. Defaults false for older IR.
+    #[serde(default)]
+    pub runtime_fallback_spread: bool,
     /// Static classes visible inside runtime-fallback shapes.
     pub candidate_classes: Vec<String>,
     /// Dynamic object properties emitted through CSS custom properties.
@@ -381,6 +388,7 @@ mod tests {
                 ternary: None,
                 array_parts: Vec::new(),
                 runtime_fallback: false,
+                runtime_fallback_spread: false,
                 candidate_classes: Vec::new(),
                 dynamic_css_vars: Vec::new(),
             }],

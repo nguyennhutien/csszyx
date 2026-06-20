@@ -395,6 +395,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             ternary,
             array_parts,
             runtime_fallback,
+            runtime_fallback_spread: runtime_fallback
+                && jsx_attribute_value_has_top_level_spread(attr.value.as_ref()),
             candidate_classes,
             dynamic_css_vars,
         });
@@ -779,6 +781,60 @@ fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<
             runtime_fallback_span_from_expression(&value.expression)
         }
         _ => Some(text_span(expression.span())),
+    }
+}
+
+/// Returns true when the `sz` attribute value is an object literal carrying a
+/// top-level spread (`sz={{ ...x }}`). This is the unresolvable-spread shape
+/// that forces a runtime fallback the static layer can't evaluate — flagged so
+/// a build-log diagnostic can surface it, distinct from other fallback shapes
+/// (e.g. a dynamic value-object sub-field) which must not warn.
+fn jsx_attribute_value_has_top_level_spread(value: Option<&JSXAttributeValue<'_>>) -> bool {
+    match value {
+        Some(JSXAttributeValue::ExpressionContainer(container)) => {
+            jsx_expression_has_top_level_spread(&container.expression)
+        }
+        _ => false,
+    }
+}
+
+fn jsx_expression_has_top_level_spread(expression: &JSXExpression<'_>) -> bool {
+    match expression {
+        JSXExpression::TSAsExpression(value) => expression_has_top_level_spread(&value.expression),
+        JSXExpression::TSSatisfiesExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        JSXExpression::ParenthesizedExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        JSXExpression::ObjectExpression(object) => object
+            .properties
+            .iter()
+            .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_))),
+        _ => false,
+    }
+}
+
+fn expression_has_top_level_spread(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::TSAsExpression(value) => expression_has_top_level_spread(&value.expression),
+        Expression::TSSatisfiesExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        Expression::TSNonNullExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        Expression::ParenthesizedExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        Expression::ObjectExpression(object) => object
+            .properties
+            .iter()
+            .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_))),
+        _ => false,
     }
 }
 
@@ -2428,6 +2484,37 @@ mod tests {
         let value_text =
             &source[attribute.value_span.start as usize..attribute.value_span.end as usize];
         assert_eq!(value_text, "{ ...BASE, ...(big ? { p: 8 } : {}) }");
+    }
+
+    #[test]
+    fn parser_shell_flags_only_top_level_spread_for_spread_diagnostic() {
+        // A top-level spread of a value the parser can't resolve statically is
+        // flagged so the build surfaces it.
+        let spread = "const X = ({ props }) => <div sz={{ ...props }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: spread.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        assert!(
+            attribute.runtime_fallback_spread,
+            "top-level spread must be flagged"
+        );
+
+        // A dynamic value-object sub-field also falls back to runtime but carries
+        // no top-level spread, so it must NOT be flagged (no noisy warning).
+        let value_obj = "const X = ({ v }) => <div sz={{ bg: { color: 'black', op: v } }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: value_obj.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        assert!(
+            !attribute.runtime_fallback_spread,
+            "value-object backstop must not be flagged as a spread"
+        );
     }
 
     #[test]

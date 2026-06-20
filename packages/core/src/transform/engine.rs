@@ -155,6 +155,7 @@ fn transform_static_classes_with_options(
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
+    diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
@@ -301,6 +302,25 @@ fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec
             format!(
                 "[csszyx] Rust native transform at {}:{}: unsupported dynamic sz attribute; leaving file unchanged for now.",
                 file.filename, span.start
+            )
+        })
+        .collect()
+}
+
+/// Build-log diagnostic for an `sz` prop forced to a runtime fallback by a
+/// top-level object spread (`sz={{ ...x }}`). The file still transforms (the
+/// `_sz` helper handles it), but the spread can't be statically resolved, so
+/// it may produce no styles in production — this surfaces it instead of failing
+/// silently. The `unresolvable sz spread` phrase is the marker the bundler
+/// plugin matches to promote these to a build-log warning in every mode.
+fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.sz_attributes
+        .iter()
+        .filter(|attr| attr.runtime_fallback_spread)
+        .map(|attr| {
+            format!(
+                "[csszyx] unresolvable sz spread at {}:{}: sz={{{{ ...x }}}} can't be resolved at build time and falls back to runtime (it may produce no styles in production). Use array form: sz={{[x, {{ … }}]}}.",
+                file.filename, attr.value_span.start
             )
         })
         .collect()
@@ -533,7 +553,16 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert_eq!(result.classes, ["p-4", "p-8"]);
-        assert!(result.diagnostics.is_empty());
+        // A top-level spread forces the runtime fallback, so it now surfaces the
+        // build-log spread diagnostic (the dev-assert fires for the same shape).
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.contains("unresolvable sz spread")),
+            "{:?}",
+            result.diagnostics
+        );
     }
 
     #[test]
