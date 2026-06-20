@@ -401,6 +401,13 @@ jobs:
       - name: Check sz-key test fixture is current
         run: pnpm gen:key-tests:check
 
+      # The runtime box-role map (splitBox / classify / has / pick / omit) is
+      # generated from the compiler's PROPERTY_MAP / REMOVED_BOOLEAN_SUGAR /
+      # BOOLEAN_SHORTHANDS. Fail if regenerating would change it, so a new sz prop
+      # can't leave a class unclassified for box-model routing.
+      - name: Check runtime box-role map is current
+        run: pnpm gen:box-role:check
+
       # The TS↔Rust lowering parity corpus ingests every documented sz-key
       # forward case, so the Rust default engine is proven equivalent to the TS
       # engine for each key. Fail if regenerating would change it, so a snippet,
