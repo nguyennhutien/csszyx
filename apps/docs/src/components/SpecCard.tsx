@@ -17,7 +17,7 @@ export function SpecCard({ title, specId, icon, children }: SpecCardProps) {
             {icon && (
                 <span
                     sz={{
-                        absolute: true,
+                        position: 'absolute',
                         top: 4,
                         right: 4,
                         text: '2xl',
@@ -53,7 +53,7 @@ export function SpecCard({ title, specId, icon, children }: SpecCardProps) {
                     fontFamily: '--ds-font-ui',
                     text: 'xs',
                     tracking: 'widest',
-                    uppercase: true,
+                    textTransform: 'uppercase',
                     color: '--ds-text-subtle',
                 }}
             >

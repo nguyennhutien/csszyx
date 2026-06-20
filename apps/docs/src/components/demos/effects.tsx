@@ -3,11 +3,11 @@ import { Demo } from '../Demo.tsx';
 const LABEL_WHITE = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'white' } as const;
 
 // Base swatch layout — chained into neutral and primary tier variants below
-const swatchBase = { size: 24, rounded: 'xl', flex: true, items: 'center', justify: 'center' } as const;
+const swatchBase = { size: 24, rounded: 'xl', display: 'flex', items: 'center', justify: 'center' } as const;
 const swatchPrimary = { ...swatchBase, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500' } as const;
 
 // Shadow swatch — white bg so box-shadow is visible against the dark panel
-const shadowSwatch = { size: 24, rounded: 'xl', bg: 'white', flex: true, items: 'center', justify: 'center' } as const;
+const shadowSwatch = { size: 24, rounded: 'xl', bg: 'white', display: 'flex', items: 'center', justify: 'center' } as const;
 const LABEL_DARK = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'zinc-700' } as const;
 
 export function BoxShadowScale() {
@@ -28,7 +28,7 @@ export function BoxShadowScale() {
 
 export function OpacityScale() {
     // label below the box — opacity applies to the entire box including its children
-    const col = { flex: true, flexDir: 'col', items: 'center', gap: 2 } as const;
+    const col = { display: 'flex', flexDir: 'col', items: 'center', gap: 2 } as const;
     return (
         <Demo label="opacity — 100, 50, 25">
             <div sz={col}>
@@ -49,7 +49,7 @@ export function OpacityScale() {
 
 export function BlurScale() {
     // label below the box — blur filter applies to the box, text stays sharp outside
-    const col = { flex: true, flexDir: 'col', items: 'center', gap: 2 } as const;
+    const col = { display: 'flex', flexDir: 'col', items: 'center', gap: 2 } as const;
     return (
         <Demo label="blur scale — none, sm, md">
             <div sz={col}>

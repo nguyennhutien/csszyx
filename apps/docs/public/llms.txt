@@ -360,7 +360,7 @@ sz={{ '@container': true, '@md': { display: 'flex' } }}
   textAlign: "center";
 } // text-center
 {
-  uppercase: true;
+  textTransform: "uppercase";
 } // uppercase
 {
   truncate: true;
@@ -548,7 +548,7 @@ import { szv } from "csszyx";
 
 const buttonSz = szv({
   base: {
-    inlineFlex: true,
+    display: "inline-flex",
     items: "center",
     rounded: "md",
     fontWeight: "medium",

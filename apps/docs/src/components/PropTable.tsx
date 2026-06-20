@@ -17,7 +17,7 @@ const VIZ_ZOOM = 0.32;
 
 // justify is opt-in for SizingViz (start) — all other viz use center.
 const vizCellContainerSz = szv({
-    base: { w: 40, h: 14, overflow: 'hidden', flex: true, items: 'center' },
+    base: { w: 40, h: 14, overflow: 'hidden', display: 'flex', items: 'center' },
     variants: { justify: { center: { justify: 'center' }, start: { justify: 'start', pl: 2 } } },
     defaultVariants: { justify: 'center' },
 });
@@ -105,7 +105,7 @@ const targetMarginSz = szv({
 
 // ── Margin viz inner flex container — szv over direction variants ─────────────
 const marginContainerSz = szv({
-    base: { flex: true, items: 'center' },
+    base: { display: 'flex', items: 'center' },
     variants: { dir: { horiz: { flexDir: 'row' }, vert: { flexDir: 'col' } } },
 });
 
@@ -193,7 +193,7 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
             ? [targetBox, adjBox] : [adjBox, targetBox];
 
         return (
-            <div sz={{ w: 40, h: 24, flex: true, items: 'center', justify: 'center', overflow: 'hidden' }}>
+            <div sz={{ w: 40, h: 24, display: 'flex', items: 'center', justify: 'center', overflow: 'hidden' }}>
                 <div className={dynamic(marginContainerSz({ dir: isHoriz ? 'horiz' : 'vert' }))}>
                     {ordered}
                 </div>
@@ -243,7 +243,7 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
     const showText = ps != null || pe != null;
 
     return (
-        <div sz={{ w: 40, h: 24, flex: true, items: 'center', justify: 'center', overflow: 'hidden' }}>
+        <div sz={{ w: 40, h: 24, display: 'flex', items: 'center', justify: 'center', overflow: 'hidden' }}>
           <div sz={{ bg: '--sl-color-accent-high', rounded: 'md' }}>
             <div
               className={`${padOverrideCls} ${dynamic(hatchSz({ dir: pe != null ? 'vert' : 'horiz' }))}`}
@@ -366,7 +366,7 @@ export function RadiusViz({ rounded }: { rounded: string }) {
 
 // ── Grid container — szv over cols variants used in flex-grid.mdx ────────────
 const colsVizSz = szv({
-    base: { grid: true, w: 60, h: 24, gap: 2, border: true, borderColor: { color: 'emerald-400', op: 40 }, rounded: 'sm', p: 1 },
+    base: { display: 'grid', w: 60, h: 24, gap: 2, border: true, borderColor: { color: 'emerald-400', op: 40 }, rounded: 'sm', p: 1 },
     variants: { cols: { '1': { gridCols: 1 }, '3': { gridCols: 3 } } },
 });
 
@@ -392,7 +392,7 @@ export function ColsViz({ cols }: { cols: number }) {
 // Compiler pre-extracts all variant combinations at build time → Tailwind JIT sees every
 // class statically → all are in built CSS → runtime szv dispatch just looks them up.
 const flexContainerSz = szv({
-    base: { flex: true, gap: 2, border: true, rounded: 'sm', p: 2, w: 'full', h: 'full' },
+    base: { display: 'flex', gap: 2, border: true, rounded: 'sm', p: 2, w: 'full', h: 'full' },
     variants: {
         direction: {
             'row':            { flexDir: 'row' },
@@ -494,7 +494,7 @@ export function FlexViz({ direction = 'row', wrap = false, justify = 'flex-start
 
 // ── OpacityViz — szv over all opacity values used in effects.mdx ──────────────
 const opacityVizSz = szv({
-    base: { absolute: true, inset: 0, bg: '#2dd597' },
+    base: { position: 'absolute', inset: 0, bg: '#2dd597' },
     variants: {
         opacity: {
             '0':   { opacity: 0 },
@@ -510,9 +510,9 @@ const opacityVizSz = szv({
 export function OpacityViz({ opacity }: { opacity: number }) {
     return (
         <VizCell>
-            <div sz={{ relative: true, w: 10, h: 10 }}>
+            <div sz={{ position: 'relative', w: 10, h: 10 }}>
                 {/* repeating-linear-gradient has no sz equivalent — inline style is unavoidable */}
-                <div sz={{ absolute: true, inset: 0 }}
+                <div sz={{ position: 'absolute', inset: 0 }}
                      style={{ background: 'repeating-linear-gradient(45deg,#334155 0,#334155 8px,#1e293b 8px,#1e293b 16px)' }} />
                 <div className={dynamic(opacityVizSz({ opacity: String(opacity) as '0' | '35' | '50' | '75' | '100' }))} />
             </div>
@@ -541,7 +541,7 @@ export function ShadowViz({ shadow }: { shadow: string | boolean }) {
     const s = (shadow === true ? 'base' : shadow) as 'sm' | 'base' | 'md' | 'lg' | 'xl' | '2xl' | 'inner';
     return (
         <VizCell>
-            <div sz={{ w: 'full', h: 'full', bg: 'white', flex: true, items: 'center', justify: 'center' }}>
+            <div sz={{ w: 'full', h: 'full', bg: 'white', display: 'flex', items: 'center', justify: 'center' }}>
                 <div className={dynamic(shadowVizSz({ shadow: s }))} />
             </div>
         </VizCell>

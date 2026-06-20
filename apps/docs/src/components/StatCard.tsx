@@ -17,7 +17,7 @@ export function StatCard({ label, value, subtitle }: StatCardProps) {
                     fontFamily: '--ds-font-ui',
                     text: 'xs',
                     tracking: 'widest',
-                    uppercase: true,
+                    textTransform: 'uppercase',
                     color: '--ds-text-subtle',
                     mb: 1,
                 }}

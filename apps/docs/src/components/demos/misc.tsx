@@ -62,8 +62,8 @@ export function SrOnly() {
     const srLabel = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'zinc-500' } as const;
     return (
         <Demo label="{ srOnly: true } — visually hidden but accessible to screen readers">
-            <div sz={{ relative: true, flex: true, items: 'center', gap: 2 }}>
-                <button sz={{ size: 8, bg: 'violet-600', rounded: 'md', flex: true, items: 'center', justify: 'center' }}>
+            <div sz={{ position: 'relative', display: 'flex', items: 'center', gap: 2 }}>
+                <button sz={{ size: 8, bg: 'violet-600', rounded: 'md', display: 'flex', items: 'center', justify: 'center' }}>
                     <span sz={{ srOnly: true }}>Close dialog</span>
                     <span sz={{ text: 'sm', color: 'white', fontFamily: '--ds-font-ui' }}>×</span>
                 </button>

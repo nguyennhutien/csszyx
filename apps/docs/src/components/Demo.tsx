@@ -4,7 +4,7 @@ import { SzToken } from './PropTable.tsx';
 
 // Prescan anchor — all content-area classes in one const so Tailwind generates CSS for them.
 // Also covers the default bg; callers may override bg with any value they've added to the safelist.
-const _DEMO_CONTENT = { p: 8, flex: true, gap: 6, flexWrap: 'wrap', items: 'center', justify: 'center', minH: 40, bg: 'zinc-900' } as const;
+const _DEMO_CONTENT = { p: 8, display: 'flex', gap: 6, flexWrap: 'wrap', items: 'center', justify: 'center', minH: 40, bg: 'zinc-900' } as const;
 
 interface DemoProps {
     children: ReactNode;
@@ -35,16 +35,16 @@ export function Demo({ children, label, hint, bg = 'zinc-900' }: DemoProps) {
     return (
         <figure className="not-content" sz={{ mt: 6, rounded: 'xl', border: true, borderColor: 'zinc-800', overflow: 'hidden', shadow: 'xl' }}>
             {/* macOS-style titlebar */}
-            <div sz={{ px: 4, h: 9, flex: true, items: 'center', justify: 'between', borderB: true, borderColor: 'zinc-800', bg: 'zinc-950' }}>
+            <div sz={{ px: 4, h: 9, display: 'flex', items: 'center', justify: 'between', borderB: true, borderColor: 'zinc-800', bg: 'zinc-950' }}>
                 {/* Traffic lights — exact macOS colors */}
-                <div sz={{ flex: true, items: 'center', gap: 1.5 }}>
+                <div sz={{ display: 'flex', items: 'center', gap: 1.5 }}>
                     <span className="demo-dot" sz={{ bg: '#ff5f57' }} />
                     <span className="demo-dot" sz={{ bg: '#ffbd2e' }} />
                     <span className="demo-dot" sz={{ bg: '#28c840' }} />
                 </div>
                 {/* Label — monospace, dimmed */}
                 {label && (
-                    <div sz={{ fontFamily: '--ds-font-ui', text: 'xs', flex: true, items: 'center', gap: 1, flexWrap: 'wrap', justify: 'end', color: 'zinc-400' }}>
+                    <div sz={{ fontFamily: '--ds-font-ui', text: 'xs', display: 'flex', items: 'center', gap: 1, flexWrap: 'wrap', justify: 'end', color: 'zinc-400' }}>
                         {segments.map((seg, i) =>
                             seg.type === 'sz'
                                 ? <SzToken key={i} value={seg.value} />

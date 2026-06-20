@@ -6,7 +6,7 @@ const LABEL_MUTED = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'mediu
 const LABEL_WHITE = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'white' } as const;
 
 // Base swatch box — chained into sized and styled variants
-const BOX_CENTER = { flex: true, items: 'center', justify: 'center' } as const;
+const BOX_CENTER = { display: 'flex', items: 'center', justify: 'center' } as const;
 const BOX_BORDER = { ...BOX_CENTER, rounded: 'lg', borderColor: 'violet-500', bg: 'zinc-950' } as const;
 
 export function BorderRadiusScale() {

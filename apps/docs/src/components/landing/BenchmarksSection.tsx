@@ -10,10 +10,10 @@ export default function BenchmarksSection() {
     <section
       id="benchmarks"
       sz={{
-        relative: true,
+        position: 'relative',
         py: 40,
         minH: '90vh',
-        flex: true,
+        display: 'flex',
         flexDir: 'col',
         justify: 'center',
         bg: 'slate-50',
@@ -21,7 +21,7 @@ export default function BenchmarksSection() {
         overflow: 'hidden',
       }}
     >
-      <div sz={{ maxW: '1536px', mx: 'auto', px: 6, lg: { px: 20 }, relative: true, z: 10, w: 'full' }}>
+      <div sz={{ maxW: '1536px', mx: 'auto', px: 6, lg: { px: 20 }, position: 'relative', z: 10, w: 'full' }}>
 
         <div sz={{ textAlign: 'center', mb: 24 }}>
           <h2
@@ -33,13 +33,13 @@ export default function BenchmarksSection() {
           </h2>
           <p
             className="reveal-item"
-            sz={{ color: 'slate-500', dark: { color: 'slate-400' }, fontFamily: 'mono', text: 'xs', tracking: 'widest', uppercase: true, mt: 6, delay: '150ms' }}
+            sz={{ color: 'slate-500', dark: { color: 'slate-400' }, fontFamily: 'mono', text: 'xs', tracking: 'widest', textTransform: 'uppercase', mt: 6, delay: '150ms' }}
           >
             Benchmarks run on Node.js 22 &amp; Chromium 124.
           </p>
         </div>
 
-        <div sz={{ grid: true, gridCols: 1, sm: { gridCols: 2 }, lg: { gridCols: 4 }, gap: 6 }}>
+        <div sz={{ display: 'grid', gridCols: 1, sm: { gridCols: 2 }, lg: { gridCols: 4 }, gap: 6 }}>
           {benchmarks.map(({ value, unit, label, delay }) => (
             <div
               key={label}

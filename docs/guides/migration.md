@@ -48,7 +48,7 @@ If you prefer to migrate manually or have complex dynamic classes, use the recom
 
 - **Padding/Margin**: `p-4` -> `p: 4`, `mx-2` -> `mx: 2`
 - **Colors**: `bg-red-500` -> `bg: 'red-500'`, `text-white` -> `color: 'white'`
-- **Layout**: `flex` -> `flex: true`, `grid` -> `display: 'grid'`
+- **Layout**: `flex` -> `display: 'flex'`, `grid` -> `display: 'grid'`
 - **Font**: `font-bold` -> `fontWeight: 'bold'`
 - **Modifiers**: `hover:` -> `hover: { ... }`, `md:` -> `md: { ... }`
 

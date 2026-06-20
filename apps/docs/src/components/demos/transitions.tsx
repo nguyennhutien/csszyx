@@ -48,7 +48,7 @@ export function AnimatePulse() {
 export function AnimateBounce() {
     return (
         <Demo label="{ animate: 'bounce' } — staggered loading indicator">
-            <div sz={{ flex: true, gap: 2, items: 'end', h: 12 }}>
+            <div sz={{ display: 'flex', gap: 2, items: 'end', h: 12 }}>
                 <div sz={bounceDot1} />
                 <div sz={bounceDot2} />
                 <div sz={bounceDot3} />
@@ -58,7 +58,7 @@ export function AnimateBounce() {
 }
 
 // --- Interactive: ease-out vs spring comparison ---
-const COL = { flex: true, flexDir: 'col', items: 'center', gap: 5 } as const;
+const COL = { display: 'flex', flexDir: 'col', items: 'center', gap: 5 } as const;
 // sz={{ ...BOX_X, scale: state ? 75 : 100 }} — pre-plugin resolves the spread at build time
 // and generates a template literal; Pass 1.5 mangles the static quasi parts in SSR bundles.
 const BOX_A = { size: 20, rounded: 'xl', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'sky-400',    to: 'indigo-500',  transition: 'transform', duration: 700, ease: 'out'               } as const;
@@ -77,7 +77,7 @@ export function TransitionCompare() {
             label="ease-out vs spring vs backout — click Trigger to compare"
             // hint="spring uses a linear() curve with control points to simulate a bounce overshoot"
         >
-            <div sz={{ flex: true, gap: 12 }}>
+            <div sz={{ display: 'flex', gap: 12 }}>
                 {/* ease-out column */}
                 <div sz={COL}>
                     <span sz={{ text: 'xs', tracking: 'wider', fontFamily: 'mono', fontWeight: 'semibold', color: 'indigo-400' }}>EASE-OUT</span>

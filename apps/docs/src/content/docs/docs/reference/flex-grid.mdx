@@ -117,7 +117,7 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
 ```tsx
 // Centered hero section
 <div sz={{
-  flex: true,
+  display: 'flex',
   items: 'center',
   justify: 'center',
   minH: 'screen',
@@ -125,7 +125,7 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
 
 // Responsive grid
 <div sz={{
-  grid: true,
+  display: 'grid',
   gridCols: 1,
   gap: 6,
   sm: { gridCols: 2 },
@@ -134,7 +134,7 @@ import { FlexDirection, JustifyVariants, GapScale, GridThreeCols, ColSpan } from
 
 // Navigation bar
 <nav sz={{
-  flex: true,
+  display: 'flex',
   items: 'center',
   justify: 'between',
   px: 6,

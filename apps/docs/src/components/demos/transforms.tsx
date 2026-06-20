@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Demo } from '../Demo.tsx';
 
 // Base swatch layout
-const swatchBase = { size: 16, rounded: 'xl', flex: true, items: 'center', justify: 'center' } as const;
+const swatchBase = { size: 16, rounded: 'xl', display: 'flex', items: 'center', justify: 'center' } as const;
 const swatchNeutral = { ...swatchBase, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-800', to: 'violet-900', shadow: 'sm' } as const;
 const swatchHighlight = { ...swatchBase, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', shadow: 'md' } as const;
 const originalHolder = { ...swatchBase, position: 'relative', border: true, borderColor: 'zinc-600', borderStyle: 'dashed' } as const;
@@ -13,7 +13,7 @@ const labelWhite = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibo
 export function ScaleDemo() {
     return (
       <Demo label="scale — 75, 100, 125 side by side">
-        <div sz={{ flex: true, gap: 8 }}>
+        <div sz={{ display: 'flex', gap: 8 }}>
           <div sz={originalHolder}>
             <div sz={{ ...swatchNeutral, position: 'absolute', top: '50%', left: '50%', translateX: '-50%', translateY: '-50%', scale: 75 }}>
                 <span sz={labelMuted}>75</span>
@@ -68,7 +68,7 @@ export function TranslateDemo() {
 }
 
 export function SkewDemo() {
-    const skewBase = { px: 6, py: 4, rounded: 'xl', flex: true, items: 'center', justify: 'center' } as const;
+    const skewBase = { px: 6, py: 4, rounded: 'xl', display: 'flex', items: 'center', justify: 'center' } as const;
     const skewNeutral = { ...skewBase, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-800', to: 'violet-900', shadow: 'sm' } as const;
     return (
         <Demo label="skewX — 0 vs skewX-6">
@@ -87,7 +87,7 @@ export function TransformStyle3D() {
     // at 45° it visibly narrows in 3D space, at 75° it's nearly edge-on.
     // perspective MUST be on the parent — it sets the viewer's distance from the scene.
     const PBOX = { perspective: '400px' } as const;
-    const CARD = { w: 24, rounded: 'lg', bg: 'white', shadow: '2xl', overflow: 'hidden', transformStyle: '3d', flex: true, flexDir: 'col' } as const;
+    const CARD = { w: 24, rounded: 'lg', bg: 'white', shadow: '2xl', overflow: 'hidden', transformStyle: '3d', display: 'flex', flexDir: 'col' } as const;
     const PHOTO = { w: 'full', h: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-400', to: 'fuchsia-500' } as const;
     const INFO = { px: 3, py: 2 } as const;
     const TITLE = { text: 'xs', fontWeight: 'semibold', color: 'zinc-700', fontFamily: '--ds-font-ui' } as const;
@@ -96,8 +96,8 @@ export function TransformStyle3D() {
 
     return (
         <Demo label="{ rotateY, transformStyle: '3d' } — perspective on parent makes depth visible">
-            <div sz={{ flex: true, gap: 8, items: 'end' }}>
-                <div sz={{ flex: true, flexDir: 'col', items: 'center', gap: 3 }}>
+            <div sz={{ display: 'flex', gap: 8, items: 'end' }}>
+                <div sz={{ display: 'flex', flexDir: 'col', items: 'center', gap: 3 }}>
                     <div sz={PBOX}>
                         <div sz={{ ...CARD, rotateY: 0 }}>
                             <div sz={PHOTO} />
@@ -110,7 +110,7 @@ export function TransformStyle3D() {
                     <span sz={DEG}>rotateY: 0</span>
                 </div>
 
-                <div sz={{ flex: true, flexDir: 'col', items: 'center', gap: 3 }}>
+                <div sz={{ display: 'flex', flexDir: 'col', items: 'center', gap: 3 }}>
                     <div sz={PBOX}>
                         <div sz={{ ...CARD, rotateY: 45 }}>
                             <div sz={PHOTO} />
@@ -123,7 +123,7 @@ export function TransformStyle3D() {
                     <span sz={DEG}>rotateY: 45</span>
                 </div>
 
-                <div sz={{ flex: true, flexDir: 'col', items: 'center', gap: 3 }}>
+                <div sz={{ display: 'flex', flexDir: 'col', items: 'center', gap: 3 }}>
                     <div sz={PBOX}>
                         <div sz={{ ...CARD, rotateY: 75 }}>
                             <div sz={PHOTO} />
@@ -143,7 +143,7 @@ export function TransformStyle3D() {
 // --- Interactive: click to step through rotation ---
 const ROTATE_STEPS = [0, 45, 90, 135, 180] as const;
 const ROTATE_CLASSES = ['rotate-0', 'rotate-45', 'rotate-90', 'rotate-135', 'rotate-180'] as const;
-const ROT_BOX = { size: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: '2xl', flex: true, items: 'center', justify: 'center', shadow: 'xl', transition: 'transform', duration: 400, ease: 'cubic-bezier(0.34,1.56,0.64,1)' } as const;
+const ROT_BOX = { size: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: '2xl', display: 'flex', items: 'center', justify: 'center', shadow: 'xl', transition: 'transform', duration: 400, ease: 'cubic-bezier(0.34,1.56,0.64,1)' } as const;
 const ROT_LABEL = { text: 'base', fontFamily: '--ds-font-ui', fontWeight: 'bold', color: 'white' } as const;
 const ROT_BTN = { px: 5, py: 2, rounded: 'lg', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', bg: 'violet-600', color: 'white', cursor: 'pointer', border: true, borderColor: 'violet-500', transition: 'colors', duration: 150, hover: { bg: 'violet-700' } } as const;
 
@@ -156,7 +156,7 @@ export function RotateInteractive() {
             label="click to rotate — steps through 0 → 45 → 90 → 135 → 180"
             hint="className drives the animation — sz {{ rotate }} compiles each step statically at build time"
         >
-            <div sz={{ flex: true, flexDir: 'col', items: 'center', gap: 6 }}>
+            <div sz={{ display: 'flex', flexDir: 'col', items: 'center', gap: 6 }}>
                 <div sz={ROT_BOX} className={ROTATE_CLASSES[idx]}>
                     <span sz={ROT_LABEL}>{deg}°</span>
                 </div>

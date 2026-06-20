@@ -39,20 +39,20 @@ export function MarginAuto() {
 export function SpaceX() {
     return (
         <Demo label="spaceX scale — 1, 4, 8">
-            <div sz={{ flex: true, flexDir: 'col', gap: 3 }}>
-                <div sz={{ flex: true, spaceX: 1, items: 'center' }}>
+            <div sz={{ display: 'flex', flexDir: 'col', gap: 3 }}>
+                <div sz={{ display: 'flex', spaceX: 1, items: 'center' }}>
                     <div sz={{ ...item, ...gradient }}>A</div>
                     <div sz={{ ...item, ...gradient }}>B</div>
                     <div sz={{ ...item, ...gradient }}>C</div>
                     <span sz={{ ...label, ml: 2 }}>spaceX-1</span>
                 </div>
-                <div sz={{ flex: true, spaceX: 4, items: 'center' }}>
+                <div sz={{ display: 'flex', spaceX: 4, items: 'center' }}>
                     <div sz={{ ...item, ...gradient }}>A</div>
                     <div sz={{ ...item, ...gradient }}>B</div>
                     <div sz={{ ...item, ...gradient }}>C</div>
                     <span sz={{ ...label, ml: 2 }}>spaceX-4</span>
                 </div>
-                <div sz={{ flex: true, spaceX: 8, items: 'center' }}>
+                <div sz={{ display: 'flex', spaceX: 8, items: 'center' }}>
                     <div sz={{ ...item, ...gradient }}>A</div>
                     <div sz={{ ...item, ...gradient }}>B</div>
                     <div sz={{ ...item, ...gradient }}>C</div>
@@ -66,7 +66,7 @@ export function SpaceX() {
 export function SpaceY() {
     return (
         <Demo label="spaceY scale — 1, 4, 8">
-            <div sz={{ flex: true, gap: 6, items: 'start' }}>
+            <div sz={{ display: 'flex', gap: 6, items: 'start' }}>
                 <div>
                     <div sz={{ spaceY: 1, w: 20 }}>
                         <div sz={{ ...item, textAlign: 'center', ...gradient }}>A</div>

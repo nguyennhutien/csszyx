@@ -8,10 +8,10 @@ import { useEffect, useRef } from 'react';
 interface CompileEntry { sz: string; tw: string; }
 const compileData: CompileEntry[] = [
     // Common
-    { sz: "{flex: true}", tw: "flex" },
+    { sz: "{display: 'flex'}", tw: "flex" },
     { sz: "{shrink: 0}", tw: "shrink-0" },
     { sz: "{grayscale: true}", tw: "grayscale" },
-    { sz: "{firstLine: {uppercase: true}}", tw: "first-line:uppercase" },
+    { sz: "{firstLine: {textTransform: 'uppercase'}}", tw: "first-line:uppercase" },
     { sz: "{bg: 'sky-500'}", tw: "bg-sky-500" },
     { sz: "{fontFamily: 'mono'}", tw: "font-mono" },
     { sz: "{bgRepeat: 'no-repeat'}", tw: "bg-no-repeat" },
@@ -36,10 +36,10 @@ const compileData: CompileEntry[] = [
 
     // Abstract property combinations
     { sz: "{'[&>span]': {color: 'blue'}}", tw: "[&>span]:text-blue" },
-    { sz: "{before: {content: '\"\"', block: true}}", tw: "before:content-['']" },
+    { sz: "{before: {content: '\"\"', display: 'block'}}", tw: "before:content-['']" },
     { sz: "{xl: {portrait: {bg: {gradient: 'to-r'}}}}", tw: "xl:portrait:bg-gradient-to-r" },
     { sz: "{lg: {landscape: {w: 'full'}}}", tw: "lg:landscape:w-full" },
-    { sz: "{print: {hidden: true}}", tw: "print:hidden" },
+    { sz: "{print: {display: 'none'}}", tw: "print:hidden" },
     { sz: "{selection: {bg: 'fuchsia-300'}}", tw: "selection:bg-fuchsia-300" },
     { sz: "{marker: {text: 'sky-400'}}", tw: "marker:text-sky-400" },
     { sz: "{file: {border: 0, bg: 'transparent'}}", tw: "file:border-0" },
@@ -75,8 +75,8 @@ const compileData: CompileEntry[] = [
     // Layout
     { sz: "{overflow: 'hidden'}", tw: "overflow-hidden" },
     { sz: "{z: 10}", tw: "z-10" },
-    { sz: "{absolute: true}", tw: "absolute" },
-    { sz: "{inlineFlex: true}", tw: "inline-flex" },
+    { sz: "{position: 'absolute'}", tw: "absolute" },
+    { sz: "{display: 'inline-flex'}", tw: "inline-flex" },
 
     // Flexbox & Grid
     { sz: "{flexDir: 'col'}", tw: "flex-col" },
@@ -378,7 +378,7 @@ export default function HeroSection() {
     <div
       className="lp-dot-grid"
       sz={{
-        fixed: true,
+        position: 'fixed',
         inset: 0,
         pointerEvents: 'none',
       }}
@@ -386,8 +386,8 @@ export default function HeroSection() {
     />
     <section
       sz={{
-        relative: true,
-        grid: true,
+        position: 'relative',
+        display: 'grid',
         mx: 'auto',
         px: 6,
         lg: { gridCols: 2, px: 20 },
@@ -399,7 +399,7 @@ export default function HeroSection() {
       }}
     >
       {/* Left column */}
-      <div sz={{ flex: true, flexDir: 'col', gap: 8 }}>
+      <div sz={{ display: 'flex', flexDir: 'col', gap: 8 }}>
         <h1
           className="hero-in-1"
           sz={{ text: '5xl', lg: { text: '7xl' }, fontWeight: 'black', leading: 'tight', color: 'neutral-800', dark: { color: 'white' }, tracking: 'tighter' }}
@@ -418,7 +418,7 @@ export default function HeroSection() {
           <span sz={{ fontWeight: 'normal', color: 'neutral-900', dark: { color: 'slate-300' } }}>No more safelist bloat or pre-defined string concatenation.</span>
         </p>
 
-        <div className="hero-in-3" sz={{ flex: true, gap: 4 }}>
+        <div className="hero-in-3" sz={{ display: 'flex', gap: 4 }}>
           <a
             href="/docs/installation"
             sz={{
@@ -432,10 +432,10 @@ export default function HeroSection() {
               px: 10,
               rounded: '2xl',
               fontFamily: 'mono',
-              uppercase: true,
+              textTransform: 'uppercase',
               tracking: 'widest',
               text: 'sm',
-              flex: true,
+              display: 'flex',
               items: 'center',
               gap: 3,
               cursor: 'pointer',
@@ -459,9 +459,9 @@ export default function HeroSection() {
               rounded: '2xl',
               fontFamily: 'mono',
               text: 'sm',
-              uppercase: true,
+              textTransform: 'uppercase',
               tracking: 'widest',
-              flex: true,
+              display: 'flex',
               items: 'center',
               gap: 3,
               dropShadow: '0 0 15px rgba(63,15,166,0.3)',
@@ -475,26 +475,26 @@ export default function HeroSection() {
       </div>
 
       {/* Right column — compiler animation */}
-      <div sz={{ relative: true }}>
-        <div sz={{ aspect: 'square', w: 'full', flex: true, items: 'center', justify: 'center', relative: true }}>
+      <div sz={{ position: 'relative' }}>
+        <div sz={{ aspect: 'square', w: 'full', display: 'flex', items: 'center', justify: 'center', position: 'relative' }}>
           {/* Hero opening typewriter */}
           <div
             id="hero-opening"
-            sz={{ absolute: true, inset: 0, flex: true, flexDir: 'col', items: 'center', justify: 'center', pointerEvents: 'none', z: 10, px: 8 }}
+            sz={{ position: 'absolute', inset: 0, display: 'flex', flexDir: 'col', items: 'center', justify: 'center', pointerEvents: 'none', z: 10, px: 8 }}
           >
             <div sz={{ w: 'full', maxW: 'xs', fontFamily: 'mono' }}>
-              <div id="ho-label" sz={{ text: '9px', tracking: 'widest', color: { color: 'primary', op: 50 }, uppercase: true, mb: 4 }} style={{ opacity: 0, transition: 'opacity 0.5s ease' }}>
+              <div id="ho-label" sz={{ text: '9px', tracking: 'widest', color: { color: 'primary', op: 50 }, textTransform: 'uppercase', mb: 4 }} style={{ opacity: 0, transition: 'opacity 0.5s ease' }}>
                 compiling...
               </div>
               <div sz={{ mb: 3, minH: '170px' }}>
                 <span id="ho-sz" sz={{ color: 'slate-400', text: '11px', leading: 'snug', whitespace: 'pre-wrap' }} />
                 <span id="ho-cursor" />
               </div>
-              <div id="ho-tw-row" sz={{ flex: true, items: 'center', gap: 2, mb: 3 }} style={{ opacity: 0, transition: 'opacity 0.7s ease' }}>
+              <div id="ho-tw-row" sz={{ display: 'flex', items: 'center', gap: 2, mb: 3 }} style={{ opacity: 0, transition: 'opacity 0.7s ease' }}>
                 <span sz={{ color: 'slate-600', text: '10px', select: 'none', shrink: 0 }}>↓</span>
                 <span sz={{ color: 'purple-400', text: '11px', fontWeight: 'medium' }}>p-4 bg-blue-500 hover:bg-blue-600</span>
               </div>
-              <div id="ho-mg-row" sz={{ flex: true, items: 'center', gap: 2 }} style={{ opacity: 0, transition: 'opacity 0.7s ease' }}>
+              <div id="ho-mg-row" sz={{ display: 'flex', items: 'center', gap: 2 }} style={{ opacity: 0, transition: 'opacity 0.7s ease' }}>
                 <span sz={{ color: 'slate-600', text: '10px', select: 'none', shrink: 0 }}>↓</span>
                 <span sz={{ text: '11px', fontWeight: 'bold' }} style={{ color: '#2dd597', textShadow: '0 0 14px rgba(45,213,151,0.9), 0 0 4px rgba(45,213,151,0.6)' }}>z&nbsp;&nbsp;y&nbsp;&nbsp;x</span>
               </div>

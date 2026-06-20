@@ -117,7 +117,7 @@
   textAlign: "center";
 } // text-center
 {
-  uppercase: true;
+  textTransform: "uppercase";
 } // uppercase
 {
   truncate: true;

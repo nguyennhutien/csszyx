@@ -312,7 +312,7 @@ import { szv } from "csszyx";
 
 const buttonSz = szv({
   base: {
-    inlineFlex: true,
+    display: "inline-flex",
     items: "center",
     rounded: "md",
     fontWeight: "medium",

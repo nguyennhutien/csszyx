@@ -139,7 +139,7 @@ Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
 // Absolutely positioned overlay
 <div sz={{ position: 'relative' }}>
   <div sz={{
-    absolute: true,
+    position: 'absolute',
     inset: 0,
     bg: 'black',
     opacity: 50,
@@ -148,7 +148,7 @@ Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
 
 // Sticky header
 <header sz={{
-  sticky: true,
+  position: 'sticky',
   top: 0,
   z: 50,
   bg: 'white',
