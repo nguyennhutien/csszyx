@@ -28,14 +28,12 @@ const corpus: ParityRecord[] = JSON.parse(
     readFileSync(fileURLToPath(new URL('./fixtures/parity-corpus.json', import.meta.url)), 'utf8'),
 );
 
-// SKIPPED until `transform_sz` is unified onto the single static lowering core.
-// Against the current duplicated runtime, 173/1317 corpus records diverge (111
-// leaf-level: CSS-var parens, fractions, content→alignContent, …; 62 nested:
-// color-opacity / bgImg objects, css escape hatch, group/peer/parametric
-// variants the runtime treats as plain variants). Flip `.skip` off — this then
-// becomes the permanent runtime gate, the twin of the static `parity_corpus.rs`
-// — once the unification lands and drives every record green.
-describe.skip('WASM runtime parity (transform_sz vs TS transform)', () => {
+// `transform_sz` is a thin adapter over the single static lowering core
+// (transformer.rs → convert_runtime_object → lower_static_sz_object), so every
+// corpus record lowers identically through the runtime WASM path and the TS
+// source-of-truth. This is the permanent runtime gate, the twin of the static
+// `parity_corpus.rs` — a divergence in either fails CI.
+describe('WASM runtime parity (transform_sz vs TS transform)', () => {
     beforeAll(async () => {
         await init();
     });
