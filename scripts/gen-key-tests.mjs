@@ -193,6 +193,10 @@ const topKey = sz => (sz && typeof sz === 'object' ? Object.keys(sz)[0] : undefi
 function collect() {
     const keys = {}; // key -> { forward: Map<sig,{sz,class}>, reverse: Set<class> }
     const reverseSkipped = [];
+    // class -> the sz key it is documented under (forward column), so its reverse
+    // case lands in the same describe block instead of the migrate-derived key.
+    const classToDocKey = new Map();
+    const reverseCandidates = new Set();
 
     const ensure = k => {
         if (!keys[k]) keys[k] = { forward: new Map(), reverse: new Set() };
@@ -240,30 +244,52 @@ function collect() {
                 ensure(key).forward.set(`${key} ${cls}`, { sz, class: cls });
             }
 
-            // REVERSE: every concrete class that migrates back to itself.
+            // REVERSE: collect candidates; bucket them after the walk so each
+            // class can be filed under the key its forward case uses.
             for (const raw of classes) {
                 const cls = concretizeClass(raw);
-                if (!cls) continue;
-                let parsed = null;
-                try {
-                    parsed = parseClass(cls, { display: 'canonical' });
-                } catch {
-                    /* unrecognized */
-                }
-                let ok = false;
-                try {
-                    ok = roundTrip(cls) === cls;
-                } catch {
-                    ok = false;
-                }
-                if (ok && parsed?.prop) {
-                    ensure(parsed.prop).reverse.add(cls);
-                } else if (!ok) {
-                    reverseSkipped.push(cls);
-                }
+                if (cls) reverseCandidates.add(cls);
             }
         }
     }
+
+    // Map each documented class to the key its forward case is filed under, so a
+    // class is tested in both directions inside one describe block; keyword-only
+    // classes (no documented sz) fall back to the migrate-derived key.
+    for (const [k, v] of Object.entries(keys)) {
+        for (const { class: c } of v.forward.values()) {
+            if (!classToDocKey.has(c)) classToDocKey.set(c, new Set());
+            classToDocKey.get(c).add(k);
+        }
+    }
+    for (const cls of reverseCandidates) {
+        let ok = false;
+        try {
+            ok = roundTrip(cls) === cls;
+        } catch {
+            ok = false;
+        }
+        if (!ok) {
+            reverseSkipped.push(cls);
+            continue;
+        }
+        // File the reverse case under every key the class is documented under (an
+        // alias like inset-e-4 ↔ { end } and { insetE } is documented twice), so
+        // neither alias key shows a false reverse-only gap.
+        const docKeys = classToDocKey.get(cls);
+        if (docKeys?.size) {
+            for (const k of docKeys) ensure(k).reverse.add(cls);
+            continue;
+        }
+        let key;
+        try {
+            key = parseClass(cls, { display: 'canonical' })?.prop;
+        } catch {
+            key = undefined;
+        }
+        if (key) ensure(key).reverse.add(cls);
+    }
+
     return { keys, reverseSkipped };
 }
 
