@@ -31,6 +31,8 @@
     "gen:parse-parity-corpus": "node --import tsx/esm scripts/gen-rust-parse-parity-corpus.mjs",
     "gen:rust-tables": "node scripts/generate-rust-transform-tables.mjs",
     "gen:rust-tables:check": "node scripts/generate-rust-transform-tables.mjs --check",
+    "gen:key-tests": "node --import tsx/esm scripts/gen-key-tests.mjs",
+    "gen:key-tests:check": "node --import tsx/esm scripts/gen-key-tests.mjs --check",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",

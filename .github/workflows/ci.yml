@@ -108,6 +108,11 @@ jobs:
               - 'playground/**/*.jsx'
               - 'scripts/**/*.ts'
               - 'scripts/**/*.mts'
+              - 'scripts/**/*.mjs'
+              # Snippets are the source of truth for the per-sz-key test matrix
+              # (scripts/gen-key-tests.mjs → sz-key-cases.json); a snippet edit
+              # can make the committed fixture stale, so it must run the suite.
+              - 'docs/specs/snippets/**'
               # package.json is intentionally NOT here — those edits go
               # through the content-aware pkg-gate step below instead, so a
               # version/repository/engines-only edit does not run the matrix.
@@ -388,6 +393,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The per-sz-key test matrix (packages/cli/tests/sz-key-matrix.test.ts) is
+      # driven by a committed fixture generated from docs/specs/snippets. Fail if
+      # regenerating would change it, so the snippets, generator, and fixture
+      # never drift apart.
+      - name: Check sz-key test fixture is current
+        run: pnpm gen:key-tests:check
 
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
