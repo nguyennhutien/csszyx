@@ -1227,7 +1227,9 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{lower_source_ir_classes, lower_static_sz_object};
+    use super::{
+        has_slash_opacity, lower_source_ir_classes, lower_static_sz_object, needs_brackets,
+    };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
         TextSpan,
@@ -1239,6 +1241,32 @@ mod tests {
             span: TextSpan { start: 0, end: 0 },
             value,
         }
+    }
+
+    #[test]
+    fn has_slash_opacity_truth_table() {
+        assert!(has_slash_opacity("blue-500/20"));
+        assert!(has_slash_opacity("brand-500/50"));
+        // A digit before the slash counts as opacity here; the color filter runs upstream.
+        assert!(has_slash_opacity("w-1/2"));
+        assert!(!has_slash_opacity("blue-500"));
+    }
+
+    #[test]
+    fn needs_brackets_extended() {
+        // Color functions and CSS units must be wrapped as arbitrary values.
+        assert!(needs_brackets("rgb(255,0,0)"));
+        assert!(needs_brackets("hsl(200,50%,50%)"));
+        assert!(needs_brackets("oklch(50% 0.1 200)"));
+        assert!(needs_brackets("50dvh"));
+        assert!(needs_brackets("1fr"));
+        assert!(needs_brackets("1ch"));
+        assert!(needs_brackets("90rad"));
+        assert!(needs_brackets("180turn"));
+        // Plain tokens, already-bracketed values, and bare numbers must not be wrapped.
+        assert!(!needs_brackets("red-500"));
+        assert!(!needs_brackets("[#333]"));
+        assert!(!needs_brackets("4"));
     }
 
     #[test]
