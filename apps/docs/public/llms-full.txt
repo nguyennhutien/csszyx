@@ -241,6 +241,28 @@ sz={{ '@container': true, '@md': { display: 'flex' } }}
 { p: 4, bg: 'blue-500', display: 'flex', flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
 ```
 
+## Type safety — unknown keys are TypeScript errors
+
+The `sz` prop type is **closed**: a key that is not a known sz prop or variant is a
+compile error, so typos and legacy CSS-property names are caught by `tsc` (run
+`tsc --noEmit` in CI to enforce it).
+
+```tsx
+{ bgColor: 'red-500' }   // ❌ tsc error — unknown key; canonical is { bg: 'red-500' }
+
+// Forcing a brand-new Tailwind utility csszyx has no key for yet — opt out explicitly:
+// @ts-expect-error - forward-compat utility not yet in csszyx
+{ someNewUtility: 'x' }  // ✅ allowed; the runtime still emits the class
+```
+
+Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
+`{ '[&>span]': {…} }`. **Custom breakpoints are typed from your CSS** — define one once in
+Tailwind `@theme` and csszyx auto-generates the type:
+
+```css
+@theme { --breakpoint-tablet: 40rem; }   /* → { tablet: { p: 6 } } now type-checks */
+```
+
 ## Full Snippets Reference
 
 # Core Concepts

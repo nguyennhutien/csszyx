@@ -76,6 +76,39 @@ flags (`ordinal`, `tabularNums`), default-or-value toggles (`grow`, `ring`,
 <div sz={{ truncate: true, tabularNums: true, grow: true, container: true }} />
 ```
 
+## Type safety — unknown keys are caught by TypeScript
+
+The `sz` prop type is **closed**: a key that isn't a known sz prop or variant is a
+TypeScript error, so a typo or a legacy CSS-property name fails at compile time. Run
+`tsc --noEmit` in CI to enforce it across a codebase.
+
+```tsx
+<div sz={{ bgColor: 'red-500' }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
+```
+
+To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt out with
+`@ts-expect-error` — a conscious decision; the runtime still emits the class:
+
+```tsx
+{/* @ts-expect-error - forward-compat utility not yet in csszyx */}
+<div sz={{ someNewUtility: 'x' }} />
+```
+
+Arbitrary variants are allowed by pattern (`@container`, `min-[320px]`, `[&>span]`).
+
+:::tip[Custom breakpoints are typed from your CSS]
+Define a breakpoint once in Tailwind `@theme` and csszyx auto-generates the type — no
+manual declaration:
+
+```css
+@theme { --breakpoint-tablet: 40rem; }
+```
+
+```tsx
+<div sz={{ p: 4, tablet: { p: 6 } }} /> // `tablet:` now type-checks + autocompletes
+```
+:::
+
 ## Nested Variants
 
 Variants (hover, focus, responsive breakpoints) use nested objects:

@@ -85,7 +85,9 @@ Key csszyx rules:
 - Arbitrary values: { p: '5px' } → p-[5px]
 - CSS variables: { p: '--my-var' } → p-(--my-var)
 - Scope variants: { group: { hover: { bg: 'blue-700' } } } → group-hover:bg-blue-700 (also peer)
-- Conditional/feature variants: { has: { checked: { ... } } } → has-[:checked]:…, { supports: { 'display:grid': { ... } } } → supports-[display:grid]:… (also not/data/aria)`,
+- Conditional/feature variants: { has: { checked: { ... } } } → has-[:checked]:…, { supports: { 'display:grid': { ... } } } → supports-[display:grid]:… (also not/data/aria)
+- Type-safe keys: the sz prop type is CLOSED — an unknown/typo key (e.g. { bgColor: 'red' }, canonical is { bg: 'red' }) is a TypeScript error, so a literal sz object is caught by tsc/CI. To force a brand-new Tailwind utility csszyx has no key for yet, opt out with // @ts-expect-error on that line (the runtime still emits the class). Arbitrary variants (@container, min-[320px], [&>span]) are allowed by pattern.
+- Custom breakpoints are typed from CSS: define it once in Tailwind @theme (e.g. @theme { --breakpoint-tablet: 40rem }) and csszyx auto-generates the type so { tablet: { ... } } type-checks — no manual declaration.`,
                         },
                     },
                 ],
