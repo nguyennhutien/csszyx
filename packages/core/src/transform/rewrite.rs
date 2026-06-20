@@ -900,6 +900,32 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_color_opacity_sub_property_ternary() {
+        // A ternary on the `op` sub-field must lower to complete color-opacity
+        // classes per branch, not the dead `bg:op-30` form.
+        let source =
+            "const X = ({ dim }) => <div sz={{ bg: { color: 'black', op: dim ? 30 : 100 } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ dim }) => <div className={dim ? \"bg-black/30\" : \"bg-black/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_palette_color_opacity_sub_property_ternary() {
+        let source =
+            "const X = ({ dim }) => <div sz={{ bg: { color: 'red-500', op: dim ? 30 : 100 } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ dim }) => <div className={dim ? \"bg-red-500/30\" : \"bg-red-500/100\"} />;"
+        );
+    }
+
+    #[test]
     fn rewrites_conditional_spread_ternary_sz_attribute() {
         let source = "const active = { bg: 'blue-500', color: 'white' }; const inactive = { bg: 'gray-100', color: 'gray-600' }; const X = ({ on }) => <div sz={{ ...(on ? active : inactive), p: 4 }} />;";
         let rewritten = rewrite(source).expect("rewritten");
