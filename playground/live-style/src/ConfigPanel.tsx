@@ -11,9 +11,9 @@ export function ConfigPanel({ config, onChange }: ConfigPanelProps) {
     const [jsonOpen, setJsonOpen] = useState(false);
 
     return (
-        <div sz={{ h: 'full', overflow: 'auto', p: 6, flex: true, flexDir: 'col', gap: 6 }}>
+        <div sz={{ h: 'full', overflow: 'auto', p: 6, display: 'flex', flexDir: 'col', gap: 6 }}>
             <div>
-                <h2 sz={{ text: 'sm', fontWeight: 'semibold', tracking: 'widest', uppercase: true, color: 'gray-400', mb: 4 }}>
+                <h2 sz={{ text: 'sm', fontWeight: 'semibold', tracking: 'widest', textTransform: 'uppercase', color: 'gray-400', mb: 4 }}>
                     Style Config
                 </h2>
 
@@ -48,7 +48,7 @@ export function ConfigPanel({ config, onChange }: ConfigPanelProps) {
             {/* JSON representation — what this would look like from an API */}
             <div sz={{ mt: 'auto' }}>
                 <button
-                    sz={{ flex: true, items: 'center', justify: 'between', w: 'full', text: 'xs', color: 'gray-400', fontFamily: 'mono', py: 2 }}
+                    sz={{ display: 'flex', items: 'center', justify: 'between', w: 'full', text: 'xs', color: 'gray-400', fontFamily: 'mono', py: 2 }}
                     onClick={() => setJsonOpen((o) => !o)}
                 >
                     <span>JSON Config</span>
@@ -68,7 +68,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
     return (
         <div sz={{ mb: 5 }}>
             <p sz={{ text: 'xs', color: 'gray-500', fontWeight: 'medium', mb: 2 }}>{label}</p>
-            <div sz={{ flex: true, flexDir: 'col', gap: 2 }}>
+            <div sz={{ display: 'flex', flexDir: 'col', gap: 2 }}>
                 {children}
             </div>
         </div>
@@ -77,9 +77,9 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function ColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
     return (
-        <div sz={{ flex: true, items: 'center', justify: 'between', gap: 3 }}>
+        <div sz={{ display: 'flex', items: 'center', justify: 'between', gap: 3 }}>
             <span sz={{ text: 'sm', color: 'gray-300' }}>{label}</span>
-            <div sz={{ flex: true, items: 'center', gap: 2 }}>
+            <div sz={{ display: 'flex', items: 'center', gap: 2 }}>
                 <span sz={{ text: 'xs', color: 'gray-500', fontFamily: 'mono' }}>{value}</span>
                 <input
                     type="color"
@@ -97,9 +97,9 @@ function SliderRow({ label, value, min, max, unit, onChange }: {
     onChange: (v: number) => void;
 }) {
     return (
-        <div sz={{ flex: true, items: 'center', justify: 'between', gap: 3 }}>
+        <div sz={{ display: 'flex', items: 'center', justify: 'between', gap: 3 }}>
             <span sz={{ text: 'sm', color: 'gray-300' }}>{label}</span>
-            <div sz={{ flex: true, items: 'center', gap: 2 }}>
+            <div sz={{ display: 'flex', items: 'center', gap: 2 }}>
                 <input
                     type="range"
                     min={min}

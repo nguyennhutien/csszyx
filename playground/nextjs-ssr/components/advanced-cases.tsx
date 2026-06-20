@@ -10,7 +10,7 @@ export function AdvancedCases() {
                 Testing group/peer, data attributes, ARIA, RTL, container queries, and more.
             </p>
 
-            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 3 }, gap: 4 }}>
+            <div sz={{ display: 'grid', gridCols: 2, md: { gridCols: 3 }, gap: 4 }}>
                 {/* Case 21: Group hover — parent group, child reacts */}
                 <div sz={{ group: true, p: 4, bg: 'gray-700', rounded: 'md' }}>
                     <span
@@ -33,7 +33,7 @@ export function AdvancedCases() {
 
                 {/* Case 23: Peer — checkbox controls sibling */}
                 <div sz={{ p: 4, bg: 'gray-700', rounded: 'md' }}>
-                    <label sz={{ flex: true, items: 'center', gap: 2 }}>
+                    <label sz={{ display: 'flex', items: 'center', gap: 2 }}>
                         <input type="checkbox" sz={{ peer: true }} />
                         <span
                             data-case="23-peer"
@@ -53,7 +53,7 @@ export function AdvancedCases() {
                     />
                     <span
                         data-case="24-named-peer"
-                        sz={{ invisible: true, 'peer-focus/search': { visible: true }, color: 'blue-400', text: 'xs', mt: 1, block: true }}
+                        sz={{ visibility: 'hidden', 'peer-focus/search': { visibility: 'visible' }, color: 'blue-400', text: 'xs', mt: 1, display: 'block' }}
                     >
                         Named Peer Focus
                     </span>

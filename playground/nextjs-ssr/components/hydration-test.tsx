@@ -59,7 +59,7 @@ export function HydrationTest() {
     return (
         <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>
             {/* Status Header */}
-            <div sz={{ flex: true, items: 'center', justify: 'between', mb: 6 }}>
+            <div sz={{ display: 'flex', items: 'center', justify: 'between', mb: 6 }}>
                 <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'white' }}>Hydration Status</h3>
                 <span
                     sz={statusSz}

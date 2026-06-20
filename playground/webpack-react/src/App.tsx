@@ -14,7 +14,7 @@ const App: React.FC = () => {
                     Welcome to csszyx + Webpack (Object Syntax)
                 </h1>
 
-                <div sz={{ grid: true, gridCols: 1, md: { gridCols: 2 }, gap: 6 }}>
+                <div sz={{ display: 'grid', gridCols: 1, md: { gridCols: 2 }, gap: 6 }}>
                     <div sz={{
                         p: 6,
                         bg: 'slate-800',
@@ -51,7 +51,7 @@ const App: React.FC = () => {
                     <h2 sz={{ text: '2xl', fontWeight: 'semibold', mb: 6, textAlign: 'center' }}>
                         New Features
                     </h2>
-                    <div sz={{ grid: true, gridCols: 1, md: { gridCols: 3 }, gap: 6 }}>
+                    <div sz={{ display: 'grid', gridCols: 1, md: { gridCols: 3 }, gap: 6 }}>
                         {/* Text/Leading shorthand */}
                         <div sz={{ p: 6, bg: 'slate-800', rounded: 'xl', border: true, borderColor: 'slate-700' }}>
                             <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'emerald-400', mb: 3 }}>Text/Leading</h3>

@@ -40,12 +40,12 @@ export function DynamicForm() {
             </h2>
 
             <form data-testid="dynamic-form" noValidate>
-                <div className={sz({ grid: true, gridCols: 2, gap: 4 })}>
+                <div className={sz({ display: 'grid', gridCols: 2, gap: 4 })}>
                     {FIELD_CONFIGS.map(({ name, label, style }) => (
                         <div key={name} data-testid={`field-${name}`}>
                             <label
                                 htmlFor={name}
-                                className={sz({ text: 'sm', fontWeight: 'medium', color: 'gray-700', mb: 1, block: true })}
+                                className={sz({ text: 'sm', fontWeight: 'medium', color: 'gray-700', mb: 1, display: 'block' })}
                             >
                                 {label}
                             </label>
@@ -61,7 +61,7 @@ export function DynamicForm() {
                     ))}
                 </div>
 
-                <div className={sz({ mt: 6, flex: true, justify: 'end', gap: 3 })}>
+                <div className={sz({ mt: 6, display: 'flex', justify: 'end', gap: 3 })}>
                     <button
                         type="button"
                         className={sz({ px: 4, py: 2, border: true, rounded: 'md', text: 'sm', color: 'gray-700' })}

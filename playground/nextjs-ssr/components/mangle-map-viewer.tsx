@@ -96,17 +96,17 @@ export function MangleMapViewer() {
             <h1 sz={{ text: '3xl', fontWeight: 'bold', color: 'white', mb: 2 }}>Mangle Map Viewer</h1>
 
             {/* Stats */}
-            <div sz={{ flex: true, gap: 4, mb: 6, flexWrap: 'wrap' }}>
-                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, flex: true, flexDir: 'col' }}>
+            <div sz={{ display: 'flex', gap: 4, mb: 6, flexWrap: 'wrap' }}>
+                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, display: 'flex', flexDir: 'col' }}>
                     <span sz={{ color: 'slate-400', text: 'xs', fontWeight: 'medium' }}>Total Classes</span>
                     <span sz={{ color: 'white', text: '2xl', fontWeight: 'bold' }}>{entries.length}</span>
                 </div>
-                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, flex: true, flexDir: 'col' }}>
+                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, display: 'flex', flexDir: 'col' }}>
                     <span sz={{ color: 'slate-400', text: 'xs', fontWeight: 'medium' }}>Total Bytes Saved</span>
                     <span sz={{ color: 'green-400', text: '2xl', fontWeight: 'bold' }}>{totalSaved} bytes</span>
                 </div>
                 {checksum && (
-                    <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, flex: true, flexDir: 'col' }}>
+                    <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, display: 'flex', flexDir: 'col' }}>
                         <span sz={{ color: 'slate-400', text: 'xs', fontWeight: 'medium' }}>Checksum (SHA-256)</span>
                         <code sz={{ color: 'amber-400', text: 'sm', fontFamily: 'mono' }}>{checksum}</code>
                     </div>

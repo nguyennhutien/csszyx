@@ -26,7 +26,7 @@ export default function Home() {
                         These components are rendered on the server. The sz prop is
                         transformed at build time.
                     </p>
-                    <div sz={{ grid: true, gridCols: 1, md: { gridCols: 2 }, gap: 4 }}>
+                    <div sz={{ display: 'grid', gridCols: 1, md: { gridCols: 2 }, gap: 4 }}>
                         <ServerCard
                             title="Static Card"
                             description="This card is rendered entirely on the server."
@@ -84,7 +84,7 @@ export default function Home() {
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
                         Testing conditional class application with sz prop.
                     </p>
-                    <div sz={{ flex: true, gap: 4 }}>
+                    <div sz={{ display: 'flex', gap: 4 }}>
                         <div sz={{ p: 4, rounded: 'lg', bg: { color: 'green-500', op: 20 }, borderColor: 'green-500', border: true }}>
                             <span sz={{ color: 'green-400' }}>Active State</span>
                         </div>

@@ -62,7 +62,7 @@ function App() {
   }
 
   return (
-    <div sz={{ minH: 'screen', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'purple-500', to: 'pink-500', flex: true, items: 'center', justify: 'center', p: 8 }}>
+    <div sz={{ minH: 'screen', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'purple-500', to: 'pink-500', display: 'flex', items: 'center', justify: 'center', p: 8 }}>
       <div sz={{ maxW: '2xl', w: 'full', bg: 'white', rounded: '2xl', shadow: '2xl', p: 8 }}>
         <VerificationComponent />
         <h1 sz={{ text: '4xl', fontWeight: 'bold', color: 'gray-900', mb: 4 }}>
@@ -76,7 +76,7 @@ function App() {
         {/* Basic Transform Test */}
         <div sz={{ mb: 8, p: 6, bg: 'blue-50', rounded: 'lg', borderColor: 'blue-200', border: true }}>
           <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'blue-900', mb: 3 }}>Counter Test</h2>
-          <div sz={{ flex: true, items: 'center', gap: 4 }}>
+          <div sz={{ display: 'flex', items: 'center', gap: 4 }}>
             <button
               onClick={() => setCount(c => c - 1)}
               sz={{ px: 4, py: 2, bg: 'red-500', color: 'white', rounded: 'lg', hover: { bg: 'red-600' }, transition: 'colors' }}
@@ -110,7 +110,7 @@ function App() {
         {/* Complex Styles Test */}
         <div sz={{ p: 6, bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'cyan-50', to: 'blue-50', rounded: 'lg', borderColor: 'cyan-200', border: true }}>
           <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'cyan-900', mb: 3 }}>Complex Styles</h2>
-          <div sz={{ grid: true, gridCols: 3, gap: 4 }}>
+          <div sz={{ display: 'grid', gridCols: 3, gap: 4 }}>
             <div sz={{ p: 4, bg: 'white', rounded: true, shadow: true, hover: { shadow: 'lg' }, transition: 'shadow' }}>
               <div sz={{ w: 12, h: 12, bg: 'red-500', rounded: 'full', mb: 2 }}></div>
               <p sz={{ text: 'sm', color: 'gray-600' }}>Red Circle</p>
@@ -130,7 +130,7 @@ function App() {
         <div sz={{ mt: 8, p: 6, bg: 'emerald-50', rounded: 'lg', borderColor: 'emerald-200', border: true }}>
           <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'emerald-900', mb: 3 }}>New Features</h2>
 
-          <div sz={{ grid: true, gridCols: 2, gap: 4 }}>
+          <div sz={{ display: 'grid', gridCols: 2, gap: 4 }}>
             {/* Text/Leading shorthand */}
             <div sz={{ p: 4, bg: 'white', rounded: 'lg', shadow: true }}>
               <h3 sz={{ text: 'sm', fontWeight: 'semibold', color: 'emerald-800', mb: 2 }}>Text/Leading Shorthand</h3>

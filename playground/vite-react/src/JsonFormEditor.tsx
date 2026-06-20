@@ -75,11 +75,11 @@ export function JsonFormEditor() {
             </div>
 
             {/* Two-panel layout */}
-            <div sz={{ grid: true, gridCols: 2, gap: 6, items: 'start' }}>
+            <div sz={{ display: 'grid', gridCols: 2, gap: 6, items: 'start' }}>
 
                 {/* Left: JSON editor */}
-                <div sz={{ flex: true, flexDir: 'col', gap: 2 }}>
-                    <div sz={{ flex: true, items: 'center', justify: 'between', mb: 1 }}>
+                <div sz={{ display: 'flex', flexDir: 'col', gap: 2 }}>
+                    <div sz={{ display: 'flex', items: 'center', justify: 'between', mb: 1 }}>
                         <span sz={{ text: 'xs', fontWeight: 'semibold', color: 'gray-400' }}>
                             FIELD CONFIG (JSON)
                         </span>
@@ -118,10 +118,10 @@ export function JsonFormEditor() {
                 </div>
 
                 {/* Right: live preview + stats */}
-                <div sz={{ flex: true, flexDir: 'col', gap: 4 }}>
+                <div sz={{ display: 'flex', flexDir: 'col', gap: 4 }}>
 
                     {/* Stats bar */}
-                    <div sz={{ flex: true, gap: 6, p: 4, bg: 'gray-900', border: true, borderColor: 'gray-700', rounded: 'lg' }}>
+                    <div sz={{ display: 'flex', gap: 6, p: 4, bg: 'gray-900', border: true, borderColor: 'gray-700', rounded: 'lg' }}>
                         <div>
                             <div sz={{ text: 'xs', color: 'gray-500', mb: 1 }}>adoptedStyleSheets</div>
                             <div sz={{ text: '2xl', fontWeight: 'bold', color: 'emerald-400' }}>{sheetInfo.sheets}</div>
@@ -137,7 +137,7 @@ export function JsonFormEditor() {
 
                     {/* Live preview — inputs styled via sz() runtime */}
                     <div sz={{ p: 6, bg: 'gray-900', border: true, borderColor: 'gray-700', rounded: 'lg' }}>
-                        <span sz={{ text: 'xs', fontWeight: 'semibold', color: 'gray-400', block: true, mb: 4 }}>
+                        <span sz={{ text: 'xs', fontWeight: 'semibold', color: 'gray-400', display: 'block', mb: 4 }}>
                             LIVE PREVIEW
                         </span>
                         {fields.length === 0
@@ -150,7 +150,7 @@ export function JsonFormEditor() {
                                 <form noValidate>
                                     {fields.map((field, i) => (
                                         <div key={field.name ?? i} sz={{ mb: 4 }}>
-                                            <label sz={{ text: 'xs', fontWeight: 'medium', color: 'gray-400', block: true, mb: 1 }}>
+                                            <label sz={{ text: 'xs', fontWeight: 'medium', color: 'gray-400', display: 'block', mb: 1 }}>
                                                 {field.label ?? field.name}
                                             </label>
                                             {/* sz() runtime — injects CSS for each unique style combo from JSON */}
