@@ -481,6 +481,10 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
         )),
         StaticSzValue::Boolean(false) | StaticSzValue::Object(_) => None,
         StaticSzValue::Number(value) => {
+            // Gradient color-stop positions render as a bare percent: from-50%.
+            if let Some(grad) = gradient_stop_prefix(key) {
+                return Some(format!("{prefix}{grad}-{}%", format_abs_number(*value)));
+            }
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
@@ -559,6 +563,176 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                     _ => return None,
                 });
             }
+            // listStyleType: standard keywords stay bare (list-disc), CSS vars use
+            // the paren form, everything else is arbitrary (list-[upper-roman]).
+            if key == "list" || key == "listStyle" {
+                return Some(if value.starts_with("--") {
+                    format!("{prefix}list-({value})")
+                } else if matches!(value.as_str(), "none" | "disc" | "decimal") {
+                    format!("{prefix}list-{value}")
+                } else {
+                    format!("{prefix}list-[{value}]")
+                });
+            }
+            // alignContent maps onto Tailwind's content-* utilities (content-center,
+            // content-between). Kept distinct from the `content` CSS property above.
+            if key == "alignContent" {
+                return Some(format!("{prefix}content-{value}"));
+            }
+            // mask-* sub-properties collapse the sub-axis: maskPos: 'center' is
+            // mask-center, not mask-position-center.
+            if matches!(
+                key,
+                "maskPos" | "maskSize" | "maskShape" | "maskComposite" | "maskMode"
+            ) {
+                return Some(format!("{prefix}mask-{value}"));
+            }
+            if key == "maskType" {
+                return Some(format!("{prefix}mask-type-{value}"));
+            }
+            if key == "maskRepeat" {
+                return Some(match value.as_str() {
+                    "repeat" => format!("{prefix}mask-repeat"),
+                    "no-repeat" => format!("{prefix}mask-no-repeat"),
+                    _ => format!("{prefix}mask-{value}"),
+                });
+            }
+            // font-variant-numeric values are emitted bare (normal-nums, tabular-nums).
+            if key == "fontVariant"
+                && matches!(
+                    value.as_str(),
+                    "normal-nums"
+                        | "ordinal"
+                        | "slashed-zero"
+                        | "lining-nums"
+                        | "oldstyle-nums"
+                        | "proportional-nums"
+                        | "tabular-nums"
+                        | "diagonal-fractions"
+                        | "stacked-fractions"
+                )
+            {
+                return Some(format!("{prefix}{value}"));
+            }
+            // scroll-snap direct maps: the sub-axis is dropped (snap-mandatory,
+            // snap-center), except snap-align-none which keeps the axis.
+            if key == "snapAlign" {
+                return match value.as_str() {
+                    "start" => Some(format!("{prefix}snap-start")),
+                    "end" => Some(format!("{prefix}snap-end")),
+                    "center" => Some(format!("{prefix}snap-center")),
+                    "none" => Some(format!("{prefix}snap-align-none")),
+                    _ => None,
+                };
+            }
+            if key == "snapStrictness" {
+                return match value.as_str() {
+                    "mandatory" => Some(format!("{prefix}snap-mandatory")),
+                    "proximity" => Some(format!("{prefix}snap-proximity")),
+                    _ => None,
+                };
+            }
+            if key == "snapStop" {
+                return match value.as_str() {
+                    "normal" => Some(format!("{prefix}snap-normal")),
+                    "always" => Some(format!("{prefix}snap-always")),
+                    _ => None,
+                };
+            }
+            if key == "snapType" {
+                return match value.as_str() {
+                    "none" => Some(format!("{prefix}snap-none")),
+                    "x" => Some(format!("{prefix}snap-x")),
+                    "y" => Some(format!("{prefix}snap-y")),
+                    "both" => Some(format!("{prefix}snap-both")),
+                    _ => None,
+                };
+            }
+            // Named container: { '@container': 'sidebar' } → @container/sidebar.
+            if key == "@container" {
+                return Some(format!("{prefix}@container/{value}"));
+            }
+            // Gradient color-stop positions reuse the from/via/to prefix. CSS vars
+            // use the paren form, bare integer percents stay bare, the rest bracket.
+            if let Some(grad) = gradient_stop_prefix(key) {
+                return Some(if value.starts_with("--") {
+                    format!("{prefix}{grad}-({value})")
+                } else if is_integer_percent(value) {
+                    format!("{prefix}{grad}-{value}")
+                } else {
+                    format!("{prefix}{grad}-[{value}]")
+                });
+            }
+            // font-stretch: named keywords use the font- prefix (font-condensed),
+            // integer percents stay bare (font-stretch-50%), decimals bracket.
+            if key == "fontStretch" {
+                return Some(format!("{prefix}{}", format_font_stretch(value)));
+            }
+            // Filter functions take a unit-bearing numeric whose string form is
+            // always arbitrary (brightness-[1.25]); scale: '3d' is the one keyword.
+            if matches!(
+                key,
+                "brightness"
+                    | "contrast"
+                    | "saturate"
+                    | "scale"
+                    | "backdropBrightness"
+                    | "backdropContrast"
+                    | "backdropSaturate"
+            ) {
+                if value == "3d" && key == "scale" {
+                    return Some(format!("{prefix}scale-3d"));
+                }
+                return Some(if value.starts_with("--") {
+                    format!("{prefix}{class_key}-({value})")
+                } else {
+                    format!("{prefix}{class_key}-[{value}]")
+                });
+            }
+            // Composite/function values (origin, ease, animate, filter, drop-shadow)
+            // are arbitrary whenever they carry a function, underscore, percent, or a
+            // unit/space that needs brackets.
+            if matches!(
+                key,
+                "origin" | "ease" | "animate" | "filter" | "backdropFilter" | "dropShadow"
+            ) && (needs_brackets(value)
+                || value.contains('(')
+                || value.contains('_')
+                || value.contains('%'))
+            {
+                return Some(format!(
+                    "{prefix}{class_key}-[{}]",
+                    normalize_arbitrary_value(value)
+                ));
+            }
+            // perspective-origin: named keywords stay bare, the rest are arbitrary
+            // (perspective-origin-[25%_25%]).
+            if key == "perspectiveOrigin" {
+                return Some(if matches!(
+                    value.as_str(),
+                    "center"
+                        | "top"
+                        | "right"
+                        | "bottom"
+                        | "left"
+                        | "top-left"
+                        | "top-right"
+                        | "bottom-left"
+                        | "bottom-right"
+                ) {
+                    format!("{prefix}perspective-origin-{value}")
+                } else {
+                    format!(
+                        "{prefix}perspective-origin-[{}]",
+                        normalize_arbitrary_value(value)
+                    )
+                });
+            }
+            // transformStyle: 'flat' | '3d' → transform-flat, transform-3d.
+            if key == "transformStyle" {
+                return Some(format!("{prefix}transform-{value}"));
+            }
+
             // Bare numeric fractions (1/2, 3/4) are sizing values, not the
             // `color/op` slash strings the guard below suppresses. Fraction-
             // friendly properties keep them native (w-1/2, basis-1/3); the rest
@@ -582,23 +756,92 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                 ));
             }
 
-            let is_negative = value.starts_with('-');
-            let base_value = if is_negative { &value[1..] } else { value };
-            let final_value = if needs_brackets(base_value) {
+            // Bracket the whole value (sign included) when it needs arbitrary
+            // syntax, then hoist a surviving leading `-` to the utility prefix.
+            // A negative length stays inside the bracket (top-[-1px]); a bare
+            // negative fraction hoists (-inset-1/2), mirroring the oxc transform.
+            let final_value = if key == "aspect" && is_decimal_ratio(value) {
+                format!("[{value}]")
+            } else if needs_brackets(value) {
                 // Tailwind arbitrary values cannot contain raw spaces (the class
                 // attribute would split into separate tokens), so collapse
                 // whitespace to underscores, matching the Babel/oxc transform.
-                format!("[{}]", normalize_arbitrary_value(base_value))
+                format!("[{}]", normalize_arbitrary_value(value))
             } else {
-                base_value.to_string()
+                value.clone()
             };
 
-            if is_negative {
-                Some(format!("{prefix}-{class_key}-{final_value}"))
-            } else {
-                Some(format!("{prefix}{class_key}-{final_value}"))
-            }
+            Some(final_value.strip_prefix('-').map_or_else(
+                || format!("{prefix}{class_key}-{final_value}"),
+                |stripped| format!("{prefix}-{class_key}-{stripped}"),
+            ))
         }
+    }
+}
+
+/// Maps a gradient color-stop position key to its Tailwind prefix
+/// (`fromPos` → `from`, `viaPos` → `via`, `toPos` → `to`).
+pub(crate) fn gradient_stop_prefix(key: &str) -> Option<&'static str> {
+    match key {
+        "fromPos" => Some("from"),
+        "viaPos" => Some("via"),
+        "toPos" => Some("to"),
+        _ => None,
+    }
+}
+
+/// Matches a bare integer percentage such as `50%` (the `^\d+%$` form).
+pub(crate) fn is_integer_percent(value: &str) -> bool {
+    value
+        .strip_suffix('%')
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Matches a percentage with an optional decimal part such as `50%` or `12.5%`.
+fn is_percent(value: &str) -> bool {
+    let Some(num) = value.strip_suffix('%') else {
+        return false;
+    };
+    let mut parts = num.split('.');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(int), None, None) => !int.is_empty() && int.bytes().all(|b| b.is_ascii_digit()),
+        (Some(int), Some(frac), None) => {
+            !int.is_empty()
+                && !frac.is_empty()
+                && int.bytes().all(|b| b.is_ascii_digit())
+                && frac.bytes().all(|b| b.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+/// Lowers `fontStretch` to its bare Tailwind class (caller prepends the variant
+/// prefix): named keywords use the `font-` prefix (`font-condensed`), integer
+/// percents stay bare (`font-stretch-50%`), decimals and other values arbitrary.
+pub(crate) fn format_font_stretch(value: &str) -> String {
+    const KEYWORDS: &[&str] = &[
+        "ultra-condensed",
+        "extra-condensed",
+        "condensed",
+        "semi-condensed",
+        "normal",
+        "semi-expanded",
+        "expanded",
+        "extra-expanded",
+        "ultra-expanded",
+    ];
+    if KEYWORDS.contains(&value) {
+        format!("font-{value}")
+    } else if value.starts_with("--") {
+        format!("font-stretch-({value})")
+    } else if is_percent(value) {
+        if value.contains('.') {
+            format!("font-stretch-[{value}]")
+        } else {
+            format!("font-stretch-{value}")
+        }
+    } else {
+        format!("font-stretch-[{value}]")
     }
 }
 
@@ -812,6 +1055,12 @@ const CSS_UNITS: &[&str] = &[
 ];
 
 fn has_slash_opacity(value: &str) -> bool {
+    // Suppress a color/opacity slash (red-500/50, white/50) — the object form
+    // `{ color, op }` is the supported spelling. A numeric ratio (4/2.5, -1/2)
+    // or a function value (calc(100/5)) is a real arbitrary value, not opacity.
+    if value.contains('(') || is_decimal_ratio(value) {
+        return false;
+    }
     value.find('/').is_some_and(|pos| {
         pos > 0
             && value
@@ -819,6 +1068,31 @@ fn has_slash_opacity(value: &str) -> bool {
                 .get(pos - 1)
                 .is_some_and(u8::is_ascii_digit)
     })
+}
+
+/// Matches a numeric ratio with optional decimals and an optional leading sign,
+/// such as `4/2.5`, `16/9`, or `-1/2`.
+pub(crate) fn is_decimal_ratio(value: &str) -> bool {
+    let unsigned = value.strip_prefix('-').unwrap_or(value);
+    let Some((num, den)) = unsigned.split_once('/') else {
+        return false;
+    };
+    is_unsigned_decimal(num) && is_unsigned_decimal(den)
+}
+
+/// Matches a non-empty run of digits with at most one decimal point (`12`, `2.5`).
+fn is_unsigned_decimal(value: &str) -> bool {
+    let mut parts = value.split('.');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(int), None, None) => !int.is_empty() && int.bytes().all(|b| b.is_ascii_digit()),
+        (Some(int), Some(frac), None) => {
+            !int.is_empty()
+                && !frac.is_empty()
+                && int.bytes().all(|b| b.is_ascii_digit())
+                && frac.bytes().all(|b| b.is_ascii_digit())
+        }
+        _ => false,
+    }
 }
 
 /// Kebab-cases a camelCase key the way the oxc fallback does:
@@ -936,12 +1210,14 @@ fn needs_brackets(value: &str) -> bool {
 
     CSS_UNITS.iter().any(|unit| {
         value.strip_suffix(unit).is_some_and(|prefix| {
+            // Tolerate a leading sign so a negative length (-1px) brackets too.
+            let prefix = prefix.strip_prefix('-').unwrap_or(prefix);
             !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit() || c == '.')
         })
     })
 }
 
-fn normalize_arbitrary_value(value: &str) -> String {
+pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
     let stripped = value
         .strip_prefix('[')
         .and_then(|inner| inner.strip_suffix(']'))

@@ -5,6 +5,10 @@ use wasm_bindgen::prelude::*;
 use crate::transform::generated::tables::{
     boolean_class, is_removed_boolean_sugar, property_prefix, variant_prefix,
 };
+use crate::transform::lower::{
+    format_font_stretch, gradient_stop_prefix, is_decimal_ratio, is_integer_percent,
+    normalize_arbitrary_value,
+};
 
 /// Value types supported by the sz prop.
 #[derive(Serialize, Deserialize, Debug)]
@@ -79,6 +83,17 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
         }
         PrimitiveValue::Bool(false) => String::new(),
         PrimitiveValue::Number(n) => {
+            // Gradient color-stop positions render as a bare percent: from-50%.
+            if let Some(grad) = gradient_stop_prefix(key) {
+                let pct = if n.fract() == 0.0 {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let int_val = *n as i64;
+                    int_val.to_string()
+                } else {
+                    n.to_string()
+                };
+                return format!("{prefix}{grad}-{pct}%");
+            }
             // Correct negative value handling: m: -4 -> -m-4
             if *n < 0.0 {
                 let abs_val = n.abs();
@@ -114,23 +129,22 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
                 return format!("{prefix}{class_name}");
             }
 
-            let is_negative = s.starts_with('-');
-            let base_val = if is_negative { &s[1..] } else { s };
-
-            // Auto-bracket for arbitrary values (contains units or special chars)
-            let final_val = if needs_brackets(base_val) {
-                format!("[{base_val}]")
+            // Bracket the whole value (sign included) when it needs arbitrary
+            // syntax, then hoist a surviving leading `-` to the utility prefix —
+            // a negative length stays inside the bracket (top-[-1px]) while a bare
+            // negative fraction hoists (-inset-1/2). Mirrors transform/lower.rs.
+            let final_val = if key == "aspect" && is_decimal_ratio(s) {
+                format!("[{s}]")
+            } else if needs_brackets(s) {
+                format!("[{}]", normalize_arbitrary_value(s))
             } else {
-                base_val.to_string()
+                s.clone()
             };
 
-            if is_negative {
-                // Negative string: m: "-4" -> -m-4
-                format!("{prefix}-{class_key}-{final_val}")
-            } else {
-                // Positive string: bg: "red-500" -> bg-red-500
-                format!("{prefix}{class_key}-{final_val}")
-            }
+            final_val.strip_prefix('-').map_or_else(
+                || format!("{prefix}{class_key}-{final_val}"),
+                |stripped| format!("{prefix}-{class_key}-{stripped}"),
+            )
         }
     }
 }
@@ -140,6 +154,7 @@ fn format_primitive_class(key: &str, value: &PrimitiveValue, prefix: &str) -> St
 /// Tailwind class. Mirrors the string special-cases in transform/lower.rs and
 /// the TypeScript transform. Returns `None` for any other key or an unsupported
 /// value (which then warns/falls through at the TypeScript boundary).
+#[allow(clippy::too_many_lines)]
 fn single_property_class(key: &str, value: &str) -> Option<String> {
     match key {
         "display" => Some(if value == "none" {
@@ -178,6 +193,121 @@ fn single_property_class(key: &str, value: &str) -> Option<String> {
             "underline" | "overline" | "line-through" | "no-underline" => Some(value.to_string()),
             _ => None,
         },
+        // listStyleType: standard keywords bare, CSS vars paren, else arbitrary.
+        "list" | "listStyle" => Some(if value.starts_with("--") {
+            format!("list-({value})")
+        } else if matches!(value, "none" | "disc" | "decimal") {
+            format!("list-{value}")
+        } else {
+            format!("list-[{value}]")
+        }),
+        // alignContent → Tailwind content-* utilities (distinct from `content`).
+        "alignContent" => Some(format!("content-{value}")),
+        // mask-* sub-properties collapse the sub-axis (maskPos: center → mask-center).
+        "maskPos" | "maskSize" | "maskShape" | "maskComposite" | "maskMode" => {
+            Some(format!("mask-{value}"))
+        }
+        "maskType" => Some(format!("mask-type-{value}")),
+        "maskRepeat" => Some(match value {
+            "repeat" => "mask-repeat".to_string(),
+            "no-repeat" => "mask-no-repeat".to_string(),
+            _ => format!("mask-{value}"),
+        }),
+        // font-variant-numeric values emit bare (normal-nums, tabular-nums).
+        "fontVariant" => match value {
+            "normal-nums" | "ordinal" | "slashed-zero" | "lining-nums" | "oldstyle-nums"
+            | "proportional-nums" | "tabular-nums" | "diagonal-fractions" | "stacked-fractions" => {
+                Some(value.to_string())
+            }
+            _ => None,
+        },
+        // scroll-snap direct maps (sub-axis dropped, except snap-align-none).
+        "snapAlign" => match value {
+            "start" => Some("snap-start".to_string()),
+            "end" => Some("snap-end".to_string()),
+            "center" => Some("snap-center".to_string()),
+            "none" => Some("snap-align-none".to_string()),
+            _ => None,
+        },
+        "snapStrictness" => match value {
+            "mandatory" => Some("snap-mandatory".to_string()),
+            "proximity" => Some("snap-proximity".to_string()),
+            _ => None,
+        },
+        "snapStop" => match value {
+            "normal" => Some("snap-normal".to_string()),
+            "always" => Some("snap-always".to_string()),
+            _ => None,
+        },
+        "snapType" => match value {
+            "none" => Some("snap-none".to_string()),
+            "x" => Some("snap-x".to_string()),
+            "y" => Some("snap-y".to_string()),
+            "both" => Some("snap-both".to_string()),
+            _ => None,
+        },
+        // Named container: { '@container': 'sidebar' } → @container/sidebar.
+        "@container" => Some(format!("@container/{value}")),
+        // font-stretch: keywords use font-, integer percents bare, decimals bracket.
+        "fontStretch" => Some(format_font_stretch(value)),
+        // transformStyle: 'flat' | '3d' → transform-flat, transform-3d.
+        "transformStyle" => Some(format!("transform-{value}")),
+        // perspective-origin: named keywords bare, the rest arbitrary.
+        "perspectiveOrigin" => Some(
+            if matches!(
+                value,
+                "center"
+                    | "top"
+                    | "right"
+                    | "bottom"
+                    | "left"
+                    | "top-left"
+                    | "top-right"
+                    | "bottom-left"
+                    | "bottom-right"
+            ) {
+                format!("perspective-origin-{value}")
+            } else {
+                format!("perspective-origin-[{}]", normalize_arbitrary_value(value))
+            },
+        ),
+        // Filter functions whose string value is always arbitrary (brightness-[1.25]);
+        // scale: '3d' is the one keyword.
+        "brightness" | "contrast" | "saturate" | "scale" | "backdropBrightness"
+        | "backdropContrast" | "backdropSaturate" => {
+            if value == "3d" && key == "scale" {
+                Some("scale-3d".to_string())
+            } else {
+                let prop = property_prefix(key).unwrap_or(key);
+                Some(if value.starts_with("--") {
+                    format!("{prop}-({value})")
+                } else {
+                    format!("{prop}-[{value}]")
+                })
+            }
+        }
+        // Composite/function values are arbitrary when they carry a function,
+        // underscore, percent, or a unit/space; otherwise fall through to generic.
+        "origin" | "ease" | "animate" | "filter" | "backdropFilter" | "dropShadow"
+            if needs_brackets(value)
+                || value.contains('(')
+                || value.contains('_')
+                || value.contains('%') =>
+        {
+            let prop = property_prefix(key).unwrap_or(key);
+            Some(format!("{prop}-[{}]", normalize_arbitrary_value(value)))
+        }
+        // Gradient color-stop positions reuse the from/via/to prefix.
+        _ if gradient_stop_prefix(key).is_some() => {
+            let grad = gradient_stop_prefix(key).unwrap_or(key);
+            Some(if value.starts_with("--") {
+                format!("{grad}-({value})")
+            } else if is_integer_percent(value) {
+                format!("{grad}-{value}")
+            } else {
+                format!("{grad}-[{value}]")
+            })
+        }
         _ => None,
     }
 }
@@ -193,6 +323,11 @@ const CSS_UNITS: &[&str] = &[
 /// Only matches color-scale/opacity patterns (digit before slash),
 /// not fractions like "1/2" or other slash usage.
 fn has_slash_opacity(s: &str) -> bool {
+    // A numeric ratio (4/2.5, -1/2) or a function value (calc(100/5)) is a real
+    // arbitrary value, not opacity — only a color/opacity slash is suppressed.
+    if s.contains('(') || is_decimal_ratio(s) {
+        return false;
+    }
     s.find('/')
         .is_some_and(|pos| pos > 0 && s.as_bytes().get(pos - 1).is_some_and(u8::is_ascii_digit))
 }
@@ -241,6 +376,8 @@ fn needs_brackets(val: &str) -> bool {
     // CSS units — must match TypeScript's unit list exactly
     for unit in CSS_UNITS {
         if let Some(prefix) = val.strip_suffix(unit) {
+            // Tolerate a leading sign so a negative length (-1px) brackets too.
+            let prefix = prefix.strip_prefix('-').unwrap_or(prefix);
             if !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit() || c == '.') {
                 return true;
             }
