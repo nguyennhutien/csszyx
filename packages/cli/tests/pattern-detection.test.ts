@@ -414,9 +414,10 @@ describe('real-world SA scenarios', () => {
             '<div className="@container flex flex-col @md:flex-row @lg:gap-8 md:p-8 lg:p-12" />';
         const result = migrate(source);
         expect(result.changed).toBe(true);
-        // @container (standalone) is a TW v4 container declaration class — not a sz prop;
-        // it stays in className while its query variants (@md, @lg) go to sz.
-        expect(result.code).toContain('className="@container"');
+        // The standalone @container marker migrates to sz like group/peer
+        // ({ '@container': true } lowers back to the same class); its query
+        // variants (@md, @lg) and responsive breakpoints (md, lg) nest under sz.
+        expect(result.code).toContain("'@container': true");
         expect(result.code).toContain("'@md'");
         expect(result.code).toContain("'@lg'");
         expect(result.code).toContain('md: {');
