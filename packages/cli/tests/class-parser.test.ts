@@ -1123,5 +1123,56 @@ describe('class-parser', () => {
             expect(parseClass('resize')).toEqual({ prop: 'resize', value: true });
             expect(parseClass('shadow')).toEqual({ prop: 'shadow', value: true });
         });
+
+        it('logical inset / margin / padding / sizing map to their keys', () => {
+            expect(parseClass('inset-s-4')).toEqual({ prop: 'insetS', value: 4 });
+            expect(parseClass('inset-be-4')).toEqual({ prop: 'insetBe', value: 4 });
+            expect(parseClass('mbs-4')).toEqual({ prop: 'mbs', value: 4 });
+            expect(parseClass('pbe-4')).toEqual({ prop: 'pbe', value: 4 });
+            expect(parseClass('min-block-4')).toEqual({ prop: 'minBlockSize', value: 4 });
+            expect(parseClass('max-inline-4')).toEqual({ prop: 'maxInlineSize', value: 4 });
+            expect(parseClass('tab-4')).toEqual({ prop: 'tabSize', value: 4 });
+            expect(parseClass('zoom-4')).toEqual({ prop: 'zoom', value: 4 });
+            expect(parseClass('translate-4')).toEqual({ prop: 'translate', value: 4 });
+        });
+
+        it('disambiguates ambiguous suffixes that share a prefix', () => {
+            // gradient stop: position (%, length) vs color
+            expect(parseClass('from-4%')).toEqual({ prop: 'fromPos', value: '4%' });
+            expect(parseClass('from-red-500')).toEqual({ prop: 'from', value: 'red-500' });
+            // shadow value var vs explicit color var
+            expect(parseClass('shadow-(--s)')).toEqual({ prop: 'shadow', value: '--s' });
+            expect(parseClass('shadow-(color:--c)')).toEqual({
+                prop: 'shadowColor',
+                value: '--c',
+            });
+            // decoration length form is thickness, not color
+            expect(parseClass('decoration-[3px]')).toEqual({
+                prop: 'decorationThickness',
+                value: '3px',
+            });
+            // stroke length form is width, not color
+            expect(parseClass('stroke-[0.5rem]')).toEqual({
+                prop: 'strokeWidth',
+                value: '0.5rem',
+            });
+            // arbitrary bg led by a position keyword is background-position
+            expect(parseClass('bg-[center_top_1rem]')).toEqual({
+                prop: 'bgPos',
+                value: 'center top 1rem',
+            });
+        });
+
+        it('container-query marker and named container', () => {
+            expect(parseClass('@container')).toEqual({ prop: '@container', value: true });
+            expect(parseClass('@container/sidebar')).toEqual({
+                prop: '@container',
+                value: 'sidebar',
+            });
+        });
+
+        it('mask gradient keeps a leading - as part of the value', () => {
+            expect(parseClass('-mask-linear-45')).toEqual({ prop: 'mask', value: '-linear-45' });
+        });
     });
 });

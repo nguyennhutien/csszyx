@@ -16,6 +16,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     bg: 'bg',
     'bg-clip': 'bgClip',
     'bg-origin': 'bgOrigin',
+    'bg-size': 'bgSize',
 
     // Border Radius
     rounded: 'rounded',
@@ -83,6 +84,12 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'space-x': 'spaceX',
     'space-y': 'spaceY',
 
+    // Logical margin / padding (block-start / block-end)
+    mbs: 'mbs',
+    mbe: 'mbe',
+    pbs: 'pbs',
+    pbe: 'pbe',
+
     // Sizing
     w: 'w',
     'min-w': 'minW',
@@ -96,6 +103,10 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     // `block-*` / `inline-*` value forms route here.
     block: 'blockSize',
     inline: 'inlineSize',
+    'min-block': 'minBlockSize',
+    'max-block': 'maxBlockSize',
+    'min-inline': 'minInlineSize',
+    'max-inline': 'maxInlineSize',
 
     // Layout
     aspect: 'aspect',
@@ -120,6 +131,11 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     inset: 'inset',
     'inset-x': 'insetX',
     'inset-y': 'insetY',
+    // Logical inset sides (inset-s/e + block-start/block-end)
+    'inset-s': 'insetS',
+    'inset-e': 'insetE',
+    'inset-bs': 'insetBs',
+    'inset-be': 'insetBe',
     top: 'top',
     right: 'right',
     bottom: 'bottom',
@@ -212,6 +228,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'scale-y': 'scaleY',
     'scale-z': 'scaleZ',
     rotate: 'rotate',
+    translate: 'translate',
     'translate-x': 'translateX',
     'translate-y': 'translateY',
     'translate-z': 'translateZ',
@@ -231,6 +248,8 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     caret: 'caret',
     'pointer-events': 'pointerEvents',
     scheme: 'scheme',
+    tab: 'tabSize',
+    zoom: 'zoom',
     scrollbar: 'scrollbar',
     'scrollbar-gutter': 'scrollbarGutter',
     resize: 'resize',
@@ -565,6 +584,13 @@ export const NEGATIVE_ALLOWED = new Set([
     'inset-y',
     'start',
     'end',
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
+    'mbs',
+    'mbe',
+    'translate',
     'z',
     'order',
     'col',
@@ -591,6 +617,9 @@ export const NEGATIVE_ALLOWED = new Set([
     'scroll-ml',
     'hue-rotate',
     'backdrop-hue-rotate',
+    // mask gradient direction carries a leading `-` as part of the value
+    // (e.g. -mask-linear-45 → { mask: '-linear-45' }), not a numeric negation.
+    'mask',
 ]);
 
 // ============================================================================
@@ -614,8 +643,13 @@ export const FRACTION_SUPPORTED = new Set([
     'left',
     'start',
     'end',
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
     'translate-x',
     'translate-y',
+    'translate',
     'aspect',
 ]);
 
@@ -686,9 +720,23 @@ export const SPACING_PROPS = new Set([
     'translate-x',
     'translate-y',
     'translate-z',
+    'translate',
     // Logical sizing accepts the spacing/sizing scale (block-4, inline-full, …)
     'block',
     'inline',
+    'min-block',
+    'max-block',
+    'min-inline',
+    'max-inline',
+    // Logical inset sides + block-axis margin/padding
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
+    'mbs',
+    'mbe',
+    'pbs',
+    'pbe',
 ]);
 
 // ============================================================================

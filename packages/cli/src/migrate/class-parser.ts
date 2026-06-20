@@ -77,6 +77,15 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
         negInput = input.slice(1);
     }
 
+    // Container-query marker: `@container` enables container queries, and the
+    // named form `@container/sidebar` carries the container name as a sugar value.
+    if (input === '@container') {
+        return { prop: '@container', value: true };
+    }
+    if (input.startsWith('@container/')) {
+        return { prop: '@container', value: input.slice('@container/'.length) };
+    }
+
     // 1. Try exact boolean match first (highest priority)
     const boolResult = tryBooleanMatch(input);
     if (boolResult) {
@@ -434,6 +443,10 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return disambiguateInsetShadow(value);
         case 'stroke':
             return disambiguateStroke(value);
+        case 'from':
+        case 'via':
+        case 'to':
+            return disambiguateGradientStop(prefix, value);
         case 'list':
             return disambiguateList(value);
         case 'ease':
@@ -513,7 +526,9 @@ function disambiguateFont(value: string): ParsedClass | null {
     // font-stretch-* is handled as a separate prefix
     if (value.startsWith('stretch-')) {
         const stretchVal = value.slice('stretch-'.length);
-        return { prop: 'fontStretch', value: stretchVal };
+        // Strip arbitrary/CSS-var wrappers so font-stretch-(--s) round-trips
+        // (the compiler re-wraps the bare value) instead of double-wrapping.
+        return { prop: 'fontStretch', value: parseStringValue(stretchVal) };
     }
     if (FONT_STRETCH_KEYWORDS.has(value)) {
         return { prop: 'fontStretch', value };
@@ -560,6 +575,15 @@ function disambiguateBg(value: string): ParsedClass | null {
     if (BG_ATTACHMENT_KEYWORDS.has(value)) {
         return { prop: 'bgAttach', value };
     }
+    // Arbitrary multi-token value led by a position keyword → background-position
+    // (e.g. bg-[center_top_1rem]). A color or image arbitrary value never takes
+    // this shape, so single-token / non-position arbitraries still fall through.
+    if (value.startsWith('[') && value.endsWith(']')) {
+        const inner = value.slice(1, -1).replace(/_/g, ' ');
+        if (inner.includes(' ') && BG_POSITION_KEYWORDS.has(inner.split(' ')[0])) {
+            return { prop: 'bgPos', value: inner };
+        }
+    }
     if (value === 'none') {
         return { prop: 'bgImg', value: 'none' };
     }
@@ -590,6 +614,15 @@ function disambiguateObject(value: string): ParsedClass | null {
 function disambiguateShadow(value: string): ParsedClass | null {
     if (SHADOW_SIZE_KEYWORDS.has(value)) {
         return { prop: 'shadow', value };
+    }
+    // CSS-var paren form: shadow-(color:--c) is the color, shadow-(--s) is the
+    // shadow value itself. Bare arbitrary length also sets the shadow value.
+    if (value.startsWith('(') && value.endsWith(')')) {
+        const inner = value.slice(1, -1);
+        if (inner.startsWith('color:')) {
+            return { prop: 'shadowColor', value: inner.slice('color:'.length) };
+        }
+        return { prop: 'shadow', value: inner };
     }
     // shadow with color
     return { prop: 'shadowColor', value: parseStringValue(value) };
@@ -627,11 +660,12 @@ function disambiguateDecoration(value: string): ParsedClass | null {
         return { prop: 'decorationStyle', value };
     }
     if (DECORATION_THICKNESS_KEYWORDS.has(value)) {
-        const num = Number(value);
-        if (!Number.isNaN(num)) {
-            return { prop: 'decorationThickness', value };
-        }
         return { prop: 'decorationThickness', value };
+    }
+    // Arbitrary dimension (decoration-[3px]) or CSS-var (decoration-(--v)) → thickness.
+    // csszyx models the bracket/paren length form as text-decoration-thickness.
+    if (isArbitraryDimension(value) || (value.startsWith('(') && value.endsWith(')'))) {
+        return { prop: 'decorationThickness', value: parseStringValue(value) };
     }
     // Default: color
     return { prop: 'decorationColor', value: parseStringValue(value) };
@@ -715,7 +749,27 @@ function disambiguateStroke(value: string): ParsedClass | null {
     if (!Number.isNaN(num) && Number.isInteger(num)) {
         return { prop: 'strokeWidth', value: num };
     }
+    // Arbitrary dimension → width (e.g. stroke-[0.5rem])
+    if (isArbitraryDimension(value)) {
+        return { prop: 'strokeWidth', value: parseStringValue(value) };
+    }
     return { prop: 'stroke', value: parseStringValue(value) };
+}
+
+/**
+ * Disambiguates gradient color-stop classes (from/via/to) into a color or a
+ * color-stop position. A percentage, bare number, or arbitrary length is a stop
+ * position (from-4%, from-[300px] → fromPos); anything else is a color.
+ * @param prefix - The gradient stop prefix (from/via/to)
+ * @param value - The value after the prefix
+ * @returns Parsed gradient-stop result
+ */
+function disambiguateGradientStop(prefix: string, value: string): ParsedClass | null {
+    const posKey = prefix === 'from' ? 'fromPos' : prefix === 'via' ? 'viaPos' : 'toPos';
+    if (/^\d+(\.\d+)?%$/.test(value) || /^\d+$/.test(value) || isArbitraryDimension(value)) {
+        return { prop: posKey, value: parseStringValue(value) };
+    }
+    return { prop: prefix, value: parseStringValue(value) };
 }
 
 /**
