@@ -136,7 +136,18 @@ interface ProductionConfig {
   incrementalBuild: boolean; // Enable build caching
   minify: boolean; // Minify output
 }
+```
 
+:::tip[Inspecting CSS / hybrid apps]
+Mangling rewrites every csszyx-owned class name to a short alias (`z`, `y`, …), so
+the production bundle no longer contains the original utility names. Set
+`production: { mangle: false }` to keep readable class names — the supported way to
+verify the CSS a build emits, and recommended for **hybrid apps** that also ship
+non-csszyx stylesheets keyed on the original names. To check a single `sz` object
+without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
+:::
+
+```ts
 interface GlobalVarMangleConfig {
   enabled: boolean;
   mode?: 'alias';
