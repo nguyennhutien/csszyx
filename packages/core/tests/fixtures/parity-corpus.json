@@ -4424,6 +4424,58 @@
     "oxc": "group-hover:opacity-100 p-1"
   },
   {
+    "sz": "{\"bgImg\":\"url(/hero.png)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bgImg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "url(/hero.png)"
+          }
+        }
+      ]
+    },
+    "oxc": "bg-[url(/hero.png)]"
+  },
+  {
+    "sz": "{\"hover\":{\"start\":2}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "hover",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "start",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "hover:inset-s-2"
+  },
+  {
     "sz": "{\"@container\":true}",
     "ir": {
       "properties": [

@@ -9,8 +9,11 @@
  * Round-trip: TW class → invert PROPERTY_MAP prefix → sz object → transform() → compare
  *
  * Usage:
- *   pnpm corpus:check              — print report, exit 0 always
- *   pnpm corpus:check --fail-fast  — exit 1 if any gaps found
+ *   pnpm corpus:check                    — print report, exit 0 always
+ *   pnpm corpus:check --fail-fast        — exit 1 if any gap (broken or unmapped)
+ *   pnpm corpus:check --require-no-broken — exit 1 only on broken (wrong output);
+ *                                           ignores unmapped, which is advisory
+ *                                           coverage noise (component class names)
  *
  * This is a reporting tool, not a vitest test. Run on PRs to track coverage
  * trends. Add missing mappings to the relevant packages/compiler/tests/ file.
@@ -232,5 +235,15 @@ if (broken.length === 0 && unmapped.length === 0) {
 
 const failFast = process.argv.includes('--fail-fast');
 if (failFast && (broken.length > 0 || unmapped.length > 0)) {
+    process.exit(1);
+}
+
+// `broken` means a class maps but compiles to the WRONG output — a real
+// correctness risk worth gating. `unmapped` is a coverage trend (mostly
+// non-utility component class names like rt-*) and stays advisory. This mode
+// lets a gate require "no broken" without the unmapped noise; it could back a
+// required CI step or the verify:ci mirror.
+const requireNoBroken = process.argv.includes('--require-no-broken');
+if (requireNoBroken && broken.length > 0) {
     process.exit(1);
 }

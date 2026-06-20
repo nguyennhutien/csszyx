@@ -245,6 +245,10 @@ const corpus = [
     { bg: { color: 'blue-500', op: 30 }, p: 4 },
     { aria: { checked: { bg: 'blue-500' } }, p: 2 },
     { group: { hover: { opacity: 100 } }, p: 1 },
+    // Shapes formerly asserted by the integration.test.ts spot-check, folded in
+    // so the cross-engine harness covers them instead of a 4-case JS duplicate.
+    { bgImg: 'url(/hero.png)' },
+    { hover: { start: 2 } },
 ];
 
 // Merge the hand-curated corpus (first, order preserved) with every documented
