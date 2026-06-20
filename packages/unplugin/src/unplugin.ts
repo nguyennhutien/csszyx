@@ -106,6 +106,14 @@ interface PluginState {
     ownedClasses: Set<string>;
     /** Unresolvable-spread warnings surfaced to the build log in every mode. */
     spreadWarnings: Set<string>;
+    /**
+     * Workspace-package files under `/packages/` that contain `sz` but were
+     * skipped by the hard-ignore (not opted into `compilePackages`). Surfaced at
+     * build end so the silent no-op (skipped `sz` → no CSS) becomes visible.
+     */
+    skippedSzFiles: Set<string>;
+    /** Guards the skipped-sz-files warning so it fires at most once. */
+    skipWarningEmitted: boolean;
     mangleMap: Record<string, string>;
     varMangleEntriesByFile: Map<string, Array<[string, string]>>;
     varMangleMap: Record<string, CssVariableMangleValue>;
@@ -324,6 +332,100 @@ export function missingTailwindEntryMessage(ownedClassCount: number): string {
         'importing "tailwindcss" — those classes will produce no CSS. Import "tailwindcss" ' +
         'in a CSS file (csszyx auto-injects @source for the generated classes) so Tailwind ' +
         'emits their styles.'
+    );
+}
+
+/**
+ * Whether a `/packages/` file was opted into compilation via `compilePackages`.
+ * Matches the package directory name as a path segment (`/packages/<name>/`).
+ * `node_modules` is never opted in — real dependencies must not be compiled even
+ * if a dependency happens to share a name with a listed workspace package.
+ *
+ * @param id - bundler file id or filesystem path (posix-normalized).
+ * @param compilePackages - workspace package directory names to compile.
+ * @returns true when the file belongs to a listed workspace package.
+ */
+export function isCompilePackageOptedIn(
+    id: string,
+    compilePackages: readonly string[],
+): boolean {
+    if (id.includes('node_modules')) {
+        return false;
+    }
+    return compilePackages.some((name) => id.includes(`/packages/${name}/`));
+}
+
+/**
+ * Whether a file lives in a built-in directory csszyx never transforms.
+ *
+ * `node_modules` and `.next` (non-static) are always ignored. `/packages/` is
+ * ignored by default — published libraries ship pre-extracted CSS — but is
+ * relaxed for packages listed in `compilePackages`, so a monorepo can author
+ * `sz` in workspace source. Pulled out as a pure function so the precedence
+ * (node_modules/.next stay hard regardless of `compilePackages`) is unit-tested.
+ *
+ * @param id - bundler file id or filesystem path.
+ * @param compilePackages - workspace package directory names to compile.
+ * @returns true when the file should be skipped regardless of user filters.
+ */
+export function isHardIgnoredPath(
+    id: string,
+    compilePackages: readonly string[] = [],
+): boolean {
+    if (id.includes('node_modules')) {
+        return true;
+    }
+    if (id.includes('.next') && !id.includes('static')) {
+        return true;
+    }
+    if (id.includes('/packages/')) {
+        return !isCompilePackageOptedIn(id, compilePackages);
+    }
+    return false;
+}
+
+/**
+ * Whether a file is workspace-package source that csszyx skipped only because it
+ * lives under `/packages/` and was not opted into `compilePackages`. Used to
+ * surface the silent no-op (skipped `sz` produces no CSS). `node_modules` and
+ * `.next` are excluded — those are never workspace source the developer authors,
+ * and scanning `node_modules` for `sz` would be slow and false-positive-prone.
+ *
+ * @param id - filesystem path of the skipped file.
+ * @param compilePackages - workspace package directory names already opted in.
+ * @returns true when the skip is a workspace-package `sz` skip worth warning on.
+ */
+export function isPackagesSkippedSource(
+    id: string,
+    compilePackages: readonly string[] = [],
+): boolean {
+    if (id.includes('node_modules')) {
+        return false;
+    }
+    if (id.includes('.next') && !id.includes('static')) {
+        return false;
+    }
+    if (!id.includes('/packages/')) {
+        return false;
+    }
+    return !isCompilePackageOptedIn(id, compilePackages);
+}
+
+/**
+ * Build the workspace-package skip warning. Lists the skipped files that contain
+ * `sz` so the developer can opt the package into `compilePackages` instead of
+ * silently shipping no CSS for them.
+ *
+ * @param files - skipped `/packages/` file paths that contain `sz`.
+ * @returns the warning string.
+ */
+export function skippedSzFilesMessage(files: readonly string[]): string {
+    const list = files.map((file) => `  - ${file}`).join('\n');
+    return (
+        `[csszyx] ${files.length} file(s) under packages/ contain \`sz\` but were ` +
+        `skipped by ignore rules:\n${list}\n` +
+        'Add the package to `compilePackages` (or move the file out of packages/) — ' +
+        'otherwise their `sz` produces no CSS.'
     );
 }
 
@@ -1489,6 +1591,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             '[csszyx] Transform cache disabled because package versions could not be resolved.',
         );
     }
+    // Workspace packages opted into compilation; relaxes the /packages/ hard-ignore.
+    const compilePackages = options.compilePackages ?? [];
     const parserOverride = process.env.CSSZYX_PARSER;
     const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'rust';
     const parserMode =
@@ -1503,6 +1607,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         sawTailwindEntry: false,
         tailwindWarningEmitted: false,
         spreadWarnings: new Set<string>(),
+        skippedSzFiles: new Set<string>(),
+        skipWarningEmitted: false,
         ownedClasses: new Set<string>(),
         mangleMap: {},
         varMangleEntriesByFile: new Map(),
@@ -1604,11 +1710,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns True when the file should be skipped regardless of user filters.
      */
     function isHardIgnored(id: string): boolean {
-        return (
-            id.includes('node_modules') ||
-            id.includes('/packages/') ||
-            (id.includes('.next') && !id.includes('static'))
-        );
+        return isHardIgnoredPath(id, compilePackages);
     }
 
     /**
@@ -1976,6 +2078,30 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Records a skipped file when it is workspace-package source under
+     * `/packages/` (not opted into `compilePackages`) that contains `sz`. These
+     * are the silent no-op cases — the file is never compiled, so its `sz`
+     * produces no CSS — surfaced once at build end. node_modules/.next are never
+     * scanned (handled by {@link isPackagesSkippedSource}).
+     *
+     * @param filePath - filesystem path of the file the prescan skipped.
+     */
+    function recordPackagesSkipIfSz(filePath: string): void {
+        if (!isPackagesSkippedSource(filePath, compilePackages)) {
+            return;
+        }
+        let content: string;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            return;
+        }
+        if (content.includes('sz=') || content.includes('sz:')) {
+            state.skippedSzFiles.add(filePath);
+        }
+    }
+
+    /**
      * Pre-scans source files to discover class names before Tailwind CSS runs.
      * Tailwind v4 reads source files from disk and can't detect classes generated
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
@@ -2007,6 +2133,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
                     const filePath = path.join(dir, entry.name);
                     if (!shouldProcessSource(filePath)) {
+                        recordPackagesSkipIfSz(filePath);
                         continue;
                     }
                     let content: string;
@@ -2604,6 +2731,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 ) {
                     state.tailwindWarningEmitted = true;
                     console.warn(missingTailwindEntryMessage(state.ownedClasses.size));
+                }
+                // Workspace-package source under /packages/ is hard-ignored, so its
+                // sz silently produces no CSS unless opted into compilePackages.
+                // Surface the skipped files once so the no-op is visible.
+                if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
+                    state.skipWarningEmitted = true;
+                    console.warn(skippedSzFilesMessage([...state.skippedSzFiles].sort()));
                 }
                 // Surface unresolvable-spread warnings to the build log in every
                 // mode (collected during transform). The build log is not the

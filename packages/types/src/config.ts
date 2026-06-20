@@ -525,6 +525,18 @@ export type PartialCsszyxConfig = {
      */
     exclude?: FilePattern | FilePattern[];
 
+    /**
+     * Opt workspace packages under `/packages/` into compilation.
+     *
+     * csszyx hard-ignores `/packages/` by default because published libraries
+     * are expected to ship pre-extracted CSS. In a monorepo, however, a
+     * design-system package is first-class source the developer authors, so its
+     * `sz` props must be compiled like app code. List the package directory
+     * names here (e.g. `['vui']`) to compile `**\/packages/<name>/**`. Only the
+     * `/packages/` rule is relaxed — `node_modules` and `.next` stay ignored.
+     */
+    compilePackages?: string[];
+
     development?: Partial<DevelopmentConfig>;
     production?: Partial<ProductionConfig>;
     build?: Partial<BuildConfig>;
