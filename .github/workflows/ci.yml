@@ -401,6 +401,13 @@ jobs:
       - name: Check sz-key test fixture is current
         run: pnpm gen:key-tests:check
 
+      # The TS↔Rust lowering parity corpus ingests every documented sz-key
+      # forward case, so the Rust default engine is proven equivalent to the TS
+      # engine for each key. Fail if regenerating would change it, so a snippet,
+      # generator, or compiler change can't leave the corpus stale.
+      - name: Check Rust parity corpus is current
+        run: pnpm gen:parity-corpus:check
+
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
