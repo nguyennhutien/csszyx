@@ -1731,6 +1731,10 @@ export interface MaskProps {
     maskRepeat?: 'repeat' | 'no-repeat' | 'repeat-x' | 'repeat-y' | 'round' | 'space';
     /** CSS mask-type (shape-rendering) */
     maskShape?: 'alpha' | 'luminance';
+    /** CSS mask-clip */
+    maskClip?: 'border' | 'content' | 'fill' | 'padding' | 'stroke' | 'view' | (string & {});
+    /** CSS mask-origin */
+    maskOrigin?: 'border' | 'content' | 'fill' | 'padding' | 'stroke' | 'view' | (string & {});
 
     /** Mask gradient from color stop (v4.1) */
     maskFrom?: ColorPropValue;

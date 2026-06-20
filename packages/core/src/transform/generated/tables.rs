@@ -260,6 +260,8 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "maskPos" => Some("mask-position"),
         "maskRepeat" => Some("mask-repeat"),
         "maskShape" => Some("mask"),
+        "maskClip" => Some("mask-clip"),
+        "maskOrigin" => Some("mask-origin"),
         "cursor" => Some("cursor"),
         "caret" => Some("caret"),
         "pointerEvents" => Some("pointer-events"),

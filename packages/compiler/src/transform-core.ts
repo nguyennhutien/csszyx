@@ -341,6 +341,8 @@ export const PROPERTY_MAP: Record<string, string> = {
     maskPos: 'mask-position',
     maskRepeat: 'mask-repeat',
     maskShape: 'mask',
+    maskClip: 'mask-clip',
+    maskOrigin: 'mask-origin',
 
     // Interactivity
     cursor: 'cursor',
