@@ -30,14 +30,14 @@ const sorted = values => [...new Set(values)].sort();
 // className+sz, multiple elements, components, and comment/string decoys.
 const sources = [
     'const A = () => <div sz={{ p: 4 }} />;',
-    'const A = () => <div sz={{ p: 4, bg: "red-500", flex: true }} />;',
+    'const A = () => <div sz={{ p: 4, bg: "red-500", display: "flex" }} />;',
     'const A = () => <div sz={{ m: -2, gap: "1/2" }} />;',
     'const A = () => <div sz={{ w: "280px minmax(0,1fr)" }} />;',
     'const A = () => <div sz={{ display: "flex" }} />;',
-    'const A = () => <div sz={{ md: { flex: true }, p: 6 }} />;',
+    'const A = () => <div sz={{ md: { display: "flex" }, p: 6 }} />;',
     'const A = () => <div sz={{ hover: { bg: "blue-600" } }} />;',
     'const A = () => <div sz={{ group: { hover: { color: "white" } } }} />;',
-    'const A = () => <div sz={{ supports: { "display:grid": { grid: true } } }} />;',
+    'const A = () => <div sz={{ supports: { "display:grid": { display: "grid" } } }} />;',
     'const A = () => <div sz={{ bg: { color: "blue-500", op: 20 } }} />;',
     'const A = () => <div sz={{ p: pad }} />;',
     'const A = () => <div sz={{ p: 4, m: gap }} />;',

@@ -817,25 +817,6 @@
     "oxc": "isolate"
   },
   {
-    "sz": "{\"flex\":true}",
-    "ir": {
-      "properties": [
-        {
-          "key": "flex",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "boolean",
-            "value": true
-          }
-        }
-      ]
-    },
-    "oxc": ""
-  },
-  {
     "sz": "{\"flex\":1}",
     "ir": {
       "properties": [
@@ -1823,23 +1804,23 @@
     "oxc": "whitespace-nowrap"
   },
   {
-    "sz": "{\"italic\":true}",
+    "sz": "{\"fontStyle\":\"italic\"}",
     "ir": {
       "properties": [
         {
-          "key": "italic",
+          "key": "fontStyle",
           "span": {
             "start": 0,
             "end": 0
           },
           "value": {
-            "kind": "boolean",
-            "value": true
+            "kind": "string",
+            "value": "italic"
           }
         }
       ]
     },
-    "oxc": ""
+    "oxc": "italic"
   },
   {
     "sz": "{\"italic\":false}",
@@ -1861,23 +1842,23 @@
     "oxc": ""
   },
   {
-    "sz": "{\"underline\":true}",
+    "sz": "{\"decoration\":\"underline\"}",
     "ir": {
       "properties": [
         {
-          "key": "underline",
+          "key": "decoration",
           "span": {
             "start": 0,
             "end": 0
           },
           "value": {
-            "kind": "boolean",
-            "value": true
+            "kind": "string",
+            "value": "underline"
           }
         }
       ]
     },
-    "oxc": ""
+    "oxc": "underline"
   },
   {
     "sz": "{\"weight\":600}",
@@ -2589,7 +2570,7 @@
     "oxc": "scroll-smooth"
   },
   {
-    "sz": "{\"md\":{\"flex\":true}}",
+    "sz": "{\"md\":{\"display\":\"flex\"}}",
     "ir": {
       "properties": [
         {
@@ -2603,14 +2584,14 @@
             "value": {
               "properties": [
                 {
-                  "key": "flex",
+                  "key": "display",
                   "span": {
                     "start": 0,
                     "end": 0
                   },
                   "value": {
-                    "kind": "boolean",
-                    "value": true
+                    "kind": "string",
+                    "value": "flex"
                   }
                 }
               ]
@@ -2619,7 +2600,7 @@
         }
       ]
     },
-    "oxc": ""
+    "oxc": "md:flex"
   },
   {
     "sz": "{\"lg\":{\"gridCols\":4}}",
@@ -2961,7 +2942,7 @@
     "oxc": "peer-checked:bg-green-500"
   },
   {
-    "sz": "{\"group\":{\"has\":{\"input\":{\"block\":true}}}}",
+    "sz": "{\"group\":{\"has\":{\"input\":{\"display\":\"block\"}}}}",
     "ir": {
       "properties": [
         {
@@ -2995,14 +2976,14 @@
                             "value": {
                               "properties": [
                                 {
-                                  "key": "block",
+                                  "key": "display",
                                   "span": {
                                     "start": 0,
                                     "end": 0
                                   },
                                   "value": {
-                                    "kind": "boolean",
-                                    "value": true
+                                    "kind": "string",
+                                    "value": "block"
                                   }
                                 }
                               ]
@@ -3019,7 +3000,7 @@
         }
       ]
     },
-    "oxc": ""
+    "oxc": "group-has-[input]:block"
   },
   {
     "sz": "{\"group\":{\"data\":{\"active\":{\"bg\":\"blue-500\"}}}}",
@@ -3144,7 +3125,7 @@
     "oxc": "group-aria-checked:bg-blue-500"
   },
   {
-    "sz": "{\"group\":{\".is-published\":{\"block\":true}}}",
+    "sz": "{\"group\":{\".is-published\":{\"display\":\"block\"}}}",
     "ir": {
       "properties": [
         {
@@ -3168,14 +3149,14 @@
                     "value": {
                       "properties": [
                         {
-                          "key": "block",
+                          "key": "display",
                           "span": {
                             "start": 0,
                             "end": 0
                           },
                           "value": {
-                            "kind": "boolean",
-                            "value": true
+                            "kind": "string",
+                            "value": "block"
                           }
                         }
                       ]
@@ -3188,7 +3169,7 @@
         }
       ]
     },
-    "oxc": ""
+    "oxc": "group-[.is-published]:block"
   },
   {
     "sz": "{\"group\":{\"sidebar\":{\"hover\":{\"color\":\"white\"}}}}",
@@ -3567,7 +3548,7 @@
     "oxc": "[&>span]:p-1"
   },
   {
-    "sz": "{\"supports\":{\"display:grid\":{\"grid\":true}}}",
+    "sz": "{\"supports\":{\"display:grid\":{\"display\":\"grid\"}}}",
     "ir": {
       "properties": [
         {
@@ -3591,14 +3572,14 @@
                     "value": {
                       "properties": [
                         {
-                          "key": "grid",
+                          "key": "display",
                           "span": {
                             "start": 0,
                             "end": 0
                           },
                           "value": {
-                            "kind": "boolean",
-                            "value": true
+                            "kind": "string",
+                            "value": "grid"
                           }
                         }
                       ]
@@ -3611,7 +3592,7 @@
         }
       ]
     },
-    "oxc": ""
+    "oxc": "supports-[display:grid]:grid"
   },
   {
     "sz": "{\"supports\":{\"backdrop-filter:blur(1px)\":{\"rounded\":\"lg\"}}}",
@@ -3755,7 +3736,7 @@
     "oxc": "not-hover:opacity-75"
   },
   {
-    "sz": "{\"not\":{\"supports\":{\"display:grid\":{\"block\":true}}}}",
+    "sz": "{\"not\":{\"supports\":{\"display:grid\":{\"display\":\"block\"}}}}",
     "ir": {
       "properties": [
         {
@@ -3789,14 +3770,14 @@
                             "value": {
                               "properties": [
                                 {
-                                  "key": "block",
+                                  "key": "display",
                                   "span": {
                                     "start": 0,
                                     "end": 0
                                   },
                                   "value": {
-                                    "kind": "boolean",
-                                    "value": true
+                                    "kind": "string",
+                                    "value": "block"
                                   }
                                 }
                               ]
@@ -3813,7 +3794,7 @@
         }
       ]
     },
-    "oxc": ""
+    "oxc": "not-supports-[display:grid]:block"
   },
   {
     "sz": "{\"data\":{\"active\":{\"bg\":\"blue-500\"}}}",
@@ -3943,7 +3924,7 @@
     "oxc": "first:ml-0"
   },
   {
-    "sz": "{\"p\":4,\"bg\":\"red-500\",\"flex\":true}",
+    "sz": "{\"p\":4,\"bg\":\"red-500\",\"display\":\"flex\"}",
     "ir": {
       "properties": [
         {
@@ -3969,19 +3950,19 @@
           }
         },
         {
-          "key": "flex",
+          "key": "display",
           "span": {
             "start": 0,
             "end": 0
           },
           "value": {
-            "kind": "boolean",
-            "value": true
+            "kind": "string",
+            "value": "flex"
           }
         }
       ]
     },
-    "oxc": "p-4 bg-red-500"
+    "oxc": "p-4 bg-red-500 flex"
   },
   {
     "sz": "{\"display\":\"flex\",\"items\":\"center\",\"gap\":3}",
@@ -10764,25 +10745,6 @@
     "oxc": "cursor-(--c)"
   },
   {
-    "sz": "{\"decoration\":\"underline\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "decoration",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "underline"
-          }
-        }
-      ]
-    },
-    "oxc": "underline"
-  },
-  {
     "sz": "{\"decorationColor\":\"blue-500\"}",
     "ir": {
       "properties": [
@@ -12617,25 +12579,6 @@
       ]
     },
     "oxc": "font-stretch-75%"
-  },
-  {
-    "sz": "{\"fontStyle\":\"italic\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontStyle",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "italic"
-          }
-        }
-      ]
-    },
-    "oxc": "italic"
   },
   {
     "sz": "{\"fontStyle\":\"normal\"}",

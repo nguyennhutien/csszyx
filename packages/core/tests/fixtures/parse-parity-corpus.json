@@ -7,9 +7,10 @@
     "rawClassNames": []
   },
   {
-    "source": "const A = () => <div sz={{ p: 4, bg: \"red-500\", flex: true }} />;",
+    "source": "const A = () => <div sz={{ p: 4, bg: \"red-500\", display: \"flex\" }} />;",
     "classes": [
       "bg-red-500",
+      "flex",
       "p-4"
     ],
     "rawClassNames": []
@@ -37,8 +38,9 @@
     "rawClassNames": []
   },
   {
-    "source": "const A = () => <div sz={{ md: { flex: true }, p: 6 }} />;",
+    "source": "const A = () => <div sz={{ md: { display: \"flex\" }, p: 6 }} />;",
     "classes": [
+      "md:flex",
       "p-6"
     ],
     "rawClassNames": []
@@ -58,8 +60,10 @@
     "rawClassNames": []
   },
   {
-    "source": "const A = () => <div sz={{ supports: { \"display:grid\": { grid: true } } }} />;",
-    "classes": [],
+    "source": "const A = () => <div sz={{ supports: { \"display:grid\": { display: \"grid\" } } }} />;",
+    "classes": [
+      "supports-[display:grid]:grid"
+    ],
     "rawClassNames": []
   },
   {
