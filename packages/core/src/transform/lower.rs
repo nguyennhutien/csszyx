@@ -1319,6 +1319,74 @@ mod tests {
     }
 
     #[test]
+    fn lowers_responsive_breakpoints() {
+        // Helpers to build nested variant objects compactly.
+        fn obj(props: Vec<StaticSzProperty>) -> StaticSzValue {
+            StaticSzValue::Object(StaticSzObject { properties: props })
+        }
+        let nest = |key: &str, child: StaticSzValue| StaticSzObject {
+            properties: vec![property(key, child)],
+        };
+
+        // breakpoint × state, both nesting orders — order is preserved as authored.
+        assert_eq!(
+            lower_static_sz_object(&nest(
+                "md",
+                obj(vec![property("hover", obj(vec![property("bg", StaticSzValue::String("blue-500".into()))]))]),
+            )),
+            ["md:hover:bg-blue-500"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&nest(
+                "hover",
+                obj(vec![property("md", obj(vec![property("bg", StaticSzValue::String("blue-500".into()))]))]),
+            )),
+            ["hover:md:bg-blue-500"]
+        );
+
+        // breakpoint × group × state.
+        assert_eq!(
+            lower_static_sz_object(&nest(
+                "md",
+                obj(vec![property("group", obj(vec![property("hover", obj(vec![property("p", StaticSzValue::Number(2.0))]))]))]),
+            )),
+            ["md:group-hover:p-2"]
+        );
+
+        // custom breakpoint passes through.
+        assert_eq!(
+            lower_static_sz_object(&nest("tablet", obj(vec![property("p", StaticSzValue::Number(3.0))]))),
+            ["tablet:p-3"]
+        );
+
+        // breakpoint × nested color-opacity value object.
+        assert_eq!(
+            lower_static_sz_object(&nest(
+                "md",
+                obj(vec![property(
+                    "bg",
+                    obj(vec![
+                        property("color", StaticSzValue::String("black".into())),
+                        property("op", StaticSzValue::Number(30.0)),
+                    ]),
+                )]),
+            )),
+            ["md:bg-black/30"]
+        );
+
+        // multiple breakpoints on one element keep source order.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![
+                    property("sm", obj(vec![property("p", StaticSzValue::Number(1.0))])),
+                    property("md", obj(vec![property("p", StaticSzValue::Number(2.0))])),
+                ],
+            }),
+            ["sm:p-1", "md:p-2"]
+        );
+    }
+
+    #[test]
     fn lowers_background_image_object_syntax() {
         let object = StaticSzObject {
             properties: vec![property(

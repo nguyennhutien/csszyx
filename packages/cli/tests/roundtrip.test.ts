@@ -378,6 +378,25 @@ describe('round-trip: TW → migrate → compile', () => {
     });
 
     // ========================================================================
+    // RESPONSIVE — breakpoints combined with state/group, custom + arbitrary
+    // breakpoints, reversed nesting order, and max-* all round-trip.
+    // ========================================================================
+    describe('responsive', () => {
+        it.each([
+            'md:hover:bg-blue-500',
+            'md:group-hover:p-2',
+            'dark:md:bg-red-500',
+            'sm:p-1',
+            '2xl:flex',
+            'max-md:hidden',
+            'min-[320px]:flex',
+            'tablet:p-3',
+        ])('%s', cls => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+    });
+
+    // ========================================================================
     // COLOR + OPACITY (decimal bracket form)
     // ========================================================================
     describe('color + opacity', () => {

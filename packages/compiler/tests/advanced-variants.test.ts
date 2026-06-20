@@ -574,3 +574,59 @@ describe('variant chaining', () => {
         expect(result).toBe('group-hover:dark:text-white');
     });
 });
+
+// ===========================================================================
+// Responsive breakpoints — combined with state/group/peer/dark, custom and
+// arbitrary breakpoints, nested value sub-properties, modifiers.
+// Variant order is preserved as authored; Tailwind v4 generates an equivalent
+// (logically AND-ed) rule for either order, so both are valid.
+// ===========================================================================
+
+describe('responsive breakpoints', () => {
+    it('breakpoint × state, both nesting orders', () => {
+        expect(t({ md: { hover: { bg: 'blue-500' } } })).toBe('md:hover:bg-blue-500');
+        expect(t({ hover: { md: { bg: 'blue-500' } } })).toBe('hover:md:bg-blue-500');
+        expect(t({ md: { dark: { bg: 'blue-500' } } })).toBe('md:dark:bg-blue-500');
+        expect(t({ dark: { md: { bg: 'blue-500' } } })).toBe('dark:md:bg-blue-500');
+        expect(t({ md: { focus: { p: 2 } } })).toBe('md:focus:p-2');
+    });
+
+    it('breakpoint × group / peer', () => {
+        expect(t({ md: { group: { hover: { p: 2 } } } })).toBe('md:group-hover:p-2');
+        expect(t({ group: { hover: { md: { p: 2 } } } })).toBe('group-hover:md:p-2');
+        expect(t({ md: { peer: { checked: { p: 2 } } } })).toBe('md:peer-checked:p-2');
+    });
+
+    it('breakpoint × nested value sub-property (color + opacity)', () => {
+        expect(t({ md: { bg: { color: 'black', op: 30 } } })).toBe('md:bg-black/30');
+        expect(t({ md: { hover: { bg: { color: 'black', op: 30 } } } })).toBe(
+            'md:hover:bg-black/30',
+        );
+    });
+
+    it('custom, arbitrary, max and container breakpoints pass through', () => {
+        expect(t({ tablet: { p: 3 } })).toBe('tablet:p-3');
+        expect(t({ tablet: { hover: { p: 3 } } })).toBe('tablet:hover:p-3');
+        expect(t({ 'min-[320px]': { display: 'flex' } })).toBe('min-[320px]:flex');
+        expect(t({ 'max-[600px]': { display: 'none' } })).toBe('max-[600px]:hidden');
+        expect(t({ 'max-md': { p: 2 } })).toBe('max-md:p-2');
+        expect(t({ '@md': { p: 2 } })).toBe('@md:p-2');
+        expect(t({ '@container/sidebar': { p: 2 } })).toBe('@container/sidebar:p-2');
+    });
+
+    it('multiple breakpoints on one element, in source order', () => {
+        expect(t({ sm: { p: 1 }, md: { p: 2 }, lg: { p: 3 }, xl: { p: 4 }, '2xl': { p: 5 } })).toBe(
+            'sm:p-1 md:p-2 lg:p-3 xl:p-4 2xl:p-5',
+        );
+    });
+
+    it('breakpoint × modifiers (important, negative, arbitrary value)', () => {
+        expect(t({ md: { bg: 'red-500!' } })).toBe('md:bg-red-500!');
+        expect(t({ md: { mt: -4 } })).toBe('md:-mt-4');
+        expect(t({ md: { w: '[320px]' } })).toBe('md:w-[320px]');
+    });
+
+    it('empty breakpoint object emits nothing without throwing', () => {
+        expect(t({ md: {} })).toBe('');
+    });
+});
