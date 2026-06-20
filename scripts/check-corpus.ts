@@ -20,6 +20,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
 import { transform } from '../packages/compiler/src/transform.js';
 import { PROPERTY_MAP } from '../packages/compiler/src/transform-core.js';
 
@@ -99,8 +100,24 @@ type Result =
  * @returns covered | broken | unmapped result
  */
 function roundTrip(twClass: string): Result {
-    // Pass 1: try as a boolean property — handles absolute, fixed, relative,
-    // uppercase, invisible, etc. which live outside the PROPERTY_MAP prefix system.
+    // Pass 0: run the class through the migrate parser — the maintained inverse
+    // of the compiler. It resolves single-property value classes to their
+    // canonical key (absolute → { position: 'absolute' }, italic → { fontStyle:
+    // 'italic' }), which the removed boolean sugar no longer covers.
+    try {
+        const parsed = parseClass(twClass);
+        if (parsed) {
+            const sz = { [parsed.prop]: parsed.value } as Parameters<typeof transform>[0];
+            if (transform(sz).className === twClass) {
+                return { status: 'covered', szKey: parsed.prop };
+            }
+        }
+    } catch {
+        /* not migrate-parseable */
+    }
+
+    // Pass 1: try as a boolean shorthand (truncate, container, …) that maps a
+    // bare class to a true value.
     try {
         const result = transform({ [twClass]: true }).className;
         if (result === twClass) {
