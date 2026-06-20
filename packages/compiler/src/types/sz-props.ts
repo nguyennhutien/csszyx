@@ -1754,128 +1754,138 @@ export interface MaskProps {
  */
 export interface VariantModifiers {
     // Pseudo-classes
-    hover?: SzPropsBase;
-    focus?: SzPropsBase;
-    active?: SzPropsBase;
-    visited?: SzPropsBase;
-    target?: SzPropsBase;
-    first?: SzPropsBase;
-    last?: SzPropsBase;
-    only?: SzPropsBase;
-    odd?: SzPropsBase;
-    even?: SzPropsBase;
-    firstOfType?: SzPropsBase;
-    lastOfType?: SzPropsBase;
-    onlyOfType?: SzPropsBase;
-    empty?: SzPropsBase;
-    disabled?: SzPropsBase;
-    enabled?: SzPropsBase;
-    checked?: SzPropsBase;
-    indeterminate?: SzPropsBase;
-    default?: SzPropsBase;
-    required?: SzPropsBase;
-    valid?: SzPropsBase;
-    invalid?: SzPropsBase;
-    inRange?: SzPropsBase;
-    outOfRange?: SzPropsBase;
-    placeholderShown?: SzPropsBase;
-    autofill?: SzPropsBase;
-    readOnly?: SzPropsBase;
-    focusWithin?: SzPropsBase;
-    focusVisible?: SzPropsBase;
+    hover?: SzProps;
+    focus?: SzProps;
+    active?: SzProps;
+    visited?: SzProps;
+    target?: SzProps;
+    first?: SzProps;
+    last?: SzProps;
+    only?: SzProps;
+    odd?: SzProps;
+    even?: SzProps;
+    firstOfType?: SzProps;
+    lastOfType?: SzProps;
+    onlyOfType?: SzProps;
+    empty?: SzProps;
+    disabled?: SzProps;
+    enabled?: SzProps;
+    checked?: SzProps;
+    indeterminate?: SzProps;
+    default?: SzProps;
+    required?: SzProps;
+    valid?: SzProps;
+    invalid?: SzProps;
+    inRange?: SzProps;
+    outOfRange?: SzProps;
+    placeholderShown?: SzProps;
+    autofill?: SzProps;
+    readOnly?: SzProps;
+    focusWithin?: SzProps;
+    focusVisible?: SzProps;
 
     // Pseudo-elements
-    before?: SzPropsBase;
-    after?: SzPropsBase;
-    placeholder?: SzPropsBase;
-    file?: SzPropsBase;
-    marker?: SzPropsBase;
-    selection?: SzPropsBase;
-    firstLine?: SzPropsBase;
-    firstLetter?: SzPropsBase;
-    backdrop?: SzPropsBase;
+    before?: SzProps;
+    after?: SzProps;
+    placeholder?: SzProps;
+    file?: SzProps;
+    marker?: SzProps;
+    selection?: SzProps;
+    firstLine?: SzProps;
+    firstLetter?: SzProps;
+    backdrop?: SzProps;
 
     // Responsive breakpoints
-    sm?: SzPropsBase;
-    md?: SzPropsBase;
-    lg?: SzPropsBase;
-    xl?: SzPropsBase;
-    '2xl'?: SzPropsBase;
+    sm?: SzProps;
+    md?: SzProps;
+    lg?: SzProps;
+    xl?: SzProps;
+    '2xl'?: SzProps;
 
     // Container queries
-    '@sm'?: SzPropsBase;
-    '@md'?: SzPropsBase;
-    '@lg'?: SzPropsBase;
-    '@xl'?: SzPropsBase;
-    '@2xl'?: SzPropsBase;
+    '@sm'?: SzProps;
+    '@md'?: SzProps;
+    '@lg'?: SzProps;
+    '@xl'?: SzProps;
+    '@2xl'?: SzProps;
 
     // Dark mode
-    dark?: SzPropsBase;
-    light?: SzPropsBase;
+    dark?: SzProps;
+    light?: SzProps;
 
     // Motion preferences
-    motionReduce?: SzPropsBase;
-    motionSafe?: SzPropsBase;
+    motionReduce?: SzProps;
+    motionSafe?: SzProps;
 
     // Contrast preferences
-    contrastMore?: SzPropsBase;
-    contrastLess?: SzPropsBase;
+    contrastMore?: SzProps;
+    contrastLess?: SzProps;
 
     // Pointer preferences
-    pointerFine?: SzPropsBase;
-    pointerCoarse?: SzPropsBase;
-    pointerNone?: SzPropsBase;
+    pointerFine?: SzProps;
+    pointerCoarse?: SzProps;
+    pointerNone?: SzProps;
 
     // Any-pointer preferences (v4.1)
-    anyPointerFine?: SzPropsBase;
-    anyPointerCoarse?: SzPropsBase;
-    anyPointerNone?: SzPropsBase;
+    anyPointerFine?: SzProps;
+    anyPointerCoarse?: SzProps;
+    anyPointerNone?: SzProps;
 
     // Form validation (v4.1)
-    userValid?: SzPropsBase;
-    userInvalid?: SzPropsBase;
+    userValid?: SzProps;
+    userInvalid?: SzProps;
 
     // Details / inverted-colors / noscript (v4.1)
-    detailsContent?: SzPropsBase;
-    invertedColors?: SzPropsBase;
-    noscript?: SzPropsBase;
+    detailsContent?: SzProps;
+    invertedColors?: SzProps;
+    noscript?: SzProps;
 
     // Forced-colors media variant
-    forcedColors?: SzPropsBase;
+    forcedColors?: SzProps;
 
     // Print
-    print?: SzPropsBase;
+    print?: SzProps;
 
     // Starting-style + inert state variants
-    starting?: SzPropsBase;
-    inert?: SzPropsBase;
+    starting?: SzProps;
+    inert?: SzProps;
 
     // Orientation
-    portrait?: SzPropsBase;
-    landscape?: SzPropsBase;
+    portrait?: SzProps;
+    landscape?: SzProps;
 
     // RTL/LTR
-    rtl?: SzPropsBase;
-    ltr?: SzPropsBase;
+    rtl?: SzProps;
+    ltr?: SzProps;
 
     // Group/Peer modifiers (true = class, string = named, object = nested variants)
-    group?: boolean | string | SzPropsBase;
-    peer?: boolean | string | SzPropsBase;
+    group?: boolean | string | SzProps;
+    peer?: boolean | string | SzProps;
 
     // Not modifier
-    not?: SzPropsBase;
+    not?: SzProps;
 
     // Has modifier
-    has?: Record<string, SzPropsBase>;
+    has?: Record<string, SzProps>;
 
     // Aria states
-    aria?: Record<string, SzPropsBase>;
+    aria?: Record<string, SzProps>;
 
     // Data attributes
-    data?: Record<string, SzPropsBase>;
+    data?: Record<string, SzProps>;
 
     // Supports queries
-    supports?: Record<string, SzPropsBase>;
+    supports?: Record<string, SzProps>;
+
+    // Arbitrary variants (object-valued): container queries (`@container`,
+    // `@container/sidebar`), arbitrary breakpoints (`min-[320px]`/`max-[600px]`),
+    // and arbitrary selectors (`[&>span]`). A scalar typo key like `bgColor`
+    // matches no pattern and is not a known prop → rejected by tsc. Force a
+    // genuinely-new Tailwind utility csszyx has no key for yet with `@ts-expect-error`.
+    [variant: `@${string}`]: SzProps | undefined;
+    [variant: `min-[${string}`]: SzProps | undefined;
+    [variant: `max-[${string}`]: SzProps | undefined;
+    [variant: `[${string}`]: SzProps | undefined;
 }
 
 // ============================================================================
@@ -1913,7 +1923,7 @@ export type SzPropsBase = LayoutProps &
          * // → [--my-color:red]
          */
         css?: CSS.Properties & { [cssVar: `--${string}`]: string | number };
-    } & { [key: string]: unknown }; // Allow arbitrary keys
+    };
 
 /**
  * Complete sz prop type with all properties and variant modifiers.
