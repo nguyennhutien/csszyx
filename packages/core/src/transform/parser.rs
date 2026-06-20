@@ -1275,6 +1275,19 @@ fn partial_object_from_object_expression(
                         ternary = Some(color_opacity_ternary);
                         continue;
                     }
+                    // A property whose value is an object (color+opacity, gradient,
+                    // arbitrary `css`, mask, …) is a value object, not variant
+                    // nesting. A fully static one was already captured above, so if
+                    // it reached here it carries a dynamic sub-field the static
+                    // composers do not cover. Recursing would prefix the sub-key with
+                    // the property name and emit a dead `<property>:<subkey>` class
+                    // (e.g. `bg:op-(--var)`, `css:text-red`, `bgImg:dir-to-r`). Punt
+                    // the whole attribute to the runtime instead, which resolves the
+                    // dynamic value correctly. Variant keys (hover, md, supports, …)
+                    // are absent from the property map and still nest normally.
+                    if super::generated::tables::property_prefix(&key).is_some() || key == "css" {
+                        return None;
+                    }
                     let variant = variant_prefix_string(variant_prefix, &key);
                     let nested =
                         partial_object_from_object_expression(nested, ctx, Some(variant.as_str()))?;
@@ -2447,6 +2460,38 @@ mod tests {
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         assert!(parsed.ir.sz_attributes[0].runtime_fallback);
         assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_punts_dynamic_value_object_sub_field_to_runtime() {
+        // A dynamic/ternary value on a nested value-object sub-property (color
+        // opacity var, arbitrary `css`, gradient direction) must fall back to the
+        // runtime, never lower to a dead `<property>:<subkey>` class such as
+        // `bg:op-(--var)`, `css:text-red`, or `bgImg:dir-to-r`.
+        for source in [
+            "const X = ({ v }) => <div sz={{ bg: { color: 'black', op: v } }} />;",
+            "const X = ({ c }) => <div sz={{ css: { color: c ? 'red' : 'blue' } }} />;",
+            "const X = ({ c }) => <div sz={{ bgImg: { gradient: 'linear', dir: c ? 'to-r' : 'to-l' } }} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            assert_eq!(parsed.ir.sz_attributes.len(), 1, "{source}");
+            assert!(
+                parsed.ir.sz_attributes[0].runtime_fallback,
+                "must fall back to the runtime: {source}"
+            );
+            let lowered = lower_source_ir_classes(&parsed.ir);
+            for class in &lowered.classes {
+                assert!(
+                    !class.contains(":op-")
+                        && !class.contains(":dir-")
+                        && !class.starts_with("css:"),
+                    "dead class `{class}` from {source}"
+                );
+            }
+        }
     }
 
     #[test]
