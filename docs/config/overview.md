@@ -202,6 +202,29 @@ in IO or AST work. Defence-in-depth angle: operators can quarantine
 suspect paths via `exclude` while keeping `build.astBudgetLimit` at its
 conservative default of 50000 nodes.
 
+### Workspace packages (`compilePackages`)
+
+csszyx hard-ignores `/packages/` by default: a published library is
+expected to ship pre-extracted CSS, so its `sz` is compiled once at
+release time, not in every consumer. In a monorepo, though, a
+design-system package is first-class source you author, so its `sz`
+must compile alongside app code.
+
+```ts
+csszyx({
+  // Compile sz in these workspace packages (matched as `/packages/<name>/`).
+  compilePackages: ["vui"],
+});
+```
+
+Only the `/packages/` rule is relaxed — `node_modules` and `.next` stay
+ignored, so a real dependency is never compiled even if it shares a name.
+A file under `/packages/` that contains `sz` but is NOT opted in is
+skipped silently (it produces no CSS); csszyx warns at build end listing
+those files so the no-op is visible. Publishing convention: ship the
+package's pre-extracted CSS for external consumers, and use
+`compilePackages` to re-extract from source inside your own monorepo.
+
 ### Hydration
 
 Controls SSR hydration behavior:

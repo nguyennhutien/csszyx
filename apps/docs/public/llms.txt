@@ -761,6 +761,19 @@ Or exclude the file from csszyx processing entirely before parsing:
 ...csszyx({ exclude: ['src/generated/**', /icon-dump\.tsx$/] })
 ```
 
+## Monorepo Workspace Packages (compilePackages)
+
+`/packages/` is hard-ignored by default (a published library ships pre-extracted
+CSS). To compile `sz` in a monorepo workspace package you author, opt it in by
+directory name — only `/packages/` is relaxed, `node_modules`/`.next` stay ignored:
+
+```js
+...csszyx({ compilePackages: ['vui'] }) // compiles sz in /packages/vui/**
+```
+
+A `/packages/` file with `sz` that is not opted in is skipped silently (no CSS);
+csszyx warns at build end and lists those files.
+
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 
 When using Tailwind v4 `@theme` blocks for custom design tokens, enable `build.scanCss`

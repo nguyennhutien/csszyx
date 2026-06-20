@@ -223,6 +223,24 @@ csszyx({
 });
 ```
 
+#### Workspace Packages (`compilePackages`)
+
+`/packages/` is hard-ignored by default — a published library ships pre-extracted
+CSS rather than recompiling in every consumer. In a monorepo, a design-system
+package is source you author, so opt it into compilation by directory name:
+
+```ts
+csszyx({
+  compilePackages: ["vui"], // compiles sz in /packages/vui/**
+});
+```
+
+Only the `/packages/` rule is relaxed; `node_modules` and `.next` stay ignored, so
+a real dependency is never compiled. A `/packages/` file that contains `sz` but is
+not opted in is skipped silently (no CSS) — csszyx warns at build end and lists
+those files. Convention: ship pre-extracted CSS for external consumers, and use
+`compilePackages` to re-extract from source within your own monorepo.
+
 #### Theme Auto-Scan (`scanCss`)
 
 When set, the plugin parses `@theme` blocks in your CSS entry point and generates
