@@ -466,4 +466,76 @@ describe('round-trip: TW → migrate → compile', () => {
             expect(result.className).toBe('max-[600px]:hidden');
         });
     });
+
+    // ========================================================================
+    // MIGRATE GAP FIXES — single-property utilities that previously migrated to
+    // {} (reverse-map gaps) or to the wrong class (disambiguation bugs). Each must
+    // now be the exact inverse of the compiler.
+    // ========================================================================
+    describe('migrate gap fixes', () => {
+        it.each([
+            // display table values + inline-table
+            'inline-table',
+            'table-caption',
+            'table-column',
+            'table-column-group',
+            'table-footer-group',
+            'table-header-group',
+            'table-row-group',
+            // isolation / field-sizing / transform-style
+            'isolation-auto',
+            'field-sizing-content',
+            'field-sizing-fixed',
+            'transform-3d',
+            'transform-flat',
+            // 3D scale/translate + z-axis
+            'scale-3d',
+            'translate-3d',
+            'scale-z-50',
+            'translate-z-4',
+            // scheme
+            'scheme-light',
+            'scheme-dark',
+            'scheme-light-dark',
+            'scheme-only-dark',
+            'scheme-normal',
+            // scrollbar / prose plugins
+            'scrollbar-thin',
+            'scrollbar-gutter-stable',
+            'prose',
+            'prose-lg',
+            'prose-invert',
+            // logical sizing
+            'block-full',
+            'block-auto',
+            'inline-auto',
+            // bare toggles
+            'resize',
+            'shadow',
+            // shadow sizes + aspect fraction + basis container sizes
+            'shadow-2xs',
+            'shadow-xs',
+            'aspect-4/3',
+            'basis-2xs',
+            'basis-3xs',
+            // content (align-content) + content property
+            'content-center',
+            'content-between',
+            'content-baseline',
+            'content-none',
+            // negative inset keyword
+            '-inset-full',
+            // line-clamp none + filters
+            'line-clamp-none',
+            'filter-none',
+            'backdrop-filter-none',
+        ])('%s', cls => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+
+        it('content align-content and content property coexist on one element', () => {
+            const { szObject } = classNameToSzObject('content-center content-none');
+            expect(szObject).toEqual({ alignContent: 'center', content: 'none' });
+        });
+    });
 });

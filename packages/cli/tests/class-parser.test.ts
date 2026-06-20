@@ -1030,4 +1030,98 @@ describe('class-parser', () => {
             expect(parseClass('-p-4')).toBeNull();
         });
     });
+
+    // ========================================================================
+    // CONTENT DISAMBIGUATION — content-<keyword> is align-content; quoted/none/
+    // var/arbitrary content-* sets the generated-content `content` property.
+    // ========================================================================
+    describe('content disambiguation', () => {
+        it('align-content keywords → alignContent', () => {
+            for (const v of [
+                'normal',
+                'center',
+                'start',
+                'end',
+                'between',
+                'around',
+                'evenly',
+                'baseline',
+                'stretch',
+            ]) {
+                expect(parseClass(`content-${v}`)).toEqual({ prop: 'alignContent', value: v });
+            }
+        });
+
+        it('content property values → content', () => {
+            expect(parseClass('content-none')).toEqual({ prop: 'content', value: 'none' });
+            expect(parseClass('content-(--c)')).toEqual({ prop: 'content', value: '--c' });
+            // Quoted arbitrary normalizes to double-quote form for round-trip stability.
+            expect(parseClass("content-['x']")).toEqual({ prop: 'content', value: '"x"' });
+            expect(parseClass('content-[attr(data-content)]')).toEqual({
+                prop: 'content',
+                value: 'attr(data-content)',
+            });
+        });
+    });
+
+    // ========================================================================
+    // LOGICAL SIZING vs DISPLAY — bare display values must not be swallowed by
+    // the block-*/inline-* logical-sizing prefixes (exact match wins first).
+    // ========================================================================
+    describe('block/inline prefix vs display value', () => {
+        it('bare forms stay display values', () => {
+            const d = (value: string) => ({ prop: 'display', value, cssProperty: 'display' });
+            expect(parseClass('block')).toEqual(d('block'));
+            expect(parseClass('inline')).toEqual(d('inline'));
+            expect(parseClass('inline-block')).toEqual(d('inline-block'));
+            expect(parseClass('inline-table')).toEqual(d('inline-table'));
+            expect(parseClass('table-row-group')).toEqual(d('table-row-group'));
+        });
+
+        it('value forms route to logical sizing', () => {
+            expect(parseClass('block-full')).toEqual({ prop: 'blockSize', value: 'full' });
+            expect(parseClass('inline-auto')).toEqual({ prop: 'inlineSize', value: 'auto' });
+        });
+    });
+
+    // ========================================================================
+    // MIGRATE GAP FIXES — formerly-unrecognized single-property utilities.
+    // ========================================================================
+    describe('newly recognized single-property utilities', () => {
+        it('scheme / scrollbar / prose / field-sizing / transform-style', () => {
+            expect(parseClass('scheme-light-dark')).toEqual({
+                prop: 'scheme',
+                value: 'light-dark',
+            });
+            expect(parseClass('scrollbar-gutter-stable')).toEqual({
+                prop: 'scrollbarGutter',
+                value: 'stable',
+            });
+            expect(parseClass('prose-lg')).toEqual({ prop: 'prose', value: 'lg' });
+            expect(parseClass('field-sizing-content')).toEqual({
+                prop: 'fieldSizing',
+                value: 'content',
+                cssProperty: 'field-sizing',
+            });
+            expect(parseClass('transform-3d')).toEqual({
+                prop: 'transformStyle',
+                value: '3d',
+                cssProperty: 'transform-style',
+            });
+        });
+
+        it('3D transforms, z-axis, shadow sizes, negative inset-full', () => {
+            expect(parseClass('scale-3d')).toEqual({ prop: 'scale', value: '3d' });
+            expect(parseClass('scale-z-50')).toEqual({ prop: 'scaleZ', value: 50 });
+            expect(parseClass('translate-z-4')).toEqual({ prop: 'translateZ', value: 4 });
+            expect(parseClass('shadow-2xs')).toEqual({ prop: 'shadow', value: '2xs' });
+            expect(parseClass('-inset-full')).toEqual({ prop: 'inset', value: '-full' });
+            expect(parseClass('aspect-4/3')).toEqual({ prop: 'aspect', value: '4/3' });
+        });
+
+        it('bare resize / shadow stay boolean toggles', () => {
+            expect(parseClass('resize')).toEqual({ prop: 'resize', value: true });
+            expect(parseClass('shadow')).toEqual({ prop: 'shadow', value: true });
+        });
+    });
 });

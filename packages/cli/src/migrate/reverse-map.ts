@@ -91,6 +91,11 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'min-h': 'minH',
     'max-h': 'maxH',
     size: 'size',
+    // Logical sizing (block-size / inline-size). The bare `block`/`inline` classes
+    // are display values (BOOLEAN_VALUE_MAP wins via exact match first); only the
+    // `block-*` / `inline-*` value forms route here.
+    block: 'blockSize',
+    inline: 'inlineSize',
 
     // Layout
     aspect: 'aspect',
@@ -180,6 +185,8 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'bg-blend': 'bgBlend',
 
     // Filters
+    filter: 'filter',
+    'backdrop-filter': 'backdropFilter',
     blur: 'blur',
     brightness: 'brightness',
     contrast: 'contrast',
@@ -203,9 +210,11 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     scale: 'scale',
     'scale-x': 'scaleX',
     'scale-y': 'scaleY',
+    'scale-z': 'scaleZ',
     rotate: 'rotate',
     'translate-x': 'translateX',
     'translate-y': 'translateY',
+    'translate-z': 'translateZ',
     'skew-x': 'skewX',
     'skew-y': 'skewY',
     origin: 'origin',
@@ -221,6 +230,9 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     cursor: 'cursor',
     caret: 'caret',
     'pointer-events': 'pointerEvents',
+    scheme: 'scheme',
+    scrollbar: 'scrollbar',
+    'scrollbar-gutter': 'scrollbarGutter',
     resize: 'resize',
     scroll: 'scroll',
     'scroll-m': 'scrollM',
@@ -259,6 +271,9 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     // Line clamp
     'line-clamp': 'lineClamp',
     wrap: 'wrap',
+
+    // Typography plugin (bare `prose` is boolean; `prose-gray`/`prose-lg` carry a value)
+    prose: 'prose',
 
     // Text shadow
     'text-shadow': 'textShadow',
@@ -311,6 +326,10 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     // Misc
     container: 'container',
     prose: 'prose',
+    // Bare `resize` (resize: both) and bare `shadow` (default elevation) are
+    // default-or-value toggles, like ring/outline below.
+    resize: 'resize',
+    shadow: 'shadow',
     'sr-only': 'srOnly',
     'not-sr-only': 'notSrOnly',
     isolate: 'isolate',
@@ -334,10 +353,8 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     outline: 'outline',
     rounded: 'rounded',
 
-    // Transforms
-    'scale-3d': 'scale',
-    'translate-3d': 'translate',
-    // transform-gpu/cpu/none use BOOLEAN_VALUE_MAP → { transform: 'gpu'/'cpu'/'none' }
+    // Transforms — scale-3d/translate-3d carry the literal '3d' value via
+    // BOOLEAN_VALUE_MAP, and transform-gpu/cpu/none → { transform: 'gpu'/'cpu'/'none' }.
 
     // Font numeric
     'normal-nums': 'fontVariant',
@@ -416,10 +433,23 @@ export const BOOLEAN_VALUE_MAP: Record<
     'appearance-none': { prop: 'appearance', value: 'none' },
     'appearance-auto': { prop: 'appearance', value: 'auto' },
 
+    // Isolation (bare `isolate` is in REVERSE_BOOLEAN_MAP; `isolation-auto` carries a value)
+    'isolation-auto': { prop: 'isolation', value: 'auto', cssProperty: 'isolation' },
+
+    // Field sizing
+    'field-sizing-content': { prop: 'fieldSizing', value: 'content', cssProperty: 'field-sizing' },
+    'field-sizing-fixed': { prop: 'fieldSizing', value: 'fixed', cssProperty: 'field-sizing' },
+
     // Transform
     'transform-none': { prop: 'transform', value: 'none' },
     'transform-gpu': { prop: 'transform', value: 'gpu' },
     'transform-cpu': { prop: 'transform', value: 'cpu' },
+    // transform-style (3d / flat) — single CSS property, so fail-closed on conflict.
+    'transform-3d': { prop: 'transformStyle', value: '3d', cssProperty: 'transform-style' },
+    'transform-flat': { prop: 'transformStyle', value: 'flat', cssProperty: 'transform-style' },
+    // 3D scale/translate keyword shorthands carry the literal '3d' value.
+    'scale-3d': { prop: 'scale', value: '3d' },
+    'translate-3d': { prop: 'translate', value: '3d' },
 
     // Single-property utilities — migrated to their canonical { key: value }
     // form. The boolean-sugar aliases (flex/absolute/italic/...) were removed,
@@ -435,8 +465,27 @@ export const BOOLEAN_VALUE_MAP: Record<
     hidden: { prop: 'display', value: 'none', cssProperty: 'display' },
     contents: { prop: 'display', value: 'contents', cssProperty: 'display' },
     table: { prop: 'display', value: 'table', cssProperty: 'display' },
+    'inline-table': { prop: 'display', value: 'inline-table', cssProperty: 'display' },
     'table-row': { prop: 'display', value: 'table-row', cssProperty: 'display' },
+    'table-row-group': { prop: 'display', value: 'table-row-group', cssProperty: 'display' },
     'table-cell': { prop: 'display', value: 'table-cell', cssProperty: 'display' },
+    'table-caption': { prop: 'display', value: 'table-caption', cssProperty: 'display' },
+    'table-column': { prop: 'display', value: 'table-column', cssProperty: 'display' },
+    'table-column-group': {
+        prop: 'display',
+        value: 'table-column-group',
+        cssProperty: 'display',
+    },
+    'table-footer-group': {
+        prop: 'display',
+        value: 'table-footer-group',
+        cssProperty: 'display',
+    },
+    'table-header-group': {
+        prop: 'display',
+        value: 'table-header-group',
+        cssProperty: 'display',
+    },
     'flow-root': { prop: 'display', value: 'flow-root', cssProperty: 'display' },
     'list-item': { prop: 'display', value: 'list-item', cssProperty: 'display' },
     // position
@@ -567,6 +616,7 @@ export const FRACTION_SUPPORTED = new Set([
     'end',
     'translate-x',
     'translate-y',
+    'aspect',
 ]);
 
 // ============================================================================
@@ -635,6 +685,10 @@ export const SPACING_PROPS = new Set([
     'border-spacing',
     'translate-x',
     'translate-y',
+    'translate-z',
+    // Logical sizing accepts the spacing/sizing scale (block-4, inline-full, …)
+    'block',
+    'inline',
 ]);
 
 // ============================================================================
@@ -738,7 +792,31 @@ export const OBJECT_POSITION_KEYWORDS = new Set([
     'right-bottom',
 ]);
 
-export const SHADOW_SIZE_KEYWORDS = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'inner', 'none']);
+export const SHADOW_SIZE_KEYWORDS = new Set([
+    '2xs',
+    'xs',
+    'sm',
+    'md',
+    'lg',
+    'xl',
+    '2xl',
+    'inner',
+    'none',
+]);
+
+// align-content keywords. `content-<keyword>` is align-content (→ alignContent),
+// while quoted / none / var / arbitrary `content-*` is the `content` CSS property.
+export const ALIGN_CONTENT_KEYWORDS = new Set([
+    'normal',
+    'center',
+    'start',
+    'end',
+    'between',
+    'around',
+    'evenly',
+    'baseline',
+    'stretch',
+]);
 
 export const OUTLINE_STYLE_KEYWORDS = new Set(['none', 'dashed', 'dotted', 'double']);
 

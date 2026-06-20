@@ -7,6 +7,7 @@
  */
 
 import {
+    ALIGN_CONTENT_KEYWORDS,
     BG_ATTACHMENT_KEYWORDS,
     BG_POSITION_KEYWORDS,
     BG_REPEAT_KEYWORDS,
@@ -439,6 +440,8 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return { prop: 'ease', value: parseValue('ease', value, negative) };
         case 'snap':
             return disambiguateSnap(value);
+        case 'content':
+            return disambiguateContent(value);
         case 'flex':
             return disambiguateFlex(value);
         case 'table':
@@ -751,6 +754,21 @@ function disambiguateSnap(_value: string): ParsedClass | null {
 }
 
 /**
+ * Disambiguates content-* classes into align-content vs the `content` CSS property.
+ * `content-center`/`content-between`/… are align-content (flex/grid alignment),
+ * while `content-none`, `content-['x']`, `content-(--v)`, `content-[attr(x)]` set
+ * the generated-content `content` property.
+ * @param value - The value after the content prefix
+ * @returns Parsed alignContent or content result
+ */
+function disambiguateContent(value: string): ParsedClass | null {
+    if (ALIGN_CONTENT_KEYWORDS.has(value)) {
+        return { prop: 'alignContent', value };
+    }
+    return { prop: 'content', value: parseValue('content', value, false) };
+}
+
+/**
  * Disambiguates flex-* classes into direction or shorthand.
  * @param value - The value after the flex prefix
  * @returns Parsed flex property result
@@ -861,6 +879,8 @@ function isValidSpacingValue(value: string): boolean {
             'lvh',
             'lvw',
             // Max-width size keywords
+            '3xs',
+            '2xs',
             'xs',
             'sm',
             'md',
@@ -931,9 +951,10 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
         return inner;
     }
 
-    // Fraction: 1/2, 2/3, etc.
+    // Fraction: 1/2, 2/3, etc. Negative is allowed for inset/translate (e.g. -translate-x-1/2);
+    // parseClass already rejected negatives for prefixes outside NEGATIVE_ALLOWED.
     if (FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(value)) {
-        return value; // Keep as string "1/2"
+        return negative ? `-${value}` : value; // Keep as string "1/2" / "-1/2"
     }
 
     // Px keyword
@@ -946,9 +967,9 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
         return 'auto';
     }
 
-    // Full
+    // Full (negatable: -inset-full, -translate-x-full)
     if (value === 'full') {
-        return 'full';
+        return negative ? '-full' : 'full';
     }
 
     // Screen
