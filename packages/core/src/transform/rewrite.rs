@@ -926,6 +926,59 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_color_opacity_color_ternary() {
+        // A ternary on `color` (with a static `op` sibling) lowers to complete
+        // color-opacity classes per branch, not the dead `bg:op-50` / `bg:text-*`
+        // pair that a bare sub-property ternary emits.
+        let source =
+            "const X = ({ c }) => <div sz={{ bg: { color: c ? 'red-500' : 'blue-500', op: 50 } }} />;";
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"bg-red-500/50\" : \"bg-blue-500/50\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_op_ternary_non_bg_sides() {
+        // The op-ternary lowering applies to every color-capable side, not just bg.
+        let text =
+            "const X = ({ c }) => <div sz={{ text: { color: 'black', op: c ? 30 : 100 } }} />;";
+        assert_eq!(
+            rewrite(text).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"text-black/30\" : \"text-black/100\"} />;"
+        );
+        let border =
+            "const X = ({ c }) => <div sz={{ border: { color: 'red-500', op: c ? 30 : 100 } }} />;";
+        assert_eq!(
+            rewrite(border).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"border-red-500/30\" : \"border-red-500/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_ternary_under_deep_variants() {
+        // The lowering composes the right variant prefix at any nesting depth.
+        let source =
+            "const X = ({ c }) => <div sz={{ md: { hover: { bg: { color: 'black', op: c ? 30 : 100 } } } }} />;";
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"md:hover:bg-black/30\" : \"md:hover:bg-black/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_ternary_with_static_sibling_prop() {
+        // A static sibling prop stays in the base class; only the color-opacity
+        // ternary becomes the conditional segment.
+        let source =
+            "const X = ({ c }) => <div sz={{ p: 4, bg: { color: 'black', op: c ? 30 : 100 } }} />;";
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const X = ({ c }) => <div className={`p-4 ${c ? \"bg-black/30\" : \"bg-black/100\"}`} />;"
+        );
+    }
+
+    #[test]
     fn rewrites_conditional_spread_ternary_sz_attribute() {
         let source = "const active = { bg: 'blue-500', color: 'white' }; const inactive = { bg: 'gray-100', color: 'gray-600' }; const X = ({ on }) => <div sz={{ ...(on ? active : inactive), p: 4 }} />;";
         let rewritten = rewrite(source).expect("rewritten");

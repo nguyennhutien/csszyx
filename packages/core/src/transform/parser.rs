@@ -1447,7 +1447,10 @@ fn color_opacity_ternary_from_object(
 ) -> Option<StaticTernaryIr> {
     super::generated::tables::property_prefix(parent_key)?;
 
-    let mut color: Option<String> = None;
+    // Capture `color` and `op`, each as either a static value or a ternary.
+    let mut static_color: Option<String> = None;
+    let mut color_conditional: Option<&ConditionalExpression<'_>> = None;
+    let mut static_op: Option<StaticSzValue> = None;
     let mut op_conditional: Option<&ConditionalExpression<'_>> = None;
 
     for property in &object.properties {
@@ -1459,18 +1462,27 @@ fn color_opacity_ternary_from_object(
         }
         match static_property_key(&prop.key)?.as_str() {
             "color" => {
-                let StaticSzValue::String(value) = static_value_from_expression(&prop.value, ctx)?
-                else {
-                    return None;
-                };
-                color = Some(value);
+                if let Expression::ConditionalExpression(conditional) =
+                    unwrap_expression(&prop.value)
+                {
+                    color_conditional = Some(conditional);
+                } else {
+                    let StaticSzValue::String(value) =
+                        static_value_from_expression(&prop.value, ctx)?
+                    else {
+                        return None;
+                    };
+                    static_color = Some(value);
+                }
             }
             "op" => {
-                let Expression::ConditionalExpression(conditional) = unwrap_expression(&prop.value)
-                else {
-                    return None;
-                };
-                op_conditional = Some(conditional);
+                if let Expression::ConditionalExpression(conditional) =
+                    unwrap_expression(&prop.value)
+                {
+                    op_conditional = Some(conditional);
+                } else {
+                    static_op = Some(static_value_from_expression(&prop.value, ctx)?);
+                }
             }
             // Any other member means this is not a plain color-opacity object;
             // leave it to the normal nesting path.
@@ -1478,45 +1490,84 @@ fn color_opacity_ternary_from_object(
         }
     }
 
-    let color = color?;
-    let conditional = op_conditional?;
-    let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
-    let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
-
-    Some(StaticTernaryIr {
-        test_span: text_span(conditional.test.span()),
-        consequent_classes: color_opacity_branch_classes(
-            parent_key,
-            &color,
-            consequent,
-            variant_prefix,
-        ),
-        alternate_classes: color_opacity_branch_classes(parent_key, &color, alternate, variant_prefix),
-    })
+    // Exactly one of `color`/`op` may be the ternary; the other (and any
+    // sibling) must be static. Both static is a normal static object, and both
+    // dynamic falls back to the runtime helper — neither belongs here.
+    match (color_conditional, op_conditional) {
+        (None, Some(conditional)) => {
+            let color = static_color?;
+            let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
+            let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
+            Some(StaticTernaryIr {
+                test_span: text_span(conditional.test.span()),
+                consequent_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &color,
+                    Some(consequent),
+                    variant_prefix,
+                ),
+                alternate_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &color,
+                    Some(alternate),
+                    variant_prefix,
+                ),
+            })
+        }
+        (Some(conditional), None) => {
+            let StaticSzValue::String(consequent) =
+                static_value_from_expression(&conditional.consequent, ctx)?
+            else {
+                return None;
+            };
+            let StaticSzValue::String(alternate) =
+                static_value_from_expression(&conditional.alternate, ctx)?
+            else {
+                return None;
+            };
+            Some(StaticTernaryIr {
+                test_span: text_span(conditional.test.span()),
+                consequent_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &consequent,
+                    static_op.clone(),
+                    variant_prefix,
+                ),
+                alternate_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &alternate,
+                    static_op,
+                    variant_prefix,
+                ),
+            })
+        }
+        _ => None,
+    }
 }
 
 /// Lowers one branch of a color-opacity ternary into its complete class,
 /// e.g. `(bg, black, 30)` -> `bg-black/30`, applying any variant prefix.
+/// `op` is optional so a ternary on `color` alone (`{ color: c ? a : b }`)
+/// lowers to bare `bg-a` / `bg-b`.
 fn color_opacity_branch_classes(
     parent_key: &str,
     color: &str,
-    op: StaticSzValue,
+    op: Option<StaticSzValue>,
     variant_prefix: Option<&str>,
 ) -> Vec<String> {
-    let nested = StaticSzObject {
-        properties: vec![
-            StaticSzProperty {
-                key: "color".to_string(),
-                span: TextSpan { start: 0, end: 0 },
-                value: StaticSzValue::String(color.to_string()),
-            },
-            StaticSzProperty {
-                key: "op".to_string(),
-                span: TextSpan { start: 0, end: 0 },
-                value: op,
-            },
-        ],
-    };
+    let mut properties = vec![StaticSzProperty {
+        key: "color".to_string(),
+        span: TextSpan { start: 0, end: 0 },
+        value: StaticSzValue::String(color.to_string()),
+    }];
+    if let Some(op) = op {
+        properties.push(StaticSzProperty {
+            key: "op".to_string(),
+            span: TextSpan { start: 0, end: 0 },
+            value: op,
+        });
+    }
+    let nested = StaticSzObject { properties };
     let object = StaticSzObject {
         properties: vec![StaticSzProperty {
             key: parent_key.to_string(),
