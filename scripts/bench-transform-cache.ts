@@ -798,7 +798,7 @@ function createStaticFastFiles(count: number): Array<{ filename: string; source:
     return Array.from({ length: count }, (_, index) => ({
         filename: '/bench/src/StaticFastModule.tsx',
         source: `export function StaticFastModule() {
-  return <div id="card-${index}" sz={{ p: ${index % 8}, bg: 'blue-500', color: 'white', flex: true }} />;
+  return <div id="card-${index}" sz={{ p: ${index % 8}, bg: 'blue-500', color: 'white', display: 'flex' }} />;
 }
 `,
     }));

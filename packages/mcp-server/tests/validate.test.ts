@@ -24,8 +24,9 @@ describe('csszyx_validate', () => {
         expect(data.errors[0].message).toContain("Unknown prop 'unknownProp'");
     });
 
-    // flex is in BOTH BOOLEAN_SHORTHANDS (flex:true → display:flex) and
-    // PROPERTY_MAP (flex:'auto' → flex-auto). Non-boolean values must NOT trigger a warning.
+    // flex's boolean sugar was removed, but flex stays a valid PROPERTY_MAP key
+    // for shorthand values (flex:'auto' → flex-auto, flex:1 → flex-1). Those
+    // non-boolean values must NOT trigger a warning.
     it('does NOT warn for dual-purpose props with valid non-boolean values', () => {
         for (const value of ['auto', 'none', 1] as const) {
             const data = JSON.parse(handleValidate({ sz: { flex: value } }).content[0].text);

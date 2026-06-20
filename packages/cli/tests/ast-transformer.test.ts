@@ -23,7 +23,7 @@ describe('sz-codegen', () => {
     });
 
     it('quoted keys for @ prefix', () => {
-        const result = generateSzExpression({ '@md': { flex: true } });
+        const result = generateSzExpression({ '@md': { display: 'flex' } });
         expect(result).toContain("'@md'");
     });
 
@@ -79,7 +79,7 @@ describe('sz-codegen', () => {
     });
 
     it('keys with hyphens get quoted', () => {
-        const result = generateSzExpression({ 'display:grid': { flex: true } });
+        const result = generateSzExpression({ 'display:grid': { display: 'flex' } });
         expect(result).toContain("'display:grid'");
     });
 });

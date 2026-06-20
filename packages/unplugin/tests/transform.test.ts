@@ -158,7 +158,7 @@ describe('mangleCodeClassesSync — Pass 1 (direct static className strings)', (
 
 describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', () => {
     it('mangles the static quasi prefix in a className template literal', () => {
-        // Generated when sz={{ flex: true, items: 'center', flexDir: isRow ? 'row' : 'col' }}
+        // Generated when sz={{ display: 'flex', items: 'center', flexDir: isRow ? 'row' : 'col' }}
         // Pre-plugin output (in bundle form):  className:`flex items-center ${isRow?"flex-row":"flex-col"}`
         const code = 'className:`flex items-center ${isRow?"flex-row":"flex-col"}`';
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
@@ -205,7 +205,7 @@ describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', 
     });
 
     it('mangles chained ternary inside interpolation (size/variant pattern)', () => {
-        // sz={{ flex: true, size: s==="sm" ? "rounded-xl" : s==="md" ? "rounded-full" : "p-4", items: "center" }}
+        // sz={{ display: 'flex', size: s==="sm" ? "rounded-xl" : s==="md" ? "rounded-full" : "p-4", items: "center" }}
         // Non-class strings ("sm", "md") are values of a comparison, not class names — preserved.
         const code =
             'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`';
@@ -375,7 +375,7 @@ describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => 
 });
 
 describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => {
-    // Button component: sz={[{ flex: true, items: 'center', rounded: 'full' },
+    // Button component: sz={[{ display: 'flex', items: 'center', rounded: 'full' },
     //   variant === 'primary' && { bg: 'violet-500' },
     //   size === 'lg' ? { scale: 100 } : { scale: 75 }]}
     // Minified bundle: className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")
@@ -408,7 +408,7 @@ describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => 
     });
 
     it('Modal — 4-arg _szMerge: static + two && booleans + ternary', () => {
-        // sz={[{ flex: true, items: 'center' }, open && { p: 4 }, active && { rounded: 'xl' },
+        // sz={[{ display: 'flex', items: 'center' }, open && { p: 4 }, active && { rounded: 'xl' },
         //       full ? { rounded: 'full' } : { scale: 75 }]}
         const code =
             'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")';

@@ -5,7 +5,7 @@ import { transformMarkup } from '../src/index.js';
 describe('Svelte markup transform', () => {
     it('transforms quoted and bound static sz objects', () => {
         const result = transformMarkup(
-            '<div sz="{{ p: 4 }}"></div><span sz={{ m: 2, hover: { block: true } }} />',
+            '<div sz="{{ p: 4 }}"></div><span sz={{ m: 2, hover: { display: "block" } }} />',
         );
 
         expect(result.count).toBe(2);

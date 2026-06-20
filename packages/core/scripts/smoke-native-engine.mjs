@@ -89,7 +89,7 @@ function assertNativeEngineTransform(binding) {
     {
       filename: path.join(repoRoot, "fixtures", "array-sz.tsx"),
       source:
-        "const ArraySz = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;",
+        "const ArraySz = () => <div sz={[{ display: 'flex' }, false, null, { p: 4 }]} />;",
     },
     {
       filename: path.join(repoRoot, "fixtures", "spread-sz.tsx"),

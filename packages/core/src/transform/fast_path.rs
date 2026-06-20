@@ -292,7 +292,7 @@ mod tests {
     fn flat_static_sz_prop_builds_ast_free_ir() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', italic: true }} />;".to_string(),
+            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', fontStyle: 'italic' }} />;".to_string(),
         };
 
         let FastPathTriage::StaticIr(ir) = triage_source(&file) else {

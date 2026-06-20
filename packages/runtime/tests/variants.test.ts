@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { szv } from '../src/variants.js';
 
 const buttonSz = szv({
-    base: { inlineFlex: true, items: 'center', rounded: 'md' },
+    base: { display: 'inline-flex', items: 'center', rounded: 'md' },
     variants: {
         variant: {
             default: { bg: 'primary', text: 'primary-foreground' },
@@ -23,7 +23,7 @@ describe('szv()', () => {
     describe('base + defaultVariants', () => {
         it('no selection → base + defaultVariants applied', () => {
             const result = buttonSz();
-            expect(result.inlineFlex).toBe(true);
+            expect(result.display).toBe('inline-flex');
             expect(result.items).toBe('center');
             expect(result.rounded).toBe('md');
             expect(result.bg).toBe('primary'); // from default variant
@@ -47,7 +47,7 @@ describe('szv()', () => {
             const result = buttonSz({ size: 'sm' });
             expect(result.h).toBe(9);
             expect(result.px).toBe(3);
-            expect(result.inlineFlex).toBe(true); // base still present
+            expect(result.display).toBe('inline-flex'); // base still present
             expect(result.bg).toBe('primary'); // default variant still applied
         });
 

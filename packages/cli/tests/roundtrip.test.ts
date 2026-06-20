@@ -452,7 +452,7 @@ describe('round-trip: TW → migrate → compile', () => {
     describe('bracket-free keys round-trip', () => {
         it('min-[320px]:flex', () => {
             const { szObject } = classNameToSzObject('min-[320px]:flex');
-            // szObject = { min: { '320px': { flex: true } } }  — no brackets!
+            // szObject = { min: { '320px': { display: 'flex' } } }  — no brackets!
             expect((szObject.min as Record<string, unknown>)['320px']).toBeDefined();
             expect((szObject.min as Record<string, unknown>)['[320px]']).toBeUndefined();
             // Compiler should auto-wrap in []

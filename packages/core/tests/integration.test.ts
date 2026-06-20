@@ -100,7 +100,7 @@ describe('@csszyx/core Integration', () => {
         it('should match compiler transform for generated property and boolean maps', () => {
             const cases = [
                 { start: 4 },
-                { inlineBlock: true },
+                { display: 'inline-block' },
                 { bgImg: 'url(/hero.png)' },
                 { hover: { start: 2 } },
             ] as const;

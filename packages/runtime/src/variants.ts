@@ -78,7 +78,7 @@ function deepMerge(target: SzObject, source: SzObject): SzObject {
  * import { szv } from 'csszyx';
  *
  * const buttonSz = szv({
- *   base: { inlineFlex: true, items: 'center', rounded: 'md', fontWeight: 'medium' },
+ *   base: { display: 'inline-flex', items: 'center', rounded: 'md', fontWeight: 'medium' },
  *   variants: {
  *     variant: {
  *       default: { bg: 'primary', text: 'primary-foreground' },

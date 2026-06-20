@@ -5,7 +5,7 @@ import { extractTemplate, transformTemplate } from '../src/index.js';
 describe('Vue template transform', () => {
     it('extracts and transforms static sz attributes', () => {
         const source =
-            '<template><div :sz="{ p: 4 }" /><span v-bind:sz="{ m: 2 }" /><i sz="{ block: true }" /></template>';
+            '<template><div :sz="{ p: 4 }" /><span v-bind:sz="{ m: 2 }" /><i sz="{ display: \'block\' }" /></template>';
         const template = extractTemplate(source);
 
         expect(template?.content).toContain(':sz=');
