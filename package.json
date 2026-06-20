@@ -34,6 +34,8 @@
     "gen:rust-tables:check": "node scripts/generate-rust-transform-tables.mjs --check",
     "gen:key-tests": "node --import tsx/esm scripts/gen-key-tests.mjs",
     "gen:key-tests:check": "node --import tsx/esm scripts/gen-key-tests.mjs --check",
+    "gen:box-role": "node --import tsx/esm scripts/gen-box-role-map.mjs",
+    "gen:box-role:check": "node --import tsx/esm scripts/gen-box-role-map.mjs --check",
     "check:key-corpus": "node scripts/check-key-corpus-consistency.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
