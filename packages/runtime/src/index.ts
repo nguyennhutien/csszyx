@@ -44,6 +44,19 @@ export {
 } from './hydration.js';
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
 export { __szColorVar } from './lite.js';
+// Box-model class routing + category-aware toolkit
+export {
+    type BoxRole,
+    type BoxSelector,
+    classify,
+    type Classification,
+    has,
+    omit,
+    pick,
+    splitBox,
+    type SplitBoxOptions,
+    type SplitBoxResult,
+} from './split-box.js';
 // Export variant authoring helper
 export { szv } from './variants.js';
 // Export verification functions
