@@ -236,6 +236,15 @@ const corpus = [
     { display: 'flex', items: 'center', gap: 3 },
     { md: { display: 'grid', gridCols: 2 }, p: 6 },
     { mt: 6, display: 'flex', flexWrap: 'wrap', gap: 3 },
+    // css escape hatch (arbitrary [prop:value]) — a nested object that is NOT a
+    // variant; the runtime path historically lowered it as a `css:` variant.
+    { css: { color: 'red', backgroundColor: 'blue' } },
+    { css: { '--brand': 'navy' } },
+    // order-locking multi-prop + nested handlers combined with sibling props
+    { p: 4, m: 2, bg: 'red-500', display: 'flex', items: 'center' },
+    { bg: { color: 'blue-500', op: 30 }, p: 4 },
+    { aria: { checked: { bg: 'blue-500' } }, p: 2 },
+    { group: { hover: { opacity: 100 } }, p: 1 },
 ];
 
 // Merge the hand-curated corpus (first, order preserved) with every documented

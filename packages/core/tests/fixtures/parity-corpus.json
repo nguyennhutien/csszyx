@@ -4113,6 +4113,317 @@
     "oxc": "mt-6 flex flex-wrap gap-3"
   },
   {
+    "sz": "{\"css\":{\"color\":\"red\",\"backgroundColor\":\"blue\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "css",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "red"
+                  }
+                },
+                {
+                  "key": "backgroundColor",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "blue"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "[color:red] [background-color:blue]"
+  },
+  {
+    "sz": "{\"css\":{\"--brand\":\"navy\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "css",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--brand",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "navy"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "[--brand:navy]"
+  },
+  {
+    "sz": "{\"p\":4,\"m\":2,\"bg\":\"red-500\",\"display\":\"flex\",\"items\":\"center\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "p",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 4
+          }
+        },
+        {
+          "key": "m",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 2
+          }
+        },
+        {
+          "key": "bg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "red-500"
+          }
+        },
+        {
+          "key": "display",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "flex"
+          }
+        },
+        {
+          "key": "items",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "center"
+          }
+        }
+      ]
+    },
+    "oxc": "p-4 m-2 bg-red-500 flex items-center"
+  },
+  {
+    "sz": "{\"bg\":{\"color\":\"blue-500\",\"op\":30},\"p\":4}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "blue-500"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 30
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "key": "p",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 4
+          }
+        }
+      ]
+    },
+    "oxc": "bg-blue-500/30 p-4"
+  },
+  {
+    "sz": "{\"aria\":{\"checked\":{\"bg\":\"blue-500\"}},\"p\":2}",
+    "ir": {
+      "properties": [
+        {
+          "key": "aria",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "checked",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "object",
+                    "value": {
+                      "properties": [
+                        {
+                          "key": "bg",
+                          "span": {
+                            "start": 0,
+                            "end": 0
+                          },
+                          "value": {
+                            "kind": "string",
+                            "value": "blue-500"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "key": "p",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 2
+          }
+        }
+      ]
+    },
+    "oxc": "aria-checked:bg-blue-500 p-2"
+  },
+  {
+    "sz": "{\"group\":{\"hover\":{\"opacity\":100}},\"p\":1}",
+    "ir": {
+      "properties": [
+        {
+          "key": "group",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "hover",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "object",
+                    "value": {
+                      "properties": [
+                        {
+                          "key": "opacity",
+                          "span": {
+                            "start": 0,
+                            "end": 0
+                          },
+                          "value": {
+                            "kind": "number",
+                            "value": 100
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "key": "p",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 1
+          }
+        }
+      ]
+    },
+    "oxc": "group-hover:opacity-100 p-1"
+  },
+  {
     "sz": "{\"@container\":true}",
     "ir": {
       "properties": [
