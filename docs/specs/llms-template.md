@@ -450,6 +450,36 @@ import { __szColorVar } from "csszyx/lite";
 //        __szColorVar('#ff0000')       → '#ff0000'
 ```
 
+## Nested Element Routing — splitBox + class toolkit
+
+When a caller passes one flat `className` to a component that renders nested elements, `splitBox` partitions it at the CSS box-model border line so each element gets the classes that act on it. Pure string functions, framework-agnostic. The class-token → box-role map is generated from the compiler's property tables (never drifts).
+
+```tsx
+import { splitBox, classify, has, pick, omit, stripSzProps } from '@csszyx/runtime';
+
+// Partition: outer = border-outward (margin/position/border/sizing/bg/shadow/transform/visibility),
+//            inner = border-inward (padding/overflow/display/layout/gap/text/paint-inside/interactivity)
+const { outer, inner } = splitBox('m-4 px-2 md:flex');
+// outer: "m-4"   inner: "px-2 md:flex"
+
+// Override any default per call (BoxSelector = box-role | category | class-prefix | { category: value })
+splitBox('overflow-hidden p-4', { outer: ['overflow'] });
+// outer: "overflow-hidden"   inner: "p-4"
+
+// Toolkit: csszyx owns the truth (box-role/category), your project owns the rule
+classify('inset-ring-2');                 // { role: 'inner', category: 'ring' }
+has('p-2 overflow-y-auto', 'overflow');   // true
+pick('m-4 text-sm', 'text');              // "text-sm"
+omit('p-2 overflow-y-auto flex', 'overflow'); // "p-2 flex"
+
+// A scroller scrolls only when the outer frame clips (project-owned dependency rule)
+const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
+
+// stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files
+// whose raw sz would leak as sz="[object Object]"; dev-warns once on a raw-object sz)
+function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
+```
+
 ## SSR Hydration
 
 CSSzyx validates that server and client use the same mangle map:

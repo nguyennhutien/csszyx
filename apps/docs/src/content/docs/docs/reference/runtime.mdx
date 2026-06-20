@@ -1,6 +1,6 @@
 ---
 title: Runtime Helpers
-description: _sz, _szIf, _szSwitch, _szMerge, szv() — className composition and variant authoring helpers.
+description: _sz, _szIf, _szSwitch, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, and stripSzProps for nested element routing.
 ---
 
 import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
@@ -299,6 +299,84 @@ Pass an array to the `sz` prop to compose multiple sz objects with conditional i
 
 The compiler pre-computes all static objects at build time; only the conditional merge
 paths use `_szMerge` at runtime.
+
+## `splitBox(className, options?)` — Nested Element Routing
+
+When a caller passes one flat `className` to a component that renders nested
+elements, the styles often belong on different elements — the margin on the
+outer frame, the padding on the inner content. `splitBox` partitions a className
+at the CSS box-model border line into `{ outer, inner }`. Every token lands in
+exactly one bucket (no loss, no duplication) and keeps its variant prefix.
+
+```ts
+function splitBox(className: string, options?: {
+  outer?: BoxSelector[];          // force these onto the outer node
+  inner?: BoxSelector[];          // force these onto the inner node
+  fallback?: 'outer' | 'inner';   // unrecognized token → default 'outer'
+}): { outer: string; inner: string }
+
+// box-role | category | class-prefix | category+value pair
+type BoxSelector = string | Readonly<Record<string, string>>
+```
+
+The split follows the box model: **outer** = border-outward (margin, position,
+border, sizing, background, shadow, transform, visibility); **inner** =
+border-inward (padding, overflow, display, layout, gap, text, paint-inside,
+interactivity). The class-token → box-role map is **generated from the
+compiler's property tables**, so it never drifts. Every default is overridable.
+
+```tsx
+import { splitBox } from '@csszyx/runtime';
+
+const { outer, inner } = splitBox('m-4 px-2 md:flex');
+// outer: "m-4"   inner: "px-2 md:flex"
+
+<Frame className={outer}>
+  <Content className={inner} />
+</Frame>
+```
+
+## `classify` / `has` / `pick` / `omit` — Class Toolkit
+
+The category-aware toolkit exposes csszyx's class knowledge as primitives.
+csszyx owns the **truth** (a class's box-role + category); your project owns the
+**rule** (which dependent classes to add, under which conditions) — no rule-DSL,
+no hardcoded Tailwind vocabulary.
+
+```ts
+function classify(token: string): { role: 'outer' | 'inner'; category: string } | undefined
+function has(classes: string, selector: BoxSelector): boolean
+function pick(classes: string, selector: BoxSelector): string
+function omit(classes: string, selector: BoxSelector): string
+```
+
+```tsx
+import { splitBox, has, _szMerge } from '@csszyx/runtime';
+
+// A scroller should scroll only when the outer frame clips:
+const { outer, inner } = splitBox(className);
+const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
+
+<Frame className={outer}>
+  <Scroll className={_szMerge(inner, dep)} />
+</Frame>
+```
+
+## `stripSzProps(props)` — Safe Prop Forwarding
+
+Removes `sz` before a component spreads `...rest` onto a host element. Compiled
+components never carry a leftover `sz`, but a file that was **not** compiled
+(e.g. a workspace package missing from `compilePackages`) keeps its raw `sz`,
+which leaks to the DOM as `sz="[object Object]"`. `stripSzProps` drops it and,
+in development, warns once when the leaked `sz` is a raw object.
+
+```tsx
+import { stripSzProps } from '@csszyx/runtime';
+
+function Box({ sz, ...rest }: BoxProps) {
+  return <div {...stripSzProps(rest)} />;
+}
+```
 
 ## Lite Runtime
 

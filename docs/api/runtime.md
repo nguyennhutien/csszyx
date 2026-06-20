@@ -177,6 +177,110 @@ __szColorVar("--my-var"); // → 'var(--my-var)'
 __szColorVar("rgb(255,0,0)"); // → 'rgb(255,0,0)'
 ```
 
+## Box-Model Class Routing
+
+When a caller passes one flat `className` (e.g. from an `sz` prop) to a component that renders nested elements, the styles often belong on different elements — the margin on the outer frame, the padding on the inner content. `splitBox` partitions a className string at the CSS box-model border line so each element gets the classes that act on it. The toolkit (`classify`/`has`/`pick`/`omit`) exposes csszyx's own class knowledge so a project can express cross-element dependency rules without hardcoding Tailwind's vocabulary.
+
+These are pure string functions — framework-agnostic, no React, no DOM. The class-token → box-role map is **generated from the compiler's property tables**, so it never drifts from what the compiler emits. Value-keyed classes (`block`, `absolute`, `underline`) and variant prefixes (`md:`, `hover:`, `@max-[600px]:`, `[&:hover]:`) are handled.
+
+The border line splits two roles:
+
+- **`outer`** (border-outward): margin, position/inset/z, border/rounded/outline/ring/divide, drop shadow, sizing, background, opacity/transform/transition/filter/backdrop, visibility.
+- **`inner`** (border-inward): padding, overflow/overscroll/scroll/snap, display, flex/grid layout, gap/space, text & typography, paint-inside (gradient, fill/stroke, caret/accent, inset-ring/inset-shadow), interactivity.
+
+Every default is overridable per call.
+
+### `splitBox()`
+
+Partition a className into `{ outer, inner }`. Every token lands in exactly one bucket (no loss, no duplication) and keeps its variant prefix.
+
+**Signature:**
+
+```ts
+function splitBox(className: string, options?: SplitBoxOptions): {
+  outer: string;
+  inner: string;
+};
+
+interface SplitBoxOptions {
+  outer?: BoxSelector[]; // force these onto the outer node
+  inner?: BoxSelector[]; // force these onto the inner node
+  fallback?: "outer" | "inner"; // unrecognized token → default "outer"
+}
+
+// A box-role ('outer'|'inner'), a category ('overflow'|'bg'|…),
+// a class-prefix ('px'|'bg'|…), or a category+value pair ({ overflow: 'hidden' }).
+type BoxSelector = string | Readonly<Record<string, string>>;
+```
+
+**Example:**
+
+```tsx
+import { splitBox } from "@csszyx/runtime";
+
+splitBox("m-4 px-2 md:flex");
+// → { outer: "m-4", inner: "px-2 md:flex" }
+
+// Override the default: route overflow to the outer frame instead of inner
+splitBox("overflow-hidden p-4", { outer: ["overflow"] });
+// → { outer: "overflow-hidden", inner: "p-4" }
+```
+
+### `classify()`, `has()`, `pick()`, `omit()`
+
+The category-aware toolkit. csszyx owns the **truth** (which box-role / category a class has); the project owns the **rule** (which dependent classes to add, under which conditions).
+
+**Signatures:**
+
+```ts
+function classify(token: string): { role: "outer" | "inner"; category: string } | undefined;
+function has(classes: string, selector: BoxSelector): boolean;
+function pick(classes: string, selector: BoxSelector): string;
+function omit(classes: string, selector: BoxSelector): string;
+```
+
+**Example — a project-owned dependency rule** (the inner scroller should scroll only when the outer frame clips):
+
+```tsx
+import { splitBox, has, _szMerge } from "@csszyx/runtime";
+
+const { outer, inner } = splitBox(className);
+const dep = has(outer, { overflow: "hidden" }) ? "overflow-y-auto h-full" : "";
+
+<Frame className={outer}>
+  <Scroll className={_szMerge(inner, dep)} />
+</Frame>;
+```
+
+```tsx
+classify("inset-ring-2"); // → { role: "inner", category: "ring" }
+has("p-2 overflow-y-auto", "overflow"); // → true
+pick("m-4 px-2 text-sm", "text"); // → "text-sm"
+omit("p-2 overflow-y-auto flex", "overflow"); // → "p-2 flex"
+```
+
+## Prop Forwarding
+
+### `stripSzProps()`
+
+Removes the `sz` prop before a component spreads `...rest` onto a host element. The compiler rewrites `sz` to `className` at build time, so a compiled component never carries a leftover `sz`. But a file that was **not** compiled (e.g. a workspace package missing from `compilePackages`, or any source the bundler skipped) keeps its raw `sz`, which then leaks to the DOM as `sz="[object Object]"`. `stripSzProps` drops it, and in development warns once when the leaked `sz` is a raw object — pointing at the real cause.
+
+**Signature:**
+
+```ts
+function stripSzProps<T extends Record<string, unknown>>(props: T): Omit<T, "sz">;
+```
+
+**Example:**
+
+```tsx
+import { stripSzProps } from "@csszyx/runtime";
+
+function Box({ sz, ...rest }: BoxProps) {
+  return <div {...stripSzProps(rest)} />;
+}
+```
+
 ## Initialization
 
 ### `initRuntime()`
