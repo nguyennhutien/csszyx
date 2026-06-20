@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { generateThemeDts } from '../src/theme-type-writer.js';
 
-const EMPTY_THEME = { colors: [], spacings: [], fonts: [], radii: [], shadows: [] };
+const EMPTY_THEME = {
+    colors: [],
+    spacings: [],
+    fonts: [],
+    radii: [],
+    shadows: [],
+    breakpoints: [],
+};
 
 describe('generateThemeDts', () => {
     it('produces valid module augmentation for a single category', () => {
@@ -27,6 +34,7 @@ describe('generateThemeDts', () => {
                 fonts: ['display'],
                 radii: ['button'],
                 shadows: ['card'],
+                breakpoints: [],
             },
             sourceFiles: ['theme.css'],
         });
@@ -103,5 +111,40 @@ describe('generateThemeDts', () => {
         });
 
         expect(output.endsWith('\n')).toBe(true);
+    });
+
+    it('augments VariantModifiers with custom breakpoints', () => {
+        const output = generateThemeDts({
+            outputPath: '/p/.csszyx/theme.d.ts',
+            theme: { ...EMPTY_THEME, breakpoints: ['tablet', 'desktop'] },
+            sourceFiles: ['theme.css'],
+        });
+
+        expect(output).toContain('interface VariantModifiers {');
+        expect(output).toContain('tablet?: SzPropsBase;');
+        expect(output).toContain('desktop?: SzPropsBase;');
+        // Both interfaces live in the same module augmentation block.
+        expect(output).toContain("declare module '@csszyx/compiler'");
+    });
+
+    it('quotes breakpoint keys that are not bare identifiers', () => {
+        const output = generateThemeDts({
+            outputPath: '/p/.csszyx/theme.d.ts',
+            theme: { ...EMPTY_THEME, breakpoints: ['3xl', 'tablet'] },
+            sourceFiles: ['theme.css'],
+        });
+
+        expect(output).toContain("'3xl'?: SzPropsBase;");
+        expect(output).toContain('tablet?: SzPropsBase;');
+    });
+
+    it('omits the VariantModifiers block when there are no breakpoints', () => {
+        const output = generateThemeDts({
+            outputPath: '/p/.csszyx/theme.d.ts',
+            theme: { ...EMPTY_THEME, colors: ['brand'] },
+            sourceFiles: ['theme.css'],
+        });
+
+        expect(output).not.toContain('VariantModifiers');
     });
 });
