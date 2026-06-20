@@ -826,6 +826,20 @@ export function transformSourceCode(
                                 diagnostics.push(
                                     `sz fallback at ${lineCol}: ${reason}.\n  Suggestion: ${suggestion}`,
                                 );
+                                // A top-level object spread can't be resolved at build
+                                // time and may render no styles in production — surface it
+                                // with a marker the bundler promotes to a build-log warning
+                                // (kept identical to the oxc engine for parity).
+                                if (
+                                    t.isObjectExpression(expression) &&
+                                    expression.properties.some(prop => t.isSpreadElement(prop))
+                                ) {
+                                    diagnostics.push(
+                                        `[csszyx] unresolvable sz spread at ${lineCol}: ` +
+                                            'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
+                                            'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
+                                    );
+                                }
 
                                 path.node.name.name = 'className';
                                 const szCall = t.callExpression(t.identifier('_sz'), [

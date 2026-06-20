@@ -607,9 +607,9 @@ export function transformOxc(
             ) {
                 const { line, column } = offsetToLineColumn(source, runtimeFallbackExpr.start);
                 diagnostics.push(
-                    `[csszyx] unresolvable sz spread at ${effectiveFilename}:${line}:${column + 1}: ` +
-                        'sz={{ ...x }} can\'t be resolved at build time and falls back to runtime ' +
-                        '(it may produce no styles in production). Use array form: sz={[x, { … }]}.',
+                    `[csszyx] unresolvable sz spread at ${line}:${column + 1}: ` +
+                        'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
+                        'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
                 );
             }
             collectCandidateClassesFromExpression(
