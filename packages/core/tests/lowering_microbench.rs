@@ -8,9 +8,13 @@
 //!   - **A (convert+lower)**: `obj.clone()` (a faithful proxy for
 //!     `convert_runtime_object`'s `Vec<StaticSzProperty>` + key/value allocation)
 //!     then lower.
+//!
 //! The delta `A - B` is the conversion cost A pays and B avoids.
 //!
 //! Run: `cargo test --release --test lowering_microbench -- --ignored --nocapture`
+
+// Nanosecond timings are averaged as f64 — precision loss is irrelevant for a bench.
+#![allow(clippy::cast_precision_loss)]
 
 use std::hint::black_box;
 use std::time::Instant;
