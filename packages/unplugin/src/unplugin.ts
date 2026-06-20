@@ -104,6 +104,8 @@ interface PluginState {
      * JS that references classes by name) owns.
      */
     ownedClasses: Set<string>;
+    /** Unresolvable-spread warnings surfaced to the build log in every mode. */
+    spreadWarnings: Set<string>;
     mangleMap: Record<string, string>;
     varMangleEntriesByFile: Map<string, Array<[string, string]>>;
     varMangleMap: Record<string, CssVariableMangleValue>;
@@ -1500,6 +1502,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         classes: new Set<string>(),
         sawTailwindEntry: false,
         tailwindWarningEmitted: false,
+        spreadWarnings: new Set<string>(),
         ownedClasses: new Set<string>(),
         mangleMap: {},
         varMangleEntriesByFile: new Map(),
@@ -2453,13 +2456,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         szClasses = result.classes;
                         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
                         recordFileCSSVariableMetrics(state, id, result.code);
-                        // Emit dev-mode warnings when the compiler had to fall back to _sz() runtime.
-                        // Suppressed in production to avoid leaking source paths into build output.
+                        // Unresolvable-spread warnings are collected and surfaced
+                        // at buildEnd in EVERY mode — the build log is not the
+                        // shipped bundle, so the prod path-leak concern doesn't
+                        // apply, and a spread that ships silently is the worst
+                        // failure mode. Other diagnostics stay dev-only below.
+                        for (const msg of result.diagnostics) {
+                            if (msg.includes('unresolvable sz spread')) {
+                                state.spreadWarnings.add(`${id}\n  ${msg}`);
+                            }
+                        }
+                        // Emit remaining dev-mode warnings when the compiler had to fall back to
+                        // _sz() runtime. Suppressed in production to avoid leaking source paths.
                         if (
                             result.diagnostics.length > 0 &&
                             process.env.NODE_ENV !== 'production'
                         ) {
                             for (const msg of result.diagnostics) {
+                                if (msg.includes('unresolvable sz spread')) continue;
                                 this.warn(`[csszyx] ${id}\n  ${msg}`);
                             }
                         }
@@ -2591,6 +2605,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     state.tailwindWarningEmitted = true;
                     console.warn(missingTailwindEntryMessage(state.ownedClasses.size));
                 }
+                // Surface unresolvable-spread warnings to the build log in every
+                // mode (collected during transform). The build log is not the
+                // shipped bundle, so this never leaks paths to end users.
+                for (const warning of state.spreadWarnings) {
+                    console.warn(`[csszyx] ${warning}`);
+                }
+                state.spreadWarnings.clear();
                 // Expose the mangle map as a Node.js global so that dynamic() SSR calls
                 // (which run in the same process during Astro/Next.js SSG) can resolve
                 // original class names to their mangled equivalents. Without this, dynamic()
