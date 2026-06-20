@@ -401,7 +401,7 @@ mod tests {
     fn transform_file_uses_ast_free_path_for_flat_static_sz_attribute() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', italic: true }} />;"
+            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', fontStyle: 'italic' }} />;"
                 .to_string(),
         };
 

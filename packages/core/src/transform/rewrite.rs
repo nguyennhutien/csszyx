@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn rewrites_static_array_sz_attribute() {
         let source =
-            "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;";
+            "export const App = () => <div sz={[{ display: 'flex' }, false, null, { p: 4 }]} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(

@@ -1920,7 +1920,7 @@ mod tests {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source:
-                "export const App = () => <div className=\"block\" sz={{ start: 4, inlineBlock: true }} />;"
+                "export const App = () => <div className=\"block\" sz={{ start: 4, display: 'inline-block' }} />;"
                     .to_string(),
         };
 
@@ -2044,7 +2044,7 @@ mod tests {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source:
-                "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;"
+                "export const App = () => <div sz={[{ display: 'flex' }, false, null, { p: 4 }]} />;"
                     .to_string(),
         };
 
@@ -2114,7 +2114,7 @@ mod tests {
                 vec!["m-2"],
             ),
             (
-                "export const App = () => <div sz={([{ flex: true }] as const)} />;",
+                "export const App = () => <div sz={([{ display: 'flex' }] as const)} />;",
                 vec!["flex"],
             ),
         ];
@@ -2136,7 +2136,7 @@ mod tests {
         let cases = [
             ("sz={{ m: -2 }}", vec!["-m-2"]),
             ("sz={{ m: +2 }}", vec!["m-2"]),
-            ("sz={{ italic: false }}", vec!["not-italic"]),
+            ("sz={{ fontStyle: 'normal' }}", vec!["not-italic"]),
             (
                 "sz={{ hover: { bg: 'red-500' } }}",
                 vec!["hover:bg-red-500"],
