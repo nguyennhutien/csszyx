@@ -13,7 +13,7 @@ export function ConfigPanel({ config, onChange }: ConfigPanelProps) {
     return (
         <div sz={{ h: 'full', overflow: 'auto', p: 6, display: 'flex', flexDir: 'col', gap: 6 }}>
             <div>
-                <h2 sz={{ text: 'sm', fontWeight: 'semibold', tracking: 'widest', textTransform: 'uppercase', color: 'gray-400', mb: 4 }}>
+                <h2 sz={{ text: 'sm', weight: 'semibold', tracking: 'widest', textTransform: 'uppercase', color: 'gray-400', mb: 4 }}>
                     Style Config
                 </h2>
 
@@ -67,7 +67,7 @@ export function ConfigPanel({ config, onChange }: ConfigPanelProps) {
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div sz={{ mb: 5 }}>
-            <p sz={{ text: 'xs', color: 'gray-500', fontWeight: 'medium', mb: 2 }}>{label}</p>
+            <p sz={{ text: 'xs', color: 'gray-500', weight: 'medium', mb: 2 }}>{label}</p>
             <div sz={{ display: 'flex', flexDir: 'col', gap: 2 }}>
                 {children}
             </div>

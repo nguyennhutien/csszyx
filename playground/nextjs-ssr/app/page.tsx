@@ -9,7 +9,7 @@ export default function Home() {
     return (
         <main sz={{ minH: 'screen', p: 8, bgImg: { gradient: 'linear', dir: 'to-b' }, from: 'slate-900', to: 'slate-800' }}>
             <div sz={{ maxW: '4xl', mx: 'auto' }}>
-                <h1 sz={{ text: '4xl', fontWeight: 'bold', color: 'white', mb: 8, textAlign: 'center' }}>
+                <h1 sz={{ text: '4xl', weight: 'bold', color: 'white', mb: 8, textAlign: 'center' }}>
                     csszyx Next.js SSR Playground
                 </h1>
 
@@ -19,7 +19,7 @@ export default function Home() {
 
                 {/* Server Component Section */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', weight: 'semibold', color: 'white', mb: 4 }}>
                         Server Components (RSC)
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
@@ -40,7 +40,7 @@ export default function Home() {
 
                 {/* Client Component Section */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', weight: 'semibold', color: 'white', mb: 4 }}>
                         Client Components
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
@@ -52,7 +52,7 @@ export default function Home() {
 
                 {/* Hydration Test Section */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', weight: 'semibold', color: 'white', mb: 4 }}>
                         Hydration Guard Test
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
@@ -78,7 +78,7 @@ export default function Home() {
 
                 {/* Conditional Styling Test */}
                 <section sz={{ mb: 12 }}>
-                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', color: 'white', mb: 4 }}>
+                    <h2 sz={{ text: '2xl', weight: 'semibold', color: 'white', mb: 4 }}>
                         Conditional Styling (_szIf)
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>

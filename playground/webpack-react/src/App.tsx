@@ -10,7 +10,7 @@ const App: React.FC = () => {
             fontFamily: 'sans'
         }}>
             <div sz={{ maxW: '2xl', mx: 'auto' }}>
-                <h1 sz={{ text: '4xl', textAlign: 'center', color: 'blue-400', fontWeight: 'bold', mb: 6 }}>
+                <h1 sz={{ text: '4xl', textAlign: 'center', color: 'blue-400', weight: 'bold', mb: 6 }}>
                     Welcome to csszyx + Webpack (Object Syntax)
                 </h1>
 
@@ -24,7 +24,7 @@ const App: React.FC = () => {
                         hover: { borderColor: 'blue-500' },
                         transition: 'colors'
                     }}>
-                        <h2 sz={{ text: 'xl', fontWeight: 'semibold', mb: 3 }}>Feature 1</h2>
+                        <h2 sz={{ text: 'xl', weight: 'semibold', mb: 3 }}>Feature 1</h2>
                         <p sz={{ color: 'slate-400' }}>
                             This card uses object syntax for styles.
                         </p>
@@ -39,7 +39,7 @@ const App: React.FC = () => {
                         hover: { borderColor: 'purple-500' },
                         transition: 'colors'
                     }}>
-                        <h2 sz={{ text: 'xl', fontWeight: 'semibold', mb: 3 }}>Feature 2</h2>
+                        <h2 sz={{ text: 'xl', weight: 'semibold', mb: 3 }}>Feature 2</h2>
                         <p sz={{ color: 'slate-400' }}>
                             Webpack HMR and bundling should work seamlessly.
                         </p>
@@ -48,13 +48,13 @@ const App: React.FC = () => {
 
                 {/* New Features Showcase */}
                 <div sz={{ mt: 12 }}>
-                    <h2 sz={{ text: '2xl', fontWeight: 'semibold', mb: 6, textAlign: 'center' }}>
+                    <h2 sz={{ text: '2xl', weight: 'semibold', mb: 6, textAlign: 'center' }}>
                         New Features
                     </h2>
                     <div sz={{ display: 'grid', gridCols: 1, md: { gridCols: 3 }, gap: 6 }}>
                         {/* Text/Leading shorthand */}
                         <div sz={{ p: 6, bg: 'slate-800', rounded: 'xl', border: true, borderColor: 'slate-700' }}>
-                            <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'emerald-400', mb: 3 }}>Text/Leading</h3>
+                            <h3 sz={{ text: 'lg', weight: 'semibold', color: 'emerald-400', mb: 3 }}>Text/Leading</h3>
                             <p sz={{ text: 'lg', leading: 7, color: 'slate-300' }}>
                                 text-lg/7 merged shorthand
                             </p>
@@ -65,15 +65,15 @@ const App: React.FC = () => {
 
                         {/* Explicit keys */}
                         <div sz={{ p: 6, bg: 'slate-800', rounded: 'xl', border: true, borderColor: 'slate-700' }}>
-                            <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'blue-400', mb: 3 }}>Explicit Keys</h3>
-                            <p sz={{ fontWeight: 'bold', color: 'slate-300' }}>fontWeight: bold</p>
+                            <h3 sz={{ text: 'lg', weight: 'semibold', color: 'blue-400', mb: 3 }}>Explicit Keys</h3>
+                            <p sz={{ weight: 'bold', color: 'slate-300' }}>fontWeight: bold</p>
                             <p sz={{ fontFamily: 'mono', color: 'slate-300' }}>fontFamily: mono</p>
                             <p sz={{ fontFamily: 'serif', color: 'slate-300' }}>fontFamily: serif</p>
                         </div>
 
                         {/* Shadow color opacity */}
                         <div sz={{ p: 6, bg: 'slate-800', rounded: 'xl', border: true, borderColor: 'slate-700' }}>
-                            <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'purple-400', mb: 3 }}>Shadow Opacity</h3>
+                            <h3 sz={{ text: 'lg', weight: 'semibold', color: 'purple-400', mb: 3 }}>Shadow Opacity</h3>
                             <div sz={{ p: 3, bg: 'slate-700', rounded: 'md', shadow: 'lg', shadowColor: { color: 'blue-500', op: 50 }, mb: 2 }}>
                                 shadow-blue-500/50
                             </div>
@@ -91,7 +91,7 @@ const App: React.FC = () => {
                         bg: 'blue-600',
                         hover: { bg: 'blue-700' },
                         rounded: 'lg',
-                        fontWeight: 'medium',
+                        weight: 'medium',
                         transition: 'colors'
                     }}>
                         Click Me

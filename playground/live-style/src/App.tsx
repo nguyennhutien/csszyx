@@ -13,7 +13,7 @@ export function App() {
             {/* Header */}
             <header sz={{ display: 'flex', items: 'center', justify: 'between', px: 6, py: 3, borderB: true, borderColor: 'gray-800' }}>
                 <div sz={{ display: 'flex', items: 'center', gap: 3 }}>
-                    <span sz={{ text: 'sm', fontFamily: 'mono', color: 'indigo-400', fontWeight: 'semibold' }}>
+                    <span sz={{ text: 'sm', fontFamily: 'mono', color: 'indigo-400', weight: 'semibold' }}>
                         @csszyx/vars
                     </span>
                     <span sz={{ text: 'xs', color: 'gray-600' }}>—</span>

@@ -60,7 +60,7 @@ export function HydrationTest() {
         <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>
             {/* Status Header */}
             <div sz={{ display: 'flex', items: 'center', justify: 'between', mb: 6 }}>
-                <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'white' }}>Hydration Status</h3>
+                <h3 sz={{ text: 'lg', weight: 'semibold', color: 'white' }}>Hydration Status</h3>
                 <span
                     sz={statusSz}
                 >
@@ -108,7 +108,7 @@ export function HydrationTest() {
 
             {/* Explanation */}
             <div sz={{ mt: 6, p: 4, rounded: 'lg', bg: { color: 'slate-900', op: 30 }, borderColor: 'slate-700', border: true }}>
-                <h4 sz={{ text: 'sm', fontWeight: 'semibold', color: 'white', mb: 2 }}>How it works:</h4>
+                <h4 sz={{ text: 'sm', weight: 'semibold', color: 'white', mb: 2 }}>How it works:</h4>
                 <ul sz={{ text: 'xs', color: 'slate-400', spaceY: 1 }}>
                     <li>1. Server renders HTML with mangled classes</li>
                     <li>2. Checksum is injected into HTML</li>

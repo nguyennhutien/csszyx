@@ -3,7 +3,7 @@
 export function AdvancedCases() {
     return (
         <section sz={{ p: 4, bg: 'slate-900', rounded: 'lg' }}>
-            <h2 sz={{ text: '2xl', fontWeight: 'bold', mb: 4, color: 'white' }}>
+            <h2 sz={{ text: '2xl', weight: 'bold', mb: 4, color: 'white' }}>
                 Advanced Cases
             </h2>
             <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>

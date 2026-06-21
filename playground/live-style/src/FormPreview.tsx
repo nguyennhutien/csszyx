@@ -32,7 +32,7 @@ export function FormPreview({ config }: FormPreviewProps) {
                 onSubmit={(e) => e.preventDefault()}
             >
                 <div sz={{ mb: 2 }}>
-                    <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: '--label-color', mb: 1 }}>
+                    <h2 sz={{ text: 'xl', weight: 'semibold', color: '--label-color', mb: 1 }}>
                         Contact Us
                     </h2>
                     <p style={{ color: 'var(--label-color)', fontSize: 'var(--label-size)', opacity: 0.6 }}>

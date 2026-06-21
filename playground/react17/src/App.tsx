@@ -39,7 +39,7 @@ function App() {
 
   return (
     <main sz={{ minH: 'screen', p: 8, bg: 'white' }}>
-      <h1 sz={{ text: '4xl', fontWeight: 'bold', mb: 4 }}>csszyx on React 17</h1>
+      <h1 sz={{ text: '4xl', weight: 'bold', mb: 4 }}>csszyx on React 17</h1>
 
       <button
         data-testid="toggle"
