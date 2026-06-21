@@ -1,0 +1,3 @@
+# gitleaks baseline. To suppress a confirmed false positive, paste the finding
+# fingerprint that gitleaks prints (format: <commit>:<path>:<rule-id>:<line>)
+# on its own line below. Keep this list small and reviewed.

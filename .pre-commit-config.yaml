@@ -1,0 +1,8 @@
+# Local secret-scanning before a commit lands. Install once with `pre-commit
+# install` (https://pre-commit.com). Mirrors the gitleaks CI gate so secrets are
+# caught at the earliest possible point.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
