@@ -33,12 +33,14 @@ describe('value-keyed canonical forms are the only spelling', () => {
         expect(transform(sz).className).toBe(expected);
     });
 
-    it.each([{ absolute: true }, { flex: true }, { underline: true }, { italic: true }] as const)(
-        'removed boolean sugar %o emits nothing',
-        sz => {
-            expect(transform(sz).className).toBe('');
-        },
-    );
+    it.each([
+        { absolute: true },
+        { flex: true },
+        { underline: true },
+        { italic: true },
+    ] as const)('removed boolean sugar %o emits nothing', sz => {
+        expect(transform(sz).className).toBe('');
+    });
 });
 
 describe('CSS-property-name keys resolve to real Tailwind utilities', () => {
@@ -105,7 +107,7 @@ describe('a ternary on a value sub-property does not emit a dead class', () => {
     it('falls back to the runtime helper with a build diagnostic', () => {
         const { code, diagnostics } = transformOxc(source, 'App.tsx');
         expect(code).toContain('_sz(');
-        expect(diagnostics.some((d) => d.includes('sz fallback'))).toBe(true);
+        expect(diagnostics.some(d => d.includes('sz fallback'))).toBe(true);
     });
 });
 

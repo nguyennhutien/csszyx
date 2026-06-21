@@ -42,9 +42,7 @@ function warnRawSz(): void {
  * @param props - the props a component is about to forward to a host element.
  * @returns the same props without `sz`.
  */
-export function stripSzProps<T extends Record<string, unknown>>(
-    props: T,
-): Omit<T, 'sz'> {
+export function stripSzProps<T extends Record<string, unknown>>(props: T): Omit<T, 'sz'> {
     if (props == null || typeof props !== 'object' || !('sz' in props)) {
         return props as Omit<T, 'sz'>;
     }

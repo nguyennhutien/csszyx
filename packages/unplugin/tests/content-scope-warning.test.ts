@@ -20,7 +20,9 @@ describe('cssHasContentScope', () => {
         expect(cssHasContentScope('@import "tailwindcss";\n@source not "../docs";')).toBe(true);
     });
     it('false for a plain additive @source (does not stop the broad scan)', () => {
-        expect(cssHasContentScope('@import "tailwindcss";\n@source "./safelist.html";')).toBe(false);
+        expect(cssHasContentScope('@import "tailwindcss";\n@source "./safelist.html";')).toBe(
+            false,
+        );
     });
     it('false for a bare import', () => {
         expect(cssHasContentScope('@import "tailwindcss";')).toBe(false);
@@ -58,10 +60,7 @@ describe('isMonorepoPackage', () => {
     it('detects a pnpm-workspace.yaml ancestor', () => {
         const root = mkdtempSync(path.join(tmpdir(), 'csszyx-mono-'));
         try {
-            writeFileSync(
-                path.join(root, 'pnpm-workspace.yaml'),
-                'packages:\n  - "packages/*"\n',
-            );
+            writeFileSync(path.join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n');
             const pkg = path.join(root, 'packages', 'web');
             mkdirSync(pkg, { recursive: true });
             expect(isMonorepoPackage(pkg)).toBe(true);

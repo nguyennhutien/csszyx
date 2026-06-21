@@ -43,7 +43,10 @@
             "!**/llms*.txt",
             "!**/CHANGELOG.md",
             "!**/*.benchmark.json",
-            "!apps/docs/src/styles/landing.css"
+            "!apps/docs/src/styles/landing.css",
+            "!**/*.generated.ts",
+            "!**/tests/generated",
+            "!packages/core/tests/fixtures"
         ]
     },
     "formatter": {

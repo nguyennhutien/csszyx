@@ -83,8 +83,7 @@ function assertAllValuesSafe(value: unknown): void {
         // Strip the arbitrary brackets purify keeps, then validate the inner value.
         const inner = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
         const colon = inner.indexOf(':');
-        const candidate =
-            value.startsWith('[') && colon !== -1 ? inner.slice(colon + 1) : inner;
+        const candidate = value.startsWith('[') && colon !== -1 ? inner.slice(colon + 1) : inner;
         expect(isSafeCssValue(candidate)).toBe(true);
         return;
     }
@@ -118,9 +117,11 @@ describe('fuzz: hostile sz never breaks the invariants', () => {
         const rand = rng(0x5eed);
         for (let i = 0; i < 400; i++) {
             const hostile = buildHostile(rand, 0);
-            const input = (hostile && typeof hostile === 'object' && !Array.isArray(hostile)
-                ? hostile
-                : { bg: hostile }) as Record<string, unknown>;
+            const input = (
+                hostile && typeof hostile === 'object' && !Array.isArray(hostile)
+                    ? hostile
+                    : { bg: hostile }
+            ) as Record<string, unknown>;
             try {
                 transform(input as never);
             } catch (err) {

@@ -21,20 +21,17 @@
  *   node --import tsx/esm scripts/gen-box-role-map.mjs --check   # CI: fail if stale
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { transform } from '../packages/compiler/src/transform.js';
 import {
     BOOLEAN_SHORTHANDS,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
 } from '../packages/compiler/src/transform-core.js';
-import { transform } from '../packages/compiler/src/transform.js';
 
 const repoRoot = join(fileURLToPath(import.meta.url), '..', '..');
-const outPath = join(
-    repoRoot,
-    'packages/runtime/src/box-role-map.generated.ts',
-);
+const outPath = join(repoRoot, 'packages/runtime/src/box-role-map.generated.ts');
 
 /**
  * Source of truth for the box-model role of every sz prop. Each rule lists the
@@ -49,33 +46,246 @@ const outPath = join(
  */
 const BOX_ROLE_RULES = [
     // ── OUTER ────────────────────────────────────────────────────────────
-    { role: 'outer', category: 'margin', keys: ['m', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me', 'mbs', 'mbe'] },
-    { role: 'outer', category: 'position', keys: ['z', 'position', 'inset', 'insetX', 'insetY', 'top', 'right', 'bottom', 'left', 'start', 'end', 'insetS', 'insetE', 'insetBs', 'insetBe', 'float', 'clear', 'isolation'] },
-    { role: 'outer', category: 'border', keys: ['border', 'borderColor', 'borderStyle', 'borderT', 'borderTColor', 'borderR', 'borderRColor', 'borderB', 'borderBColor', 'borderL', 'borderLColor', 'borderX', 'borderXColor', 'borderY', 'borderYColor', 'borderS', 'borderE', 'borderBs', 'borderBe', 'borderCollapse', 'borderSpacing', 'borderSpacingX', 'borderSpacingY'] },
-    { role: 'outer', category: 'rounded', keys: ['rounded', 'roundedT', 'roundedR', 'roundedB', 'roundedL', 'roundedTl', 'roundedTr', 'roundedBl', 'roundedBr', 'roundedS', 'roundedE', 'roundedSs', 'roundedSe', 'roundedEs', 'roundedEe'] },
-    { role: 'outer', category: 'divide', keys: ['divideX', 'divideY', 'divideColor', 'divideStyle'] },
-    { role: 'outer', category: 'outline', keys: ['outline', 'outlineColor', 'outlineOffset', 'outlineStyle'] },
-    { role: 'outer', category: 'ring', keys: ['ring', 'ringColor', 'ringOffset', 'ringOffsetColor'] },
+    {
+        role: 'outer',
+        category: 'margin',
+        keys: ['m', 'mt', 'mr', 'mb', 'ml', 'mx', 'my', 'ms', 'me', 'mbs', 'mbe'],
+    },
+    {
+        role: 'outer',
+        category: 'position',
+        keys: [
+            'z',
+            'position',
+            'inset',
+            'insetX',
+            'insetY',
+            'top',
+            'right',
+            'bottom',
+            'left',
+            'start',
+            'end',
+            'insetS',
+            'insetE',
+            'insetBs',
+            'insetBe',
+            'float',
+            'clear',
+            'isolation',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'border',
+        keys: [
+            'border',
+            'borderColor',
+            'borderStyle',
+            'borderT',
+            'borderTColor',
+            'borderR',
+            'borderRColor',
+            'borderB',
+            'borderBColor',
+            'borderL',
+            'borderLColor',
+            'borderX',
+            'borderXColor',
+            'borderY',
+            'borderYColor',
+            'borderS',
+            'borderE',
+            'borderBs',
+            'borderBe',
+            'borderCollapse',
+            'borderSpacing',
+            'borderSpacingX',
+            'borderSpacingY',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'rounded',
+        keys: [
+            'rounded',
+            'roundedT',
+            'roundedR',
+            'roundedB',
+            'roundedL',
+            'roundedTl',
+            'roundedTr',
+            'roundedBl',
+            'roundedBr',
+            'roundedS',
+            'roundedE',
+            'roundedSs',
+            'roundedSe',
+            'roundedEs',
+            'roundedEe',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'divide',
+        keys: ['divideX', 'divideY', 'divideColor', 'divideStyle'],
+    },
+    {
+        role: 'outer',
+        category: 'outline',
+        keys: ['outline', 'outlineColor', 'outlineOffset', 'outlineStyle'],
+    },
+    {
+        role: 'outer',
+        category: 'ring',
+        keys: ['ring', 'ringColor', 'ringOffset', 'ringOffsetColor'],
+    },
     { role: 'outer', category: 'shadow', keys: ['shadow', 'shadowColor'] },
     // sizing → OUTER (contested): width/height constrain the frame the parent gives.
-    { role: 'outer', category: 'sizing', keys: ['w', 'minW', 'maxW', 'h', 'minH', 'maxH', 'size', 'blockSize', 'minBlockSize', 'maxBlockSize', 'inlineSize', 'minInlineSize', 'maxInlineSize', 'aspect', 'box'] },
-    { role: 'outer', category: 'fragmentation', keys: ['breakAfter', 'breakBefore', 'breakInside', 'boxDecoration'] },
+    {
+        role: 'outer',
+        category: 'sizing',
+        keys: [
+            'w',
+            'minW',
+            'maxW',
+            'h',
+            'minH',
+            'maxH',
+            'size',
+            'blockSize',
+            'minBlockSize',
+            'maxBlockSize',
+            'inlineSize',
+            'minInlineSize',
+            'maxInlineSize',
+            'aspect',
+            'box',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'fragmentation',
+        keys: ['breakAfter', 'breakBefore', 'breakInside', 'boxDecoration'],
+    },
     // bg → OUTER (contested): the frame's stable background, matches the report.
-    { role: 'outer', category: 'bg', keys: ['bg', 'bgAttach', 'bgClip', 'bgImg', 'bgOrigin', 'bgPos', 'bgRepeat', 'bgSize', 'bgBlend'] },
+    {
+        role: 'outer',
+        category: 'bg',
+        keys: [
+            'bg',
+            'bgAttach',
+            'bgClip',
+            'bgImg',
+            'bgOrigin',
+            'bgPos',
+            'bgRepeat',
+            'bgSize',
+            'bgBlend',
+        ],
+    },
     { role: 'outer', category: 'gradient', keys: ['from', 'via', 'to'] },
     // visibility → OUTER (contested): toggles the whole element, not its content.
     { role: 'outer', category: 'visibility', keys: ['visibility'] },
     { role: 'outer', category: 'opacity', keys: ['opacity'] },
     { role: 'outer', category: 'blend', keys: ['mixBlend'] },
-    { role: 'outer', category: 'filter', keys: ['filter', 'blur', 'brightness', 'contrast', 'dropShadow', 'dropShadowColor', 'grayscale', 'hueRotate', 'invert', 'saturate', 'sepia'] },
-    { role: 'outer', category: 'backdrop', keys: ['backdropFilter', 'backdropBlur', 'backdropBrightness', 'backdropContrast', 'backdropGrayscale', 'backdropHueRotate', 'backdropInvert', 'backdropOpacity', 'backdropSaturate', 'backdropSepia'] },
-    { role: 'outer', category: 'transform', keys: ['scale', 'scaleX', 'scaleY', 'scaleZ', 'rotate', 'rotateX', 'rotateY', 'rotateZ', 'translate', 'translateX', 'translateY', 'translateZ', 'skewX', 'skewY', 'origin', 'backface', 'perspective', 'perspectiveOrigin', 'transformStyle', 'transform', 'zoom'] },
-    { role: 'outer', category: 'transition', keys: ['transition', 'transitionBehavior', 'duration', 'ease', 'delay', 'animate', 'animationDelay'] },
-    { role: 'outer', category: 'mask', keys: ['mask', 'maskSize', 'maskPos', 'maskRepeat', 'maskShape', 'maskClip', 'maskOrigin', 'maskFrom', 'maskVia', 'maskTo'] },
+    {
+        role: 'outer',
+        category: 'filter',
+        keys: [
+            'filter',
+            'blur',
+            'brightness',
+            'contrast',
+            'dropShadow',
+            'dropShadowColor',
+            'grayscale',
+            'hueRotate',
+            'invert',
+            'saturate',
+            'sepia',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'backdrop',
+        keys: [
+            'backdropFilter',
+            'backdropBlur',
+            'backdropBrightness',
+            'backdropContrast',
+            'backdropGrayscale',
+            'backdropHueRotate',
+            'backdropInvert',
+            'backdropOpacity',
+            'backdropSaturate',
+            'backdropSepia',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'transform',
+        keys: [
+            'scale',
+            'scaleX',
+            'scaleY',
+            'scaleZ',
+            'rotate',
+            'rotateX',
+            'rotateY',
+            'rotateZ',
+            'translate',
+            'translateX',
+            'translateY',
+            'translateZ',
+            'skewX',
+            'skewY',
+            'origin',
+            'backface',
+            'perspective',
+            'perspectiveOrigin',
+            'transformStyle',
+            'transform',
+            'zoom',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'transition',
+        keys: [
+            'transition',
+            'transitionBehavior',
+            'duration',
+            'ease',
+            'delay',
+            'animate',
+            'animationDelay',
+        ],
+    },
+    {
+        role: 'outer',
+        category: 'mask',
+        keys: [
+            'mask',
+            'maskSize',
+            'maskPos',
+            'maskRepeat',
+            'maskShape',
+            'maskClip',
+            'maskOrigin',
+            'maskFrom',
+            'maskVia',
+            'maskTo',
+        ],
+    },
     { role: 'outer', category: 'color-scheme', keys: ['scheme', 'forcedColorAdjust'] },
 
     // ── INNER ────────────────────────────────────────────────────────────
-    { role: 'inner', category: 'padding', keys: ['p', 'pt', 'pr', 'pb', 'pl', 'px', 'py', 'ps', 'pe', 'pbs', 'pbe'] },
+    {
+        role: 'inner',
+        category: 'padding',
+        keys: ['p', 'pt', 'pr', 'pb', 'pl', 'px', 'py', 'ps', 'pe', 'pbs', 'pbe'],
+    },
     { role: 'inner', category: 'space', keys: ['spaceX', 'spaceY'] },
     // inset-ring / inset-shadow are painted INSIDE the border, unlike ring/shadow.
     { role: 'inner', category: 'ring', keys: ['insetRing', 'insetRingColor'] },
@@ -87,17 +297,131 @@ const BOX_ROLE_RULES = [
     { role: 'inner', category: 'overscroll', keys: ['overscroll', 'overscrollX', 'overscrollY'] },
     // display → INNER (contested): governs how the element's children flow.
     { role: 'inner', category: 'display', keys: ['display'] },
-    { role: 'inner', category: 'text', keys: ['color', 'text', 'weight', 'fontFamily', 'fontStretch', 'fontStyle', 'fontSmoothing', 'fontFeatures', 'textAlign', 'decoration', 'decorationColor', 'decorationStyle', 'decorationThickness', 'underlineOffset', 'textTransform', 'textOverflow', 'textWrap', 'wrap', 'indent', 'align', 'whitespace', 'break', 'hyphens', 'content', 'leading', 'tracking', 'lineClamp', 'tabSize', 'textShadow', 'textShadowColor'] },
+    {
+        role: 'inner',
+        category: 'text',
+        keys: [
+            'color',
+            'text',
+            'weight',
+            'fontFamily',
+            'fontStretch',
+            'fontStyle',
+            'fontSmoothing',
+            'fontFeatures',
+            'textAlign',
+            'decoration',
+            'decorationColor',
+            'decorationStyle',
+            'decorationThickness',
+            'underlineOffset',
+            'textTransform',
+            'textOverflow',
+            'textWrap',
+            'wrap',
+            'indent',
+            'align',
+            'whitespace',
+            'break',
+            'hyphens',
+            'content',
+            'leading',
+            'tracking',
+            'lineClamp',
+            'tabSize',
+            'textShadow',
+            'textShadowColor',
+        ],
+    },
     { role: 'inner', category: 'list', keys: ['list', 'listPos', 'listImg'] },
-    { role: 'inner', category: 'flex', keys: ['basis', 'flex', 'flexDir', 'flexWrap', 'grow', 'shrink', 'order'] },
-    { role: 'inner', category: 'alignment', keys: ['items', 'self', 'justify', 'justifyItems', 'justifySelf', 'placeContent', 'placeItems', 'placeSelf'] },
+    {
+        role: 'inner',
+        category: 'flex',
+        keys: ['basis', 'flex', 'flexDir', 'flexWrap', 'grow', 'shrink', 'order'],
+    },
+    {
+        role: 'inner',
+        category: 'alignment',
+        keys: [
+            'items',
+            'self',
+            'justify',
+            'justifyItems',
+            'justifySelf',
+            'placeContent',
+            'placeItems',
+            'placeSelf',
+        ],
+    },
     { role: 'inner', category: 'gap', keys: ['gap', 'gapX', 'gapY'] },
-    { role: 'inner', category: 'grid', keys: ['gridCols', 'gridRows', 'col', 'colSpan', 'colStart', 'colEnd', 'row', 'rowSpan', 'rowStart', 'rowEnd', 'gridFlow', 'autoCols', 'autoRows'] },
+    {
+        role: 'inner',
+        category: 'grid',
+        keys: [
+            'gridCols',
+            'gridRows',
+            'col',
+            'colSpan',
+            'colStart',
+            'colEnd',
+            'row',
+            'rowSpan',
+            'rowStart',
+            'rowEnd',
+            'gridFlow',
+            'autoCols',
+            'autoRows',
+        ],
+    },
     { role: 'inner', category: 'svg', keys: ['fill', 'stroke', 'strokeWidth'] },
     { role: 'inner', category: 'table', keys: ['tableLayout', 'caption'] },
     { role: 'inner', category: 'accent', keys: ['caret', 'accent'] },
-    { role: 'inner', category: 'interaction', keys: ['cursor', 'pointerEvents', 'fieldSizing', 'resize', 'select', 'willChange', 'appearance'] },
-    { role: 'inner', category: 'scroll', keys: ['scroll', 'scrollM', 'scrollMt', 'scrollMr', 'scrollMb', 'scrollMl', 'scrollMs', 'scrollMe', 'scrollMx', 'scrollMy', 'scrollMbs', 'scrollMbe', 'scrollP', 'scrollPt', 'scrollPr', 'scrollPb', 'scrollPl', 'scrollPs', 'scrollPe', 'scrollPx', 'scrollPy', 'scrollPbs', 'scrollPbe', 'scrollbar', 'scrollbarThumb', 'scrollbarTrack', 'scrollbarGutter'] },
+    {
+        role: 'inner',
+        category: 'interaction',
+        keys: [
+            'cursor',
+            'pointerEvents',
+            'fieldSizing',
+            'resize',
+            'select',
+            'willChange',
+            'appearance',
+        ],
+    },
+    {
+        role: 'inner',
+        category: 'scroll',
+        keys: [
+            'scroll',
+            'scrollM',
+            'scrollMt',
+            'scrollMr',
+            'scrollMb',
+            'scrollMl',
+            'scrollMs',
+            'scrollMe',
+            'scrollMx',
+            'scrollMy',
+            'scrollMbs',
+            'scrollMbe',
+            'scrollP',
+            'scrollPt',
+            'scrollPr',
+            'scrollPb',
+            'scrollPl',
+            'scrollPs',
+            'scrollPe',
+            'scrollPx',
+            'scrollPy',
+            'scrollPbs',
+            'scrollPbe',
+            'scrollbar',
+            'scrollbarThumb',
+            'scrollbarTrack',
+            'scrollbarGutter',
+        ],
+    },
     { role: 'inner', category: 'snap', keys: ['snapAlign', 'snapStop', 'snapType'] },
     { role: 'inner', category: 'touch', keys: ['touch'] },
 ];
@@ -153,13 +477,13 @@ function build() {
         }
     }
     const propertyKeys = Object.keys(PROPERTY_MAP);
-    const missing = propertyKeys.filter((k) => !keyRole.has(k));
+    const missing = propertyKeys.filter(k => !keyRole.has(k));
     if (missing.length > 0) {
         throw new Error(
             `[gen-box-role-map] ${missing.length} PROPERTY_MAP key(s) have no box role — add them to BOX_ROLE_RULES: ${missing.join(', ')}`,
         );
     }
-    const extra = [...keyRole.keys()].filter((k) => !(k in PROPERTY_MAP));
+    const extra = [...keyRole.keys()].filter(k => !(k in PROPERTY_MAP));
     if (extra.length > 0) {
         throw new Error(
             `[gen-box-role-map] BOX_ROLE_RULES has key(s) not in PROPERTY_MAP (stale): ${extra.join(', ')}`,
@@ -225,9 +549,7 @@ function render({ prefixes, tokens }) {
     const prefixEntries = [...prefixes.entries()].sort(
         (a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0]),
     );
-    const tokenEntries = [...tokens.entries()].sort((a, b) =>
-        a[0].localeCompare(b[0]),
-    );
+    const tokenEntries = [...tokens.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     const entry = ([k, v]) =>
         `    [${JSON.stringify(k)}, { role: ${JSON.stringify(v.role)}, category: ${JSON.stringify(v.category)} }],`;
     return `// GENERATED by scripts/gen-box-role-map.mjs — DO NOT EDIT.

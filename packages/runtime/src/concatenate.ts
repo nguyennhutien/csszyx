@@ -12,8 +12,8 @@
 import {
     MAX_SZ_DEPTH,
     transform as rawTransform,
-    type SzObject,
     SzDepthError,
+    type SzObject,
 } from '@csszyx/compiler/browser';
 
 /** Result of a runtime sz transform: the className plus any style attributes. */

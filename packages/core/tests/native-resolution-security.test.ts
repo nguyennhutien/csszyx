@@ -20,7 +20,7 @@ const loaderSrc = readFileSync(
 
 describe('native binary resolution (dependency-confusion)', () => {
     it('declares every platform package under the @csszyx scope', () => {
-        const names = [...platformsSrc.matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]);
+        const names = [...platformsSrc.matchAll(/name:\s*'([^']+)'/g)].map(m => m[1]);
         expect(names.length).toBeGreaterThan(0);
         for (const name of names) {
             expect(name).toMatch(/^@csszyx\/core-/);

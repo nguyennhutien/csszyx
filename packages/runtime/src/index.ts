@@ -51,14 +51,14 @@ export { __szColorVar } from './lite.js';
 export {
     type BoxRole,
     type BoxSelector,
-    classify,
     type Classification,
+    classify,
     has,
     omit,
     pick,
-    splitBox,
     type SplitBoxOptions,
     type SplitBoxResult,
+    splitBox,
 } from './split-box.js';
 // Strip the sz prop before forwarding props to a host element
 export { stripSzProps } from './strip-sz-props.js';

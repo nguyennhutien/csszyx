@@ -500,7 +500,6 @@ function renderTailwindSourceHtml(classNames: readonly string[]): string {
     return `${classNames.map(className => `<div class="${escapeHtmlAttribute(className)}"></div>`).join('\n')}\n`;
 }
 
-
 /**
  *
  * @param options

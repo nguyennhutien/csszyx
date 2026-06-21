@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-    isValidMangleMap,
-    loadMangleMapFromDOM,
-} from '../src/hydration.js';
+import { isValidMangleMap, loadMangleMapFromDOM } from '../src/hydration.js';
 
 describe('isValidMangleMap', () => {
     it('accepts a plain string→string map', () => {
@@ -19,9 +16,7 @@ describe('isValidMangleMap', () => {
     });
 
     it('rejects prototype-polluting keys', () => {
-        expect(
-            isValidMangleMap(JSON.parse('{"__proto__":"x"}')),
-        ).toBe(false);
+        expect(isValidMangleMap(JSON.parse('{"__proto__":"x"}'))).toBe(false);
         expect(isValidMangleMap(JSON.parse('{"constructor":"x"}'))).toBe(false);
     });
 

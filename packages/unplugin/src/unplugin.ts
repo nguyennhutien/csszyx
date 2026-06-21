@@ -35,7 +35,6 @@ import type { Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
-import { escapeHtmlAttribute } from './html-escape.js';
 import {
     createGlobalVarAliasValidationOptions,
     type GlobalVarAliasValidationResult,
@@ -45,6 +44,7 @@ import {
     rewriteGlobalVarCssAliases,
     validateGlobalVarAliasInputs,
 } from './global-var-scanner.js';
+import { escapeHtmlAttribute } from './html-escape.js';
 import {
     buildRecoveryManifest,
     createHydrationMangleMap,
@@ -365,8 +365,7 @@ export function missingTailwindEntryMessage(ownedClassCount: number): string {
 export function cssHasContentScope(code: string): boolean {
     const s = code.replace(/\/\*[\s\S]*?\*\//g, '');
     return (
-        /@import\s+["']tailwindcss(?:\/[^"']*)?["']\s+source\(/.test(s) ||
-        /@source\s+not\b/.test(s)
+        /@import\s+["']tailwindcss(?:\/[^"']*)?["']\s+source\(/.test(s) || /@source\s+not\b/.test(s)
     );
 }
 
@@ -455,15 +454,12 @@ export function unscopedMonorepoMessage(): string {
  * @param compilePackages - workspace package directory names to compile.
  * @returns true when the file belongs to a listed workspace package.
  */
-export function isCompilePackageOptedIn(
-    id: string,
-    compilePackages: readonly string[],
-): boolean {
+export function isCompilePackageOptedIn(id: string, compilePackages: readonly string[]): boolean {
     const path = id.replace(/\\/g, '/');
     if (path.includes('node_modules')) {
         return false;
     }
-    return compilePackages.some((name) => path.includes(`/packages/${name}/`));
+    return compilePackages.some(name => path.includes(`/packages/${name}/`));
 }
 
 /**
@@ -479,10 +475,7 @@ export function isCompilePackageOptedIn(
  * @param compilePackages - workspace package directory names to compile.
  * @returns true when the file should be skipped regardless of user filters.
  */
-export function isHardIgnoredPath(
-    id: string,
-    compilePackages: readonly string[] = [],
-): boolean {
+export function isHardIgnoredPath(id: string, compilePackages: readonly string[] = []): boolean {
     const path = id.replace(/\\/g, '/');
     if (path.includes('node_modules')) {
         return true;
@@ -533,7 +526,7 @@ export function isPackagesSkippedSource(
  * @returns the warning string.
  */
 export function skippedSzFilesMessage(files: readonly string[]): string {
-    const list = files.map((file) => `  - ${file}`).join('\n');
+    const list = files.map(file => `  - ${file}`).join('\n');
     return (
         `[csszyx] ${files.length} file(s) under packages/ contain \`sz\` but were ` +
         `skipped by ignore rules:\n${list}\n` +

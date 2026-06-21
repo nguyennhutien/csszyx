@@ -140,10 +140,11 @@ cli.command('doctor', 'Diagnose mangling issues')
     });
 
 // explain command
-cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles to')
-    .action((sz: string) => {
+cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles to').action(
+    (sz: string) => {
         explain(sz);
-    });
+    },
+);
 
 // audit command
 cli.command('audit', 'Analyze mangling performance')

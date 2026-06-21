@@ -9,12 +9,7 @@
  */
 
 import { parseExpression } from '@babel/parser';
-import type {
-    ArrayExpression,
-    Expression,
-    ObjectExpression,
-    PrivateName,
-} from '@babel/types';
+import type { ArrayExpression, Expression, ObjectExpression, PrivateName } from '@babel/types';
 import { transform } from '@csszyx/compiler';
 
 import { printError } from '../utils/terminal-ui.js';
@@ -94,11 +89,7 @@ function objectToValue(node: ObjectExpression): Record<string, unknown> {
         }
         const { key } = property;
         const name =
-            key.type === 'Identifier'
-                ? key.name
-                : key.type === 'StringLiteral'
-                  ? key.value
-                  : null;
+            key.type === 'Identifier' ? key.name : key.type === 'StringLiteral' ? key.value : null;
         if (name === null) {
             throw new ExplainParseError(`unsupported key type "${key.type}"`);
         }

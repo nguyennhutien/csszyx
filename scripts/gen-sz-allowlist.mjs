@@ -22,25 +22,16 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-    BOOLEAN_SHORTHANDS,
-    PROPERTY_MAP,
-} from '../packages/compiler/src/transform-core.js';
-import {
-    getPropertyCategory,
-    PropertyCategory,
-} from '../packages/compiler/src/property-types.js';
+import { getPropertyCategory, PropertyCategory } from '../packages/compiler/src/property-types.js';
+import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from '../packages/compiler/src/transform-core.js';
 
 const repoRoot = join(fileURLToPath(import.meta.url), '..', '..');
 const outPath = join(repoRoot, 'packages/dynamic/src/sz-allowlist.generated.ts');
 
 /** Build the sorted [key, categoryName] list from the compiler tables. */
 function build() {
-    const keys = new Set([
-        ...Object.keys(PROPERTY_MAP),
-        ...BOOLEAN_SHORTHANDS,
-    ]);
-    return [...keys].sort().map((key) => {
+    const keys = new Set([...Object.keys(PROPERTY_MAP), ...BOOLEAN_SHORTHANDS]);
+    return [...keys].sort().map(key => {
         const category = PropertyCategory[getPropertyCategory(key)];
         if (typeof category !== 'string') {
             // getPropertyCategory always falls back to PASSTHROUGH, so this only

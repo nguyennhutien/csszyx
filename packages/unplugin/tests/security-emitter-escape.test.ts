@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { escapeHtmlAttribute } from '../src/html-escape.js';
-import {
-    generateThemeDts,
-    type ThemeTypeWriterOptions,
-} from '../src/theme-type-writer.js';
+import { generateThemeDts, type ThemeTypeWriterOptions } from '../src/theme-type-writer.js';
 
 const emptyTheme = {
     colors: [],

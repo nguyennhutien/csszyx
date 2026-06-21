@@ -22,11 +22,11 @@
  */
 import {
     getVariantPrefix,
+    isForbiddenSzKey,
     KNOWN_VARIANTS,
     MAX_SZ_DEPTH,
     SPECIAL_VARIANTS,
     SzDepthError,
-    isForbiddenSzKey,
     type SzObject,
     type SzValue,
 } from '@csszyx/compiler/browser';

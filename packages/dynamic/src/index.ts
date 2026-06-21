@@ -39,7 +39,7 @@ export type { ReadonlySzObject, SzObject } from '@csszyx/compiler/browser';
 export type { Tier } from './css-generator.js';
 export type { CSSManifest } from './manifest.js';
 // Purify untrusted (e.g. JSON-driven) sz before runtime CSS injection.
-export { purifySz, type PurifySzOptions } from './purify.js';
+export { type PurifySzOptions, purifySz } from './purify.js';
 
 /**
  * Transforms sz props at runtime and injects CSS only for classes not already

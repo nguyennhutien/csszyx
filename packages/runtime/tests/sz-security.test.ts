@@ -3,8 +3,8 @@
  * DoS from deeply nested untrusted input) and prototype-pollution-safe merges.
  */
 
-import { describe, expect, it } from 'vitest';
 import { SzDepthError } from '@csszyx/compiler/browser';
+import { describe, expect, it } from 'vitest';
 import { _sz, _szMerge } from '../src/concatenate.js';
 import { szv } from '../src/variants.js';
 

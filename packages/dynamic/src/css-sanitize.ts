@@ -109,8 +109,7 @@ export function isUtilityArbitrarySafe(utility: string): boolean {
     ) {
         const colon = inner.indexOf(':');
         return (
-            isSafeCssPropertyName(inner.slice(0, colon)) &&
-            isSafeCssValue(inner.slice(colon + 1))
+            isSafeCssPropertyName(inner.slice(0, colon)) && isSafeCssValue(inner.slice(colon + 1))
         );
     }
 

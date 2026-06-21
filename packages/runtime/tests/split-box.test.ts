@@ -1,9 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { PROPERTY_MAP } from '@csszyx/compiler';
-import {
-    BOX_ROLE_PREFIXES,
-    BOX_ROLE_TOKENS,
-} from '../src/box-role-map.generated.js';
+import { describe, expect, it } from 'vitest';
+import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS } from '../src/box-role-map.generated.js';
 import { classify, has, omit, pick, splitBox } from '../src/split-box.js';
 
 describe('splitBox', () => {
@@ -30,9 +27,7 @@ describe('splitBox', () => {
         expect(r.outer.split(' ').sort()).toEqual(
             ['bg-white', 'invisible', 'm-2', 'w-full'].sort(),
         );
-        expect(r.inner.split(' ').sort()).toEqual(
-            ['flex', 'overflow-hidden', 'p-2'].sort(),
-        );
+        expect(r.inner.split(' ').sort()).toEqual(['flex', 'overflow-hidden', 'p-2'].sort());
     });
 
     it('routes value-keyed tokens (display/position/decoration)', () => {
@@ -54,9 +49,9 @@ describe('splitBox', () => {
             outer: 'not-a-csszyx-class',
             inner: 'px-2',
         });
-        expect(
-            splitBox('not-a-csszyx-class', { fallback: 'inner' }).inner,
-        ).toBe('not-a-csszyx-class');
+        expect(splitBox('not-a-csszyx-class', { fallback: 'inner' }).inner).toBe(
+            'not-a-csszyx-class',
+        );
     });
 
     it('lets options override the default map', () => {
@@ -66,9 +61,7 @@ describe('splitBox', () => {
             inner: 'bg-white',
         });
         // force a category to outer
-        expect(splitBox('overflow-hidden', { outer: ['overflow'] }).outer).toBe(
-            'overflow-hidden',
-        );
+        expect(splitBox('overflow-hidden', { outer: ['overflow'] }).outer).toBe('overflow-hidden');
         // a class-prefix selector works as an override too
         expect(splitBox('px-2', { outer: ['px'] }).outer).toBe('px-2');
     });
@@ -193,9 +186,7 @@ describe('splitBox — edge cases', () => {
     it('handles modifier variants with bracketed values', () => {
         const r = splitBox('data-[state=open]:px-2 group-hover:bg-red-500 [&>*]:m-1');
         expect(r.inner).toBe('data-[state=open]:px-2');
-        expect(r.outer.split(' ').sort()).toEqual(
-            ['group-hover:bg-red-500', '[&>*]:m-1'].sort(),
-        );
+        expect(r.outer.split(' ').sort()).toEqual(['group-hover:bg-red-500', '[&>*]:m-1'].sort());
     });
 
     it('routes value-keyed display tokens to inner', () => {
@@ -230,15 +221,13 @@ describe('toolkit — variant- and marker-aware', () => {
 describe('anti-drift coverage gate', () => {
     it('classifies every PROPERTY_MAP emitted prefix', () => {
         const prefixes = new Set(BOX_ROLE_PREFIXES.map(([p]) => p));
-        const missing = Object.values(PROPERTY_MAP).filter(
-            (prefix) => !prefixes.has(prefix),
-        );
+        const missing = Object.values(PROPERTY_MAP).filter(prefix => !prefixes.has(prefix));
         expect(missing).toEqual([]);
     });
 
     it('has both buckets and no empty roles', () => {
         const roles = new Set([
-            ...[...BOX_ROLE_TOKENS.values()].map((e) => e.role),
+            ...[...BOX_ROLE_TOKENS.values()].map(e => e.role),
             ...BOX_ROLE_PREFIXES.map(([, e]) => e.role),
         ]);
         expect(roles).toEqual(new Set(['outer', 'inner']));

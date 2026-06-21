@@ -14,9 +14,7 @@ import {
 
 describe('isHardIgnoredPath', () => {
     it('relaxes /packages/<name>/ when the package is opted in', () => {
-        expect(isHardIgnoredPath('/repo/packages/vui/src/Button.tsx', ['vui'])).toBe(
-            false,
-        );
+        expect(isHardIgnoredPath('/repo/packages/vui/src/Button.tsx', ['vui'])).toBe(false);
     });
 
     it('still ignores /packages/ source that is not opted in', () => {
@@ -25,13 +23,9 @@ describe('isHardIgnoredPath', () => {
     });
 
     it('never relaxes node_modules, even when the name is listed (safety)', () => {
-        expect(isHardIgnoredPath('/repo/node_modules/vui/index.js', ['vui'])).toBe(
-            true,
-        );
+        expect(isHardIgnoredPath('/repo/node_modules/vui/index.js', ['vui'])).toBe(true);
         // A nested workspace package inside node_modules stays ignored too.
-        expect(
-            isHardIgnoredPath('/repo/node_modules/x/packages/vui/i.js', ['vui']),
-        ).toBe(true);
+        expect(isHardIgnoredPath('/repo/node_modules/x/packages/vui/i.js', ['vui'])).toBe(true);
     });
 
     it('keeps .next ignored except its static assets, regardless of opt-in', () => {
@@ -45,25 +39,15 @@ describe('isHardIgnoredPath', () => {
 
     it('ignores pnpm and scoped dependency layouts under node_modules', () => {
         expect(
-            isHardIgnoredPath('/repo/node_modules/.pnpm/vui@1/node_modules/vui/i.js', [
-                'vui',
-            ]),
+            isHardIgnoredPath('/repo/node_modules/.pnpm/vui@1/node_modules/vui/i.js', ['vui']),
         ).toBe(true);
-        expect(
-            isHardIgnoredPath('/repo/node_modules/@scope/pkg/index.js', ['vui']),
-        ).toBe(true);
+        expect(isHardIgnoredPath('/repo/node_modules/@scope/pkg/index.js', ['vui'])).toBe(true);
     });
 
     it('relaxes an opted-in package on Windows backslash paths', () => {
-        expect(
-            isHardIgnoredPath('C:\\repo\\packages\\vui\\src\\Button.tsx', ['vui']),
-        ).toBe(false);
-        expect(
-            isHardIgnoredPath('C:\\repo\\packages\\vui\\src\\Button.tsx', []),
-        ).toBe(true);
-        expect(
-            isHardIgnoredPath('C:\\repo\\node_modules\\vui\\index.js', ['vui']),
-        ).toBe(true);
+        expect(isHardIgnoredPath('C:\\repo\\packages\\vui\\src\\Button.tsx', ['vui'])).toBe(false);
+        expect(isHardIgnoredPath('C:\\repo\\packages\\vui\\src\\Button.tsx', [])).toBe(true);
+        expect(isHardIgnoredPath('C:\\repo\\node_modules\\vui\\index.js', ['vui'])).toBe(true);
     });
 
     it('matches the legacy behavior when compilePackages is unset', () => {
@@ -79,15 +63,13 @@ describe('isHardIgnoredPath', () => {
 describe('isCompilePackageOptedIn', () => {
     it('matches the package name as a /packages/ path segment', () => {
         expect(isCompilePackageOptedIn('/repo/packages/vui/x.tsx', ['vui'])).toBe(true);
-        expect(isCompilePackageOptedIn('/repo/packages/app/x.tsx', ['vui'])).toBe(
-            false,
-        );
+        expect(isCompilePackageOptedIn('/repo/packages/app/x.tsx', ['vui'])).toBe(false);
     });
 
     it('never opts in node_modules paths (safety)', () => {
-        expect(
-            isCompilePackageOptedIn('/repo/node_modules/x/packages/vui/i.js', ['vui']),
-        ).toBe(false);
+        expect(isCompilePackageOptedIn('/repo/node_modules/x/packages/vui/i.js', ['vui'])).toBe(
+            false,
+        );
     });
 
     it('is false for an empty allowlist', () => {
@@ -97,12 +79,8 @@ describe('isCompilePackageOptedIn', () => {
     it('matches the name as a whole segment, not a prefix or substring', () => {
         // `vui` must not opt in a sibling package whose name merely starts with
         // or contains it — the `/<name>/` delimiters guard against that.
-        expect(isCompilePackageOptedIn('/repo/packages/vui-core/x.tsx', ['vui'])).toBe(
-            false,
-        );
-        expect(isCompilePackageOptedIn('/repo/packages/my-vui/x.tsx', ['vui'])).toBe(
-            false,
-        );
+        expect(isCompilePackageOptedIn('/repo/packages/vui-core/x.tsx', ['vui'])).toBe(false);
+        expect(isCompilePackageOptedIn('/repo/packages/my-vui/x.tsx', ['vui'])).toBe(false);
         expect(isCompilePackageOptedIn('/repo/packages/vui/x.tsx', ['vui'])).toBe(true);
     });
 
@@ -111,12 +89,8 @@ describe('isCompilePackageOptedIn', () => {
     });
 
     it('matches Windows backslash paths', () => {
-        expect(
-            isCompilePackageOptedIn('C:\\repo\\packages\\vui\\src\\x.tsx', ['vui']),
-        ).toBe(true);
-        expect(
-            isCompilePackageOptedIn('C:\\repo\\packages\\app\\x.tsx', ['vui']),
-        ).toBe(false);
+        expect(isCompilePackageOptedIn('C:\\repo\\packages\\vui\\src\\x.tsx', ['vui'])).toBe(true);
+        expect(isCompilePackageOptedIn('C:\\repo\\packages\\app\\x.tsx', ['vui'])).toBe(false);
     });
 });
 

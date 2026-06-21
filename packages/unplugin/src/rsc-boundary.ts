@@ -18,13 +18,7 @@ const CLIENT_RUNTIME_MODULE_ROOTS = ['@csszyx/dynamic', 'csszyx/dynamic'];
 const normalizedModuleIdCache = new Map<string, string>();
 const resolvedLocalModuleCache = new Map<string, string>();
 
-const FORBIDDEN_SYMBOLS = new Set([
-    '_sz',
-    '_sz2',
-    '_sz3',
-    '_szMerge',
-    '__csszyx_runtime__',
-]);
+const FORBIDDEN_SYMBOLS = new Set(['_sz', '_sz2', '_sz3', '_szMerge', '__csszyx_runtime__']);
 
 /**
  * Direct RSC boundary violation found in a transformed module.

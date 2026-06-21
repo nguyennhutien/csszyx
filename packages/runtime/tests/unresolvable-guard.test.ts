@@ -16,6 +16,8 @@ describe('_sz unresolvable-object guard', () => {
 
     it('throws a helpful error when a plain object reaches the helper (non-production)', () => {
         // vitest runs with NODE_ENV !== 'production', so the dev guard is active.
-        expect(() => _sz({ p: 4 } as never)).toThrow(/could not resolve this sz prop at build time/);
+        expect(() => _sz({ p: 4 } as never)).toThrow(
+            /could not resolve this sz prop at build time/,
+        );
     });
 });

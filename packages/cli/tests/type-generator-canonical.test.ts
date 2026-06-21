@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-    BOOLEAN_SHORTHANDS,
-    PROPERTY_MAP,
-} from '../../compiler/src/transform-core.js';
+import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from '../../compiler/src/transform-core.js';
 import { PROPERTY_MAPPINGS } from '../src/generator/type-generator.js';
 
 /**
@@ -15,20 +12,14 @@ import { PROPERTY_MAPPINGS } from '../src/generator/type-generator.js';
  * `weight`, or `text` typed as a color instead of `color`) fails CI.
  */
 describe('generate-types emits only canonical sz keys', () => {
-    const canonical = new Set([
-        ...Object.keys(PROPERTY_MAP),
-        ...BOOLEAN_SHORTHANDS,
-    ]);
+    const canonical = new Set([...Object.keys(PROPERTY_MAP), ...BOOLEAN_SHORTHANDS]);
 
-    it.each(PROPERTY_MAPPINGS.map((m) => m.prop))(
-        'prop "%s" is a canonical sz key',
-        (prop) => {
-            expect(canonical.has(prop)).toBe(true);
-        },
-    );
+    it.each(PROPERTY_MAPPINGS.map(m => m.prop))('prop "%s" is a canonical sz key', prop => {
+        expect(canonical.has(prop)).toBe(true);
+    });
 
     it('does not advertise removed/non-canonical keys', () => {
-        const props = PROPERTY_MAPPINGS.map((m) => m.prop);
+        const props = PROPERTY_MAPPINGS.map(m => m.prop);
         // Regression guards for the specific drifts that were fixed.
         expect(props).toContain('weight'); // font-weight (not `font`)
         expect(props).toContain('color'); // text color (not `text`)

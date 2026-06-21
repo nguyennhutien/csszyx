@@ -226,7 +226,7 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
 export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
     const canonical = Object.keys(map)
         .sort()
-        .map((key) => `${key}:${map[key]}`)
+        .map(key => `${key}:${map[key]}`)
         .join('|');
     const bytes = new TextEncoder().encode(canonical);
     const digest = await crypto.subtle.digest('SHA-256', bytes);

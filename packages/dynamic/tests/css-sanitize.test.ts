@@ -5,12 +5,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { generateDeclarations } from '../src/css-generator.js';
 import {
     isSafeCssPropertyName,
     isSafeCssValue,
     isUtilityArbitrarySafe,
 } from '../src/css-sanitize.js';
-import { generateDeclarations } from '../src/css-generator.js';
 
 describe('isSafeCssValue', () => {
     it('accepts legitimate single values', () => {
@@ -69,7 +69,12 @@ describe('isUtilityArbitrarySafe', () => {
         }
     });
     it('passes legitimate arbitrary values and properties', () => {
-        for (const u of ['bg-[url(/i.png)]', 'w-[calc(100%-2rem)]', '[mask-type:luminance]', '[--c:red]']) {
+        for (const u of [
+            'bg-[url(/i.png)]',
+            'w-[calc(100%-2rem)]',
+            '[mask-type:luminance]',
+            '[--c:red]',
+        ]) {
             expect(isUtilityArbitrarySafe(u), u).toBe(true);
         }
     });

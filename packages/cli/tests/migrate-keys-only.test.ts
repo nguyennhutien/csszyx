@@ -11,12 +11,12 @@ import { transformSource } from '../src/migrate/ast-transformer.js';
 describe('migrate --keys-only', () => {
     // A className-only element next to an sz element carrying legacy keys.
     const SRC =
-        "const App = () => (<><div className=\"p-4\" /><span sz={{ fontWeight: 'bold', padding: 2 }} /></>);";
+        'const App = () => (<><div className="p-4" /><span sz={{ fontWeight: \'bold\', padding: 2 }} /></>);';
 
     it('normalizes sz keys and leaves className byte-for-byte unchanged', () => {
         const out = transformSource(SRC, 'test.tsx', { keysOnly: true });
         expect(out.code).toBe(
-            "const App = () => (<><div className=\"p-4\" /><span sz={{ weight: 'bold', p: 2 }} /></>);",
+            'const App = () => (<><div className="p-4" /><span sz={{ weight: \'bold\', p: 2 }} /></>);',
         );
         expect(out.code).toContain('className="p-4"'); // not converted, not removed
         expect(out.stats.szKeysNormalized).toBe(2);

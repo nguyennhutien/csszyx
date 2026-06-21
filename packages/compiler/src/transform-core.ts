@@ -1624,7 +1624,6 @@ function transformImpl(
     prefix: string,
     mangleMap?: Record<string, string>,
 ): TransformResult {
-
     const classes: string[] = [];
     const attributes: Record<string, string> = {};
 

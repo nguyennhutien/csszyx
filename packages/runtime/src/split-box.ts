@@ -14,11 +14,7 @@
  * dependency rules (e.g. "if the frame clips, make the scroller scroll") without
  * hardcoding csszyx's class vocabulary.
  */
-import {
-    BOX_ROLE_PREFIXES,
-    BOX_ROLE_TOKENS,
-    type BoxRole,
-} from './box-role-map.generated.js';
+import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS, type BoxRole } from './box-role-map.generated.js';
 
 export type { BoxRole };
 
@@ -120,8 +116,7 @@ function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
     if (!info) return false;
     if (typeof selector === 'object') {
         return Object.entries(selector).every(
-            ([category, value]) =>
-                info.category === category && info.value === value,
+            ([category, value]) => info.category === category && info.value === value,
         );
     }
     if (selector === 'outer' || selector === 'inner') {
@@ -133,11 +128,8 @@ function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
     return info.base.startsWith(`${selector}-`);
 }
 
-function anyMatch(
-    info: TokenInfo | undefined,
-    selectors: BoxSelector[],
-): boolean {
-    return selectors.some((s) => matches(info, s));
+function anyMatch(info: TokenInfo | undefined, selectors: BoxSelector[]): boolean {
+    return selectors.some(s => matches(info, s));
 }
 
 function tokenize(className: string): string[] {
@@ -152,10 +144,7 @@ function tokenize(className: string): string[] {
  *
  * @example splitBox('m-4 px-2 md:flex') // → { outer: 'm-4', inner: 'px-2 md:flex' }
  */
-export function splitBox(
-    className: string,
-    options: SplitBoxOptions = {},
-): SplitBoxResult {
+export function splitBox(className: string, options: SplitBoxOptions = {}): SplitBoxResult {
     const forceInner = options.inner ?? [];
     const forceOuter = options.outer ?? [];
     const fallback: BoxRole = options.fallback ?? 'outer';
@@ -176,19 +165,19 @@ export function splitBox(
 
 /** Does any token in `classes` match `selector`? Variant- and mangle-robust. */
 export function has(classes: string, selector: BoxSelector): boolean {
-    return tokenize(classes).some((t) => matches(inspect(t), selector));
+    return tokenize(classes).some(t => matches(inspect(t), selector));
 }
 
 /** Keep only the tokens in `classes` that match `selector`. */
 export function pick(classes: string, selector: BoxSelector): string {
     return tokenize(classes)
-        .filter((t) => matches(inspect(t), selector))
+        .filter(t => matches(inspect(t), selector))
         .join(' ');
 }
 
 /** Drop the tokens in `classes` that match `selector`, keeping the rest. */
 export function omit(classes: string, selector: BoxSelector): string {
     return tokenize(classes)
-        .filter((t) => !matches(inspect(t), selector))
+        .filter(t => !matches(inspect(t), selector))
         .join(' ');
 }

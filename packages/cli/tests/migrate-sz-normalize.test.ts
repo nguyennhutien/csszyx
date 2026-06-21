@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest';
-
 import { transform } from '@csszyx/compiler';
+import { describe, expect, it } from 'vitest';
 import { transformSource } from '../src/migrate/ast-transformer.js';
 
 /**

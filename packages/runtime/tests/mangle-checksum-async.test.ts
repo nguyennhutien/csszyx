@@ -1,22 +1,19 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import {
-    computeMangleChecksumAsync,
-    verifyMangleChecksumAsync,
-} from '../src/hydration.js';
+import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
 
 /** Independent reference implementation of the Rust `compute_checksum_internal`. */
 function referenceChecksum(map: Record<string, string>): string {
     const canonical = Object.keys(map)
         .sort()
-        .map((k) => `${k}:${map[k]}`)
+        .map(k => `${k}:${map[k]}`)
         .join('|');
     return createHash('sha256').update(canonical).digest('hex').slice(0, 16);
 }
 
 describe('computeMangleChecksumAsync', () => {
     it('matches an independent SHA-256 implementation (byte parity)', async () => {
-        const map = { 'bg-red-500': 'a', 'p-4': 'b', 'flex': 'c' };
+        const map = { 'bg-red-500': 'a', 'p-4': 'b', flex: 'c' };
         expect(await computeMangleChecksumAsync(map)).toBe(referenceChecksum(map));
     });
 

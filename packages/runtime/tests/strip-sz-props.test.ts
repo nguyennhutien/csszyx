@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-    __resetStripSzWarnings,
-    stripSzProps,
-} from '../src/strip-sz-props.js';
+import { __resetStripSzWarnings, stripSzProps } from '../src/strip-sz-props.js';
 
 describe('stripSzProps', () => {
     beforeEach(() => {

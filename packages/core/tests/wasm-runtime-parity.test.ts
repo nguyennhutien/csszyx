@@ -38,15 +38,12 @@ describe('WASM runtime parity (transform_sz vs TS transform)', () => {
         await init();
     });
 
-    it.each(corpus.map(r => [r.sz, r.oxc] as const))(
-        'transform_sz(%s) === oxc',
-        (szJson, oxc) => {
-            const sz = JSON.parse(szJson);
-            // The TS baseline (`oxc`) is recomputed-equivalent; assert the WASM
-            // runtime matches it exactly (token set + order).
-            expect(transform_sz(sz)).toBe(oxc);
-            // Cross-check the baseline itself stayed in sync with the compiler.
-            expect(transform(sz).className).toBe(oxc);
-        },
-    );
+    it.each(corpus.map(r => [r.sz, r.oxc] as const))('transform_sz(%s) === oxc', (szJson, oxc) => {
+        const sz = JSON.parse(szJson);
+        // The TS baseline (`oxc`) is recomputed-equivalent; assert the WASM
+        // runtime matches it exactly (token set + order).
+        expect(transform_sz(sz)).toBe(oxc);
+        // Cross-check the baseline itself stayed in sync with the compiler.
+        expect(transform(sz).className).toBe(oxc);
+    });
 });

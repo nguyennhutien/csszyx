@@ -17,7 +17,7 @@
  * Usage: pnpm gen:parity-corpus       (write)
  *        pnpm gen:parity-corpus:check (verify committed file is in sync)
  */
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
