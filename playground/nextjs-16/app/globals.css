@@ -1,8 +1,11 @@
-/* Pin Tailwind's automatic content detection to this playground. Under
-   Turbopack + Tailwind 4.3.1 the auto-base resolves up to the monorepo root and
-   scans docs/snippets (which carry `url(...)`/`{value}` examples as text),
-   generating broken `url()` classes that the Next css-loader cannot resolve. */
-@import "tailwindcss" source("..");
+/* Disable Tailwind's automatic content detection and scope it explicitly to
+   this playground. Under Tailwind 4.3.x the auto-base (even with source("..."))
+   resolves up to the monorepo root and scans docs/snippets (which carry
+   `url(...)`/`{value}` examples as text), generating broken `url()` classes the
+   Next css-loader cannot resolve. source(none) + explicit @source is the only
+   deterministic scope. */
+@import "tailwindcss" source(none);
+@source "../app";
 @source "../csszyx-classes.html";
 @source "../.csszyx/next-loader-classes.html";
 
