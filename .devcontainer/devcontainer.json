@@ -37,5 +37,5 @@
   "remoteUser": "root",
   "workspaceFolder": "/workspaces/csszyx",
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/cleanup-credentials.sh && bash .devcontainer/configure-codex.sh && bash .devcontainer/configure-claude.sh && bash .devcontainer/healthcheck.sh && bash .devcontainer/init-firewall.sh && bash .devcontainer/security-envelope-check.sh"
+  "postStartCommand": "bash .devcontainer/poststart.sh"
 }
