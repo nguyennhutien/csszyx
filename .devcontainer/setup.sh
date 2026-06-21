@@ -18,6 +18,19 @@ echo "[setup] Running workspace setup..."
 mise trust /workspaces/csszyx/.mise.toml
 mise install
 
+# mise installs claude-code through its npm backend with --ignore-scripts, so the
+# platform-native binary (downloaded as an optional dep) is never wired to the JS
+# launcher and `claude` reports "native binary not installed". Run the package's
+# own postinstall with a real node (the install path carries the resolved
+# "latest" version, so locate it dynamically).
+cc_install=$(find /root/.local/share/mise/installs/npm-anthropic-ai-claude-code \
+    -path '*@anthropic-ai/claude-code/install.cjs' 2>/dev/null | head -1)
+node_bin=$(ls /root/.local/share/mise/installs/node/*/bin/node 2>/dev/null | head -1)
+if [ -n "$cc_install" ] && [ -n "$node_bin" ]; then
+    (cd "$(dirname "$cc_install")" && "$node_bin" install.cjs) \
+        || echo "[setup] WARN: claude-code native binary setup failed"
+fi
+
 # Cocogitto validates Conventional Commit messages. It is baked into new
 # devcontainer images, but install it here as a recovery path for existing
 # containers that predate the Dockerfile change.
