@@ -1,6 +1,6 @@
 ---
 title: Migrate from Tailwind
-description: Automatically convert className to sz props using the CSSzyx CLI.
+description: Convert className to sz props with the CSSzyx CLI, and upgrade old sz objects to single-way keys and the closed type.
 ---
 
 The `csszyx migrate` CLI command converts `className=` (JSX/TSX) or `class=`
@@ -21,6 +21,92 @@ npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
 ```
 
 Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
+
+## Breaking changes: single-way keys + closed type
+
+Two breaking changes affect how `sz` objects are written. `csszyx migrate`
+rewrites old code to the new form automatically, and dev-mode warnings point at
+the exact fix. Both changes enforce the same principle: **one canonical key per
+CSS property, no aliases.**
+
+### 1. Boolean value-sugar was removed
+
+Keys that were a boolean alias for a value of a single, mutually-exclusive CSS
+property no longer accept `{ key: true }`. They **emit nothing** and warn in dev.
+Write the canonical `{ property: 'value' }` form instead.
+
+| Before (removed) | After (canonical) | CSS property |
+|---|---|---|
+| `{ flex: true }` | `{ display: 'flex' }` | display |
+| `{ block: true }` / `{ hidden: true }` | `{ display: 'block' }` / `{ display: 'none' }` | display |
+| `{ absolute: true }` / `{ relative: true }` | `{ position: 'absolute' }` / `{ position: 'relative' }` | position |
+| `{ invisible: true }` | `{ visibility: 'hidden' }` | visibility |
+| `{ isolate: true }` | `{ isolation: 'isolate' }` | isolation |
+| `{ uppercase: true }` | `{ textTransform: 'uppercase' }` | text-transform |
+| `{ italic: true }` | `{ fontStyle: 'italic' }` | font-style |
+| `{ underline: true }` | `{ decoration: 'underline' }` | text-decoration-line |
+| `{ antialiased: true }` | `{ fontSmoothing: 'grayscale' }` | font-smoothing |
+
+The dev warning is precise:
+
+```text
+[csszyx] "flex" boolean sugar was removed. Use { display: 'flex' } instead, or run `csszyx migrate`.
+```
+
+:::note[Genuinely on/off utilities stay boolean]
+Only **value-aliases** of a single property were removed. Utilities that are
+truly on/off — not one value among several — keep accepting `true`: composite
+helpers (`truncate`, `srOnly`), stackable font-variant-numeric flags (`ordinal`,
+`tabularNums`, `liningNums`, …), default-or-value toggles (`grow`, `shrink`,
+`ring`, `outline`, `blur`, `border`, `shadow`, `transition`, `divideX`), and
+plugin components (`container`, `prose`). `{ truncate: true }`, `{ grow: true }`,
+and `{ container: true }` are all still correct.
+
+Note `flex` is overloaded: `{ flex: true }` (the removed display alias) warns,
+but `{ flex: '1' }` / `{ flex: 'auto' }` (the `flex` shorthand) still works.
+:::
+
+### 2. CSS-property-name keys are not sz keys
+
+`sz` keys are csszyx's short, Tailwind-aligned names — **not** CSS property
+names. A CSS-property name like `padding` or `backgroundColor` is not a valid sz
+key; it emits nothing and warns with the canonical key to use.
+
+| CSS-property name (not a key) | Canonical sz key |
+|---|---|
+| `{ padding: 4 }` | `{ p: 4 }` |
+| `{ marginTop: 2 }` | `{ mt: 2 }` |
+| `{ backgroundColor: 'blue-500' }` | `{ bg: 'blue-500' }` |
+| `{ width: 'full' }` | `{ w: 'full' }` |
+| `{ fontSize: 'lg' }` | `{ text: 'lg' }` |
+| `{ borderRadius: 'lg' }` | `{ rounded: 'lg' }` |
+
+```text
+[csszyx] Use the canonical key "bg" instead of "backgroundColor".
+```
+
+### 3. The `sz` type is closed — typos fail at compile time
+
+The `sz` prop type no longer has an open index signature, so an unknown key (a
+typo or a legacy CSS-property name) is a **TypeScript error** caught by
+`tsc --noEmit` in CI — not a silent dead class at runtime.
+
+```tsx
+<div sz={{ bgColor: 'red-500' }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
+```
+
+To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt
+out with `@ts-expect-error` (a conscious decision; the runtime still emits the
+class):
+
+```tsx
+{/* @ts-expect-error - forward-compat utility not yet in csszyx */}
+<div sz={{ someNewUtility: 'x' }} />
+```
+
+Arbitrary variants (`@container`, `min-[320px]`, `[&>span]`) and custom
+breakpoints declared in `@theme { --breakpoint-tablet: … }` still type-check —
+see [Sz Props Basics](/docs/sz-props/#type-safety--unknown-keys-are-caught-by-typescript).
 
 ## Understanding the Migration Report
 
