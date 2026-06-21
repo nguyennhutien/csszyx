@@ -13,6 +13,24 @@
  * Returns empty string for unknown classes — graceful no-op, not a crash.
  */
 
+import { isUtilityArbitrarySafe } from './css-sanitize.js';
+
+/** Warn once (in dev) when an arbitrary value is dropped for being unsafe. */
+let warnedUnsafeArbitrary = false;
+function warnUnsafeArbitrary(utility: string): void {
+    if (warnedUnsafeArbitrary) {
+        return;
+    }
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+        return;
+    }
+    warnedUnsafeArbitrary = true;
+    console.warn(
+        `[csszyx] dropped an arbitrary value that could inject CSS: "${utility}". ` +
+            'Arbitrary values from untrusted data are not emitted at runtime.',
+    );
+}
+
 // ── Variant metadata ──────────────────────────────────────────────────────────
 
 /** Breakpoint tiers (min-width values, Tailwind v4 defaults). */
@@ -722,6 +740,16 @@ export function parseVariants(cls: string): ParsedVariants {
  * @returns CSS declarations string (e.g. "padding: calc(var(--spacing) * 4)")
  */
 export function generateDeclarations(utility: string): string {
+    // ── 0. Security: reject any arbitrary [...] segment that could inject a
+    // second declaration into this rule. Only attacker-controllable arbitrary
+    // values hit this; csszyx-generated numeric/keyword utilities always pass.
+    // Fail safe (emit nothing) rather than throw — a per-render throw is itself
+    // a DoS.
+    if (!isUtilityArbitrarySafe(utility)) {
+        warnUnsafeArbitrary(utility);
+        return '';
+    }
+
     // ── 1. Keyword lookup (fastest path) ───────────────────────────────────
     if (utility in KEYWORD_RULES) {
         return KEYWORD_RULES[utility];
