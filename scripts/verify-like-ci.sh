@@ -80,8 +80,8 @@ pnpm exec eslint .
 echo "[verify-like-ci] Type-check..."
 pnpm type-check
 
-echo "[verify-like-ci] Corpus coverage report (advisory)..."
-pnpm corpus:check
+echo "[verify-like-ci] Corpus round-trip (fails on broken mappings, like CI)..."
+pnpm corpus:check --require-no-broken
 
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build

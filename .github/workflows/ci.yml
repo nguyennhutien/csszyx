@@ -435,6 +435,14 @@ jobs:
       - name: Check parity corpus covers the per-key matrix
         run: pnpm check:key-corpus
 
+      # The corpus round-trip checks every documented Tailwind class maps back to
+      # an sz form AND that the mapping compiles to the SAME class. The plain
+      # check is advisory; --require-no-broken fails only when a class maps but
+      # compiles to the WRONG output (a real correctness regression) — it ignores
+      # the unmapped-class noise.
+      - name: Check corpus round-trip has no broken mappings
+        run: pnpm corpus:check --require-no-broken
+
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
