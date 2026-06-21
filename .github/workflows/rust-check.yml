@@ -53,6 +53,12 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # The crate's only `unsafe` block lives behind `native-engine`, so the
+      # default clippy run above never lints it. Run clippy with the feature too
+      # so the unsafe-block lints (undocumented_unsafe_blocks etc.) are enforced.
+      - name: Run clippy (native-engine)
+        run: cargo clippy --features native-engine --all-targets -- -D warnings
+
       - name: Run tests
         run: cargo test
 
