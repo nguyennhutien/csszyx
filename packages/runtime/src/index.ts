@@ -21,6 +21,7 @@ export {
     abortHydration,
     attemptCSRRecovery,
     clearHydrationErrors,
+    computeMangleChecksumAsync,
     disableCSRRecovery,
     enableCSRRecovery,
     endHydration,
@@ -41,6 +42,7 @@ export {
     startHydration,
     validateHydrationClass,
     verifyMangleChecksum,
+    verifyMangleChecksumAsync,
     verifyMangleMapIntegrity,
 } from './hydration.js';
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime

@@ -212,6 +212,61 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
 }
 
 /**
+ * Recompute a mangle map's checksum the same way the Rust core does
+ * (`compute_checksum_internal`): SHA-256 over the entries sorted by key and
+ * formatted `orig:mangle`, joined by `|`, hex-encoded, first 16 chars (64 bits).
+ *
+ * Uses the Web Crypto API (`crypto.subtle`), so it works WITHOUT the WASM core —
+ * unlike the WASM-only sync path. Async because `crypto.subtle.digest` is async.
+ *
+ * @param map - the mangle map to checksum.
+ * @returns the 16-char hex checksum (matches the Rust output byte-for-byte for
+ *          ASCII class names).
+ */
+export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
+    const canonical = Object.keys(map)
+        .sort()
+        .map((key) => `${key}:${map[key]}`)
+        .join('|');
+    const bytes = new TextEncoder().encode(canonical);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    let hex = '';
+    for (const b of new Uint8Array(digest)) {
+        hex += b.toString(16).padStart(2, '0');
+    }
+    return hex.slice(0, 16);
+}
+
+/**
+ * Verify a mangle map's integrity by RECOMPUTING its checksum (via Web Crypto)
+ * and comparing it to the expected value — real verification that works without
+ * the WASM core. Unlike the sync {@link verifyMangleChecksum} (a plain attribute
+ * compare), this recomputes from the map, so it detects a map that was altered
+ * without updating the checksum.
+ *
+ * Still tamper-DETECTION, not authentication: the checksum is unsigned, so an
+ * attacker who can rewrite the served HTML can recompute it after editing the
+ * map. Use it to catch corruption / accidental drift, not as a trust boundary.
+ *
+ * @param expectedChecksum - the checksum to match (e.g. from the manifest or the
+ *        `data-sz-checksum` attribute).
+ * @param map - the mangle map; loaded (and schema-validated) from the DOM when omitted.
+ * @returns a promise resolving true when the map is present and its recomputed
+ *          checksum matches.
+ */
+export async function verifyMangleChecksumAsync(
+    expectedChecksum: string,
+    map?: MangleMap,
+): Promise<boolean> {
+    const target = map ?? loadMangleMapFromDOM();
+    if (!target) {
+        return false;
+    }
+    const actual = await computeMangleChecksumAsync(target);
+    return actual === expectedChecksum;
+}
+
+/**
  * Verifies mangle map integrity using the Rust core checksum verifier.
  *
  * Loads the mangle map from the DOM, validates its shape, and (when the WASM
