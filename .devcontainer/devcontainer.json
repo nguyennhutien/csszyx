@@ -6,7 +6,8 @@
   "containerEnv": {
     "CODEX_HOME": "/root/.codex-devcontainer",
     "CLAUDE_CONFIG_DIR": "/root/.claude-devcontainer",
-    "IS_SANDBOX": "1"
+    "IS_SANDBOX": "1",
+    "HOST_WORKSPACE": "${localWorkspaceFolder}"
   },
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/tmp/host-ssh-agent.sock"

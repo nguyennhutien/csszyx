@@ -115,6 +115,40 @@ if [ "$WRAPPER_ONLY" -ne 1 ]; then
     fi
 fi
 
+if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    # --- Keep conversations + memory in sync between host and container ---
+    # projects/ is already symlinked to the host above, but Claude keys each
+    # project's subdir by cwd: the container (/workspaces/csszyx) and the host
+    # (its own clone path) resolve to DIFFERENT subdirs, so sessions + auto-
+    # memory drift between them. Alias the container's project key to the host's
+    # so both Claude instances read/write ONE dir. Only chat history + memory are
+    # shared (projects/ already shares those) — settings.json and credentials
+    # stay container-isolated, untouched.
+    #
+    # HOST_WORKSPACE is the host-side absolute path (${localWorkspaceFolder} from
+    # devcontainer.json). Full setup only — never --wrapper-only, so we never
+    # swap the project dir while Claude may be running.
+    HOST_WS="${HOST_WORKSPACE:-}"
+    if [ -n "$HOST_WS" ]; then
+        validate_path "HOST_WORKSPACE" "$HOST_WS"
+        host_key="$(printf '%s' "$HOST_WS" | sed 's#/#-#g')"
+        cont_key="$(printf '%s' "/workspaces/csszyx" | sed 's#/#-#g')"
+        proj_dir="$DEV_CLAUDE_HOME/projects"
+        if [ "$host_key" != "$cont_key" ] && [ -d "$proj_dir" ]; then
+            mkdir -p "$proj_dir/$host_key"
+            # One-time migration: fold any container-keyed history into the
+            # host-keyed dir, then replace it with a RELATIVE symlink so the
+            # alias resolves identically from the host and the container.
+            if [ -d "$proj_dir/$cont_key" ] && [ ! -L "$proj_dir/$cont_key" ]; then
+                cp -an "$proj_dir/$cont_key/." "$proj_dir/$host_key/" 2>/dev/null || true
+                rm -rf "$proj_dir/$cont_key"
+            fi
+            ln -sfn "$host_key" "$proj_dir/$cont_key"
+            echo "[claude] Sessions + memory synced: projects/$cont_key -> $host_key"
+        fi
+    fi
+fi
+
 # Make the devcontainer Claude env available even when Claude is launched by
 # an IDE task or a fresh shell that does not go through our wrapper aliases.
 # devcontainer.json also sets containerEnv, but that only applies after the
