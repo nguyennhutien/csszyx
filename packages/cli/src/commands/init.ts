@@ -220,12 +220,74 @@ export async function init(options: InitOptions = {}): Promise<void> {
 }
 
 /**
+ * Walk up from `cwd` (excluding `cwd` itself) for a workspace root —
+ * `pnpm-workspace.yaml`, a `package.json` with a `workspaces` field, or an
+ * nx/lerna marker. When found, `cwd` is a package INSIDE a monorepo, where
+ * Tailwind v4's automatic content detection would otherwise climb to the
+ * workspace root and scan sibling packages + docs.
+ * @param cwd - Project root directory being initialized.
+ * @returns True when an ancestor directory is a workspace root.
+ */
+export async function isInsideWorkspace(cwd: string): Promise<boolean> {
+    let dir = path.dirname(path.resolve(cwd));
+    const { root } = path.parse(dir);
+    while (dir !== root) {
+        if (
+            (await fs.pathExists(path.join(dir, 'pnpm-workspace.yaml'))) ||
+            (await fs.pathExists(path.join(dir, 'nx.json'))) ||
+            (await fs.pathExists(path.join(dir, 'lerna.json')))
+        ) {
+            return true;
+        }
+        const pkg = await readFileOrNull(path.join(dir, 'package.json'));
+        if (pkg) {
+            try {
+                if ('workspaces' in (JSON.parse(pkg) as object)) return true;
+            } catch {
+                // Malformed package.json — ignore and keep walking up.
+            }
+        }
+        dir = path.dirname(dir);
+    }
+    return false;
+}
+
+/**
+ * The Tailwind v4 import block for a CSS entry. Inside a monorepo, scope content
+ * detection to this package — `source(none)` disables the climb-to-workspace-root
+ * scan and an explicit `@source` adds back only this package (csszyx auto-injects
+ * its own `@source` for generated classes). Outside a monorepo the bare import is
+ * correct. `source(none)` is used rather than a narrowing `source("..")` because
+ * automatic detection can still escape a narrowed base in some bundler pipelines.
+ * @param cssDir - Directory containing the CSS entry file.
+ * @param cwd - Project root directory.
+ * @param monorepo - Whether this package sits inside a workspace.
+ * @returns CSS text to write at the top of the entry file.
+ */
+export function tailwindImportBlock(cssDir: string, cwd: string, monorepo: boolean): string {
+    if (!monorepo) return '@import "tailwindcss";\n';
+    const rel = path.relative(path.resolve(cssDir), path.resolve(cwd)) || '.';
+    const src = rel.split(path.sep).join('/');
+    return (
+        "/* Monorepo: scope Tailwind's content detection to this package. Its\n" +
+        '   automatic detection otherwise climbs to the workspace root and scans\n' +
+        '   sibling packages + docs (.md/.mdx/.txt are NOT ignored), generating\n' +
+        '   phantom or broken url() classes. csszyx auto-injects @source for its\n' +
+        '   generated classes; this @source covers your own templates. See\n' +
+        '   https://csszyx.dev/docs/monorepo-content-scope/ */\n' +
+        '@import "tailwindcss" source(none);\n' +
+        `@source "${src}";\n`
+    );
+}
+
+/**
  * Inject Tailwind v4 @import into the main CSS entry file.
  * If no CSS entry file is found, creates src/index.css.
  * @param cwd - Project root directory.
  * @param framework - Detected or specified framework.
  */
 async function setupTailwindCss(cwd: string, framework: Framework): Promise<void> {
+    const monorepo = await isInsideWorkspace(cwd);
     let cssPath: string | undefined;
     let content: string | null = null;
     for (const candidate of CSS_ENTRY_CANDIDATES) {
@@ -242,13 +304,16 @@ async function setupTailwindCss(cwd: string, framework: Framework): Promise<void
         // Create src/index.css as the entry CSS file
         cssPath = path.join(cwd, 'src/index.css');
         await fs.ensureDir(path.dirname(cssPath));
-        await fs.writeFile(cssPath, '@import "tailwindcss";\n');
+        await fs.writeFile(cssPath, tailwindImportBlock(path.dirname(cssPath), cwd, monorepo));
         printInfo(`Created ${path.relative(cwd, cssPath)} with Tailwind v4 import`);
         return;
     }
 
     if (!content.includes('@import "tailwindcss"') && !content.includes("@import 'tailwindcss'")) {
-        await fs.writeFile(cssPath, `@import "tailwindcss";\n\n${content}`);
+        await fs.writeFile(
+            cssPath,
+            `${tailwindImportBlock(path.dirname(cssPath), cwd, monorepo)}\n${content}`,
+        );
         printInfo(`Added Tailwind v4 import to ${path.relative(cwd, cssPath)}`);
     }
 
