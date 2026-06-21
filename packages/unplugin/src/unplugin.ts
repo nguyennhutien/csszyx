@@ -287,6 +287,39 @@ export function appendTailwindSourceDirective(code: string, relPath: string): st
 }
 
 /**
+ * Strip CSS block comments in a single linear pass. The regex form
+ * (`/\/\*[\s\S]*?\*\//`) is polynomial-ReDoS on adversarial input such as an
+ * unterminated `/*` followed by many `a/*` repetitions (CodeQL
+ * js/polynomial-redos), so scan by hand: O(n), no backtracking, copying only
+ * the whole non-comment spans.
+ *
+ * @param code - CSS source that may contain block comments.
+ * @returns the source with every block comment removed.
+ */
+function stripCssBlockComments(code: string): string {
+    const SLASH = 47;
+    const STAR = 42;
+    let out = '';
+    let last = 0;
+    let i = 0;
+    const n = code.length;
+    while (i < n) {
+        if (code.charCodeAt(i) === SLASH && code.charCodeAt(i + 1) === STAR) {
+            out += code.slice(last, i);
+            i += 2;
+            while (i < n && !(code.charCodeAt(i) === STAR && code.charCodeAt(i + 1) === SLASH)) {
+                i++;
+            }
+            i += 2; // skip past the closing */ (or past EOF if unterminated)
+            last = i;
+        } else {
+            i++;
+        }
+    }
+    return out + code.slice(last);
+}
+
+/**
  * Whether a CSS module actually imports the `tailwindcss` package, so the
  * `@source` directive should be appended.
  *
@@ -301,7 +334,7 @@ export function appendTailwindSourceDirective(code: string, relPath: string): st
  * @returns true if the module imports tailwindcss (exact or a subpath).
  */
 export function cssImportsTailwind(code: string): boolean {
-    const withoutBlockComments = code.replace(/\/\*[\s\S]*?\*\//g, '');
+    const withoutBlockComments = stripCssBlockComments(code);
     return /@import\s+["']tailwindcss(?:\/[^"']*)?["']/.test(withoutBlockComments);
 }
 
@@ -363,7 +396,7 @@ export function missingTailwindEntryMessage(ownedClassCount: number): string {
  * @returns true when the entry scopes (or excludes from) content detection.
  */
 export function cssHasContentScope(code: string): boolean {
-    const s = code.replace(/\/\*[\s\S]*?\*\//g, '');
+    const s = stripCssBlockComments(code);
     return (
         /@import\s+["']tailwindcss(?:\/[^"']*)?["']\s+source\(/.test(s) || /@source\s+not\b/.test(s)
     );
