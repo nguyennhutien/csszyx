@@ -241,6 +241,23 @@ not opted in is skipped silently (no CSS) — csszyx warns at build end and list
 those files. Convention: ship pre-extracted CSS for external consumers, and use
 `compilePackages` to re-extract from source within your own monorepo.
 
+#### Content Scope Check (`contentScopeCheck`)
+
+Default `true`. In a monorepo, Tailwind v4's automatic content detection climbs to
+the workspace root and scans sibling packages + docs (`.md`/`.mdx`/`.txt` are not
+ignored), which can generate phantom or broken `url()` classes and fail the build.
+When your Tailwind entry imports `tailwindcss` without scoping it (no `source(none)`
+/ `source(...)` / `@source not`), csszyx warns once at build end with the two-line
+fix. Set `false` to silence that warning when a broad scan is intentional.
+
+```ts
+csszyx({
+  contentScopeCheck: false, // silence the unscoped-monorepo warning
+});
+```
+
+See [Monorepo & Content Scope](/docs/monorepo-content-scope/) for the full fix.
+
 #### Theme Auto-Scan (`scanCss`)
 
 When set, the plugin parses `@theme` blocks in your CSS entry point and generates

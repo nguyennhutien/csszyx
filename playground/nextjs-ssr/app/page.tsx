@@ -79,7 +79,7 @@ export default function Home() {
                 {/* Conditional Styling Test */}
                 <section sz={{ mb: 12 }}>
                     <h2 sz={{ text: '2xl', weight: 'semibold', color: 'white', mb: 4 }}>
-                        Conditional Styling (_szIf)
+                        Conditional Styling
                     </h2>
                     <p sz={{ color: 'slate-400', mb: 4, text: 'sm' }}>
                         Testing conditional class application with sz prop.

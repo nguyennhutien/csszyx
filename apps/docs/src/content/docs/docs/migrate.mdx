@@ -41,7 +41,8 @@ npx @csszyx/cli migrate --keys-only --dry-run   # preview
 npx @csszyx/cli migrate --keys-only             # apply
 ```
 
-This is a transitional helper for the 0.9.10 → 0.10.0 upgrade.
+This is a transitional helper for the single-way-keys upgrade and will be removed
+at v1.
 :::
 
 ### 1. Boolean value-sugar was removed
@@ -122,6 +123,24 @@ class):
 Arbitrary variants (`@container`, `min-[320px]`, `[&>span]`) and custom
 breakpoints declared in `@theme { --breakpoint-tablet: … }` still type-check —
 see [Sz Props Basics](/docs/sz-props/#type-safety--unknown-keys-are-caught-by-typescript).
+
+### 4. `_szIf` and `_szSwitch` were removed — use plain JS
+
+These two runtime helpers are gone from `@csszyx/runtime`. Compose `_sz` with a
+plain conditional or object lookup instead — the same result with nothing extra to
+import. Importing them now fails the build, so update call sites:
+
+```tsx
+// before
+import { _sz, _szIf, _szSwitch } from "@csszyx/runtime";
+_sz("base", _szIf(isActive, "active", "inactive"));
+_sz("base", _szSwitch(size, { sm: "p-2", lg: "p-6" }));
+
+// after
+import { _sz } from "@csszyx/runtime";
+_sz("base", isActive ? "active" : "inactive");
+_sz("base", { sm: "p-2", lg: "p-6" }[size]);
+```
 
 ## Understanding the Migration Report
 
