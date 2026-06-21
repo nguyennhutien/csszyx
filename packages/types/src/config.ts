@@ -537,6 +537,17 @@ export type PartialCsszyxConfig = {
      */
     compilePackages?: string[];
 
+    /**
+     * Warn when, inside a monorepo, the Tailwind entry imports `tailwindcss`
+     * without scoping its content detection (no `source(none)` / `source(...)` /
+     * `@source not`). Unscoped, Tailwind v4 climbs to the workspace root and
+     * scans sibling packages + docs (`.md`/`.mdx`/`.txt` are not ignored),
+     * which can generate phantom or broken `url()` classes and fail the build.
+     * The warning prints the one-time fix; set `false` to silence it when a
+     * broad scan is intentional. Defaults to `true`.
+     */
+    contentScopeCheck?: boolean;
+
     development?: Partial<DevelopmentConfig>;
     production?: Partial<ProductionConfig>;
     build?: Partial<BuildConfig>;
