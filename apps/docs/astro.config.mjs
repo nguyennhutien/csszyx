@@ -89,6 +89,7 @@ export default defineConfig({
                     items: [
                         { label: 'Introduction', slug: 'docs/introduction' },
                         { label: 'Installation', slug: 'docs/installation' },
+                        { label: 'Monorepo & Content Scope', slug: 'docs/monorepo-content-scope' },
                         { label: 'Migrate from Tailwind', slug: 'docs/migrate' },
                         { label: 'Sz Props Basics', slug: 'docs/sz-props' },
                         { label: 'Variants & Modifiers', slug: 'docs/variants' },

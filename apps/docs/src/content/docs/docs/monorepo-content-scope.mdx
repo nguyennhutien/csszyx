@@ -1,0 +1,114 @@
+---
+title: Monorepo & Content Scope
+description: In a monorepo, Tailwind v4 can scan your whole workspace — including docs and text files — and generate phantom or broken classes. Scope its content detection to your package so csszyx builds clean everywhere.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+If you use csszyx **inside a monorepo** and your build fails with something like
+`Cannot find module './h.cur'`, an invalid `url()` in your CSS, or a cryptic
+hashing crash deep in the bundler — this page is the fix. It is a one-time, two-line
+change to your CSS entry, and it is **not specific to any framework**: it applies to
+Vite, Next.js (webpack *and* Turbopack), Astro, and any bundler running Tailwind v4.
+
+<Aside type="caution" title="Symptom">
+Phantom utilities you never wrote (`cursor-[url(h.cur)]`, `content-['{value}']`)
+appear in the generated CSS. With webpack/Next they hard-fail the build trying to
+resolve a fake `url(...)`; with other bundlers they silently bloat your CSS.
+</Aside>
+
+## What's actually happening
+
+Tailwind v4 has **automatic content detection** — no `content: [...]` array. It picks
+a base directory and scans it for class names. In a monorepo, that base **climbs up to
+the workspace root**, so Tailwind scans *every* package — and the files it scans are
+not just your components.
+
+Tailwind ignores `node_modules`, `.gitignore`d files, binaries, CSS, and lockfiles —
+but it does **not** ignore `.md`, `.mdx`, or `.txt`. Documentation is full of class
+names written as **examples**: a README code block, an MDX snippet, an AI-context file
+like `llms-full.txt`. Tailwind can't tell "example in the docs" from "class in my app",
+so it generates CSS for them — including arbitrary-value classes that compile to broken
+`url(...)` rules.
+
+<Aside type="note" title="It's Tailwind, not csszyx">
+This is Tailwind v4 content-detection behavior, not a csszyx bug — any Tailwind v4
+project in a monorepo can hit it. csszyx just makes the fix turn-key.
+See Tailwind's [Detecting classes in source files](https://tailwindcss.com/docs/detecting-classes-in-source-files).
+</Aside>
+
+## The fix: scope the scan to your package
+
+Disable automatic detection and tell Tailwind **exactly** what to scan. csszyx already
+auto-injects an `@source` for the classes it generates, so you only add your own
+templates.
+
+```css title="src/index.css"
+@import "tailwindcss" source(none);
+@source ".."; /* your package root, relative to this CSS file */
+```
+
+`source(none)` turns off the climb-to-the-workspace-root scan; the explicit `@source`
+adds back only your package. This is the most reliable form — a narrowing
+`source("..")` alone is not enough, because automatic detection can still escape the
+base in some bundler pipelines.
+
+<Aside type="tip" title="csszyx init does this for you">
+Running `csszyx init` inside a monorepo writes the scoped form automatically. This
+guide is for existing setups and for understanding what the two lines do.
+</Aside>
+
+### Other ways to scope
+
+<Tabs>
+<TabItem label="Allowlist (recommended)">
+Disable detection, then list what to scan. Deterministic; nothing leaks in.
+
+```css
+@import "tailwindcss" source(none);
+@source "..";                         /* this package */
+@source "../../packages/ui/src";      /* a shared UI lib you import classes from */
+```
+</TabItem>
+<TabItem label="Excludelist">
+Keep automatic detection but carve out the poisoners. Simpler, but you must name
+every offending path.
+
+```css
+@import "tailwindcss";
+@source not "../../apps/docs";        /* docs with class examples */
+@source not "../../**/*.md";          /* and any markdown */
+```
+</TabItem>
+<TabItem label="Narrow the base">
+Point detection at a sub-tree. Convenient, but **less reliable** — some pipelines
+still climb out of the base, so prefer `source(none)` if you see leakage.
+
+```css
+@import "tailwindcss" source("../src");
+```
+</TabItem>
+</Tabs>
+
+## Safelisting literal classes
+
+`source(none)` only affects *scanning*. If you generate class names dynamically (or
+need a class that appears in no file), safelist it with `@source inline(...)` — it
+supports brace expansion and ranges:
+
+```css
+@source inline("underline");
+@source inline("{hover:,focus:,}bg-blue-{50,{100..900..100},950}");
+```
+
+## How csszyx fits in
+
+csszyx compiles your `sz` props to Tailwind classes and writes them to a generated
+safelist file (`csszyx-classes.html`), then **auto-injects** an `@source` pointing at
+it. That is why, even with `source(none)`, your csszyx styles still emit — the plugin
+already registered its own source. You only ever scope **your own** templates.
+
+## See also
+
+- [Installation](/docs/installation/) — first-time setup.
+- Tailwind CSS — [Detecting classes in source files](https://tailwindcss.com/docs/detecting-classes-in-source-files) (official `source()` / `@source` reference).
