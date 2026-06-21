@@ -36,6 +36,8 @@
     "gen:key-tests:check": "node --import tsx/esm scripts/gen-key-tests.mjs --check",
     "gen:box-role": "node --import tsx/esm scripts/gen-box-role-map.mjs",
     "gen:box-role:check": "node --import tsx/esm scripts/gen-box-role-map.mjs --check",
+    "gen:sz-allowlist": "node --import tsx/esm scripts/gen-sz-allowlist.mjs",
+    "gen:sz-allowlist:check": "node --import tsx/esm scripts/gen-sz-allowlist.mjs --check",
     "check:key-corpus": "node scripts/check-key-corpus-consistency.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
