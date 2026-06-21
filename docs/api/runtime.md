@@ -360,6 +360,30 @@ if (manifest && element) {
 }
 ```
 
+### `verifyMangleChecksumAsync()`
+
+Recomputes the production mangle map's checksum with the Web Crypto API and compares it to the expected value. Async and WASM-free (no core binary required), so it runs in edge/serverless runtimes. Returns `true` only when the map is present and its recomputed checksum matches. This is tamper **detection**, not authentication — the checksum is unsigned. Unlike the sync `verifyMangleChecksum` (which only compares the `data-sz-checksum` attribute), this re-derives the checksum from the map itself, so it also catches a map edited without updating the attribute.
+
+**Signature:**
+
+```ts
+function verifyMangleChecksumAsync(
+  expectedChecksum: string,
+  map?: MangleMap, // loaded + schema-validated from the DOM when omitted
+): Promise<boolean>;
+```
+
+**Example:**
+
+```ts
+import { verifyMangleChecksumAsync } from "@csszyx/runtime";
+
+const ok = await verifyMangleChecksumAsync(expectedChecksum);
+if (!ok) {
+  // map missing, corrupted, or changed without updating the checksum
+}
+```
+
 ### `loadManifestFromDOM()`
 
 Loads the recovery manifest from the DOM.

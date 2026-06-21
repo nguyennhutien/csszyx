@@ -1,6 +1,6 @@
 ---
 title: Runtime Helpers
-description: _sz, _szIf, _szSwitch, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, and stripSzProps for nested element routing.
+description: _sz, _szIf, _szSwitch, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
 ---
 
 import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
@@ -377,6 +377,38 @@ function Box({ sz, ...rest }: BoxProps) {
   return <div {...stripSzProps(rest)} />;
 }
 ```
+
+## `verifyMangleChecksumAsync(expected, map?)` — Integrity Check
+
+When production mangling is on, csszyx embeds a mangle map plus a checksum so the
+runtime can detect a map that was altered or drifted out of sync.
+`verifyMangleChecksumAsync` **recomputes** the map's checksum with the Web Crypto
+API (`crypto.subtle`) and compares it to the expected value — no WASM core
+required, which makes it usable in edge/serverless runtimes.
+
+```ts
+function verifyMangleChecksumAsync(
+  expectedChecksum: string,
+  map?: MangleMap, // loaded + schema-validated from the DOM when omitted
+): Promise<boolean> // true only when the map is present and its checksum matches
+```
+
+```ts
+import { verifyMangleChecksumAsync } from '@csszyx/runtime';
+
+const ok = await verifyMangleChecksumAsync(expectedChecksum);
+if (!ok) {
+  // map missing, corrupted, or changed without updating the checksum
+}
+```
+
+:::caution[Tamper *detection*, not authentication]
+The checksum is unsigned, so this catches accidental corruption or drift — it is
+**not** a trust boundary. The sync `verifyMangleChecksum` only compares the
+`data-sz-checksum` attribute; `verifyMangleChecksumAsync` actually re-derives the
+checksum from the map, so it also catches a map edited without updating the
+attribute.
+:::
 
 ## Lite Runtime
 
