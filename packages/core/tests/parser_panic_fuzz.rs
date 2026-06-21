@@ -62,10 +62,16 @@ mod parser_panic_fuzz {
         // `catch_unwind`. The guard bails before the parser, so these now
         // survive; `deep_nesting_is_guarded_not_aborted` asserts the behavior.
         let nested_variants = format!("<div sz={{{}1{}}} />", "{hover:".repeat(48), "}".repeat(48));
-        let nested_guarded_200 =
-            format!("<div sz={{{}1{}}} />", "{hover:".repeat(200), "}".repeat(200));
-        let nested_guarded_1000 =
-            format!("<div sz={{{}1{}}} />", "{hover:".repeat(1_000), "}".repeat(1_000));
+        let nested_guarded_200 = format!(
+            "<div sz={{{}1{}}} />",
+            "{hover:".repeat(200),
+            "}".repeat(200)
+        );
+        let nested_guarded_1000 = format!(
+            "<div sz={{{}1{}}} />",
+            "{hover:".repeat(1_000),
+            "}".repeat(1_000)
+        );
         let deep_brackets = format!("<div sz={{{{ w: '{}' }}}} />", "[".repeat(2_000));
         let huge_value = format!("<div sz={{{{ p: '{}' }}}} />", "a".repeat(200_000));
         let huge_attr = format!("<div className=\"{}\" />", "x ".repeat(100_000));
@@ -113,8 +119,7 @@ mod parser_panic_fuzz {
 
         // Randomized inputs built from a hostile alphabet of sz-syntax tokens and
         // metacharacters, so the parser sees plausible-but-broken source shapes.
-        let alphabet: &[u8] =
-            b"sz={}[]()<>/\\\"'`;:.,*&|-_ \t\n\r0129divclassNamehoverfocusmdpwbg";
+        let alphabet: &[u8] = b"sz={}[]()<>/\\\"'`;:.,*&|-_ \t\n\r0129divclassNamehoverfocusmdpwbg";
         let mut rng = Rng(0x1234_5678);
         for _ in 0..3_000 {
             let len = rng.below(512) + 1;
@@ -138,14 +143,21 @@ mod parser_panic_fuzz {
         // recursive parser — a stack overflow there is a fatal process abort,
         // not a catchable panic. The engine leaves the file unchanged and emits
         // an actionable diagnostic instead of crashing the build.
-        let deep = format!("<div sz={{{}1{}}} />", "{hover:".repeat(300), "}".repeat(300));
+        let deep = format!(
+            "<div sz={{{}1{}}} />",
+            "{hover:".repeat(300),
+            "}".repeat(300)
+        );
         let file = TransformFile {
             filename: "deep.tsx".to_string(),
             source: deep.clone(),
         };
         let results = transform_batch(std::slice::from_ref(&file)).expect("batch returns Ok");
         let result = &results[0];
-        assert_eq!(result.code, deep, "deeply nested file must be left unchanged");
+        assert_eq!(
+            result.code, deep,
+            "deeply nested file must be left unchanged"
+        );
         assert!(
             !result.metadata.transformed,
             "deeply nested file must not be marked transformed"
@@ -164,7 +176,11 @@ mod parser_panic_fuzz {
     fn legitimately_deep_source_below_the_guard_still_compiles() {
         // ~30 levels is comfortably under MAX_SOURCE_NESTING_DEPTH (64): a real,
         // if heavy, component must still transform normally (no false reject).
-        let nested = format!("<div sz={{{}{{ p: 4 }}{}}} />", "{hover:".repeat(30), "}".repeat(30));
+        let nested = format!(
+            "<div sz={{{}{{ p: 4 }}{}}} />",
+            "{hover:".repeat(30),
+            "}".repeat(30)
+        );
         let file = TransformFile {
             filename: "ok.tsx".to_string(),
             source: nested,

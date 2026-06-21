@@ -131,7 +131,11 @@ mod tests {
             ("fontSmoothing", "grayscale", "antialiased"),
             ("textTransform", "uppercase", "uppercase"),
         ] {
-            assert_eq!(lower(vec![(key, s(value))]), [expected.to_string()], "{key}: {value}");
+            assert_eq!(
+                lower(vec![(key, s(value))]),
+                [expected.to_string()],
+                "{key}: {value}"
+            );
         }
 
         assert_eq!(lower(vec![("flex", n(1.0))]), ["flex-1".to_string()]);

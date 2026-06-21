@@ -708,25 +708,27 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             // perspective-origin: named keywords stay bare, the rest are arbitrary
             // (perspective-origin-[25%_25%]).
             if key == "perspectiveOrigin" {
-                return Some(if matches!(
-                    value.as_str(),
-                    "center"
-                        | "top"
-                        | "right"
-                        | "bottom"
-                        | "left"
-                        | "top-left"
-                        | "top-right"
-                        | "bottom-left"
-                        | "bottom-right"
-                ) {
-                    format!("{prefix}perspective-origin-{value}")
-                } else {
-                    format!(
-                        "{prefix}perspective-origin-[{}]",
-                        normalize_arbitrary_value(value)
-                    )
-                });
+                return Some(
+                    if matches!(
+                        value.as_str(),
+                        "center"
+                            | "top"
+                            | "right"
+                            | "bottom"
+                            | "left"
+                            | "top-left"
+                            | "top-right"
+                            | "bottom-left"
+                            | "bottom-right"
+                    ) {
+                        format!("{prefix}perspective-origin-{value}")
+                    } else {
+                        format!(
+                            "{prefix}perspective-origin-[{}]",
+                            normalize_arbitrary_value(value)
+                        )
+                    },
+                );
             }
             // transformStyle: 'flat' | '3d' → transform-flat, transform-3d.
             if key == "transformStyle" {
@@ -1332,14 +1334,26 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&nest(
                 "md",
-                obj(vec![property("hover", obj(vec![property("bg", StaticSzValue::String("blue-500".into()))]))]),
+                obj(vec![property(
+                    "hover",
+                    obj(vec![property(
+                        "bg",
+                        StaticSzValue::String("blue-500".into())
+                    )])
+                )]),
             )),
             ["md:hover:bg-blue-500"]
         );
         assert_eq!(
             lower_static_sz_object(&nest(
                 "hover",
-                obj(vec![property("md", obj(vec![property("bg", StaticSzValue::String("blue-500".into()))]))]),
+                obj(vec![property(
+                    "md",
+                    obj(vec![property(
+                        "bg",
+                        StaticSzValue::String("blue-500".into())
+                    )])
+                )]),
             )),
             ["hover:md:bg-blue-500"]
         );
@@ -1348,14 +1362,23 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&nest(
                 "md",
-                obj(vec![property("group", obj(vec![property("hover", obj(vec![property("p", StaticSzValue::Number(2.0))]))]))]),
+                obj(vec![property(
+                    "group",
+                    obj(vec![property(
+                        "hover",
+                        obj(vec![property("p", StaticSzValue::Number(2.0))])
+                    )])
+                )]),
             )),
             ["md:group-hover:p-2"]
         );
 
         // custom breakpoint passes through.
         assert_eq!(
-            lower_static_sz_object(&nest("tablet", obj(vec![property("p", StaticSzValue::Number(3.0))]))),
+            lower_static_sz_object(&nest(
+                "tablet",
+                obj(vec![property("p", StaticSzValue::Number(3.0))])
+            )),
             ["tablet:p-3"]
         );
 
