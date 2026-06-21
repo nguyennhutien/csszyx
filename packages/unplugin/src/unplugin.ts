@@ -1227,7 +1227,7 @@ function insertRuntimeImport(code: string, importStmt: string): string {
  * Pass 1:   Direct `className="..."` / `class="..."` static strings
  * Pass 1.5: Template literal quasi (static) segments in `className:\`...\``
  * Pass 2:   `className:EXPR` patterns with ternary operators containing quoted strings
- * Pass 3:   Quoted string arguments to csszyx runtime helpers (_szMerge, _szIf, etc.)
+ * Pass 3:   Quoted string arguments to csszyx runtime helpers (_szMerge, _sz, etc.)
  *
  * @param code     bundled source code
  * @param mangleMap class-name → mangled-token mapping
@@ -1499,7 +1499,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         }
     }
 
-    // Pass 3: Mangle quoted string arguments to csszyx runtime helpers (_szMerge, _szIf, etc.)
+    // Pass 3: Mangle quoted string arguments to csszyx runtime helpers (_szMerge, _sz, etc.)
     // that did NOT get a className= prefix in Pass 1. These are compiled class strings
     // produced by the sz array/conditional compiler path — e.g. the static arg in:
     //   _szMerge("demo-preview", "p-8 flex gap-6...", { bg })

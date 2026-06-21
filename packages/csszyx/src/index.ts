@@ -3,7 +3,7 @@
  *
  * This is the main entry point that provides a unified API for:
  * - Core Rust WASM (encoding, mangling, checksum)
- * - Runtime helpers (_sz, _szIf, lite bundle)
+ * - Runtime helpers (_sz, _szMerge, lite bundle)
  * - Compiler logic (transform, manifest, recovery)
  * - Unplugin (Vite, Webpack, Rollup, esbuild)
  * - TypeScript types
@@ -31,9 +31,7 @@ export {
     _sz,
     _sz2,
     _sz3,
-    _szIf,
     _szMerge,
-    _szSwitch,
     abortHydration,
     endHydration,
     getSSRContext,
@@ -44,7 +42,7 @@ export {
     verifyMangleMapIntegrity,
 } from '@csszyx/runtime';
 // === Runtime Lite (minimal bundle) ===
-export { _sz as _szLite, _szIf as _szIfLite } from '@csszyx/runtime/lite';
+export { _sz as _szLite } from '@csszyx/runtime/lite';
 // === Types ===
 export type {
     CsszyxConfig,

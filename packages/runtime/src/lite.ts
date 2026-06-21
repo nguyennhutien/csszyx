@@ -85,23 +85,6 @@ export function _sz(...classes: SzInput[]): string {
 }
 
 /**
- * Conditional className helper.
- *
- * @param {boolean} condition - Condition to evaluate
- * @param {SzInput} truthyValue - Value when true
- * @param {SzInput} falsyValue - Value when false
- * @returns {string} Resolved className
- *
- * @example
- * ```typescript
- * _szIf(isActive, 'bg-green-500', 'bg-gray-500')
- * ```
- */
-export function _szIf(condition: boolean, truthyValue: SzInput, falsyValue?: SzInput): string {
-    return (condition ? truthyValue : falsyValue) || '';
-}
-
-/**
  * Merges className strings from compiled array sz props, deduplicating tokens.
  *
  * Emitted by the compiler for sz={[varA, cond && varB, ...]} when at least one

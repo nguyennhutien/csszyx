@@ -22,9 +22,7 @@ const FORBIDDEN_SYMBOLS = new Set([
     '_sz',
     '_sz2',
     '_sz3',
-    '_szIf',
     '_szMerge',
-    '_szSwitch',
     '__csszyx_runtime__',
 ]);
 
