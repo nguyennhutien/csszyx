@@ -27,6 +27,7 @@ const tables = {
     variantMap: extractStringObject('VARIANT_MAP'),
     booleanToClass: extractStringObject('BOOLEAN_TO_CLASS'),
     booleanShorthands: extractStringSet('BOOLEAN_SHORTHANDS'),
+    removedBooleanSugar: extractObjectKeys('REMOVED_BOOLEAN_SUGAR'),
     knownVariants: extractStringSet('KNOWN_VARIANTS'),
     ariaStates: extractStringSet('ARIA_STATES'),
 };
@@ -130,6 +131,7 @@ function renderRust({
     variantMap,
     booleanToClass,
     booleanShorthands,
+    removedBooleanSugar,
     knownVariants,
     ariaStates,
 }) {
@@ -170,6 +172,16 @@ ${renderMatchPatterns(booleanShorthands)}
     )
 }
 
+/// Returns true when a key is a removed boolean-sugar alias (flex/absolute/
+/// italic/...). A \`true\` value on such a key emits no class — the canonical
+/// key with a value is the only spelling.
+pub(crate) fn is_removed_boolean_sugar(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(removedBooleanSugar)}
+    )
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(
@@ -186,6 +198,22 @@ ${renderMatchPatterns(ariaStates)}
     )
 }
 `;
+}
+
+function extractObjectKeys(name) {
+    const declaration = findVariableDeclaration(name);
+    const initializer = declaration.initializer;
+    if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
+        fail(`${name} must be an object literal`);
+    }
+    const keys = [];
+    for (const property of initializer.properties) {
+        if (!ts.isPropertyAssignment(property)) {
+            fail(`${name} contains a non-property assignment`);
+        }
+        keys.push(propertyNameToString(property.name));
+    }
+    return keys;
 }
 
 function renderMatchArms(entries) {

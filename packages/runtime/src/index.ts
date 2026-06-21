@@ -15,12 +15,13 @@ import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 // Export SzInput type from concatenate
 export type { SzInput } from './concatenate.js';
 // Export concatenation helpers
-export { _sz, _sz2, _sz3, _szIf, _szMerge, _szSwitch } from './concatenate.js';
+export { _sz, _sz2, _sz3, _szMerge } from './concatenate.js';
 // Export hydration functions
 export {
     abortHydration,
     attemptCSRRecovery,
     clearHydrationErrors,
+    computeMangleChecksumAsync,
     disableCSRRecovery,
     enableCSRRecovery,
     endHydration,
@@ -34,16 +35,33 @@ export {
     isHydrating,
     isHydrationAborted,
     isSSREnvironment,
+    isValidMangleMap,
     loadMangleMapFromDOM,
     type MangleMap,
     type SSRContext,
     startHydration,
     validateHydrationClass,
     verifyMangleChecksum,
+    verifyMangleChecksumAsync,
     verifyMangleMapIntegrity,
 } from './hydration.js';
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
 export { __szColorVar } from './lite.js';
+// Box-model class routing + category-aware toolkit
+export {
+    type BoxRole,
+    type BoxSelector,
+    type Classification,
+    classify,
+    has,
+    omit,
+    pick,
+    type SplitBoxOptions,
+    type SplitBoxResult,
+    splitBox,
+} from './split-box.js';
+// Strip the sz prop before forwarding props to a host element
+export { stripSzProps } from './strip-sz-props.js';
 // Export variant authoring helper
 export { szv } from './variants.js';
 // Export verification functions

@@ -38,7 +38,7 @@ The CLI will modify your files in place (unless `--dry-run` is used).
 
 ```tsx
 <div sz={{ p: 4, bg: "red-500", hover: { bg: "red-600" } }}>
-  <span sz={{ color: "white", fontWeight: "bold" }}>Hello</span>
+  <span sz={{ color: "white", weight: "bold" }}>Hello</span>
 </div>
 ```
 
@@ -48,8 +48,8 @@ If you prefer to migrate manually or have complex dynamic classes, use the recom
 
 - **Padding/Margin**: `p-4` -> `p: 4`, `mx-2` -> `mx: 2`
 - **Colors**: `bg-red-500` -> `bg: 'red-500'`, `text-white` -> `color: 'white'`
-- **Layout**: `flex` -> `flex: true`, `grid` -> `display: 'grid'`
-- **Font**: `font-bold` -> `fontWeight: 'bold'`
+- **Layout**: `flex` -> `display: 'flex'`, `grid` -> `display: 'grid'`
+- **Font**: `font-bold` -> `weight: 'bold'`
 - **Modifiers**: `hover:` -> `hover: { ... }`, `md:` -> `md: { ... }`
 
 > **Note**: Always verify the changes after running the CLI, especially for complex string template literals.

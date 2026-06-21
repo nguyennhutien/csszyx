@@ -77,13 +77,13 @@ const fixtures: readonly CorpusFixture[] = [
     },
     {
         name: 'array sz attribute',
-        source: 'const A = () => <div sz={[{ flex: true }, { p: 4 }]} />;',
+        source: 'const A = () => <div sz={[{ display: "flex" }, { p: 4 }]} />;',
         expected: 'parity',
         note: 'fully static arrays compile without runtime',
     },
     {
         name: 'array logical object element',
-        source: 'const A = ({ isActive }) => <div sz={[{ flex: true }, isActive && { bg: "blue-500" }]} />;',
+        source: 'const A = ({ isActive }) => <div sz={[{ display: "flex" }, isActive && { bg: "blue-500" }]} />;',
         expected: 'surgical-parity',
         note: 'runtime array fallback still collects static logical object classes',
     },

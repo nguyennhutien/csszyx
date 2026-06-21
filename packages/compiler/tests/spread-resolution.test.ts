@@ -91,7 +91,7 @@ describe('spread resolution', () => {
     describe('sz={{ ...localVar, extra: val }}', () => {
         it('merges spread with additional inline props', () => {
             const src = `
-                const base = { flex: true, gap: 2 };
+                const base = { display: "flex", gap: 2 };
                 const A = () => <div sz={{ ...base, mt: 4 }} />;
             `;
             const result = transformSourceCode(src);
@@ -131,7 +131,7 @@ describe('spread resolution', () => {
     describe('sz={{ ...varA, ...varB }}', () => {
         it('merges two spread variables', () => {
             const src = `
-                const layout = { flex: true, gap: 4 };
+                const layout = { display: "flex", gap: 4 };
                 const color = { bg: 'blue-500', color: 'white' };
                 const A = () => <div sz={{ ...layout, ...color }} />;
             `;

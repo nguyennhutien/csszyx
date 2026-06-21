@@ -9,6 +9,7 @@
  */
 
 import type { SzObject } from '@csszyx/compiler/browser';
+import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/browser';
 
 /**
  *
@@ -22,9 +23,7 @@ type VariantSelection<V extends VariantSchema> = {
     [K in keyof V]?: keyof V[K] | null | undefined;
 };
 
-/**
- *
- */
+/** Configuration for a variant component: base styles, variants, and defaults. */
 interface SzvConfig<V extends VariantSchema> {
     base?: SzObject;
     variants: V;
@@ -38,11 +37,20 @@ interface SzvConfig<V extends VariantSchema> {
  *
  * @param {SzObject} target - Base object to merge into
  * @param {SzObject} source - Object whose values take precedence
+ * @param {number} depth - Current recursion depth (for depth bounding)
  * @returns {SzObject} New merged object (target and source are not mutated)
  */
-function deepMerge(target: SzObject, source: SzObject): SzObject {
+function deepMerge(target: SzObject, source: SzObject, depth = 0): SzObject {
+    if (depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
     const result: SzObject = { ...target };
     for (const key of Object.keys(source)) {
+        // Skip prototype-polluting keys — source may be JSON-derived (a runtime
+        // variant schema), where an own `__proto__` key would poison the prototype.
+        if (isForbiddenSzKey(key)) {
+            continue;
+        }
         const sv = source[key];
         const tv = target[key];
         if (
@@ -55,7 +63,7 @@ function deepMerge(target: SzObject, source: SzObject): SzObject {
             typeof tv === 'object' &&
             !Array.isArray(tv)
         ) {
-            result[key] = deepMerge(tv as SzObject, sv as SzObject);
+            result[key] = deepMerge(tv as SzObject, sv as SzObject, depth + 1);
         } else {
             result[key] = sv;
         }
@@ -78,7 +86,7 @@ function deepMerge(target: SzObject, source: SzObject): SzObject {
  * import { szv } from 'csszyx';
  *
  * const buttonSz = szv({
- *   base: { inlineFlex: true, items: 'center', rounded: 'md', fontWeight: 'medium' },
+ *   base: { display: 'inline-flex', items: 'center', rounded: 'md', weight: 'medium' },
  *   variants: {
  *     variant: {
  *       default: { bg: 'primary', text: 'primary-foreground' },
@@ -119,6 +127,9 @@ export function szv<V extends VariantSchema>(
         const resolved: Record<string, unknown> = { ...config.defaultVariants };
         if (selection) {
             for (const key of Object.keys(selection)) {
+                if (isForbiddenSzKey(key)) {
+                    continue;
+                }
                 const val = (selection as Record<string, unknown>)[key];
                 if (val !== null && val !== undefined) {
                     resolved[key] = val;

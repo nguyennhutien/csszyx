@@ -1,0 +1,37 @@
+# gitleaks configuration — secret scanning for the csszyx repo.
+#
+# The dev container holds a `gh` OAuth token and npm-publish credentials, so an
+# accidental commit of a secret is a real path. gitleaks runs in CI and as a
+# pre-commit hook (.pre-commit-config.yaml) to block secrets before they land.
+title = "csszyx gitleaks config"
+
+# Inherit gitleaks' full built-in ruleset; our rules/allowlist extend it.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Paths that carry sample/fixture data, not real secrets."
+paths = [
+  '''.*\.test\.(ts|tsx|js|jsx|mjs|cjs)$''',
+  '''(^|/)tests?/.*''',
+  '''(^|/)__tests__/.*''',
+  '''(^|/)fixtures?/.*''',
+  '''(^|/)snapshots?/.*''',
+  '''.*\.snap$''',
+  '''^scripts/corpus/.*''',
+  '''^docs/.*''',
+  '''^pnpm-lock\.yaml$''',
+]
+
+# High-value token shapes for this project, in addition to the defaults.
+[[rules]]
+id = "csszyx-npm-token"
+description = "npm access token"
+regex = '''npm_[A-Za-z0-9]{36}'''
+keywords = ["npm_"]
+
+[[rules]]
+id = "csszyx-github-token"
+description = "GitHub personal access / OAuth token"
+regex = '''gh[pousr]_[A-Za-z0-9]{36,}'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"]

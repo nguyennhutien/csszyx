@@ -110,3 +110,53 @@ jobs:
 
       - name: Audit Rust dependencies
         run: cargo audit
+
+  gitleaks:
+    name: gitleaks (secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so the scan covers every commit, not just the diff.
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Built-in token; no license/secret needed for a public repo.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  semgrep:
+    name: semgrep (SAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install semgrep
+        run: pip install semgrep
+
+      # Blocking: only the ERROR-severity custom rules (verified clean against
+      # the current tree). The WARNING/heuristic rules run informationally below.
+      - name: Custom rules (blocking)
+        run: semgrep scan --config rules/ --severity ERROR --error --metrics=off
+
+      # Informational: full custom set + registry rulesets. continue-on-error so
+      # pre-existing registry findings surface as annotations without breaking
+      # the build until a baseline is triaged.
+      - name: Custom + registry rulesets (informational)
+        continue-on-error: true
+        run: >
+          semgrep scan
+          --config rules/
+          --config p/javascript
+          --config p/typescript
+          --config p/react
+          --config p/owasp-top-ten
+          --config p/secrets
+          --metrics=off

@@ -8,9 +8,9 @@ const routePath = fileURLToPath(
 );
 
 const BASELINE_LITERAL =
-    "sz={{ p: 4, bg: 'sky-500', color: 'white', rounded: 'md', fontWeight: 'semibold' }}";
+    "sz={{ p: 4, bg: 'sky-500', color: 'white', rounded: 'md', weight: 'semibold' }}";
 const MUTATED_LITERAL =
-    "sz={{ p: 8, bg: 'sky-500', color: 'white', rounded: 'md', fontWeight: 'semibold' }}";
+    "sz={{ p: 8, bg: 'sky-500', color: 'white', rounded: 'md', weight: 'semibold' }}";
 
 async function readSource(): Promise<string> {
     return readFile(routePath, 'utf8');

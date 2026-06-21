@@ -169,3 +169,30 @@ function RenderedField({ uiSchema }) {
 
 This is the primary target use case: form renderers that store component definitions in
 JSON and need `hover:`, `dark:`, `responsive:` variants from user-supplied config.
+
+## Untrusted sz — clean it with `purifySz`
+
+When the sz object comes from a source you don't fully control (a CMS, a saved
+user theme, any JSON you didn't author), pass it through `purifySz` before
+`dynamic()` / `useSz`. It is allowlist-based: it keeps only keys csszyx
+recognizes, drops values that aren't safe CSS, blocks prototype-polluting keys,
+and bounds nesting depth.
+
+```ts
+import { dynamic, purifySz } from '@csszyx/dynamic';
+
+const className = dynamic(purifySz(untrustedSzFromJson));
+```
+
+```ts
+// Report what was dropped, and relax the default strict mode if you need url()/image-set()
+purifySz(input, {
+  strict: false,
+  onDrop: (path, reason) => console.warn(`dropped ${path}: ${reason}`),
+});
+```
+
+Compiled or hand-authored sz from your own code does **not** need `purifySz` —
+use it only at the untrusted boundary. See the
+[security guide](/docs/security/) for why the dynamic path is treated as an
+untrusted sink.

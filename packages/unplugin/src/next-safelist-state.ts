@@ -6,6 +6,8 @@ import * as path from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
+import { escapeHtmlAttribute } from './html-escape.js';
+
 const DEFAULT_RENAME_RETRIES = 5;
 const DEFAULT_RENAME_RETRY_DELAY_MS = 10;
 const DEFAULT_STALE_LOCK_MS = 30_000;
@@ -496,18 +498,6 @@ function renderTailwindSourceHtml(classNames: readonly string[]): string {
         return '<!-- csszyx Next safelist: empty -->\n';
     }
     return `${classNames.map(className => `<div class="${escapeHtmlAttribute(className)}"></div>`).join('\n')}\n`;
-}
-
-/**
- *
- * @param value
- */
-function escapeHtmlAttribute(value: string): string {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
 }
 
 /**

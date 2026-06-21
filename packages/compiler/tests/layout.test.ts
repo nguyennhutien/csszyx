@@ -111,40 +111,40 @@ describe('layout — display', () => {
         expect(t({ display: 'block' })).toBe('block');
     });
 
-    it('{ block: true } → block', () => {
-        expect(t({ block: true })).toBe('block');
+    it('{ display: "block" } → block', () => {
+        expect(t({ display: 'block' })).toBe('block');
     });
 
     it('{ display: "inline-block" } → inline-block', () => {
         expect(t({ display: 'inline-block' })).toBe('inline-block');
     });
 
-    it('{ inlineBlock: true } → inline-block', () => {
-        expect(t({ inlineBlock: true })).toBe('inline-block');
+    it('{ display: "inline-block" } → inline-block', () => {
+        expect(t({ display: 'inline-block' })).toBe('inline-block');
     });
 
     it('{ display: "flex" } → flex', () => {
         expect(t({ display: 'flex' })).toBe('flex');
     });
 
-    it('{ flex: true } → flex', () => {
-        expect(t({ flex: true })).toBe('flex');
+    it('{ display: "flex" } → flex', () => {
+        expect(t({ display: 'flex' })).toBe('flex');
     });
 
     it('{ display: "grid" } → grid', () => {
         expect(t({ display: 'grid' })).toBe('grid');
     });
 
-    it('{ grid: true } → grid', () => {
-        expect(t({ grid: true })).toBe('grid');
+    it('{ display: "grid" } → grid', () => {
+        expect(t({ display: 'grid' })).toBe('grid');
     });
 
     it('{ display: "none" } → hidden', () => {
         expect(t({ display: 'none' })).toBe('hidden');
     });
 
-    it('{ hidden: true } → hidden', () => {
-        expect(t({ hidden: true })).toBe('hidden');
+    it('{ display: "none" } → hidden', () => {
+        expect(t({ display: 'none' })).toBe('hidden');
     });
 
     it('{ srOnly: true } → sr-only (handled also in misc.test.ts)', () => {
@@ -177,8 +177,8 @@ describe('layout — isolation', () => {
         expect(t({ isolation: 'isolate' })).toBe('isolate');
     });
 
-    it('{ isolate: true } → isolate', () => {
-        expect(t({ isolate: true })).toBe('isolate');
+    it('{ isolation: "isolate" } → isolate', () => {
+        expect(t({ isolation: 'isolate' })).toBe('isolate');
     });
 
     it('{ isolation: "auto" } → isolation-auto', () => {
@@ -251,24 +251,24 @@ describe('layout — position', () => {
         expect(t({ position: 'static' })).toBe('static');
     });
 
-    it('{ static: true } → static', () => {
-        expect(t({ static: true })).toBe('static');
+    it('{ position: "static" } → static', () => {
+        expect(t({ position: 'static' })).toBe('static');
     });
 
     it('{ position: "absolute" } → absolute', () => {
         expect(t({ position: 'absolute' })).toBe('absolute');
     });
 
-    it('{ absolute: true } → absolute', () => {
-        expect(t({ absolute: true })).toBe('absolute');
+    it('{ position: "absolute" } → absolute', () => {
+        expect(t({ position: 'absolute' })).toBe('absolute');
     });
 
     it('{ position: "relative" } → relative', () => {
         expect(t({ position: 'relative' })).toBe('relative');
     });
 
-    it('{ relative: true } → relative', () => {
-        expect(t({ relative: true })).toBe('relative');
+    it('{ position: "relative" } → relative', () => {
+        expect(t({ position: 'relative' })).toBe('relative');
     });
 });
 
@@ -363,24 +363,24 @@ describe('layout — visibility', () => {
         expect(t({ visibility: 'visible' })).toBe('visible');
     });
 
-    it('{ visible: true } → visible', () => {
-        expect(t({ visible: true })).toBe('visible');
+    it('{ visibility: "visible" } → visible', () => {
+        expect(t({ visibility: 'visible' })).toBe('visible');
     });
 
     it('{ visibility: "hidden" } → invisible', () => {
         expect(t({ visibility: 'hidden' })).toBe('invisible');
     });
 
-    it('{ invisible: true } → invisible', () => {
-        expect(t({ invisible: true })).toBe('invisible');
+    it('{ visibility: "hidden" } → invisible', () => {
+        expect(t({ visibility: 'hidden' })).toBe('invisible');
     });
 
     it('{ visibility: "collapse" } → collapse', () => {
         expect(t({ visibility: 'collapse' })).toBe('collapse');
     });
 
-    it('{ collapse: true } → collapse', () => {
-        expect(t({ collapse: true })).toBe('collapse');
+    it('{ visibility: "collapse" } → collapse', () => {
+        expect(t({ visibility: 'collapse' })).toBe('collapse');
     });
 });
 

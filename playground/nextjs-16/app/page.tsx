@@ -13,10 +13,10 @@ export default function Home() {
                     p: 8,
                 }}
             >
-                <p sz={{ text: 'sm', fontWeight: 'semibold', color: 'blue-600', mb: 2 }}>
+                <p sz={{ text: 'sm', weight: 'semibold', color: 'blue-600', mb: 2 }}>
                     Next.js 16 Webpack mode
                 </p>
-                <h1 sz={{ text: '4xl', fontWeight: 'bold', color: 'slate-950', mb: 4 }}>
+                <h1 sz={{ text: '4xl', weight: 'bold', color: 'slate-950', mb: 4 }}>
                     csszyx Next.js 16 Playground
                 </h1>
                 <p sz={{ text: 'lg', color: 'slate-600', mb: 8 }}>
@@ -35,7 +35,7 @@ export default function Home() {
                         color: 'blue-950',
                     }}
                 >
-                    <span data-testid="next16-card-label" sz={{ fontWeight: 'semibold' }}>
+                    <span data-testid="next16-card-label" sz={{ weight: 'semibold' }}>
                         sz prop transformed and styled
                     </span>
                 </div>

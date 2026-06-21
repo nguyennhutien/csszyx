@@ -119,7 +119,7 @@ describe('variable naming edge cases', () => {
 
         it('multiple variables in array', () => {
             const src = `
-                const layout = { flex: true, gap: 4 };
+                const layout = { display: "flex", gap: 4 };
                 const color = { bg: 'blue-500' };
                 const A = () => <div sz={[layout, color]} />;
             `;
@@ -153,7 +153,7 @@ describe('variable naming edge cases', () => {
 
         it('all array items are variables (no runtime expected)', () => {
             const src = `
-                const layout = { flex: true };
+                const layout = { display: "flex" };
                 const spacing = { p: 4, gap: 2 };
                 const A = () => <div sz={[layout, spacing]} />;
             `;

@@ -89,6 +89,7 @@ export default defineConfig({
                     items: [
                         { label: 'Introduction', slug: 'docs/introduction' },
                         { label: 'Installation', slug: 'docs/installation' },
+                        { label: 'Monorepo & Content Scope', slug: 'docs/monorepo-content-scope' },
                         { label: 'Migrate from Tailwind', slug: 'docs/migrate' },
                         { label: 'Sz Props Basics', slug: 'docs/sz-props' },
                         { label: 'Variants & Modifiers', slug: 'docs/variants' },
@@ -99,6 +100,7 @@ export default defineConfig({
                     label: 'Guides',
                     items: [
                         { label: 'Reusing Styles', slug: 'docs/reusing-styles' },
+                        { label: 'Box Model Routing', slug: 'docs/box-model-splitbox' },
                         { label: 'Component Variants (szv)', slug: 'docs/szv' },
                         { label: 'Runtime Injection', slug: 'docs/dynamic' },
                         { label: 'CDN — Vanilla HTML', slug: 'docs/cdn-html' },

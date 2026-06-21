@@ -114,7 +114,7 @@ export default function SSRTestPage() {
                         href="/"
                         sz={{
                             color: 'blue-500',
-                            hover: { color: 'blue-700', underline: true },
+                            hover: { color: 'blue-700', decoration: 'underline' },
                         }}
                     >
                         &larr; Back to Home

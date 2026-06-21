@@ -9,8 +9,11 @@
  * Round-trip: TW class → invert PROPERTY_MAP prefix → sz object → transform() → compare
  *
  * Usage:
- *   pnpm corpus:check              — print report, exit 0 always
- *   pnpm corpus:check --fail-fast  — exit 1 if any gaps found
+ *   pnpm corpus:check                    — print report, exit 0 always
+ *   pnpm corpus:check --fail-fast        — exit 1 if any gap (broken or unmapped)
+ *   pnpm corpus:check --require-no-broken — exit 1 only on broken (wrong output);
+ *                                           ignores unmapped, which is advisory
+ *                                           coverage noise (component class names)
  *
  * This is a reporting tool, not a vitest test. Run on PRs to track coverage
  * trends. Add missing mappings to the relevant packages/compiler/tests/ file.
@@ -20,6 +23,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
 import { transform } from '../packages/compiler/src/transform.js';
 import { PROPERTY_MAP } from '../packages/compiler/src/transform-core.js';
 
@@ -99,8 +103,24 @@ type Result =
  * @returns covered | broken | unmapped result
  */
 function roundTrip(twClass: string): Result {
-    // Pass 1: try as a boolean property — handles absolute, fixed, relative,
-    // uppercase, invisible, etc. which live outside the PROPERTY_MAP prefix system.
+    // Pass 0: run the class through the migrate parser — the maintained inverse
+    // of the compiler. It resolves single-property value classes to their
+    // canonical key (absolute → { position: 'absolute' }, italic → { fontStyle:
+    // 'italic' }), which the removed boolean sugar no longer covers.
+    try {
+        const parsed = parseClass(twClass);
+        if (parsed) {
+            const sz = { [parsed.prop]: parsed.value } as Parameters<typeof transform>[0];
+            if (transform(sz).className === twClass) {
+                return { status: 'covered', szKey: parsed.prop };
+            }
+        }
+    } catch {
+        /* not migrate-parseable */
+    }
+
+    // Pass 1: try as a boolean shorthand (truncate, container, …) that maps a
+    // bare class to a true value.
     try {
         const result = transform({ [twClass]: true }).className;
         if (result === twClass) {
@@ -215,5 +235,15 @@ if (broken.length === 0 && unmapped.length === 0) {
 
 const failFast = process.argv.includes('--fail-fast');
 if (failFast && (broken.length > 0 || unmapped.length > 0)) {
+    process.exit(1);
+}
+
+// `broken` means a class maps but compiles to the WRONG output — a real
+// correctness risk worth gating. `unmapped` is a coverage trend (mostly
+// non-utility component class names like rt-*) and stays advisory. This mode
+// lets a gate require "no broken" without the unmapped noise; it could back a
+// required CI step or the verify:ci mirror.
+const requireNoBroken = process.argv.includes('--require-no-broken');
+if (requireNoBroken && broken.length > 0) {
     process.exit(1);
 }

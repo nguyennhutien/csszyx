@@ -79,7 +79,7 @@ export function MangleMapViewer() {
     if (!mangleMap) {
         return (
             <div sz={{ p: 8, textAlign: 'center' }}>
-                <h1 sz={{ text: '3xl', fontWeight: 'bold', color: 'white', mb: 4 }}>Mangle Map Viewer</h1>
+                <h1 sz={{ text: '3xl', weight: 'bold', color: 'white', mb: 4 }}>Mangle Map Viewer</h1>
                 <p sz={{ color: 'slate-400', text: 'lg' }}>
                     No mangle map found. Make sure the app is running in development mode
                     with mangling enabled.
@@ -93,21 +93,21 @@ export function MangleMapViewer() {
 
     return (
         <div>
-            <h1 sz={{ text: '3xl', fontWeight: 'bold', color: 'white', mb: 2 }}>Mangle Map Viewer</h1>
+            <h1 sz={{ text: '3xl', weight: 'bold', color: 'white', mb: 2 }}>Mangle Map Viewer</h1>
 
             {/* Stats */}
-            <div sz={{ flex: true, gap: 4, mb: 6, flexWrap: 'wrap' }}>
-                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, flex: true, flexDir: 'col' }}>
-                    <span sz={{ color: 'slate-400', text: 'xs', fontWeight: 'medium' }}>Total Classes</span>
-                    <span sz={{ color: 'white', text: '2xl', fontWeight: 'bold' }}>{entries.length}</span>
+            <div sz={{ display: 'flex', gap: 4, mb: 6, flexWrap: 'wrap' }}>
+                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, display: 'flex', flexDir: 'col' }}>
+                    <span sz={{ color: 'slate-400', text: 'xs', weight: 'medium' }}>Total Classes</span>
+                    <span sz={{ color: 'white', text: '2xl', weight: 'bold' }}>{entries.length}</span>
                 </div>
-                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, flex: true, flexDir: 'col' }}>
-                    <span sz={{ color: 'slate-400', text: 'xs', fontWeight: 'medium' }}>Total Bytes Saved</span>
-                    <span sz={{ color: 'green-400', text: '2xl', fontWeight: 'bold' }}>{totalSaved} bytes</span>
+                <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, display: 'flex', flexDir: 'col' }}>
+                    <span sz={{ color: 'slate-400', text: 'xs', weight: 'medium' }}>Total Bytes Saved</span>
+                    <span sz={{ color: 'green-400', text: '2xl', weight: 'bold' }}>{totalSaved} bytes</span>
                 </div>
                 {checksum && (
-                    <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, flex: true, flexDir: 'col' }}>
-                        <span sz={{ color: 'slate-400', text: 'xs', fontWeight: 'medium' }}>Checksum (SHA-256)</span>
+                    <div sz={{ bg: 'slate-800', rounded: 'lg', p: 4, display: 'flex', flexDir: 'col' }}>
+                        <span sz={{ color: 'slate-400', text: 'xs', weight: 'medium' }}>Checksum (SHA-256)</span>
                         <code sz={{ color: 'amber-400', text: 'sm', fontFamily: 'mono' }}>{checksum}</code>
                     </div>
                 )}
@@ -131,19 +131,19 @@ export function MangleMapViewer() {
                         <tr sz={{ bg: 'slate-800' }}>
                             <th
                                 onClick={() => toggleSort('original')}
-                                sz={{ textAlign: 'left', px: 4, py: 3, color: 'slate-300', fontWeight: 'medium', cursor: 'pointer' }}
+                                sz={{ textAlign: 'left', px: 4, py: 3, color: 'slate-300', weight: 'medium', cursor: 'pointer' }}
                             >
                                 Original Class{sortIndicator('original')}
                             </th>
                             <th
                                 onClick={() => toggleSort('mangled')}
-                                sz={{ textAlign: 'left', px: 4, py: 3, color: 'slate-300', fontWeight: 'medium', cursor: 'pointer' }}
+                                sz={{ textAlign: 'left', px: 4, py: 3, color: 'slate-300', weight: 'medium', cursor: 'pointer' }}
                             >
                                 Mangled{sortIndicator('mangled')}
                             </th>
                             <th
                                 onClick={() => toggleSort('savings')}
-                                sz={{ textAlign: 'right', px: 4, py: 3, color: 'slate-300', fontWeight: 'medium', cursor: 'pointer' }}
+                                sz={{ textAlign: 'right', px: 4, py: 3, color: 'slate-300', weight: 'medium', cursor: 'pointer' }}
                             >
                                 Length Saved{sortIndicator('savings')}
                             </th>
@@ -156,7 +156,7 @@ export function MangleMapViewer() {
                                     <code sz={{ color: 'sky-400' }}>{entry.original}</code>
                                 </td>
                                 <td sz={{ px: 4, py: 2 }}>
-                                    <code sz={{ color: 'emerald-400', fontWeight: 'bold' }}>{entry.mangled}</code>
+                                    <code sz={{ color: 'emerald-400', weight: 'bold' }}>{entry.mangled}</code>
                                 </td>
                                 <td sz={{ px: 4, py: 2, textAlign: 'right' }}>
                                     <span sz={{ color: entry.savings > 0 ? 'green-400' : 'slate-500' }}>

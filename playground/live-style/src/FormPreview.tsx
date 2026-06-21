@@ -14,7 +14,7 @@ export function FormPreview({ config }: FormPreviewProps) {
     useSzVars(configToVars(config), containerRef);
 
     return (
-        <div ref={containerRef} sz={{ flex: true, flexDir: 'col', items: 'center', justify: 'center', h: 'full', p: 8 }}>
+        <div ref={containerRef} sz={{ display: 'flex', flexDir: 'col', items: 'center', justify: 'center', h: 'full', p: 8 }}>
             <form
                 sz={{
                     bg: '--form-bg',
@@ -25,14 +25,14 @@ export function FormPreview({ config }: FormPreviewProps) {
                     w: 'full',
                     maxW: 'md',
                     flexDir: 'col',
-                    flex: true,
+                    display: 'flex',
                     gap: 5,
                 }}
                 style={{ boxShadow: 'var(--form-shadow)' }}
                 onSubmit={(e) => e.preventDefault()}
             >
                 <div sz={{ mb: 2 }}>
-                    <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: '--label-color', mb: 1 }}>
+                    <h2 sz={{ text: 'xl', weight: 'semibold', color: '--label-color', mb: 1 }}>
                         Contact Us
                     </h2>
                     <p style={{ color: 'var(--label-color)', fontSize: 'var(--label-size)', opacity: 0.6 }}>
@@ -44,7 +44,7 @@ export function FormPreview({ config }: FormPreviewProps) {
                 <Field label="Email Address" type="email" placeholder="john@example.com" />
                 <Field label="Company" type="text" placeholder="Acme Inc." />
 
-                <div sz={{ flex: true, flexDir: 'col', gap: 1 }}>
+                <div sz={{ display: 'flex', flexDir: 'col', gap: 1 }}>
                     <label style={{ color: 'var(--label-color)', fontSize: 'var(--label-size)', fontWeight: 500 }}>
                         Message
                     </label>
@@ -95,7 +95,7 @@ export function FormPreview({ config }: FormPreviewProps) {
 
 function Field({ label, type, placeholder }: { label: string; type: string; placeholder: string }) {
     return (
-        <div sz={{ flex: true, flexDir: 'col', gap: 1 }}>
+        <div sz={{ display: 'flex', flexDir: 'col', gap: 1 }}>
             <label style={{ color: 'var(--label-color)', fontSize: 'var(--label-size)', fontWeight: 500 }}>
                 {label}
             </label>

@@ -117,7 +117,7 @@ export default function SearchModal({ isOpen, onClose }: Props) {
     return (
         <div
             className="search-overlay"
-            sz={{ fixed: true, inset: 0, z: 100, flex: true, items: 'start', justify: 'center', pt: 24, px: 4 }}
+            sz={{ position: 'fixed', inset: 0, z: 100, display: 'flex', items: 'start', justify: 'center', pt: 24, px: 4 }}
             onClick={onClose}
         >
             <div
@@ -126,7 +126,7 @@ export default function SearchModal({ isOpen, onClose }: Props) {
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Input row */}
-                <div className="search-input-row" sz={{ flex: true, items: 'center', px: 4, gap: 3 }}>
+                <div className="search-input-row" sz={{ display: 'flex', items: 'center', px: 4, gap: 3 }}>
                     <span
                         className="material-symbols-outlined search-icon"
                         sz={{ shrink: 0 }}
@@ -150,7 +150,7 @@ export default function SearchModal({ isOpen, onClose }: Props) {
                                 <a
                                     href={result.url}
                                     className="search-result"
-                                    sz={{ block: true, px: 4, py: 3 }}
+                                    sz={{ display: 'block', px: 4, py: 3 }}
                                     onClick={onClose}
                                 >
                                     <div className="search-result-title">{result.meta.title}</div>

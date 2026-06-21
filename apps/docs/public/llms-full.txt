@@ -48,19 +48,36 @@ module.exports = {
 <div className="flex items-center p-4 bg-blue-500 rounded-lg" />
 
 // After (CSSzyx)
-<div sz={{ flex: true, items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
+<div sz={{ display: 'flex', items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
 ```
 
 The compiler transforms `sz` props → Tailwind classes at build time. The browser never sees `sz`.
 
-### Boolean shorthand
+### One key per property
 
-Many display/position properties accept `true`:
+Single-property props use their canonical key with a value — one way, no
+aliases. display/position/visibility/isolation/textTransform/fontStyle/
+fontSmoothing/decoration:
 
 ```tsx
-<div sz={{ flex: true, relative: true, hidden: true }} />
-// → className="flex relative hidden"
+<div
+  sz={{
+    display: "flex",
+    position: "relative",
+    visibility: "hidden",
+    fontStyle: "italic",
+  }}
+/>
+// → className="flex relative invisible italic"
 ```
+
+Boolean aliases (`{ flex: true }`, `{ italic: true }`, `{ uppercase: true }`)
+were **removed** — they emit nothing and warn; run `csszyx migrate` to rewrite.
+Each property has exactly one key, so it can never be set twice in one object.
+
+Genuinely on/off utilities — composite (`truncate`, `srOnly`), stackable
+font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
+`ring`, `blur`), plugin (`container`, `prose`) — stay boolean.
 
 ### Arbitrary values
 
@@ -162,7 +179,7 @@ sz={{ group: { card: { data: { active: { color: 'blue-600' } } } } }}
 sz={{ group: { aria: { expanded: { color: 'blue-600' } } } }}
 // → className="group-aria-expanded:text-blue-600"
 
-sz={{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }}
+sz={{ group: { aria: { 'current=page': { weight: 'bold' } } } }}
 // → className="group-aria-[current=page]:font-bold"
 
 // peer-data / peer-aria work the same way
@@ -195,7 +212,7 @@ sz={{ placeholder: { color: 'gray-400' } }}
 ### Container queries
 
 ```tsx
-sz={{ '@container': true, '@md': { flex: true } }}
+sz={{ '@container': true, '@md': { display: 'flex' } }}
 // → className="@container @md:flex"
 ```
 
@@ -221,7 +238,29 @@ sz={{ '@container': true, '@md': { flex: true } }}
 <div className="p-4" sz={{ m: 2 }} />  // Wrong — use sz only
 
 // ✅ Correct
-{ p: 4, bg: 'blue-500', flex: true, flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
+{ p: 4, bg: 'blue-500', display: 'flex', flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
+```
+
+## Type safety — unknown keys are TypeScript errors
+
+The `sz` prop type is **closed**: a key that is not a known sz prop or variant is a
+compile error, so typos and legacy CSS-property names are caught by `tsc` (run
+`tsc --noEmit` in CI to enforce it).
+
+```tsx
+{ bgColor: 'red-500' }   // ❌ tsc error — unknown key; canonical is { bg: 'red-500' }
+
+// Forcing a brand-new Tailwind utility csszyx has no key for yet — opt out explicitly:
+// @ts-expect-error - forward-compat utility not yet in csszyx
+{ someNewUtility: 'x' }  // ✅ allowed; the runtime still emits the class
+```
+
+Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
+`{ '[&>span]': {…} }`. **Custom breakpoints are typed from your CSS** — define one once in
+Tailwind `@theme` and csszyx auto-generates the type:
+
+```css
+@theme { --breakpoint-tablet: 40rem; }   /* → { tablet: { p: 6 } } now type-checks */
 ```
 
 ## Full Snippets Reference
@@ -241,7 +280,7 @@ Simple property-value mappings.
 | **Text Color**       | `color: white`                           | `text-white`      | `{ color: 'white' }`  |
 | **Border Radius**    | `border-radius: var(--radius-lg)`        | `rounded-lg`      | `{ rounded: 'lg' }`   |
 | **Box Shadow**       | `box-shadow: var(--shadow-xl)`           | `shadow-xl`       | `{ shadow: 'xl' }`    |
-| **Flex Container**   | `display: flex`                          | `flex`            | `{ flex: true }`      |
+| **Flex Container**   | `display: flex`                          | `flex`            | `{ display: 'flex' }` |
 
 ## State Modifiers (Hover, Focus)
 
@@ -258,11 +297,11 @@ Handling pseudo-classes using nested objects or string prefixes.
 
 Handling media queries via properties.
 
-| Concept              | CSS Rule                            | Tailwind v4 Class | `sz` Prop (Object Syntax) |
-| :------------------- | :---------------------------------- | :---------------- | :------------------------ |
-| **Small Breakpoint** | `@media (width >= 40rem) { (etc) }` | `sm:grid-cols-3`  | `{ sm: { gridCols: 3 } }` |
-| **Medium Layout**    | `@media (width >= 48rem) { (etc) }` | `md:flex`         | `{ md: { flex: true } }`  |
-| **Large Spacing**    | `@media (width >= 64rem) { (etc) }` | `lg:px-8`         | `{ lg: { px: 8 } }`       |
+| Concept              | CSS Rule                            | Tailwind v4 Class | `sz` Prop (Object Syntax)     |
+| :------------------- | :---------------------------------- | :---------------- | :---------------------------- |
+| **Small Breakpoint** | `@media (width >= 40rem) { (etc) }` | `sm:grid-cols-3`  | `{ sm: { gridCols: 3 } }`     |
+| **Medium Layout**    | `@media (width >= 48rem) { (etc) }` | `md:flex`         | `{ md: { display: 'flex' } }` |
+| **Large Spacing**    | `@media (width >= 64rem) { (etc) }` | `lg:px-8`         | `{ lg: { px: 8 } }`           |
 
 ## Dark Mode
 
@@ -341,9 +380,9 @@ Standard interactive states.
 | **Hover, Focus, Active** | `hover:bg-red focus:bg-blue active:bg-green` | `{ hover: { bg: 'red' }, focus: { bg: 'blue' }, active: { bg: 'green' } }` |                             |
 | **First/Last Child**     | `first:pt-0 last:pb-0`                       | `{ first: { pt: 0 }, last: { pb: 0 } }`                                    |                             |
 | **Odd/Even Child**       | `odd:bg-white even:bg-gray`                  | `{ odd: { bg: 'white' }, even: { bg: 'gray' } }`                           |                             |
-| **First of Type**        | `first-of-type:block`                        | `{ firstOfType: { block: true } }`                                         | **Sugar**: CamelCase alias. |
-| **Only Child**           | `only:block`                                 | `{ only: { block: true } }`                                                |                             |
-| **Empty**                | `empty:hidden`                               | `{ empty: { hidden: true } }`                                              |                             |
+| **First of Type**        | `first-of-type:block`                        | `{ firstOfType: { display: 'block' } }`                                    | **Sugar**: CamelCase alias. |
+| **Only Child**           | `only:block`                                 | `{ only: { display: 'block' } }`                                           |                             |
+| **Empty**                | `empty:hidden`                               | `{ empty: { display: 'none' } }`                                           |                             |
 | **Visited**              | `visited:text-purple`                        | `{ visited: { color: 'purple' } }`                                         |                             |
 | **Focus Within**         | `focus-within:ring`                          | `{ focusWithin: { ring: true } }`                                          | **Sugar**: CamelCase alias. |
 | **Focus Visible**        | `focus-visible:ring`                         | `{ focusVisible: { ring: true } }`                                         | **Sugar**: CamelCase alias. |
@@ -353,11 +392,11 @@ Standard interactive states.
 
 Styling based on descendants.
 
-| Concept            | Tailwind v4 Class           | `sz` Prop (Object Syntax)                       | Note                                  |
-| :----------------- | :-------------------------- | :---------------------------------------------- | :------------------------------------ |
-| **Has Descendant** | `has-[img]:bg-blue`         | `{ has: { img: { bg: 'blue' } } }`              | **Sugar**: Nested selector.           |
-| **Has State**      | `has-[:checked]:bg-blue`    | `{ has: { checked: { bg: 'blue' } } }`          | **Sugar**: Auto-detects pseudo-class. |
-| **Arbitrary Has**  | `has-[.custom-class]:block` | `{ has: { '.custom-class': { block: true } } }` |                                       |
+| Concept            | Tailwind v4 Class           | `sz` Prop (Object Syntax)                            | Note                                  |
+| :----------------- | :-------------------------- | :--------------------------------------------------- | :------------------------------------ |
+| **Has Descendant** | `has-[img]:bg-blue`         | `{ has: { img: { bg: 'blue' } } }`                   | **Sugar**: Nested selector.           |
+| **Has State**      | `has-[:checked]:bg-blue`    | `{ has: { checked: { bg: 'blue' } } }`               | **Sugar**: Auto-detects pseudo-class. |
+| **Arbitrary Has**  | `has-[.custom-class]:block` | `{ has: { '.custom-class': { display: 'block' } } }` |                                       |
 
 ## Styling based on parent state (Groups)
 
@@ -369,76 +408,76 @@ Styling children based on parent `group` class.
 | **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                        |                                      |
 | **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                       |                                      |
 | **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`              | **Sugar**: Scope name as nested key. |
-| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { block: true } } }`                 |                                      |
-| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { block: true } } } }`                      |                                      |
+| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { display: 'block' } } }`            |                                      |
+| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { display: 'block' } } } }`                 |                                      |
 | **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`              | **Sugar**: Nested `data` key.        |
 | **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
-| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { block: true } } } }`          | `=` in key → bracket form always.    |
-| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { block: true } } } }`              | Standard states: bare form.          |
-| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }` | Non-standard: bracket form.          |
+| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`     | `=` in key → bracket form always.    |
+| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`         | Standard states: bare form.          |
+| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }` | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 
 Styling based on previous sibling `peer` class.
 
-| Concept                     | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                  | Note                                 |
-| :-------------------------- | :---------------------------------- | :--------------------------------------------------------- | :----------------------------------- |
-| **Peer Hover**              | `peer-hover:text-white`             | `{ peer: { hover: { color: 'white' } } }`                  | **Sugar**: Nested scope.             |
-| **Peer Checked**            | `peer-checked:bg-blue`              | `{ peer: { checked: { bg: 'blue' } } }`                    |                                      |
-| **Differentiating Peers**   | `peer-checked/name:bg-blue`         | `{ peer: { name: { checked: { bg: 'blue' } } } }`          | **Sugar**: Scope name as nested key. |
-| **Arbitrary Peers**         | `peer-[.is-dirty]:block`            | `{ peer: { '.is-dirty': { block: true } } }`               |                                      |
-| **Peer Data**               | `peer-data-[active]:text-blue`      | `{ peer: { data: { active: { color: 'blue' } } } }`        | **Sugar**: Nested `data` key.        |
-| **Peer Data (value match)** | `peer-data-[state=open]:block`      | `{ peer: { data: { 'state=open': { block: true } } } }`    | `=` in key → bracket form always.    |
-| **Peer ARIA**               | `peer-aria-checked:bg-blue`         | `{ peer: { aria: { checked: { bg: 'blue' } } } }`          | Standard states: bare form.          |
-| **Peer ARIA (arbitrary)**   | `peer-aria-[invalid=true]:text-red` | `{ peer: { aria: { 'invalid=true': { color: 'red' } } } }` | Non-standard: bracket form.          |
+| Concept                     | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                    | Note                                 |
+| :-------------------------- | :---------------------------------- | :----------------------------------------------------------- | :----------------------------------- |
+| **Peer Hover**              | `peer-hover:text-white`             | `{ peer: { hover: { color: 'white' } } }`                    | **Sugar**: Nested scope.             |
+| **Peer Checked**            | `peer-checked:bg-blue`              | `{ peer: { checked: { bg: 'blue' } } }`                      |                                      |
+| **Differentiating Peers**   | `peer-checked/name:bg-blue`         | `{ peer: { name: { checked: { bg: 'blue' } } } }`            | **Sugar**: Scope name as nested key. |
+| **Arbitrary Peers**         | `peer-[.is-dirty]:block`            | `{ peer: { '.is-dirty': { display: 'block' } } }`            |                                      |
+| **Peer Data**               | `peer-data-[active]:text-blue`      | `{ peer: { data: { active: { color: 'blue' } } } }`          | **Sugar**: Nested `data` key.        |
+| **Peer Data (value match)** | `peer-data-[state=open]:block`      | `{ peer: { data: { 'state=open': { display: 'block' } } } }` | `=` in key → bracket form always.    |
+| **Peer ARIA**               | `peer-aria-checked:bg-blue`         | `{ peer: { aria: { checked: { bg: 'blue' } } } }`            | Standard states: bare form.          |
+| **Peer ARIA (arbitrary)**   | `peer-aria-[invalid=true]:text-red` | `{ peer: { aria: { 'invalid=true': { color: 'red' } } } }`   | Non-standard: bracket form.          |
 
 ## :not()
 
 Inverse conditions.
 
-| Concept          | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                    | Note |
-| :--------------- | :---------------------------------- | :----------------------------------------------------------- | :--- |
-| **Not Hover**    | `not-hover:opacity-75`              | `{ not: { hover: { opacity: 75 } } }`                        |      |
-| **Not First**    | `not-first:mt-4`                    | `{ not: { first: { mt: 4 } } }`                              |      |
-| **Not Supports** | `not-supports-[display:grid]:block` | `{ not: { supports: { 'display:grid': { block: true } } } }` |      |
+| Concept          | Tailwind v4 Class                   | `sz` Prop (Object Syntax)                                         | Note |
+| :--------------- | :---------------------------------- | :---------------------------------------------------------------- | :--- |
+| **Not Hover**    | `not-hover:opacity-75`              | `{ not: { hover: { opacity: 75 } } }`                             |      |
+| **Not First**    | `not-first:mt-4`                    | `{ not: { first: { mt: 4 } } }`                                   |      |
+| **Not Supports** | `not-supports-[display:grid]:block` | `{ not: { supports: { 'display:grid': { display: 'block' } } } }` |      |
 
 ## Pseudo-elements
 
 Advanced content styling.
 
-| Concept          | Tailwind v4 Class       | `sz` Prop (Object Syntax)            | Note                  |
-| :--------------- | :---------------------- | :----------------------------------- | :-------------------- |
-| **Before/After** | `before:content-['']`   | `{ before: { (etc) } }`              | Defaults used.        |
-| **Placeholder**  | `placeholder:text-gray` | `{ placeholder: { color: 'gray' } }` |                       |
-| **File**         | `file:border`           | `{ file: { border: true } }`         |                       |
-| **Marker**       | `marker:text-blue`      | `{ marker: { color: 'blue' } }`      |                       |
-| **Selection**    | `selection:bg-pink`     | `{ selection: { bg: 'pink' } }`      |                       |
-| **First Line**   | `first-line:uppercase`  | `{ firstLine: { uppercase: true } }` | **Sugar**: CamelCase. |
-| **First Letter** | `first-letter:text-7xl` | `{ firstLetter: { text: '7xl' } }`   | **Sugar**: CamelCase. |
-| **Backdrop**     | `backdrop:blur`         | `{ backdrop: { blur: true } }`       |                       |
+| Concept          | Tailwind v4 Class       | `sz` Prop (Object Syntax)                       | Note                  |
+| :--------------- | :---------------------- | :---------------------------------------------- | :-------------------- |
+| **Before/After** | `before:content-['']`   | `{ before: { (etc) } }`                         | Defaults used.        |
+| **Placeholder**  | `placeholder:text-gray` | `{ placeholder: { color: 'gray' } }`            |                       |
+| **File**         | `file:border`           | `{ file: { border: true } }`                    |                       |
+| **Marker**       | `marker:text-blue`      | `{ marker: { color: 'blue' } }`                 |                       |
+| **Selection**    | `selection:bg-pink`     | `{ selection: { bg: 'pink' } }`                 |                       |
+| **First Line**   | `first-line:uppercase`  | `{ firstLine: { textTransform: 'uppercase' } }` | **Sugar**: CamelCase. |
+| **First Letter** | `first-letter:text-7xl` | `{ firstLetter: { text: '7xl' } }`              | **Sugar**: CamelCase. |
+| **Backdrop**     | `backdrop:blur`         | `{ backdrop: { blur: true } }`                  |                       |
 
 ## Media & Feature Queries
 
 Environment-based styling.
 
-| Concept               | Tailwind v4 Class                 | `sz` Prop (Object Syntax)                           | Note                          |
-| :-------------------- | :-------------------------------- | :-------------------------------------------------- | :---------------------------- |
-| **Breakpoints**       | `md:block lg:flex`                | `{ md: { block: true }, lg: { flex: true } }`       |                               |
-| **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { block: true }, '@lg': { flex: true } }` | **Note**: String key for `@`. |
-| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { hidden: true } }`                | **Sugar**: CamelCase.         |
-| **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                |                               |
-| **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`         | **Sugar**: CamelCase.         |
-| **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`              | **Sugar**: CamelCase.         |
-| **Pointer**           | `pointer-coarse:p-4`              | `{ pointerCoarse: { p: 4 } }`                       | **Sugar**: CamelCase.         |
-| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`         | v4.1. **Sugar**: CamelCase.   |
-| **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`       | v4.1. Form validation state.  |
-| **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`       | v4.1. Form validation state.  |
-| **Details Content**   | `details-content:block`           | `{ detailsContent: { block: true } }`               | v4.1. **Sugar**: CamelCase.   |
-| **Print**             | `print:hidden`                    | `{ print: { hidden: true } }`                       |                               |
-| **Orientation**       | `portrait:hidden`                 | `{ portrait: { hidden: true } }`                    |                               |
-| **Scripting**         | `noscript:block`                  | `{ noscript: { block: true } }`                     |                               |
-| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { grid: true } } }`  |                               |
-| **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                      |                               |
+| Concept               | Tailwind v4 Class                 | `sz` Prop (Object Syntax)                                     | Note                          |
+| :-------------------- | :-------------------------------- | :------------------------------------------------------------ | :---------------------------- |
+| **Breakpoints**       | `md:block lg:flex`                | `{ md: { display: 'block' }, lg: { display: 'flex' } }`       |                               |
+| **Container Queries** | `@md:block @lg:flex`              | `{ '@md': { display: 'block' }, '@lg': { display: 'flex' } }` | **Note**: String key for `@`. |
+| **Reduced Motion**    | `motion-reduce:hidden`            | `{ motionReduce: { display: 'none' } }`                       | **Sugar**: CamelCase.         |
+| **Prefers Contrast**  | `contrast-more:border`            | `{ contrastMore: { border: true } }`                          |                               |
+| **Forced Colors**     | `forced-colors:border-gray`       | `{ forcedColors: { borderColor: 'gray' } }`                   | **Sugar**: CamelCase.         |
+| **Inverted Colors**   | `inverted-colors:invert`          | `{ invertedColors: { invert: true } }`                        | **Sugar**: CamelCase.         |
+| **Pointer**           | `pointer-coarse:p-4`              | `{ pointerCoarse: { p: 4 } }`                                 | **Sugar**: CamelCase.         |
+| **Any-Pointer**       | `any-pointer-fine:cursor-pointer` | `{ anyPointerFine: { cursor: 'pointer' } }`                   | v4.1. **Sugar**: CamelCase.   |
+| **User Valid**        | `user-valid:border-green-500`     | `{ userValid: { borderColor: 'green-500' } }`                 | v4.1. Form validation state.  |
+| **User Invalid**      | `user-invalid:border-red-500`     | `{ userInvalid: { borderColor: 'red-500' } }`                 | v4.1. Form validation state.  |
+| **Details Content**   | `details-content:block`           | `{ detailsContent: { display: 'block' } }`                    | v4.1. **Sugar**: CamelCase.   |
+| **Print**             | `print:hidden`                    | `{ print: { display: 'none' } }`                              |                               |
+| **Orientation**       | `portrait:hidden`                 | `{ portrait: { display: 'none' } }`                           |                               |
+| **Scripting**         | `noscript:block`                  | `{ noscript: { display: 'block' } }`                          |                               |
+| **Supports**          | `supports-[display:grid]:grid`    | `{ supports: { 'display:grid': { display: 'grid' } } }`       |                               |
+| **Starting Style**    | `starting:opacity-0`              | `{ starting: { opacity: 0 } }`                                |                               |
 
 ## Attribute Selectors
 
@@ -476,8 +515,8 @@ Targeting specific screen sizes and container states.
 | Concept                  | CSS Rule                    | Tailwind v4 Class         | `sz` Prop (Object Syntax)                         | Note                                |
 | :----------------------- | :-------------------------- | :------------------------ | :------------------------------------------------ | :---------------------------------- |
 | **Mobile First**         | `min-width: (etc)`          | `w-full md:w-1/2`         | `{ w: 'full', md: { w: '1/2' } }`                 | Unprefixed utilities target mobile. |
-| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { flex: true } } }`               | **Sugar**: CamelCase for `max-xl`.  |
-| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { flex: true } } }`               | Target specific range.              |
+| **Breakpoint Range**     | `768px <= width < 1280px`   | `md:max-xl:flex`          | `{ md: { maxXl: { display: 'flex' } } }`          | **Sugar**: CamelCase for `max-xl`.  |
+| **Single Breakpoint**    | `md only`                   | `md:max-lg:flex`          | `{ md: { maxLg: { display: 'flex' } } }`          | Target specific range.              |
 | **Custom Breakpoint**    | `@media (min-width: 320px)` | `min-[320px]:text-center` | `{ min: { '[320px]': { textAlign: 'center' } } }` | Arbitrary one-off breakpoint.       |
 | **Max-Width Breakpoint** | `@media (max-width: 600px)` | `max-[600px]:bg-sky-300`  | `{ max: { '[600px]': { bg: 'sky-300' } } }`       |                                     |
 
@@ -497,15 +536,15 @@ The `container` class sets `width: 100%` and applies responsive max-widths.
 
 The `@container` class enables CSS container queries.
 
-| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                   | Note                                      |
-| :----------------------- | :------------------- | :------------------------------------------ | :---------------------------------------- |
-| **Mark Container**       | `@container`         | `{ '@container': true }`                    |                                           |
-| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`               | **Sugar**: Value string = container name. |
-| **Container Breakpoint** | `@md:flex`           | `{ '@md': { flex: true } }`                 | **Note**: `@` prefix in key.              |
-| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { block: true } } }`   | **Sugar**: Nest name inside query key.    |
-| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { block: true } } }`  |                                           |
-| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { flex: true } } }` |                                           |
-| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                            |                                           |
+| Concept                  | Tailwind v4 Class    | `sz` Prop (Object Syntax)                        | Note                                      |
+| :----------------------- | :------------------- | :----------------------------------------------- | :---------------------------------------- |
+| **Mark Container**       | `@container`         | `{ '@container': true }`                         |                                           |
+| **Named Container**      | `@container/sidebar` | `{ '@container': 'sidebar' }`                    | **Sugar**: Value string = container name. |
+| **Container Breakpoint** | `@md:flex`           | `{ '@md': { display: 'flex' } }`                 | **Note**: `@` prefix in key.              |
+| **Named Query**          | `@md/sidebar:block`  | `{ '@md': { sidebar: { display: 'block' } } }`   | **Sugar**: Nest name inside query key.    |
+| **Container Range**      | `@sm:@max-md:block`  | `{ '@sm': { '@maxMd': { display: 'block' } } }`  |                                           |
+| **Arbitrary Query**      | `@min-[475px]:flex`  | `{ '@min': { '[475px]': { display: 'flex' } } }` |                                           |
+| **Container Units**      | `w-[50cqw]`          | `{ w: '50cqw' }`                                 |                                           |
 
 ## Dark mode
 
@@ -836,14 +875,14 @@ Controlling the width of an element's borders.
 
 Controlling the color of an element's borders.
 
-| Concept               | CSS Rule                      | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
-| :-------------------- | :---------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
-| **Color**             | `border-color: currentColor`  | `border-red-500`    | `{ borderColor: 'red-500' }`                    |                                            |
-| **Opacity**           | `border-color: currentColor`  | `border-red-500/50` | `{ borderColor: { color: 'red-500', op: 50 } }` |                                            |
-| **CSS Var + Opacity** | `border-color: var(--c) / 50` | `border-(--c)/50`   | `{ borderColor: { color: '--c', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`. |
-| **X/Y/T/R/B/L**       | `border-color: currentColor`  | `border-t-red-500`  | `{ borderTColor: 'red-500' }`                   | Verbose keys to avoid conflict with Width. |
-| **Arbitrary**         | `border-color: currentColor`  | `border-[#50d71e]`  | `{ borderColor: '#50d71e' }`                    |                                            |
-| **Variable**          | `border-color: var(--c)`      | `border-(--c)`      | `{ borderColor: '--c' }`                        |                                            |
+| Concept               | CSS Rule                                                                   | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
+| :-------------------- | :------------------------------------------------------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
+| **Color**             | `border-color: var(--color-red-500)`                                       | `border-red-500`    | `{ borderColor: 'red-500' }`                    |                                            |
+| **Opacity**           | `border-color: color-mix(in oklab, var(--color-red-500) 50%, transparent)` | `border-red-500/50` | `{ borderColor: { color: 'red-500', op: 50 } }` |                                            |
+| **CSS Var + Opacity** | `border-color: var(--c) / 50`                                              | `border-(--c)/50`   | `{ borderColor: { color: '--c', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`. |
+| **X/Y/T/R/B/L**       | `border-top-color: var(--color-red-500)`                                   | `border-t-red-500`  | `{ borderTColor: 'red-500' }`                   | Verbose keys to avoid conflict with Width. |
+| **Arbitrary**         | `border-color: #50d71e`                                                    | `border-[#50d71e]`  | `{ borderColor: '#50d71e' }`                    |                                            |
+| **Variable**          | `border-color: var(--c)`                                                   | `border-(--c)`      | `{ borderColor: '--c' }`                        |                                            |
 
 ## Border Style
 
@@ -877,13 +916,13 @@ Utilities for controlling the border width between elements.
 
 Utilities for controlling the border color between elements.
 
-| Concept               | CSS Rule                      | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
-| :-------------------- | :---------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
-| **Color**             | `border-color: currentColor`  | `divide-red-500`    | `{ divideColor: 'red-500' }`                    |                                            |
-| **Opacity**           | `border-color: currentColor`  | `divide-red-500/50` | `{ divideColor: { color: 'red-500', op: 50 } }` |                                            |
-| **CSS Var + Opacity** | `border-color: var(--c) / 50` | `divide-(--c)/50`   | `{ divideColor: { color: '--c', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`. |
-| **Arbitrary**         | `border-color: currentColor`  | `divide-[#50d71e]`  | `{ divideColor: '#50d71e' }`                    |                                            |
-| **Variable**          | `border-color: var(--c)`      | `divide-(--c)`      | `{ divideColor: '--c' }`                        |                                            |
+| Concept               | CSS Rule                                                                   | Tailwind v4 Class   | `sz` Prop (Object Syntax)                       | Note                                       |
+| :-------------------- | :------------------------------------------------------------------------- | :------------------ | :---------------------------------------------- | :----------------------------------------- |
+| **Color**             | `border-color: var(--color-red-500)`                                       | `divide-red-500`    | `{ divideColor: 'red-500' }`                    | Applied between children.                  |
+| **Opacity**           | `border-color: color-mix(in oklab, var(--color-red-500) 50%, transparent)` | `divide-red-500/50` | `{ divideColor: { color: 'red-500', op: 50 } }` |                                            |
+| **CSS Var + Opacity** | `border-color: var(--c) / 50`                                              | `divide-(--c)/50`   | `{ divideColor: { color: '--c', op: 50 } }`     | CSS variables are auto-wrapped in `(...)`. |
+| **Arbitrary**         | `border-color: #50d71e`                                                    | `divide-[#50d71e]`  | `{ divideColor: '#50d71e' }`                    |                                            |
+| **Variable**          | `border-color: var(--c)`                                                   | `divide-(--c)`      | `{ divideColor: '--c' }`                        |                                            |
 
 ## Divide Style
 
@@ -911,11 +950,11 @@ Controlling the width of an element's outline.
 
 Controlling the color of an element's outline.
 
-| Concept       | CSS Rule                      | Tailwind v4 Class   | `sz` Prop (Object Syntax)     | Note |
-| :------------ | :---------------------------- | :------------------ | :---------------------------- | :--- |
-| **Color**     | `outline-color: currentColor` | `outline-red-500`   | `{ outlineColor: 'red-500' }` |      |
-| **Arbitrary** | `outline-color: currentColor` | `outline-[#50d71e]` | `{ outlineColor: '#50d71e' }` |      |
-| **Variable**  | `outline-color: var(--c)`     | `outline-(--c)`     | `{ outlineColor: '--c' }`     |      |
+| Concept       | CSS Rule                              | Tailwind v4 Class   | `sz` Prop (Object Syntax)     | Note |
+| :------------ | :------------------------------------ | :------------------ | :---------------------------- | :--- |
+| **Color**     | `outline-color: var(--color-red-500)` | `outline-red-500`   | `{ outlineColor: 'red-500' }` |      |
+| **Arbitrary** | `outline-color: #50d71e`              | `outline-[#50d71e]` | `{ outlineColor: '#50d71e' }` |      |
+| **Variable**  | `outline-color: var(--c)`             | `outline-(--c)`     | `{ outlineColor: '--c' }`     |      |
 
 ## Outline Style
 
@@ -2150,31 +2189,31 @@ Controlling box model sizing.
 
 Controlling display box type.
 
-| Concept                | CSS Rule                      | Tailwind v4 Class    | `sz` Prop (Canonical)               | `sz` Prop (Boolean Sugar)    |
-| :--------------------- | :---------------------------- | :------------------- | :---------------------------------- | :--------------------------- |
-| **Block**              | `display: block`              | `block`              | `{ display: 'block' }`              | `{ block: true }`            |
-| **Inline Block**       | `display: inline-block`       | `inline-block`       | `{ display: 'inline-block' }`       | `{ inlineBlock: true }`      |
-| **Inline**             | `display: inline`             | `inline`             | `{ display: 'inline' }`             | `{ inline: true }`           |
-| **Flex**               | `display: flex`               | `flex`               | `{ display: 'flex' }`               | `{ flex: true }`             |
-| **Inline Flex**        | `display: inline-flex`        | `inline-flex`        | `{ display: 'inline-flex' }`        | `{ inlineFlex: true }`       |
-| **Grid**               | `display: grid`               | `grid`               | `{ display: 'grid' }`               | `{ grid: true }`             |
-| **Inline Grid**        | `display: inline-grid`        | `inline-grid`        | `{ display: 'inline-grid' }`        | `{ inlineGrid: true }`       |
-| **Contents**           | `display: contents`           | `contents`           | `{ display: 'contents' }`           | `{ contents: true }`         |
-| **Table**              | `display: table`              | `table`              | `{ display: 'table' }`              | `{ table: true }`            |
-| **Inline Table**       | `display: inline-table`       | `inline-table`       | `{ display: 'inline-table' }`       | `{ inlineTable: true }`      |
-| **Table Caption**      | `display: table-caption`      | `table-caption`      | `{ display: 'table-caption' }`      | `{ tableCaption: true }`     |
-| **Table Cell**         | `display: table-cell`         | `table-cell`         | `{ display: 'table-cell' }`         | `{ tableCell: true }`        |
-| **Table Column**       | `display: table-column`       | `table-column`       | `{ display: 'table-column' }`       | `{ tableColumn: true }`      |
-| **Table Column Group** | `display: table-column-group` | `table-column-group` | `{ display: 'table-column-group' }` | `{ tableColumnGroup: true }` |
-| **Table Footer Group** | `display: table-footer-group` | `table-footer-group` | `{ display: 'table-footer-group' }` | `{ tableFooterGroup: true }` |
-| **Table Header Group** | `display: table-header-group` | `table-header-group` | `{ display: 'table-header-group' }` | `{ tableHeaderGroup: true }` |
-| **Table Row Group**    | `display: table-row-group`    | `table-row-group`    | `{ display: 'table-row-group' }`    | `{ tableRowGroup: true }`    |
-| **Table Row**          | `display: table-row`          | `table-row`          | `{ display: 'table-row' }`          | `{ tableRow: true }`         |
-| **Flow Root**          | `display: flow-root`          | `flow-root`          | `{ display: 'flow-root' }`          | `{ flowRoot: true }`         |
-| **List Item**          | `display: list-item`          | `list-item`          | `{ display: 'list-item' }`          | `{ listItem: true }`         |
-| **Hidden**             | `display: none`               | `hidden`             | `{ display: 'none' }`               | `{ hidden: true }`           |
-| **Screen Reader Only** | `position: absolute; ...`     | `sr-only`            | N/A                                 | `{ srOnly: true }`           |
-| **Not Screen Reader**  | `position: static; ...`       | `not-sr-only`        | N/A                                 | `{ notSrOnly: true }`        |
+| Concept                | CSS Rule                      | Tailwind v4 Class    | `sz` Prop                           |
+| :--------------------- | :---------------------------- | :------------------- | :---------------------------------- |
+| **Block**              | `display: block`              | `block`              | `{ display: 'block' }`              |
+| **Inline Block**       | `display: inline-block`       | `inline-block`       | `{ display: 'inline-block' }`       |
+| **Inline**             | `display: inline`             | `inline`             | `{ display: 'inline' }`             |
+| **Flex**               | `display: flex`               | `flex`               | `{ display: 'flex' }`               |
+| **Inline Flex**        | `display: inline-flex`        | `inline-flex`        | `{ display: 'inline-flex' }`        |
+| **Grid**               | `display: grid`               | `grid`               | `{ display: 'grid' }`               |
+| **Inline Grid**        | `display: inline-grid`        | `inline-grid`        | `{ display: 'inline-grid' }`        |
+| **Contents**           | `display: contents`           | `contents`           | `{ display: 'contents' }`           |
+| **Table**              | `display: table`              | `table`              | `{ display: 'table' }`              |
+| **Inline Table**       | `display: inline-table`       | `inline-table`       | `{ display: 'inline-table' }`       |
+| **Table Caption**      | `display: table-caption`      | `table-caption`      | `{ display: 'table-caption' }`      |
+| **Table Cell**         | `display: table-cell`         | `table-cell`         | `{ display: 'table-cell' }`         |
+| **Table Column**       | `display: table-column`       | `table-column`       | `{ display: 'table-column' }`       |
+| **Table Column Group** | `display: table-column-group` | `table-column-group` | `{ display: 'table-column-group' }` |
+| **Table Footer Group** | `display: table-footer-group` | `table-footer-group` | `{ display: 'table-footer-group' }` |
+| **Table Header Group** | `display: table-header-group` | `table-header-group` | `{ display: 'table-header-group' }` |
+| **Table Row Group**    | `display: table-row-group`    | `table-row-group`    | `{ display: 'table-row-group' }`    |
+| **Table Row**          | `display: table-row`          | `table-row`          | `{ display: 'table-row' }`          |
+| **Flow Root**          | `display: flow-root`          | `flow-root`          | `{ display: 'flow-root' }`          |
+| **List Item**          | `display: list-item`          | `list-item`          | `{ display: 'list-item' }`          |
+| **Hidden**             | `display: none`               | `hidden`             | `{ display: 'none' }`               |
+| **Screen Reader Only** | `position: absolute; ...`     | `sr-only`            | `{ srOnly: true }`                  |
+| **Not Screen Reader**  | `position: static; ...`       | `not-sr-only`        | `{ notSrOnly: true }`               |
 
 ## Floats
 
@@ -2205,10 +2244,10 @@ Controlling flow relative to floats.
 
 Controlling stacking contexts.
 
-| Concept     | CSS Rule             | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note                            |
-| :---------- | :------------------- | :---------------- | :------------------------- | :------------------------------ |
-| **Isolate** | `isolation: isolate` | `isolate`         | `{ isolation: 'isolate' }` | **Sugar**: `{ isolate: true }`. |
-| **Auto**    | `isolation: auto`    | `isolation-auto`  | `{ isolation: 'auto' }`    |                                 |
+| Concept     | CSS Rule             | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note |
+| :---------- | :------------------- | :---------------- | :------------------------- | :--- |
+| **Isolate** | `isolation: isolate` | `isolate`         | `{ isolation: 'isolate' }` |      |
+| **Auto**    | `isolation: auto`    | `isolation-auto`  | `{ isolation: 'auto' }`    |      |
 
 ## Object Fit
 
@@ -2282,13 +2321,13 @@ Controlling scroll chaining.
 
 Controlling positioning.
 
-| Concept      | CSS Rule             | Tailwind v4 Class | `sz` Prop (Canonical)      | `sz` Prop (Boolean Sugar) |
-| :----------- | :------------------- | :---------------- | :------------------------- | :------------------------ |
-| **Static**   | `position: static`   | `static`          | `{ position: 'static' }`   | `{ static: true }`        |
-| **Fixed**    | `position: fixed`    | `fixed`           | `{ position: 'fixed' }`    | `{ fixed: true }`         |
-| **Absolute** | `position: absolute` | `absolute`        | `{ position: 'absolute' }` | `{ absolute: true }`      |
-| **Relative** | `position: relative` | `relative`        | `{ position: 'relative' }` | `{ relative: true }`      |
-| **Sticky**   | `position: sticky`   | `sticky`          | `{ position: 'sticky' }`   | `{ sticky: true }`        |
+| Concept      | CSS Rule             | Tailwind v4 Class | `sz` Prop                  |
+| :----------- | :------------------- | :---------------- | :------------------------- |
+| **Static**   | `position: static`   | `static`          | `{ position: 'static' }`   |
+| **Fixed**    | `position: fixed`    | `fixed`           | `{ position: 'fixed' }`    |
+| **Absolute** | `position: absolute` | `absolute`        | `{ position: 'absolute' }` |
+| **Relative** | `position: relative` | `relative`        | `{ position: 'relative' }` |
+| **Sticky**   | `position: sticky`   | `sticky`          | `{ position: 'sticky' }`   |
 
 ## Top / Right / Bottom / Left (Placement)
 
@@ -2343,11 +2382,11 @@ Positioning mapped elements.
 
 Controlling visibility without layout change.
 
-| Concept       | CSS Rule               | Tailwind v4 Class | `sz` Prop (Canonical)        | `sz` Prop (Boolean)   |
-| :------------ | :--------------------- | :---------------- | :--------------------------- | :-------------------- |
-| **Visible**   | `visibility: visible`  | `visible`         | `{ visibility: 'visible' }`  | `{ visible: true }`   |
-| **Invisible** | `visibility: hidden`   | `invisible`       | `{ visibility: 'hidden' }`   | `{ invisible: true }` |
-| **Collapse**  | `visibility: collapse` | `collapse`        | `{ visibility: 'collapse' }` | `{ collapse: true }`  |
+| Concept       | CSS Rule               | Tailwind v4 Class | `sz` Prop                    |
+| :------------ | :--------------------- | :---------------- | :--------------------------- |
+| **Visible**   | `visibility: visible`  | `visible`         | `{ visibility: 'visible' }`  |
+| **Invisible** | `visibility: hidden`   | `invisible`       | `{ visibility: 'hidden' }`   |
+| **Collapse**  | `visibility: collapse` | `collapse`        | `{ visibility: 'collapse' }` |
 
 ## Z-Index
 
@@ -3099,7 +3138,7 @@ Controlling the font size.
 | Concept          | CSS Rule                                    | Tailwind v4 Class                                                                                                                                       | `sz` Prop (Object Syntax)               | Note                                                              |
 | :--------------- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------- | :---------------------------------------------------------------- |
 | **Scale**        | `font-size: (size); line-height: (leading)` | `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`, `text-4xl`, `text-5xl`, `text-6xl`, `text-7xl`, `text-8xl`, `text-9xl` | `{ text: 'xs' }`, `{ text: 'sm' }` etc. | Sets size & leading.                                              |
-| **Number**       | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | CamelCase `fontSize` also valid.                                  |
+| **Number**       | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | `text` is the single canonical key.                               |
 | **Arbitrary**    | `font-size: 1.5rem`                         | `text-[1.5rem]`                                                                                                                                         | `{ text: '1.5rem' }`                    |                                                                   |
 | **CSS Variable** | `font-size: var(--size)`                    | `text-(length:--size)`                                                                                                                                  | `{ text: '--size' }`                    | **Sugar**: Auto-detects `--`. Type hint disambiguates from color. |
 
@@ -3109,11 +3148,11 @@ Controlling the font weight.
 
 | Concept          | CSS Rule                | Tailwind v4 Class                                                                                                                        | `sz` Prop (Object Syntax)                                     | Note                                                               |
 | :--------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :----------------------------------------------------------------- |
-| **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ fontWeight: 'thin' }`, `{ fontWeight: 'extralight' }` etc. |                                                                    |
-| **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ fontWeight: 100 }`, `{ fontWeight: 200 }` etc.             | v4 shorthand.                                                      |
-| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `fontWeight`.                                            |
-| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ fontWeight: 550 }`                                         |                                                                    |
-| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ fontWeight: '--w' }`                                       | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
+| **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ weight: 'thin' }`, `{ weight: 'extralight' }` etc. |                                                                    |
+| **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ weight: 100 }`, `{ weight: 200 }` etc.             | v4 shorthand.                                                      |
+| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `weight`.                                            |
+| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ weight: 550 }`                                         |                                                                    |
+| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ weight: '--w' }`                                       | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
 
 ## Font Stretch
 
@@ -3152,12 +3191,12 @@ Controlling font-feature-settings. Added in Tailwind v4.2.
 
 Controlling the font style and smoothing.
 
-| Concept         | CSS Rule                              | Tailwind v4 Class      | `sz` Prop (Object Syntax)       | Note                                                   |
-| :-------------- | :------------------------------------ | :--------------------- | :------------------------------ | :----------------------------------------------------- |
-| **Italic**      | `font-style: italic`                  | `italic`               | `{ italic: true }`              |                                                        |
-| **Not Italic**  | `font-style: normal`                  | `not-italic`           | `{ notItalic: true }`           | `false` = NOOP; use `notItalic: true` to reset.        |
-| **Antialiased** | `-webkit-font-smoothing: antialiased` | `antialiased`          | `{ antialiased: true }`         |                                                        |
-| **Subpixel**    | `-webkit-font-smoothing: auto`        | `subpixel-antialiased` | `{ subpixelAntialiased: true }` | `false` = NOOP; use `subpixelAntialiased` to override. |
+| Concept         | CSS Rule                              | Tailwind v4 Class      | `sz` Prop (Object Syntax)        | Note                         |
+| :-------------- | :------------------------------------ | :--------------------- | :------------------------------- | :--------------------------- |
+| **Italic**      | `font-style: italic`                  | `italic`               | `{ fontStyle: 'italic' }`        |                              |
+| **Not Italic**  | `font-style: normal`                  | `not-italic`           | `{ fontStyle: 'normal' }`        | Resets to upright.           |
+| **Antialiased** | `-webkit-font-smoothing: antialiased` | `antialiased`          | `{ fontSmoothing: 'grayscale' }` | Grayscale antialiasing.      |
+| **Subpixel**    | `-webkit-font-smoothing: auto`        | `subpixel-antialiased` | `{ fontSmoothing: 'subpixel' }`  | Subpixel (RGB) antialiasing. |
 
 ## Letter Spacing (Tracking)
 
@@ -3222,28 +3261,23 @@ Controlling the text color.
 
 Controlling the decoration of text.
 
-| Concept            | CSS Rule                              | Tailwind v4 Class                                                                                                                     | `sz` Prop (Object Syntax)           | Note                                                          |
-| :----------------- | :------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------- | :------------------------------------------------------------ |
-| **Line (string)**  | `text-decoration-line: underline`     | `underline`, `overline`, `line-through`, `no-underline`                                                                               | `{ decoration: 'underline' }` etc.  | String key. `'none'` → `no-underline` (resets ALL decoration) |
-| **Style**          | `text-decoration-style: solid`        | `decoration-solid`, `decoration-dashed`, `decoration-dotted`, `decoration-double`, `decoration-wavy`                                  | `{ decorationStyle: 'solid' }` etc. |                                                               |
-| **Thickness**      | `text-decoration-thickness: auto`     | `decoration-0`, `decoration-1`, `decoration-2`, `decoration-4`, `decoration-8`, `decoration-auto`, `decoration-from-font`             | `{ decorationThickness: 1 }` etc.   |                                                               |
-| **Offset**         | `text-underline-offset: auto`         | `underline-offset-0`, `underline-offset-1`, `underline-offset-2`, `underline-offset-4`, `underline-offset-8`, `underline-offset-auto` | `{ underlineOffset: 1 }` etc.       |                                                               |
-| **Color**          | `text-decoration-color: currentColor` | `decoration-blue-500`                                                                                                                 | `{ decorationColor: 'blue-500' }`   |                                                               |
-| **Arbitrary**      | `text-decoration: (value)`            | `decoration-[3px]`                                                                                                                    | `{ decorationThickness: '3px' }`    |                                                               |
-| **Var**            | `text-decoration: (value)`            | `decoration-(--v)`                                                                                                                    | `{ decorationThickness: '--v' }`    | **Sugar**: Auto-detects `--`.                                 |
-| **Bool underline** | `text-decoration-line: underline`     | `underline`                                                                                                                           | `{ underline: true }`               | **Sugar**. `false` = NOOP.                                    |
-| **Bool overline**  | `text-decoration-line: overline`      | `overline`                                                                                                                            | `{ overline: true }`                | **Sugar**. `false` = NOOP.                                    |
-| **Bool through**   | `text-decoration-line: line-through`  | `line-through`                                                                                                                        | `{ lineThrough: true }`             | **Sugar**. `false` = NOOP.                                    |
-| **Bool reset**     | `text-decoration-line: none`          | `no-underline`                                                                                                                        | `{ noUnderline: true }`             | **Sugar**. Resets ALL decoration. Use for responsive reset.   |
+| Concept           | CSS Rule                                       | Tailwind v4 Class                                                                                                                     | `sz` Prop (Object Syntax)           | Note                                                          |
+| :---------------- | :--------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------- | :------------------------------------------------------------ |
+| **Line (string)** | `text-decoration-line: underline`              | `underline`, `overline`, `line-through`, `no-underline`                                                                               | `{ decoration: 'underline' }` etc.  | String key. `'none'` → `no-underline` (resets ALL decoration) |
+| **Style**         | `text-decoration-style: solid`                 | `decoration-solid`, `decoration-dashed`, `decoration-dotted`, `decoration-double`, `decoration-wavy`                                  | `{ decorationStyle: 'solid' }` etc. |                                                               |
+| **Thickness**     | `text-decoration-thickness: auto`              | `decoration-0`, `decoration-1`, `decoration-2`, `decoration-4`, `decoration-8`, `decoration-auto`, `decoration-from-font`             | `{ decorationThickness: 1 }` etc.   |                                                               |
+| **Offset**        | `text-underline-offset: auto`                  | `underline-offset-0`, `underline-offset-1`, `underline-offset-2`, `underline-offset-4`, `underline-offset-8`, `underline-offset-auto` | `{ underlineOffset: 1 }` etc.       |                                                               |
+| **Color**         | `text-decoration-color: var(--color-blue-500)` | `decoration-blue-500`                                                                                                                 | `{ decorationColor: 'blue-500' }`   |                                                               |
+| **Arbitrary**     | `text-decoration: (value)`                     | `decoration-[3px]`                                                                                                                    | `{ decorationThickness: '3px' }`    |                                                               |
+| **Var**           | `text-decoration: (value)`                     | `decoration-(--v)`                                                                                                                    | `{ decorationThickness: '--v' }`    | **Sugar**: Auto-detects `--`.                                 |
 
 ## Text Transform
 
 Controlling the capitalization of text.
 
-| Concept             | CSS Rule                    | Tailwind v4 Class                                     | `sz` Prop (Object Syntax)             | Note                                   |
-| :------------------ | :-------------------------- | :---------------------------------------------------- | :------------------------------------ | :------------------------------------- |
-| **Transform**       | `text-transform: uppercase` | `uppercase`, `lowercase`, `capitalize`, `normal-case` | `{ textTransform: 'uppercase' }` etc. |                                        |
-| **Boolean (Sugar)** | `text-transform: uppercase` | `uppercase`                                           | `{ uppercase: true }`                 | **Sugar**. Overwrites `textTransform`. |
+| Concept       | CSS Rule                    | Tailwind v4 Class                                     | `sz` Prop (Object Syntax)                                                       | Note                   |
+| :------------ | :-------------------------- | :---------------------------------------------------- | :------------------------------------------------------------------------------ | :--------------------- |
+| **Transform** | `text-transform: uppercase` | `uppercase`, `lowercase`, `capitalize`, `normal-case` | `{ textTransform: 'uppercase' }` (also `'lowercase'`, `'capitalize'`, `'none'`) | `'none'` → normal-case |
 
 ## Text Overflow & Whitespace
 
@@ -3313,7 +3347,7 @@ Static items are pre-computed at build time; conditional items use `_szMerge` at
 ```tsx
 <div
   sz={[
-    { flex: true, items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
     isActive && { bg: "blue-500" }, // runtime conditional
     isDisabled && { opacity: 50, cursor: "not-allowed" },
   ]}
@@ -3355,10 +3389,10 @@ import { szv } from "csszyx";
 
 const buttonSz = szv({
   base: {
-    inlineFlex: true,
+    display: "inline-flex",
     items: "center",
     rounded: "md",
-    fontWeight: "medium",
+    weight: "medium",
   },
   variants: {
     variant: {
@@ -3443,20 +3477,21 @@ SSR-safe: on the server, returns class names without CSSOM access.
 For dynamic classes at runtime (the only runtime overhead):
 
 ```tsx
-import { _sz, _szIf, _szSwitch, _szMerge } from '@csszyx/runtime';
+import { _sz, _szMerge } from '@csszyx/runtime';
 
 // Concatenate class strings
 <div className={_sz('base-class', conditionalClass)} />
 
-// Conditional class
-<div className={_szIf(isActive, 'active-class', 'inactive-class')} />
+// Conditional class — plain JS conditionals compose with _sz
+<div className={_sz('base-class', isActive && 'active-class')} />
+<div className={isActive ? 'active-class' : 'inactive-class'} />
 
-// Switch/enum
-<div className={_szSwitch(status, {
+// Switch/enum — a plain object lookup
+<div className={{
   loading: 'opacity-50',
   error: 'border-red-500',
   success: 'border-green-500',
-})} />
+}[status]} />
 
 // Merge (last wins for conflicts)
 <div className={_szMerge(baseClasses, overrideClasses)} />
@@ -3470,6 +3505,51 @@ import { __szColorVar } from "csszyx/lite";
 //        __szColorVar('blue-500')      → 'var(--color-blue-500)'
 //        __szColorVar('#ff0000')       → '#ff0000'
 ```
+
+## Nested Element Routing — splitBox + class toolkit
+
+When a caller passes one flat `className` to a component that renders nested elements, `splitBox` partitions it at the CSS box-model border line so each element gets the classes that act on it. Pure string functions, framework-agnostic. The class-token → box-role map is generated from the compiler's property tables (never drifts).
+
+```tsx
+import { splitBox, classify, has, pick, omit, stripSzProps } from '@csszyx/runtime';
+
+// Partition: outer = border-outward (margin/position/border/sizing/bg/shadow/transform/visibility),
+//            inner = border-inward (padding/overflow/display/layout/gap/text/paint-inside/interactivity)
+const { outer, inner } = splitBox('m-4 px-2 md:flex');
+// outer: "m-4"   inner: "px-2 md:flex"
+
+// Override any default per call (BoxSelector = box-role | category | class-prefix | { category: value })
+splitBox('overflow-hidden p-4', { outer: ['overflow'] });
+// outer: "overflow-hidden"   inner: "p-4"
+
+// Toolkit: csszyx owns the truth (box-role/category), your project owns the rule
+classify('inset-ring-2');                 // { role: 'inner', category: 'ring' }
+has('p-2 overflow-y-auto', 'overflow');   // true
+pick('m-4 text-sm', 'text');              // "text-sm"
+omit('p-2 overflow-y-auto flex', 'overflow'); // "p-2 flex"
+
+// A scroller scrolls only when the outer frame clips (project-owned dependency rule)
+const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
+
+// stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files
+// whose raw sz would leak as sz="[object Object]"; dev-warns once on a raw-object sz)
+function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
+```
+
+## Security — untrusted sz
+
+csszyx is safe-by-default for AUTHORED sz (compiled to class strings at build time). When sz comes from UNTRUSTED input (JSON-driven UI, CMS, user data), it controls keys and values that reach the runtime CSS pipeline — purify it.
+
+```tsx
+import { dynamic, purifySz } from '@csszyx/dynamic';
+// stripSzProps is exported from '@csszyx/runtime'
+
+// Untrusted sz → dynamic() runtime CSS: purify first (allowlist + value sanitize + proto guard)
+const className = dynamic(purifySz(untrustedSzFromJson));
+// strict (default) also strips url()/image-set()/@import/expression(); { strict:false } for trusted input
+```
+
+Guarantees on the runtime path: CSS is injected via atomic `insertRule` (a `}`/`</style>` rule-breakout throws, no 2nd rule/markup); declaration value + arbitrary property name are validated before injection; recursion depth is capped (`SzDepthError`). `dynamic()`/`_sz`/`_szMerge` return React-escaped-only strings — safe in `className={}`, NEVER interpolate into raw HTML. `stripSzProps(props)` keeps a raw `sz` object off the DOM. SSR mangle map is schema-validated (`isValidMangleMap`); `verifyMangleChecksumAsync` gives real integrity verification without the WASM core (tamper-detection, not authentication). The constructable-`adoptedStyleSheets` injection path is CSP-clean (no inline style text). Posture: treat all sz/DOM/config as untrusted by default.
 
 ## SSR Hydration
 
@@ -3524,6 +3604,11 @@ In production, class names are mangled for maximum compression:
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
 
+Set `production: { mangle: false }` to keep readable class names — the supported way to
+inspect the emitted CSS, and recommended for hybrid apps that also ship non-csszyx
+stylesheets keyed on the original class names. To check what a single `sz` object
+compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
+
 ### AST budget guard
 
 Files larger than 50 000 AST nodes throw `ASTBudgetExceededError` at
@@ -3540,6 +3625,19 @@ Or exclude the file from csszyx processing entirely before parsing:
 ```js
 ...csszyx({ exclude: ['src/generated/**', /icon-dump\.tsx$/] })
 ```
+
+## Monorepo Workspace Packages (compilePackages)
+
+`/packages/` is hard-ignored by default (a published library ships pre-extracted
+CSS). To compile `sz` in a monorepo workspace package you author, opt it in by
+directory name — only `/packages/` is relaxed, `node_modules`/`.next` stay ignored:
+
+```js
+...csszyx({ compilePackages: ['vui'] }) // compiles sz in /packages/vui/**
+```
+
+A `/packages/` file with `sz` that is not opted in is skipped silently (no CSS);
+csszyx warns at build end and lists those files.
 
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 
@@ -3631,12 +3729,13 @@ of classes the developer has explicitly flagged as "not yet decided."
 | `inline-flex` | `{ display: 'inline-flex' }` |
 | `hidden`      | `{ display: 'none' }`        |
 
-Manual authoring can still use `{ flex: true }`, `{ inlineFlex: true }`, etc.
+Boolean sugar like `{ flex: true }` was removed — use `{ display: 'flex' }`.
 The migrate command uses `display` so duplicate display utilities are visible as
 one semantic CSS property. Conflicting display utilities in the same variant
 scope, such as `block flex` or `md:block md:flex`, are left unresolved instead
 of guessed. `flex flex-1` is safe and migrates to
-`{ display: 'flex', flex: '1' }`.
+`{ display: 'flex', flex: '1' }` (the `flex` shorthand stays — only the
+`flex: true` display alias was removed).
 
 ### `--resolve-todos` — apply the resolution map
 

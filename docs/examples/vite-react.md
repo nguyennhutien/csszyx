@@ -45,18 +45,18 @@ playground/vite-react/
 Demonstrates variant-based styling:
 
 ```tsx
-import { _sz, _szSwitch } from "@csszyx/runtime";
+import { _sz } from "@csszyx/runtime";
 
 type ButtonVariant = "primary" | "secondary" | "danger";
 
 function Button({ variant = "primary", disabled = false }) {
   const baseClasses = "px-4 py-2 rounded-lg font-medium transition-all";
 
-  const variantClasses = _szSwitch([
-    [variant === "primary", "bg-blue-600 text-white hover:bg-blue-700"],
-    [variant === "secondary", "bg-gray-200 text-gray-900 hover:bg-gray-300"],
-    [variant === "danger", "bg-red-600 text-white hover:bg-red-700"],
-  ]);
+  const variantClasses = {
+    primary: "bg-blue-600 text-white hover:bg-blue-700",
+    secondary: "bg-gray-200 text-gray-900 hover:bg-gray-300",
+    danger: "bg-red-600 text-white hover:bg-red-700",
+  }[variant];
 
   return (
     <button
@@ -79,7 +79,7 @@ Shows state-driven styling:
 
 ```tsx
 import { useState } from "react";
-import { _sz, _szIf } from "@csszyx/runtime";
+import { _sz } from "@csszyx/runtime";
 
 function DynamicExample() {
   const [isActive, setIsActive] = useState(false);
@@ -101,11 +101,9 @@ function DynamicExample() {
       className={_sz(
         "rounded-lg border-2 transition-all",
         getSizeClasses(),
-        _szIf(
-          isActive,
-          "bg-green-100 border-green-500",
-          "bg-gray-100 border-gray-300",
-        ),
+        isActive
+          ? "bg-green-100 border-green-500"
+          : "bg-gray-100 border-gray-300",
       )}
     >
       Status: {isActive ? "Active" : "Inactive"}
@@ -154,19 +152,17 @@ pnpm preview
 ### 2. Conditional Styling
 
 ```tsx
-<div className={_sz("base", _szIf(isActive, "active", "inactive"))} />
+<div className={_sz("base", isActive ? "active" : "inactive")} />
 ```
 
 ### 3. Switch-like Selection
 
 ```tsx
-const className = _szSwitch(
-  [
-    [status === "success", "text-green-500"],
-    [status === "error", "text-red-500"],
-  ],
-  "text-gray-500",
-);
+const className =
+  {
+    success: "text-green-500",
+    error: "text-red-500",
+  }[status] ?? "text-gray-500";
 ```
 
 ### 4. Dark Mode
@@ -177,7 +173,7 @@ const [darkMode, setDarkMode] = useState(false);
 <div
   className={_sz(
     "min-h-screen",
-    _szIf(darkMode, "bg-gray-900 text-white", "bg-gray-50 text-gray-900"),
+    darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900",
   )}
 />;
 ```

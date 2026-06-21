@@ -17,7 +17,7 @@ export function RecoveryFixture() {
 
   return (
     <main sz={{ p: 8, fontFamily: 'sans' }}>
-      <h1 sz={{ text: '2xl', fontWeight: 'bold', mb: 4 }} data-testid="title">
+      <h1 sz={{ text: '2xl', weight: 'bold', mb: 4 }} data-testid="title">
         Recovery Manifest E2E Fixture
       </h1>
 

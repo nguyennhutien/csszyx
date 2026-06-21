@@ -525,6 +525,29 @@ export type PartialCsszyxConfig = {
      */
     exclude?: FilePattern | FilePattern[];
 
+    /**
+     * Opt workspace packages under `/packages/` into compilation.
+     *
+     * csszyx hard-ignores `/packages/` by default because published libraries
+     * are expected to ship pre-extracted CSS. In a monorepo, however, a
+     * design-system package is first-class source the developer authors, so its
+     * `sz` props must be compiled like app code. List the package directory
+     * names here (e.g. `['vui']`) to compile `**\/packages/<name>/**`. Only the
+     * `/packages/` rule is relaxed — `node_modules` and `.next` stay ignored.
+     */
+    compilePackages?: string[];
+
+    /**
+     * Warn when, inside a monorepo, the Tailwind entry imports `tailwindcss`
+     * without scoping its content detection (no `source(none)` / `source(...)` /
+     * `@source not`). Unscoped, Tailwind v4 climbs to the workspace root and
+     * scans sibling packages + docs (`.md`/`.mdx`/`.txt` are not ignored),
+     * which can generate phantom or broken `url()` classes and fail the build.
+     * The warning prints the one-time fix; set `false` to silence it when a
+     * broad scan is intentional. Defaults to `true`.
+     */
+    contentScopeCheck?: boolean;
+
     development?: Partial<DevelopmentConfig>;
     production?: Partial<ProductionConfig>;
     build?: Partial<BuildConfig>;

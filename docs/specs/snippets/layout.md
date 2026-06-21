@@ -103,31 +103,31 @@ Controlling box model sizing.
 
 Controlling display box type.
 
-| Concept                | CSS Rule                      | Tailwind v4 Class    | `sz` Prop (Canonical)               | `sz` Prop (Boolean Sugar)    |
-| :--------------------- | :---------------------------- | :------------------- | :---------------------------------- | :--------------------------- |
-| **Block**              | `display: block`              | `block`              | `{ display: 'block' }`              | `{ block: true }`            |
-| **Inline Block**       | `display: inline-block`       | `inline-block`       | `{ display: 'inline-block' }`       | `{ inlineBlock: true }`      |
-| **Inline**             | `display: inline`             | `inline`             | `{ display: 'inline' }`             | `{ inline: true }`           |
-| **Flex**               | `display: flex`               | `flex`               | `{ display: 'flex' }`               | `{ flex: true }`             |
-| **Inline Flex**        | `display: inline-flex`        | `inline-flex`        | `{ display: 'inline-flex' }`        | `{ inlineFlex: true }`       |
-| **Grid**               | `display: grid`               | `grid`               | `{ display: 'grid' }`               | `{ grid: true }`             |
-| **Inline Grid**        | `display: inline-grid`        | `inline-grid`        | `{ display: 'inline-grid' }`        | `{ inlineGrid: true }`       |
-| **Contents**           | `display: contents`           | `contents`           | `{ display: 'contents' }`           | `{ contents: true }`         |
-| **Table**              | `display: table`              | `table`              | `{ display: 'table' }`              | `{ table: true }`            |
-| **Inline Table**       | `display: inline-table`       | `inline-table`       | `{ display: 'inline-table' }`       | `{ inlineTable: true }`      |
-| **Table Caption**      | `display: table-caption`      | `table-caption`      | `{ display: 'table-caption' }`      | `{ tableCaption: true }`     |
-| **Table Cell**         | `display: table-cell`         | `table-cell`         | `{ display: 'table-cell' }`         | `{ tableCell: true }`        |
-| **Table Column**       | `display: table-column`       | `table-column`       | `{ display: 'table-column' }`       | `{ tableColumn: true }`      |
-| **Table Column Group** | `display: table-column-group` | `table-column-group` | `{ display: 'table-column-group' }` | `{ tableColumnGroup: true }` |
-| **Table Footer Group** | `display: table-footer-group` | `table-footer-group` | `{ display: 'table-footer-group' }` | `{ tableFooterGroup: true }` |
-| **Table Header Group** | `display: table-header-group` | `table-header-group` | `{ display: 'table-header-group' }` | `{ tableHeaderGroup: true }` |
-| **Table Row Group**    | `display: table-row-group`    | `table-row-group`    | `{ display: 'table-row-group' }`    | `{ tableRowGroup: true }`    |
-| **Table Row**          | `display: table-row`          | `table-row`          | `{ display: 'table-row' }`          | `{ tableRow: true }`         |
-| **Flow Root**          | `display: flow-root`          | `flow-root`          | `{ display: 'flow-root' }`          | `{ flowRoot: true }`         |
-| **List Item**          | `display: list-item`          | `list-item`          | `{ display: 'list-item' }`          | `{ listItem: true }`         |
-| **Hidden**             | `display: none`               | `hidden`             | `{ display: 'none' }`               | `{ hidden: true }`           |
-| **Screen Reader Only** | `position: absolute; ...`     | `sr-only`            | N/A                                 | `{ srOnly: true }`           |
-| **Not Screen Reader**  | `position: static; ...`       | `not-sr-only`        | N/A                                 | `{ notSrOnly: true }`        |
+| Concept                | CSS Rule                      | Tailwind v4 Class    | `sz` Prop                           |
+| :--------------------- | :---------------------------- | :------------------- | :---------------------------------- |
+| **Block**              | `display: block`              | `block`              | `{ display: 'block' }`              |
+| **Inline Block**       | `display: inline-block`       | `inline-block`       | `{ display: 'inline-block' }`       |
+| **Inline**             | `display: inline`             | `inline`             | `{ display: 'inline' }`             |
+| **Flex**               | `display: flex`               | `flex`               | `{ display: 'flex' }`               |
+| **Inline Flex**        | `display: inline-flex`        | `inline-flex`        | `{ display: 'inline-flex' }`        |
+| **Grid**               | `display: grid`               | `grid`               | `{ display: 'grid' }`               |
+| **Inline Grid**        | `display: inline-grid`        | `inline-grid`        | `{ display: 'inline-grid' }`        |
+| **Contents**           | `display: contents`           | `contents`           | `{ display: 'contents' }`           |
+| **Table**              | `display: table`              | `table`              | `{ display: 'table' }`              |
+| **Inline Table**       | `display: inline-table`       | `inline-table`       | `{ display: 'inline-table' }`       |
+| **Table Caption**      | `display: table-caption`      | `table-caption`      | `{ display: 'table-caption' }`      |
+| **Table Cell**         | `display: table-cell`         | `table-cell`         | `{ display: 'table-cell' }`         |
+| **Table Column**       | `display: table-column`       | `table-column`       | `{ display: 'table-column' }`       |
+| **Table Column Group** | `display: table-column-group` | `table-column-group` | `{ display: 'table-column-group' }` |
+| **Table Footer Group** | `display: table-footer-group` | `table-footer-group` | `{ display: 'table-footer-group' }` |
+| **Table Header Group** | `display: table-header-group` | `table-header-group` | `{ display: 'table-header-group' }` |
+| **Table Row Group**    | `display: table-row-group`    | `table-row-group`    | `{ display: 'table-row-group' }`    |
+| **Table Row**          | `display: table-row`          | `table-row`          | `{ display: 'table-row' }`          |
+| **Flow Root**          | `display: flow-root`          | `flow-root`          | `{ display: 'flow-root' }`          |
+| **List Item**          | `display: list-item`          | `list-item`          | `{ display: 'list-item' }`          |
+| **Hidden**             | `display: none`               | `hidden`             | `{ display: 'none' }`               |
+| **Screen Reader Only** | `position: absolute; ...`     | `sr-only`            | `{ srOnly: true }`                  |
+| **Not Screen Reader**  | `position: static; ...`       | `not-sr-only`        | `{ notSrOnly: true }`               |
 
 ## Floats
 
@@ -158,10 +158,10 @@ Controlling flow relative to floats.
 
 Controlling stacking contexts.
 
-| Concept     | CSS Rule             | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note                            |
-| :---------- | :------------------- | :---------------- | :------------------------- | :------------------------------ |
-| **Isolate** | `isolation: isolate` | `isolate`         | `{ isolation: 'isolate' }` | **Sugar**: `{ isolate: true }`. |
-| **Auto**    | `isolation: auto`    | `isolation-auto`  | `{ isolation: 'auto' }`    |                                 |
+| Concept     | CSS Rule             | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note |
+| :---------- | :------------------- | :---------------- | :------------------------- | :--- |
+| **Isolate** | `isolation: isolate` | `isolate`         | `{ isolation: 'isolate' }` |      |
+| **Auto**    | `isolation: auto`    | `isolation-auto`  | `{ isolation: 'auto' }`    |      |
 
 ## Object Fit
 
@@ -235,13 +235,13 @@ Controlling scroll chaining.
 
 Controlling positioning.
 
-| Concept      | CSS Rule             | Tailwind v4 Class | `sz` Prop (Canonical)      | `sz` Prop (Boolean Sugar) |
-| :----------- | :------------------- | :---------------- | :------------------------- | :------------------------ |
-| **Static**   | `position: static`   | `static`          | `{ position: 'static' }`   | `{ static: true }`        |
-| **Fixed**    | `position: fixed`    | `fixed`           | `{ position: 'fixed' }`    | `{ fixed: true }`         |
-| **Absolute** | `position: absolute` | `absolute`        | `{ position: 'absolute' }` | `{ absolute: true }`      |
-| **Relative** | `position: relative` | `relative`        | `{ position: 'relative' }` | `{ relative: true }`      |
-| **Sticky**   | `position: sticky`   | `sticky`          | `{ position: 'sticky' }`   | `{ sticky: true }`        |
+| Concept      | CSS Rule             | Tailwind v4 Class | `sz` Prop                  |
+| :----------- | :------------------- | :---------------- | :------------------------- |
+| **Static**   | `position: static`   | `static`          | `{ position: 'static' }`   |
+| **Fixed**    | `position: fixed`    | `fixed`           | `{ position: 'fixed' }`    |
+| **Absolute** | `position: absolute` | `absolute`        | `{ position: 'absolute' }` |
+| **Relative** | `position: relative` | `relative`        | `{ position: 'relative' }` |
+| **Sticky**   | `position: sticky`   | `sticky`          | `{ position: 'sticky' }`   |
 
 ## Top / Right / Bottom / Left (Placement)
 
@@ -296,11 +296,11 @@ Positioning mapped elements.
 
 Controlling visibility without layout change.
 
-| Concept       | CSS Rule               | Tailwind v4 Class | `sz` Prop (Canonical)        | `sz` Prop (Boolean)   |
-| :------------ | :--------------------- | :---------------- | :--------------------------- | :-------------------- |
-| **Visible**   | `visibility: visible`  | `visible`         | `{ visibility: 'visible' }`  | `{ visible: true }`   |
-| **Invisible** | `visibility: hidden`   | `invisible`       | `{ visibility: 'hidden' }`   | `{ invisible: true }` |
-| **Collapse**  | `visibility: collapse` | `collapse`        | `{ visibility: 'collapse' }` | `{ collapse: true }`  |
+| Concept       | CSS Rule               | Tailwind v4 Class | `sz` Prop                    |
+| :------------ | :--------------------- | :---------------- | :--------------------------- |
+| **Visible**   | `visibility: visible`  | `visible`         | `{ visibility: 'visible' }`  |
+| **Invisible** | `visibility: hidden`   | `invisible`       | `{ visibility: 'hidden' }`   |
+| **Collapse**  | `visibility: collapse` | `collapse`        | `{ visibility: 'collapse' }` |
 
 ## Z-Index
 

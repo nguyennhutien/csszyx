@@ -48,19 +48,36 @@ module.exports = {
 <div className="flex items-center p-4 bg-blue-500 rounded-lg" />
 
 // After (CSSzyx)
-<div sz={{ flex: true, items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
+<div sz={{ display: 'flex', items: 'center', p: 4, bg: 'blue-500', rounded: 'lg' }} />
 ```
 
 The compiler transforms `sz` props → Tailwind classes at build time. The browser never sees `sz`.
 
-### Boolean shorthand
+### One key per property
 
-Many display/position properties accept `true`:
+Single-property props use their canonical key with a value — one way, no
+aliases. display/position/visibility/isolation/textTransform/fontStyle/
+fontSmoothing/decoration:
 
 ```tsx
-<div sz={{ flex: true, relative: true, hidden: true }} />
-// → className="flex relative hidden"
+<div
+  sz={{
+    display: "flex",
+    position: "relative",
+    visibility: "hidden",
+    fontStyle: "italic",
+  }}
+/>
+// → className="flex relative invisible italic"
 ```
+
+Boolean aliases (`{ flex: true }`, `{ italic: true }`, `{ uppercase: true }`)
+were **removed** — they emit nothing and warn; run `csszyx migrate` to rewrite.
+Each property has exactly one key, so it can never be set twice in one object.
+
+Genuinely on/off utilities — composite (`truncate`, `srOnly`), stackable
+font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
+`ring`, `blur`), plugin (`container`, `prose`) — stay boolean.
 
 ### Arbitrary values
 
@@ -162,7 +179,7 @@ sz={{ group: { card: { data: { active: { color: 'blue-600' } } } } }}
 sz={{ group: { aria: { expanded: { color: 'blue-600' } } } }}
 // → className="group-aria-expanded:text-blue-600"
 
-sz={{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }}
+sz={{ group: { aria: { 'current=page': { weight: 'bold' } } } }}
 // → className="group-aria-[current=page]:font-bold"
 
 // peer-data / peer-aria work the same way
@@ -195,7 +212,7 @@ sz={{ placeholder: { color: 'gray-400' } }}
 ### Container queries
 
 ```tsx
-sz={{ '@container': true, '@md': { flex: true } }}
+sz={{ '@container': true, '@md': { display: 'flex' } }}
 // → className="@container @md:flex"
 ```
 
@@ -221,7 +238,29 @@ sz={{ '@container': true, '@md': { flex: true } }}
 <div className="p-4" sz={{ m: 2 }} />  // Wrong — use sz only
 
 // ✅ Correct
-{ p: 4, bg: 'blue-500', flex: true, flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
+{ p: 4, bg: 'blue-500', display: 'flex', flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
+```
+
+## Type safety — unknown keys are TypeScript errors
+
+The `sz` prop type is **closed**: a key that is not a known sz prop or variant is a
+compile error, so typos and legacy CSS-property names are caught by `tsc` (run
+`tsc --noEmit` in CI to enforce it).
+
+```tsx
+{ bgColor: 'red-500' }   // ❌ tsc error — unknown key; canonical is { bg: 'red-500' }
+
+// Forcing a brand-new Tailwind utility csszyx has no key for yet — opt out explicitly:
+// @ts-expect-error - forward-compat utility not yet in csszyx
+{ someNewUtility: 'x' }  // ✅ allowed; the runtime still emits the class
+```
+
+Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
+`{ '[&>span]': {…} }`. **Custom breakpoints are typed from your CSS** — define one once in
+Tailwind `@theme` and csszyx auto-generates the type:
+
+```css
+@theme { --breakpoint-tablet: 40rem; }   /* → { tablet: { p: 6 } } now type-checks */
 ```
 
 ## Common Props Reference
@@ -273,20 +312,20 @@ sz={{ '@container': true, '@md': { flex: true } }}
 
 ```tsx
 {
-  flex: true;
-} // display: flex     → flex
+  display: "flex";
+} // → flex
 {
-  grid: true;
-} // display: grid     → grid
+  display: "grid";
+} // → grid
 {
-  hidden: true;
-} // display: none     → hidden
+  display: "none";
+} // → hidden
 {
-  absolute: true;
-} // position          → absolute
+  position: "absolute";
+} // → absolute
 {
-  relative: true;
-} // position          → relative
+  position: "relative";
+} // → relative
 {
   overflow: "hidden";
 } // overflow          → overflow-hidden
@@ -328,7 +367,7 @@ sz={{ '@container': true, '@md': { flex: true } }}
   text: "xl";
 } // text-xl (size + leading)
 {
-  fontWeight: "bold";
+  weight: "bold";
 } // font-bold
 {
   fontFamily: "mono";
@@ -343,7 +382,7 @@ sz={{ '@container': true, '@md': { flex: true } }}
   textAlign: "center";
 } // text-center
 {
-  uppercase: true;
+  textTransform: "uppercase";
 } // uppercase
 {
   truncate: true;
@@ -489,7 +528,7 @@ Static items are pre-computed at build time; conditional items use `_szMerge` at
 ```tsx
 <div
   sz={[
-    { flex: true, items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
     isActive && { bg: "blue-500" }, // runtime conditional
     isDisabled && { opacity: 50, cursor: "not-allowed" },
   ]}
@@ -531,10 +570,10 @@ import { szv } from "csszyx";
 
 const buttonSz = szv({
   base: {
-    inlineFlex: true,
+    display: "inline-flex",
     items: "center",
     rounded: "md",
-    fontWeight: "medium",
+    weight: "medium",
   },
   variants: {
     variant: {
@@ -619,20 +658,21 @@ SSR-safe: on the server, returns class names without CSSOM access.
 For dynamic classes at runtime (the only runtime overhead):
 
 ```tsx
-import { _sz, _szIf, _szSwitch, _szMerge } from '@csszyx/runtime';
+import { _sz, _szMerge } from '@csszyx/runtime';
 
 // Concatenate class strings
 <div className={_sz('base-class', conditionalClass)} />
 
-// Conditional class
-<div className={_szIf(isActive, 'active-class', 'inactive-class')} />
+// Conditional class — plain JS conditionals compose with _sz
+<div className={_sz('base-class', isActive && 'active-class')} />
+<div className={isActive ? 'active-class' : 'inactive-class'} />
 
-// Switch/enum
-<div className={_szSwitch(status, {
+// Switch/enum — a plain object lookup
+<div className={{
   loading: 'opacity-50',
   error: 'border-red-500',
   success: 'border-green-500',
-})} />
+}[status]} />
 
 // Merge (last wins for conflicts)
 <div className={_szMerge(baseClasses, overrideClasses)} />
@@ -646,6 +686,51 @@ import { __szColorVar } from "csszyx/lite";
 //        __szColorVar('blue-500')      → 'var(--color-blue-500)'
 //        __szColorVar('#ff0000')       → '#ff0000'
 ```
+
+## Nested Element Routing — splitBox + class toolkit
+
+When a caller passes one flat `className` to a component that renders nested elements, `splitBox` partitions it at the CSS box-model border line so each element gets the classes that act on it. Pure string functions, framework-agnostic. The class-token → box-role map is generated from the compiler's property tables (never drifts).
+
+```tsx
+import { splitBox, classify, has, pick, omit, stripSzProps } from '@csszyx/runtime';
+
+// Partition: outer = border-outward (margin/position/border/sizing/bg/shadow/transform/visibility),
+//            inner = border-inward (padding/overflow/display/layout/gap/text/paint-inside/interactivity)
+const { outer, inner } = splitBox('m-4 px-2 md:flex');
+// outer: "m-4"   inner: "px-2 md:flex"
+
+// Override any default per call (BoxSelector = box-role | category | class-prefix | { category: value })
+splitBox('overflow-hidden p-4', { outer: ['overflow'] });
+// outer: "overflow-hidden"   inner: "p-4"
+
+// Toolkit: csszyx owns the truth (box-role/category), your project owns the rule
+classify('inset-ring-2');                 // { role: 'inner', category: 'ring' }
+has('p-2 overflow-y-auto', 'overflow');   // true
+pick('m-4 text-sm', 'text');              // "text-sm"
+omit('p-2 overflow-y-auto flex', 'overflow'); // "p-2 flex"
+
+// A scroller scrolls only when the outer frame clips (project-owned dependency rule)
+const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
+
+// stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files
+// whose raw sz would leak as sz="[object Object]"; dev-warns once on a raw-object sz)
+function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
+```
+
+## Security — untrusted sz
+
+csszyx is safe-by-default for AUTHORED sz (compiled to class strings at build time). When sz comes from UNTRUSTED input (JSON-driven UI, CMS, user data), it controls keys and values that reach the runtime CSS pipeline — purify it.
+
+```tsx
+import { dynamic, purifySz } from '@csszyx/dynamic';
+// stripSzProps is exported from '@csszyx/runtime'
+
+// Untrusted sz → dynamic() runtime CSS: purify first (allowlist + value sanitize + proto guard)
+const className = dynamic(purifySz(untrustedSzFromJson));
+// strict (default) also strips url()/image-set()/@import/expression(); { strict:false } for trusted input
+```
+
+Guarantees on the runtime path: CSS is injected via atomic `insertRule` (a `}`/`</style>` rule-breakout throws, no 2nd rule/markup); declaration value + arbitrary property name are validated before injection; recursion depth is capped (`SzDepthError`). `dynamic()`/`_sz`/`_szMerge` return React-escaped-only strings — safe in `className={}`, NEVER interpolate into raw HTML. `stripSzProps(props)` keeps a raw `sz` object off the DOM. SSR mangle map is schema-validated (`isValidMangleMap`); `verifyMangleChecksumAsync` gives real integrity verification without the WASM core (tamper-detection, not authentication). The constructable-`adoptedStyleSheets` injection path is CSP-clean (no inline style text). Posture: treat all sz/DOM/config as untrusted by default.
 
 ## SSR Hydration
 
@@ -700,6 +785,11 @@ In production, class names are mangled for maximum compression:
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
 
+Set `production: { mangle: false }` to keep readable class names — the supported way to
+inspect the emitted CSS, and recommended for hybrid apps that also ship non-csszyx
+stylesheets keyed on the original class names. To check what a single `sz` object
+compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
+
 ### AST budget guard
 
 Files larger than 50 000 AST nodes throw `ASTBudgetExceededError` at
@@ -716,6 +806,19 @@ Or exclude the file from csszyx processing entirely before parsing:
 ```js
 ...csszyx({ exclude: ['src/generated/**', /icon-dump\.tsx$/] })
 ```
+
+## Monorepo Workspace Packages (compilePackages)
+
+`/packages/` is hard-ignored by default (a published library ships pre-extracted
+CSS). To compile `sz` in a monorepo workspace package you author, opt it in by
+directory name — only `/packages/` is relaxed, `node_modules`/`.next` stay ignored:
+
+```js
+...csszyx({ compilePackages: ['vui'] }) // compiles sz in /packages/vui/**
+```
+
+A `/packages/` file with `sz` that is not opted in is skipped silently (no CSS);
+csszyx warns at build end and lists those files.
 
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 
@@ -807,12 +910,13 @@ of classes the developer has explicitly flagged as "not yet decided."
 | `inline-flex` | `{ display: 'inline-flex' }` |
 | `hidden`      | `{ display: 'none' }`        |
 
-Manual authoring can still use `{ flex: true }`, `{ inlineFlex: true }`, etc.
+Boolean sugar like `{ flex: true }` was removed — use `{ display: 'flex' }`.
 The migrate command uses `display` so duplicate display utilities are visible as
 one semantic CSS property. Conflicting display utilities in the same variant
 scope, such as `block flex` or `md:block md:flex`, are left unresolved instead
 of guessed. `flex flex-1` is safe and migrates to
-`{ display: 'flex', flex: '1' }`.
+`{ display: 'flex', flex: '1' }` (the `flex` shorthand stays — only the
+`flex: true` display alias was removed).
 
 ### `--resolve-todos` — apply the resolution map
 

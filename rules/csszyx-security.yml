@@ -1,0 +1,109 @@
+# Custom semgrep rules — regression locks for the vulnerability classes found in
+# the sz-input security audit. They complement CodeQL + the registry rulesets by
+# encoding csszyx-specific invariants. Run with: semgrep scan --config rules/
+#
+# Severity policy: only `csszyx-unescaped-css-sink` is ERROR (blocking) — it is
+# verified clean against the current tree (csszyx never uses innerHTML/cssText/
+# document.write; it injects CSS only via the atomic insertRule after the P0
+# value sanitizer). The others are WARNING/heuristic: they surface findings but
+# must be triaged on a live semgrep run before promotion to blocking, because
+# their patterns (computed-key writes, dynamic RegExp, self-recursion) also match
+# legitimate validated code (e.g. globToRegExp, the guarded merge loops).
+rules:
+  - id: csszyx-unescaped-css-sink
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      A value reaches an HTML/CSS injection sink. csszyx injects CSS only through
+      the atomic CSSStyleSheet.insertRule after isUtilityArbitrarySafe /
+      isSafeCssValue validation; innerHTML / outerHTML / insertAdjacentHTML /
+      style.cssText / document.write are XSS/CSS-injection sinks and must not be
+      introduced. Route CSS through the sanitized insertRule path instead.
+    metadata:
+      category: security
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation"]
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: $EL.insertAdjacentHTML(...)
+          - pattern: $EL.style.cssText = $X
+          - pattern: document.write(...)
+          - pattern: document.writeln(...)
+      - pattern-not: $EL.innerHTML = ""
+      - pattern-not: $EL.innerHTML = ``
+
+  - id: csszyx-proto-pollution-write
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      Computed-key assignment that may originate from JSON-parsed data. Without
+      an isForbiddenSzKey (or equivalent __proto__/constructor/prototype) guard,
+      a hostile key can pollute Object.prototype. Guard the key before assigning.
+      Heuristic — array indices and trusted keys are false positives; verify this
+      is an sz/merge path.
+    metadata:
+      category: security
+      cwe: ["CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"]
+      confidence: LOW
+    patterns:
+      - pattern: $OBJ[$KEY] = $VAL
+      - pattern-not-inside: |
+          for (...) {
+            ...
+            if (isForbiddenSzKey(...)) { ... }
+            ...
+          }
+      - pattern-not-inside: |
+          for (...) {
+            ...
+            if (<... $KEY === "__proto__" ...>) { ... }
+            ...
+          }
+
+  - id: csszyx-unvalidated-dom-json
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      JSON.parse of DOM / external content cast to a type without runtime shape
+      validation. Validate before use (e.g. isValidMangleMap / isValidManifest)
+      so malformed or tampered data is not trusted.
+    metadata:
+      category: security
+      cwe: ["CWE-20: Improper Input Validation"]
+      confidence: LOW
+    patterns:
+      - pattern: JSON.parse($X) as $T
+
+  - id: csszyx-dynamic-regexp
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      new RegExp() built from a non-literal. A regex compiled from dynamic input
+      risks ReDoS or injection. Prefer a static literal; if dynamic, ensure the
+      source is a validated/bounded subset (as globToRegExp already is).
+    metadata:
+      category: security
+      cwe: ["CWE-1333: Inefficient Regular Expression Complexity"]
+      confidence: LOW
+    patterns:
+      - pattern: new RegExp($X, ...)
+      - pattern-not: new RegExp("...", ...)
+      - pattern-not: new RegExp('...', ...)
+      - pattern-not: new RegExp(`...`, ...)
+
+  - id: csszyx-unbounded-recursion
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      Heuristic — a self-recursive function. If it walks sz / object input,
+      bound the recursion with MAX_SZ_DEPTH (sz-limits.ts) so a deeply nested
+      object cannot overflow the stack (a request-time DoS).
+    metadata:
+      category: security
+      cwe: ["CWE-674: Uncontrolled Recursion"]
+      confidence: LOW
+    patterns:
+      - pattern: |
+          function $F(...) { ... $F(...) ... }

@@ -41,10 +41,10 @@ export default function NewsApp(props: NewsAppProps) {
                 }}
             >
                 <header sz={{ display: 'grid', gap: 3 }}>
-                    <p sz={{ text: 'sm', color: 'emerald-300', fontWeight: 'semibold' }}>
+                    <p sz={{ text: 'sm', color: 'emerald-300', weight: 'semibold' }}>
                         CSSzyx x Astro x SolidJS
                     </p>
-                    <h1 sz={{ text: '4xl', md: { text: '6xl' }, fontWeight: 'bold' }}>
+                    <h1 sz={{ text: '4xl', md: { text: '6xl' }, weight: 'bold' }}>
                         Astro Solid Demo
                     </h1>
                     <p sz={{ maxW: '2xl', color: 'slate-300', leading: 'relaxed' }}>
@@ -106,7 +106,7 @@ function ArticleCard(props: ArticleCardProps) {
             }}
         >
             <div sz={{ display: 'flex', items: 'center', justify: 'between', gap: 3 }}>
-                <span sz={{ text: 'xs', color: 'emerald-300', fontWeight: 'semibold' }}>
+                <span sz={{ text: 'xs', color: 'emerald-300', weight: 'semibold' }}>
                     {local.article.category}
                 </span>
                 <Show when={local.article.featured}>
@@ -115,7 +115,7 @@ function ArticleCard(props: ArticleCardProps) {
                     </span>
                 </Show>
             </div>
-            <h2 sz={{ text: 'xl', fontWeight: 'bold', leading: 'tight' }}>{local.article.title}</h2>
+            <h2 sz={{ text: 'xl', weight: 'bold', leading: 'tight' }}>{local.article.title}</h2>
             <p sz={{ color: 'slate-300', leading: 'relaxed' }}>{local.article.summary}</p>
             <footer sz={{ color: 'slate-500', text: 'sm' }}>{local.article.minutes} min read</footer>
         </article>

@@ -19,7 +19,7 @@ export default function LandingHeader() {
   return (
     <header
       sz={{
-        fixed: true,
+        position: 'fixed',
         w: 'full',
         top: 0,
         z: 50,
@@ -35,13 +35,13 @@ export default function LandingHeader() {
           mx: 'auto',
           px: 6,
           lg: { px: 20 },
-          flex: true,
+          display: 'flex',
           items: 'center',
           justify: 'between',
         }}
       >
         {/* Logo */}
-        <div sz={{ flex: true, items: 'center', gap: 3 }}>
+        <div sz={{ display: 'flex', items: 'center', gap: 3 }}>
           <a href="/" sz={{ h: 8, bgClip: 'text', color: 'transparent' }}>
             <svg width="100%" height="100%" viewBox="0 0 1026 348" version="1.1" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -64,7 +64,7 @@ export default function LandingHeader() {
         </div>
 
         {/* Nav */}
-        <nav sz={{ hidden: true, md: { flex: true }, items: 'center', gap: 10 }}>
+        <nav sz={{ display: 'none', md: { display: 'flex' }, items: 'center', gap: 10 }}>
           {[
             { href: '#visionaries', label: 'Visionaries' },
             { href: '#how-it-works', label: 'The Delta' },
@@ -90,7 +90,7 @@ export default function LandingHeader() {
               fontFamily: 'mono',
               hover: { color: 'primary-thin' },
               transition: 'colors',
-              flex: true,
+              display: 'flex',
               items: 'center',
               gap: 1,
             }}
@@ -98,13 +98,13 @@ export default function LandingHeader() {
             Docs
             <span
               className="material-symbols-outlined"
-              sz={{ text: '14px!', align: 'middle', w: '14px', h: '14px', overflow: 'hidden', inlineBlock: true }}
+              sz={{ text: '14px!', align: 'middle', w: '14px', h: '14px', overflow: 'hidden', display: 'inline-block' }}
             >open_in_new</span>
           </a>
         </nav>
 
         {/* Right side */}
-        <div sz={{ flex: true, items: 'center', gap: 4 }}>
+        <div sz={{ display: 'flex', items: 'center', gap: 4 }}>
           <div className="cmd-bar" id="searchTrigger" onClick={() => setIsSearchOpen(true)}>
             Search... <kbd>Ctrl</kbd><kbd>K</kbd>
           </div>

@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn rewrites_static_array_sz_attribute() {
         let source =
-            "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;";
+            "export const App = () => <div sz={[{ display: 'flex' }, false, null, { p: 4 }]} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
@@ -896,6 +896,85 @@ mod tests {
         assert_eq!(
             rewritten,
             "const X = ({ big }) => <div className={big ? \"p-8\" : \"p-4\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_sub_property_ternary() {
+        // A ternary on the `op` sub-field must lower to complete color-opacity
+        // classes per branch, not the dead `bg:op-30` form.
+        let source =
+            "const X = ({ dim }) => <div sz={{ bg: { color: 'black', op: dim ? 30 : 100 } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ dim }) => <div className={dim ? \"bg-black/30\" : \"bg-black/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_palette_color_opacity_sub_property_ternary() {
+        let source =
+            "const X = ({ dim }) => <div sz={{ bg: { color: 'red-500', op: dim ? 30 : 100 } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const X = ({ dim }) => <div className={dim ? \"bg-red-500/30\" : \"bg-red-500/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_color_ternary() {
+        // A ternary on `color` (with a static `op` sibling) lowers to complete
+        // color-opacity classes per branch, not the dead `bg:op-50` / `bg:text-*`
+        // pair that a bare sub-property ternary emits.
+        let source =
+            "const X = ({ c }) => <div sz={{ bg: { color: c ? 'red-500' : 'blue-500', op: 50 } }} />;";
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"bg-red-500/50\" : \"bg-blue-500/50\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_op_ternary_non_bg_sides() {
+        // The op-ternary lowering applies to every color-capable side, not just bg.
+        let text =
+            "const X = ({ c }) => <div sz={{ text: { color: 'black', op: c ? 30 : 100 } }} />;";
+        assert_eq!(
+            rewrite(text).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"text-black/30\" : \"text-black/100\"} />;"
+        );
+        let border =
+            "const X = ({ c }) => <div sz={{ border: { color: 'red-500', op: c ? 30 : 100 } }} />;";
+        assert_eq!(
+            rewrite(border).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"border-red-500/30\" : \"border-red-500/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_ternary_under_deep_variants() {
+        // The lowering composes the right variant prefix at any nesting depth.
+        let source =
+            "const X = ({ c }) => <div sz={{ md: { hover: { bg: { color: 'black', op: c ? 30 : 100 } } } }} />;";
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const X = ({ c }) => <div className={c ? \"md:hover:bg-black/30\" : \"md:hover:bg-black/100\"} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_color_opacity_ternary_with_static_sibling_prop() {
+        // A static sibling prop stays in the base class; only the color-opacity
+        // ternary becomes the conditional segment.
+        let source =
+            "const X = ({ c }) => <div sz={{ p: 4, bg: { color: 'black', op: c ? 30 : 100 } }} />;";
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const X = ({ c }) => <div className={`p-4 ${c ? \"bg-black/30\" : \"bg-black/100\"}`} />;"
         );
     }
 

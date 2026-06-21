@@ -16,6 +16,7 @@
 
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
+import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
 
 import {
     handleClsxCall,
@@ -44,6 +45,8 @@ export interface TransformResult {
         /** className kept on capitalized components (they do not accept sz). */
         classNamesSkippedComponent: number;
         classesUnrecognized: string[];
+        /** Legacy sz-prop keys rewritten to their single-way canonical (transitional). */
+        szKeysNormalized?: number;
     };
     /** Imports that may be unused after migration (e.g., clsx, cn). */
     potentiallyUnusedImports: string[];
@@ -142,6 +145,95 @@ function isClassNameJsxAttribute(node: VisitNode): boolean {
     return t.isJSXAttribute(node) && t.isJSXIdentifier(node.name) && node.name.name === 'className';
 }
 
+/**
+ * A SUGGESTION_MAP target is auto-rewritable only when it is a single bare key
+ * name. Prose/multi-target hints (e.g. "fontWeight (for weight) or fontFamily")
+ * cannot be applied mechanically — those are left for the build-time dev-warn.
+ *
+ * @param target - the SUGGESTION_MAP target string to test.
+ * @returns true if the target is a single bare key name.
+ */
+function isCleanCanonicalTarget(target: string): boolean {
+    return /^[a-z][a-z0-9]*$/i.test(target);
+}
+
+/**
+ * TRANSITIONAL: normalizes pre-single-way sz-prop keys for the 0.9.10 → 0.10.0
+ * upgrade. Remove at v1 — redundant once consumers have migrated.
+ *
+ * Rewrites OLD keys inside an `sz={{…}}` object literal to the single canonical
+ * form, driven entirely by the compiler's authoritative maps (no local table):
+ * removed boolean sugar `{ flex: true }` → `{ display: 'flex' }`
+ * (REMOVED_BOOLEAN_SUGAR), and clean key renames `{ padding: 4 }` → `{ p: 4 }`,
+ * `{ fontWeight: 'bold' }` → `{ weight: 'bold' }` (single-target SUGGESTION_MAP).
+ * Recurses into nested variant objects (`hover:{…}`, `group:{data:{…}}`).
+ * Already-canonical and unknown keys are left untouched; non-`true` values of a
+ * boolean-sugar key are left as-is (the dev-warn is the backstop).
+ *
+ * @param obj - the sz object expression.
+ * @param replacements - sink for non-overlapping source edits.
+ * @returns number of keys rewritten.
+ */
+function normalizeSzObject(obj: t.ObjectExpression, replacements: Replacement[]): number {
+    let count = 0;
+    for (const prop of obj.properties) {
+        if (!t.isObjectProperty(prop) || prop.computed) {
+            continue; // spread / computed keys are not safely rewritable
+        }
+        const key = prop.key;
+        let keyName: string | null = null;
+        if (t.isIdentifier(key)) {
+            keyName = key.name;
+        } else if (t.isStringLiteral(key)) {
+            keyName = key.value;
+        }
+        if (keyName === null) {
+            continue;
+        }
+
+        // Removed boolean sugar: replace the whole `flex: true` property.
+        const sugar = REMOVED_BOOLEAN_SUGAR[keyName];
+        if (
+            sugar &&
+            t.isBooleanLiteral(prop.value) &&
+            prop.value.value === true &&
+            prop.start != null &&
+            prop.end != null
+        ) {
+            replacements.push({
+                start: prop.start,
+                end: prop.end,
+                text: `${sugar.key}: '${sugar.value}'`,
+            });
+            count++;
+            continue;
+        }
+
+        // Clean rename: rewrite only the key identifier, keep the value as-is.
+        const suggestion = SUGGESTION_MAP[keyName];
+        if (
+            suggestion &&
+            isCleanCanonicalTarget(suggestion) &&
+            suggestion !== keyName &&
+            key.start != null &&
+            key.end != null
+        ) {
+            replacements.push({
+                start: key.start,
+                end: key.end,
+                text: t.isStringLiteral(key) ? `'${suggestion}'` : suggestion,
+            });
+            count++;
+        }
+
+        // Recurse into nested variant objects (disjoint from the key edit above).
+        if (t.isObjectExpression(prop.value)) {
+            count += normalizeSzObject(prop.value, replacements);
+        }
+    }
+    return count;
+}
+
 // ============================================================================
 // MAIN TRANSFORMER (BABEL AST — JSX/TSX)
 // ============================================================================
@@ -154,6 +246,14 @@ export interface TransformOptions {
     injectTodos?: boolean;
     /** Map of custom classes to sz objects, used to override unrecognized classes */
     customMap?: CsszyxTodoMap;
+    /**
+     * If true, ONLY normalize legacy sz-prop keys to their single-way canonical
+     * and leave every `className` attribute untouched. The sz-key-only upgrade
+     * path for 0.9.10 → 0.10.0.
+     *
+     * TRANSITIONAL: part of the same legacy-key normalizer; remove at v1.
+     */
+    keysOnly?: boolean;
 }
 
 /**
@@ -174,6 +274,7 @@ export function transformSource(
     let classNamesTransformed = 0;
     let classNamesSkipped = 0;
     let classNamesSkippedComponent = 0;
+    let szKeysNormalized = 0;
     const classesUnrecognized: string[] = [];
     const replacements: Replacement[] = [];
 
@@ -191,7 +292,26 @@ export function transformSource(
     // saves the full Babel parse + AST walk cost on every irrelevant file.
     // Must catch both className references (migration target) and cva
     // imports (warning surface) — anything else is invisible to migrate.
-    if (source.indexOf('className') === -1 && source.indexOf('cva') === -1) {
+    // In keys-only mode only `sz=` matters (className is left untouched).
+    if (options.keysOnly && source.indexOf('sz=') === -1) {
+        return {
+            code: source,
+            changed: false,
+            warnings: [],
+            stats: {
+                classNamesTransformed: 0,
+                classNamesSkipped: 0,
+                classNamesSkippedComponent: 0,
+                classesUnrecognized: [],
+            },
+            potentiallyUnusedImports: [],
+        };
+    }
+    if (
+        source.indexOf('className') === -1 &&
+        source.indexOf('cva') === -1 &&
+        source.indexOf('sz=') === -1
+    ) {
         return {
             code: source,
             changed: false,
@@ -264,8 +384,29 @@ export function transformSource(
         },
 
         JSXAttribute(node, parent) {
-            // Only process className attributes
             const attrName = node.name;
+
+            // TRANSITIONAL (0.9.10 → 0.10.0): normalize legacy keys inside an
+            // existing sz={{…}} object literal to the single-way canonical.
+            // Remove at v1 — redundant once consumers have migrated.
+            if (t.isJSXIdentifier(attrName) && attrName.name === 'sz') {
+                const szValue = node.value;
+                if (
+                    t.isJSXExpressionContainer(szValue) &&
+                    t.isObjectExpression(szValue.expression)
+                ) {
+                    szKeysNormalized += normalizeSzObject(szValue.expression, replacements);
+                }
+                return;
+            }
+
+            // keys-only upgrade: leave className (and everything else) untouched —
+            // only the sz-prop key normalization above runs. (Transitional; v1.)
+            if (options.keysOnly) {
+                return;
+            }
+
+            // Only process className attributes
             if (!t.isJSXIdentifier(attrName) || attrName.name !== 'className') {
                 return;
             }
@@ -498,6 +639,7 @@ export function transformSource(
             classNamesSkipped,
             classNamesSkippedComponent,
             classesUnrecognized,
+            szKeysNormalized,
         },
         potentiallyUnusedImports,
     };

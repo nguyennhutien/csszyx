@@ -1,9 +1,9 @@
 import { Demo } from '../Demo.tsx';
 
 // Shared swatch layout — direct reference when no override needed
-const swatchLayout = { size: 20, rounded: 'lg', flex: true, items: 'center', justify: 'center' } as const;
-const labelWhite = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'white' } as const;
-const labelDark = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'slate-900' } as const;
+const swatchLayout = { size: 20, rounded: 'lg', display: 'flex', items: 'center', justify: 'center' } as const;
+const labelWhite = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: 'white' } as const;
+const labelDark = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: 'slate-900' } as const;
 
 export function BackgroundColorSwatches() {
     return (
@@ -22,7 +22,7 @@ export function BackgroundColorSwatches() {
 }
 
 export function BackgroundOpacity() {
-    const labelText = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: '--ds-text' } as const;
+    const labelText = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: '--ds-text' } as const;
     return (
         <Demo label="{ bg: { color: 'blue-500', op: 50 } } — background with opacity">
             <div sz={{ ...swatchLayout, bg: { color: 'sky-400', op: 100 } }}>

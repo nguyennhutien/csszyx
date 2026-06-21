@@ -2,16 +2,22 @@
 /**
  * Generates the TS↔Rust lowering parity corpus.
  *
- * For every sz object below it records the canonical Babel/oxc `transform()`
- * className and serializes the object into the Rust `StaticSzObject` IR shape.
- * `packages/core/tests/parity_corpus.rs` replays the same objects through the
- * native `lower_static_sz_object` and asserts identical class output, so a
- * divergence between the two parser paths fails closed instead of shipping a
- * silent default-parser bug.
+ * Sources two sets of sz objects: the hand-curated edge cases below (variants,
+ * nesting, color-opacity, arbitrary spaces) plus every documented single-key
+ * forward case from the per-key matrix fixture
+ * (`packages/cli/tests/generated/sz-key-cases.json`), so the rust default engine
+ * is proven equivalent to the TS engine for every key the snippets document —
+ * not just the curated edges. For each object it records the canonical Babel/oxc
+ * `transform()` className and serializes the object into the Rust
+ * `StaticSzObject` IR shape. `packages/core/tests/parity_corpus.rs` replays the
+ * same objects through the native `lower_static_sz_object` and asserts identical
+ * class output, so a divergence between the two parser paths fails closed
+ * instead of shipping a silent default-parser bug.
  *
- * Usage: pnpm gen:parity-corpus
+ * Usage: pnpm gen:parity-corpus       (write)
+ *        pnpm gen:parity-corpus:check (verify committed file is in sync)
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +25,8 @@ import { transform } from '../packages/compiler/src/transform.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outFile = resolve(here, '../packages/core/tests/fixtures/parity-corpus.json');
+const keyCasesFile = resolve(here, '../packages/cli/tests/generated/sz-key-cases.json');
+const check = process.argv.includes('--check');
 
 /** Converts a JS sz value into the serde `StaticSzValue` tagged shape. */
 function toIrValue(value) {
@@ -103,7 +111,7 @@ const corpus = [
     { top: 4 },
     { isolation: 'isolate' },
     // flex / grid (KLTN P1-4 arbitrary spaces)
-    { flex: true },
+    { display: 'flex' },
     { flex: 1 },
     { flex: 'auto' },
     { flexDir: 'row' },
@@ -148,9 +156,9 @@ const corpus = [
     { tracking: 'wide' },
     { align: 'middle' },
     { whitespace: 'nowrap' },
-    { italic: true },
+    { fontStyle: 'italic' },
     { italic: false },
-    { underline: true },
+    { decoration: 'underline' },
     { weight: 600 },
     { indent: 4 },
     { breakWord: true },
@@ -193,7 +201,7 @@ const corpus = [
     { pointer: 'none' },
     { scroll: 'smooth' },
     // variants — responsive / state / dark / group / peer / arbitrary / supports
-    { md: { flex: true } },
+    { md: { display: 'flex' } },
     { lg: { gridCols: 4 } },
     { sm: { p: 2 } },
     { hover: { bg: 'blue-600' } },
@@ -203,10 +211,10 @@ const corpus = [
     { group: { hover: { color: 'white' } } },
     { peer: { focus: { text: 'red-500' } } },
     { peer: { checked: { bg: 'green-500' } } },
-    { group: { has: { input: { block: true } } } },
+    { group: { has: { input: { display: 'block' } } } },
     { group: { data: { active: { bg: 'blue-500' } } } },
     { group: { aria: { checked: { bg: 'blue-500' } } } },
-    { group: { '.is-published': { block: true } } },
+    { group: { '.is-published': { display: 'block' } } },
     { group: { sidebar: { hover: { color: 'white' } } } },
     { has: { checked: { bg: 'blue-500' } } },
     { has: { img: { rounded: 'lg' } } },
@@ -215,27 +223,73 @@ const corpus = [
     { 'group-hover': { dark: { text: 'white' } } },
     { md: { hover: { text: 'white' } } },
     { '[&>span]': { p: 1 } },
-    { supports: { 'display:grid': { grid: true } } },
+    { supports: { 'display:grid': { display: 'grid' } } },
     { supports: { 'backdrop-filter:blur(1px)': { rounded: 'lg' } } },
     { not: { first: { mt: 4 } } },
     { not: { hover: { opacity: 75 } } },
-    { not: { supports: { 'display:grid': { block: true } } } },
+    { not: { supports: { 'display:grid': { display: 'block' } } } },
     { data: { active: { bg: 'blue-500' } } },
     { data: { 'state=open': { p: 2 } } },
     { firstChild: { ml: 0 } },
     // combinations / multiple props / important
-    { p: 4, bg: 'red-500', flex: true },
+    { p: 4, bg: 'red-500', display: 'flex' },
     { display: 'flex', items: 'center', gap: 3 },
     { md: { display: 'grid', gridCols: 2 }, p: 6 },
     { mt: 6, display: 'flex', flexWrap: 'wrap', gap: 3 },
+    // css escape hatch (arbitrary [prop:value]) — a nested object that is NOT a
+    // variant; the runtime path historically lowered it as a `css:` variant.
+    { css: { color: 'red', backgroundColor: 'blue' } },
+    { css: { '--brand': 'navy' } },
+    // order-locking multi-prop + nested handlers combined with sibling props
+    { p: 4, m: 2, bg: 'red-500', display: 'flex', items: 'center' },
+    { bg: { color: 'blue-500', op: 30 }, p: 4 },
+    { aria: { checked: { bg: 'blue-500' } }, p: 2 },
+    { group: { hover: { opacity: 100 } }, p: 1 },
+    // Shapes formerly asserted by the integration.test.ts spot-check, folded in
+    // so the cross-engine harness covers them instead of a 4-case JS duplicate.
+    { bgImg: 'url(/hero.png)' },
+    { hover: { start: 2 } },
 ];
 
-const records = corpus.map(sz => ({
+// Merge the hand-curated corpus (first, order preserved) with every documented
+// single-key forward case from the per-key matrix fixture. Dedup by stable JSON
+// key so a curated object and its fixture twin collapse to one record, and the
+// Map preserves insertion order for a diff-clean, deterministic output.
+const byKey = new Map();
+for (const sz of corpus) {
+    byKey.set(JSON.stringify(sz), sz);
+}
+
+const keyCases = JSON.parse(readFileSync(keyCasesFile, 'utf8'));
+for (const entry of Object.values(keyCases.keys)) {
+    for (const { sz } of entry.forward ?? []) {
+        const key = JSON.stringify(sz);
+        if (!byKey.has(key)) {
+            byKey.set(key, sz);
+        }
+    }
+}
+
+const records = [...byKey.values()].map(sz => ({
     sz: JSON.stringify(sz),
     ir: toIrObject(sz),
     oxc: transform(sz).className,
 }));
 
+const serialized = `${JSON.stringify(records, null, 2)}\n`;
+
+if (check) {
+    const current = readFileSync(outFile, 'utf8');
+    if (current !== serialized) {
+        console.error(
+            '[gen-rust-parity-corpus] parity corpus is stale. Run pnpm gen:parity-corpus.',
+        );
+        process.exit(1);
+    }
+    console.log(`[gen-rust-parity-corpus] up to date (${records.length} records).`);
+    process.exit(0);
+}
+
 mkdirSync(dirname(outFile), { recursive: true });
-writeFileSync(outFile, `${JSON.stringify(records, null, 2)}\n`, 'utf8');
+writeFileSync(outFile, serialized, 'utf8');
 console.log(`Wrote ${records.length} parity records to ${outFile}`);

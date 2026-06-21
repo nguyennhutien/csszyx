@@ -43,6 +43,7 @@
   "dependencies": {
     "@babel/parser": "^7.23.0",
     "@babel/types": "^7.23.0",
+    "@csszyx/compiler": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/unplugin": "workspace:*",
     "cac": "^6.7.14",

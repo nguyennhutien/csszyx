@@ -33,23 +33,81 @@ Tailwind class names map to camelCase sz prop keys:
 | `bg-blue-500` | `{ bg: 'blue-500' }` |
 | `text-white` | `{ color: 'white' }` |
 | `rounded-lg` | `{ rounded: 'lg' }` |
-| `font-bold` | `{ fontWeight: 'bold' }` |
-| `flex` | `{ flex: true }` |
-| `hidden` | `{ hidden: true }` |
+| `font-bold` | `{ weight: 'bold' }` |
+| `flex` | `{ display: 'flex' }` |
+| `hidden` | `{ display: 'none' }` |
 
-## Boolean Props
+## One key per property
 
-Many Tailwind utilities are boolean — they're either on or off:
+Props that set a single CSS property are written with their **canonical key and
+a value** — one way, no aliases:
+
+| CSS property | sz key | Example |
+|---|---|---|
+| display | `display` | `{ display: 'flex' }`, `{ display: 'none' }` |
+| position | `position` | `{ position: 'absolute' }` |
+| visibility | `visibility` | `{ visibility: 'hidden' }` |
+| isolation | `isolation` | `{ isolation: 'isolate' }` |
+| text-transform | `textTransform` | `{ textTransform: 'uppercase' }` |
+| font-style | `fontStyle` | `{ fontStyle: 'italic' }` |
+| font-smoothing | `fontSmoothing` | `{ fontSmoothing: 'grayscale' }` |
+| text-decoration-line | `decoration` | `{ decoration: 'underline' }` |
 
 ```tsx
-<div sz={{
-  flex: true,        // flex
-  hidden: true,      // hidden
-  uppercase: true,   // uppercase
-  italic: true,      // italic
-  truncate: true,    // truncate
-}} />
+<div sz={{ display: 'flex', position: 'absolute', fontStyle: 'italic' }} />
 ```
+
+:::caution[Boolean sugar was removed]
+Earlier versions accepted boolean aliases like `{ flex: true }`, `{ absolute: true }`,
+`{ italic: true }`. These are **removed** — they emit nothing and warn in dev.
+Use the canonical key above, or run `csszyx migrate` to rewrite them automatically.
+Because each property has exactly one key, the same property can never be set
+twice in one object.
+:::
+
+### True boolean utilities
+
+Some utilities are genuinely on/off — not a value of a single property — and stay
+boolean: composite helpers (`truncate`, `srOnly`), stackable font-variant-numeric
+flags (`ordinal`, `tabularNums`), default-or-value toggles (`grow`, `ring`,
+`blur`), and plugin components (`container`, `prose`).
+
+```tsx
+<div sz={{ truncate: true, tabularNums: true, grow: true, container: true }} />
+```
+
+## Type safety — unknown keys are caught by TypeScript
+
+The `sz` prop type is **closed**: a key that isn't a known sz prop or variant is a
+TypeScript error, so a typo or a legacy CSS-property name fails at compile time. Run
+`tsc --noEmit` in CI to enforce it across a codebase.
+
+```tsx
+<div sz={{ bgColor: 'red-500' }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
+```
+
+To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt out with
+`@ts-expect-error` — a conscious decision; the runtime still emits the class:
+
+```tsx
+{/* @ts-expect-error - forward-compat utility not yet in csszyx */}
+<div sz={{ someNewUtility: 'x' }} />
+```
+
+Arbitrary variants are allowed by pattern (`@container`, `min-[320px]`, `[&>span]`).
+
+:::tip[Custom breakpoints are typed from your CSS]
+Define a breakpoint once in Tailwind `@theme` and csszyx auto-generates the type — no
+manual declaration:
+
+```css
+@theme { --breakpoint-tablet: 40rem; }
+```
+
+```tsx
+<div sz={{ p: 4, tablet: { p: 6 } }} /> // `tablet:` now type-checks + autocompletes
+```
+:::
 
 ## Nested Variants
 
@@ -296,7 +354,7 @@ Multiple spreads and nested variant objects are also resolved statically at
 build time:
 
 ```tsx
-const layout = { flex: true, gap: 4 };
+const layout = { display: 'flex', gap: 4 };
 const colors = { bg: 'blue-500', color: 'white' };
 
 <div sz={{ ...layout, ...colors, hover: { opacity: 75 } }} />
@@ -359,17 +417,17 @@ uses `_szMerge` at runtime to join them safely:
 When class names depend on runtime values, use the helper functions:
 
 ```tsx
-import { _sz, _szIf, _szSwitch } from 'csszyx';
+import { _sz } from 'csszyx';
 
 // Concatenate multiple class strings
 <div className={_sz('p-4 bg-blue-500', extraClass)} />
 
-// Conditional: apply class only when condition is true
-<div className={_szIf(isActive, 'ring-2 ring-blue-400')} />
+// Conditional: plain JS conditionals compose with _sz
+<div className={_sz('base', isActive && 'ring-2 ring-blue-400')} />
 
-// Switch: first truthy condition wins
-<div className={_szSwitch([
-  [variant === 'primary', 'bg-blue-600 text-white'],
-  [variant === 'danger',  'bg-red-600 text-white'],
-], 'bg-gray-500 text-gray-900')} />
+// Switch: a plain object lookup
+<div className={{
+  primary: 'bg-blue-600 text-white',
+  danger:  'bg-red-600 text-white',
+}[variant] ?? 'bg-gray-500 text-gray-900'} />
 ```

@@ -202,8 +202,8 @@ describe('any-pointer variants (v4.1)', () => {
         expect(transform({ anyPointerCoarse: { p: 8 } }).className).toBe('any-pointer-coarse:p-8');
     });
 
-    it('{ anyPointerNone: { hidden: true } } → any-pointer-none:hidden', () => {
-        expect(transform({ anyPointerNone: { hidden: true } }).className).toBe(
+    it('{ anyPointerNone: { display: "none" } } → any-pointer-none:hidden', () => {
+        expect(transform({ anyPointerNone: { display: 'none' } }).className).toBe(
             'any-pointer-none:hidden',
         );
     });
@@ -224,8 +224,8 @@ describe('user-valid / user-invalid variants (v4.1)', () => {
 });
 
 describe('details-content variant (v4.1)', () => {
-    it('{ detailsContent: { block: true } } → details-content:block', () => {
-        expect(transform({ detailsContent: { block: true } }).className).toBe(
+    it('{ detailsContent: { display: "block" } } → details-content:block', () => {
+        expect(transform({ detailsContent: { display: 'block' } }).className).toBe(
             'details-content:block',
         );
     });
@@ -240,7 +240,7 @@ describe('inverted-colors variant (v4.1)', () => {
 });
 
 describe('noscript variant (v4.1)', () => {
-    it('{ noscript: { block: true } } → noscript:block', () => {
-        expect(transform({ noscript: { block: true } }).className).toBe('noscript:block');
+    it('{ noscript: { display: "block" } } → noscript:block', () => {
+        expect(transform({ noscript: { display: 'block' } }).className).toBe('noscript:block');
     });
 });

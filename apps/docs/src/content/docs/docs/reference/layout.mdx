@@ -12,16 +12,16 @@ the document.
 ## Display
 
 <PropTable rows={[
-  { sz: "{ flex: true }", tw: "flex" },
-  { sz: "{ grid: true }", tw: "grid" },
-  { sz: "{ block: true }", tw: "block" },
-  { sz: "{ inlineBlock: true }", tw: "inline-block" },
-  { sz: "{ inline: true }", tw: "inline" },
-  { sz: "{ hidden: true }", tw: "hidden" },
-  { sz: "{ contents: true }", tw: "contents" },
-  { sz: "{ inlineFlex: true }", tw: "inline-flex" },
-  { sz: "{ inlineGrid: true }", tw: "inline-grid" },
-  { sz: "{ flowRoot: true }", tw: "flow-root" },
+  { sz: "{ display: 'flex' }", tw: "flex" },
+  { sz: "{ display: 'grid' }", tw: "grid" },
+  { sz: "{ display: 'block' }", tw: "block" },
+  { sz: "{ display: 'inline-block' }", tw: "inline-block" },
+  { sz: "{ display: 'inline' }", tw: "inline" },
+  { sz: "{ display: 'none' }", tw: "hidden" },
+  { sz: "{ display: 'contents' }", tw: "contents" },
+  { sz: "{ display: 'inline-flex' }", tw: "inline-flex" },
+  { sz: "{ display: 'inline-grid' }", tw: "inline-grid" },
+  { sz: "{ display: 'flow-root' }", tw: "flow-root" },
   { sz: "{ srOnly: true }", tw: "sr-only" },
 ]} />
 
@@ -32,11 +32,11 @@ the document.
 ## Position
 
 <PropTable rows={[
-  { sz: "{ relative: true }", tw: "relative" },
-  { sz: "{ absolute: true }", tw: "absolute" },
-  { sz: "{ fixed: true }", tw: "fixed" },
-  { sz: "{ sticky: true }", tw: "sticky" },
-  { sz: "{ static: true }", tw: "static" },
+  { sz: "{ position: 'relative' }", tw: "relative" },
+  { sz: "{ position: 'absolute' }", tw: "absolute" },
+  { sz: "{ position: 'fixed' }", tw: "fixed" },
+  { sz: "{ position: 'sticky' }", tw: "sticky" },
+  { sz: "{ position: 'static' }", tw: "static" },
 ]} />
 
 <AbsoluteOverlay />
@@ -79,9 +79,9 @@ Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
 ## Visibility
 
 <PropTable rows={[
-  { sz: "{ visible: true }", tw: "visible" },
-  { sz: "{ invisible: true }", tw: "invisible" },
-  { sz: "{ collapse: true }", tw: "collapse" },
+  { sz: "{ visibility: 'visible' }", tw: "visible" },
+  { sz: "{ visibility: 'hidden' }", tw: "invisible" },
+  { sz: "{ visibility: 'collapse' }", tw: "collapse" },
 ]} />
 
 ## Z-Index
@@ -137,9 +137,9 @@ Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
 
 ```tsx
 // Absolutely positioned overlay
-<div sz={{ relative: true }}>
+<div sz={{ position: 'relative' }}>
   <div sz={{
-    absolute: true,
+    position: 'absolute',
     inset: 0,
     bg: 'black',
     opacity: 50,
@@ -148,7 +148,7 @@ Logical inset properties: `{ insetS: 4 }` → `inset-s-4` (inline-start),
 
 // Sticky header
 <header sz={{
-  sticky: true,
+  position: 'sticky',
   top: 0,
   z: 50,
   bg: 'white',

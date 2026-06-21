@@ -17802,7 +17802,7 @@
         {
             "id": "typography-font-weight-keywords-1",
             "szInput": {
-                "fontWeight": "thin"
+                "weight": "thin"
             },
             "expectedClass": "font-thin",
             "tailwindVersion": "4",
@@ -17812,7 +17812,7 @@
         {
             "id": "typography-font-weight-keywords-2",
             "szInput": {
-                "fontWeight": "extralight"
+                "weight": "extralight"
             },
             "expectedClass": "font-extralight",
             "tailwindVersion": "4",
@@ -17822,7 +17822,7 @@
         {
             "id": "typography-font-weight-number-1",
             "szInput": {
-                "fontWeight": 100
+                "weight": 100
             },
             "expectedClass": "font-100",
             "tailwindVersion": "4",
@@ -17832,7 +17832,7 @@
         {
             "id": "typography-font-weight-number-2",
             "szInput": {
-                "fontWeight": 200
+                "weight": 200
             },
             "expectedClass": "font-200",
             "tailwindVersion": "4",
@@ -17852,7 +17852,7 @@
         {
             "id": "typography-font-weight-arbitrary",
             "szInput": {
-                "fontWeight": 550
+                "weight": 550
             },
             "expectedClass": "font-550",
             "tailwindVersion": "4",
@@ -17862,7 +17862,7 @@
         {
             "id": "typography-font-weight-css-variable",
             "szInput": {
-                "fontWeight": "--w"
+                "weight": "--w"
             },
             "expectedClass": "font-(--w)",
             "tailwindVersion": "4",
@@ -18477,7 +18477,7 @@
         },
         {
             "id": "typography-font-weight-edge-950",
-            "szInput": { "fontWeight": 950 },
+            "szInput": { "weight": 950 },
             "expectedClass": "font-950",
             "tailwindVersion": "4",
             "category": "Typography",
@@ -18485,7 +18485,7 @@
         },
         {
             "id": "typography-font-weight-edge-150",
-            "szInput": { "fontWeight": 150 },
+            "szInput": { "weight": 150 },
             "expectedClass": "font-150",
             "tailwindVersion": "4",
             "category": "Typography",

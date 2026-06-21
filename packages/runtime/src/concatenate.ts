@@ -9,7 +9,12 @@
  * @module @csszyx/runtime/concatenate
  */
 
-import { transform as rawTransform, type SzObject } from '@csszyx/compiler/browser';
+import {
+    MAX_SZ_DEPTH,
+    transform as rawTransform,
+    SzDepthError,
+    type SzObject,
+} from '@csszyx/compiler/browser';
 
 /** Result of a runtime sz transform: the className plus any style attributes. */
 interface TransformResult {
@@ -95,6 +100,23 @@ export type SzInput = string | SzObject | SzInput[] | null | undefined | false;
  * ```
  */
 export function _sz(...classes: SzInput[]): string {
+    return szJoin(classes, 0);
+}
+
+/**
+ * Depth-tracked worker for {@link _sz}. Nested arrays recurse with an incremented
+ * depth so a deeply nested array (`[[[[…]]]]`, e.g. from untrusted data) is
+ * bounded by {@link MAX_SZ_DEPTH} instead of overflowing the call stack.
+ *
+ * @param classes - the class inputs to join.
+ * @param depth - the current recursion depth.
+ * @returns the joined className string.
+ */
+function szJoin(classes: SzInput[], depth: number): string {
+    if (depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
+
     // Fast path: single string argument (most common case after compilation)
     if (classes.length === 1) {
         const cls = classes[0];
@@ -105,7 +127,7 @@ export function _sz(...classes: SzInput[]): string {
             return '';
         }
         if (Array.isArray(cls)) {
-            return _sz(...(cls as SzInput[]));
+            return szJoin(cls as SzInput[], depth + 1);
         }
         const res = transform(cls);
         return typeof res === 'string' ? res : res.className;
@@ -123,7 +145,7 @@ export function _sz(...classes: SzInput[]): string {
         }
 
         if (Array.isArray(cls)) {
-            const str = _sz(...(cls as SzInput[]));
+            const str = szJoin(cls as SzInput[], depth + 1);
             if (!str) {
                 continue;
             }
@@ -154,101 +176,6 @@ export function _sz(...classes: SzInput[]): string {
 }
 
 /**
- * Conditionally applies className based on a condition.
- *
- * Supports both pre-compiled strings and SzObjects for dynamic styling.
- * This is the recommended helper for conditional class application.
- *
- * @param {boolean} condition - Whether to apply the truthy value
- * @param {SzInput} truthyValue - ClassName or SzObject when condition is true
- * @param {SzInput} falsyValue - ClassName or SzObject when condition is false
- * @returns {string} The resolved className string
- *
- * @example
- * ```typescript
- * // With strings (pre-compiled)
- * _szIf(isActive, 'bg-green-500', 'bg-gray-500')
- * // Returns: "bg-green-500" if isActive, "bg-gray-500" otherwise
- *
- * // With SzObjects (runtime transform)
- * _szIf(isActive, { bg: 'green-500' }, { bg: 'gray-500' })
- * // Returns: "bg-green-500" if isActive, "bg-gray-500" otherwise
- *
- * // Without fallback
- * _szIf(isActive, { bg: 'green-500' })
- * // Returns: "bg-green-500" if isActive, "" otherwise
- * ```
- */
-export function _szIf(condition: boolean, truthyValue: SzInput, falsyValue?: SzInput): string {
-    const value = condition ? truthyValue : falsyValue;
-
-    if (!value) {
-        return '';
-    }
-    if (typeof value === 'string') {
-        return value;
-    }
-    if (Array.isArray(value)) {
-        return _sz(...(value as SzInput[]));
-    }
-    const res = transform(value);
-    return typeof res === 'string' ? res : res.className;
-}
-
-/**
- * Applies className based on multiple conditions (switch-like).
- *
- * Returns the className for the first truthy condition, or the default.
- * Supports both strings and SzObjects.
- *
- * @param {Array<[boolean, SzInput]>} conditions - Array of [condition, value] tuples
- * @param {SzInput} defaultValue - Default value if no conditions match
- * @returns {string} The matched className or default
- *
- * @example
- * ```typescript
- * _szSwitch([
- *     [status === 'success', { text: 'green-500' }],
- *     [status === 'error', { text: 'red-500' }],
- *     [status === 'warning', { text: 'yellow-500' }]
- * ], { text: 'gray-500' })
- * ```
- */
-export function _szSwitch(
-    conditions: Array<[boolean, SzInput]>,
-    defaultValue: SzInput = '',
-): string {
-    for (let i = 0; i < conditions.length; i++) {
-        const [condition, value] = conditions[i];
-        if (condition) {
-            if (!value) {
-                return '';
-            }
-            if (typeof value === 'string') {
-                return value;
-            }
-            if (Array.isArray(value)) {
-                return _sz(...(value as SzInput[]));
-            }
-            const res = transform(value);
-            return typeof res === 'string' ? res : res.className;
-        }
-    }
-
-    if (!defaultValue) {
-        return '';
-    }
-    if (typeof defaultValue === 'string') {
-        return defaultValue;
-    }
-    if (Array.isArray(defaultValue)) {
-        return _sz(...(defaultValue as SzInput[]));
-    }
-    const res = transform(defaultValue);
-    return typeof res === 'string' ? res : res.className;
-}
-
-/**
  * Merges className strings, removing duplicates.
  *
  * Useful when combining multiple className sources that may overlap.
@@ -266,6 +193,22 @@ export function _szSwitch(
  * ```
  */
 export function _szMerge(...classes: SzInput[]): string {
+    return szMergeJoin(classes, 0);
+}
+
+/**
+ * Depth-tracked worker for {@link _szMerge}. Bounds nested-array recursion by
+ * {@link MAX_SZ_DEPTH} so untrusted deeply nested input cannot overflow the stack.
+ *
+ * @param classes - the class inputs to join.
+ * @param depth - the current recursion depth.
+ * @returns the joined className string.
+ */
+function szMergeJoin(classes: SzInput[], depth: number): string {
+    if (depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
+
     const seen = new Set<string>();
     const result: string[] = [];
 
@@ -276,7 +219,7 @@ export function _szMerge(...classes: SzInput[]): string {
         }
 
         if (Array.isArray(cls)) {
-            const str = _szMerge(...(cls as SzInput[]));
+            const str = szMergeJoin(cls as SzInput[], depth + 1);
             if (!str) {
                 continue;
             }

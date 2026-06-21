@@ -48,7 +48,7 @@ for (const szKey of Object.keys(PROPERTY_MAP)) {
 }
 
 // Index SUGGESTION_MAP entries (CSS property aliases → sz keys).
-// Values can be descriptive strings like "fontWeight (for weight) or fontFamily (for family)".
+// Values can be descriptive strings like "weight (for font-weight) or fontFamily (for family)".
 // Extract the first token as the primary sz key.
 for (const [cssAlias, szTarget] of Object.entries(SUGGESTION_MAP)) {
     const primaryKey = szTarget.split(/[\s/(]/)[0];
@@ -83,11 +83,13 @@ const EXAMPLES: Record<string, string[]> = {
     h: ['{ h: 16 }', "{ h: 'screen' }"],
     text: ["{ text: 'lg' }", "{ text: '2xl' }"],
     color: ["{ color: 'white' }", "{ color: 'slate-500' }"],
-    fontWeight: ["{ fontWeight: 'bold' }", '{ fontWeight: 700 }'],
+    weight: ["{ weight: 'bold' }", '{ weight: 700 }'],
     fontFamily: ["{ fontFamily: 'sans' }", "{ fontFamily: 'mono' }"],
-    flex: ['{ flex: true }', "{ flex: 'auto' }", '{ flex: 1 }'],
+    display: ["{ display: 'flex' }", "{ display: 'none' }"],
+    position: ["{ position: 'absolute' }", "{ position: 'relative' }"],
+    flex: ['{ flex: 1 }', "{ flex: 'auto' }"],
     flexDir: ["{ flexDir: 'col' }", "{ flexDir: 'row' }"],
-    grid: ['{ grid: true }'],
+    grid: ["{ display: 'grid' }"],
     gridCols: ['{ gridCols: 3 }', "{ gridCols: 'none' }"],
     gap: ['{ gap: 4 }'],
     items: ["{ items: 'center' }", "{ items: 'start' }"],

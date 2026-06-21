@@ -86,7 +86,7 @@ Full walkthrough: <https://csszyx.com>
 | ------------------------ | ---------------------------------------------------------------------------------- |
 | `csszyx`                 | Umbrella — re-exports all; provides `csszyx/vite`, `csszyx/webpack`, `csszyx/lite` |
 | `@csszyx/compiler`       | `sz` object → Tailwind className transform (TypeScript)                            |
-| `@csszyx/runtime`        | `_sz`, `_szIf`, `_szSwitch`, `_szMerge` + SSR hydration validator                  |
+| `@csszyx/runtime`        | `_sz`, `_szMerge`, `splitBox` + class toolkit + SSR hydration validator            |
 | `@csszyx/core`           | Rust/WASM core: encoder, SHA-256 checksum, collision detection                     |
 | `@csszyx/unplugin`       | Build plugin — Vite + Webpack + esbuild + Rollup + Next.js                         |
 | `@csszyx/dynamic`        | Runtime CSS injection for API/CMS-driven styling                                   |
@@ -119,9 +119,9 @@ Full walkthrough: <https://csszyx.com>
 **Runtime helpers:**
 
 ```tsx
-import { _sz, _szIf } from "@csszyx/runtime";
+import { _sz } from "@csszyx/runtime";
 
-<div className={_sz("base", _szIf(isActive, "active", "inactive"))} />;
+<div className={_sz("base", isActive ? "active" : "inactive")} />;
 ```
 
 **Dynamic (runtime-injected styles):**

@@ -49,8 +49,8 @@ Pass an array to compose multiple objects. The compiler merges fully-static arra
 build time; conditional elements use `_szMerge` at runtime:
 
 ```tsx
-const layout = { flex: true, items: 'center', gap: 3 } as const;
-const text   = { text: 'sm', fontWeight: 'medium' } as const;
+const layout = { display: 'flex', items: 'center', gap: 3 } as const;
+const text   = { text: 'sm', weight: 'medium' } as const;
 
 // Static — single className string, zero runtime
 <div sz={[layout, text]} />
@@ -121,12 +121,12 @@ export function Card({ elevated }: { elevated?: boolean }) {
 </TabItem>
 <TabItem label="Shared label style">
 ```tsx
-const label = { text: 'sm', fontWeight: 'medium', color: 'gray-600' } as const;
+const label = { text: 'sm', weight: 'medium', color: 'gray-600' } as const;
 
 function SpaceXDemo() {
     return (
-        <div sz={{ flex: true, gap: 4 }}>
-            <div sz={{ flex: true, spaceX: 2 }}>
+        <div sz={{ display: 'flex', gap: 4 }}>
+            <div sz={{ display: 'flex', spaceX: 2 }}>
                 <div sz={item}>A</div>
                 <div sz={item}>B</div>
                 <span sz={{ ...label, ml: 2 }}>spaceX-2</span>
@@ -138,7 +138,7 @@ function SpaceXDemo() {
 </TabItem>
 <TabItem label="Conditional array">
 ```tsx
-const btnBase    = { px: 4, py: 2, rounded: 'md', fontWeight: 'medium' } as const;
+const btnBase    = { px: 4, py: 2, rounded: 'md', weight: 'medium' } as const;
 const btnPrimary = { bg: 'blue-600', color: 'white', hover: { bg: 'blue-700' } } as const;
 const btnGhost   = { bg: 'transparent', color: 'blue-600', hover: { bg: 'blue-50' } } as const;
 
@@ -187,7 +187,7 @@ For predefined variant systems (intent, size, state…), use
 import { szv } from 'csszyx';
 
 const btn = szv({
-    base: { px: 4, py: 2, rounded: 'md', fontWeight: 'medium' },
+    base: { px: 4, py: 2, rounded: 'md', weight: 'medium' },
     variants: {
         intent: {
             primary: { bg: 'blue-600', color: 'white' },

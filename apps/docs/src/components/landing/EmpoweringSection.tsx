@@ -1,5 +1,5 @@
 const glowCardSz = {
-  flex: true,
+  display: 'flex',
   md: { colSpan: 6, p: 14 },
   lg: { colSpan: 3 },
   position: 'relative',
@@ -44,21 +44,21 @@ export default function EmpoweringSection() {
       sz={{
         maxW: '1536px',
         mx: 'auto',
-        relative: true,
+        position: 'relative',
         pt: 20,
         pb: 32,
         minH: '90vh',
-        flex: true,
+        display: 'flex',
         flexDir: 'col',
         justify: 'center',
       }}
     >
       {/* Section Header */}
-      <div sz={{ mb: 20, flex: true, flexDir: 'col', md: { flexDir: 'row' }, items: 'end', justify: 'between', gap: 8 }}>
+      <div sz={{ mb: 20, display: 'flex', flexDir: 'col', md: { flexDir: 'row' }, items: 'end', justify: 'between', gap: 8 }}>
         <div sz={{ flex: '1' }}>
           <h2
             className="reveal-item"
-            sz={{ text: '5xl', fontWeight: 'black', mb: 6, leading: 'tight', tracking: 'tighter', delay: '0ms' }}
+            sz={{ text: '5xl', weight: 'black', mb: 6, leading: 'tight', tracking: 'tighter', delay: '0ms' }}
           >
             Built for <br />
             <span sz={{ color: 'transparent', bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'primary', to: 'primary-thin' }}>
@@ -67,7 +67,7 @@ export default function EmpoweringSection() {
           </h2>
           <p
             className="reveal-item"
-            sz={{ color: 'slate-600', dark: { color: 'slate-400' }, maxW: 'xl', text: 'lg', fontWeight: 'light', leading: 'relaxed', delay: '150ms' }}
+            sz={{ color: 'slate-600', dark: { color: 'slate-400' }, maxW: 'xl', text: 'lg', weight: 'light', leading: 'relaxed', delay: '150ms' }}
           >
             Built from the ground up to support the demanding, hyper-dynamic workflows of Form Renderers, CMS platforms, and Enterprise Design Systems.
           </p>
@@ -75,20 +75,20 @@ export default function EmpoweringSection() {
       </div>
 
       {/* Bento Grid */}
-      <div sz={{ grid: true, gridCols: 1, md: { gridCols: 6 }, gap: 8 }}>
+      <div sz={{ display: 'grid', gridCols: 1, md: { gridCols: 6 }, gap: 8 }}>
 
         {/* For Form Renderers */}
         <div
           className="glow-card reveal-item group"
           sz={glowCardSz}
         >
-          <div sz={{ relative: true, z: 20 }}>
-            <h3 sz={{ text: '3xl', fontWeight: 'black', tracking: 'tighter', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>
+          <div sz={{ position: 'relative', z: 20 }}>
+            <h3 sz={{ text: '3xl', weight: 'black', tracking: 'tighter', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>
               For Form Renderers
             </h3>
-            <p sz={{ color: 'neutral-700', dark: { color: 'slate-400' }, text: 'lg', fontWeight: 'light', leading: 'relaxed', maxW: 'lg' }}>
+            <p sz={{ color: 'neutral-700', dark: { color: 'slate-400' }, text: 'lg', weight: 'light', leading: 'relaxed', maxW: 'lg' }}>
               Bring Tailwind into your data-driven components. Style dynamic form fields directly from JSON schemas without bloating user stylesheets with duplicate rules.{' '}
-              <span sz={{ fontWeight: 'medium', color: 'neutral-900', dark: { color: 'slate-300' } }}>Zero duplicated CSS.</span>
+              <span sz={{ weight: 'medium', color: 'neutral-900', dark: { color: 'slate-300' } }}>Zero duplicated CSS.</span>
             </p>
           </div>
         </div>
@@ -98,11 +98,11 @@ export default function EmpoweringSection() {
           className="glow-card reveal-item group"
           sz={glowCardSz}
         >
-          <div sz={{ relative: true, z: 20 }}>
-            <h3 sz={{ text: '3xl', fontWeight: 'black', tracking: 'tighter', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>
+          <div sz={{ position: 'relative', z: 20 }}>
+            <h3 sz={{ text: '3xl', weight: 'black', tracking: 'tighter', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>
               The End of Safelisting
             </h3>
-            <p sz={{ color: 'neutral-700', dark: { color: 'slate-400' }, fontWeight: 'light', leading: 'relaxed', mb: 10, text: 'lg' }}>
+            <p sz={{ color: 'neutral-700', dark: { color: 'slate-400' }, weight: 'light', leading: 'relaxed', mb: 10, text: 'lg' }}>
               Stop fighting Tailwind's compiler just to toggle a dynamic <code>width</code> or <code>padding</code> on scroll. Inject precise CSS states dynamically via true JS variables—without ever having to pre-define static string concatenations or bloated safelists in your config.
             </p>
           </div>
@@ -122,9 +122,9 @@ export default function EmpoweringSection() {
           }}
         >
           {/* Text */}
-          <div sz={{ relative: true, z: 20, flex: '1', spaceY: 6 }}>
-            <h3 sz={{ text: '3xl', fontWeight: 'black', color: 'neutral-900', dark: { color: 'white' }, tracking: 'tighter' }}>True Dynamic Styling</h3>
-            <p sz={{ color: 'neutral-700', dark: { color: 'slate-400' }, text: 'lg', leading: 'relaxed', maxW: 'xl', fontWeight: 'light' }}>
+          <div sz={{ position: 'relative', z: 20, flex: '1', spaceY: 6 }}>
+            <h3 sz={{ text: '3xl', weight: 'black', color: 'neutral-900', dark: { color: 'white' }, tracking: 'tighter' }}>True Dynamic Styling</h3>
+            <p sz={{ color: 'neutral-700', dark: { color: 'slate-400' }, text: 'lg', leading: 'relaxed', maxW: 'xl', weight: 'light' }}>
               The biggest pain point in Tailwind is the inability to dynamically compute classes at runtime. Stop concatenating messy strings or compiling bloated safelists just to handle a scroll header or a user-selected theme. With CSSzyx, you inject the exact CSS state you need via JS variables, entirely on demand.
             </p>
           </div>
@@ -132,7 +132,7 @@ export default function EmpoweringSection() {
           {/* Code Preview */}
           <div
             sz={{
-              relative: true,
+              position: 'relative',
               z: 20,
               flex: '1',
               w: 'full',
@@ -154,7 +154,7 @@ export default function EmpoweringSection() {
             style={{ WebkitBackdropFilter: 'blur(16px)', backdropFilter: 'blur(16px)' }}
           >
             {/* Mac title bar */}
-            <div sz={{ absolute: true, top: 0, insetX: 0, h: 10, bg: 'slate-100', dark: { bg: '#1a1a21', borderColor: '--lp-border' }, borderB: true, borderColor: { color: 'black', op: 5 }, flex: true, items: 'center', px: 4, gap: 2 }}>
+            <div sz={{ position: 'absolute', top: 0, insetX: 0, h: 10, bg: 'slate-100', dark: { bg: '#1a1a21', borderColor: '--lp-border' }, borderB: true, borderColor: { color: 'black', op: 5 }, display: 'flex', items: 'center', px: 4, gap: 2 }}>
               <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'rose-500', op: 80 } }} />
               <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'amber-500', op: 80 } }} />
               <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'emerald-500', op: 80 } }} />

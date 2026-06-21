@@ -108,6 +108,11 @@ jobs:
               - 'playground/**/*.jsx'
               - 'scripts/**/*.ts'
               - 'scripts/**/*.mts'
+              - 'scripts/**/*.mjs'
+              # Snippets are the source of truth for the per-sz-key test matrix
+              # (scripts/gen-key-tests.mjs → sz-key-cases.json); a snippet edit
+              # can make the committed fixture stale, so it must run the suite.
+              - 'docs/specs/snippets/**'
               # package.json is intentionally NOT here — those edits go
               # through the content-aware pkg-gate step below instead, so a
               # version/repository/engines-only edit does not run the matrix.
@@ -389,6 +394,55 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The per-sz-key test matrix (packages/cli/tests/sz-key-matrix.test.ts) is
+      # driven by a committed fixture generated from docs/specs/snippets. Fail if
+      # regenerating would change it, so the snippets, generator, and fixture
+      # never drift apart.
+      - name: Check sz-key test fixture is current
+        run: pnpm gen:key-tests:check
+
+      # The runtime box-role map (splitBox / classify / has / pick / omit) is
+      # generated from the compiler's PROPERTY_MAP / REMOVED_BOOLEAN_SUGAR /
+      # BOOLEAN_SHORTHANDS. Fail if regenerating would change it, so a new sz prop
+      # can't leave a class unclassified for box-model routing.
+      - name: Check runtime box-role map is current
+        run: pnpm gen:box-role:check
+
+      # The sz-key allowlist (purifySz's authoritative set for untrusted input)
+      # is generated from the compiler's PROPERTY_MAP / BOOLEAN_SHORTHANDS. Fail
+      # if regenerating would change it, so a new sz prop can't be silently
+      # rejected as "unknown" by the purify boundary.
+      - name: Check sz-key allowlist is current
+        run: pnpm gen:sz-allowlist:check
+
+      # The TS↔Rust lowering parity corpus ingests every documented sz-key
+      # forward case, so the Rust default engine is proven equivalent to the TS
+      # engine for each key. Fail if regenerating would change it, so a snippet,
+      # generator, or compiler change can't leave the corpus stale.
+      - name: Check Rust parity corpus is current
+        run: pnpm gen:parity-corpus:check
+
+      # The Rust transform lookup tables are generated from the TS compiler's
+      # PROPERTY_MAP/VARIANT_MAP. Fail if regenerating would change them, so the
+      # native engine can't drift from the TS source of truth.
+      - name: Check Rust transform tables are current
+        run: pnpm gen:rust-tables:check
+
+      # The per-key matrix fixture and the parity corpus are derived independently
+      # from the snippets; the staleness checks only prove each is internally
+      # fresh. Assert the corpus actually covers every per-key forward case, so the
+      # Rust default engine can't silently lose coverage for a key.
+      - name: Check parity corpus covers the per-key matrix
+        run: pnpm check:key-corpus
+
+      # The corpus round-trip checks every documented Tailwind class maps back to
+      # an sz form AND that the mapping compiles to the SAME class. The plain
+      # check is advisory; --require-no-broken fails only when a class maps but
+      # compiles to the WRONG output (a real correctness regression) — it ignores
+      # the unmapped-class noise.
+      - name: Check corpus round-trip has no broken mappings
+        run: pnpm corpus:check --require-no-broken
+
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
@@ -397,6 +451,16 @@ jobs:
       # @csszyx/core itself changed.
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
+      # Build the core WASM (pkg-node) explicitly so the WASM-dependent unit
+      # tests are deterministic regardless of turbo's build ordering. The
+      # runtime parity gate (tests/wasm-runtime-parity.test.ts) replays the
+      # parity corpus through the WASM transform_sz and compares to the TS
+      # source of truth — the runtime twin of the static parity_corpus.rs, so a
+      # drift in either Rust forward path fails here. integration.test.ts needs
+      # the same artefact.
+      - name: Build core WASM
+        run: pnpm --filter @csszyx/core build
 
       # Mirrors `test:unit` (`turbo run test --filter=!@csszyx/e2e` — keep in
       # sync with package.json). Playwright tests live in @csszyx/e2e and run

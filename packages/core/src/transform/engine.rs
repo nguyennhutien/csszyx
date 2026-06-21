@@ -16,6 +16,76 @@ use super::{
 };
 use std::time::Instant;
 
+/// Maximum structural nesting depth of `{}`/`[]`/`()` allowed in a source file
+/// before it is handed to the parser.
+///
+/// oxc's recursive-descent parser overflows the call stack on pathologically
+/// nested input — e.g. a code generator that emits `{ hover: { hover: … } }`
+/// hundreds of levels deep. A stack overflow is a FATAL process abort, not a
+/// catchable panic, so it would crash the whole bundler (a build-time DoS) and
+/// is invisible to the parser's `catch_unwind`. 64 is far above any legitimate
+/// single-file nesting (deep JSX / data literals top out around 20-30) yet far
+/// below the overflow threshold (~800), so it converts the abort into a graceful,
+/// file-unchanged diagnostic. The runtime sz-object depth is bounded separately
+/// (`MAX_SZ_DEPTH`); this guards the build-time source-parsing layer.
+const MAX_SOURCE_NESTING_DEPTH: usize = 64;
+
+/// Deepest `{[(` nesting in `source`, ignoring brackets inside string/template
+/// literals and `//` / `/* */` comments.
+///
+/// A coarse pre-parse safety scan, NOT a tokenizer: it skips quoted/templated
+/// spans and comments so a string or regex containing braces never trips the
+/// guard, and otherwise counts structural bracket depth. Operates on bytes;
+/// multi-byte UTF-8 sequences never match an ASCII bracket/quote and are simply
+/// stepped over.
+const fn max_source_nesting_depth(source: &str) -> usize {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let mut depth: usize = 0;
+    let mut max_depth: usize = 0;
+    while i < len {
+        let c = bytes[i];
+        if c == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+            i += 2;
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+        } else if c == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2;
+        } else if c == b'\'' || c == b'"' || c == b'`' {
+            i += 1;
+            while i < len {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == c {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+        } else if c == b'{' || c == b'[' || c == b'(' {
+            depth += 1;
+            if depth > max_depth {
+                max_depth = depth;
+            }
+            i += 1;
+        } else if c == b'}' || c == b']' || c == b')' {
+            depth = depth.saturating_sub(1);
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    max_depth
+}
+
 /// Transform one file through fast-path triage and parser-backed static rewrite.
 pub(super) fn transform_file(file: &TransformFile) -> TransformResult {
     transform_file_with_options(file, TransformOptions::default())
@@ -28,6 +98,20 @@ pub(super) fn transform_file_with_options(
 ) -> TransformResult {
     let total_start = Instant::now();
     let triage_start = Instant::now();
+    // Bail before the parser on pathologically nested source: the recursive
+    // parser would overflow the stack and abort the process. Leave the file
+    // unchanged and surface an actionable diagnostic instead.
+    let nesting_depth = max_source_nesting_depth(&file.source);
+    if nesting_depth > MAX_SOURCE_NESTING_DEPTH {
+        let mut result = noop_result(file);
+        result.diagnostics.push(format!(
+            "[csszyx] {}: source nesting exceeded {MAX_SOURCE_NESTING_DEPTH} levels (found {nesting_depth}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)",
+            file.filename
+        ));
+        result.metadata.timings.triage_ns = elapsed_ns(triage_start);
+        result.metadata.timings.total_ns = elapsed_ns(total_start);
+        return result;
+    }
     match triage_source(file) {
         FastPathTriage::Noop(_) => {
             let mut result = noop_result(file);
@@ -155,6 +239,7 @@ fn transform_static_classes_with_options(
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
+    diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
@@ -306,6 +391,25 @@ fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec
         .collect()
 }
 
+/// Build-log diagnostic for an `sz` prop forced to a runtime fallback by a
+/// top-level object spread (`sz={{ ...x }}`). The file still transforms (the
+/// `_sz` helper handles it), but the spread can't be statically resolved, so
+/// it may produce no styles in production — this surfaces it instead of failing
+/// silently. The `unresolvable sz spread` phrase is the marker the bundler
+/// plugin matches to promote these to a build-log warning in every mode.
+fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.sz_attributes
+        .iter()
+        .filter(|attr| attr.runtime_fallback_spread)
+        .map(|attr| {
+            format!(
+                "[csszyx] unresolvable sz spread at {}:{}: sz={{{{ ...x }}}} can't be resolved at build time and falls back to runtime (it may produce no styles in production). Use array form: sz={{[x, {{ … }}]}}.",
+                file.filename, attr.value_span.start
+            )
+        })
+        .collect()
+}
+
 fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.unsupported_recovery_attribute_spans
         .iter()
@@ -401,7 +505,7 @@ mod tests {
     fn transform_file_uses_ast_free_path_for_flat_static_sz_attribute() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', italic: true }} />;"
+            source: "export const App = () => <div id=\"x\" sz={{ p: 4, bg: 'red-500', fontStyle: 'italic' }} />;"
                 .to_string(),
         };
 
@@ -533,7 +637,16 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert_eq!(result.classes, ["p-4", "p-8"]);
-        assert!(result.diagnostics.is_empty());
+        // A top-level spread forces the runtime fallback, so it now surfaces the
+        // build-log spread diagnostic (the dev-assert fires for the same shape).
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.contains("unresolvable sz spread")),
+            "{:?}",
+            result.diagnostics
+        );
     }
 
     #[test]

@@ -10,8 +10,8 @@ describe('sz-codegen', () => {
     });
 
     it('boolean values', () => {
-        const result = generateSzExpression({ flex: true, relative: true });
-        expect(result).toBe('{{ flex: true, relative: true }}');
+        const result = generateSzExpression({ display: 'flex', position: 'relative' });
+        expect(result).toBe("{{ display: 'flex', position: 'relative' }}");
     });
 
     it('nested variant', () => {
@@ -23,7 +23,7 @@ describe('sz-codegen', () => {
     });
 
     it('quoted keys for @ prefix', () => {
-        const result = generateSzExpression({ '@md': { flex: true } });
+        const result = generateSzExpression({ '@md': { display: 'flex' } });
         expect(result).toContain("'@md'");
     });
 
@@ -79,7 +79,7 @@ describe('sz-codegen', () => {
     });
 
     it('keys with hyphens get quoted', () => {
-        const result = generateSzExpression({ 'display:grid': { flex: true } });
+        const result = generateSzExpression({ 'display:grid': { display: 'flex' } });
         expect(result).toContain("'display:grid'");
     });
 });
@@ -164,7 +164,7 @@ describe('ast-transformer (simple)', () => {
         const result = transformSourceSimple(source, 'test.tsx');
         expect(result.changed).toBe(true);
         expect(result.code).toContain('className="flex hidden"');
-        expect(result.code).toContain('relative: true');
+        expect(result.code).toContain("position: 'relative'");
     });
 
     it('preserves non-className content', () => {

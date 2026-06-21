@@ -14,6 +14,7 @@ body { margin: 0; }
         expect(result.fonts).toEqual([]);
         expect(result.radii).toEqual([]);
         expect(result.shadows).toEqual([]);
+        expect(result.breakpoints).toEqual([]);
     });
 
     it('extracts color tokens from @theme block', () => {
@@ -93,6 +94,29 @@ body { margin: 0; }
 `;
         const result = parseThemeBlocks(css);
         expect(result.shadows).toEqual(['card']);
+    });
+
+    it('extracts custom breakpoint tokens', () => {
+        const css = `
+@theme {
+    --breakpoint-tablet: 40rem;
+    --breakpoint-3xl: 120rem;
+}
+`;
+        const result = parseThemeBlocks(css);
+        expect(result.breakpoints).toEqual(['3xl', 'tablet']);
+    });
+
+    it('keeps full breakpoint names without shade-stripping', () => {
+        const css = `
+@theme {
+    --breakpoint-2xl: 96rem;
+    --breakpoint-desktop: 80rem;
+}
+`;
+        const result = parseThemeBlocks(css);
+        // Breakpoint names are literal — the numeric-shade collapse must not apply.
+        expect(result.breakpoints).toEqual(['2xl', 'desktop']);
     });
 
     it('handles multiple @theme blocks', () => {
@@ -180,18 +204,27 @@ describe('mergeThemes', () => {
     });
 
     it('merges tokens from multiple themes', () => {
-        const a = { colors: ['brand'], spacings: ['xl'], fonts: [], radii: [], shadows: [] };
+        const a = {
+            colors: ['brand'],
+            spacings: ['xl'],
+            fonts: [],
+            radii: [],
+            shadows: [],
+            breakpoints: ['tablet'],
+        };
         const b = {
             colors: ['accent'],
             spacings: ['xl'],
             fonts: ['display'],
             radii: [],
             shadows: [],
+            breakpoints: ['desktop'],
         };
         const result = mergeThemes([a, b]);
         expect(result.colors).toEqual(['accent', 'brand']);
         expect(result.spacings).toEqual(['xl']); // deduped
         expect(result.fonts).toEqual(['display']);
+        expect(result.breakpoints).toEqual(['desktop', 'tablet']);
     });
 
     it('returns sorted output after merge', () => {
@@ -201,8 +234,16 @@ describe('mergeThemes', () => {
             fonts: [],
             radii: [],
             shadows: [],
+            breakpoints: [],
         };
-        const b = { colors: ['m-color'], spacings: [], fonts: [], radii: [], shadows: [] };
+        const b = {
+            colors: ['m-color'],
+            spacings: [],
+            fonts: [],
+            radii: [],
+            shadows: [],
+            breakpoints: [],
+        };
         const result = mergeThemes([a, b]);
         expect(result.colors).toEqual(['a-color', 'm-color', 'z-color']);
     });
@@ -210,17 +251,38 @@ describe('mergeThemes', () => {
 
 describe('hasTokens', () => {
     it('returns false for empty theme', () => {
-        expect(hasTokens({ colors: [], spacings: [], fonts: [], radii: [], shadows: [] })).toBe(
-            false,
-        );
+        expect(
+            hasTokens({
+                colors: [],
+                spacings: [],
+                fonts: [],
+                radii: [],
+                shadows: [],
+                breakpoints: [],
+            }),
+        ).toBe(false);
     });
 
     it('returns true when any category has tokens', () => {
         expect(
-            hasTokens({ colors: ['brand'], spacings: [], fonts: [], radii: [], shadows: [] }),
+            hasTokens({
+                colors: ['brand'],
+                spacings: [],
+                fonts: [],
+                radii: [],
+                shadows: [],
+                breakpoints: [],
+            }),
         ).toBe(true);
         expect(
-            hasTokens({ colors: [], spacings: [], fonts: [], radii: [], shadows: ['card'] }),
+            hasTokens({
+                colors: [],
+                spacings: [],
+                fonts: [],
+                radii: [],
+                shadows: [],
+                breakpoints: ['tablet'],
+            }),
         ).toBe(true);
     });
 });

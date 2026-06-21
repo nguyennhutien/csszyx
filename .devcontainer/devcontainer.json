@@ -6,7 +6,9 @@
   "containerEnv": {
     "CODEX_HOME": "/root/.codex-devcontainer",
     "CLAUDE_CONFIG_DIR": "/root/.claude-devcontainer",
-    "IS_SANDBOX": "1"
+    "IS_SANDBOX": "1",
+    "HOST_WORKSPACE": "${localWorkspaceFolder}",
+    "MISE_TRUSTED_CONFIG_PATHS": "/workspaces/csszyx"
   },
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/tmp/host-ssh-agent.sock"
@@ -16,7 +18,7 @@
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind,consistency=cached",
-    "source=${localEnv:SSH_AUTH_SOCK},target=/tmp/host-ssh-agent.sock,type=bind"
+    "source=/run/host-services/ssh-auth.sock,target=/tmp/host-ssh-agent.sock,type=bind"
   ],
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
   "customizations": {
@@ -35,5 +37,5 @@
   "remoteUser": "root",
   "workspaceFolder": "/workspaces/csszyx",
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/cleanup-credentials.sh && bash .devcontainer/configure-codex.sh && bash .devcontainer/configure-claude.sh && bash .devcontainer/healthcheck.sh && bash .devcontainer/init-firewall.sh && bash .devcontainer/security-envelope-check.sh"
+  "postStartCommand": "bash .devcontainer/poststart.sh"
 }

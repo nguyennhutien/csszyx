@@ -67,7 +67,7 @@ const fixtures: readonly ParityFixture[] = [
     },
     {
         name: 'static-array-prop',
-        source: 'const X = () => <div sz={[{ flex: true }, { p: 4 }]} />;',
+        source: 'const X = () => <div sz={[{ display: "flex" }, { p: 4 }]} />;',
         filename: 'array.tsx',
         expected: 'parity',
     },
@@ -182,7 +182,7 @@ const fixtures: readonly ParityFixture[] = [
     },
     {
         name: 'sz-array-logical-object',
-        source: 'const X = ({ active }) => <div sz={[{ flex: true }, active && { bg: "blue-500" }]} />;',
+        source: 'const X = ({ active }) => <div sz={[{ display: "flex" }, active && { bg: "blue-500" }]} />;',
         filename: 'array-logical.tsx',
         expected: 'surgical-parity',
     },

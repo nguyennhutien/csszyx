@@ -513,9 +513,9 @@ describe('variant-parser', () => {
             });
         });
 
-        it('boolean classes', () => {
+        it('single-property classes → canonical', () => {
             const { szObject } = classNameToSzObject('flex relative');
-            expect(szObject).toEqual({ display: 'flex', relative: true });
+            expect(szObject).toEqual({ display: 'flex', position: 'relative' });
         });
 
         it('no brackets in variant keys', () => {
@@ -540,6 +540,28 @@ describe('variant-parser', () => {
             const { szObject, unrecognized } = classNameToSzObject('block flex inline p-4');
             expect(szObject).toEqual({ p: 4 });
             expect(unrecognized).toEqual(['block', 'flex', 'inline']);
+        });
+
+        it('migrates every single-property group to its canonical key', () => {
+            const { szObject } = classNameToSzObject(
+                'flex absolute invisible isolate uppercase italic underline antialiased',
+            );
+            expect(szObject).toEqual({
+                display: 'flex',
+                position: 'absolute',
+                visibility: 'hidden',
+                isolation: 'isolate',
+                textTransform: 'uppercase',
+                fontStyle: 'italic',
+                decoration: 'underline',
+                fontSmoothing: 'grayscale',
+            });
+        });
+
+        it('fails closed on conflicting text-transform classes', () => {
+            const { szObject, unrecognized } = classNameToSzObject('uppercase lowercase p-4');
+            expect(szObject).toEqual({ p: 4 });
+            expect(unrecognized).toEqual(['uppercase', 'lowercase']);
         });
 
         it('allows display classes in different variant scopes', () => {

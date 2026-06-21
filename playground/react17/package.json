@@ -1,0 +1,29 @@
+{
+  "name": "@csszyx/playground-react17",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@csszyx/dynamic": "workspace:*",
+    "@csszyx/vars": "workspace:*",
+    "@tailwindcss/vite": "^4.3.0",
+    "csszyx": "workspace:*",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "@csszyx/compiler": "workspace:*",
+    "@csszyx/types": "workspace:*",
+    "@types/react": "^17.0.2",
+    "@types/react-dom": "^17.0.2",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^5.4.5",
+    "vite": "^8.0.13"
+  }
+}

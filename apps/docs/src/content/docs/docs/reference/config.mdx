@@ -136,7 +136,18 @@ interface ProductionConfig {
   incrementalBuild: boolean; // Enable build caching
   minify: boolean; // Minify output
 }
+```
 
+:::tip[Inspecting CSS / hybrid apps]
+Mangling rewrites every csszyx-owned class name to a short alias (`z`, `y`, …), so
+the production bundle no longer contains the original utility names. Set
+`production: { mangle: false }` to keep readable class names — the supported way to
+verify the CSS a build emits, and recommended for **hybrid apps** that also ship
+non-csszyx stylesheets keyed on the original names. To check a single `sz` object
+without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
+:::
+
+```ts
 interface GlobalVarMangleConfig {
   enabled: boolean;
   mode?: 'alias';
@@ -211,6 +222,41 @@ csszyx({
   exclude: ["src/generated/**", /icon-dump\.tsx$/],
 });
 ```
+
+#### Workspace Packages (`compilePackages`)
+
+`/packages/` is hard-ignored by default — a published library ships pre-extracted
+CSS rather than recompiling in every consumer. In a monorepo, a design-system
+package is source you author, so opt it into compilation by directory name:
+
+```ts
+csszyx({
+  compilePackages: ["vui"], // compiles sz in /packages/vui/**
+});
+```
+
+Only the `/packages/` rule is relaxed; `node_modules` and `.next` stay ignored, so
+a real dependency is never compiled. A `/packages/` file that contains `sz` but is
+not opted in is skipped silently (no CSS) — csszyx warns at build end and lists
+those files. Convention: ship pre-extracted CSS for external consumers, and use
+`compilePackages` to re-extract from source within your own monorepo.
+
+#### Content Scope Check (`contentScopeCheck`)
+
+Default `true`. In a monorepo, Tailwind v4's automatic content detection climbs to
+the workspace root and scans sibling packages + docs (`.md`/`.mdx`/`.txt` are not
+ignored), which can generate phantom or broken `url()` classes and fail the build.
+When your Tailwind entry imports `tailwindcss` without scoping it (no `source(none)`
+/ `source(...)` / `@source not`), csszyx warns once at build end with the two-line
+fix. Set `false` to silence that warning when a broad scan is intentional.
+
+```ts
+csszyx({
+  contentScopeCheck: false, // silence the unscoped-monorepo warning
+});
+```
+
+See [Monorepo & Content Scope](/docs/monorepo-content-scope/) for the full fix.
 
 #### Theme Auto-Scan (`scanCss`)
 

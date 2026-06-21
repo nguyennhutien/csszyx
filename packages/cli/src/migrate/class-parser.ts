@@ -7,6 +7,7 @@
  */
 
 import {
+    ALIGN_CONTENT_KEYWORDS,
     BG_ATTACHMENT_KEYWORDS,
     BG_POSITION_KEYWORDS,
     BG_REPEAT_KEYWORDS,
@@ -76,8 +77,17 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
         negInput = input.slice(1);
     }
 
+    // Container-query marker: `@container` enables container queries, and the
+    // named form `@container/sidebar` carries the container name as a sugar value.
+    if (input === '@container') {
+        return { prop: '@container', value: true };
+    }
+    if (input.startsWith('@container/')) {
+        return { prop: '@container', value: input.slice('@container/'.length) };
+    }
+
     // 1. Try exact boolean match first (highest priority)
-    const boolResult = tryBooleanMatch(input, options);
+    const boolResult = tryBooleanMatch(input);
     if (boolResult) {
         return applyImportant(boolResult, important);
     }
@@ -101,7 +111,10 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
             }
             // For properties like "ring", "outline" — boolean true
             if (REVERSE_BOOLEAN_MAP[source]) {
-                return applyImportant(booleanClassToParsed(source, options), important);
+                return applyImportant(
+                    { prop: REVERSE_BOOLEAN_MAP[source], value: true },
+                    important,
+                );
             }
             // For divide-x, divide-y without value → boolean
             if (prefix === 'divide-x' || prefix === 'divide-y') {
@@ -155,12 +168,6 @@ export function parseClass(cls: string, options: ParseClassOptions = {}): Parsed
         }
     }
 
-    // 4. Handle display/position shorthand values
-    const displayResult = tryDisplay(input, options);
-    if (displayResult) {
-        return applyImportant(displayResult, important);
-    }
-
     // 5. Try CSS custom property declaration: [--var:value]
     if (input.startsWith('[') && input.endsWith(']') && input.includes(':')) {
         const inner = input.slice(1, -1);
@@ -189,15 +196,16 @@ function applyImportant(result: ParsedClass, important: boolean): ParsedClass {
     if (!important) {
         return result;
     }
+    const base = result.cssProperty ? { cssProperty: result.cssProperty } : {};
     if (typeof result.value === 'string') {
-        return { prop: result.prop, value: `${result.value}!` };
+        return { ...base, prop: result.prop, value: `${result.value}!` };
     }
     if (typeof result.value === 'boolean') {
-        return { prop: result.prop, value: '!' };
+        return { ...base, prop: result.prop, value: '!' };
     }
     // For numeric values, convert to string + !
     if (typeof result.value === 'number') {
-        return { prop: result.prop, value: `${String(result.value)}!` };
+        return { ...base, prop: result.prop, value: `${String(result.value)}!` };
     }
     return result;
 }
@@ -205,19 +213,20 @@ function applyImportant(result: ParsedClass, important: boolean): ParsedClass {
 /**
  * Attempts to match a class as a boolean value.
  * @param cls - The class string to match
- * @param options - Parser output policy.
  * @returns {ParsedClass | null} Parsed result or null if no match
  */
-function tryBooleanMatch(cls: string, options: ParseClassOptions): ParsedClass | null {
-    // Check BOOLEAN_VALUE_MAP for classes with non-boolean values
+function tryBooleanMatch(cls: string): ParsedClass | null {
+    // Canonical value classes (display/position/visibility/text-transform/…) and
+    // other class→{prop,value} mappings resolve here first. cssProperty (when set)
+    // lets the variant parser fail closed on a same-scope conflict.
     if (BOOLEAN_VALUE_MAP[cls]) {
-        const { prop, value } = BOOLEAN_VALUE_MAP[cls];
-        return { prop, value };
+        const { prop, value, cssProperty } = BOOLEAN_VALUE_MAP[cls];
+        return cssProperty ? { prop, value, cssProperty } : { prop, value };
     }
 
-    // Check REVERSE_BOOLEAN_MAP for true booleans
+    // Remaining true-boolean shorthands (ring, outline, truncate, grow, …).
     if (REVERSE_BOOLEAN_MAP[cls]) {
-        return booleanClassToParsed(cls, options);
+        return { prop: REVERSE_BOOLEAN_MAP[cls], value: true };
     }
 
     return null;
@@ -229,63 +238,6 @@ function tryBooleanMatch(cls: string, options: ParseClassOptions): ParsedClass |
  * @param options - Parser output policy.
  * @returns {ParsedClass | null} Parsed result or null if no match
  */
-function tryDisplay(cls: string, options: ParseClassOptions): ParsedClass | null {
-    // Handle display-* not caught by booleans
-    const displayValues = new Set([
-        'block',
-        'inline',
-        'inline-block',
-        'flex',
-        'inline-flex',
-        'grid',
-        'inline-grid',
-        'hidden',
-        'contents',
-        'table',
-        'table-row',
-        'table-cell',
-        'flow-root',
-        'list-item',
-    ]);
-    // These are already handled by boolean map; this is a fallback
-    if (displayValues.has(cls)) {
-        return REVERSE_BOOLEAN_MAP[cls] ? booleanClassToParsed(cls, options) : null;
-    }
-    return null;
-}
-
-/**
- * Convert a boolean Tailwind utility class into a parsed sz pair.
- *
- * @param cls Tailwind utility class.
- * @param options Parser output options.
- * @returns Parsed class metadata.
- */
-function booleanClassToParsed(cls: string, options: ParseClassOptions): ParsedClass {
-    const displayValue = DISPLAY_CLASS_VALUES[cls];
-    if (options.display === 'canonical' && displayValue) {
-        return { prop: 'display', value: displayValue, cssProperty: 'display' };
-    }
-    return { prop: REVERSE_BOOLEAN_MAP[cls], value: true };
-}
-
-const DISPLAY_CLASS_VALUES: Record<string, string> = {
-    block: 'block',
-    inline: 'inline',
-    'inline-block': 'inline-block',
-    flex: 'flex',
-    'inline-flex': 'inline-flex',
-    grid: 'grid',
-    'inline-grid': 'inline-grid',
-    hidden: 'none',
-    contents: 'contents',
-    table: 'table',
-    'table-row': 'table-row',
-    'table-cell': 'table-cell',
-    'flow-root': 'flow-root',
-    'list-item': 'list-item',
-};
-
 // ============================================================================
 // GRADIENT PARSING
 // ============================================================================
@@ -491,12 +443,18 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return disambiguateInsetShadow(value);
         case 'stroke':
             return disambiguateStroke(value);
+        case 'from':
+        case 'via':
+        case 'to':
+            return disambiguateGradientStop(prefix, value);
         case 'list':
             return disambiguateList(value);
         case 'ease':
             return { prop: 'ease', value: parseValue('ease', value, negative) };
         case 'snap':
             return disambiguateSnap(value);
+        case 'content':
+            return disambiguateContent(value);
         case 'flex':
             return disambiguateFlex(value);
         case 'table':
@@ -557,10 +515,10 @@ function disambiguateText(value: string): ParsedClass | null {
  */
 function disambiguateFont(value: string): ParsedClass | null {
     if (FONT_WEIGHT_KEYWORDS.has(value)) {
-        return { prop: 'fontWeight', value };
+        return { prop: 'weight', value };
     }
     if (/^\d{3}$/.test(value)) {
-        return { prop: 'fontWeight', value: parseInt(value, 10) };
+        return { prop: 'weight', value: parseInt(value, 10) };
     }
     if (FONT_FAMILY_KEYWORDS.has(value)) {
         return { prop: 'fontFamily', value };
@@ -568,7 +526,9 @@ function disambiguateFont(value: string): ParsedClass | null {
     // font-stretch-* is handled as a separate prefix
     if (value.startsWith('stretch-')) {
         const stretchVal = value.slice('stretch-'.length);
-        return { prop: 'fontStretch', value: stretchVal };
+        // Strip arbitrary/CSS-var wrappers so font-stretch-(--s) round-trips
+        // (the compiler re-wraps the bare value) instead of double-wrapping.
+        return { prop: 'fontStretch', value: parseStringValue(stretchVal) };
     }
     if (FONT_STRETCH_KEYWORDS.has(value)) {
         return { prop: 'fontStretch', value };
@@ -615,6 +575,15 @@ function disambiguateBg(value: string): ParsedClass | null {
     if (BG_ATTACHMENT_KEYWORDS.has(value)) {
         return { prop: 'bgAttach', value };
     }
+    // Arbitrary multi-token value led by a position keyword → background-position
+    // (e.g. bg-[center_top_1rem]). A color or image arbitrary value never takes
+    // this shape, so single-token / non-position arbitraries still fall through.
+    if (value.startsWith('[') && value.endsWith(']')) {
+        const inner = value.slice(1, -1).replace(/_/g, ' ');
+        if (inner.includes(' ') && BG_POSITION_KEYWORDS.has(inner.split(' ')[0])) {
+            return { prop: 'bgPos', value: inner };
+        }
+    }
     if (value === 'none') {
         return { prop: 'bgImg', value: 'none' };
     }
@@ -645,6 +614,15 @@ function disambiguateObject(value: string): ParsedClass | null {
 function disambiguateShadow(value: string): ParsedClass | null {
     if (SHADOW_SIZE_KEYWORDS.has(value)) {
         return { prop: 'shadow', value };
+    }
+    // CSS-var paren form: shadow-(color:--c) is the color, shadow-(--s) is the
+    // shadow value itself. Bare arbitrary length also sets the shadow value.
+    if (value.startsWith('(') && value.endsWith(')')) {
+        const inner = value.slice(1, -1);
+        if (inner.startsWith('color:')) {
+            return { prop: 'shadowColor', value: inner.slice('color:'.length) };
+        }
+        return { prop: 'shadow', value: inner };
     }
     // shadow with color
     return { prop: 'shadowColor', value: parseStringValue(value) };
@@ -682,11 +660,12 @@ function disambiguateDecoration(value: string): ParsedClass | null {
         return { prop: 'decorationStyle', value };
     }
     if (DECORATION_THICKNESS_KEYWORDS.has(value)) {
-        const num = Number(value);
-        if (!Number.isNaN(num)) {
-            return { prop: 'decorationThickness', value };
-        }
         return { prop: 'decorationThickness', value };
+    }
+    // Arbitrary dimension (decoration-[3px]) or CSS-var (decoration-(--v)) → thickness.
+    // csszyx models the bracket/paren length form as text-decoration-thickness.
+    if (isArbitraryDimension(value) || (value.startsWith('(') && value.endsWith(')'))) {
+        return { prop: 'decorationThickness', value: parseStringValue(value) };
     }
     // Default: color
     return { prop: 'decorationColor', value: parseStringValue(value) };
@@ -770,7 +749,27 @@ function disambiguateStroke(value: string): ParsedClass | null {
     if (!Number.isNaN(num) && Number.isInteger(num)) {
         return { prop: 'strokeWidth', value: num };
     }
+    // Arbitrary dimension → width (e.g. stroke-[0.5rem])
+    if (isArbitraryDimension(value)) {
+        return { prop: 'strokeWidth', value: parseStringValue(value) };
+    }
     return { prop: 'stroke', value: parseStringValue(value) };
+}
+
+/**
+ * Disambiguates gradient color-stop classes (from/via/to) into a color or a
+ * color-stop position. A percentage, bare number, or arbitrary length is a stop
+ * position (from-4%, from-[300px] → fromPos); anything else is a color.
+ * @param prefix - The gradient stop prefix (from/via/to)
+ * @param value - The value after the prefix
+ * @returns Parsed gradient-stop result
+ */
+function disambiguateGradientStop(prefix: string, value: string): ParsedClass | null {
+    const posKey = prefix === 'from' ? 'fromPos' : prefix === 'via' ? 'viaPos' : 'toPos';
+    if (/^\d+(\.\d+)?%$/.test(value) || /^\d+$/.test(value) || isArbitraryDimension(value)) {
+        return { prop: posKey, value: parseStringValue(value) };
+    }
+    return { prop: prefix, value: parseStringValue(value) };
 }
 
 /**
@@ -806,6 +805,21 @@ function disambiguateSnap(_value: string): ParsedClass | null {
     // snap-start, snap-end, etc. should be caught by boolean map
     // Here we handle snap-* prefix matching (shouldn't normally reach here)
     return null;
+}
+
+/**
+ * Disambiguates content-* classes into align-content vs the `content` CSS property.
+ * `content-center`/`content-between`/… are align-content (flex/grid alignment),
+ * while `content-none`, `content-['x']`, `content-(--v)`, `content-[attr(x)]` set
+ * the generated-content `content` property.
+ * @param value - The value after the content prefix
+ * @returns Parsed alignContent or content result
+ */
+function disambiguateContent(value: string): ParsedClass | null {
+    if (ALIGN_CONTENT_KEYWORDS.has(value)) {
+        return { prop: 'alignContent', value };
+    }
+    return { prop: 'content', value: parseValue('content', value, false) };
 }
 
 /**
@@ -919,6 +933,8 @@ function isValidSpacingValue(value: string): boolean {
             'lvh',
             'lvw',
             // Max-width size keywords
+            '3xs',
+            '2xs',
             'xs',
             'sm',
             'md',
@@ -989,9 +1005,10 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
         return inner;
     }
 
-    // Fraction: 1/2, 2/3, etc.
+    // Fraction: 1/2, 2/3, etc. Negative is allowed for inset/translate (e.g. -translate-x-1/2);
+    // parseClass already rejected negatives for prefixes outside NEGATIVE_ALLOWED.
     if (FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(value)) {
-        return value; // Keep as string "1/2"
+        return negative ? `-${value}` : value; // Keep as string "1/2" / "-1/2"
     }
 
     // Px keyword
@@ -1004,9 +1021,9 @@ export function parseValue(prefix: string, value: string, negative: boolean): un
         return 'auto';
     }
 
-    // Full
+    // Full (negatable: -inset-full, -translate-x-full)
     if (value === 'full') {
-        return 'full';
+        return negative ? '-full' : 'full';
     }
 
     // Screen

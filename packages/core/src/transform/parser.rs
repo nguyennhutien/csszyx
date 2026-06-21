@@ -395,6 +395,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             ternary,
             array_parts,
             runtime_fallback,
+            runtime_fallback_spread: runtime_fallback
+                && jsx_attribute_value_has_top_level_spread(attr.value.as_ref()),
             candidate_classes,
             dynamic_css_vars,
         });
@@ -779,6 +781,60 @@ fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<
             runtime_fallback_span_from_expression(&value.expression)
         }
         _ => Some(text_span(expression.span())),
+    }
+}
+
+/// Returns true when the `sz` attribute value is an object literal carrying a
+/// top-level spread (`sz={{ ...x }}`). This is the unresolvable-spread shape
+/// that forces a runtime fallback the static layer can't evaluate — flagged so
+/// a build-log diagnostic can surface it, distinct from other fallback shapes
+/// (e.g. a dynamic value-object sub-field) which must not warn.
+fn jsx_attribute_value_has_top_level_spread(value: Option<&JSXAttributeValue<'_>>) -> bool {
+    match value {
+        Some(JSXAttributeValue::ExpressionContainer(container)) => {
+            jsx_expression_has_top_level_spread(&container.expression)
+        }
+        _ => false,
+    }
+}
+
+fn jsx_expression_has_top_level_spread(expression: &JSXExpression<'_>) -> bool {
+    match expression {
+        JSXExpression::TSAsExpression(value) => expression_has_top_level_spread(&value.expression),
+        JSXExpression::TSSatisfiesExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        JSXExpression::ParenthesizedExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        JSXExpression::ObjectExpression(object) => object
+            .properties
+            .iter()
+            .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_))),
+        _ => false,
+    }
+}
+
+fn expression_has_top_level_spread(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::TSAsExpression(value) => expression_has_top_level_spread(&value.expression),
+        Expression::TSSatisfiesExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        Expression::TSNonNullExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        Expression::ParenthesizedExpression(value) => {
+            expression_has_top_level_spread(&value.expression)
+        }
+        Expression::ObjectExpression(object) => object
+            .properties
+            .iter()
+            .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_))),
+        _ => false,
     }
 }
 
@@ -1266,6 +1322,28 @@ fn partial_object_from_object_expression(
 
                 let key = static_property_key(&property.key)?;
                 if let Expression::ObjectExpression(nested) = &property.value {
+                    if let Some(color_opacity_ternary) =
+                        color_opacity_ternary_from_object(&key, nested, ctx, variant_prefix)
+                    {
+                        if ternary.is_some() {
+                            return None;
+                        }
+                        ternary = Some(color_opacity_ternary);
+                        continue;
+                    }
+                    // A property whose value is an object (color+opacity, gradient,
+                    // arbitrary `css`, mask, …) is a value object, not variant
+                    // nesting. A fully static one was already captured above, so if
+                    // it reached here it carries a dynamic sub-field the static
+                    // composers do not cover. Recursing would prefix the sub-key with
+                    // the property name and emit a dead `<property>:<subkey>` class
+                    // (e.g. `bg:op-(--var)`, `css:text-red`, `bgImg:dir-to-r`). Punt
+                    // the whole attribute to the runtime instead, which resolves the
+                    // dynamic value correctly. Variant keys (hover, md, supports, …)
+                    // are absent from the property map and still nest normally.
+                    if super::generated::tables::property_prefix(&key).is_some() || key == "css" {
+                        return None;
+                    }
                     let variant = variant_prefix_string(variant_prefix, &key);
                     let nested =
                         partial_object_from_object_expression(nested, ctx, Some(variant.as_str()))?;
@@ -1423,6 +1501,157 @@ fn conditional_property_classes(
         .into_iter()
         .map(|class_name| format!("{prefix}:{class_name}"))
         .collect()
+}
+
+/// Detects a color-opacity sub-object whose `op` is a ternary, e.g.
+/// `{ color: 'black', op: cond ? 30 : 100 }` under a color-capable parent key.
+/// Each branch is lowered into a complete color-opacity class (`bg-black/30`,
+/// `bg-black/100`) — the same output the object-level ternary produces —
+/// instead of the dead `bg:op-30` form a bare sub-property ternary emits.
+fn color_opacity_ternary_from_object(
+    parent_key: &str,
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_prefix: Option<&str>,
+) -> Option<StaticTernaryIr> {
+    super::generated::tables::property_prefix(parent_key)?;
+
+    // Capture `color` and `op`, each as either a static value or a ternary.
+    let mut static_color: Option<String> = None;
+    let mut color_conditional: Option<&ConditionalExpression<'_>> = None;
+    let mut static_op: Option<StaticSzValue> = None;
+    let mut op_conditional: Option<&ConditionalExpression<'_>> = None;
+
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(prop) = property else {
+            return None;
+        };
+        if prop.method || prop.computed || prop.shorthand {
+            return None;
+        }
+        match static_property_key(&prop.key)?.as_str() {
+            "color" => {
+                if let Expression::ConditionalExpression(conditional) =
+                    unwrap_expression(&prop.value)
+                {
+                    color_conditional = Some(conditional);
+                } else {
+                    let StaticSzValue::String(value) =
+                        static_value_from_expression(&prop.value, ctx)?
+                    else {
+                        return None;
+                    };
+                    static_color = Some(value);
+                }
+            }
+            "op" => {
+                if let Expression::ConditionalExpression(conditional) =
+                    unwrap_expression(&prop.value)
+                {
+                    op_conditional = Some(conditional);
+                } else {
+                    static_op = Some(static_value_from_expression(&prop.value, ctx)?);
+                }
+            }
+            // Any other member means this is not a plain color-opacity object;
+            // leave it to the normal nesting path.
+            _ => return None,
+        }
+    }
+
+    // Exactly one of `color`/`op` may be the ternary; the other (and any
+    // sibling) must be static. Both static is a normal static object, and both
+    // dynamic falls back to the runtime helper — neither belongs here.
+    match (color_conditional, op_conditional) {
+        (None, Some(conditional)) => {
+            let color = static_color?;
+            let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
+            let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
+            Some(StaticTernaryIr {
+                test_span: text_span(conditional.test.span()),
+                consequent_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &color,
+                    Some(consequent),
+                    variant_prefix,
+                ),
+                alternate_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &color,
+                    Some(alternate),
+                    variant_prefix,
+                ),
+            })
+        }
+        (Some(conditional), None) => {
+            let StaticSzValue::String(consequent) =
+                static_value_from_expression(&conditional.consequent, ctx)?
+            else {
+                return None;
+            };
+            let StaticSzValue::String(alternate) =
+                static_value_from_expression(&conditional.alternate, ctx)?
+            else {
+                return None;
+            };
+            Some(StaticTernaryIr {
+                test_span: text_span(conditional.test.span()),
+                consequent_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &consequent,
+                    static_op.clone(),
+                    variant_prefix,
+                ),
+                alternate_classes: color_opacity_branch_classes(
+                    parent_key,
+                    &alternate,
+                    static_op,
+                    variant_prefix,
+                ),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Lowers one branch of a color-opacity ternary into its complete class,
+/// e.g. `(bg, black, 30)` -> `bg-black/30`, applying any variant prefix.
+/// `op` is optional so a ternary on `color` alone (`{ color: c ? a : b }`)
+/// lowers to bare `bg-a` / `bg-b`.
+fn color_opacity_branch_classes(
+    parent_key: &str,
+    color: &str,
+    op: Option<StaticSzValue>,
+    variant_prefix: Option<&str>,
+) -> Vec<String> {
+    let mut properties = vec![StaticSzProperty {
+        key: "color".to_string(),
+        span: TextSpan { start: 0, end: 0 },
+        value: StaticSzValue::String(color.to_string()),
+    }];
+    if let Some(op) = op {
+        properties.push(StaticSzProperty {
+            key: "op".to_string(),
+            span: TextSpan { start: 0, end: 0 },
+            value: op,
+        });
+    }
+    let nested = StaticSzObject { properties };
+    let object = StaticSzObject {
+        properties: vec![StaticSzProperty {
+            key: parent_key.to_string(),
+            span: TextSpan { start: 0, end: 0 },
+            value: StaticSzValue::Object(nested),
+        }],
+    };
+    let classes = lower_static_sz_object(&object);
+    match variant_prefix {
+        Some(prefix) => classes
+            .into_iter()
+            .map(|class_name| format!("{prefix}:{class_name}"))
+            .collect(),
+        None => classes,
+    }
 }
 
 fn dynamic_css_var_from_property(
@@ -1920,7 +2149,7 @@ mod tests {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source:
-                "export const App = () => <div className=\"block\" sz={{ start: 4, inlineBlock: true }} />;"
+                "export const App = () => <div className=\"block\" sz={{ start: 4, display: 'inline-block' }} />;"
                     .to_string(),
         };
 
@@ -2044,7 +2273,7 @@ mod tests {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source:
-                "export const App = () => <div sz={[{ flex: true }, false, null, { p: 4 }]} />;"
+                "export const App = () => <div sz={[{ display: 'flex' }, false, null, { p: 4 }]} />;"
                     .to_string(),
         };
 
@@ -2114,7 +2343,7 @@ mod tests {
                 vec!["m-2"],
             ),
             (
-                "export const App = () => <div sz={([{ flex: true }] as const)} />;",
+                "export const App = () => <div sz={([{ display: 'flex' }] as const)} />;",
                 vec!["flex"],
             ),
         ];
@@ -2136,7 +2365,7 @@ mod tests {
         let cases = [
             ("sz={{ m: -2 }}", vec!["-m-2"]),
             ("sz={{ m: +2 }}", vec!["m-2"]),
-            ("sz={{ italic: false }}", vec!["not-italic"]),
+            ("sz={{ fontStyle: 'normal' }}", vec!["not-italic"]),
             (
                 "sz={{ hover: { bg: 'red-500' } }}",
                 vec!["hover:bg-red-500"],
@@ -2258,6 +2487,37 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_flags_only_top_level_spread_for_spread_diagnostic() {
+        // A top-level spread of a value the parser can't resolve statically is
+        // flagged so the build surfaces it.
+        let spread = "const X = ({ props }) => <div sz={{ ...props }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: spread.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        assert!(
+            attribute.runtime_fallback_spread,
+            "top-level spread must be flagged"
+        );
+
+        // A dynamic value-object sub-field also falls back to runtime but carries
+        // no top-level spread, so it must NOT be flagged (no noisy warning).
+        let value_obj = "const X = ({ v }) => <div sz={{ bg: { color: 'black', op: v } }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: value_obj.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        assert!(
+            !attribute.runtime_fallback_spread,
+            "value-object backstop must not be flagged as a spread"
+        );
+    }
+
+    #[test]
     fn parser_shell_marks_dynamic_ternary_branch_for_runtime_fallback() {
         let source = "const X = ({ active, styles }) => <div sz={active ? styles : { p: 8 }} />;";
         let parsed = parse_source_shell(&TransformFile {
@@ -2287,6 +2547,38 @@ mod tests {
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         assert!(parsed.ir.sz_attributes[0].runtime_fallback);
         assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_punts_dynamic_value_object_sub_field_to_runtime() {
+        // A dynamic/ternary value on a nested value-object sub-property (color
+        // opacity var, arbitrary `css`, gradient direction) must fall back to the
+        // runtime, never lower to a dead `<property>:<subkey>` class such as
+        // `bg:op-(--var)`, `css:text-red`, or `bgImg:dir-to-r`.
+        for source in [
+            "const X = ({ v }) => <div sz={{ bg: { color: 'black', op: v } }} />;",
+            "const X = ({ c }) => <div sz={{ css: { color: c ? 'red' : 'blue' } }} />;",
+            "const X = ({ c }) => <div sz={{ bgImg: { gradient: 'linear', dir: c ? 'to-r' : 'to-l' } }} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            assert_eq!(parsed.ir.sz_attributes.len(), 1, "{source}");
+            assert!(
+                parsed.ir.sz_attributes[0].runtime_fallback,
+                "must fall back to the runtime: {source}"
+            );
+            let lowered = lower_source_ir_classes(&parsed.ir);
+            for class in &lowered.classes {
+                assert!(
+                    !class.contains(":op-")
+                        && !class.contains(":dir-")
+                        && !class.starts_with("css:"),
+                    "dead class `{class}` from {source}"
+                );
+            }
+        }
     }
 
     #[test]

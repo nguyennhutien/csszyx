@@ -7,21 +7,22 @@ describe('class-parser', () => {
     // BOOLEAN CLASSES
     // ========================================================================
     describe('boolean classes', () => {
-        it('display booleans', () => {
-            expect(parseClass('block')).toEqual({ prop: 'block', value: true });
-            expect(parseClass('flex')).toEqual({ prop: 'flex', value: true });
-            expect(parseClass('grid')).toEqual({ prop: 'grid', value: true });
-            expect(parseClass('hidden')).toEqual({ prop: 'hidden', value: true });
-            expect(parseClass('inline')).toEqual({ prop: 'inline', value: true });
-            expect(parseClass('inline-block')).toEqual({ prop: 'inlineBlock', value: true });
-            expect(parseClass('inline-flex')).toEqual({ prop: 'inlineFlex', value: true });
-            expect(parseClass('inline-grid')).toEqual({ prop: 'inlineGrid', value: true });
-            expect(parseClass('contents')).toEqual({ prop: 'contents', value: true });
-            expect(parseClass('table')).toEqual({ prop: 'table', value: true });
-            expect(parseClass('table-row')).toEqual({ prop: 'tableRow', value: true });
-            expect(parseClass('table-cell')).toEqual({ prop: 'tableCell', value: true });
-            expect(parseClass('flow-root')).toEqual({ prop: 'flowRoot', value: true });
-            expect(parseClass('list-item')).toEqual({ prop: 'listItem', value: true });
+        it('display → canonical { display: value }', () => {
+            const d = (value: string) => ({ prop: 'display', value, cssProperty: 'display' });
+            expect(parseClass('block')).toEqual(d('block'));
+            expect(parseClass('flex')).toEqual(d('flex'));
+            expect(parseClass('grid')).toEqual(d('grid'));
+            expect(parseClass('hidden')).toEqual(d('none'));
+            expect(parseClass('inline')).toEqual(d('inline'));
+            expect(parseClass('inline-block')).toEqual(d('inline-block'));
+            expect(parseClass('inline-flex')).toEqual(d('inline-flex'));
+            expect(parseClass('inline-grid')).toEqual(d('inline-grid'));
+            expect(parseClass('contents')).toEqual(d('contents'));
+            expect(parseClass('table')).toEqual(d('table'));
+            expect(parseClass('table-row')).toEqual(d('table-row'));
+            expect(parseClass('table-cell')).toEqual(d('table-cell'));
+            expect(parseClass('flow-root')).toEqual(d('flow-root'));
+            expect(parseClass('list-item')).toEqual(d('list-item'));
         });
 
         it('transition and group/peer markers', () => {
@@ -36,55 +37,56 @@ describe('class-parser', () => {
             expect(parseClass('peer')).toEqual({ prop: 'peer', value: true });
         });
 
-        it('canonical display mode', () => {
-            expect(parseClass('block', { display: 'canonical' })).toEqual({
-                prop: 'display',
-                value: 'block',
-                cssProperty: 'display',
-            });
-            expect(parseClass('inline-flex', { display: 'canonical' })).toEqual({
-                prop: 'display',
-                value: 'inline-flex',
-                cssProperty: 'display',
-            });
-            expect(parseClass('hidden', { display: 'canonical' })).toEqual({
-                prop: 'display',
-                value: 'none',
-                cssProperty: 'display',
-            });
+        it('position → canonical { position: value }', () => {
+            const p = (value: string) => ({ prop: 'position', value, cssProperty: 'position' });
+            expect(parseClass('static')).toEqual(p('static'));
+            expect(parseClass('fixed')).toEqual(p('fixed'));
+            expect(parseClass('absolute')).toEqual(p('absolute'));
+            expect(parseClass('relative')).toEqual(p('relative'));
+            expect(parseClass('sticky')).toEqual(p('sticky'));
         });
 
-        it('position booleans', () => {
-            expect(parseClass('static')).toEqual({ prop: 'static', value: true });
-            expect(parseClass('fixed')).toEqual({ prop: 'fixed', value: true });
-            expect(parseClass('absolute')).toEqual({ prop: 'absolute', value: true });
-            expect(parseClass('relative')).toEqual({ prop: 'relative', value: true });
-            expect(parseClass('sticky')).toEqual({ prop: 'sticky', value: true });
+        it('visibility → canonical { visibility: value }', () => {
+            const v = (value: string) => ({ prop: 'visibility', value, cssProperty: 'visibility' });
+            expect(parseClass('visible')).toEqual(v('visible'));
+            expect(parseClass('invisible')).toEqual(v('hidden'));
+            expect(parseClass('collapse')).toEqual(v('collapse'));
         });
 
-        it('visibility booleans', () => {
-            expect(parseClass('visible')).toEqual({ prop: 'visible', value: true });
-            expect(parseClass('invisible')).toEqual({ prop: 'invisible', value: true });
-            expect(parseClass('collapse')).toEqual({ prop: 'collapse', value: true });
-        });
-
-        it('typography booleans', () => {
+        it('typography → canonical single-property forms', () => {
             expect(parseClass('truncate')).toEqual({ prop: 'truncate', value: true });
-            expect(parseClass('uppercase')).toEqual({ prop: 'uppercase', value: true });
-            expect(parseClass('lowercase')).toEqual({ prop: 'lowercase', value: true });
-            expect(parseClass('capitalize')).toEqual({ prop: 'capitalize', value: true });
-            expect(parseClass('normal-case')).toEqual({ prop: 'normalCase', value: true });
-            expect(parseClass('underline')).toEqual({ prop: 'underline', value: true });
-            expect(parseClass('overline')).toEqual({ prop: 'overline', value: true });
-            expect(parseClass('line-through')).toEqual({ prop: 'lineThrough', value: true });
-            expect(parseClass('no-underline')).toEqual({ prop: 'noUnderline', value: true });
-            expect(parseClass('italic')).toEqual({ prop: 'italic', value: true });
-            expect(parseClass('not-italic')).toEqual({ prop: 'notItalic', value: true });
-            expect(parseClass('antialiased')).toEqual({ prop: 'antialiased', value: true });
-            expect(parseClass('subpixel-antialiased')).toEqual({
-                prop: 'subpixelAntialiased',
-                value: true,
+            const tt = (value: string) => ({
+                prop: 'textTransform',
+                value,
+                cssProperty: 'text-transform',
             });
+            expect(parseClass('uppercase')).toEqual(tt('uppercase'));
+            expect(parseClass('lowercase')).toEqual(tt('lowercase'));
+            expect(parseClass('capitalize')).toEqual(tt('capitalize'));
+            expect(parseClass('normal-case')).toEqual(tt('none'));
+            const dec = (value: string) => ({
+                prop: 'decoration',
+                value,
+                cssProperty: 'text-decoration-line',
+            });
+            expect(parseClass('underline')).toEqual(dec('underline'));
+            expect(parseClass('overline')).toEqual(dec('overline'));
+            expect(parseClass('line-through')).toEqual(dec('line-through'));
+            expect(parseClass('no-underline')).toEqual(dec('none'));
+            const fs = (value: string) => ({
+                prop: 'fontStyle',
+                value,
+                cssProperty: 'font-style',
+            });
+            expect(parseClass('italic')).toEqual(fs('italic'));
+            expect(parseClass('not-italic')).toEqual(fs('normal'));
+            const sm = (value: string) => ({
+                prop: 'fontSmoothing',
+                value,
+                cssProperty: 'font-smoothing',
+            });
+            expect(parseClass('antialiased')).toEqual(sm('grayscale'));
+            expect(parseClass('subpixel-antialiased')).toEqual(sm('subpixel'));
         });
 
         it('flexbox booleans', () => {
@@ -100,7 +102,11 @@ describe('class-parser', () => {
             expect(parseClass('container')).toEqual({ prop: 'container', value: true });
             expect(parseClass('sr-only')).toEqual({ prop: 'srOnly', value: true });
             expect(parseClass('not-sr-only')).toEqual({ prop: 'notSrOnly', value: true });
-            expect(parseClass('isolate')).toEqual({ prop: 'isolate', value: true });
+            expect(parseClass('isolate')).toEqual({
+                prop: 'isolation',
+                value: 'isolate',
+                cssProperty: 'isolation',
+            });
         });
 
         it('transform booleans', () => {
@@ -280,18 +286,18 @@ describe('class-parser', () => {
         });
 
         it('font weight', () => {
-            expect(parseClass('font-bold')).toEqual({ prop: 'fontWeight', value: 'bold' });
-            expect(parseClass('font-semibold')).toEqual({ prop: 'fontWeight', value: 'semibold' });
-            expect(parseClass('font-thin')).toEqual({ prop: 'fontWeight', value: 'thin' });
-            expect(parseClass('font-normal')).toEqual({ prop: 'fontWeight', value: 'normal' });
-            expect(parseClass('font-medium')).toEqual({ prop: 'fontWeight', value: 'medium' });
+            expect(parseClass('font-bold')).toEqual({ prop: 'weight', value: 'bold' });
+            expect(parseClass('font-semibold')).toEqual({ prop: 'weight', value: 'semibold' });
+            expect(parseClass('font-thin')).toEqual({ prop: 'weight', value: 'thin' });
+            expect(parseClass('font-normal')).toEqual({ prop: 'weight', value: 'normal' });
+            expect(parseClass('font-medium')).toEqual({ prop: 'weight', value: 'medium' });
         });
 
         it('font weight numeric', () => {
-            expect(parseClass('font-100')).toEqual({ prop: 'fontWeight', value: 100 });
-            expect(parseClass('font-400')).toEqual({ prop: 'fontWeight', value: 400 });
-            expect(parseClass('font-700')).toEqual({ prop: 'fontWeight', value: 700 });
-            expect(parseClass('font-900')).toEqual({ prop: 'fontWeight', value: 900 });
+            expect(parseClass('font-100')).toEqual({ prop: 'weight', value: 100 });
+            expect(parseClass('font-400')).toEqual({ prop: 'weight', value: 400 });
+            expect(parseClass('font-700')).toEqual({ prop: 'weight', value: 700 });
+            expect(parseClass('font-900')).toEqual({ prop: 'weight', value: 900 });
         });
 
         it('font family', () => {
@@ -954,8 +960,16 @@ describe('class-parser', () => {
             expect(parseClass('text-red-500!')).toEqual({ prop: 'color', value: 'red-500!' });
         });
 
-        it('boolean with !', () => {
-            expect(parseClass('flex!')).toEqual({ prop: 'flex', value: '!' });
+        it('canonical single-property with !', () => {
+            expect(parseClass('flex!')).toEqual({
+                prop: 'display',
+                value: 'flex!',
+                cssProperty: 'display',
+            });
+        });
+
+        it('kept boolean shorthand with !', () => {
+            expect(parseClass('truncate!')).toEqual({ prop: 'truncate', value: '!' });
         });
 
         it('numeric with !', () => {
@@ -1014,6 +1028,151 @@ describe('class-parser', () => {
             // However the parser doesn't enforce this — NEGATIVE_ALLOWED determines it
             // In our reverse map, 'p' is NOT in NEGATIVE_ALLOWED, so -p-4 returns null
             expect(parseClass('-p-4')).toBeNull();
+        });
+    });
+
+    // ========================================================================
+    // CONTENT DISAMBIGUATION — content-<keyword> is align-content; quoted/none/
+    // var/arbitrary content-* sets the generated-content `content` property.
+    // ========================================================================
+    describe('content disambiguation', () => {
+        it('align-content keywords → alignContent', () => {
+            for (const v of [
+                'normal',
+                'center',
+                'start',
+                'end',
+                'between',
+                'around',
+                'evenly',
+                'baseline',
+                'stretch',
+            ]) {
+                expect(parseClass(`content-${v}`)).toEqual({ prop: 'alignContent', value: v });
+            }
+        });
+
+        it('content property values → content', () => {
+            expect(parseClass('content-none')).toEqual({ prop: 'content', value: 'none' });
+            expect(parseClass('content-(--c)')).toEqual({ prop: 'content', value: '--c' });
+            // Quoted arbitrary normalizes to double-quote form for round-trip stability.
+            expect(parseClass("content-['x']")).toEqual({ prop: 'content', value: '"x"' });
+            expect(parseClass('content-[attr(data-content)]')).toEqual({
+                prop: 'content',
+                value: 'attr(data-content)',
+            });
+        });
+    });
+
+    // ========================================================================
+    // LOGICAL SIZING vs DISPLAY — bare display values must not be swallowed by
+    // the block-*/inline-* logical-sizing prefixes (exact match wins first).
+    // ========================================================================
+    describe('block/inline prefix vs display value', () => {
+        it('bare forms stay display values', () => {
+            const d = (value: string) => ({ prop: 'display', value, cssProperty: 'display' });
+            expect(parseClass('block')).toEqual(d('block'));
+            expect(parseClass('inline')).toEqual(d('inline'));
+            expect(parseClass('inline-block')).toEqual(d('inline-block'));
+            expect(parseClass('inline-table')).toEqual(d('inline-table'));
+            expect(parseClass('table-row-group')).toEqual(d('table-row-group'));
+        });
+
+        it('value forms route to logical sizing', () => {
+            expect(parseClass('block-full')).toEqual({ prop: 'blockSize', value: 'full' });
+            expect(parseClass('inline-auto')).toEqual({ prop: 'inlineSize', value: 'auto' });
+        });
+    });
+
+    // ========================================================================
+    // MIGRATE GAP FIXES — formerly-unrecognized single-property utilities.
+    // ========================================================================
+    describe('newly recognized single-property utilities', () => {
+        it('scheme / scrollbar / prose / field-sizing / transform-style', () => {
+            expect(parseClass('scheme-light-dark')).toEqual({
+                prop: 'scheme',
+                value: 'light-dark',
+            });
+            expect(parseClass('scrollbar-gutter-stable')).toEqual({
+                prop: 'scrollbarGutter',
+                value: 'stable',
+            });
+            expect(parseClass('prose-lg')).toEqual({ prop: 'prose', value: 'lg' });
+            expect(parseClass('field-sizing-content')).toEqual({
+                prop: 'fieldSizing',
+                value: 'content',
+                cssProperty: 'field-sizing',
+            });
+            expect(parseClass('transform-3d')).toEqual({
+                prop: 'transformStyle',
+                value: '3d',
+                cssProperty: 'transform-style',
+            });
+        });
+
+        it('3D transforms, z-axis, shadow sizes, negative inset-full', () => {
+            expect(parseClass('scale-3d')).toEqual({ prop: 'scale', value: '3d' });
+            expect(parseClass('scale-z-50')).toEqual({ prop: 'scaleZ', value: 50 });
+            expect(parseClass('translate-z-4')).toEqual({ prop: 'translateZ', value: 4 });
+            expect(parseClass('shadow-2xs')).toEqual({ prop: 'shadow', value: '2xs' });
+            expect(parseClass('-inset-full')).toEqual({ prop: 'inset', value: '-full' });
+            expect(parseClass('aspect-4/3')).toEqual({ prop: 'aspect', value: '4/3' });
+        });
+
+        it('bare resize / shadow stay boolean toggles', () => {
+            expect(parseClass('resize')).toEqual({ prop: 'resize', value: true });
+            expect(parseClass('shadow')).toEqual({ prop: 'shadow', value: true });
+        });
+
+        it('logical inset / margin / padding / sizing map to their keys', () => {
+            expect(parseClass('inset-s-4')).toEqual({ prop: 'insetS', value: 4 });
+            expect(parseClass('inset-be-4')).toEqual({ prop: 'insetBe', value: 4 });
+            expect(parseClass('mbs-4')).toEqual({ prop: 'mbs', value: 4 });
+            expect(parseClass('pbe-4')).toEqual({ prop: 'pbe', value: 4 });
+            expect(parseClass('min-block-4')).toEqual({ prop: 'minBlockSize', value: 4 });
+            expect(parseClass('max-inline-4')).toEqual({ prop: 'maxInlineSize', value: 4 });
+            expect(parseClass('tab-4')).toEqual({ prop: 'tabSize', value: 4 });
+            expect(parseClass('zoom-4')).toEqual({ prop: 'zoom', value: 4 });
+            expect(parseClass('translate-4')).toEqual({ prop: 'translate', value: 4 });
+        });
+
+        it('disambiguates ambiguous suffixes that share a prefix', () => {
+            // gradient stop: position (%, length) vs color
+            expect(parseClass('from-4%')).toEqual({ prop: 'fromPos', value: '4%' });
+            expect(parseClass('from-red-500')).toEqual({ prop: 'from', value: 'red-500' });
+            // shadow value var vs explicit color var
+            expect(parseClass('shadow-(--s)')).toEqual({ prop: 'shadow', value: '--s' });
+            expect(parseClass('shadow-(color:--c)')).toEqual({
+                prop: 'shadowColor',
+                value: '--c',
+            });
+            // decoration length form is thickness, not color
+            expect(parseClass('decoration-[3px]')).toEqual({
+                prop: 'decorationThickness',
+                value: '3px',
+            });
+            // stroke length form is width, not color
+            expect(parseClass('stroke-[0.5rem]')).toEqual({
+                prop: 'strokeWidth',
+                value: '0.5rem',
+            });
+            // arbitrary bg led by a position keyword is background-position
+            expect(parseClass('bg-[center_top_1rem]')).toEqual({
+                prop: 'bgPos',
+                value: 'center top 1rem',
+            });
+        });
+
+        it('container-query marker and named container', () => {
+            expect(parseClass('@container')).toEqual({ prop: '@container', value: true });
+            expect(parseClass('@container/sidebar')).toEqual({
+                prop: '@container',
+                value: 'sidebar',
+            });
+        });
+
+        it('mask gradient keeps a leading - as part of the value', () => {
+            expect(parseClass('-mask-linear-45')).toEqual({ prop: 'mask', value: '-linear-45' });
         });
     });
 });

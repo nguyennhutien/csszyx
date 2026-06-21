@@ -12,7 +12,7 @@ export function Panel({ children }: PanelProps) {
     return (
         <div
             sz={{
-                relative: true,
+                position: 'relative',
                 border: true,
                 borderColor: '--ds-border',
                 rounded: 'sm',
@@ -20,7 +20,7 @@ export function Panel({ children }: PanelProps) {
                 bg: '--ds-bg',
                 before: {
                     content: "''",
-                    absolute: true,
+                    position: 'absolute',
                     top: '-1px',
                     left: '-1px',
                     w: 2,
@@ -32,7 +32,7 @@ export function Panel({ children }: PanelProps) {
                 },
                 after: {
                     content: "''",
-                    absolute: true,
+                    position: 'absolute',
                     bottom: '-1px',
                     right: '-1px',
                     w: 2,

@@ -13,7 +13,7 @@ function CssVarFixture() {
 
   return (
     <section data-testid="css-var-fixture" sz={{ minH: 'screen', p: 6, bg: 'white' }}>
-      <h1 sz={{ text: '2xl', fontWeight: 'bold', mb: 4 }}>CSS variable fixture</h1>
+      <h1 sz={{ text: '2xl', weight: 'bold', mb: 4 }}>CSS variable fixture</h1>
       <button
         data-testid="css-var-button"
         onClick={() => setPad(value => value + 1)}
@@ -62,10 +62,10 @@ function App() {
   }
 
   return (
-    <div sz={{ minH: 'screen', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'purple-500', to: 'pink-500', flex: true, items: 'center', justify: 'center', p: 8 }}>
+    <div sz={{ minH: 'screen', bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'purple-500', to: 'pink-500', display: 'flex', items: 'center', justify: 'center', p: 8 }}>
       <div sz={{ maxW: '2xl', w: 'full', bg: 'white', rounded: '2xl', shadow: '2xl', p: 8 }}>
         <VerificationComponent />
-        <h1 sz={{ text: '4xl', fontWeight: 'bold', color: 'gray-900', mb: 4 }}>
+        <h1 sz={{ text: '4xl', weight: 'bold', color: 'gray-900', mb: 4 }}>
           🌊 csszyx Playground
         </h1>
 
@@ -75,15 +75,15 @@ function App() {
 
         {/* Basic Transform Test */}
         <div sz={{ mb: 8, p: 6, bg: 'blue-50', rounded: 'lg', borderColor: 'blue-200', border: true }}>
-          <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'blue-900', mb: 3 }}>Counter Test</h2>
-          <div sz={{ flex: true, items: 'center', gap: 4 }}>
+          <h2 sz={{ text: 'xl', weight: 'semibold', color: 'blue-900', mb: 3 }}>Counter Test</h2>
+          <div sz={{ display: 'flex', items: 'center', gap: 4 }}>
             <button
               onClick={() => setCount(c => c - 1)}
               sz={{ px: 4, py: 2, bg: 'red-500', color: 'white', rounded: 'lg', hover: { bg: 'red-600' }, transition: 'colors' }}
             >
               Decrement
             </button>
-            <span sz={{ text: '2xl', fontWeight: 'bold', color: 'gray-900' }}>{count}</span>
+            <span sz={{ text: '2xl', weight: 'bold', color: 'gray-900' }}>{count}</span>
             <button
               onClick={() => setCount(c => c + 1)}
               sz={{ px: 4, py: 2, bg: 'green-500', color: 'white', rounded: 'lg', hover: { bg: 'green-600' }, transition: 'colors' }}
@@ -95,12 +95,12 @@ function App() {
 
         {/* Conditional Class Test */}
         <div sz={{ mb: 8, p: 6, bg: 'purple-50', rounded: 'lg', borderColor: 'purple-200', border: true }}>
-          <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'purple-900', mb: 3 }}>Conditional Test</h2>
+          <h2 sz={{ text: 'xl', weight: 'semibold', color: 'purple-900', mb: 3 }}>Conditional Test</h2>
           <button
             onClick={() => setIsActive(!isActive)}
             sz={isActive
-              ? { px: 6, py: 3, bg: 'green-500', color: 'white', rounded: 'lg', fontWeight: 'medium', transition: 'all' }
-              : { px: 6, py: 3, bg: 'gray-300', color: 'gray-700', rounded: 'lg', fontWeight: 'medium', transition: 'all' }
+              ? { px: 6, py: 3, bg: 'green-500', color: 'white', rounded: 'lg', weight: 'medium', transition: 'all' }
+              : { px: 6, py: 3, bg: 'gray-300', color: 'gray-700', rounded: 'lg', weight: 'medium', transition: 'all' }
             }
           >
             {isActive ? '✓ Active' : '○ Inactive'}
@@ -109,8 +109,8 @@ function App() {
 
         {/* Complex Styles Test */}
         <div sz={{ p: 6, bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'cyan-50', to: 'blue-50', rounded: 'lg', borderColor: 'cyan-200', border: true }}>
-          <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'cyan-900', mb: 3 }}>Complex Styles</h2>
-          <div sz={{ grid: true, gridCols: 3, gap: 4 }}>
+          <h2 sz={{ text: 'xl', weight: 'semibold', color: 'cyan-900', mb: 3 }}>Complex Styles</h2>
+          <div sz={{ display: 'grid', gridCols: 3, gap: 4 }}>
             <div sz={{ p: 4, bg: 'white', rounded: true, shadow: true, hover: { shadow: 'lg' }, transition: 'shadow' }}>
               <div sz={{ w: 12, h: 12, bg: 'red-500', rounded: 'full', mb: 2 }}></div>
               <p sz={{ text: 'sm', color: 'gray-600' }}>Red Circle</p>
@@ -128,12 +128,12 @@ function App() {
 
         {/* New Features Showcase */}
         <div sz={{ mt: 8, p: 6, bg: 'emerald-50', rounded: 'lg', borderColor: 'emerald-200', border: true }}>
-          <h2 sz={{ text: 'xl', fontWeight: 'semibold', color: 'emerald-900', mb: 3 }}>New Features</h2>
+          <h2 sz={{ text: 'xl', weight: 'semibold', color: 'emerald-900', mb: 3 }}>New Features</h2>
 
-          <div sz={{ grid: true, gridCols: 2, gap: 4 }}>
+          <div sz={{ display: 'grid', gridCols: 2, gap: 4 }}>
             {/* Text/Leading shorthand */}
             <div sz={{ p: 4, bg: 'white', rounded: 'lg', shadow: true }}>
-              <h3 sz={{ text: 'sm', fontWeight: 'semibold', color: 'emerald-800', mb: 2 }}>Text/Leading Shorthand</h3>
+              <h3 sz={{ text: 'sm', weight: 'semibold', color: 'emerald-800', mb: 2 }}>Text/Leading Shorthand</h3>
               <p sz={{ text: 'lg', leading: 7, color: 'gray-700' }}>
                 text-lg/7 — font-size + line-height merged into a single class.
               </p>
@@ -144,16 +144,16 @@ function App() {
 
             {/* Explicit fontWeight / fontFamily */}
             <div sz={{ p: 4, bg: 'white', rounded: 'lg', shadow: true }}>
-              <h3 sz={{ text: 'sm', fontWeight: 'semibold', color: 'emerald-800', mb: 2 }}>Explicit Keys</h3>
-              <p sz={{ fontWeight: 'bold', color: 'gray-700' }}>fontWeight: bold</p>
-              <p sz={{ fontWeight: 'light', color: 'gray-700' }}>fontWeight: light</p>
+              <h3 sz={{ text: 'sm', weight: 'semibold', color: 'emerald-800', mb: 2 }}>Explicit Keys</h3>
+              <p sz={{ weight: 'bold', color: 'gray-700' }}>weight: bold</p>
+              <p sz={{ weight: 'light', color: 'gray-700' }}>weight: light</p>
               <p sz={{ fontFamily: 'mono', color: 'gray-700' }}>fontFamily: mono</p>
               <p sz={{ fontFamily: 'serif', color: 'gray-700' }}>fontFamily: serif</p>
             </div>
 
             {/* Separate color / textAlign / text */}
             <div sz={{ p: 4, bg: 'white', rounded: 'lg', shadow: true }}>
-              <h3 sz={{ text: 'sm', fontWeight: 'semibold', color: 'emerald-800', mb: 2 }}>No Collisions</h3>
+              <h3 sz={{ text: 'sm', weight: 'semibold', color: 'emerald-800', mb: 2 }}>No Collisions</h3>
               <p sz={{ text: 'lg', color: 'blue-600' }}>text=lg + color=blue-600</p>
               <p sz={{ text: 'sm', textAlign: 'right', color: 'purple-600' }}>text=sm + textAlign=right</p>
               <p sz={{ border: 2, borderColor: 'red-500', p: 2, rounded: 'md', color: 'gray-700', mt: 2 }}>border=2 + borderColor=red-500</p>
@@ -161,7 +161,7 @@ function App() {
 
             {/* Shadow/ring color opacity */}
             <div sz={{ p: 4, bg: 'white', rounded: 'lg', shadow: true }}>
-              <h3 sz={{ text: 'sm', fontWeight: 'semibold', color: 'emerald-800', mb: 2 }}>Shadow Color Opacity</h3>
+              <h3 sz={{ text: 'sm', weight: 'semibold', color: 'emerald-800', mb: 2 }}>Shadow Color Opacity</h3>
               <div sz={{ p: 3, bg: 'blue-50', rounded: 'md', shadow: 'lg', shadowColor: { color: 'blue-500', op: 50 }, mb: 2 }}>
                 shadow-blue-500/50
               </div>
@@ -174,7 +174,7 @@ function App() {
 
         {/* Instructions */}
         <div sz={{ mt: 8, p: 4, bg: 'yellow-50', borderColor: 'yellow-200', border: true, rounded: 'lg' }}>
-          <p sz={{ text: 'sm', color: 'yellow-900', fontWeight: 'medium', mb: 2 }}>🔍 Inspection Tips:</p>
+          <p sz={{ text: 'sm', color: 'yellow-900', weight: 'medium', mb: 2 }}>🔍 Inspection Tips:</p>
           <ul sz={{ text: 'sm', color: 'yellow-800', spaceY: 1 }}>
             <li>• Open DevTools → Inspect elements to see mangled classes</li>
             <li>• Check Network tab → CSS file should have <code sz={{ px: 1, bg: 'yellow-100', rounded: true }}>.z</code>, <code sz={{ px: 1, bg: 'yellow-100', rounded: true }}>.y</code> selectors</li>

@@ -45,7 +45,7 @@ describe('clsx/cn calls', () => {
         expect(result.changed).toBe(true);
         expect(result.code).toContain('sz=');
         expect(result.code).toContain("display: 'flex'");
-        expect(result.code).toContain('relative: true');
+        expect(result.code).toContain("position: 'relative'");
     });
 
     it('twMerge function name', () => {

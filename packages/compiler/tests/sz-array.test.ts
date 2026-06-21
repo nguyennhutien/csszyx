@@ -5,7 +5,7 @@ import { transformSourceCode } from '../src/transform.js';
 describe('sz array syntax', () => {
     describe('fully static arrays', () => {
         it('all static objects → merged className string, zero runtime', () => {
-            const source = 'const A = () => <div sz={[{ flex: true }, { p: 4 }]} />';
+            const source = 'const A = () => <div sz={[{ display: "flex" }, { p: 4 }]} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('className="flex p-4"');
@@ -38,7 +38,7 @@ describe('sz array syntax', () => {
     describe('conditional arrays', () => {
         it('condition && szObject → _szMerge with compiled string', () => {
             const source =
-                'const A = () => <div sz={[{ flex: true }, isActive && { bg: "blue-500" }]} />';
+                'const A = () => <div sz={[{ display: "flex" }, isActive && { bg: "blue-500" }]} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('_szMerge');
@@ -50,7 +50,7 @@ describe('sz array syntax', () => {
 
         it('multiple conditions → _szMerge with all compiled parts', () => {
             const source = `const A = () => <div sz={[
-                { flex: true, p: 4 },
+                { display: "flex", p: 4 },
                 isActive && { bg: "blue-500" },
                 isDisabled && { opacity: 50, cursor: "not-allowed" },
             ]} />`;
@@ -64,7 +64,7 @@ describe('sz array syntax', () => {
 
         it('classes are collected for Tailwind JIT', () => {
             const source = `const A = () => <div sz={[
-                { flex: true },
+                { display: "flex" },
                 isActive && { bg: "blue-500" },
             ]} />`;
             const result = transformSourceCode(source);

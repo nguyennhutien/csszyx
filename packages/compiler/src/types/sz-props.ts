@@ -307,34 +307,13 @@ export interface LayoutProps {
         | 'list-item'
         | 'none';
 
-    /** Boolean sugar for display: block */
-    block?: boolean;
-    /** Boolean sugar for display: inline-block */
-    inlineBlock?: boolean;
-    /** Boolean sugar for display: inline */
-    inline?: boolean;
-    /** Boolean sugar for display: flex */
-    flex?: boolean | 'auto' | 'initial' | 'none' | 1 | (string & {});
-    /** Boolean sugar for display: inline-flex */
-    inlineFlex?: boolean;
-    /** Boolean sugar for display: grid */
-    grid?: boolean;
-    /** Boolean sugar for display: inline-grid */
-    inlineGrid?: boolean;
-    /** Boolean sugar for display: table */
-    table?: boolean;
-    /** Boolean sugar for display: table-row */
-    tableRow?: boolean;
-    /** Boolean sugar for display: table-cell */
-    tableCell?: boolean;
-    /** Boolean sugar for display: flow-root */
-    flowRoot?: boolean;
-    /** Boolean sugar for display: list-item */
-    listItem?: boolean;
-    /** Boolean sugar for display: contents */
-    contents?: boolean;
-    /** Boolean sugar for display: hidden/none */
-    hidden?: boolean;
+    /**
+     * Flex shorthand (flex-grow/shrink/basis). `flex: 1` → flex-1,
+     * `flex: 'auto'` → flex-auto. This is NOT the removed `display: flex` sugar —
+     * for display use `display: 'flex'`.
+     * @see https://tailwindcss.com/docs/flex
+     */
+    flex?: 'auto' | 'initial' | 'none' | number | (string & {});
     /** Boolean sugar for sr-only */
     srOnly?: boolean;
     /** Boolean sugar for not-sr-only */
@@ -354,7 +333,6 @@ export interface LayoutProps {
 
     /** @see https://tailwindcss.com/docs/isolation */
     isolation?: 'isolate' | 'auto';
-    isolate?: boolean;
 
     /** @see https://tailwindcss.com/docs/object-fit */
     objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
@@ -384,11 +362,6 @@ export interface LayoutProps {
 
     /** @see https://tailwindcss.com/docs/position */
     position?: 'static' | 'fixed' | 'absolute' | 'relative' | 'sticky';
-    static?: boolean;
-    fixed?: boolean;
-    absolute?: boolean;
-    relative?: boolean;
-    sticky?: boolean;
 
     /** @see https://tailwindcss.com/docs/top-right-bottom-left */
     inset?: SpacingValue;
@@ -411,9 +384,6 @@ export interface LayoutProps {
 
     /** @see https://tailwindcss.com/docs/visibility */
     visibility?: 'visible' | 'hidden' | 'collapse';
-    visible?: boolean;
-    invisible?: boolean;
-    collapse?: boolean;
 
     /** @see https://tailwindcss.com/docs/z-index */
     z?: 'auto' | 0 | 10 | 20 | 30 | 40 | 50 | number | (string & {});
@@ -931,16 +901,22 @@ export interface TypographyProps {
         | '9xl'
         | (string & {});
 
-    /** @see https://tailwindcss.com/docs/font-smoothing */
-    antialiased?: boolean;
-    subpixelAntialiased?: boolean;
+    /**
+     * Font smoothing. `'grayscale'` → antialiased, `'subpixel'` → subpixel-antialiased.
+     * The values name the rendering technique. (Distinct from the `grayscale` filter.)
+     * @see https://tailwindcss.com/docs/font-smoothing
+     */
+    fontSmoothing?: 'grayscale' | 'subpixel';
 
-    /** @see https://tailwindcss.com/docs/font-style */
-    italic?: boolean;
-    notItalic?: boolean;
+    /**
+     * Font style. `'italic'` → italic, `'normal'` → not-italic. Tailwind models
+     * only these two; for oblique use `css: { fontStyle: 'oblique 10deg' }`.
+     * @see https://tailwindcss.com/docs/font-style
+     */
+    fontStyle?: 'italic' | 'normal';
 
     /** @see https://tailwindcss.com/docs/font-weight */
-    fontWeight?:
+    weight?:
         | 'thin'
         | 'extralight'
         | 'light'
@@ -1025,12 +1001,12 @@ export interface TypographyProps {
     /** @see https://tailwindcss.com/docs/text-color */
     color?: ColorPropValue;
 
-    /** @see https://tailwindcss.com/docs/text-decoration */
-    underline?: boolean;
-    overline?: boolean;
-    lineThrough?: boolean;
-    noUnderline?: boolean;
-    /** String-keyed text-decoration prop for arbitrary values */
+    /**
+     * Text decoration line. `'underline'`, `'overline'`, `'line-through'`,
+     * `'none'` (→ no-underline). Decoration color/style/thickness are separate
+     * keys (decorationColor/decorationStyle/decorationThickness).
+     * @see https://tailwindcss.com/docs/text-decoration-line
+     */
     decoration?: 'underline' | 'overline' | 'line-through' | 'none' | (string & {});
 
     /** @see https://tailwindcss.com/docs/text-decoration-color */
@@ -1045,11 +1021,12 @@ export interface TypographyProps {
     /** @see https://tailwindcss.com/docs/text-underline-offset */
     underlineOffset?: 'auto' | 0 | 1 | 2 | 4 | 8 | (string & {});
 
-    /** @see https://tailwindcss.com/docs/text-transform */
-    uppercase?: boolean;
-    lowercase?: boolean;
-    capitalize?: boolean;
-    normalCase?: boolean;
+    /**
+     * Text transform. `'uppercase'`, `'lowercase'`, `'capitalize'`,
+     * `'none'` (→ normal-case).
+     * @see https://tailwindcss.com/docs/text-transform
+     */
+    textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
 
     /** @see https://tailwindcss.com/docs/text-overflow */
     truncate?: boolean;
@@ -1754,6 +1731,10 @@ export interface MaskProps {
     maskRepeat?: 'repeat' | 'no-repeat' | 'repeat-x' | 'repeat-y' | 'round' | 'space';
     /** CSS mask-type (shape-rendering) */
     maskShape?: 'alpha' | 'luminance';
+    /** CSS mask-clip */
+    maskClip?: 'border' | 'content' | 'fill' | 'padding' | 'stroke' | 'view' | (string & {});
+    /** CSS mask-origin */
+    maskOrigin?: 'border' | 'content' | 'fill' | 'padding' | 'stroke' | 'view' | (string & {});
 
     /** Mask gradient from color stop (v4.1) */
     maskFrom?: ColorPropValue;
@@ -1773,128 +1754,158 @@ export interface MaskProps {
  */
 export interface VariantModifiers {
     // Pseudo-classes
-    hover?: SzPropsBase;
-    focus?: SzPropsBase;
-    active?: SzPropsBase;
-    visited?: SzPropsBase;
-    target?: SzPropsBase;
-    first?: SzPropsBase;
-    last?: SzPropsBase;
-    only?: SzPropsBase;
-    odd?: SzPropsBase;
-    even?: SzPropsBase;
-    firstOfType?: SzPropsBase;
-    lastOfType?: SzPropsBase;
-    onlyOfType?: SzPropsBase;
-    empty?: SzPropsBase;
-    disabled?: SzPropsBase;
-    enabled?: SzPropsBase;
-    checked?: SzPropsBase;
-    indeterminate?: SzPropsBase;
-    default?: SzPropsBase;
-    required?: SzPropsBase;
-    valid?: SzPropsBase;
-    invalid?: SzPropsBase;
-    inRange?: SzPropsBase;
-    outOfRange?: SzPropsBase;
-    placeholderShown?: SzPropsBase;
-    autofill?: SzPropsBase;
-    readOnly?: SzPropsBase;
-    focusWithin?: SzPropsBase;
-    focusVisible?: SzPropsBase;
+    hover?: SzProps;
+    focus?: SzProps;
+    active?: SzProps;
+    visited?: SzProps;
+    target?: SzProps;
+    first?: SzProps;
+    last?: SzProps;
+    only?: SzProps;
+    odd?: SzProps;
+    even?: SzProps;
+    firstOfType?: SzProps;
+    lastOfType?: SzProps;
+    onlyOfType?: SzProps;
+    empty?: SzProps;
+    disabled?: SzProps;
+    enabled?: SzProps;
+    checked?: SzProps;
+    indeterminate?: SzProps;
+    default?: SzProps;
+    required?: SzProps;
+    valid?: SzProps;
+    invalid?: SzProps;
+    inRange?: SzProps;
+    outOfRange?: SzProps;
+    placeholderShown?: SzProps;
+    autofill?: SzProps;
+    readOnly?: SzProps;
+    focusWithin?: SzProps;
+    focusVisible?: SzProps;
 
     // Pseudo-elements
-    before?: SzPropsBase;
-    after?: SzPropsBase;
-    placeholder?: SzPropsBase;
-    file?: SzPropsBase;
-    marker?: SzPropsBase;
-    selection?: SzPropsBase;
-    firstLine?: SzPropsBase;
-    firstLetter?: SzPropsBase;
-    backdrop?: SzPropsBase;
+    before?: SzProps;
+    after?: SzProps;
+    placeholder?: SzProps;
+    file?: SzProps;
+    marker?: SzProps;
+    selection?: SzProps;
+    firstLine?: SzProps;
+    firstLetter?: SzProps;
+    backdrop?: SzProps;
 
     // Responsive breakpoints
-    sm?: SzPropsBase;
-    md?: SzPropsBase;
-    lg?: SzPropsBase;
-    xl?: SzPropsBase;
-    '2xl'?: SzPropsBase;
+    sm?: SzProps;
+    md?: SzProps;
+    lg?: SzProps;
+    xl?: SzProps;
+    '2xl'?: SzProps;
 
     // Container queries
-    '@sm'?: SzPropsBase;
-    '@md'?: SzPropsBase;
-    '@lg'?: SzPropsBase;
-    '@xl'?: SzPropsBase;
-    '@2xl'?: SzPropsBase;
+    '@sm'?: SzProps;
+    '@md'?: SzProps;
+    '@lg'?: SzProps;
+    '@xl'?: SzProps;
+    '@2xl'?: SzProps;
 
     // Dark mode
-    dark?: SzPropsBase;
-    light?: SzPropsBase;
+    dark?: SzProps;
+    light?: SzProps;
 
     // Motion preferences
-    motionReduce?: SzPropsBase;
-    motionSafe?: SzPropsBase;
+    motionReduce?: SzProps;
+    motionSafe?: SzProps;
 
     // Contrast preferences
-    contrastMore?: SzPropsBase;
-    contrastLess?: SzPropsBase;
+    contrastMore?: SzProps;
+    contrastLess?: SzProps;
 
     // Pointer preferences
-    pointerFine?: SzPropsBase;
-    pointerCoarse?: SzPropsBase;
-    pointerNone?: SzPropsBase;
+    pointerFine?: SzProps;
+    pointerCoarse?: SzProps;
+    pointerNone?: SzProps;
 
     // Any-pointer preferences (v4.1)
-    anyPointerFine?: SzPropsBase;
-    anyPointerCoarse?: SzPropsBase;
-    anyPointerNone?: SzPropsBase;
+    anyPointerFine?: SzProps;
+    anyPointerCoarse?: SzProps;
+    anyPointerNone?: SzProps;
 
     // Form validation (v4.1)
-    userValid?: SzPropsBase;
-    userInvalid?: SzPropsBase;
+    userValid?: SzProps;
+    userInvalid?: SzProps;
 
     // Details / inverted-colors / noscript (v4.1)
-    detailsContent?: SzPropsBase;
-    invertedColors?: SzPropsBase;
-    noscript?: SzPropsBase;
+    detailsContent?: SzProps;
+    invertedColors?: SzProps;
+    noscript?: SzProps;
 
     // Forced-colors media variant
-    forcedColors?: SzPropsBase;
+    forcedColors?: SzProps;
 
     // Print
-    print?: SzPropsBase;
+    print?: SzProps;
 
     // Starting-style + inert state variants
-    starting?: SzPropsBase;
-    inert?: SzPropsBase;
+    starting?: SzProps;
+    inert?: SzProps;
 
     // Orientation
-    portrait?: SzPropsBase;
-    landscape?: SzPropsBase;
+    portrait?: SzProps;
+    landscape?: SzProps;
 
     // RTL/LTR
-    rtl?: SzPropsBase;
-    ltr?: SzPropsBase;
+    rtl?: SzProps;
+    ltr?: SzProps;
 
     // Group/Peer modifiers (true = class, string = named, object = nested variants)
-    group?: boolean | string | SzPropsBase;
-    peer?: boolean | string | SzPropsBase;
+    group?: boolean | string | SzProps;
+    peer?: boolean | string | SzProps;
 
     // Not modifier
-    not?: SzPropsBase;
+    not?: SzProps;
 
     // Has modifier
-    has?: Record<string, SzPropsBase>;
+    has?: Record<string, SzProps>;
 
     // Aria states
-    aria?: Record<string, SzPropsBase>;
+    aria?: Record<string, SzProps>;
 
     // Data attributes
-    data?: Record<string, SzPropsBase>;
+    data?: Record<string, SzProps>;
 
     // Supports queries
-    supports?: Record<string, SzPropsBase>;
+    supports?: Record<string, SzProps>;
+
+    // Arbitrary variants (object-valued): container queries (`@container`,
+    // `@container/sidebar`), arbitrary breakpoints (`min-[320px]`/`max-[600px]`),
+    // and arbitrary selectors (`[&>span]`). A scalar typo key like `bgColor`
+    // matches no pattern and is not a known prop → rejected by tsc. Force a
+    // genuinely-new Tailwind utility csszyx has no key for yet with `@ts-expect-error`.
+    // `@md`/`@lg`/`@max-[600px]` are container-query variants (object body);
+    // `@container` / `@container/sidebar` are container-declaration markers
+    // (boolean), so this `@`-sig accepts both.
+    [variant: `@${string}`]: SzProps | boolean | undefined;
+    [variant: `min-[${string}`]: SzProps | undefined;
+    [variant: `max-[${string}`]: SzProps | undefined;
+    [variant: `[${string}`]: SzProps | undefined;
+
+    // Functional variants written as a flat string key (the compiler supports
+    // each of these). Covers the bare-state form (`group-hover`, `aria-checked`),
+    // the named form (`group-hover/sidebar`, `peer-focus/search`), and the
+    // arbitrary-param form (`group-data-[active]`, `aria-[sort=asc]`,
+    // `data-[state=open]`, `has-[:checked]`, `supports-[display:grid]`). The
+    // nested object forms (`group: { hover: {} }`, `aria: { checked: {} }`)
+    // remain available via the named props above; these cover the flat spelling.
+    [variant: `group-${string}`]: SzProps | undefined;
+    [variant: `peer-${string}`]: SzProps | undefined;
+    [variant: `has-${string}`]: SzProps | undefined;
+    [variant: `aria-${string}`]: SzProps | undefined;
+    [variant: `data-${string}`]: SzProps | undefined;
+    [variant: `not-${string}`]: SzProps | undefined;
+    [variant: `in-${string}`]: SzProps | undefined;
+    [variant: `nth-${string}`]: SzProps | undefined;
+    [variant: `supports-${string}`]: SzProps | undefined;
 }
 
 // ============================================================================
@@ -1932,7 +1943,7 @@ export type SzPropsBase = LayoutProps &
          * // → [--my-color:red]
          */
         css?: CSS.Properties & { [cssVar: `--${string}`]: string | number };
-    } & { [key: string]: unknown }; // Allow arbitrary keys
+    };
 
 /**
  * Complete sz prop type with all properties and variant modifiers.

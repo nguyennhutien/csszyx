@@ -4,12 +4,12 @@ function BeamEdge({ delay1, delay2 }: { delay1: string; delay2: string }) {
   const gradient = 'linear-gradient(to right,transparent,rgba(152,109,254,0.9) 35%,rgba(152,109,254,0.9) 65%,transparent)';
   const shadow = '0 0 28px 2px rgba(139,92,246,0.5)';
   return (
-    <div className="beam-wrapper" sz={{ group: { footerCtaBtn: { hover: { opacity: 0 } } },absolute: true, inset: 0, z: 20, pointerEvents: 'none', rounded: '3xl', overflow: 'hidden' }}>
-      <div sz={{ absolute: true, top: 0, insetX: 0, h: '1px', roundedTl: '3xl', roundedTr: '3xl' }}>
-        <div sz={{ absolute: true, top: 0, h: 'full', w: 24, animate: 'beam-sweep-h 5s ease-in-out infinite' }} style={{ background: gradient, boxShadow: shadow, animationDelay: delay1 }} />
+    <div className="beam-wrapper" sz={{ group: { footerCtaBtn: { hover: { opacity: 0 } } },position: 'absolute', inset: 0, z: 20, pointerEvents: 'none', rounded: '3xl', overflow: 'hidden' }}>
+      <div sz={{ position: 'absolute', top: 0, insetX: 0, h: '1px', roundedTl: '3xl', roundedTr: '3xl' }}>
+        <div sz={{ position: 'absolute', top: 0, h: 'full', w: 24, animate: 'beam-sweep-h 5s ease-in-out infinite' }} style={{ background: gradient, boxShadow: shadow, animationDelay: delay1 }} />
       </div>
-      <div sz={{ absolute: true, bottom: 0, insetX: 0, h: '1px', roundedBl: '3xl', roundedBr: '3xl' }}>
-        <div sz={{ absolute: true, top: 0, h: 'full', w: 24, animate: 'beam-sweep-h 5s ease-in-out infinite' }} style={{ background: gradient, boxShadow: shadow, animationDelay: delay2 }} />
+      <div sz={{ position: 'absolute', bottom: 0, insetX: 0, h: '1px', roundedBl: '3xl', roundedBr: '3xl' }}>
+        <div sz={{ position: 'absolute', top: 0, h: 'full', w: 24, animate: 'beam-sweep-h 5s ease-in-out infinite' }} style={{ background: gradient, boxShadow: shadow, animationDelay: delay2 }} />
       </div>
     </div>
   );
@@ -75,7 +75,7 @@ export default function CTASection() {
         pt: 32,
         pb: 32,
         minH: '90vh',
-        flex: true,
+        display: 'flex',
         flexDir: 'col',
         justify: 'center',
         px: 6,
@@ -83,17 +83,17 @@ export default function CTASection() {
     >
       <h2
         className="reveal-item"
-        sz={{ text: '5xl', fontWeight: 'black', mb: 6, tracking: 'tighter', textAlign: 'center', color: 'neutral-900', dark: { color: 'white' }, delay: '0ms' }}
+        sz={{ text: '5xl', weight: 'black', mb: 6, tracking: 'tighter', textAlign: 'center', color: 'neutral-900', dark: { color: 'white' }, delay: '0ms' }}
       >
         Ready to style from data?
       </h2>
       <p
         className="reveal-item"
-        sz={{ color: 'slate-600', dark: { color: 'slate-400' }, text: 'lg', fontWeight: 'light', mb: 16, textAlign: 'center', delay: '150ms' }}
+        sz={{ color: 'slate-600', dark: { color: 'slate-400' }, text: 'lg', weight: 'light', mb: 16, textAlign: 'center', delay: '150ms' }}
       >
         Start with zero-runtime compilation.<br />
         Add @csszyx/dynamic when you need it.<br />
-        <span sz={{ fontWeight: 'medium', color: 'neutral-900', dark: { color: 'slate-300' } }}>No lock-in. Pure Tailwind output.</span>
+        <span sz={{ weight: 'medium', color: 'neutral-900', dark: { color: 'slate-300' } }}>No lock-in. Pure Tailwind output.</span>
       </p>
 
       {/* Install block */}
@@ -110,34 +110,34 @@ export default function CTASection() {
           mx: 'auto',
           maxW: '2xl',
           w: 'full',
-          relative: true,
+          position: 'relative',
         }}
       >
         {/* Title bar */}
         <div
           sz={{
-            absolute: true,
+            position: 'absolute',
             insetX: 0,
             top: 0,
             h: 12,
             borderB: true,
             borderColor: { color: 'black', op: 5 },
             dark: { borderColor: { color: 'white', op: 5 }, bg: { color: '#1e1e2aff', op: 45 } },
-            flex: true,
+            display: 'flex',
             justify: 'between',
             items: 'center',
             px: 6,
             bg: { color: 'slate-50', op: 50 },
           }}
         >
-          <div sz={{ flex: true, gap: 2 }}>
+          <div sz={{ display: 'flex', gap: 2 }}>
             <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'rose-500', op: 80 } }} />
             <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'amber-500', op: 80 } }} />
             <div sz={{ w: 3, h: 3, rounded: 'full', bg: { color: 'emerald-500', op: 80 } }} />
           </div>
 
           {/* Package manager tabs */}
-          <div sz={{ flex: true, fontFamily: 'mono', text: '10px', color: 'slate-500', tracking: 'wider', gap: 1 }}>
+          <div sz={{ display: 'flex', fontFamily: 'mono', text: '10px', color: 'slate-500', tracking: 'wider', gap: 1 }}>
             {(['npm', 'pnpm'] as const).map(pkg => (
               <button
                 key={pkg}
@@ -154,15 +154,15 @@ export default function CTASection() {
 
         {/* Commands */}
         <div sz={{ p: 10, pt: 20, pb: 16, fontFamily: 'mono', text: '13px', leading: 'loose' }}>
-          <div sz={{ flex: true, items: 'center', gap: 4, mb: 4 }}>
+          <div sz={{ display: 'flex', items: 'center', gap: 4, mb: 4 }}>
             <span sz={{ color: 'primary', opacity: 50 }}>$</span>
             <span sz={{ color: 'neutral-900', dark: { color: 'white' } }}>{cmds.main}</span>
-            <span sz={{ color: 'slate-400', dark: { color: 'slate-600' }, ml: 'auto', hidden: true, sm: { inline: true } }}># build-time only</span>
+            <span sz={{ color: 'slate-400', dark: { color: 'slate-600' }, ml: 'auto', display: 'none', sm: { display: 'inline' } }}># build-time only</span>
           </div>
-          <div sz={{ flex: true, items: 'center', gap: 4 }}>
+          <div sz={{ display: 'flex', items: 'center', gap: 4 }}>
             <span sz={{ color: 'primary', opacity: 50 }}>$</span>
             <span sz={{ color: 'neutral-900', dark: { color: 'white' } }}>{cmds.dyn}</span>
-            <span sz={{ color: 'slate-400', dark: { color: 'slate-600' }, ml: 'auto', hidden: true, sm: { inline: true } }}># + runtime delta injection</span>
+            <span sz={{ color: 'slate-400', dark: { color: 'slate-600' }, ml: 'auto', display: 'none', sm: { display: 'inline' } }}># + runtime delta injection</span>
           </div>
         </div>
       </div>
@@ -181,7 +181,7 @@ export default function CTASection() {
             px: 10,
             py: 5,
             gap: 3,
-            inlineFlex: true,
+            display: 'inline-flex',
             items: 'center',
             bg: 'white',
             dark: {

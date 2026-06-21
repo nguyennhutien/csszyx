@@ -24,9 +24,18 @@ export interface ParsedTheme {
     radii: string[];
     /** Custom shadows (from --shadow-*): e.g. ['card'] */
     shadows: string[];
+    /** Custom responsive breakpoints (from --breakpoint-*): e.g. ['tablet', '3xl'] */
+    breakpoints: string[];
 }
 
-const EMPTY_THEME: ParsedTheme = { colors: [], spacings: [], fonts: [], radii: [], shadows: [] };
+const EMPTY_THEME: ParsedTheme = {
+    colors: [],
+    spacings: [],
+    fonts: [],
+    radii: [],
+    shadows: [],
+    breakpoints: [],
+};
 
 /**
  * Strip @layer { ... } wrappers so @theme blocks inside layers are still found.
@@ -128,13 +137,18 @@ function categorizeProperty(prop: string): { category: keyof ParsedTheme; token:
         ['font-', 'fonts'],
         ['radius-', 'radii'],
         ['shadow-', 'shadows'],
+        ['breakpoint-', 'breakpoints'],
     ];
 
     for (const [prefix, category] of categoryMap) {
         if (prop.startsWith(prefix)) {
             let token = prop.slice(prefix.length);
-            // Strip trailing numeric shade suffix: "brand-500" → "brand", "brand-dark" → "brand-dark"
-            token = token.replace(/-\d+$/, '');
+            // Breakpoint names are literal variant names (tablet, 3xl); only the
+            // design-token categories carry numeric shade suffixes that should be
+            // collapsed: "brand-500" → "brand", "brand-dark" → "brand-dark".
+            if (category !== 'breakpoints') {
+                token = token.replace(/-\d+$/, '');
+            }
             if (token) {
                 return { category, token };
             }
@@ -156,6 +170,7 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
         fonts: new Set(),
         radii: new Set(),
         shadows: new Set(),
+        breakpoints: new Set(),
     };
 
     const stripped = stripLayerWrappers(cssContent);
@@ -179,6 +194,7 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
         fonts: [...result.fonts].sort(),
         radii: [...result.radii].sort(),
         shadows: [...result.shadows].sort(),
+        breakpoints: [...result.breakpoints].sort(),
     };
 }
 
@@ -198,6 +214,7 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
         fonts: new Set(),
         radii: new Set(),
         shadows: new Set(),
+        breakpoints: new Set(),
     };
     for (const theme of themes) {
         for (const cat of Object.keys(merged) as (keyof ParsedTheme)[]) {
@@ -212,6 +229,7 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
         fonts: [...merged.fonts].sort(),
         radii: [...merged.radii].sort(),
         shadows: [...merged.shadows].sort(),
+        breakpoints: [...merged.breakpoints].sort(),
     };
 }
 

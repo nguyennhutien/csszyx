@@ -24,8 +24,8 @@ describe('CSS Variable Type Hints', () => {
             expect(t({ fontFamily: '--custom-font' })).toBe('font-(family-name:--custom-font)');
         });
 
-        it('fontWeight: "--my-weight" → font-(weight:--my-weight)', () => {
-            expect(t({ fontWeight: '--my-weight' })).toBe('font-(weight:--my-weight)');
+        it('weight: "--my-weight" → font-(weight:--my-weight)', () => {
+            expect(t({ weight: '--my-weight' })).toBe('font-(weight:--my-weight)');
         });
 
         it('text: "--my-text-size" → text-(length:--my-text-size)', () => {
@@ -60,8 +60,8 @@ describe('CSS Variable Type Hints', () => {
             expect(t({ fontFamily: 'sans' })).toBe('font-sans');
         });
 
-        it('fontWeight: "bold" → font-bold (no type hint)', () => {
-            expect(t({ fontWeight: 'bold' })).toBe('font-bold');
+        it('weight: "bold" → font-bold (no type hint)', () => {
+            expect(t({ weight: 'bold' })).toBe('font-bold');
         });
 
         it('text: "lg" → text-lg (no type hint)', () => {

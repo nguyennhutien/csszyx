@@ -47,8 +47,29 @@ rm -f packages/core-linux-arm64-gnu/csszyx-core.linux-arm64-gnu.node \
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
 
+# Cheap generated-artefact staleness gates first — these fail in seconds and
+# catch the most common drift (forgetting to regenerate a committed fixture).
+echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parity corpus, rust tables)..."
+pnpm gen:key-tests:check
+pnpm gen:parity-corpus:check
+pnpm gen:rust-tables:check
+pnpm check:key-corpus
+
 echo "[verify-like-ci] Building host native engine (matches CI step)..."
 env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
+# The Rust gates live in a separate workflow (rust-check.yml), so a local run
+# that only mirrored ci.yml would miss them — fmt, clippy -D warnings, the unit
+# tests, and both parity harnesses.
+echo "[verify-like-ci] Rust gates (rustfmt, clippy -D warnings, cargo test, parity harnesses)..."
+(
+    cd "$REPO/packages/core"
+    cargo fmt --all -- --check
+    cargo clippy --all-targets -- -D warnings
+    cargo test
+    cargo test --features native-engine transform::parser
+    cargo test --features native-engine --test parity_corpus
+)
 
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."
 pnpm test:unit
@@ -58,6 +79,9 @@ pnpm exec eslint .
 
 echo "[verify-like-ci] Type-check..."
 pnpm type-check
+
+echo "[verify-like-ci] Corpus round-trip (fails on broken mappings, like CI)..."
+pnpm corpus:check --require-no-broken
 
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build

@@ -23,7 +23,7 @@ describe('csszyx_batch', () => {
 
     it('preserves index and continues on per-item error', () => {
         // An invalid sz value may cause transform to throw; batch should not abort.
-        const items = [{ p: 4 }, { flex: true }, { p: 2 }];
+        const items = [{ p: 4 }, { display: 'flex' }, { p: 2 }];
         const data = JSON.parse(handleBatch({ items }).content[0].text);
         expect(data.results).toHaveLength(3);
         expect(data.results[0].index).toBe(0);

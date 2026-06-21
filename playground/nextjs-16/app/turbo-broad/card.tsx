@@ -14,7 +14,7 @@ export function Card({ title }: { title: string }) {
                 borderColor: { color: 'black', op: 5 },
             }}
         >
-            <span sz={{ text: 'sm', fontWeight: 'semibold' }}>{title}</span>
+            <span sz={{ text: 'sm', weight: 'semibold' }}>{title}</span>
         </div>
     );
 }

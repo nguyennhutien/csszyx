@@ -595,6 +595,23 @@ export function transformOxc(
             if (runtimeFallbackExpr.type !== 'ArrayExpression') {
                 diagnostics.push(buildRuntimeFallbackDiagnostic(runtimeFallbackExpr, source));
             }
+            // A top-level object spread can't be resolved at build time and may
+            // produce no styles in production — surface it with a marker the
+            // bundler plugin promotes to a build-log warning (matches the rust
+            // engine). Other fallback shapes stay quiet.
+            if (
+                runtimeFallbackExpr.type === 'ObjectExpression' &&
+                (runtimeFallbackExpr as ObjectExpressionNode).properties.some(
+                    prop => prop.type === 'SpreadElement',
+                )
+            ) {
+                const { line, column } = offsetToLineColumn(source, runtimeFallbackExpr.start);
+                diagnostics.push(
+                    `[csszyx] unresolvable sz spread at ${line}:${column + 1}: ` +
+                        'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
+                        'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
+                );
+            }
             collectCandidateClassesFromExpression(
                 runtimeFallbackExpr,
                 effectiveFilename,

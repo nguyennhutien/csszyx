@@ -47,20 +47,20 @@
 
 ```tsx
 {
-  flex: true;
-} // display: flex     → flex
+  display: "flex";
+} // → flex
 {
-  grid: true;
-} // display: grid     → grid
+  display: "grid";
+} // → grid
 {
-  hidden: true;
-} // display: none     → hidden
+  display: "none";
+} // → hidden
 {
-  absolute: true;
-} // position          → absolute
+  position: "absolute";
+} // → absolute
 {
-  relative: true;
-} // position          → relative
+  position: "relative";
+} // → relative
 {
   overflow: "hidden";
 } // overflow          → overflow-hidden
@@ -102,7 +102,7 @@
   text: "xl";
 } // text-xl (size + leading)
 {
-  fontWeight: "bold";
+  weight: "bold";
 } // font-bold
 {
   fontFamily: "mono";
@@ -117,7 +117,7 @@
   textAlign: "center";
 } // text-center
 {
-  uppercase: true;
+  textTransform: "uppercase";
 } // uppercase
 {
   truncate: true;

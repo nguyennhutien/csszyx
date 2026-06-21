@@ -51,16 +51,16 @@ export function HydrationTest() {
     }, []);
 
     const statusSz = hydrationStatus === 'success'
-        ? { px: 3, py: 1, text: 'xs', rounded: 'full', fontWeight: 'semibold', bg: { color: 'green-500', op: 20 }, color: 'green-400' }
+        ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'green-500', op: 20 }, color: 'green-400' }
         : hydrationStatus === 'mismatch'
-          ? { px: 3, py: 1, text: 'xs', rounded: 'full', fontWeight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
-          : { px: 3, py: 1, text: 'xs', rounded: 'full', fontWeight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
+          ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
+          : { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
 
     return (
         <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>
             {/* Status Header */}
-            <div sz={{ flex: true, items: 'center', justify: 'between', mb: 6 }}>
-                <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'white' }}>Hydration Status</h3>
+            <div sz={{ display: 'flex', items: 'center', justify: 'between', mb: 6 }}>
+                <h3 sz={{ text: 'lg', weight: 'semibold', color: 'white' }}>Hydration Status</h3>
                 <span
                     sz={statusSz}
                 >
@@ -108,7 +108,7 @@ export function HydrationTest() {
 
             {/* Explanation */}
             <div sz={{ mt: 6, p: 4, rounded: 'lg', bg: { color: 'slate-900', op: 30 }, borderColor: 'slate-700', border: true }}>
-                <h4 sz={{ text: 'sm', fontWeight: 'semibold', color: 'white', mb: 2 }}>How it works:</h4>
+                <h4 sz={{ text: 'sm', weight: 'semibold', color: 'white', mb: 2 }}>How it works:</h4>
                 <ul sz={{ text: 'xs', color: 'slate-400', spaceY: 1 }}>
                     <li>1. Server renders HTML with mangled classes</li>
                     <li>2. Checksum is injected into HTML</li>

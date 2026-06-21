@@ -18,15 +18,7 @@ const CLIENT_RUNTIME_MODULE_ROOTS = ['@csszyx/dynamic', 'csszyx/dynamic'];
 const normalizedModuleIdCache = new Map<string, string>();
 const resolvedLocalModuleCache = new Map<string, string>();
 
-const FORBIDDEN_SYMBOLS = new Set([
-    '_sz',
-    '_sz2',
-    '_sz3',
-    '_szIf',
-    '_szMerge',
-    '_szSwitch',
-    '__csszyx_runtime__',
-]);
+const FORBIDDEN_SYMBOLS = new Set(['_sz', '_sz2', '_sz3', '_szMerge', '__csszyx_runtime__']);
 
 /**
  * Direct RSC boundary violation found in a transformed module.
@@ -692,7 +684,16 @@ function resolveLocalModule(importer: string, source: string): string | null {
     const cacheKey = `${importer}\0${source}`;
     const cached = resolvedLocalModuleCache.get(cacheKey);
     if (cached) {
-        return cached;
+        // Self-heal a stale positive hit: when the resolved file is deleted,
+        // pruneRSCModulePathCaches can miss this entry if the cached value and
+        // the watcher-reported path normalize to different spellings (on macOS
+        // a deleted file can no longer be realpath'd, so the prune key falls
+        // back to the raw /var form while this value holds the /private/var
+        // realpath). Verifying existence here drops the entry and re-resolves.
+        if (fs.existsSync(cached)) {
+            return cached;
+        }
+        resolvedLocalModuleCache.delete(cacheKey);
     }
 
     const base = source.startsWith('/') ? source : path.resolve(path.dirname(importer), source);

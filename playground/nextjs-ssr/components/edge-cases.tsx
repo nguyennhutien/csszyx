@@ -8,28 +8,28 @@ export function EdgeCaseTests() {
 
     return (
         <section sz={{ p: 4, bg: 'slate-900', rounded: 'lg' }}>
-            <h2 sz={{ text: '2xl', fontWeight: 'bold', mb: 4, color: 'white' }}>Edge Case Tests</h2>
+            <h2 sz={{ text: '2xl', weight: 'bold', mb: 4, color: 'white' }}>Edge Case Tests</h2>
 
             {/* Dynamic value control */}
-            <div sz={{ mb: 4, flex: true, gap: 2 }}>
+            <div sz={{ mb: 4, display: 'flex', gap: 2 }}>
                 <button
                     data-testid="edge-increase"
                     onClick={() => setDynamicValue(v => v + 1)}
-                    sz={{ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', fontWeight: 'medium' }}
+                    sz={{ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', weight: 'medium' }}
                 >
                     Increase ({dynamicValue})
                 </button>
                 <button
                     data-testid="edge-toggle"
                     onClick={() => setIsActive(!isActive)}
-                    sz={{ px: 4, py: 2, bg: 'purple-600', color: 'white', rounded: 'md', fontWeight: 'medium' }}
+                    sz={{ px: 4, py: 2, bg: 'purple-600', color: 'white', rounded: 'md', weight: 'medium' }}
                 >
                     Toggle ({isActive ? 'ON' : 'OFF'})
                 </button>
             </div>
 
             {/* Test grid */}
-            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
+            <div sz={{ display: 'grid', gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
                 {/* Case 1: Dynamic spacing */}
                 <div
                     data-case="1-dynamic-spacing"
@@ -41,7 +41,7 @@ export function EdgeCaseTests() {
                 {/* Case 2: Arbitrary value */}
                 <div
                     data-case="2-arbitrary"
-                    sz={{ w: '100px', h: '60px', bg: 'purple-500', rounded: 'md', color: 'white', text: 'sm', flex: true, items: 'center', justify: 'center' }}
+                    sz={{ w: '100px', h: '60px', bg: 'purple-500', rounded: 'md', color: 'white', text: 'sm', display: 'flex', items: 'center', justify: 'center' }}
                 >
                     100x60px
                 </div>
@@ -99,8 +99,8 @@ export function EdgeCaseTests() {
             </div>
 
             {/* Background Image / Gradient cases */}
-            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>Background Image Tests</h3>
-            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
+            <h3 sz={{ text: 'lg', weight: 'semibold', mt: 6, mb: 3, color: 'white' }}>Background Image Tests</h3>
+            <div sz={{ display: 'grid', gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
                 {/* Case 9: Linear gradient to-r (object syntax per spec) */}
                 <div
                     data-case="9-gradient-r"
@@ -171,7 +171,7 @@ export function EdgeCaseTests() {
                 {/* Case 16: bgClip text + gradient */}
                 <div
                     data-case="16-bg-clip"
-                    sz={{ bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'pink-500', to: 'violet-500', text: '2xl', fontWeight: 'bold', color: 'transparent', p: 4 }}
+                    sz={{ bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'pink-500', to: 'violet-500', text: '2xl', weight: 'bold', color: 'transparent', p: 4 }}
                 >
                     bg-clip-text
                 </div>
@@ -210,8 +210,8 @@ export function EdgeCaseTests() {
             </div>
 
             {/* CSS Variable Auto-Compile Tests */}
-            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Auto-Compile Tests</h3>
-            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
+            <h3 sz={{ text: 'lg', weight: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Auto-Compile Tests</h3>
+            <div sz={{ display: 'grid', gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
                 {/* Case 21: Dynamic spacing */}
                 <div
                     data-case="21-css-var-spacing"
@@ -278,8 +278,8 @@ export function EdgeCaseTests() {
             </div>
 
             {/* New Features: Collision fixes + New capabilities */}
-            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>New Features (Collision Fixes)</h3>
-            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
+            <h3 sz={{ text: 'lg', weight: 'semibold', mt: 6, mb: 3, color: 'white' }}>New Features (Collision Fixes)</h3>
+            <div sz={{ display: 'grid', gridCols: 2, md: { gridCols: 4 }, gap: 4 }}>
                 {/* Case 29: Text/Leading shorthand merge */}
                 <div
                     data-case="29-text-leading"
@@ -299,9 +299,9 @@ export function EdgeCaseTests() {
                 {/* Case 31: Explicit fontWeight (no catch-all) */}
                 <div
                     data-case="31-font-weight"
-                    sz={{ fontWeight: 'bold', p: 4, bg: 'blue-600', rounded: 'md', color: 'white', text: 'sm' }}
+                    sz={{ weight: 'bold', p: 4, bg: 'blue-600', rounded: 'md', color: 'white', text: 'sm' }}
                 >
-                    fontWeight: bold
+                    weight: bold
                 </div>
 
                 {/* Case 32: Explicit fontFamily (no catch-all) */}
@@ -346,7 +346,7 @@ export function EdgeCaseTests() {
             </div>
 
             {/* CSS Variable Type Hints */}
-            <h3 sz={{ text: 'lg', fontWeight: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Type Hints</h3>
+            <h3 sz={{ text: 'lg', weight: 'semibold', mt: 6, mb: 3, color: 'white' }}>CSS Variable Type Hints</h3>
             <p sz={{ color: 'slate-400', mb: 4, text: 'xs' }}>
                 Ambiguous properties (fontFamily, fontWeight, text) get type hints when using CSS variables.
                 Unambiguous properties (color, bg) keep the simple syntax.
@@ -365,7 +365,7 @@ export function EdgeCaseTests() {
                     --demo-inset-shadow-color: #22d3ee;
                 }
             `}</style>
-            <div sz={{ grid: true, gridCols: 2, md: { gridCols: 3 }, gap: 4 }}>
+            <div sz={{ display: 'grid', gridCols: 2, md: { gridCols: 3 }, gap: 4 }}>
                 {/* Case 37: fontFamily with CSS variable → font-(family-name:--var) */}
                 <div
                     data-case="37-css-var-font-family"
@@ -378,9 +378,9 @@ export function EdgeCaseTests() {
                 {/* Case 38: fontWeight with CSS variable → font-(weight:--var) */}
                 <div
                     data-case="38-css-var-font-weight"
-                    sz={{ fontWeight: '--demo-weight', p: 4, bg: 'slate-800', rounded: 'md', color: 'white', text: 'sm' }}
+                    sz={{ weight: '--demo-weight', p: 4, bg: 'slate-800', rounded: 'md', color: 'white', text: 'sm' }}
                 >
-                    fontWeight: --demo-weight<br />
+                    weight: --demo-weight<br />
                     <span sz={{ color: 'cyan-400', text: 'xs' }}>→ font-(weight:--demo-weight)</span>
                 </div>
 
@@ -459,7 +459,7 @@ export function EdgeCaseTests() {
                 {/* Case 45: Multiple CSS vars in one element */}
                 <div
                     data-case="45-multi-css-var"
-                    sz={{ fontFamily: '--demo-font', fontWeight: '--demo-weight', text: '--demo-size', color: '--demo-color', p: 4, bg: 'slate-800', rounded: 'md' }}
+                    sz={{ fontFamily: '--demo-font', weight: '--demo-weight', text: '--demo-size', color: '--demo-color', p: 4, bg: 'slate-800', rounded: 'md' }}
                 >
                     All CSS vars combined<br />
                     <span sz={{ text: 'xs', opacity: 70 }}>font + weight + size + color</span>

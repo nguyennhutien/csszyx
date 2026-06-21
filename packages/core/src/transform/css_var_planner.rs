@@ -658,6 +658,7 @@ mod tests {
             ternary: None,
             array_parts: Vec::new(),
             runtime_fallback: false,
+            runtime_fallback_spread: false,
             candidate_classes: Vec::new(),
             dynamic_css_vars,
         }

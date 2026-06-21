@@ -112,7 +112,7 @@ describe('arbitrary values — negative units in before:/after: variants', () =>
         const result = t({
             before: {
                 content: "''",
-                absolute: true,
+                position: 'absolute',
                 top: '-1px',
                 left: '-1px',
                 w: 2,
@@ -122,7 +122,7 @@ describe('arbitrary values — negative units in before:/after: variants', () =>
             },
             after: {
                 content: "''",
-                absolute: true,
+                position: 'absolute',
                 bottom: '-1px',
                 right: '-1px',
                 w: 2,

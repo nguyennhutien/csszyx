@@ -8,7 +8,7 @@ export default function TurboCsszyxPage() {
                     bg: 'emerald-500',
                     color: 'white',
                     rounded: 'lg',
-                    fontWeight: 'semibold',
+                    weight: 'semibold',
                 }}
             >
                 csszyx Turbopack loader transformed this route.
@@ -18,7 +18,7 @@ export default function TurboCsszyxPage() {
                 regex-replace it deterministically. */}
             <div
                 data-testid="next16-csszyx-hmr-target"
-                sz={{ p: 4, bg: 'sky-500', color: 'white', rounded: 'md', fontWeight: 'semibold' }}
+                sz={{ p: 4, bg: 'sky-500', color: 'white', rounded: 'md', weight: 'semibold' }}
             >
                 HMR baseline target.
             </div>

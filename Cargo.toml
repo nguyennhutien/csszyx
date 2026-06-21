@@ -13,6 +13,9 @@ missing_docs = "deny"
 # promotes to errors in the rust-check workflow. Whitelist the cfg name
 # so the lint stays quiet without disabling it for everything else.
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
+# Any unsafe operation inside an `unsafe fn` must sit in its own explicit
+# `unsafe {}` block, so the safety reasoning is never implicit.
+unsafe_op_in_unsafe_fn = "deny"
 
 [workspace.lints.clippy]
 # Enable all default lints
@@ -25,6 +28,12 @@ nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 # Enforce documentation for public items within clippy as well
 missing_docs_in_private_items = "deny"
+# Every `unsafe {}` block must carry a `// SAFETY:` comment justifying it, and
+# may contain only one unsafe operation — so a future edit cannot quietly add a
+# second unsafe op or drop the safety reasoning. Pins the crate's single unsafe
+# block (an immutable-arena raw-pointer reborrow) against drift.
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
 
 # --- Custom overrides ---
 # Some arguments are necessary even if many

@@ -97,22 +97,15 @@ if [ "$WRAPPER_ONLY" -ne 1 ]; then
 fi
 
 if [ "$WRAPPER_ONLY" -ne 1 ]; then
-    # Container settings.json = host settings + bypass permissions mode.
-    # Merge with jq so user-managed keys (model, theme, permissions.allow)
-    # survive.
-    DEV_SETTINGS="$DEV_CLAUDE_HOME/settings.json"
-    HOST_SETTINGS="$HOST_CLAUDE_HOME/settings.json"
-
-    OVERLAY='{
-        "permissions": ((.permissions // {}) + {"defaultMode": "bypassPermissions"}),
-        "skipDangerousModePermissionPrompt": true
-    }'
-
-    if [ -f "$HOST_SETTINGS" ]; then
-        jq ". + $OVERLAY" "$HOST_SETTINGS" > "$DEV_SETTINGS"
-    else
-        jq -n "{} + $OVERLAY" > "$DEV_SETTINGS"
-    fi
+    # The bypassPermissions settings overlay, the conversation + memory sync
+    # (projects/ indirection + cwd-key alias), and the claude native-binary
+    # wiring all live in one idempotent, race-safe helper so the exact same
+    # logic can also self-heal from an interactive shell (the rc guard below)
+    # and from postCreate — not just here. A single source of truth avoids the
+    # drift that left the alias uncreated for so long (the old inline
+    # `ln -sfn "$host_key"` even failed outright because host_key starts with
+    # `-`, which ln parses as an option).
+    bash "$(dirname "$0")/ensure-claude-sync.sh" || true
 fi
 
 # Make the devcontainer Claude env available even when Claude is launched by
@@ -300,6 +293,14 @@ if [ ! -x /root/.local/bin/claude ] || [ ! -x /root/.local/bin/codex ]; then
     if [ -f /workspaces/csszyx/.devcontainer/configure-codex.sh ]; then
         bash /workspaces/csszyx/.devcontainer/configure-codex.sh --wrapper-only >/dev/null 2>&1
     fi
+fi
+
+# Memory/conversation sync + claude native-binary wiring. Idempotent and
+# race-safe (never touches .credentials.json), so safe to run on every shell.
+# This is what makes the host<->container memory sync survive an IDE reopen,
+# which does NOT fire postStartCommand.
+if [ -f /workspaces/csszyx/.devcontainer/ensure-claude-sync.sh ]; then
+    bash /workspaces/csszyx/.devcontainer/ensure-claude-sync.sh >/dev/null 2>&1
 fi
 
 EOF

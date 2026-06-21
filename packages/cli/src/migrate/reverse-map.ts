@@ -16,6 +16,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     bg: 'bg',
     'bg-clip': 'bgClip',
     'bg-origin': 'bgOrigin',
+    'bg-size': 'bgSize',
 
     // Border Radius
     rounded: 'rounded',
@@ -83,6 +84,12 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'space-x': 'spaceX',
     'space-y': 'spaceY',
 
+    // Logical margin / padding (block-start / block-end)
+    mbs: 'mbs',
+    mbe: 'mbe',
+    pbs: 'pbs',
+    pbe: 'pbe',
+
     // Sizing
     w: 'w',
     'min-w': 'minW',
@@ -91,6 +98,15 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'min-h': 'minH',
     'max-h': 'maxH',
     size: 'size',
+    // Logical sizing (block-size / inline-size). The bare `block`/`inline` classes
+    // are display values (BOOLEAN_VALUE_MAP wins via exact match first); only the
+    // `block-*` / `inline-*` value forms route here.
+    block: 'blockSize',
+    inline: 'inlineSize',
+    'min-block': 'minBlockSize',
+    'max-block': 'maxBlockSize',
+    'min-inline': 'minInlineSize',
+    'max-inline': 'maxInlineSize',
 
     // Layout
     aspect: 'aspect',
@@ -115,6 +131,11 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     inset: 'inset',
     'inset-x': 'insetX',
     'inset-y': 'insetY',
+    // Logical inset sides (inset-s/e + block-start/block-end)
+    'inset-s': 'insetS',
+    'inset-e': 'insetE',
+    'inset-bs': 'insetBs',
+    'inset-be': 'insetBe',
     top: 'top',
     right: 'right',
     bottom: 'bottom',
@@ -125,7 +146,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
 
     // Typography (ambiguous — text-*, font-* disambiguated)
     text: 'color', // default for text- prefix
-    font: 'fontWeight', // default for font- prefix
+    font: 'weight', // default for font- prefix
     decoration: 'decoration', // ambiguous
     'underline-offset': 'underlineOffset',
     indent: 'indent',
@@ -180,6 +201,8 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'bg-blend': 'bgBlend',
 
     // Filters
+    filter: 'filter',
+    'backdrop-filter': 'backdropFilter',
     blur: 'blur',
     brightness: 'brightness',
     contrast: 'contrast',
@@ -203,9 +226,12 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     scale: 'scale',
     'scale-x': 'scaleX',
     'scale-y': 'scaleY',
+    'scale-z': 'scaleZ',
     rotate: 'rotate',
+    translate: 'translate',
     'translate-x': 'translateX',
     'translate-y': 'translateY',
+    'translate-z': 'translateZ',
     'skew-x': 'skewX',
     'skew-y': 'skewY',
     origin: 'origin',
@@ -221,6 +247,11 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     cursor: 'cursor',
     caret: 'caret',
     'pointer-events': 'pointerEvents',
+    scheme: 'scheme',
+    tab: 'tabSize',
+    zoom: 'zoom',
+    scrollbar: 'scrollbar',
+    'scrollbar-gutter': 'scrollbarGutter',
     resize: 'resize',
     scroll: 'scroll',
     'scroll-m': 'scrollM',
@@ -260,6 +291,9 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
     'line-clamp': 'lineClamp',
     wrap: 'wrap',
 
+    // Typography plugin (bare `prose` is boolean; `prose-gray`/`prose-lg` carry a value)
+    prose: 'prose',
+
     // Text shadow
     'text-shadow': 'textShadow',
 
@@ -283,52 +317,20 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
 // ============================================================================
 // REVERSE BOOLEAN MAP: TW class name → sz prop (value = true)
 // ============================================================================
+// Single-property value-alias classes (display/position/visibility/isolation/
+// text-transform/font-style/text-decoration-line/font-smoothing) are NOT here —
+// they migrate to their canonical { key: value } form via BOOLEAN_VALUE_MAP.
+// Only genuinely on/off utilities (composite, additive, default-or-value, plugin)
+// remain true boolean shorthands.
 export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
-    // Display
-    block: 'block',
-    inline: 'inline',
-    'inline-block': 'inlineBlock',
-    flex: 'flex',
-    'inline-flex': 'inlineFlex',
-    grid: 'grid',
-    'inline-grid': 'inlineGrid',
-    hidden: 'hidden',
-    contents: 'contents',
-    table: 'table',
-    'table-row': 'tableRow',
-    'table-cell': 'tableCell',
-    'flow-root': 'flowRoot',
-    'list-item': 'listItem',
-
-    // Position
-    static: 'static',
-    fixed: 'fixed',
-    absolute: 'absolute',
-    relative: 'relative',
-    sticky: 'sticky',
-
-    // Visibility
-    visible: 'visible',
-    invisible: 'invisible',
-    collapse: 'collapse',
-
-    // Typography
+    // Typography (composite)
     truncate: 'truncate',
-    uppercase: 'uppercase',
-    lowercase: 'lowercase',
-    capitalize: 'capitalize',
-    'normal-case': 'normalCase',
-    underline: 'underline',
-    overline: 'overline',
-    'line-through': 'lineThrough',
-    'no-underline': 'noUnderline',
-    italic: 'italic',
-    'not-italic': 'notItalic',
-    antialiased: 'antialiased',
-    'subpixel-antialiased': 'subpixelAntialiased',
 
-    // Flexbox
-    // flexWrap is string-based, not boolean — removed from boolean map
+    // Flexbox (default-or-value: bare `grow`/`shrink` mean grow/shrink: true,
+    // while grow-0/shrink-0 carry a value via REVERSE_PROPERTY_MAP).
+    // flexWrap is string-based, not boolean — kept out of this map.
+    grow: 'grow',
+    shrink: 'shrink',
 
     // Filters (defaults)
     blur: 'blur',
@@ -343,6 +345,10 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     // Misc
     container: 'container',
     prose: 'prose',
+    // Bare `resize` (resize: both) and bare `shadow` (default elevation) are
+    // default-or-value toggles, like ring/outline below.
+    resize: 'resize',
+    shadow: 'shadow',
     'sr-only': 'srOnly',
     'not-sr-only': 'notSrOnly',
     isolate: 'isolate',
@@ -366,10 +372,8 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     outline: 'outline',
     rounded: 'rounded',
 
-    // Transforms
-    'scale-3d': 'scale',
-    'translate-3d': 'translate',
-    // transform-gpu/cpu/none use BOOLEAN_VALUE_MAP → { transform: 'gpu'/'cpu'/'none' }
+    // Transforms — scale-3d/translate-3d carry the literal '3d' value via
+    // BOOLEAN_VALUE_MAP, and transform-gpu/cpu/none → { transform: 'gpu'/'cpu'/'none' }.
 
     // Font numeric
     'normal-nums': 'fontVariant',
@@ -406,8 +410,14 @@ export const REVERSE_BOOLEAN_MAP: Record<string, string> = {
     'appearance-auto': 'appearance',
 };
 
-// Values that mean "use the prop name as-is with value true"
-export const BOOLEAN_VALUE_MAP: Record<string, { prop: string; value: unknown }> = {
+// Values that mean "use the prop name as-is with value true". `cssProperty`
+// marks single-property utilities so the variant parser fails closed on a
+// scope conflict (e.g. `block flex` → two display values). Additive utilities
+// (font-variant-numeric) intentionally omit it — they combine, not conflict.
+export const BOOLEAN_VALUE_MAP: Record<
+    string,
+    { prop: string; value: unknown; cssProperty?: string }
+> = {
     // Snap types
     'snap-none': { prop: 'snapType', value: 'none' },
     'snap-x': { prop: 'snapType', value: 'x' },
@@ -442,10 +452,97 @@ export const BOOLEAN_VALUE_MAP: Record<string, { prop: string; value: unknown }>
     'appearance-none': { prop: 'appearance', value: 'none' },
     'appearance-auto': { prop: 'appearance', value: 'auto' },
 
+    // Isolation (bare `isolate` is in REVERSE_BOOLEAN_MAP; `isolation-auto` carries a value)
+    'isolation-auto': { prop: 'isolation', value: 'auto', cssProperty: 'isolation' },
+
+    // Field sizing
+    'field-sizing-content': { prop: 'fieldSizing', value: 'content', cssProperty: 'field-sizing' },
+    'field-sizing-fixed': { prop: 'fieldSizing', value: 'fixed', cssProperty: 'field-sizing' },
+
     // Transform
     'transform-none': { prop: 'transform', value: 'none' },
     'transform-gpu': { prop: 'transform', value: 'gpu' },
     'transform-cpu': { prop: 'transform', value: 'cpu' },
+    // transform-style (3d / flat) — single CSS property, so fail-closed on conflict.
+    'transform-3d': { prop: 'transformStyle', value: '3d', cssProperty: 'transform-style' },
+    'transform-flat': { prop: 'transformStyle', value: 'flat', cssProperty: 'transform-style' },
+    // 3D scale/translate keyword shorthands carry the literal '3d' value.
+    'scale-3d': { prop: 'scale', value: '3d' },
+    'translate-3d': { prop: 'translate', value: '3d' },
+
+    // Single-property utilities — migrated to their canonical { key: value }
+    // form. The boolean-sugar aliases (flex/absolute/italic/...) were removed,
+    // so these never emit `{ flex: true }`; one key per CSS property.
+    // display
+    block: { prop: 'display', value: 'block', cssProperty: 'display' },
+    inline: { prop: 'display', value: 'inline', cssProperty: 'display' },
+    'inline-block': { prop: 'display', value: 'inline-block', cssProperty: 'display' },
+    flex: { prop: 'display', value: 'flex', cssProperty: 'display' },
+    'inline-flex': { prop: 'display', value: 'inline-flex', cssProperty: 'display' },
+    grid: { prop: 'display', value: 'grid', cssProperty: 'display' },
+    'inline-grid': { prop: 'display', value: 'inline-grid', cssProperty: 'display' },
+    hidden: { prop: 'display', value: 'none', cssProperty: 'display' },
+    contents: { prop: 'display', value: 'contents', cssProperty: 'display' },
+    table: { prop: 'display', value: 'table', cssProperty: 'display' },
+    'inline-table': { prop: 'display', value: 'inline-table', cssProperty: 'display' },
+    'table-row': { prop: 'display', value: 'table-row', cssProperty: 'display' },
+    'table-row-group': { prop: 'display', value: 'table-row-group', cssProperty: 'display' },
+    'table-cell': { prop: 'display', value: 'table-cell', cssProperty: 'display' },
+    'table-caption': { prop: 'display', value: 'table-caption', cssProperty: 'display' },
+    'table-column': { prop: 'display', value: 'table-column', cssProperty: 'display' },
+    'table-column-group': {
+        prop: 'display',
+        value: 'table-column-group',
+        cssProperty: 'display',
+    },
+    'table-footer-group': {
+        prop: 'display',
+        value: 'table-footer-group',
+        cssProperty: 'display',
+    },
+    'table-header-group': {
+        prop: 'display',
+        value: 'table-header-group',
+        cssProperty: 'display',
+    },
+    'flow-root': { prop: 'display', value: 'flow-root', cssProperty: 'display' },
+    'list-item': { prop: 'display', value: 'list-item', cssProperty: 'display' },
+    // position
+    static: { prop: 'position', value: 'static', cssProperty: 'position' },
+    fixed: { prop: 'position', value: 'fixed', cssProperty: 'position' },
+    absolute: { prop: 'position', value: 'absolute', cssProperty: 'position' },
+    relative: { prop: 'position', value: 'relative', cssProperty: 'position' },
+    sticky: { prop: 'position', value: 'sticky', cssProperty: 'position' },
+    // visibility
+    visible: { prop: 'visibility', value: 'visible', cssProperty: 'visibility' },
+    invisible: { prop: 'visibility', value: 'hidden', cssProperty: 'visibility' },
+    collapse: { prop: 'visibility', value: 'collapse', cssProperty: 'visibility' },
+    // isolation
+    isolate: { prop: 'isolation', value: 'isolate', cssProperty: 'isolation' },
+    // text-transform
+    uppercase: { prop: 'textTransform', value: 'uppercase', cssProperty: 'text-transform' },
+    lowercase: { prop: 'textTransform', value: 'lowercase', cssProperty: 'text-transform' },
+    capitalize: { prop: 'textTransform', value: 'capitalize', cssProperty: 'text-transform' },
+    'normal-case': { prop: 'textTransform', value: 'none', cssProperty: 'text-transform' },
+    // font-style
+    italic: { prop: 'fontStyle', value: 'italic', cssProperty: 'font-style' },
+    'not-italic': { prop: 'fontStyle', value: 'normal', cssProperty: 'font-style' },
+    // text-decoration-line
+    underline: { prop: 'decoration', value: 'underline', cssProperty: 'text-decoration-line' },
+    overline: { prop: 'decoration', value: 'overline', cssProperty: 'text-decoration-line' },
+    'line-through': {
+        prop: 'decoration',
+        value: 'line-through',
+        cssProperty: 'text-decoration-line',
+    },
+    'no-underline': { prop: 'decoration', value: 'none', cssProperty: 'text-decoration-line' },
+    // font-smoothing
+    antialiased: { prop: 'fontSmoothing', value: 'grayscale', cssProperty: 'font-smoothing' },
+    'subpixel-antialiased': {
+        prop: 'fontSmoothing',
+        value: 'subpixel',
+        cssProperty: 'font-smoothing',
+    },
 };
 
 // ============================================================================
@@ -487,6 +584,13 @@ export const NEGATIVE_ALLOWED = new Set([
     'inset-y',
     'start',
     'end',
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
+    'mbs',
+    'mbe',
+    'translate',
     'z',
     'order',
     'col',
@@ -513,6 +617,9 @@ export const NEGATIVE_ALLOWED = new Set([
     'scroll-ml',
     'hue-rotate',
     'backdrop-hue-rotate',
+    // mask gradient direction carries a leading `-` as part of the value
+    // (e.g. -mask-linear-45 → { mask: '-linear-45' }), not a numeric negation.
+    'mask',
 ]);
 
 // ============================================================================
@@ -536,8 +643,14 @@ export const FRACTION_SUPPORTED = new Set([
     'left',
     'start',
     'end',
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
     'translate-x',
     'translate-y',
+    'translate',
+    'aspect',
 ]);
 
 // ============================================================================
@@ -606,6 +719,24 @@ export const SPACING_PROPS = new Set([
     'border-spacing',
     'translate-x',
     'translate-y',
+    'translate-z',
+    'translate',
+    // Logical sizing accepts the spacing/sizing scale (block-4, inline-full, …)
+    'block',
+    'inline',
+    'min-block',
+    'max-block',
+    'min-inline',
+    'max-inline',
+    // Logical inset sides + block-axis margin/padding
+    'inset-s',
+    'inset-e',
+    'inset-bs',
+    'inset-be',
+    'mbs',
+    'mbe',
+    'pbs',
+    'pbe',
 ]);
 
 // ============================================================================
@@ -709,7 +840,31 @@ export const OBJECT_POSITION_KEYWORDS = new Set([
     'right-bottom',
 ]);
 
-export const SHADOW_SIZE_KEYWORDS = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'inner', 'none']);
+export const SHADOW_SIZE_KEYWORDS = new Set([
+    '2xs',
+    'xs',
+    'sm',
+    'md',
+    'lg',
+    'xl',
+    '2xl',
+    'inner',
+    'none',
+]);
+
+// align-content keywords. `content-<keyword>` is align-content (→ alignContent),
+// while quoted / none / var / arbitrary `content-*` is the `content` CSS property.
+export const ALIGN_CONTENT_KEYWORDS = new Set([
+    'normal',
+    'center',
+    'start',
+    'end',
+    'between',
+    'around',
+    'evenly',
+    'baseline',
+    'stretch',
+]);
 
 export const OUTLINE_STYLE_KEYWORDS = new Set(['none', 'dashed', 'dotted', 'double']);
 

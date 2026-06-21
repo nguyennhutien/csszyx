@@ -4,6 +4,7 @@ import {
     mkdtempSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     rmSync,
     statSync,
     writeFileSync,
@@ -143,7 +144,11 @@ function isChromiumInstalled(): boolean {
 }
 
 function createFixture(): string {
-    const root = mkdtempSync(join(tmpdir(), 'csszyx-vite-global-var-'));
+    // realpath the temp root so the path handed to vite matches the realpath
+    // vite's build-html plugin resolves internally. On macOS os.tmpdir() is a
+    // /var -> /private/var symlink; without this the emitted index.html name is
+    // computed relative to the un-realpath'd root and escapes the bundle dir.
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-vite-global-var-')));
     tempDirs.push(root);
     const src = join(root, 'src');
     mkdirSync(src, { recursive: true });

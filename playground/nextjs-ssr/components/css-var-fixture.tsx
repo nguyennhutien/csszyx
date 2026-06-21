@@ -10,7 +10,7 @@ export function CssVarFixture() {
             data-testid="next-css-var-fixture"
             sz={{ p: 4, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, border: true, borderColor: 'slate-700' }}
         >
-            <h3 sz={{ text: 'lg', fontWeight: 'semibold', color: 'white', mb: 3 }}>
+            <h3 sz={{ text: 'lg', weight: 'semibold', color: 'white', mb: 3 }}>
                 CSS Variable Mangling
             </h3>
             <button

@@ -80,12 +80,14 @@ Key csszyx rules:
 - Colors are strings: { bg: 'blue-500' } → bg-blue-500
 - Color + opacity is an object: { bg: { color: 'blue-500', op: 50 } } → bg-blue-500/50
 - Variants nest: { hover: { bg: 'blue-700' } } → hover:bg-blue-700
-- Boolean sugar: { flex: true } → flex
+- ONE way per property — single-property props use the canonical key with a value, never a boolean alias. display/position/visibility/isolation/textTransform/fontStyle/fontSmoothing/decoration: { display: 'flex' } → flex, { position: 'absolute' } → absolute, { fontStyle: 'italic' } → italic, { decoration: 'underline' } → underline, { fontSmoothing: 'grayscale' } → antialiased. Boolean aliases like { flex: true }/{ italic: true } were REMOVED and emit nothing.
 - Fractions stay native: { w: '1/2' } → w-1/2
 - Arbitrary values: { p: '5px' } → p-[5px]
 - CSS variables: { p: '--my-var' } → p-(--my-var)
 - Scope variants: { group: { hover: { bg: 'blue-700' } } } → group-hover:bg-blue-700 (also peer)
-- Conditional/feature variants: { has: { checked: { ... } } } → has-[:checked]:…, { supports: { 'display:grid': { ... } } } → supports-[display:grid]:… (also not/data/aria)`,
+- Conditional/feature variants: { has: { checked: { ... } } } → has-[:checked]:…, { supports: { 'display:grid': { ... } } } → supports-[display:grid]:… (also not/data/aria)
+- Type-safe keys: the sz prop type is CLOSED — an unknown/typo key (e.g. { bgColor: 'red' }, canonical is { bg: 'red' }) is a TypeScript error, so a literal sz object is caught by tsc/CI. To force a brand-new Tailwind utility csszyx has no key for yet, opt out with // @ts-expect-error on that line (the runtime still emits the class). Arbitrary variants (@container, min-[320px], [&>span]) are allowed by pattern.
+- Custom breakpoints are typed from CSS: define it once in Tailwind @theme (e.g. @theme { --breakpoint-tablet: 40rem }) and csszyx auto-generates the type so { tablet: { ... } } type-checks — no manual declaration.`,
                         },
                     },
                 ],
@@ -112,7 +114,7 @@ Please:
 
 Key csszyx syntax:
 - <div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
-- <div sz={{ flex: true, items: 'center', gap: 4 }} />
+- <div sz={{ display: 'flex', items: 'center', gap: 4 }} />
 - <div sz={{ md: { gridCols: 3 }, gridCols: 1, gap: 6 }} />
 - <div sz={{ dark: { bg: 'gray-900', color: 'white' } }} />
 - <div sz={{ bg: { color: 'blue-500', op: 50 }, w: '1/2' }} />  (color opacity + fraction)

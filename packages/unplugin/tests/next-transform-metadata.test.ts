@@ -10,7 +10,8 @@ import {
 
 describe('Next transform metadata', () => {
     it('collects generated classes separately from raw className strings', () => {
-        const source = 'const App=()=> <div className="existing" sz={{ p: 4, flex: true }} />;';
+        const source =
+            'const App=()=> <div className="existing" sz={{ p: 4, display: "flex" }} />;';
         const result = transformSourceCode(source, '/repo/src/App.tsx');
         const metadata = collectNextTransformMetadata(result, source, '/repo/src/App.tsx');
 

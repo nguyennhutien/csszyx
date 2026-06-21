@@ -25,6 +25,7 @@ import cac from 'cac';
 
 import { audit } from './commands/audit.js';
 import { doctor } from './commands/doctor.js';
+import { explain } from './commands/explain.js';
 import { generateTypes } from './commands/generate-types.js';
 import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
@@ -138,6 +139,13 @@ cli.command('doctor', 'Diagnose mangling issues')
         });
     });
 
+// explain command
+cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles to').action(
+    (sz: string) => {
+        explain(sz);
+    },
+);
+
 // audit command
 cli.command('audit', 'Analyze mangling performance')
     .option('--json', 'Output as JSON')
@@ -185,6 +193,10 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     .option('--audit', 'Scan without modifying files and output .csszyx-todo.json')
     .option('--inject-todos', 'Inject {/* @sz-todo */} comments above unrecognized classes')
     .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz properties')
+    .option(
+        '--keys-only',
+        'Only normalize legacy sz-prop keys to their canonical form; leave className untouched (0.9.10 → 0.10.0 upgrade)',
+    )
     .action(async (dir, options) => {
         await migrate({
             dryRun: options.dryRun,
@@ -204,6 +216,7 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
             audit: options.audit,
             injectTodos: options.injectTodos,
             resolveTodos: options.resolveTodos,
+            keysOnly: options.keysOnly,
         });
     });
 

@@ -25,7 +25,7 @@ describe('config docs sync', () => {
             parserDefaultMatch,
             'DEFAULT_BUILD_CONFIG.parser must be a single-quoted literal',
         ).not.toBeNull();
-        const parserDefault = parserDefaultMatch![1];
+        const parserDefault = parserDefaultMatch?.[1];
 
         expect(parserDefault).toBeDefined();
         expect(configDocs).toContain(`| \`parser\`         | \`'${parserDefault}'\``);

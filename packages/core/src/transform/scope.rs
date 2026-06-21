@@ -145,11 +145,13 @@ fn find_initializer_at_span<'a>(
 ) -> Option<&'a Expression<'a>> {
     let mut finder = InitializerFinder { span, found: None };
     finder.visit_program(program);
-    // The pointer was captured from `program` during the visitor walk above.
-    // The AST arena is immutable for the whole `'a` borrow, so reborrowing it
-    // here is equivalent to returning the matched expression from a manual
-    // recursive traversal.
-    finder.found.map(|found| unsafe { &*found })
+    finder.found.map(|found| {
+        // SAFETY: The pointer was captured from `program` during the visitor
+        // walk above. The AST arena is immutable for the whole `'a` borrow, so
+        // reborrowing it here is equivalent to returning the matched expression
+        // from a manual recursive traversal.
+        unsafe { &*found }
+    })
 }
 
 struct InitializerFinder<'a> {

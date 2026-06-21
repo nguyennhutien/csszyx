@@ -43,6 +43,14 @@ export default defineConfig({
             },
         },
         {
+            name: 'react17',
+            testMatch: /react17/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5174',
+            },
+        },
+        {
             // Reuses the vite-react dev server (port 5173) — fixture lives in
             // playground/vite-react/src/Recovery.tsx, mounted at ?page=recovery.
             name: 'recovery-manifest',
@@ -124,6 +132,14 @@ export default defineConfig({
             command: 'pnpm run dev',
             cwd: '../../playground/vite-react',
             url: 'http://localhost:5173',
+            reuseExistingServer: !process.env.CI,
+            stdout: 'pipe',
+            stderr: 'pipe',
+        },
+        {
+            command: 'pnpm run dev -- --port 5174 --strictPort',
+            cwd: '../../playground/react17',
+            url: 'http://localhost:5174',
             reuseExistingServer: !process.env.CI,
             stdout: 'pipe',
             stderr: 'pipe',

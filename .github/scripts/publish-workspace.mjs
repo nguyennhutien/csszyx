@@ -218,7 +218,7 @@ export function runPnpmPublish(pkg) {
     return new Promise((resolve, reject) => {
         const child = spawn(
             'pnpm',
-            ['publish', '--access', 'public', '--no-git-checks'],
+            ['publish', '--access', 'public', '--no-git-checks', '--provenance'],
             {
                 cwd: pkg.path,
                 env: process.env,

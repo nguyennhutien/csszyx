@@ -11,7 +11,7 @@ export default function TurboBroadPage() {
             data-testid="turbo-broad"
             sz={{ display: 'flex', flexDir: 'col', gap: 4, p: 8 }}
         >
-            <h1 sz={{ text: '2xl', fontWeight: 'bold' }}>Turbo broad-glob fixture</h1>
+            <h1 sz={{ text: '2xl', weight: 'bold' }}>Turbo broad-glob fixture</h1>
             <Card title="Card A" />
             <Card title="Card B" />
             <Plain label="No sz here" />

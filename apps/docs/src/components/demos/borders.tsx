@@ -2,11 +2,11 @@ import { Demo } from '../Demo.tsx';
 
 // SCREAMING_SNAKE_CASE — module-level shared label styles
 // zinc-300 for slightly better contrast on zinc-800 bordered boxes
-const LABEL_MUTED = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'zinc-300' } as const;
-const LABEL_WHITE = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'white' } as const;
+const LABEL_MUTED = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'zinc-300' } as const;
+const LABEL_WHITE = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: 'white' } as const;
 
 // Base swatch box — chained into sized and styled variants
-const BOX_CENTER = { flex: true, items: 'center', justify: 'center' } as const;
+const BOX_CENTER = { display: 'flex', items: 'center', justify: 'center' } as const;
 const BOX_BORDER = { ...BOX_CENTER, rounded: 'lg', borderColor: 'violet-500', bg: 'zinc-950' } as const;
 
 export function BorderRadiusScale() {
@@ -66,7 +66,7 @@ export function BorderStyles() {
 export function RingDemo() {
     return (
         <Demo label="ring-2 with ring-offset-2">
-            <button sz={{ px: 5, py: 2.5, bg: 'violet-600', color: 'white', rounded: 'lg', ring: 2, ringColor: 'violet-500', ringOffset: 2, ringOffsetColor: 'zinc-950', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold' }}>
+            <button sz={{ px: 5, py: 2.5, bg: 'violet-600', color: 'white', rounded: 'lg', ring: 2, ringColor: 'violet-500', ringOffset: 2, ringOffsetColor: 'zinc-950', text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold' }}>
                 ring-2 + offset-2
             </button>
         </Demo>
@@ -75,7 +75,7 @@ export function RingDemo() {
 
 export function DivideY() {
     // Row style for divider demo — direct variable reference, no override
-    const divideRow = { py: 2.5, px: 4, text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'violet-400' } as const;
+    const divideRow = { py: 2.5, px: 4, text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'violet-400' } as const;
     return (
         <Demo label="{ divideY: true } — horizontal dividers between rows">
             <div sz={{ divideY: true, divideColor: 'zinc-800', w: 52, bg: 'zinc-950', rounded: 'lg' }}>

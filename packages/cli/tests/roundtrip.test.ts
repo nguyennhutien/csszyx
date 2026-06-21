@@ -191,28 +191,64 @@ describe('round-trip: TW → migrate → compile', () => {
     // ========================================================================
     // BOOLEAN CLASSES
     // ========================================================================
-    describe('boolean classes', () => {
+    describe('boolean / kept shorthands', () => {
+        it.each(['truncate', 'container', 'grow', 'shrink', 'ring', 'outline'])('%s', cls => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+    });
+
+    // ========================================================================
+    // SINGLE-PROPERTY UTILITIES — every class whose sugar alias was removed must
+    // migrate to its canonical key and compile back to the exact same class.
+    // This is the strongest correctness proof for the migrate breaking change:
+    // it verifies migrate is the precise inverse of the compiler for all 8 groups.
+    // ========================================================================
+    describe('single-property canonical round-trips', () => {
         it.each([
+            // display (14)
             'block',
-            'flex',
-            'grid',
-            'hidden',
             'inline',
+            'inline-block',
+            'flex',
+            'inline-flex',
+            'grid',
+            'inline-grid',
+            'hidden',
+            'contents',
+            'table',
+            'table-row',
+            'table-cell',
+            'flow-root',
+            'list-item',
+            // position (5)
             'static',
             'fixed',
             'absolute',
             'relative',
             'sticky',
+            // visibility (3)
             'visible',
             'invisible',
-            'truncate',
+            'collapse',
+            // isolation (1)
+            'isolate',
+            // text-transform (4)
             'uppercase',
             'lowercase',
             'capitalize',
-            'underline',
+            'normal-case',
+            // font-style (2)
             'italic',
-            'container',
-        ])('%s', cls => {
+            'not-italic',
+            // text-decoration-line (4)
+            'underline',
+            'overline',
+            'line-through',
+            'no-underline',
+            // font-smoothing (2)
+            'antialiased',
+            'subpixel-antialiased',
+        ])('%s → migrate → compile → %s', cls => {
             expect(roundTrip(cls)).toBe(cls);
         });
     });
@@ -342,6 +378,25 @@ describe('round-trip: TW → migrate → compile', () => {
     });
 
     // ========================================================================
+    // RESPONSIVE — breakpoints combined with state/group, custom + arbitrary
+    // breakpoints, reversed nesting order, and max-* all round-trip.
+    // ========================================================================
+    describe('responsive', () => {
+        it.each([
+            'md:hover:bg-blue-500',
+            'md:group-hover:p-2',
+            'dark:md:bg-red-500',
+            'sm:p-1',
+            '2xl:flex',
+            'max-md:hidden',
+            'min-[320px]:flex',
+            'tablet:p-3',
+        ])('%s', cls => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+    });
+
+    // ========================================================================
     // COLOR + OPACITY (decimal bracket form)
     // ========================================================================
     describe('color + opacity', () => {
@@ -416,7 +471,7 @@ describe('round-trip: TW → migrate → compile', () => {
     describe('bracket-free keys round-trip', () => {
         it('min-[320px]:flex', () => {
             const { szObject } = classNameToSzObject('min-[320px]:flex');
-            // szObject = { min: { '320px': { flex: true } } }  — no brackets!
+            // szObject = { min: { '320px': { display: 'flex' } } }  — no brackets!
             expect((szObject.min as Record<string, unknown>)['320px']).toBeDefined();
             expect((szObject.min as Record<string, unknown>)['[320px]']).toBeUndefined();
             // Compiler should auto-wrap in []
@@ -428,6 +483,78 @@ describe('round-trip: TW → migrate → compile', () => {
             const { szObject } = classNameToSzObject('max-[600px]:hidden');
             const result = transform(szObject as SzObject);
             expect(result.className).toBe('max-[600px]:hidden');
+        });
+    });
+
+    // ========================================================================
+    // MIGRATE GAP FIXES — single-property utilities that previously migrated to
+    // {} (reverse-map gaps) or to the wrong class (disambiguation bugs). Each must
+    // now be the exact inverse of the compiler.
+    // ========================================================================
+    describe('migrate gap fixes', () => {
+        it.each([
+            // display table values + inline-table
+            'inline-table',
+            'table-caption',
+            'table-column',
+            'table-column-group',
+            'table-footer-group',
+            'table-header-group',
+            'table-row-group',
+            // isolation / field-sizing / transform-style
+            'isolation-auto',
+            'field-sizing-content',
+            'field-sizing-fixed',
+            'transform-3d',
+            'transform-flat',
+            // 3D scale/translate + z-axis
+            'scale-3d',
+            'translate-3d',
+            'scale-z-50',
+            'translate-z-4',
+            // scheme
+            'scheme-light',
+            'scheme-dark',
+            'scheme-light-dark',
+            'scheme-only-dark',
+            'scheme-normal',
+            // scrollbar / prose plugins
+            'scrollbar-thin',
+            'scrollbar-gutter-stable',
+            'prose',
+            'prose-lg',
+            'prose-invert',
+            // logical sizing
+            'block-full',
+            'block-auto',
+            'inline-auto',
+            // bare toggles
+            'resize',
+            'shadow',
+            // shadow sizes + aspect fraction + basis container sizes
+            'shadow-2xs',
+            'shadow-xs',
+            'aspect-4/3',
+            'basis-2xs',
+            'basis-3xs',
+            // content (align-content) + content property
+            'content-center',
+            'content-between',
+            'content-baseline',
+            'content-none',
+            // negative inset keyword
+            '-inset-full',
+            // line-clamp none + filters
+            'line-clamp-none',
+            'filter-none',
+            'backdrop-filter-none',
+        ])('%s', cls => {
+            expect(roundTrip(cls)).toBe(cls);
+        });
+
+        it('content align-content and content property coexist on one element', () => {
+            const { szObject } = classNameToSzObject('content-center content-none');
+            expect(szObject).toEqual({ alignContent: 'center', content: 'none' });
         });
     });
 });

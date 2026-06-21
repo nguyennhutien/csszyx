@@ -112,41 +112,41 @@ At build time, CSSzyx transforms this into:
 For className-based composition, use runtime helpers:
 
 ```tsx
-import { _sz, _szIf, _szSwitch } from "csszyx";
+import { _sz } from "csszyx";
 
 // Concatenate classes
 <div className={_sz("p-4", "bg-red-500", "text-white")} />
 
-// Conditional classes
-<div className={_szIf(isActive, "bg-blue-600", "bg-gray-200")} />
+// Conditional classes — plain JS conditionals compose with _sz
+<div className={_sz("base", isActive && "bg-blue-600")} />
+<div className={isActive ? "bg-blue-600" : "bg-gray-200"} />
 
-// Switch-like selection
-const className = _szSwitch(
-  [
-    [variant === "primary", "bg-blue-600 text-white"],
-    [variant === "secondary", "bg-gray-200 text-gray-900"],
-    [variant === "danger", "bg-red-600 text-white"],
-  ],
-  "bg-gray-500", // default
-);
+// Switch-like selection — a plain object lookup
+const className =
+  {
+    primary: "bg-blue-600 text-white",
+    secondary: "bg-gray-200 text-gray-900",
+    danger: "bg-red-600 text-white",
+  }[variant] ?? "bg-gray-500"; // default
 ```
 
 ### Combining Helpers
 
 ```tsx
-import { _sz, _szIf, _szSwitch } from "csszyx";
+import { _sz } from "csszyx";
 
 function Button({ variant, isActive, fullWidth }) {
+  const variantClass = {
+    primary: "bg-blue-600 text-white",
+    secondary: "bg-gray-200 text-gray-900",
+  }[variant];
   return (
     <button
       className={_sz(
         "px-4 py-2 rounded-lg",
-        _szSwitch([
-          [variant === "primary", "bg-blue-600 text-white"],
-          [variant === "secondary", "bg-gray-200 text-gray-900"],
-        ]),
-        _szIf(isActive, "ring-2 ring-blue-400"),
-        _szIf(fullWidth, "w-full"),
+        variantClass,
+        isActive && "ring-2 ring-blue-400",
+        fullWidth && "w-full",
       )}
     >
       Button

@@ -16,7 +16,7 @@ export default function LandingFooter() {
           mx: 'auto',
           px: 6,
           lg: { px: 20 },
-          flex: true,
+          display: 'flex',
           flexDir: 'col',
           md: { flexDir: 'row' },
           justify: 'between',
@@ -25,8 +25,8 @@ export default function LandingFooter() {
         }}
       >
         {/* Logo + copyright */}
-        <div sz={{ flex: true, flexDir: 'col', gap: 2 }}>
-          <div sz={{ flex: true, items: 'center', gap: 3, mb: 2 }}>
+        <div sz={{ display: 'flex', flexDir: 'col', gap: 2 }}>
+          <div sz={{ display: 'flex', items: 'center', gap: 3, mb: 2 }}>
             <a className="footer-logo" href="/" sz={{ h: 8, bgClip: 'text', color: 'transparent' }}>
               <svg width="100%" height="100%" viewBox="0 0 1026 348" version="1.1" xmlns="http://www.w3.org/2000/svg">
                 <defs>
@@ -54,7 +54,7 @@ export default function LandingFooter() {
         </div>
 
         {/* Nav links */}
-        <div sz={{ flex: true, flexWrap: 'wrap', gap: 10, fontFamily: 'mono', text: '11px', color: 'slate-500', dark: { color: 'slate-400' }, uppercase: true, tracking: 'widest' }}>
+        <div sz={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontFamily: 'mono', text: '11px', color: 'slate-500', dark: { color: 'slate-400' }, textTransform: 'uppercase', tracking: 'widest' }}>
           {[
             { href: '/docs', label: 'Docs' },
             { href: 'https://github.com/nguyennhutien/csszyx', label: 'GitHub', external: true },

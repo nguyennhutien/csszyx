@@ -13,7 +13,7 @@ export function CompressionDemo() {
                     fontFamily: '--ds-font-ui',
                     text: 'xs',
                     tracking: 'widest',
-                    uppercase: true,
+                    textTransform: 'uppercase',
                     color: '--ds-text-subtle',
                     mb: 4,
                 }}
@@ -22,7 +22,7 @@ export function CompressionDemo() {
             </p>
             <div
                 sz={{
-                    grid: true,
+                    display: 'grid',
                     gridCols: 3,
                     gap: 4,
                     items: 'start',
@@ -34,7 +34,7 @@ export function CompressionDemo() {
                         sz={{
                             fontFamily: '--ds-font-ui',
                             text: 'xs',
-                            uppercase: true,
+                            textTransform: 'uppercase',
                             color: '--ds-primary',
                             mb: 2,
                         }}
@@ -59,7 +59,7 @@ export function CompressionDemo() {
                 {/* ARROW */}
                 <div
                     sz={{
-                        flex: true,
+                        display: 'flex',
                         items: 'center',
                         justify: 'center',
                         pt: 6,
@@ -82,7 +82,7 @@ export function CompressionDemo() {
                         sz={{
                             fontFamily: '--ds-font-ui',
                             text: 'xs',
-                            uppercase: true,
+                            textTransform: 'uppercase',
                             color: '--ds-primary',
                             mb: 2,
                         }}

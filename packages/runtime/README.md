@@ -35,26 +35,26 @@ const className = _sz("a", null, "b", undefined, false, "c");
 // Returns: "a b c"
 ```
 
-### Conditional Helpers
+### Conditional Classes
+
+Plain JS conditionals compose with `_sz` — no dedicated helper needed:
 
 ```typescript
-import { _szIf, _szSwitch } from "@csszyx/runtime";
+import { _sz } from "@csszyx/runtime";
 
 // Simple conditional
-_szIf(isActive, "active"); // "active" or false
+_sz("base", isActive && "active");
 
 // With fallback
-_szIf(isActive, "active", "inactive"); // "active" or "inactive"
+_sz("base", isActive ? "active" : "inactive");
 
-// Switch-like
-_szSwitch(
-  [
-    [status === "success", "text-green-500"],
-    [status === "error", "text-red-500"],
-    [status === "warning", "text-yellow-500"],
-  ],
-  "text-gray-500",
-);
+// Switch-like — a plain object lookup
+const className =
+  {
+    success: "text-green-500",
+    error: "text-red-500",
+    warning: "text-yellow-500",
+  }[status] ?? "text-gray-500";
 ```
 
 ### Merging Classes
@@ -140,14 +140,6 @@ Optimized two-argument version.
 #### `_sz3(a, b, c): string`
 
 Optimized three-argument version.
-
-#### `_szIf(condition, className, fallback?): string | false`
-
-Conditional className application.
-
-#### `_szSwitch(conditions, default?): string`
-
-Switch-like className selection.
 
 #### `_szMerge(...classes): string`
 
