@@ -1599,6 +1599,15 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
  */
 let szTransformDepth = 0;
 
+/**
+ * Transform an sz object into a className string plus any attributes, bounding
+ * recursion depth via {@link szTransformDepth}.
+ *
+ * @param szProp - the sz object to transform.
+ * @param prefix - variant prefix to prepend to emitted classes.
+ * @param mangleMap - optional original→mangled class-name map.
+ * @returns the emitted className and attributes.
+ */
 export function transform(
     szProp: SzObject,
     prefix = '',
@@ -1619,6 +1628,15 @@ export function transform(
     }
 }
 
+/**
+ * Depth-unchecked transform body. Called by {@link transform} once the depth
+ * guard has been applied.
+ *
+ * @param szProp - the sz object to transform.
+ * @param prefix - variant prefix to prepend to emitted classes.
+ * @param mangleMap - optional original→mangled class-name map.
+ * @returns the emitted className and attributes.
+ */
 function transformImpl(
     szProp: SzObject,
     prefix: string,

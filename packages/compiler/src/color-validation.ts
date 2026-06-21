@@ -82,6 +82,7 @@ export function hasSlashOpacity(value: string): boolean {
  * Only warns in non-production / server-side environments.
  *
  * @param sz - The sz prop object to sanitize.
+ * @param _depth - The current recursion depth (for depth bounding).
  * @returns A new object with invalid color strings removed.
  */
 export function stripInvalidColorStrings(

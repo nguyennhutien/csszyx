@@ -3,8 +3,10 @@
 // REMOVED_BOOLEAN_SUGAR / BOOLEAN_SHORTHANDS. The box-model role of each prop is
 // defined in that script's BOX_ROLE_RULES.
 
+/** Which side of the CSS box-model border a property acts on. */
 export type BoxRole = 'outer' | 'inner';
 
+/** Box-model classification of a single utility: its role and semantic category. */
 export interface BoxRoleEntry {
     /** Which side of the CSS box-model border the property acts on. */
     readonly role: BoxRole;

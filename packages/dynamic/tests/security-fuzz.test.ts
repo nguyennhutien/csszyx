@@ -34,7 +34,6 @@ describe('legacy CSS injection vectors', () => {
     });
 });
 
-/** Deterministic PRNG (mulberry32) so the fuzz is reproducible. */
 function rng(seed: number): () => number {
     let s = seed >>> 0;
     return () => {
@@ -77,7 +76,6 @@ function buildHostile(rand: () => number, depth: number): unknown {
     return obj;
 }
 
-/** Recursively assert every string value in a purified sz is injection-safe. */
 function assertAllValuesSafe(value: unknown): void {
     if (typeof value === 'string') {
         // Strip the arbitrary brackets purify keeps, then validate the inner value.

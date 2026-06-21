@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
 
-/** Independent reference implementation of the Rust `compute_checksum_internal`. */
 function referenceChecksum(map: Record<string, string>): string {
     const canonical = Object.keys(map)
         .sort()

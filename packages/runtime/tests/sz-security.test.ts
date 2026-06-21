@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import { _sz, _szMerge } from '../src/concatenate.js';
 import { szv } from '../src/variants.js';
 
-/** Build an array nested `n` levels deep around a leaf class string. */
 function nestArray(n: number): unknown {
     let a: unknown = ['p-4'];
     for (let i = 0; i < n; i++) {
@@ -17,7 +16,6 @@ function nestArray(n: number): unknown {
     return a;
 }
 
-/** Build an object nested `n` levels deep under repeated `hover` keys. */
 function nestObject(n: number): Record<string, unknown> {
     let o: Record<string, unknown> = { p: 4 };
     for (let i = 0; i < n; i++) {

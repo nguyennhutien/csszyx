@@ -17,6 +17,11 @@ import { isUtilityArbitrarySafe } from './css-sanitize.js';
 
 /** Warn once (in dev) when an arbitrary value is dropped for being unsafe. */
 let warnedUnsafeArbitrary = false;
+/**
+ * Warn once (in dev) that an arbitrary value was dropped for being unsafe.
+ *
+ * @param utility - the utility whose arbitrary value was dropped.
+ */
 function warnUnsafeArbitrary(utility: string): void {
     if (warnedUnsafeArbitrary) {
         return;

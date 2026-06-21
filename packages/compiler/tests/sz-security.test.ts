@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import { stripInvalidColorStrings } from '../src/color-validation.js';
 import { SzDepthError, transform } from '../src/transform-core.js';
 
-/** Build an object nested `n` levels deep under repeated `hover` keys. */
 function nestObject(n: number): Record<string, unknown> {
     let o: Record<string, unknown> = { p: 4 };
     for (let i = 0; i < n; i++) {

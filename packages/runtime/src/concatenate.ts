@@ -107,6 +107,10 @@ export function _sz(...classes: SzInput[]): string {
  * Depth-tracked worker for {@link _sz}. Nested arrays recurse with an incremented
  * depth so a deeply nested array (`[[[[…]]]]`, e.g. from untrusted data) is
  * bounded by {@link MAX_SZ_DEPTH} instead of overflowing the call stack.
+ *
+ * @param classes - the class inputs to join.
+ * @param depth - the current recursion depth.
+ * @returns the joined className string.
  */
 function szJoin(classes: SzInput[], depth: number): string {
     if (depth >= MAX_SZ_DEPTH) {
@@ -195,6 +199,10 @@ export function _szMerge(...classes: SzInput[]): string {
 /**
  * Depth-tracked worker for {@link _szMerge}. Bounds nested-array recursion by
  * {@link MAX_SZ_DEPTH} so untrusted deeply nested input cannot overflow the stack.
+ *
+ * @param classes - the class inputs to join.
+ * @param depth - the current recursion depth.
+ * @returns the joined className string.
  */
 function szMergeJoin(classes: SzInput[], depth: number): string {
     if (depth >= MAX_SZ_DEPTH) {

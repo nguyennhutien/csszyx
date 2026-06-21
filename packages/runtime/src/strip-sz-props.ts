@@ -27,6 +27,7 @@ const RAW_SZ_WARNING =
     'lives in a workspace package, add that package to `compilePackages`; ' +
     'otherwise check that the bundler is not skipping the file.';
 
+/** Warn once (in dev) that a raw, uncompiled `sz` object reached the runtime. */
 function warnRawSz(): void {
     if (warned.has(RAW_SZ_WARNING)) return;
     warned.add(RAW_SZ_WARNING);

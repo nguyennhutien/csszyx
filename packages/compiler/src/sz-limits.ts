@@ -23,6 +23,9 @@ export const MAX_SZ_DEPTH = 32;
  * the build pipeline's per-file fallback can swallow it without a stack overflow.
  */
 export class SzDepthError extends Error {
+    /**
+     * @param depth - the depth limit that was exceeded (for the message).
+     */
     constructor(depth: number = MAX_SZ_DEPTH) {
         super(
             `[csszyx] sz nesting exceeded the maximum depth of ${depth}. ` +

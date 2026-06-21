@@ -10,14 +10,12 @@ import { describe, expect, it } from 'vitest';
 import { transform } from '../src/transform-core.js';
 import { transformOxc } from '../src/transform-oxc.js';
 
-/** Whether the transform flagged a class-string with the unresolvable-spread marker. */
 function warnsSpread(source: string): boolean {
     return transformOxc(source, 'App.tsx').diagnostics.some(d =>
         d.includes('unresolvable sz spread'),
     );
 }
 
-/** Read a sibling workspace package manifest. */
 function manifest(pkg: string): { peerDependencies?: Record<string, string> } {
     return JSON.parse(readFileSync(new URL(`../../${pkg}/package.json`, import.meta.url), 'utf8'));
 }

@@ -23,9 +23,7 @@ type VariantSelection<V extends VariantSchema> = {
     [K in keyof V]?: keyof V[K] | null | undefined;
 };
 
-/**
- *
- */
+/** Configuration for a variant component: base styles, variants, and defaults. */
 interface SzvConfig<V extends VariantSchema> {
     base?: SzObject;
     variants: V;
@@ -39,6 +37,7 @@ interface SzvConfig<V extends VariantSchema> {
  *
  * @param {SzObject} target - Base object to merge into
  * @param {SzObject} source - Object whose values take precedence
+ * @param {number} depth - Current recursion depth (for depth bounding)
  * @returns {SzObject} New merged object (target and source are not mutated)
  */
 function deepMerge(target: SzObject, source: SzObject, depth = 0): SzObject {

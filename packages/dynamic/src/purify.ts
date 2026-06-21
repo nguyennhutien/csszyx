@@ -36,6 +36,7 @@ import { SZ_KEY_CATEGORY } from './sz-allowlist.generated.js';
 /** Values that are exfil/legacy risks for untrusted input (stripped in strict mode). */
 const DANGEROUS_VALUE_RE = /url\s*\(|image-set\s*\(|@import|expression\s*\(/i;
 
+/** Options controlling `purifySz` strictness and drop reporting. */
 export interface PurifySzOptions {
     /**
      * When true (default), also reject values containing `url()`/`image-set()`/
@@ -51,6 +52,9 @@ export interface PurifySzOptions {
  * Whether `key` is a valid variant key (a nested-object selector like `hover`,
  * `md`, `dark`, `@container`, `group-hover`, `aria-[…]`, `[&>*]`). Reuses the
  * compiler's own variant tables so the grammar never drifts.
+ *
+ * @param key - the object key to test.
+ * @returns true if the key is a recognized variant selector.
  */
 function isVariantKey(key: string): boolean {
     if (KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key))) {
@@ -68,7 +72,13 @@ function isVariantKey(key: string): boolean {
     return false;
 }
 
-/** Is `value` safe to keep as a CSS value under the current strictness? */
+/**
+ * Is `value` safe to keep as a CSS value under the current strictness?
+ *
+ * @param value - the candidate CSS value string.
+ * @param strict - whether to also reject url()/image-set()/@import/expression().
+ * @returns true if the value is safe to keep.
+ */
 function isValueSafe(value: string, strict: boolean): boolean {
     if (!isSafeCssValue(value)) return false;
     if (strict && DANGEROUS_VALUE_RE.test(value)) return false;
@@ -83,6 +93,13 @@ const DROP = Symbol('drop');
  * objects/arrays are walked, validating every string and skipping forbidden
  * keys WITHOUT applying the top-level key allowlist (sub-keys like `color`/`op`
  * of `bg` are property-specific, not standalone sz keys).
+ *
+ * @param value - the sz value to sanitize.
+ * @param strict - whether to apply strict-mode value rejection.
+ * @param onDrop - callback invoked for each dropped key/value.
+ * @param path - the dotted path to `value` for drop reporting.
+ * @param depth - the current recursion depth (for depth bounding).
+ * @returns the cleaned value, or the `DROP` sentinel if it must be removed.
  */
 function purifyValue(
     value: SzValue,
@@ -121,6 +138,14 @@ function purifyValue(
  * Walk an sz object. At the boundary (`applyKeyAllowlist === true`) unknown
  * top-level/variant keys are dropped; inside a property sub-object it only
  * sanitizes values + skips forbidden keys.
+ *
+ * @param input - the sz object to walk.
+ * @param strict - whether to apply strict-mode value rejection.
+ * @param onDrop - callback invoked for each dropped key/value.
+ * @param path - the dotted path to `input` for drop reporting.
+ * @param depth - the current recursion depth (for depth bounding).
+ * @param applyKeyAllowlist - whether to enforce the top-level key allowlist.
+ * @returns a new object containing only allowed keys and safe values.
  */
 function sanitizeObject(
     input: SzObject,

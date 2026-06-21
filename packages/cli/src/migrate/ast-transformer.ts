@@ -149,9 +149,12 @@ function isClassNameJsxAttribute(node: VisitNode): boolean {
  * A SUGGESTION_MAP target is auto-rewritable only when it is a single bare key
  * name. Prose/multi-target hints (e.g. "fontWeight (for weight) or fontFamily")
  * cannot be applied mechanically — those are left for the build-time dev-warn.
+ *
+ * @param target - the SUGGESTION_MAP target string to test.
+ * @returns true if the target is a single bare key name.
  */
 function isCleanCanonicalTarget(target: string): boolean {
-    return /^[A-Za-z][A-Za-z0-9]*$/.test(target);
+    return /^[a-z][a-z0-9]*$/i.test(target);
 }
 
 /**

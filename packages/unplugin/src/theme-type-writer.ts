@@ -64,7 +64,7 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
         tokens.map(t => `'${escapeTsString(t)}'`).join(' | ');
     // Quote an interface key only when it is not a bare identifier (e.g. '3xl', '2xl').
     const quoteKey = (key: string): string =>
-        /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : `'${escapeTsString(key)}'`;
+        /^[a-z_$][\w$]*$/i.test(key) ? key : `'${escapeTsString(key)}'`;
 
     const entries: string[] = [];
     if (theme.colors.length > 0) {

@@ -37,6 +37,7 @@ export interface Classification {
  */
 export type BoxSelector = string | Readonly<Record<string, string>>;
 
+/** Options controlling how `splitBox` partitions a className. */
 export interface SplitBoxOptions {
     /** Force these selectors onto the outer node, overriding the default map. */
     outer?: BoxSelector[];
@@ -46,6 +47,7 @@ export interface SplitBoxOptions {
     fallback?: BoxRole;
 }
 
+/** The two class buckets produced by `splitBox`. */
 export interface SplitBoxResult {
     /** Classes for the outer (border-outward) element. */
     outer: string;
@@ -53,6 +55,7 @@ export interface SplitBoxResult {
     inner: string;
 }
 
+/** A classified token enriched with its stripped base and value segment. */
 interface TokenInfo extends Classification {
     /** Base utility with variant prefix / `!` / leading `-` stripped. */
     readonly base: string;
@@ -64,6 +67,9 @@ interface TokenInfo extends Classification {
  * Strip the variant prefix from a token, returning the base utility. Splits on
  * the LAST `:` that is not inside `[]` or `()`, so arbitrary variants
  * (`@max-[600px]:`, `[&:hover]:`, `aria-[sort=asc]:`) survive intact.
+ *
+ * @param token - A single class token, possibly variant-prefixed.
+ * @returns The base utility with the variant prefix removed.
  */
 function stripVariant(token: string): string {
     let depth = 0;
@@ -76,7 +82,12 @@ function stripVariant(token: string): string {
     return token;
 }
 
-/** Remove leading/trailing `!` (important) and a leading `-` (negative). */
+/**
+ * Remove leading/trailing `!` (important) and a leading `-` (negative).
+ *
+ * @param base - The base utility, possibly important- or negative-marked.
+ * @returns The base with important/negative markers stripped.
+ */
 function normalizeBase(base: string): string {
     let b = base;
     if (b.startsWith('!')) b = b.slice(1);
@@ -85,7 +96,12 @@ function normalizeBase(base: string): string {
     return b;
 }
 
-/** Classify a single class token, or `undefined` if csszyx does not own it. */
+/**
+ * Classify a single class token, or `undefined` if csszyx does not own it.
+ *
+ * @param token - A single class token to classify.
+ * @returns Token info (role, category, base, value), or `undefined` if unowned.
+ */
 function inspect(token: string): TokenInfo | undefined {
     const base = normalizeBase(stripVariant(token));
     if (!base) return undefined;
@@ -105,13 +121,22 @@ function inspect(token: string): TokenInfo | undefined {
 /**
  * Classify a class token by box-model role + semantic category, or `undefined`
  * if it is not a csszyx-owned utility. Variant-, important- and negative-aware.
+ *
+ * @param token - A single class token to classify.
+ * @returns The token's role and category, or `undefined` if unowned.
  */
 export function classify(token: string): Classification | undefined {
     const info = inspect(token);
     return info ? { role: info.role, category: info.category } : undefined;
 }
 
-/** Does `info` satisfy `selector`? `info === undefined` never matches. */
+/**
+ * Does `info` satisfy `selector`? `info === undefined` never matches.
+ *
+ * @param info - The classified token info, or `undefined`.
+ * @param selector - The selector to test the token against.
+ * @returns `true` if the token matches the selector.
+ */
 function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
     if (!info) return false;
     if (typeof selector === 'object') {
@@ -128,10 +153,23 @@ function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
     return info.base.startsWith(`${selector}-`);
 }
 
+/**
+ * Does `info` satisfy any of `selectors`?
+ *
+ * @param info - The classified token info, or `undefined`.
+ * @param selectors - The selectors to test the token against.
+ * @returns `true` if the token matches at least one selector.
+ */
 function anyMatch(info: TokenInfo | undefined, selectors: BoxSelector[]): boolean {
     return selectors.some(s => matches(info, s));
 }
 
+/**
+ * Split a className string into its individual non-empty tokens.
+ *
+ * @param className - A whitespace-separated className string.
+ * @returns The non-empty class tokens.
+ */
 function tokenize(className: string): string[] {
     return className.split(/\s+/).filter(Boolean);
 }
@@ -142,6 +180,9 @@ function tokenize(className: string): string[] {
  * and keeps its variant prefix. Overrides in `options.inner` / `options.outer`
  * win over the default map; `inner` is checked first when a token matches both.
  *
+ * @param className - The flat className string to partition.
+ * @param options - Overrides for forcing tokens onto a node and the fallback role.
+ * @returns The `{ outer, inner }` class buckets.
  * @example splitBox('m-4 px-2 md:flex') // → { outer: 'm-4', inner: 'px-2 md:flex' }
  */
 export function splitBox(className: string, options: SplitBoxOptions = {}): SplitBoxResult {
@@ -163,19 +204,37 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
     return { outer: outer.join(' '), inner: inner.join(' ') };
 }
 
-/** Does any token in `classes` match `selector`? Variant- and mangle-robust. */
+/**
+ * Does any token in `classes` match `selector`? Variant- and mangle-robust.
+ *
+ * @param classes - A className string to scan.
+ * @param selector - The selector to test tokens against.
+ * @returns `true` if any token matches the selector.
+ */
 export function has(classes: string, selector: BoxSelector): boolean {
     return tokenize(classes).some(t => matches(inspect(t), selector));
 }
 
-/** Keep only the tokens in `classes` that match `selector`. */
+/**
+ * Keep only the tokens in `classes` that match `selector`.
+ *
+ * @param classes - A className string to filter.
+ * @param selector - The selector tokens must match to be kept.
+ * @returns The matching tokens joined by spaces.
+ */
 export function pick(classes: string, selector: BoxSelector): string {
     return tokenize(classes)
         .filter(t => matches(inspect(t), selector))
         .join(' ');
 }
 
-/** Drop the tokens in `classes` that match `selector`, keeping the rest. */
+/**
+ * Drop the tokens in `classes` that match `selector`, keeping the rest.
+ *
+ * @param classes - A className string to filter.
+ * @param selector - The selector tokens must match to be dropped.
+ * @returns The non-matching tokens joined by spaces.
+ */
 export function omit(classes: string, selector: BoxSelector): string {
     return tokenize(classes)
         .filter(t => !matches(inspect(t), selector))

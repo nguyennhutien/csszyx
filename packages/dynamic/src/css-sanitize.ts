@@ -78,7 +78,7 @@ export function isSafeCssValue(value: string): boolean {
  * @returns true if it is a well-formed property name (no `:`/`;`/whitespace).
  */
 export function isSafeCssPropertyName(name: string): boolean {
-    return /^(?:--[A-Za-z0-9_-]+|-?[A-Za-z][A-Za-z0-9-]*)$/.test(name);
+    return /^(?:--[\w-]+|-?[a-z][a-z0-9-]*)$/i.test(name);
 }
 
 /**

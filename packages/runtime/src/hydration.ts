@@ -155,6 +155,11 @@ export function isValidMangleMap(value: unknown): value is MangleMap {
     return true;
 }
 
+/**
+ * Load and validate the mangle map embedded in the DOM by the SSR pipeline.
+ *
+ * @returns the validated mangle map, or `null` if absent or invalid.
+ */
 export function loadMangleMapFromDOM(): MangleMap | null {
     if (typeof document === 'undefined') {
         return null;
