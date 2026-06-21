@@ -54,13 +54,18 @@ mod parser_panic_fuzz {
         // Owned hostile strings (built once, referenced below).
         let unbalanced_open = "[".repeat(20_000);
         let unbalanced_mix = "([{".repeat(10_000);
-        // NOTE: object nesting is deliberately capped at a modest depth here.
-        // Source nested hundreds of levels deep (e.g. `{hover:{hover:…}}`)
-        // overflows the parser/transform recursion — a real build-time DoS that
-        // a fatal stack overflow (NOT a catchable panic) makes invisible to
-        // `catch_unwind`. That needs a dedicated pre-parse depth guard and is
-        // tracked separately; this fuzz lane guards the panic/unwrap class only.
+        // `nested_variants` stays just under the pre-parse depth guard
+        // (MAX_SOURCE_NESTING_DEPTH = 64) so it exercises the real recursive
+        // path. `nested_guarded_*` go well past it: source nested hundreds of
+        // levels deep (e.g. `{hover:{hover:…}}`) would otherwise overflow the
+        // parser stack — a fatal abort (NOT a catchable panic) invisible to
+        // `catch_unwind`. The guard bails before the parser, so these now
+        // survive; `deep_nesting_is_guarded_not_aborted` asserts the behavior.
         let nested_variants = format!("<div sz={{{}1{}}} />", "{hover:".repeat(48), "}".repeat(48));
+        let nested_guarded_200 =
+            format!("<div sz={{{}1{}}} />", "{hover:".repeat(200), "}".repeat(200));
+        let nested_guarded_1000 =
+            format!("<div sz={{{}1{}}} />", "{hover:".repeat(1_000), "}".repeat(1_000));
         let deep_brackets = format!("<div sz={{{{ w: '{}' }}}} />", "[".repeat(2_000));
         let huge_value = format!("<div sz={{{{ p: '{}' }}}} />", "a".repeat(200_000));
         let huge_attr = format!("<div className=\"{}\" />", "x ".repeat(100_000));
@@ -89,6 +94,8 @@ mod parser_panic_fuzz {
             &unbalanced_open,
             &unbalanced_mix,
             &nested_variants,
+            &nested_guarded_200,
+            &nested_guarded_1000,
             &deep_brackets,
             &huge_value,
             &huge_attr,
@@ -123,5 +130,52 @@ mod parser_panic_fuzz {
         }
 
         std::panic::set_hook(prev);
+    }
+
+    #[test]
+    fn deep_nesting_is_guarded_not_aborted() {
+        // Source nested past the pre-parse depth guard must bail BEFORE the
+        // recursive parser — a stack overflow there is a fatal process abort,
+        // not a catchable panic. The engine leaves the file unchanged and emits
+        // an actionable diagnostic instead of crashing the build.
+        let deep = format!("<div sz={{{}1{}}} />", "{hover:".repeat(300), "}".repeat(300));
+        let file = TransformFile {
+            filename: "deep.tsx".to_string(),
+            source: deep.clone(),
+        };
+        let results = transform_batch(std::slice::from_ref(&file)).expect("batch returns Ok");
+        let result = &results[0];
+        assert_eq!(result.code, deep, "deeply nested file must be left unchanged");
+        assert!(
+            !result.metadata.transformed,
+            "deeply nested file must not be marked transformed"
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.contains("source nesting exceeded")),
+            "must surface the nesting-depth diagnostic, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn legitimately_deep_source_below_the_guard_still_compiles() {
+        // ~30 levels is comfortably under MAX_SOURCE_NESTING_DEPTH (64): a real,
+        // if heavy, component must still transform normally (no false reject).
+        let nested = format!("<div sz={{{}{{ p: 4 }}{}}} />", "{hover:".repeat(30), "}".repeat(30));
+        let file = TransformFile {
+            filename: "ok.tsx".to_string(),
+            source: nested,
+        };
+        let results = transform_batch(std::slice::from_ref(&file)).expect("batch returns Ok");
+        assert!(
+            !results[0]
+                .diagnostics
+                .iter()
+                .any(|d| d.contains("source nesting exceeded")),
+            "source below the guard must not trip the nesting diagnostic"
+        );
     }
 }
