@@ -56,7 +56,9 @@ export interface ThemeTypeWriterOptions {
 export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
     const { theme, sourceFiles } = opts;
     const timestamp = new Date().toISOString();
-    const sources = sourceFiles.join(', ');
+    // Strip newlines so a path can never break out of the `// Source:` line
+    // comment onto a new line of generated TypeScript.
+    const sources = sourceFiles.join(', ').replace(/[\r\n]/g, ' ');
 
     const toUnion = (tokens: string[]): string =>
         tokens.map(t => `'${escapeTsString(t)}'`).join(' | ');
