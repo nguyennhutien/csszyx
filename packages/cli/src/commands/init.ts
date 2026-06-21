@@ -274,7 +274,7 @@ export function tailwindImportBlock(cssDir: string, cwd: string, monorepo: boole
         '   sibling packages + docs (.md/.mdx/.txt are NOT ignored), generating\n' +
         '   phantom or broken url() classes. csszyx auto-injects @source for its\n' +
         '   generated classes; this @source covers your own templates. See\n' +
-        '   https://csszyx.dev/docs/monorepo-content-scope/ */\n' +
+        '   https://csszyx.com/docs/monorepo-content-scope/ */\n' +
         '@import "tailwindcss" source(none);\n' +
         `@source "${src}";\n`
     );

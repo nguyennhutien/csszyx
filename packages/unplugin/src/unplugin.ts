@@ -440,7 +440,7 @@ export function unscopedMonorepoMessage(): string {
         '    @import "tailwindcss" source(none);\n' +
         '    @source ".";   /* this package, relative to the CSS file */\n' +
         'csszyx auto-injects @source for its generated classes, so only your own ' +
-        'templates need listing. Guide: https://csszyx.dev/docs/monorepo-content-scope/\n' +
+        'templates need listing. Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
         'Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).'
     );
 }
