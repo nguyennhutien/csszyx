@@ -1882,10 +1882,30 @@ export interface VariantModifiers {
     // and arbitrary selectors (`[&>span]`). A scalar typo key like `bgColor`
     // matches no pattern and is not a known prop → rejected by tsc. Force a
     // genuinely-new Tailwind utility csszyx has no key for yet with `@ts-expect-error`.
-    [variant: `@${string}`]: SzProps | undefined;
+    // `@md`/`@lg`/`@max-[600px]` are container-query variants (object body);
+    // `@container` / `@container/sidebar` are container-declaration markers
+    // (boolean), so this `@`-sig accepts both.
+    [variant: `@${string}`]: SzProps | boolean | undefined;
     [variant: `min-[${string}`]: SzProps | undefined;
     [variant: `max-[${string}`]: SzProps | undefined;
     [variant: `[${string}`]: SzProps | undefined;
+
+    // Functional variants written as a flat string key (the compiler supports
+    // each of these). Covers the bare-state form (`group-hover`, `aria-checked`),
+    // the named form (`group-hover/sidebar`, `peer-focus/search`), and the
+    // arbitrary-param form (`group-data-[active]`, `aria-[sort=asc]`,
+    // `data-[state=open]`, `has-[:checked]`, `supports-[display:grid]`). The
+    // nested object forms (`group: { hover: {} }`, `aria: { checked: {} }`)
+    // remain available via the named props above; these cover the flat spelling.
+    [variant: `group-${string}`]: SzProps | undefined;
+    [variant: `peer-${string}`]: SzProps | undefined;
+    [variant: `has-${string}`]: SzProps | undefined;
+    [variant: `aria-${string}`]: SzProps | undefined;
+    [variant: `data-${string}`]: SzProps | undefined;
+    [variant: `not-${string}`]: SzProps | undefined;
+    [variant: `in-${string}`]: SzProps | undefined;
+    [variant: `nth-${string}`]: SzProps | undefined;
+    [variant: `supports-${string}`]: SzProps | undefined;
 }
 
 // ============================================================================
