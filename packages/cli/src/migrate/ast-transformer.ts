@@ -243,6 +243,14 @@ export interface TransformOptions {
     injectTodos?: boolean;
     /** Map of custom classes to sz objects, used to override unrecognized classes */
     customMap?: CsszyxTodoMap;
+    /**
+     * If true, ONLY normalize legacy sz-prop keys to their single-way canonical
+     * and leave every `className` attribute untouched. The sz-key-only upgrade
+     * path for 0.9.10 → 0.10.0.
+     *
+     * TRANSITIONAL: part of the same legacy-key normalizer; remove at v1.
+     */
+    keysOnly?: boolean;
 }
 
 /**
@@ -281,6 +289,21 @@ export function transformSource(
     // saves the full Babel parse + AST walk cost on every irrelevant file.
     // Must catch both className references (migration target) and cva
     // imports (warning surface) — anything else is invisible to migrate.
+    // In keys-only mode only `sz=` matters (className is left untouched).
+    if (options.keysOnly && source.indexOf('sz=') === -1) {
+        return {
+            code: source,
+            changed: false,
+            warnings: [],
+            stats: {
+                classNamesTransformed: 0,
+                classNamesSkipped: 0,
+                classNamesSkippedComponent: 0,
+                classesUnrecognized: [],
+            },
+            potentiallyUnusedImports: [],
+        };
+    }
     if (
         source.indexOf('className') === -1 &&
         source.indexOf('cva') === -1 &&
@@ -371,6 +394,12 @@ export function transformSource(
                 ) {
                     szKeysNormalized += normalizeSzObject(szValue.expression, replacements);
                 }
+                return;
+            }
+
+            // keys-only upgrade: leave className (and everything else) untouched —
+            // only the sz-prop key normalization above runs. (Transitional; v1.)
+            if (options.keysOnly) {
                 return;
             }
 

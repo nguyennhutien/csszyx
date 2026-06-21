@@ -192,6 +192,10 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     .option('--audit', 'Scan without modifying files and output .csszyx-todo.json')
     .option('--inject-todos', 'Inject {/* @sz-todo */} comments above unrecognized classes')
     .option('--resolve-todos <file>', 'Path to a JSON file mapping custom classes to sz properties')
+    .option(
+        '--keys-only',
+        'Only normalize legacy sz-prop keys to their canonical form; leave className untouched (0.9.10 → 0.10.0 upgrade)',
+    )
     .action(async (dir, options) => {
         await migrate({
             dryRun: options.dryRun,
@@ -211,6 +215,7 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
             audit: options.audit,
             injectTodos: options.injectTodos,
             resolveTodos: options.resolveTodos,
+            keysOnly: options.keysOnly,
         });
     });
 

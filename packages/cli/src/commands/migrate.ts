@@ -40,6 +40,14 @@ export interface MigrateOptions {
     injectTodos?: boolean;
     /** Path to a JSON mapping file (like .csszyx-todo.json) to resolve previously unrecognized classes */
     resolveTodos?: string;
+    /**
+     * Only normalize legacy sz-prop keys to their single-way canonical (e.g.
+     * `fontWeight`→`weight`, `padding`→`p`, `{ flex: true }`→`{ display: 'flex' }`)
+     * and leave every `className` 100% untouched. The sz-key-only upgrade for
+     * 0.9.10 → 0.10.0, for projects already on sz that do not want a Tailwind
+     * className migration. TRANSITIONAL — remove at v1.
+     */
+    keysOnly?: boolean;
 }
 
 // ============================================================================
@@ -215,6 +223,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     let totalTransformed = 0;
     let totalSkipped = 0;
     let totalSkippedComponent = 0;
+    let totalSzKeysNormalized = 0;
     let totalFiles = 0;
     const allUnrecognized: string[] = [];
     const allWarnings: string[] = [];
@@ -226,8 +235,18 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         const source = fs.readFileSync(filePath, 'utf-8');
         const isHtml = filePath.endsWith('.html');
 
-        // Skip files without relevant class attributes
-        const hasRelevantAttr = isHtml ? source.includes('class=') : source.includes('className=');
+        // keys-only normalizes sz props in JSX/TSX only — HTML has no sz objects.
+        if (options.keysOnly && isHtml) {
+            continue;
+        }
+
+        // Skip files with nothing to do. keys-only needs an sz prop; a normal run
+        // needs a className to convert OR an sz prop whose legacy keys to normalize.
+        const hasRelevantAttr = isHtml
+            ? source.includes('class=')
+            : options.keysOnly
+              ? source.includes('sz=')
+              : source.includes('className=') || source.includes('sz=');
         if (!hasRelevantAttr) {
             continue;
         }
@@ -251,7 +270,11 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
                   cdnUrl: options.cdnUrl,
                   localPath: options.localPath,
               })
-            : transformSource(processSource, filePath, { injectTodos, customMap });
+            : transformSource(processSource, filePath, {
+                  injectTodos,
+                  customMap,
+                  keysOnly: options.keysOnly,
+              });
 
         // Collect warnings from every scanned file — not just changed ones.
         // CVA warnings and other diagnostics are emitted regardless of whether
@@ -264,6 +287,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
             totalTransformed += result.stats.classNamesTransformed;
             totalSkipped += result.stats.classNamesSkipped;
             totalSkippedComponent += result.stats.classNamesSkippedComponent;
+            totalSzKeysNormalized += result.stats.szKeysNormalized ?? 0;
             allUnrecognized.push(...result.stats.classesUnrecognized);
 
             // Track potentially unused imports
@@ -286,12 +310,13 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
             }
 
             const rel = path.relative(cwd, filePath);
+            const detail = options.keysOnly
+                ? `${result.stats.szKeysNormalized ?? 0} sz key(s) normalized`
+                : `${result.stats.classNamesTransformed} className(s) → sz`;
             if (dryRun) {
-                printInfo(`  ${rel}: ${result.stats.classNamesTransformed} className(s) → sz`);
-                log.writeLine(`  ${rel}: ${result.stats.classNamesTransformed} className(s) → sz`);
-            } else {
-                log.writeLine(`  ${rel}: ${result.stats.classNamesTransformed} className(s) → sz`);
+                printInfo(`  ${rel}: ${detail}`);
             }
+            log.writeLine(`  ${rel}: ${detail}`);
         }
     }
 
@@ -300,9 +325,16 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     // ── Summary ──────────────────────────────────────────────────────────────
     console.info();
     printSuccess(`Files modified: ${totalFiles}`);
-    printSuccess(`classNames converted: ${totalTransformed}`);
+    if (!options.keysOnly) {
+        printSuccess(`classNames converted: ${totalTransformed}`);
+    }
     log.writeLine(`Files modified: ${totalFiles}`);
     log.writeLine(`classNames converted: ${totalTransformed}`);
+
+    if (totalSzKeysNormalized > 0) {
+        printSuccess(`legacy sz keys normalized: ${totalSzKeysNormalized}`);
+        log.writeLine(`legacy sz keys normalized: ${totalSzKeysNormalized}`);
+    }
 
     if (totalSkipped > 0) {
         printWarn(`classNames skipped (dynamic): ${totalSkipped}`);
