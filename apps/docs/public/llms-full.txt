@@ -179,7 +179,7 @@ sz={{ group: { card: { data: { active: { color: 'blue-600' } } } } }}
 sz={{ group: { aria: { expanded: { color: 'blue-600' } } } }}
 // → className="group-aria-expanded:text-blue-600"
 
-sz={{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }}
+sz={{ group: { aria: { 'current=page': { weight: 'bold' } } } }}
 // → className="group-aria-[current=page]:font-bold"
 
 // peer-data / peer-aria work the same way
@@ -414,7 +414,7 @@ Styling children based on parent `group` class.
 | **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
 | **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`     | `=` in key → bracket form always.    |
 | **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`         | Standard states: bare form.          |
-| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }` | Non-standard: bracket form.          |
+| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }` | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 
@@ -3148,11 +3148,11 @@ Controlling the font weight.
 
 | Concept          | CSS Rule                | Tailwind v4 Class                                                                                                                        | `sz` Prop (Object Syntax)                                     | Note                                                               |
 | :--------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :----------------------------------------------------------------- |
-| **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ fontWeight: 'thin' }`, `{ fontWeight: 'extralight' }` etc. |                                                                    |
-| **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ fontWeight: 100 }`, `{ fontWeight: 200 }` etc.             | v4 shorthand.                                                      |
-| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `fontWeight`.                                            |
-| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ fontWeight: 550 }`                                         |                                                                    |
-| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ fontWeight: '--w' }`                                       | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
+| **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ weight: 'thin' }`, `{ weight: 'extralight' }` etc. |                                                                    |
+| **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ weight: 100 }`, `{ weight: 200 }` etc.             | v4 shorthand.                                                      |
+| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `weight`.                                            |
+| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ weight: 550 }`                                         |                                                                    |
+| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ weight: '--w' }`                                       | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
 
 ## Font Stretch
 
@@ -3392,7 +3392,7 @@ const buttonSz = szv({
     display: "inline-flex",
     items: "center",
     rounded: "md",
-    fontWeight: "medium",
+    weight: "medium",
   },
   variants: {
     variant: {

@@ -1,6 +1,6 @@
 import { Demo } from '../Demo.tsx';
 
-const LABEL_WHITE = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'white' } as const;
+const LABEL_WHITE = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: 'white' } as const;
 
 // Base swatch layout — chained into neutral and primary tier variants below
 const swatchBase = { size: 24, rounded: 'xl', display: 'flex', items: 'center', justify: 'center' } as const;
@@ -8,7 +8,7 @@ const swatchPrimary = { ...swatchBase, bgImg: { gradient: 'linear', dir: 'to-br'
 
 // Shadow swatch — white bg so box-shadow is visible against the dark panel
 const shadowSwatch = { size: 24, rounded: 'xl', bg: 'white', display: 'flex', items: 'center', justify: 'center' } as const;
-const LABEL_DARK = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'zinc-700' } as const;
+const LABEL_DARK = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: 'zinc-700' } as const;
 
 export function BoxShadowScale() {
     return (

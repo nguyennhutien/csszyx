@@ -105,7 +105,7 @@ to `@md:...` — not `md:...` (which is a viewport breakpoint).
   placeholder: { color: 'gray-400' },
   selection:   { bg: 'blue-200' },
   firstLine:   { textTransform: 'uppercase' },
-  firstLetter: { text: '5xl', fontWeight: 'bold', float: 'left', mr: 2 },
+  firstLetter: { text: '5xl', weight: 'bold', float: 'left', mr: 2 },
 }} />
 ```
 
@@ -199,7 +199,7 @@ Style children based on an `aria-*` attribute on the parent group element:
     group: {
       aria: {
         expanded: { color: 'blue-600' },       // group-aria-expanded:text-blue-600
-        'current=page': { fontWeight: 'bold' }, // group-aria-[current=page]:font-bold
+        'current=page': { weight: 'bold' }, // group-aria-[current=page]:font-bold
       },
     },
   }} />

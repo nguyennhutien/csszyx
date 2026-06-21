@@ -87,7 +87,7 @@ const compileData: CompileEntry[] = [
 
     // Typography
     { sz: "{text: 'xl'}", tw: "text-xl" },
-    { sz: "{fontWeight: 'bold'}", tw: "font-bold" },
+    { sz: "{weight: 'bold'}", tw: "font-bold" },
     { sz: "{tracking: 'tight'}", tw: "tracking-tight" },
     { sz: "{truncate: true}", tw: "truncate" },
 
@@ -402,7 +402,7 @@ export default function HeroSection() {
       <div sz={{ display: 'flex', flexDir: 'col', gap: 8 }}>
         <h1
           className="hero-in-1"
-          sz={{ text: '5xl', lg: { text: '7xl' }, fontWeight: 'black', leading: 'tight', color: 'neutral-800', dark: { color: 'white' }, tracking: 'tighter' }}
+          sz={{ text: '5xl', lg: { text: '7xl' }, weight: 'black', leading: 'tight', color: 'neutral-800', dark: { color: 'white' }, tracking: 'tighter' }}
         >
           Style from data.<br />
           <span sz={{ color: 'primary' }}>Zero</span> wasted{' '}
@@ -411,11 +411,11 @@ export default function HeroSection() {
 
         <p
           className="hero-in-2"
-          sz={{ color: 'neutral-900', dark: { color: 'slate-400' }, text: 'lg', maxW: 'lg', fontWeight: 'light', leading: 'relaxed' }}
+          sz={{ color: 'neutral-900', dark: { color: 'slate-400' }, text: 'lg', maxW: 'lg', weight: 'light', leading: 'relaxed' }}
         >
           CSSzyx compiles sz props to Tailwind at build time.<br />
           For runtime UI states or dynamic API data — it injects only the exact CSS Delta you need.{' '}
-          <span sz={{ fontWeight: 'normal', color: 'neutral-900', dark: { color: 'slate-300' } }}>No more safelist bloat or pre-defined string concatenation.</span>
+          <span sz={{ weight: 'normal', color: 'neutral-900', dark: { color: 'slate-300' } }}>No more safelist bloat or pre-defined string concatenation.</span>
         </p>
 
         <div className="hero-in-3" sz={{ display: 'flex', gap: 4 }}>
@@ -427,7 +427,7 @@ export default function HeroSection() {
               transition: 'all',
               duration: 1200,
               color: 'neutral-900',
-              fontWeight: 'bold',
+              weight: 'bold',
               py: 4,
               px: 10,
               rounded: '2xl',
@@ -492,11 +492,11 @@ export default function HeroSection() {
               </div>
               <div id="ho-tw-row" sz={{ display: 'flex', items: 'center', gap: 2, mb: 3 }} style={{ opacity: 0, transition: 'opacity 0.7s ease' }}>
                 <span sz={{ color: 'slate-600', text: '10px', select: 'none', shrink: 0 }}>↓</span>
-                <span sz={{ color: 'purple-400', text: '11px', fontWeight: 'medium' }}>p-4 bg-blue-500 hover:bg-blue-600</span>
+                <span sz={{ color: 'purple-400', text: '11px', weight: 'medium' }}>p-4 bg-blue-500 hover:bg-blue-600</span>
               </div>
               <div id="ho-mg-row" sz={{ display: 'flex', items: 'center', gap: 2 }} style={{ opacity: 0, transition: 'opacity 0.7s ease' }}>
                 <span sz={{ color: 'slate-600', text: '10px', select: 'none', shrink: 0 }}>↓</span>
-                <span sz={{ text: '11px', fontWeight: 'bold' }} style={{ color: '#2dd597', textShadow: '0 0 14px rgba(45,213,151,0.9), 0 0 4px rgba(45,213,151,0.6)' }}>z&nbsp;&nbsp;y&nbsp;&nbsp;x</span>
+                <span sz={{ text: '11px', weight: 'bold' }} style={{ color: '#2dd597', textShadow: '0 0 14px rgba(45,213,151,0.9), 0 0 4px rgba(45,213,151,0.6)' }}>z&nbsp;&nbsp;y&nbsp;&nbsp;x</span>
               </div>
             </div>
           </div>

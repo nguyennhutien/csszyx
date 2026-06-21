@@ -1,8 +1,8 @@
 import { Demo } from '../Demo.tsx';
 
 // zinc-700→zinc-800 gradient replaces zinc-900 (which is invisible against the panel bg)
-const item = { p: 3, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
-const label = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
+const item = { p: 3, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white' } as const;
+const label = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white' } as const;
 
 export function FlexRow() {
     return (

@@ -38,13 +38,13 @@ import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, Letter
 ## Font Weight
 
 <PropTable rows={[
-  { sz: "{ fontWeight: 'thin' }", tw: "font-thin" },
-  { sz: "{ fontWeight: 'normal' }", tw: "font-normal" },
-  { sz: "{ fontWeight: 'medium' }", tw: "font-medium" },
-  { sz: "{ fontWeight: 'semibold' }", tw: "font-semibold" },
-  { sz: "{ fontWeight: 'bold' }", tw: "font-bold" },
-  { sz: "{ fontWeight: 700 }", tw: "font-700" },
-  { sz: "{ fontWeight: 900 }", tw: "font-900" },
+  { sz: "{ weight: 'thin' }", tw: "font-thin" },
+  { sz: "{ weight: 'normal' }", tw: "font-normal" },
+  { sz: "{ weight: 'medium' }", tw: "font-medium" },
+  { sz: "{ weight: 'semibold' }", tw: "font-semibold" },
+  { sz: "{ weight: 'bold' }", tw: "font-bold" },
+  { sz: "{ weight: 700 }", tw: "font-700" },
+  { sz: "{ weight: 900 }", tw: "font-900" },
 ]} />
 
 <FontWeightScale />
@@ -175,7 +175,7 @@ Both `content: '""'` and `content: "''"` compile to `content-['']` — the compi
 // Heading
 <h1 sz={{
   text: '4xl',
-  fontWeight: 'bold',
+  weight: 'bold',
   tracking: 'tight',
   leading: 'tight',
   color: 'gray-900',

@@ -28,7 +28,7 @@ export function StatCard({ label, value, subtitle }: StatCardProps) {
                 sz={{
                     fontFamily: '--ds-font-ui',
                     text: '4xl',
-                    fontWeight: 'bold',
+                    weight: 'bold',
                     color: '--ds-text',
                     leading: 'none',
                     my: 2,

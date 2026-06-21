@@ -147,7 +147,7 @@ Styling children based on parent `group` class.
 | **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
 | **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`     | `=` in key → bracket form always.    |
 | **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`         | Standard states: bare form.          |
-| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }` | Non-standard: bracket form.          |
+| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }` | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 

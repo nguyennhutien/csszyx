@@ -26,7 +26,7 @@ export default function BenchmarksSection() {
         <div sz={{ textAlign: 'center', mb: 24 }}>
           <h2
             className="reveal-item"
-            sz={{ text: '5xl', fontWeight: 'black', mb: 6, color: 'neutral-900', dark: { color: 'white' }, leading: 'tight', tracking: 'tighter', delay: '0ms' }}
+            sz={{ text: '5xl', weight: 'black', mb: 6, color: 'neutral-900', dark: { color: 'white' }, leading: 'tight', tracking: 'tighter', delay: '0ms' }}
           >
             Performance so fast,<br />it feels{' '}
             <span sz={{ color: 'transparent', bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'primary', to: 'primary-thin' }}>instant.</span>
@@ -69,7 +69,7 @@ export default function BenchmarksSection() {
                 className="reveal-item__benchmark"
                 sz={{
                   text: '6xl',
-                  fontWeight: 'light',
+                  weight: 'light',
                   fontFamily: 'display',
                   color: 'neutral-900',
                   dark: { color: 'white' },
@@ -81,7 +81,7 @@ export default function BenchmarksSection() {
                 {value}<span sz={{ text: '3xl' }}>{unit}</span>
               </div>
               <div sz={{
-                text: '13px', color: 'slate-500', dark: { color: 'slate-400' }, fontWeight: 'light', tracking: 'wide',
+                text: '13px', color: 'slate-500', dark: { color: 'slate-400' }, weight: 'light', tracking: 'wide',
                 group: { hover: { color: { color: 'white', op: 95 }, } },
                 transition: 'colors',
               }}>

@@ -1,18 +1,18 @@
 import { Demo } from '../Demo.tsx';
 
 // Shared cell base — combined with tier styles as array elements
-const cellBase = { p: 2, rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium' } as const;
+const cellBase = { p: 2, rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium' } as const;
 // zinc-700→zinc-800 gradient replaces zinc-900 (which is invisible against the panel bg)
 const cellNeutral = { bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', color: 'white' } as const;
 const cellAccent = { bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-700', to: 'violet-700', color: 'white' } as const;
 const cellPrimary = { bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', color: 'white' } as const;
 const cellCenter = { textAlign: 'center' } as const;
-const labelInline = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'zinc-500', self: 'center', ml: 1 } as const;
+const labelInline = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'zinc-500', self: 'center', ml: 1 } as const;
 // Flex row container for justify demos — subtle dark container, not a content block
 const rowWrap = { display: 'flex', gap: 1, bg: 'zinc-950', border: true, borderColor: 'zinc-800', rounded: 'md', p: 1 } as const;
 // Chip styles for justify demos — gradient variant for consistency
-const chipActive = { p: 1.5, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: 'sm', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
-const chipPassive = { p: 1.5, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'sm', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
+const chipActive = { p: 1.5, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: 'sm', text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white' } as const;
+const chipPassive = { p: 1.5, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'zinc-700', to: 'zinc-800', rounded: 'sm', text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white' } as const;
 
 export function FlexDirection() {
     return (

@@ -59,7 +59,7 @@ The `sz` prop accepts an object where keys are Tailwind property names and value
 // -> className="text-white"
 
 // Font weight and family
-<div sz={{ fontWeight: "bold", fontFamily: "mono" }} />
+<div sz={{ weight: "bold", fontFamily: "mono" }} />
 // -> className="font-bold font-mono"
 
 // Hover state

@@ -102,7 +102,7 @@
   text: "xl";
 } // text-xl (size + leading)
 {
-  fontWeight: "bold";
+  weight: "bold";
 } // font-bold
 {
   fontFamily: "mono";

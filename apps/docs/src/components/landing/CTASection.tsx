@@ -83,17 +83,17 @@ export default function CTASection() {
     >
       <h2
         className="reveal-item"
-        sz={{ text: '5xl', fontWeight: 'black', mb: 6, tracking: 'tighter', textAlign: 'center', color: 'neutral-900', dark: { color: 'white' }, delay: '0ms' }}
+        sz={{ text: '5xl', weight: 'black', mb: 6, tracking: 'tighter', textAlign: 'center', color: 'neutral-900', dark: { color: 'white' }, delay: '0ms' }}
       >
         Ready to style from data?
       </h2>
       <p
         className="reveal-item"
-        sz={{ color: 'slate-600', dark: { color: 'slate-400' }, text: 'lg', fontWeight: 'light', mb: 16, textAlign: 'center', delay: '150ms' }}
+        sz={{ color: 'slate-600', dark: { color: 'slate-400' }, text: 'lg', weight: 'light', mb: 16, textAlign: 'center', delay: '150ms' }}
       >
         Start with zero-runtime compilation.<br />
         Add @csszyx/dynamic when you need it.<br />
-        <span sz={{ fontWeight: 'medium', color: 'neutral-900', dark: { color: 'slate-300' } }}>No lock-in. Pure Tailwind output.</span>
+        <span sz={{ weight: 'medium', color: 'neutral-900', dark: { color: 'slate-300' } }}>No lock-in. Pure Tailwind output.</span>
       </p>
 
       {/* Install block */}

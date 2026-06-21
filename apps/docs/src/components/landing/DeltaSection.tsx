@@ -35,7 +35,7 @@ export default function DeltaSection() {
       <div sz={{ mb: 24, display: 'flex', flexDir: 'col', items: 'center', textAlign: 'center' }}>
         <h2
           className="reveal-item"
-          sz={{ text: '5xl', fontWeight: 'black', mb: 6, leading: 'tight', tracking: 'tighter', delay: '0ms' }}
+          sz={{ text: '5xl', weight: 'black', mb: 6, leading: 'tight', tracking: 'tighter', delay: '0ms' }}
         >
           The elegant architecture<br />of{' '}
           <span sz={{ color: 'transparent', bgClip: 'text', bgImg: { gradient: 'linear', dir: 'to-r' }, from: 'primary', to: 'primary-thin' }}>
@@ -72,8 +72,8 @@ export default function DeltaSection() {
           <div sz={{ text: '10px', fontFamily: 'mono', color: 'cyan-500', mb: 8, tracking: 'widest', textTransform: 'uppercase', display: 'flex', items: 'center', gap: 2 }}>
             01 / Build
           </div>
-          <h3 sz={{ text: '2xl', fontWeight: 'bold', fontFamily: 'display', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>Compilation</h3>
-          <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', fontWeight: 'light', mb: 8 }}>
+          <h3 sz={{ text: '2xl', weight: 'bold', fontFamily: 'display', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>Compilation</h3>
+          <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', weight: 'light', mb: 8 }}>
             sz props compile to Tailwind classes before JIT runs. Zero overhead at runtime — just standard CSS selectors.
           </p>
           <div sz={{ bg: 'slate-50', dark: { bg: '--color-background-light', borderColor: { color: 'white', op: 5 } }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', overflowX: 'auto', position: 'relative', z: 30 }}>
@@ -114,8 +114,8 @@ export default function DeltaSection() {
           <div sz={{ text: '10px', fontFamily: 'mono', color: 'primary', mb: 8, tracking: 'widest', textTransform: 'uppercase', display: 'flex', items: 'center', gap: 2 }}>
             02 / Index
           </div>
-          <h3 sz={{ text: '2xl', fontWeight: 'bold', fontFamily: 'display', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>Manifest</h3>
-          <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', fontWeight: 'light', mb: 8 }}>
+          <h3 sz={{ text: '2xl', weight: 'bold', fontFamily: 'display', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>Manifest</h3>
+          <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', weight: 'light', mb: 8 }}>
             Every class in your built CSS is recorded into a map. Giving you O(1) instantaneous lookup.
           </p>
           <div sz={{ bg: 'slate-50', dark: { bg: '--color-background-light', borderColor: { color: 'white', op: 5 }, color: 'white' }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', color: 'neutral-900', overflowX: 'auto', position: 'relative', z: 30 }}>
@@ -155,8 +155,8 @@ export default function DeltaSection() {
           <div sz={{ text: '10px', fontFamily: 'mono', mb: 8, tracking: 'widest', textTransform: 'uppercase', display: 'flex', items: 'center', gap: 2 }} style={{ color: '#b491ff' }}>
             03 / Runtime
           </div>
-          <h3 sz={{ text: '2xl', fontWeight: 'bold', fontFamily: 'display', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>Delta Injection</h3>
-          <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', fontWeight: 'light', mb: 8 }}>
+          <h3 sz={{ text: '2xl', weight: 'bold', fontFamily: 'display', color: 'neutral-900', dark: { color: 'white' }, mb: 4 }}>Delta Injection</h3>
+          <p sz={{ color: 'slate-600', dark: { color: 'slate-400' }, leading: 'relaxed', weight: 'light', mb: 8 }}>
             Unknown styles are detected and injected automatically on demand. Never duplicated.
           </p>
           <div sz={{ bg: 'slate-50', dark: { bg: '--color-background-light', borderColor: { color: 'white', op: 5 } }, border: true, rounded: 'xl', p: 5, fontFamily: 'mono', text: '13px', overflowX: 'auto', position: 'relative', z: 30 }}>

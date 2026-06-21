@@ -31,7 +31,7 @@ export function SpecCard({ title, specId, icon, children }: SpecCardProps) {
                 sz={{
                     fontFamily: '--ds-font-ui',
                     text: 'lg',
-                    fontWeight: 700,
+                    weight: 700,
                     color: '--ds-text',
                     mb: 2,
                 }}

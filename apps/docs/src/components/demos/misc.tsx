@@ -7,7 +7,7 @@ const TD_BASE = { border: true, borderColor: 'zinc-700', px: 3, py: 1.5, bg: 'zi
 export function TableBorderCollapse() {
     return (
         <Demo label="table with border-collapse — collapsed borders between cells">
-            <table sz={{ borderCollapse: 'collapse', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium' }}>
+            <table sz={{ borderCollapse: 'collapse', text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium' }}>
                 <thead>
                     <tr>
                         {/* direct variable reference */}
@@ -49,7 +49,7 @@ export function SvgFill() {
 export function TwoColumnLayout() {
     return (
         <Demo label="{ columns: 2 } — two-column text layout">
-            <div sz={{ columns: 2, gap: 4, w: 64, text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'zinc-300' }}>
+            <div sz={{ columns: 2, gap: 4, w: 64, text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'zinc-300' }}>
                 <p sz={{ mb: 2 }}>First paragraph of content in a newspaper-style multi-column layout.</p>
                 <p sz={{ mb: 2 }}>Second paragraph that flows naturally into the next column when needed.</p>
                 <p>Third paragraph continuing the layout.</p>
@@ -59,7 +59,7 @@ export function TwoColumnLayout() {
 }
 
 export function SrOnly() {
-    const srLabel = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'zinc-500' } as const;
+    const srLabel = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'zinc-500' } as const;
     return (
         <Demo label="{ srOnly: true } — visually hidden but accessible to screen readers">
             <div sz={{ position: 'relative', display: 'flex', items: 'center', gap: 2 }}>

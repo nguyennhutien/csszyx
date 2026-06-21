@@ -7,8 +7,8 @@ const swatchNeutral = { ...swatchBase, bgImg: { gradient: 'linear', dir: 'to-br'
 const swatchHighlight = { ...swatchBase, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', shadow: 'md' } as const;
 const originalHolder = { ...swatchBase, position: 'relative', border: true, borderColor: 'zinc-600', borderStyle: 'dashed' } as const;
 // white labels — both swatch tiers now use dark gradient backgrounds
-const labelMuted = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
-const labelWhite = { text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', color: 'white' } as const;
+const labelMuted = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white' } as const;
+const labelWhite = { text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', color: 'white' } as const;
 
 export function ScaleDemo() {
     return (
@@ -90,7 +90,7 @@ export function TransformStyle3D() {
     const CARD = { w: 24, rounded: 'lg', bg: 'white', shadow: '2xl', overflow: 'hidden', transformStyle: '3d', display: 'flex', flexDir: 'col' } as const;
     const PHOTO = { w: 'full', h: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-400', to: 'fuchsia-500' } as const;
     const INFO = { px: 3, py: 2 } as const;
-    const TITLE = { text: 'xs', fontWeight: 'semibold', color: 'zinc-700', fontFamily: '--ds-font-ui' } as const;
+    const TITLE = { text: 'xs', weight: 'semibold', color: 'zinc-700', fontFamily: '--ds-font-ui' } as const;
     const SUB = { text: 'xs', color: 'zinc-400', fontFamily: '--ds-font-ui' } as const;
     const DEG = { text: 'xs', color: 'zinc-400', fontFamily: '--ds-font-mono' } as const;
 
@@ -144,8 +144,8 @@ export function TransformStyle3D() {
 const ROTATE_STEPS = [0, 45, 90, 135, 180] as const;
 const ROTATE_CLASSES = ['rotate-0', 'rotate-45', 'rotate-90', 'rotate-135', 'rotate-180'] as const;
 const ROT_BOX = { size: 20, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500', rounded: '2xl', display: 'flex', items: 'center', justify: 'center', shadow: 'xl', transition: 'transform', duration: 400, ease: 'cubic-bezier(0.34,1.56,0.64,1)' } as const;
-const ROT_LABEL = { text: 'base', fontFamily: '--ds-font-ui', fontWeight: 'bold', color: 'white' } as const;
-const ROT_BTN = { px: 5, py: 2, rounded: 'lg', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', bg: 'violet-600', color: 'white', cursor: 'pointer', border: true, borderColor: 'violet-500', transition: 'colors', duration: 150, hover: { bg: 'violet-700' } } as const;
+const ROT_LABEL = { text: 'base', fontFamily: '--ds-font-ui', weight: 'bold', color: 'white' } as const;
+const ROT_BTN = { px: 5, py: 2, rounded: 'lg', text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', bg: 'violet-600', color: 'white', cursor: 'pointer', border: true, borderColor: 'violet-500', transition: 'colors', duration: 150, hover: { bg: 'violet-700' } } as const;
 
 export function RotateInteractive() {
     const [idx, setIdx] = useState(0);

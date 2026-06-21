@@ -179,7 +179,7 @@ sz={{ group: { card: { data: { active: { color: 'blue-600' } } } } }}
 sz={{ group: { aria: { expanded: { color: 'blue-600' } } } }}
 // → className="group-aria-expanded:text-blue-600"
 
-sz={{ group: { aria: { 'current=page': { fontWeight: 'bold' } } } }}
+sz={{ group: { aria: { 'current=page': { weight: 'bold' } } } }}
 // → className="group-aria-[current=page]:font-bold"
 
 // peer-data / peer-aria work the same way
@@ -337,7 +337,7 @@ const buttonSz = szv({
     display: "inline-flex",
     items: "center",
     rounded: "md",
-    fontWeight: "medium",
+    weight: "medium",
   },
   variants: {
     variant: {

@@ -37,10 +37,10 @@ export function FontWeightScale() {
     return (
         <Demo label="font weight scale — normal, medium, semibold, bold">
             <div sz={{ display: 'flex', flexDir: 'col', gap: 1, items: 'start' }}>
-                <span sz={{ fontWeight: 'normal', text: 'base', color: 'zinc-200' }}>Normal — The quick brown fox</span>
-                <span sz={{ fontWeight: 'medium', text: 'base', color: 'zinc-200' }}>Medium — The quick brown fox</span>
-                <span sz={{ fontWeight: 'semibold', text: 'base', color: 'zinc-200' }}>Semibold — The quick brown fox</span>
-                <span sz={{ fontWeight: 'bold', text: 'base', color: 'zinc-200' }}>Bold — The quick brown fox</span>
+                <span sz={{ weight: 'normal', text: 'base', color: 'zinc-200' }}>Normal — The quick brown fox</span>
+                <span sz={{ weight: 'medium', text: 'base', color: 'zinc-200' }}>Medium — The quick brown fox</span>
+                <span sz={{ weight: 'semibold', text: 'base', color: 'zinc-200' }}>Semibold — The quick brown fox</span>
+                <span sz={{ weight: 'bold', text: 'base', color: 'zinc-200' }}>Bold — The quick brown fox</span>
             </div>
         </Demo>
     );
@@ -48,13 +48,13 @@ export function FontWeightScale() {
 
 export function TextColorExamples() {
     // Chained: highlight style builds on textSmBase
-    const highlight = { ...textSmBase, fontWeight: 'semibold', px: 2 } as const;
+    const highlight = { ...textSmBase, weight: 'semibold', px: 2 } as const;
     return (
         <Demo label="text color examples">
             <span sz={{ ...highlight, color: 'violet-400' }}>primary</span>
             <span sz={{ ...highlight, color: 'sky-500' }}>sky-500</span>
             <span sz={{ ...highlight, color: 'slate-500' }}>slate-500</span>
-            <span sz={{ bg: 'violet-600', color: 'white', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'semibold', px: 3, py: 1, rounded: 'lg' }}>white on violet-600</span>
+            <span sz={{ bg: 'violet-600', color: 'white', text: 'sm', fontFamily: '--ds-font-ui', weight: 'semibold', px: 3, py: 1, rounded: 'lg' }}>white on violet-600</span>
         </Demo>
     );
 }
@@ -74,7 +74,7 @@ export function LetterSpacing() {
 }
 
 export function TextAlignment() {
-    const alignBox = { text: 'sm', fontWeight: 'medium', color: 'zinc-200', fontFamily: '--ds-font-ui', bg: 'indigo-950', p: 2, rounded: 'lg' } as const;
+    const alignBox = { text: 'sm', weight: 'medium', color: 'zinc-200', fontFamily: '--ds-font-ui', bg: 'indigo-950', p: 2, rounded: 'lg' } as const;
     return (
         <Demo label="text alignment — left, center, right">
             <div sz={{ display: 'flex', flexDir: 'col', gap: 1, w: 'full', maxW: 96 }}>

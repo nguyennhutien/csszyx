@@ -1,8 +1,8 @@
 import { Demo } from '../Demo.tsx';
 
-const item = { p: 2, rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white' } as const;
+const item = { p: 2, rounded: 'md', text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white' } as const;
 const gradient = { bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'violet-500', to: 'fuchsia-500' } as const;
-const label = { text: 'xs', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'zinc-500' } as const;
+const label = { text: 'xs', fontFamily: '--ds-font-ui', weight: 'medium', color: 'zinc-500' } as const;
 
 export function PaddingScale() {
     return (
@@ -28,7 +28,7 @@ export function MarginAuto() {
     return (
         <Demo label="{ mx: 'auto' } — horizontally centered box">
             <div sz={{ w: 'full', maxW: 96, h: 40, bg: 'zinc-800', rounded: 'lg' }}>
-                <div sz={{ mx: 'auto', w: 24, rounded: 'lg', py: 2, text: 'sm', fontFamily: '--ds-font-ui', fontWeight: 'medium', color: 'white', textAlign: 'center', ...gradient }}>
+                <div sz={{ mx: 'auto', w: 24, rounded: 'lg', py: 2, text: 'sm', fontFamily: '--ds-font-ui', weight: 'medium', color: 'white', textAlign: 'center', ...gradient }}>
                     mx-auto
                 </div>
             </div>
