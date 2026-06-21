@@ -397,7 +397,7 @@ describe('aria variant', () => {
 
     // --- Arbitrary aria (aria-[*] syntax) ---
     it('arbitrary: aria-[current=page]', () => {
-        expect(t({ aria: { 'current=page': { fontWeight: 'bold' } } })).toBe(
+        expect(t({ aria: { 'current=page': { weight: 'bold' } } })).toBe(
             'aria-[current=page]:font-bold',
         );
     });

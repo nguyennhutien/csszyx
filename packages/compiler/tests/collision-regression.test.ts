@@ -20,26 +20,26 @@ function t(obj: SzObject): string {
 
 describe('Collision Regression', () => {
     describe('font: catch-all removed', () => {
-        it('fontWeight: "bold" → font-bold', () => {
-            expect(t({ fontWeight: 'bold' })).toBe('font-bold');
+        it('weight: "bold" → font-bold', () => {
+            expect(t({ weight: 'bold' })).toBe('font-bold');
         });
 
         it('fontFamily: "sans" → font-sans', () => {
             expect(t({ fontFamily: 'sans' })).toBe('font-sans');
         });
 
-        it('font: should emit dev warning suggesting fontWeight or fontFamily', () => {
+        it('font: should emit dev warning suggesting weight or fontFamily', () => {
             const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
             t({ font: 'bold' } as SzObject);
             expect(consoleSpy).toHaveBeenCalledWith(
-                expect.stringContaining('fontWeight (for weight) or fontFamily (for family)'),
+                expect.stringContaining('weight (for font-weight) or fontFamily (for family)'),
             );
             consoleSpy.mockRestore();
         });
 
-        it('fontWeight and fontFamily produce different classes for same-prefix values', () => {
+        it('weight and fontFamily produce different classes for same-prefix values', () => {
             // Both map to 'font' prefix but with distinct value sets
-            const weight = t({ fontWeight: 'bold' });
+            const weight = t({ weight: 'bold' });
             const family = t({ fontFamily: 'mono' });
             expect(weight).toBe('font-bold');
             expect(family).toBe('font-mono');
@@ -111,7 +111,7 @@ describe('Collision Regression', () => {
 
     describe('no two distinct keys produce the same output', () => {
         const KEY_VALUE_PAIRS: Array<[string, string, unknown]> = [
-            ['fontWeight', 'bold', 'bold'],
+            ['weight', 'bold', 'bold'],
             ['fontFamily', 'sans', 'sans'],
             ['text', 'lg', 'lg'],
             ['color', 'white', 'white'],

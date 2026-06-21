@@ -45,24 +45,24 @@ describe('typography — font size', () => {
 });
 
 describe('typography — font weight', () => {
-    it('{ fontWeight: "bold" } → font-bold', () => {
-        expect(t({ fontWeight: 'bold' })).toBe('font-bold');
+    it('{ weight: "bold" } → font-bold', () => {
+        expect(t({ weight: 'bold' })).toBe('font-bold');
     });
 
-    it('{ fontWeight: 500 } → font-500', () => {
-        expect(t({ fontWeight: 500 })).toBe('font-500');
+    it('{ weight: 500 } → font-500', () => {
+        expect(t({ weight: 500 })).toBe('font-500');
     });
 
     it('{ weight: "semibold" } → font-semibold (alias)', () => {
         expect(t({ weight: 'semibold' })).toBe('font-semibold');
     });
 
-    it('{ fontWeight: 550 } → font-550 (arbitrary)', () => {
-        expect(t({ fontWeight: 550 })).toBe('font-550');
+    it('{ weight: 550 } → font-550 (arbitrary)', () => {
+        expect(t({ weight: 550 })).toBe('font-550');
     });
 
-    it('{ fontWeight: "--w" } → font-(weight:--w) (css variable)', () => {
-        expect(t({ fontWeight: '--w' })).toBe('font-(weight:--w)');
+    it('{ weight: "--w" } → font-(weight:--w) (css variable)', () => {
+        expect(t({ weight: '--w' })).toBe('font-(weight:--w)');
     });
 });
 
