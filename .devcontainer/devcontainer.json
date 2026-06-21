@@ -17,7 +17,7 @@
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind,consistency=cached",
-    "source=${localEnv:SSH_AUTH_SOCK},target=/tmp/host-ssh-agent.sock,type=bind"
+    "source=/run/host-services/ssh-auth.sock,target=/tmp/host-ssh-agent.sock,type=bind"
   ],
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
   "customizations": {
