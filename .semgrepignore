@@ -1,0 +1,20 @@
+# Paths semgrep should not scan. Test files deliberately contain attack payloads
+# (breakout strings, __proto__ keys, dynamic regexes) and would false-positive
+# the custom security rules; generated and vendored code is not hand-authored.
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.test.ts
+*.test.tsx
+*.test.js
+*.spec.ts
+tests/
+__tests__/
+**/fixtures/**
+**/__snapshots__/**
+*.snap
+scripts/corpus/
+*.generated.ts
+apps/docs/
