@@ -341,7 +341,7 @@ export function missingTailwindEntryMessage(ownedClassCount: number): string {
  * `node_modules` is never opted in — real dependencies must not be compiled even
  * if a dependency happens to share a name with a listed workspace package.
  *
- * @param id - bundler file id or filesystem path (posix-normalized).
+ * @param id - bundler file id or filesystem path (Windows backslashes accepted).
  * @param compilePackages - workspace package directory names to compile.
  * @returns true when the file belongs to a listed workspace package.
  */
@@ -349,10 +349,11 @@ export function isCompilePackageOptedIn(
     id: string,
     compilePackages: readonly string[],
 ): boolean {
-    if (id.includes('node_modules')) {
+    const path = id.replace(/\\/g, '/');
+    if (path.includes('node_modules')) {
         return false;
     }
-    return compilePackages.some((name) => id.includes(`/packages/${name}/`));
+    return compilePackages.some((name) => path.includes(`/packages/${name}/`));
 }
 
 /**
@@ -372,14 +373,15 @@ export function isHardIgnoredPath(
     id: string,
     compilePackages: readonly string[] = [],
 ): boolean {
-    if (id.includes('node_modules')) {
+    const path = id.replace(/\\/g, '/');
+    if (path.includes('node_modules')) {
         return true;
     }
-    if (id.includes('.next') && !id.includes('static')) {
+    if (path.includes('.next') && !path.includes('static')) {
         return true;
     }
-    if (id.includes('/packages/')) {
-        return !isCompilePackageOptedIn(id, compilePackages);
+    if (path.includes('/packages/')) {
+        return !isCompilePackageOptedIn(path, compilePackages);
     }
     return false;
 }
@@ -399,16 +401,17 @@ export function isPackagesSkippedSource(
     id: string,
     compilePackages: readonly string[] = [],
 ): boolean {
-    if (id.includes('node_modules')) {
+    const path = id.replace(/\\/g, '/');
+    if (path.includes('node_modules')) {
         return false;
     }
-    if (id.includes('.next') && !id.includes('static')) {
+    if (path.includes('.next') && !path.includes('static')) {
         return false;
     }
-    if (!id.includes('/packages/')) {
+    if (!path.includes('/packages/')) {
         return false;
     }
-    return !isCompilePackageOptedIn(id, compilePackages);
+    return !isCompilePackageOptedIn(path, compilePackages);
 }
 
 /**
