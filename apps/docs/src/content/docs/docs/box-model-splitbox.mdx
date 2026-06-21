@@ -1,0 +1,340 @@
+---
+title: Box Model Routing
+description: One flat className in, two correctly-styled elements out. splitBox partitions a className at the CSS box-model border line — margins to the frame, padding to the content — with a category-aware toolkit that never drifts from the compiler.
+---
+
+import { Aside, Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
+
+You hand a component **one** `className`. It renders **several** nested elements.
+Which styles go where?
+
+The margin belongs on the outer frame. The padding belongs on the inner content.
+The rounded corners and the shadow stay outside; the scroll and the text color go
+inside. Get it wrong and your padding double-counts, your shadow clips, your
+border lands on the wrong edge.
+
+`splitBox` answers that question for you — at the **CSS box-model border line** —
+and it does it with pure string functions: no React, no DOM, no runtime style
+engine. The class-token → box-role map is **generated from the compiler's own
+property tables**, so it can never drift out of sync with what csszyx emits.
+
+```tsx
+import { splitBox } from '@csszyx/runtime';
+
+const { outer, inner } = splitBox('m-4 px-2 md:flex');
+//    outer → "m-4"            (margin: belongs on the frame)
+//    inner → "px-2 md:flex"   (padding + layout: belong on the content)
+```
+
+## The problem: one string, two elements
+
+A flat className is fine when a component is a single `<div>`. The moment it wraps
+its children, the caller's intent splits in two:
+
+```tsx
+// The caller writes ONE string…
+<Panel className="m-4 rounded-xl shadow-lg overflow-hidden p-6" />
+
+// …but <Panel> renders TWO elements, and the styles belong to different ones:
+function Panel({ className, children }) {
+  return (
+    <div className={/* m-4 rounded-xl shadow-lg overflow-hidden ??? */}>
+      <div className={/* p-6 ??? */}>{children}</div>
+    </div>
+  );
+}
+```
+
+Put everything on the outer node and the padding pushes the rounded clip out of
+place. Put everything on the inner node and the margin collapses. A slot recipe
+or a `cva`-style variant **can't** fix this — they generate classes, they don't
+re-route a string the caller already built. Only a runtime partition can.
+
+<Aside type="tip" title="Where this shows up">
+Design-system primitives (`Card`, `Dialog`, `Field`, `ScrollArea`), polymorphic
+wrappers, and any “dumb component that forwards `className`” pattern. Anywhere the
+frame and the content are different DOM nodes.
+</Aside>
+
+## The mental model: the border line
+
+CSS already draws the line for you. Every box property acts on **one side of the
+element's border** — outward (the box's relationship to its neighbors) or inward
+(the box's relationship to its contents).
+
+```
+   outer  ─ margin · position · sizing · background · border · shadow · transform · visibility
+   ┌──────────────────────── the border line ────────────────────────┐
+   │                                                                  │
+   │   inner  ─ padding · overflow · display · gap · layout · text · interactivity
+   │   ┌──────────────────────────────────────────────────────────┐  │
+   │   │                                                          │  │
+   │   │                     your content                         │  │
+   │   │                                                          │  │
+   │   └──────────────────────────────────────────────────────────┘  │
+   │                                                                  │
+   └──────────────────────────────────────────────────────────────────┘
+```
+
+- **outer** = *border-outward*. How the box sits in the world: `m-4`, `absolute`,
+  `w-full`, `bg-white`, `rounded-xl`, `shadow-lg`, `rotate-3`, `invisible`.
+- **inner** = *border-inward*. How the box treats its contents: `p-6`,
+  `overflow-hidden`, `flex`, `gap-2`, `text-sm`, `cursor-pointer`.
+
+`splitBox` walks the className token by token, asks the generated map “which side
+of the border does this act on?”, and drops each token in the matching bucket.
+
+<Aside type="note" title="Never drifts">
+The map isn't hand-maintained. A build step reads the compiler's property tables
+and generates the box-role for **every** class prefix csszyx can emit — a test
+gate fails the build if a single emitted prefix is left unclassified. New utility
+in the compiler ⇒ it's already routed here.
+</Aside>
+
+## splitBox in 30 seconds
+
+`splitBox` is framework-agnostic — it's a string in, two strings out. Use it in
+React, Vue, Svelte, Solid, an edge function, or plain HTML.
+
+<Tabs syncKey="framework">
+<TabItem label="React">
+```tsx
+import { splitBox } from '@csszyx/runtime';
+
+function Panel({ className = '', children }) {
+  const { outer, inner } = splitBox(className);
+  return (
+    <div className={outer}>
+      <div className={inner}>{children}</div>
+    </div>
+  );
+}
+
+<Panel className="m-4 rounded-xl shadow-lg overflow-hidden p-6" />;
+// frame   → "m-4 rounded-xl shadow-lg"
+// content → "overflow-hidden p-6"
+```
+</TabItem>
+<TabItem label="Vue">
+```vue
+<script setup>
+import { computed } from 'vue';
+import { splitBox } from '@csszyx/runtime';
+const props = defineProps({ class: { type: String, default: '' } });
+const box = computed(() => splitBox(props.class));
+</script>
+
+<template>
+  <div :class="box.outer">
+    <div :class="box.inner"><slot /></div>
+  </div>
+</template>
+```
+</TabItem>
+<TabItem label="Svelte">
+```svelte
+<script>
+  import { splitBox } from '@csszyx/runtime';
+  export let className = '';
+  $: ({ outer, inner } = splitBox(className));
+</script>
+
+<div class={outer}>
+  <div class={inner}><slot /></div>
+</div>
+```
+</TabItem>
+<TabItem label="Vanilla">
+```js
+import { splitBox } from '@csszyx/runtime';
+
+const { outer, inner } = splitBox('m-4 rounded-xl overflow-hidden p-6');
+frame.className = outer;     // "m-4 rounded-xl"
+content.className = inner;   // "overflow-hidden p-6"
+```
+</TabItem>
+</Tabs>
+
+## What lands where
+
+These are the defaults. Every one of them is overridable (next section).
+
+| Bucket | Categories | Examples |
+| --- | --- | --- |
+| **outer** | margin · position · sizing · background · border · shadow · transform · visibility | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` |
+| **inner** | padding · overflow · display · layout · gap · text · paint-inside · interactivity | `p-6` `overflow-hidden` `flex` `grid` `gap-2` `text-sm` `underline` `ring-2` `cursor-pointer` |
+
+A mixed string sorts itself in one pass:
+
+```ts
+splitBox('w-full flex bg-white overflow-hidden invisible p-2 m-2');
+// outer → "w-full bg-white invisible m-2"
+// inner → "flex overflow-hidden p-2"
+```
+
+<Aside type="caution" title="Sizing is outer, padding is inner">
+A common gotcha: `w-full` / `h-12` size the box from the outside, so they go
+**outer**, next to `m-4`. Only the *inside* spacing (`p-*`) and the *inside*
+behaviors (`overflow`, `flex`) go inner. If your layout wants width on the inner
+node instead, that's a one-line override.
+</Aside>
+
+## It survives real-world classNames
+
+`splitBox` classifies the **base utility**, so the messy parts of a real
+className come along for the ride untouched:
+
+```ts
+// Variant prefixes are preserved; the base is what gets classified.
+splitBox('md:px-2 hover:shadow-lg');
+// outer → "hover:shadow-lg"   inner → "md:px-2"
+
+// Stacked + arbitrary variants never get split at the wrong colon.
+splitBox('@max-[600px]:p-4 [&:hover]:m-2 aria-[sort=asc]:flex');
+// outer → "[&:hover]:m-2"
+// inner → "@max-[600px]:p-4 aria-[sort=asc]:flex"
+
+// Negative (-) and important (!) markers are seen through.
+splitBox('-mt-4 px-2! !flex');
+// outer → "-mt-4"   inner → "px-2! !flex"
+```
+
+Three guarantees make it safe to drop into a forwarding component:
+
+<CardGrid>
+<Card title="Lossless">
+Every token lands in **exactly one** bucket. Concatenate `outer` + `inner` back
+together and you get your input — no token dropped, none duplicated.
+</Card>
+<Card title="Predictable fallback">
+A token csszyx doesn't own (a third-party or arbitrary class like
+`[mask-type:luminance]`) goes to `outer` by default. Flip it with
+`fallback: 'inner'`.
+</Card>
+<Card title="Mangle-safe">
+It reads the compiler's tables, so it understands the same class vocabulary the
+compiler emits — variants, important, negative, value-keyed display/position.
+</Card>
+</CardGrid>
+
+## Override the defaults
+
+The defaults follow the box model, but **your** design owns the final call. Pass
+`outer` / `inner` selectors to force a category, a class-prefix, or a precise
+`{category: value}` pair to the side you want. `inner` wins ties.
+
+```ts
+// Send backgrounds to the inner node for this component.
+splitBox('bg-white m-2', { inner: ['bg'] });
+// outer → "m-2"   inner → "bg-white"
+
+// Keep the clip on the frame.
+splitBox('overflow-hidden p-4', { outer: ['overflow'] });
+// outer → "overflow-hidden"   inner → "p-4"
+```
+
+A `BoxSelector` is whatever is most convenient:
+
+```ts
+'outer' | 'inner'          // a box-role
+'content'                  // alias for inner
+'overflow' | 'bg' | 'text' // a category
+'px' | 'bg'                // a class-prefix (matches px-2, bg-red-500, …)
+{ overflow: 'hidden' }     // a category + value pair (most precise)
+```
+
+## The toolkit: csszyx owns the truth, you own the rule
+
+Routing is one job. The harder one is **cross-element dependencies**: “if the
+frame clips its overflow, the scroller inside must actually scroll.” That rule is
+*yours* — it depends on your component. But to express it, you need to **read**
+the classes, and that's where projects usually hardcode a brittle list of
+Tailwind strings.
+
+csszyx owns the **truth** (a class's box-role + category); you own the **rule**.
+Four pure helpers expose the truth — no rule-DSL, no hardcoded vocabulary:
+
+```ts
+classify(token)             // → { role, category } | undefined
+has(classes, selector)      // → boolean   ("is there an overflow class?")
+pick(classes, selector)     // → string    (keep only matching tokens)
+omit(classes, selector)     // → string    (drop matching tokens)
+```
+
+```ts
+classify('px-2');          // { role: 'inner', category: 'padding' }
+classify('m-4');           // { role: 'outer', category: 'margin' }
+classify('absolute');      // { role: 'outer', category: 'position' }
+classify('totally-custom');// undefined  (not a csszyx utility)
+```
+
+They see through variants and markers too: `classify('md:px-2')` and
+`classify('px-2!')` both report `padding`.
+
+### Worked example: a scroll frame
+
+The clip stays on the frame; the scroller is **derived** from it — no string
+matching, no `className.includes('overflow-hidden')`:
+
+```tsx
+import { splitBox, has } from '@csszyx/runtime';
+
+function ScrollArea({ className = '', children }) {
+  // Keep overflow on the frame so the rounded clip is correct.
+  const { outer, inner } = splitBox(className, { outer: ['overflow'] });
+
+  // YOUR rule: a clipping frame implies a scrolling child.
+  const scroll = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto' : '';
+
+  return (
+    <div className={outer}>
+      <div className={`${inner} ${scroll}`.trim()}>{children}</div>
+    </div>
+  );
+}
+
+<ScrollArea className="overflow-hidden rounded-xl p-4 h-64" />;
+// frame   → "overflow-hidden rounded-xl h-64"
+// content → "p-4 overflow-y-auto"
+```
+
+`pick` and `omit` round out the kit when you need to move or strip a category:
+
+```ts
+pick('m-4 p-2 bg-white', 'outer');  // "m-4 bg-white"
+omit('p-2 overflow-y-auto flex', 'overflow'); // "p-2 flex"
+```
+
+## Why this is a csszyx superpower
+
+<CardGrid>
+<Card title="Zero runtime weight">
+Pure string functions. No React, no DOM, no style engine — tree-shakeable and
+safe in server components, edge runtimes, and workers.
+</Card>
+<Card title="Framework-agnostic">
+String in, strings out. The same call works in React, Vue, Svelte, Solid, and
+vanilla JS.
+</Card>
+<Card title="Generated, never drifts">
+The box-role map is generated from the compiler's property tables and gated by a
+test — it always matches what csszyx emits.
+</Card>
+<Card title="Lossless & predictable">
+Every token routed exactly once, variants preserved, unknown tokens to a
+configurable fallback. Safe in a forwarding component.
+</Card>
+</CardGrid>
+
+This is the part of a styling system most libraries leave to you and a regex:
+turning a flat string into correctly-placed styles across a real component tree.
+csszyx ships it as a primitive — because it already knows what every class does.
+
+## See also
+
+- [Runtime Helpers reference](/docs/reference/runtime/) — full signatures for
+  `splitBox`, `classify`, `has`, `pick`, and `omit`.
+- [Sz Props Basics](/docs/sz-props/) — where the classNames come from in the
+  first place.
+- [Reusing Styles](/docs/reusing-styles/) — share `sz` objects before they ever
+  become a string.

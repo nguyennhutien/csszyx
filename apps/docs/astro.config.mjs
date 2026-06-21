@@ -99,6 +99,7 @@ export default defineConfig({
                     label: 'Guides',
                     items: [
                         { label: 'Reusing Styles', slug: 'docs/reusing-styles' },
+                        { label: 'Box Model Routing', slug: 'docs/box-model-splitbox' },
                         { label: 'Component Variants (szv)', slug: 'docs/szv' },
                         { label: 'Runtime Injection', slug: 'docs/dynamic' },
                         { label: 'CDN — Vanilla HTML', slug: 'docs/cdn-html' },
