@@ -8,6 +8,11 @@
 
 import { hasSlashOpacity, isValidColorString } from './color-validation.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+
+// Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
+// i.e. this module) shares one SzDepthError type, depth limit, and key guard.
+export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 /**
  * Represents a value in the sz object.
@@ -1587,6 +1592,14 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
  * @param {Record<string, string>} [mangleMap] - Optional map for property name mangling
  * @returns {TransformResult} The transformation result
  */
+/**
+ * Current sz recursion depth. Incremented on every {@link transform} entry and
+ * decremented on exit (single-threaded, balanced by the `finally`), so a chain
+ * of nested variant objects is bounded without threading a depth argument
+ * through ~24 recursive call sites.
+ */
+let szTransformDepth = 0;
+
 export function transform(
     szProp: SzObject,
     prefix = '',
@@ -1596,6 +1609,22 @@ export function transform(
     if (!szProp || typeof szProp !== 'object') {
         return { className: '', attributes: {} };
     }
+    if (szTransformDepth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
+    szTransformDepth++;
+    try {
+        return transformImpl(szProp, prefix, mangleMap);
+    } finally {
+        szTransformDepth--;
+    }
+}
+
+function transformImpl(
+    szProp: SzObject,
+    prefix: string,
+    mangleMap?: Record<string, string>,
+): TransformResult {
 
     const classes: string[] = [];
     const attributes: Record<string, string> = {};

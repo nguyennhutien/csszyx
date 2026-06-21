@@ -7,6 +7,7 @@
  */
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 export const COLOR_STRING_KEYWORDS: Set<string> = new Set([
     'inherit',
@@ -83,12 +84,22 @@ export function hasSlashOpacity(value: string): boolean {
  * @param sz - The sz prop object to sanitize.
  * @returns A new object with invalid color strings removed.
  */
-export function stripInvalidColorStrings(sz: Record<string, unknown>): Record<string, unknown> {
+export function stripInvalidColorStrings(
+    sz: Record<string, unknown>,
+    _depth = 0,
+): Record<string, unknown> {
+    if (_depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(sz)) {
+        // Never assign a prototype-polluting key from (possibly JSON-sourced) input.
+        if (isForbiddenSzKey(key)) {
+            continue;
+        }
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
             // Recurse into nested variants
-            result[key] = stripInvalidColorStrings(value as Record<string, unknown>);
+            result[key] = stripInvalidColorStrings(value as Record<string, unknown>, _depth + 1);
             continue;
         }
         if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[key] === PropertyCategory.COLOR) {
