@@ -7,9 +7,14 @@ import { classify, has, splitBox } from '../src/split-box.js';
  * (a JSON-driven className), so their scan must stay linear. These assert a
  * pathological 100k-char token completes well under a budget — a regression
  * trap if someone swaps the linear scan for a backtracking regex.
+ *
+ * The budget is deliberately generous: it catches CATASTROPHIC backtracking
+ * (exponential — seconds to an effective hang on these inputs), not micro-perf,
+ * so it never flakes on a loaded/slow machine while a real ReDoS still trips it
+ * by orders of magnitude.
  */
 describe('className parsing stays linear (ReDoS tripwire)', () => {
-    const BUDGET_MS = 100;
+    const BUDGET_MS = 2000;
 
     it('splitBox handles a 100k-char pathological token quickly', () => {
         const evil = `${'a'.repeat(50_000)}:${'['.repeat(50_000)}`;
