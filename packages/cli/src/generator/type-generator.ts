@@ -51,7 +51,7 @@ interface PropertyMapping {
 /**
  * Mapping of sz properties to Tailwind utilities.
  */
-const PROPERTY_MAPPINGS: PropertyMapping[] = [
+export const PROPERTY_MAPPINGS: PropertyMapping[] = [
     // Layout
     {
         prop: 'display',
@@ -108,12 +108,6 @@ const PROPERTY_MAPPINGS: PropertyMapping[] = [
         prefix: 'gap',
         valueType: 'spacing',
         description: 'Gap between flex/grid items',
-    },
-    {
-        prop: 'grid',
-        prefix: 'grid',
-        valueType: 'grid',
-        description: 'Grid shorthand',
     },
     {
         prop: 'gridCols',
@@ -289,7 +283,7 @@ const PROPERTY_MAPPINGS: PropertyMapping[] = [
         description: 'Background color',
     },
     {
-        prop: 'text',
+        prop: 'color',
         prefix: 'text',
         valueType: 'colors',
         stateful: true,
@@ -324,7 +318,7 @@ const PROPERTY_MAPPINGS: PropertyMapping[] = [
 
     // Typography
     {
-        prop: 'font',
+        prop: 'weight',
         prefix: 'font',
         valueType: 'fontWeight',
         description: 'Font weight',
@@ -336,7 +330,7 @@ const PROPERTY_MAPPINGS: PropertyMapping[] = [
         description: 'Font family',
     },
     {
-        prop: 'fontSize',
+        prop: 'text',
         prefix: 'text',
         valueType: 'fontSize',
         description: 'Font size',
@@ -366,12 +360,6 @@ const PROPERTY_MAPPINGS: PropertyMapping[] = [
         prefix: 'rounded',
         valueType: 'borderRadius',
         description: 'Border radius',
-    },
-    {
-        prop: 'borderW',
-        prefix: 'border',
-        valueType: 'borderWidth',
-        description: 'Border width',
     },
 
     // Effects
