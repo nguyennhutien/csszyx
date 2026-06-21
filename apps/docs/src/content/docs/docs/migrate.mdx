@@ -29,6 +29,21 @@ rewrites old code to the new form automatically, and dev-mode warnings point at
 the exact fix. Both changes enforce the same principle: **one canonical key per
 CSS property, no aliases.**
 
+:::tip[Already on `sz`? Upgrade the keys only]
+If your project is already written with `sz` props and you do **not** want a
+Tailwind `className` migration, run `--keys-only`. It rewrites legacy sz-prop
+keys to their canonical form (`fontWeight`→`weight`, `padding`→`p`,
+`{ flex: true }`→`{ display: 'flex' }`) and leaves every `className` 100%
+untouched:
+
+```bash
+npx @csszyx/cli migrate --keys-only --dry-run   # preview
+npx @csszyx/cli migrate --keys-only             # apply
+```
+
+This is a transitional helper for the 0.9.10 → 0.10.0 upgrade.
+:::
+
 ### 1. Boolean value-sugar was removed
 
 Keys that were a boolean alias for a value of a single, mutually-exclusive CSS
