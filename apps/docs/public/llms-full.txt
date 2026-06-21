@@ -3540,7 +3540,8 @@ function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
 csszyx is safe-by-default for AUTHORED sz (compiled to class strings at build time). When sz comes from UNTRUSTED input (JSON-driven UI, CMS, user data), it controls keys and values that reach the runtime CSS pipeline — purify it.
 
 ```tsx
-import { dynamic, purifySz, stripSzProps } from '@csszyx/dynamic';
+import { dynamic, purifySz } from '@csszyx/dynamic';
+// stripSzProps is exported from '@csszyx/runtime'
 
 // Untrusted sz → dynamic() runtime CSS: purify first (allowlist + value sanitize + proto guard)
 const className = dynamic(purifySz(untrustedSzFromJson));
