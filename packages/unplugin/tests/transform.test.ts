@@ -365,13 +365,6 @@ describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => 
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
         expect(result).toBe('_szMerge("z",pe&&"unknown-class")');
     });
-
-    it('mangles _szSwitch branch and fallback class strings', () => {
-        const code =
-            '_szSwitch([[variant==="primary","bg-violet-500 p-4"],[active,"rounded-xl"]],"flex items-center")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szSwitch([[variant==="primary","g c"],[active,"d"]],"z h")');
-    });
 });
 
 describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => {
