@@ -79,6 +79,36 @@ describe('unknown sz keys fall through to a kebab class', () => {
     });
 });
 
+describe('opacity sub-property compiles to a Tailwind modifier', () => {
+    // A static { color, op } resolves to the `bg-<color>/<op>` modifier class
+    // (the form Tailwind generates color-mix for), not a dead `bg:op-N`.
+    it.each([
+        [{ bg: { color: 'black', op: 30 } }, 'bg-black/30'],
+        [{ bg: { color: 'red-500', op: 50 } }, 'bg-red-500/50'],
+    ] as const)('%o → %s', (sz, expected) => {
+        expect(transform(sz).className).toBe(expected);
+    });
+});
+
+describe('a ternary on a value sub-property does not emit a dead class', () => {
+    // `op: cond ? 30 : 100` cannot be statically resolved, so the transform
+    // routes the whole object to the runtime fallback (which dev-throws and is
+    // build-flagged) instead of silently emitting a non-utility `bg:op-30` class.
+    const source =
+        'const X = ({ c }) => <div sz={{ bg: { color: "black", op: c ? 30 : 100 } }} />;';
+
+    it('never emits the dead bg:op-N modifier', () => {
+        const { code } = transformOxc(source, 'App.tsx');
+        expect(code).not.toContain('bg:op-');
+    });
+
+    it('falls back to the runtime helper with a build diagnostic', () => {
+        const { code, diagnostics } = transformOxc(source, 'App.tsx');
+        expect(code).toContain('_sz(');
+        expect(diagnostics.some((d) => d.includes('sz fallback'))).toBe(true);
+    });
+});
+
 describe('React 17 peer support', () => {
     it('the opt-in runtime packages accept React 17', () => {
         expect(manifest('dynamic').peerDependencies?.react).toBe('>=17.0.0');
