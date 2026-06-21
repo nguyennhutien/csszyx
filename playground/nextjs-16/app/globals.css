@@ -1,4 +1,8 @@
-@import "tailwindcss";
+/* Pin Tailwind's automatic content detection to this playground. Under
+   Turbopack + Tailwind 4.3.1 the auto-base resolves up to the monorepo root and
+   scans docs/snippets (which carry `url(...)`/`{value}` examples as text),
+   generating broken `url()` classes that the Next css-loader cannot resolve. */
+@import "tailwindcss" source("..");
 @source "../csszyx-classes.html";
 @source "../.csszyx/next-loader-classes.html";
 
