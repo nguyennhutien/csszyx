@@ -34,6 +34,7 @@ export {
     isHydrating,
     isHydrationAborted,
     isSSREnvironment,
+    isValidMangleMap,
     loadMangleMapFromDOM,
     type MangleMap,
     type SSRContext,

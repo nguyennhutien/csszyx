@@ -124,6 +124,37 @@ export function isCSRRecoveryAllowed(): boolean {
  * }
  * ```
  */
+/** Upper bound on mangle-map entries — guards against a malformed/hostile map. */
+const MAX_MANGLE_MAP_ENTRIES = 100_000;
+
+/**
+ * Validate a parsed mangle map before it is used to rewrite class names. The map
+ * is read from the DOM (attacker-writable if the served HTML is compromised), so
+ * it must be a plain object of string→string with no prototype-polluting keys.
+ * A malformed map is rejected rather than applied.
+ *
+ * @param value - the `JSON.parse`d candidate.
+ * @returns true when `value` is a safe `MangleMap`.
+ */
+export function isValidMangleMap(value: unknown): value is MangleMap {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return false;
+    }
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length > MAX_MANGLE_MAP_ENTRIES) {
+        return false;
+    }
+    for (const [key, val] of entries) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+            return false;
+        }
+        if (typeof key !== 'string' || typeof val !== 'string') {
+            return false;
+        }
+    }
+    return true;
+}
+
 export function loadMangleMapFromDOM(): MangleMap | null {
     if (typeof document === 'undefined') {
         return null;
@@ -139,7 +170,14 @@ export function loadMangleMapFromDOM(): MangleMap | null {
 
     try {
         const content = scriptElement.textContent || '';
-        return JSON.parse(content) as MangleMap;
+        const parsed: unknown = JSON.parse(content);
+        if (!isValidMangleMap(parsed)) {
+            console.error(
+                '[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.',
+            );
+            return null;
+        }
+        return parsed;
     } catch (error) {
         console.error('Failed to parse mangle map:', error);
         return null;
@@ -174,20 +212,22 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
 }
 
 /**
- * Verifies mangle map integrity using Rust core verification.
+ * Verifies mangle map integrity using the Rust core checksum verifier.
  *
- * Loads the mangle map from DOM and verifies its checksum using the
- * Rust core's `verify_mangle_checksum()` function for cryptographic-grade verification.
+ * Loads the mangle map from the DOM, validates its shape, and (when the WASM
+ * core is present) verifies its checksum via `verify_mangle_checksum()`.
  *
- * @returns {boolean} True if mangle map integrity is verified
+ * IMPORTANT — this is tamper-DETECTION, not authentication. The checksum is an
+ * unsigned SHA-256 truncation: it catches accidental server/client drift, but an
+ * attacker who can rewrite the served HTML can recompute it after editing the
+ * map. Treat it as an integrity (corruption) check, not a trust boundary.
  *
- * @example
- * ```typescript
- * if (!verifyMangleMapIntegrity()) {
- *     console.error('[csszyx] Mangle map integrity check failed');
- *     abortHydration();
- * }
- * ```
+ * When the WASM verifier is absent (the common no-core deployment), the checksum
+ * cannot be recomputed in this sync path, so verification degrades to a
+ * schema-validated load and emits a dev warning rather than failing closed
+ * (failing closed here would break every app not shipping the WASM core).
+ *
+ * @returns {boolean} True if the map is well-formed and (if verifiable) matches.
  */
 export function verifyMangleMapIntegrity(): boolean {
     if (typeof document === 'undefined') {
@@ -212,7 +252,14 @@ export function verifyMangleMapIntegrity(): boolean {
     }
 
     try {
-        const mangleMap = JSON.parse(scriptElement.textContent || '{}') as MangleMap;
+        const parsed: unknown = JSON.parse(scriptElement.textContent || '{}');
+        if (!isValidMangleMap(parsed)) {
+            console.error(
+                '[csszyx] Mangle map failed schema validation; treating integrity as invalid.',
+            );
+            return false;
+        }
+        const mangleMap = parsed;
 
         // Verify using Rust core if available
         if (typeof window !== 'undefined' && 'verify_mangle_checksum' in window) {
@@ -221,9 +268,15 @@ export function verifyMangleMapIntegrity(): boolean {
             return isValid;
         }
 
-        // Fallback: simple string comparison (should not happen in prod)
-        console.warn('[csszyx] Rust core not available, using fallback verification');
-        return true; // Gracefully degrade
+        // No WASM verifier: the checksum can't be recomputed in this sync path.
+        // The map is schema-valid; accept it but warn that integrity is unverified.
+        if (process.env.NODE_ENV !== 'production') {
+            console.warn(
+                '[csszyx] WASM core not loaded — mangle map checksum is unverified ' +
+                    '(schema-validated only). This is detection, not authentication.',
+            );
+        }
+        return true;
     } catch (error) {
         console.error('[csszyx] Failed to verify mangle map:', error);
         return false;
