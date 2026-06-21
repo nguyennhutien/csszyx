@@ -2,14 +2,9 @@
 
 ## [0.10.0](https://github.com/nguyennhutien/csszyx/compare/v0.9.10...v0.10.0) (2026-06-21)
 
-
-### ⚠ BREAKING CHANGES
-
-* `fontWeight`→`weight`, `fontSize`→`text`, boolean value-sugar (`flex:true`/`absolute:true`/…)→value-keyed form, `_szIf`/`_szSwitch` removed (use plain JS), and the `sz` prop type is now closed (unknown keys are tsc errors).
-
 ### Features
 
-* single-way sz keys, splitBox nested routing, and security + DX hardening ([#66](https://github.com/nguyennhutien/csszyx/issues/66)) ([5b7f4eb](https://github.com/nguyennhutien/csszyx/commit/5b7f4eb3158f6a99a582596dabe47c559b591037))
+* single-way sz keys, splitBox nested routing, and security + DX hardening ([#66](https://github.com/nguyennhutien/csszyx/issues/66))
 
 ## [0.9.10](https://github.com/nguyennhutien/csszyx/compare/v0.9.9...v0.9.10) (2026-06-13)
 
