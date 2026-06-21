@@ -286,18 +286,18 @@ describe('class-parser', () => {
         });
 
         it('font weight', () => {
-            expect(parseClass('font-bold')).toEqual({ prop: 'fontWeight', value: 'bold' });
-            expect(parseClass('font-semibold')).toEqual({ prop: 'fontWeight', value: 'semibold' });
-            expect(parseClass('font-thin')).toEqual({ prop: 'fontWeight', value: 'thin' });
-            expect(parseClass('font-normal')).toEqual({ prop: 'fontWeight', value: 'normal' });
-            expect(parseClass('font-medium')).toEqual({ prop: 'fontWeight', value: 'medium' });
+            expect(parseClass('font-bold')).toEqual({ prop: 'weight', value: 'bold' });
+            expect(parseClass('font-semibold')).toEqual({ prop: 'weight', value: 'semibold' });
+            expect(parseClass('font-thin')).toEqual({ prop: 'weight', value: 'thin' });
+            expect(parseClass('font-normal')).toEqual({ prop: 'weight', value: 'normal' });
+            expect(parseClass('font-medium')).toEqual({ prop: 'weight', value: 'medium' });
         });
 
         it('font weight numeric', () => {
-            expect(parseClass('font-100')).toEqual({ prop: 'fontWeight', value: 100 });
-            expect(parseClass('font-400')).toEqual({ prop: 'fontWeight', value: 400 });
-            expect(parseClass('font-700')).toEqual({ prop: 'fontWeight', value: 700 });
-            expect(parseClass('font-900')).toEqual({ prop: 'fontWeight', value: 900 });
+            expect(parseClass('font-100')).toEqual({ prop: 'weight', value: 100 });
+            expect(parseClass('font-400')).toEqual({ prop: 'weight', value: 400 });
+            expect(parseClass('font-700')).toEqual({ prop: 'weight', value: 700 });
+            expect(parseClass('font-900')).toEqual({ prop: 'weight', value: 900 });
         });
 
         it('font family', () => {

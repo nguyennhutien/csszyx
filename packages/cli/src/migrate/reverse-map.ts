@@ -146,7 +146,7 @@ export const REVERSE_PROPERTY_MAP: Record<string, string> = {
 
     // Typography (ambiguous — text-*, font-* disambiguated)
     text: 'color', // default for text- prefix
-    font: 'fontWeight', // default for font- prefix
+    font: 'weight', // default for font- prefix
     decoration: 'decoration', // ambiguous
     'underline-offset': 'underlineOffset',
     indent: 'indent',

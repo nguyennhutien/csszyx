@@ -515,10 +515,10 @@ function disambiguateText(value: string): ParsedClass | null {
  */
 function disambiguateFont(value: string): ParsedClass | null {
     if (FONT_WEIGHT_KEYWORDS.has(value)) {
-        return { prop: 'fontWeight', value };
+        return { prop: 'weight', value };
     }
     if (/^\d{3}$/.test(value)) {
-        return { prop: 'fontWeight', value: parseInt(value, 10) };
+        return { prop: 'weight', value: parseInt(value, 10) };
     }
     if (FONT_FAMILY_KEYWORDS.has(value)) {
         return { prop: 'fontFamily', value };

@@ -67,7 +67,7 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('multiple custom tokens all object-routed', () => {
             const customMap = {
-                'btn-base': { px: 4, py: 2, rounded: 'md', fontWeight: 'medium' },
+                'btn-base': { px: 4, py: 2, rounded: 'md', weight: 'medium' },
                 'btn-primary': { bg: 'blue-500', color: 'white', hover: { bg: 'blue-600' } },
             };
             const { szObject, unrecognized } = classNameToSzObject(

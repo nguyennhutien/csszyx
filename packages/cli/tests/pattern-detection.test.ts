@@ -201,7 +201,7 @@ function MyCard({ className }) {
         expect(result.code).toContain('<Button className="btn-base"');
         // div and span transformed
         expect(result.code).toContain("display: 'flex'");
-        expect(result.code).toContain("fontWeight: 'medium'");
+        expect(result.code).toContain("weight: 'medium'");
     });
 });
 
@@ -284,7 +284,7 @@ describe('real-world SA scenarios', () => {
         expect(result.code).toContain('ds-elevation-2');
         // Standard TW classes go to sz
         expect(result.code).toContain("display: 'flex'");
-        expect(result.code).toContain("fontWeight: 'semibold'");
+        expect(result.code).toContain("weight: 'semibold'");
     });
 
     it('design system with customMap: tokens resolved', () => {
