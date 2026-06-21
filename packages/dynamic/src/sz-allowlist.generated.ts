@@ -116,7 +116,6 @@ export const SZ_KEY_CATEGORY: ReadonlyMap<string, string> = new Map([
     ["fontSmoothing", "PASSTHROUGH"],
     ["fontStretch", "PASSTHROUGH"],
     ["fontStyle", "PASSTHROUGH"],
-    ["fontWeight", "PASSTHROUGH"],
     ["forcedColorAdjust", "PASSTHROUGH"],
     ["from", "COLOR"],
     ["gap", "SPACING"],

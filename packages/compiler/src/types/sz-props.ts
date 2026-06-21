@@ -916,7 +916,7 @@ export interface TypographyProps {
     fontStyle?: 'italic' | 'normal';
 
     /** @see https://tailwindcss.com/docs/font-weight */
-    fontWeight?:
+    weight?:
         | 'thin'
         | 'extralight'
         | 'light'

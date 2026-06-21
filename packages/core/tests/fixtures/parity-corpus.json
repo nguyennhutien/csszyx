@@ -12982,82 +12982,6 @@
     "oxc": "normal-nums"
   },
   {
-    "sz": "{\"fontWeight\":100}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontWeight",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "number",
-            "value": 100
-          }
-        }
-      ]
-    },
-    "oxc": "font-100"
-  },
-  {
-    "sz": "{\"fontWeight\":200}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontWeight",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "number",
-            "value": 200
-          }
-        }
-      ]
-    },
-    "oxc": "font-200"
-  },
-  {
-    "sz": "{\"fontWeight\":\"extralight\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontWeight",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "extralight"
-          }
-        }
-      ]
-    },
-    "oxc": "font-extralight"
-  },
-  {
-    "sz": "{\"fontWeight\":\"thin\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "fontWeight",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "thin"
-          }
-        }
-      ]
-    },
-    "oxc": "font-thin"
-  },
-  {
     "sz": "{\"forcedColorAdjust\":\"auto\"}",
     "ir": {
       "properties": [
@@ -26876,6 +26800,44 @@
     "oxc": "w-svw"
   },
   {
+    "sz": "{\"weight\":100}",
+    "ir": {
+      "properties": [
+        {
+          "key": "weight",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 100
+          }
+        }
+      ]
+    },
+    "oxc": "font-100"
+  },
+  {
+    "sz": "{\"weight\":200}",
+    "ir": {
+      "properties": [
+        {
+          "key": "weight",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 200
+          }
+        }
+      ]
+    },
+    "oxc": "font-200"
+  },
+  {
     "sz": "{\"weight\":\"bold\"}",
     "ir": {
       "properties": [
@@ -26893,6 +26855,44 @@
       ]
     },
     "oxc": "font-bold"
+  },
+  {
+    "sz": "{\"weight\":\"extralight\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "weight",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "extralight"
+          }
+        }
+      ]
+    },
+    "oxc": "font-extralight"
+  },
+  {
+    "sz": "{\"weight\":\"thin\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "weight",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "thin"
+          }
+        }
+      ]
+    },
+    "oxc": "font-thin"
   },
   {
     "sz": "{\"whitespace\":\"normal\"}",

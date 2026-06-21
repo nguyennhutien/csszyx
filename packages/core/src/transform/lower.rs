@@ -848,7 +848,7 @@ pub(crate) fn format_font_stretch(value: &str) -> String {
 fn css_var_type_hint(key: &str) -> Option<&'static str> {
     match key {
         "fontFamily" => Some("family-name"),
-        "fontWeight" => Some("weight"),
+        "weight" => Some("weight"),
         "text" => Some("length"),
         _ => None,
     }

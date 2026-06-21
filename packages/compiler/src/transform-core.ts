@@ -206,7 +206,6 @@ export const PROPERTY_MAP: Record<string, string> = {
     // Typography
     color: 'text',
     text: 'text',
-    fontWeight: 'font',
     weight: 'font',
     fontFamily: 'font',
     fontStretch: 'font-stretch',
@@ -429,7 +428,7 @@ export const PROPERTY_MAP: Record<string, string> = {
 // ============================================================================
 const CSS_VAR_TYPE_HINTS: Record<string, string> = {
     fontFamily: 'family-name',
-    fontWeight: 'weight',
+    weight: 'weight',
     text: 'length',
 };
 
@@ -483,8 +482,9 @@ export const SUGGESTION_MAP: Record<string, string> = {
     objectPosition: 'objectPos',
     zIndex: 'z',
     // Typography
-    font: 'fontWeight (for weight) or fontFamily (for family)',
-    weight: 'fontWeight',
+    font: 'weight (for font-weight) or fontFamily (for family)',
+    fontWeight: 'weight',
+    fontSize: 'text',
     textDecoration: 'decoration',
     textDecorationColor: 'decorationColor',
     textDecorationStyle: 'decorationStyle',
@@ -496,7 +496,6 @@ export const SUGGESTION_MAP: Record<string, string> = {
     verticalAlign: 'align',
     wordBreak: 'break',
     overflowWrap: 'wrap',
-    textWrap: 'textWrap',
     listStyleType: 'list',
     listStylePosition: 'listPos',
     listStyleImage: 'listImg',

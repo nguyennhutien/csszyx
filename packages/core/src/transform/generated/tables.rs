@@ -138,7 +138,6 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "visibility" => Some("visibility"),
         "color" => Some("text"),
         "text" => Some("text"),
-        "fontWeight" => Some("font"),
         "weight" => Some("font"),
         "fontFamily" => Some("font"),
         "fontStretch" => Some("font-stretch"),

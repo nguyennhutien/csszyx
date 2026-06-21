@@ -87,7 +87,7 @@ const BOX_ROLE_RULES = [
     { role: 'inner', category: 'overscroll', keys: ['overscroll', 'overscrollX', 'overscrollY'] },
     // display → INNER (contested): governs how the element's children flow.
     { role: 'inner', category: 'display', keys: ['display'] },
-    { role: 'inner', category: 'text', keys: ['color', 'text', 'fontWeight', 'weight', 'fontFamily', 'fontStretch', 'fontStyle', 'fontSmoothing', 'fontFeatures', 'textAlign', 'decoration', 'decorationColor', 'decorationStyle', 'decorationThickness', 'underlineOffset', 'textTransform', 'textOverflow', 'textWrap', 'wrap', 'indent', 'align', 'whitespace', 'break', 'hyphens', 'content', 'leading', 'tracking', 'lineClamp', 'tabSize', 'textShadow', 'textShadowColor'] },
+    { role: 'inner', category: 'text', keys: ['color', 'text', 'weight', 'fontFamily', 'fontStretch', 'fontStyle', 'fontSmoothing', 'fontFeatures', 'textAlign', 'decoration', 'decorationColor', 'decorationStyle', 'decorationThickness', 'underlineOffset', 'textTransform', 'textOverflow', 'textWrap', 'wrap', 'indent', 'align', 'whitespace', 'break', 'hyphens', 'content', 'leading', 'tracking', 'lineClamp', 'tabSize', 'textShadow', 'textShadowColor'] },
     { role: 'inner', category: 'list', keys: ['list', 'listPos', 'listImg'] },
     { role: 'inner', category: 'flex', keys: ['basis', 'flex', 'flexDir', 'flexWrap', 'grow', 'shrink', 'order'] },
     { role: 'inner', category: 'alignment', keys: ['items', 'self', 'justify', 'justifyItems', 'justifySelf', 'placeContent', 'placeItems', 'placeSelf'] },
