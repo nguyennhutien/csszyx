@@ -346,9 +346,10 @@ jobs:
       # Transient registry conflicts are retried and the job only succeeds
       # after every public workspace version is visible on npm.
       #
-      # --provenance is omitted for now because OIDC attestation fails with
-      # E404 on the first publish of a new scoped package. Re-enable it after
-      # every public workspace package has been published at least once.
+      # --provenance is enabled (publish-workspace.mjs): every public workspace
+      # package has been published at least once, so the first-publish E404 that
+      # blocked OIDC attestation no longer applies. Each release now ships a
+      # signed provenance attestation (id-token: write + NPM_CONFIG_PROVENANCE).
       - name: Publish to npm
         run: node .github/scripts/publish-workspace.mjs
         env:
