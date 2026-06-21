@@ -480,6 +480,20 @@ const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
 function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
 ```
 
+## Security — untrusted sz
+
+csszyx is safe-by-default for AUTHORED sz (compiled to class strings at build time). When sz comes from UNTRUSTED input (JSON-driven UI, CMS, user data), it controls keys and values that reach the runtime CSS pipeline — purify it.
+
+```tsx
+import { dynamic, purifySz, stripSzProps } from '@csszyx/dynamic';
+
+// Untrusted sz → dynamic() runtime CSS: purify first (allowlist + value sanitize + proto guard)
+const className = dynamic(purifySz(untrustedSzFromJson));
+// strict (default) also strips url()/image-set()/@import/expression(); { strict:false } for trusted input
+```
+
+Guarantees on the runtime path: CSS is injected via atomic `insertRule` (a `}`/`</style>` rule-breakout throws, no 2nd rule/markup); declaration value + arbitrary property name are validated before injection; recursion depth is capped (`SzDepthError`). `dynamic()`/`_sz`/`_szMerge` return React-escaped-only strings — safe in `className={}`, NEVER interpolate into raw HTML. `stripSzProps(props)` keeps a raw `sz` object off the DOM. SSR mangle map is schema-validated (`isValidMangleMap`); `verifyMangleChecksumAsync` gives real integrity verification without the WASM core (tamper-detection, not authentication). The constructable-`adoptedStyleSheets` injection path is CSP-clean (no inline style text). Posture: treat all sz/DOM/config as untrusted by default.
+
 ## SSR Hydration
 
 CSSzyx validates that server and client use the same mangle map:

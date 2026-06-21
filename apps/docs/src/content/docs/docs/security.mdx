@@ -1,0 +1,92 @@
+---
+title: Security
+description: Treating sz as untrusted input — purifySz for JSON/user-driven styles, the dynamic() CSS sink, React-escaped strings, and CSP guidance.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+csszyx is **safe by default for authored sz** — the styles you write in source are
+compiled to plain class strings at build time. The care is needed when sz comes
+from **untrusted input** (a JSON-driven UI, a CMS schema, end-user data), because
+`sz` lets a caller control both the keys and the values that reach the runtime CSS
+pipeline.
+
+<Aside type="caution" title="No absolute zero">
+Security is defense-in-depth, not a guarantee. csszyx reduces the realistic
+exploitability of untrusted sz to near-zero and documents the residual — it does
+not claim "zero risk." Arbitrary CSS values are, by design, a CSS sink.
+</Aside>
+
+## Zero-trust posture
+
+Treat **all** sz objects, DOM-embedded data, and config as untrusted by default.
+The library already embodies this — `purifySz`, the dynamic CSS-value sanitizer,
+`isValidMangleMap`, and the recursion-depth limit all assume hostile input.
+
+## `dynamic()` values are an untrusted CSS sink
+
+`dynamic()` / `useSz` generate CSS at runtime. When their input may be
+attacker-controlled, pass it through **`purifySz`** first:
+
+```tsx
+import { dynamic, purifySz } from '@csszyx/dynamic';
+
+// JSON-driven styles from an API / CMS / user
+const className = dynamic(purifySz(untrustedSzFromJson));
+```
+
+`purifySz` is allowlist-based: it drops keys the compiler doesn't recognize,
+rejects values that could inject a second CSS declaration, blocks
+prototype-polluting keys (`__proto__`/`constructor`/`prototype`), and bounds
+nesting depth. In its default **strict** mode it also strips `url()` /
+`image-set()` / `@import` / `expression()` (legitimate for authored styles, but
+exfiltration/legacy vectors for untrusted input). Pass `{ strict: false }` only
+for input you trust.
+
+Built-in protections on this path (active regardless of `purifySz`):
+
+- CSS is injected via `CSSStyleSheet.insertRule`, which is atomic — a `}`/`</style>`
+  rule breakout throws and is ignored (no second rule, no markup injection).
+- The declaration value + arbitrary property name are validated before injection
+  (no `;`/`{`/`}`/`<`/`>`/control chars escaping the declaration).
+- sz recursion depth is capped (`SzDepthError`) so deeply nested input can't
+  overflow the stack at render time.
+
+## Returned strings are React-escaped only
+
+`dynamic()`, `_sz`, and `_szMerge` return a **plain class string**. In React
+(`className={...}`) that string is attribute-escaped and safe. Do **not**
+interpolate it into raw HTML:
+
+```tsx
+// ✅ safe — React escapes the attribute
+<div className={dynamic(sz)} />
+
+// ❌ unsafe — raw HTML string interpolation bypasses escaping
+const html = `<div class="${dynamic(sz)}">`; // never do this with untrusted sz
+```
+
+Use `stripSzProps` when forwarding `...rest` so a raw `sz` object never reaches
+the DOM as `sz="[object Object]"`.
+
+## SSR mangle-map integrity
+
+The mangle map embedded in SSR HTML is validated (`isValidMangleMap`: plain
+string→string, no prototype keys, bounded size) before use. For real integrity
+verification without the WASM core, `verifyMangleChecksumAsync` recomputes the
+checksum via the Web Crypto API.
+
+<Aside type="note">
+The checksum is **tamper-detection**, not authentication — it is unsigned, so it
+catches accidental server/client drift, not an attacker who can rewrite the
+served HTML and recompute it.
+</Aside>
+
+## Content Security Policy (CSP)
+
+`@csszyx/dynamic`'s primary path uses a constructable `CSSStyleSheet` +
+`adoptedStyleSheets` — no inline style text, so it is **CSP-clean** and needs no
+`'unsafe-inline'`. The fallback creates an empty `<style>` element and adds rules
+via the CSSOM (still no inline content). Under a strict CSP that blocks
+`<style>` element creation, ensure `adoptedStyleSheets` is available (the primary
+path), or supply a nonce for the fallback element.
