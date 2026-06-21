@@ -148,6 +148,85 @@ describe('toolkit: has / pick / omit', () => {
     });
 });
 
+describe('splitBox — edge cases', () => {
+    it('returns empty buckets for empty / whitespace-only input', () => {
+        expect(splitBox('')).toEqual({ outer: '', inner: '' });
+        expect(splitBox('   \t  ')).toEqual({ outer: '', inner: '' });
+    });
+
+    it('collapses leading/trailing/repeated spaces and tabs', () => {
+        expect(splitBox('  \t m-4\t\tpx-2  ')).toEqual({
+            outer: 'm-4',
+            inner: 'px-2',
+        });
+    });
+
+    it('preserves duplicate tokens (partition, not dedup)', () => {
+        expect(splitBox('m-4 m-4 px-2')).toEqual({
+            outer: 'm-4 m-4',
+            inner: 'px-2',
+        });
+    });
+
+    it('routes unknown arbitrary-property tokens to the fallback', () => {
+        // [mask-type:luminance] / [--my-var:1] are not csszyx-owned utilities.
+        expect(splitBox('[mask-type:luminance] [--my-var:1] p-2')).toEqual({
+            outer: '[mask-type:luminance] [--my-var:1]',
+            inner: 'p-2',
+        });
+    });
+
+    it('strips combined important + negative + variant markers', () => {
+        expect(splitBox('!-mt-4 md:-mt-4!')).toEqual({
+            outer: '!-mt-4 md:-mt-4!',
+            inner: '',
+        });
+    });
+
+    it('classifies the base under stacked variants', () => {
+        expect(splitBox('dark:md:hover:px-2')).toEqual({
+            outer: '',
+            inner: 'dark:md:hover:px-2',
+        });
+    });
+
+    it('handles modifier variants with bracketed values', () => {
+        const r = splitBox('data-[state=open]:px-2 group-hover:bg-red-500 [&>*]:m-1');
+        expect(r.inner).toBe('data-[state=open]:px-2');
+        expect(r.outer.split(' ').sort()).toEqual(
+            ['group-hover:bg-red-500', '[&>*]:m-1'].sort(),
+        );
+    });
+
+    it('routes value-keyed display tokens to inner', () => {
+        expect(splitBox('hidden table contents flex')).toEqual({
+            outer: '',
+            inner: 'hidden table contents flex',
+        });
+    });
+
+    it('lets inner win when a token matches both overrides', () => {
+        expect(splitBox('bg-white', { inner: ['bg'], outer: ['bg'] })).toEqual({
+            outer: '',
+            inner: 'bg-white',
+        });
+    });
+});
+
+describe('toolkit — variant- and marker-aware', () => {
+    it('has/pick/omit see through a variant prefix', () => {
+        expect(has('md:overflow-hidden', { overflow: 'hidden' })).toBe(true);
+        expect(pick('md:px-2 m-4', 'padding')).toBe('md:px-2');
+        expect(omit('md:px-2 m-4', 'padding')).toBe('m-4');
+    });
+
+    it('classify strips negative / important / variant markers', () => {
+        expect(classify('-mt-4')).toEqual({ role: 'outer', category: 'margin' });
+        expect(classify('px-2!')).toEqual({ role: 'inner', category: 'padding' });
+        expect(classify('md:px-2')).toEqual({ role: 'inner', category: 'padding' });
+    });
+});
+
 describe('anti-drift coverage gate', () => {
     it('classifies every PROPERTY_MAP emitted prefix', () => {
         const prefixes = new Set(BOX_ROLE_PREFIXES.map(([p]) => p));

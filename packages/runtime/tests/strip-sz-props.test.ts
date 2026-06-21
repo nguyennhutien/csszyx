@@ -56,4 +56,39 @@ describe('stripSzProps', () => {
         }
         expect(warn).not.toHaveBeenCalled();
     });
+
+    it('strips a null/undefined/false sz without warning', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        for (const sz of [null, undefined, false] as const) {
+            const out = stripSzProps({ sz, id: 'x' });
+            expect(out).toEqual({ id: 'x' });
+            expect('sz' in out).toBe(false);
+        }
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('warns on a raw sz array (also an uncompiled leak)', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const out = stripSzProps({ sz: [{ p: '4' }], id: 'x' });
+        expect(out).toEqual({ id: 'x' });
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not mutate a frozen props object', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const frozen = Object.freeze({ sz: { p: '4' }, id: 'x' });
+        expect(() => stripSzProps(frozen)).not.toThrow();
+        expect(stripSzProps(frozen)).toEqual({ id: 'x' });
+        expect(frozen).toEqual({ sz: { p: '4' }, id: 'x' });
+        expect(warn).toHaveBeenCalled();
+    });
+
+    it('returns non-object inputs unchanged', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        // @ts-expect-error — exercising a defensive runtime path
+        expect(stripSzProps(null)).toBe(null);
+        // @ts-expect-error — exercising a defensive runtime path
+        expect(stripSzProps('nope')).toBe('nope');
+        expect(warn).not.toHaveBeenCalled();
+    });
 });
