@@ -12,10 +12,10 @@ export function ClientCounter() {
     const isNegative = count < 0;
 
     const counterSz = isPositive
-        ? { text: '6xl', fontWeight: 'bold', transition: 'colors', color: 'green-400' }
+        ? { text: '6xl', weight: 'bold', transition: 'colors', color: 'green-400' }
         : isNegative
-          ? { text: '6xl', fontWeight: 'bold', transition: 'colors', color: 'red-400' }
-          : { text: '6xl', fontWeight: 'bold', transition: 'colors', color: 'white' };
+          ? { text: '6xl', weight: 'bold', transition: 'colors', color: 'red-400' }
+          : { text: '6xl', weight: 'bold', transition: 'colors', color: 'white' };
 
     return (
         <div data-testid="client-counter" sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>

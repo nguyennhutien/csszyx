@@ -99,8 +99,8 @@ function App() {
           <button
             onClick={() => setIsActive(!isActive)}
             sz={isActive
-              ? { px: 6, py: 3, bg: 'green-500', color: 'white', rounded: 'lg', fontWeight: 'medium', transition: 'all' }
-              : { px: 6, py: 3, bg: 'gray-300', color: 'gray-700', rounded: 'lg', fontWeight: 'medium', transition: 'all' }
+              ? { px: 6, py: 3, bg: 'green-500', color: 'white', rounded: 'lg', weight: 'medium', transition: 'all' }
+              : { px: 6, py: 3, bg: 'gray-300', color: 'gray-700', rounded: 'lg', weight: 'medium', transition: 'all' }
             }
           >
             {isActive ? '✓ Active' : '○ Inactive'}
@@ -145,8 +145,8 @@ function App() {
             {/* Explicit fontWeight / fontFamily */}
             <div sz={{ p: 4, bg: 'white', rounded: 'lg', shadow: true }}>
               <h3 sz={{ text: 'sm', weight: 'semibold', color: 'emerald-800', mb: 2 }}>Explicit Keys</h3>
-              <p sz={{ weight: 'bold', color: 'gray-700' }}>fontWeight: bold</p>
-              <p sz={{ weight: 'light', color: 'gray-700' }}>fontWeight: light</p>
+              <p sz={{ weight: 'bold', color: 'gray-700' }}>weight: bold</p>
+              <p sz={{ weight: 'light', color: 'gray-700' }}>weight: light</p>
               <p sz={{ fontFamily: 'mono', color: 'gray-700' }}>fontFamily: mono</p>
               <p sz={{ fontFamily: 'serif', color: 'gray-700' }}>fontFamily: serif</p>
             </div>

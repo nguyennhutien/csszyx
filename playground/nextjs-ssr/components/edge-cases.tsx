@@ -301,7 +301,7 @@ export function EdgeCaseTests() {
                     data-case="31-font-weight"
                     sz={{ weight: 'bold', p: 4, bg: 'blue-600', rounded: 'md', color: 'white', text: 'sm' }}
                 >
-                    fontWeight: bold
+                    weight: bold
                 </div>
 
                 {/* Case 32: Explicit fontFamily (no catch-all) */}
@@ -380,7 +380,7 @@ export function EdgeCaseTests() {
                     data-case="38-css-var-font-weight"
                     sz={{ weight: '--demo-weight', p: 4, bg: 'slate-800', rounded: 'md', color: 'white', text: 'sm' }}
                 >
-                    fontWeight: --demo-weight<br />
+                    weight: --demo-weight<br />
                     <span sz={{ color: 'cyan-400', text: 'xs' }}>→ font-(weight:--demo-weight)</span>
                 </div>
 

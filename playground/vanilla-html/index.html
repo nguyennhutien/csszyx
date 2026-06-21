@@ -20,8 +20,8 @@
 
     <div sz="{ maxW: '3xl', mx: 'auto' }">
         <header sz="{ mb: 12, textAlign: 'center' }">
-            <h1 sz="{ text: '5xl', fontWeight: 'extrabold', color: 'blue-500', mb: 4, tracking: 'tight' }">
-                csszyx <span sz="{ opacity: 50, fontWeight: 'light' }">Vanilla</span>
+            <h1 sz="{ text: '5xl', weight: 'extrabold', color: 'blue-500', mb: 4, tracking: 'tight' }">
+                csszyx <span sz="{ opacity: 50, weight: 'light' }">Vanilla</span>
             </h1>
             <p sz="{ text: 'lg', color: 'slate-400' }">
                 Pure HTML experience using the <code>sz</code> attribute. No bundler, no JSX.
@@ -31,22 +31,22 @@
         <main sz="{ display: 'grid', gridCols: 1, gap: 8 }">
             <!-- Feature Card 1 -->
             <section sz="{ p: 8, bg: 'slate-900', rounded: '2xl', border: true, borderColor: 'slate-800', shadow: '2xl', hover: { borderColor: 'blue-500' }, transition: 'all' }">
-                <h2 sz="{ text: '2xl', fontWeight: 'bold', color: 'white', mb: 4 }">Object Syntax Support</h2>
+                <h2 sz="{ text: '2xl', weight: 'bold', color: 'white', mb: 4 }">Object Syntax Support</h2>
                 <p sz="{ color: 'slate-400', mb: 6 }">
                     Write styles as a JSON-like object directly in the <code>sz</code> attribute.
                     The CDN runtime processes it and applies standard Tailwind classes.
                 </p>
                 <div sz="{ display: 'flex', gap: 3 }">
-                    <span sz="{ px: 3, py: 1, bg: 'blue-500', rounded: 'full', text: 'xs', fontWeight: 'bold', color: 'white' }">WASM Core</span>
-                    <span sz="{ px: 3, py: 1, bg: 'purple-500', rounded: 'full', text: 'xs', fontWeight: 'bold', color: 'white' }">Zero Build</span>
+                    <span sz="{ px: 3, py: 1, bg: 'blue-500', rounded: 'full', text: 'xs', weight: 'bold', color: 'white' }">WASM Core</span>
+                    <span sz="{ px: 3, py: 1, bg: 'purple-500', rounded: 'full', text: 'xs', weight: 'bold', color: 'white' }">Zero Build</span>
                 </div>
             </section>
 
             <!-- Feature Card 2 -->
             <section sz="{ p: 8, bg: 'slate-900', rounded: '2xl', border: true, borderColor: 'slate-800', shadow: '2xl', hover: { borderColor: 'purple-500' }, transition: 'all' }">
-                <h2 sz="{ text: '2xl', fontWeight: 'bold', color: 'white', mb: 4 }">Interactive Elements</h2>
+                <h2 sz="{ text: '2xl', weight: 'bold', color: 'white', mb: 4 }">Interactive Elements</h2>
                 <div sz="{ display: 'flex', items: 'center', gap: 6 }">
-                    <button id="demo-btn" sz="{ px: 6, py: 3, bg: 'indigo-600', hover: { bg: 'indigo-500' }, rounded: 'lg', fontWeight: 'medium', shadow: 'lg', transition: 'colors' }">
+                    <button id="demo-btn" sz="{ px: 6, py: 3, bg: 'indigo-600', hover: { bg: 'indigo-500' }, rounded: 'lg', weight: 'medium', shadow: 'lg', transition: 'colors' }">
                         Interactive Button
                     </button>
                     <div sz="{ w: 12, h: 12, bg: 'pink-500', rounded: 'full', animate: 'pulse' }"></div>
@@ -55,30 +55,30 @@
 
             <!-- New Features Showcase -->
             <section sz="{ p: 8, bg: 'slate-900', rounded: '2xl', border: true, borderColor: 'slate-800', shadow: '2xl' }">
-                <h2 sz="{ text: '2xl', fontWeight: 'bold', color: 'white', mb: 4 }">New Features</h2>
+                <h2 sz="{ text: '2xl', weight: 'bold', color: 'white', mb: 4 }">New Features</h2>
                 <div sz="{ display: 'grid', gridCols: 2, gap: 4 }">
                     <!-- Text/Leading merge -->
                     <div sz="{ p: 4, bg: 'slate-800', rounded: 'lg' }">
-                        <h3 sz="{ text: 'sm', fontWeight: 'semibold', color: 'emerald-400', mb: 2 }">Text/Leading</h3>
+                        <h3 sz="{ text: 'sm', weight: 'semibold', color: 'emerald-400', mb: 2 }">Text/Leading</h3>
                         <p sz="{ text: 'lg', leading: 7, color: 'slate-300' }">text-lg/7 merged</p>
                         <p sz="{ text: 'sm', leading: 'tight', color: 'slate-400', mt: 1 }">text-sm/tight</p>
                     </div>
                     <!-- Explicit fontWeight / fontFamily -->
                     <div sz="{ p: 4, bg: 'slate-800', rounded: 'lg' }">
-                        <h3 sz="{ text: 'sm', fontWeight: 'semibold', color: 'blue-400', mb: 2 }">Explicit Keys</h3>
-                        <p sz="{ fontWeight: 'bold', color: 'slate-300' }">fontWeight: bold</p>
+                        <h3 sz="{ text: 'sm', weight: 'semibold', color: 'blue-400', mb: 2 }">Explicit Keys</h3>
+                        <p sz="{ weight: 'bold', color: 'slate-300' }">weight: bold</p>
                         <p sz="{ fontFamily: 'mono', color: 'slate-300' }">fontFamily: mono</p>
                         <p sz="{ fontFamily: 'serif', color: 'slate-300' }">fontFamily: serif</p>
                     </div>
                     <!-- No collisions: text + color + textAlign -->
                     <div sz="{ p: 4, bg: 'slate-800', rounded: 'lg' }">
-                        <h3 sz="{ text: 'sm', fontWeight: 'semibold', color: 'yellow-400', mb: 2 }">No Collisions</h3>
+                        <h3 sz="{ text: 'sm', weight: 'semibold', color: 'yellow-400', mb: 2 }">No Collisions</h3>
                         <p sz="{ text: 'xl', color: 'pink-400' }">text=xl + color=pink</p>
                         <p sz="{ text: 'sm', textAlign: 'right', color: 'cyan-400' }">textAlign=right</p>
                     </div>
                     <!-- border + borderColor split -->
                     <div sz="{ p: 4, bg: 'slate-800', rounded: 'lg' }">
-                        <h3 sz="{ text: 'sm', fontWeight: 'semibold', color: 'red-400', mb: 2 }">Border Split</h3>
+                        <h3 sz="{ text: 'sm', weight: 'semibold', color: 'red-400', mb: 2 }">Border Split</h3>
                         <div sz="{ border: 4, borderColor: 'red-500', p: 2, rounded: 'md', color: 'slate-300' }">border=4 + borderColor</div>
                     </div>
                 </div>

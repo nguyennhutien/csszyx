@@ -18,7 +18,7 @@ const FIELD_CONFIGS = [
     { name: 'linkedin',  label: 'LinkedIn',    style: { p: 3, border: true, rounded: 'md',  w: 'full', color: 'indigo-600' } },
     { name: 'github',    label: 'GitHub',      style: { p: 3, border: true, rounded: 'md',  w: 'full', color: 'gray-900' } },
     { name: 'bio',       label: 'Bio',         style: { p: 3, border: true, rounded: 'md',  w: 'full', leading: 'relaxed' } },
-    { name: 'role',      label: 'Role',        style: { p: 3, border: true, rounded: 'md',  w: 'full', fontWeight: 'medium' } },
+    { name: 'role',      label: 'Role',        style: { p: 3, border: true, rounded: 'md',  w: 'full', weight: 'medium' } },
     { name: 'dept',      label: 'Department',  style: { p: 3, border: true, rounded: 'md',  w: 'full', bg: 'purple-50' } },
     { name: 'salary',    label: 'Salary',      style: { p: 3, border: true, rounded: 'md',  w: 'full', textAlign: 'right' } },
     { name: 'startDate', label: 'Start Date',  style: { p: 3, border: true, rounded: 'md',  w: 'full', bg: 'pink-50' } },
@@ -35,7 +35,7 @@ export function DynamicForm() {
             className={sz({ maxW: '2xl', mx: 'auto', p: 8, bg: 'white', rounded: '2xl', shadow: '2xl' })}
             data-testid="dynamic-form-container"
         >
-            <h2 className={sz({ text: '2xl', fontWeight: 'bold', color: 'gray-900', mb: 6 })}>
+            <h2 className={sz({ text: '2xl', weight: 'bold', color: 'gray-900', mb: 6 })}>
                 Dynamic CSS Injection — 20-Field Form
             </h2>
 
@@ -45,7 +45,7 @@ export function DynamicForm() {
                         <div key={name} data-testid={`field-${name}`}>
                             <label
                                 htmlFor={name}
-                                className={sz({ text: 'sm', fontWeight: 'medium', color: 'gray-700', mb: 1, display: 'block' })}
+                                className={sz({ text: 'sm', weight: 'medium', color: 'gray-700', mb: 1, display: 'block' })}
                             >
                                 {label}
                             </label>
@@ -70,7 +70,7 @@ export function DynamicForm() {
                     </button>
                     <button
                         type="submit"
-                        className={sz({ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', text: 'sm', fontWeight: 'medium' })}
+                        className={sz({ px: 4, py: 2, bg: 'blue-600', color: 'white', rounded: 'md', text: 'sm', weight: 'medium' })}
                     >
                         Submit
                     </button>

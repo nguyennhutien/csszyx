@@ -66,7 +66,7 @@ const App: React.FC = () => {
                         {/* Explicit keys */}
                         <div sz={{ p: 6, bg: 'slate-800', rounded: 'xl', border: true, borderColor: 'slate-700' }}>
                             <h3 sz={{ text: 'lg', weight: 'semibold', color: 'blue-400', mb: 3 }}>Explicit Keys</h3>
-                            <p sz={{ weight: 'bold', color: 'slate-300' }}>fontWeight: bold</p>
+                            <p sz={{ weight: 'bold', color: 'slate-300' }}>weight: bold</p>
                             <p sz={{ fontFamily: 'mono', color: 'slate-300' }}>fontFamily: mono</p>
                             <p sz={{ fontFamily: 'serif', color: 'slate-300' }}>fontFamily: serif</p>
                         </div>
