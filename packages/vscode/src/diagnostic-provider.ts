@@ -6,7 +6,7 @@
  *
  * Valid keys:
  *   - PROPERTY_MAP keys (p, bg, text, ...)
- *   - BOOLEAN_SHORTHANDS (flex, hidden, truncate, ...)
+ *   - BOOLEAN_SHORTHANDS (truncate, grow, ring, container, ...)
  *   - KNOWN_VARIANTS used as top-level keys (hover, sm, dark, ...)
  *   - Arbitrary variant keys ([&:hover], ...)
  *   - `css` (arbitrary CSS escape hatch)
