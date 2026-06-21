@@ -9,7 +9,12 @@
  * @module @csszyx/runtime/concatenate
  */
 
-import { transform as rawTransform, type SzObject } from '@csszyx/compiler/browser';
+import {
+    MAX_SZ_DEPTH,
+    transform as rawTransform,
+    type SzObject,
+    SzDepthError,
+} from '@csszyx/compiler/browser';
 
 /** Result of a runtime sz transform: the className plus any style attributes. */
 interface TransformResult {
@@ -95,6 +100,19 @@ export type SzInput = string | SzObject | SzInput[] | null | undefined | false;
  * ```
  */
 export function _sz(...classes: SzInput[]): string {
+    return szJoin(classes, 0);
+}
+
+/**
+ * Depth-tracked worker for {@link _sz}. Nested arrays recurse with an incremented
+ * depth so a deeply nested array (`[[[[…]]]]`, e.g. from untrusted data) is
+ * bounded by {@link MAX_SZ_DEPTH} instead of overflowing the call stack.
+ */
+function szJoin(classes: SzInput[], depth: number): string {
+    if (depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
+
     // Fast path: single string argument (most common case after compilation)
     if (classes.length === 1) {
         const cls = classes[0];
@@ -105,7 +123,7 @@ export function _sz(...classes: SzInput[]): string {
             return '';
         }
         if (Array.isArray(cls)) {
-            return _sz(...(cls as SzInput[]));
+            return szJoin(cls as SzInput[], depth + 1);
         }
         const res = transform(cls);
         return typeof res === 'string' ? res : res.className;
@@ -123,7 +141,7 @@ export function _sz(...classes: SzInput[]): string {
         }
 
         if (Array.isArray(cls)) {
-            const str = _sz(...(cls as SzInput[]));
+            const str = szJoin(cls as SzInput[], depth + 1);
             if (!str) {
                 continue;
             }
@@ -266,6 +284,18 @@ export function _szSwitch(
  * ```
  */
 export function _szMerge(...classes: SzInput[]): string {
+    return szMergeJoin(classes, 0);
+}
+
+/**
+ * Depth-tracked worker for {@link _szMerge}. Bounds nested-array recursion by
+ * {@link MAX_SZ_DEPTH} so untrusted deeply nested input cannot overflow the stack.
+ */
+function szMergeJoin(classes: SzInput[], depth: number): string {
+    if (depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
+
     const seen = new Set<string>();
     const result: string[] = [];
 
@@ -276,7 +306,7 @@ export function _szMerge(...classes: SzInput[]): string {
         }
 
         if (Array.isArray(cls)) {
-            const str = _szMerge(...(cls as SzInput[]));
+            const str = szMergeJoin(cls as SzInput[], depth + 1);
             if (!str) {
                 continue;
             }
