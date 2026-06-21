@@ -1,5 +1,11 @@
 # csszyx
 
+## [0.10.0](https://github.com/nguyennhutien/csszyx/compare/v0.9.10...v0.10.0) (2026-06-21)
+
+### Features
+
+* single-way sz keys, splitBox nested routing, and security + DX hardening ([#66](https://github.com/nguyennhutien/csszyx/issues/66))
+
 ## [0.9.10](https://github.com/nguyennhutien/csszyx/compare/v0.9.9...v0.9.10) (2026-06-13)
 
 ### Features
