@@ -417,17 +417,17 @@ uses `_szMerge` at runtime to join them safely:
 When class names depend on runtime values, use the helper functions:
 
 ```tsx
-import { _sz, _szIf, _szSwitch } from 'csszyx';
+import { _sz } from 'csszyx';
 
 // Concatenate multiple class strings
 <div className={_sz('p-4 bg-blue-500', extraClass)} />
 
-// Conditional: apply class only when condition is true
-<div className={_szIf(isActive, 'ring-2 ring-blue-400')} />
+// Conditional: plain JS conditionals compose with _sz
+<div className={_sz('base', isActive && 'ring-2 ring-blue-400')} />
 
-// Switch: first truthy condition wins
-<div className={_szSwitch([
-  [variant === 'primary', 'bg-blue-600 text-white'],
-  [variant === 'danger',  'bg-red-600 text-white'],
-], 'bg-gray-500 text-gray-900')} />
+// Switch: a plain object lookup
+<div className={{
+  primary: 'bg-blue-600 text-white',
+  danger:  'bg-red-600 text-white',
+}[variant] ?? 'bg-gray-500 text-gray-900'} />
 ```

@@ -130,9 +130,9 @@ Static cases compile to string literals:
 Dynamic cases use optimized helpers:
 
 ```tsx
-import { _sz, _szIf } from "@csszyx/runtime";
+import { _sz } from "@csszyx/runtime";
 
-<div className={_sz("base-class", _szIf(isActive, "active", "inactive"))} />;
+<div className={_sz("base-class", isActive ? "active" : "inactive")} />;
 ```
 
 ## How It Works

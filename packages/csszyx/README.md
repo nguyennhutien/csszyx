@@ -84,9 +84,9 @@ The `sz` prop accepts an object where keys are Tailwind property names and value
 For dynamic class composition, use the runtime helpers from `@csszyx/runtime` (re-exported by `csszyx`):
 
 ```tsx
-import { _sz, _szIf, _szSwitch } from "@csszyx/runtime";
+import { _sz } from "@csszyx/runtime";
 
-<div className={_sz("p-4", _szIf(isActive, "bg-blue-500", "bg-gray-200"))} />;
+<div className={_sz("p-4", isActive ? "bg-blue-500" : "bg-gray-200")} />;
 ```
 
 ## Packages

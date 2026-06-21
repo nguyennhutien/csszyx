@@ -1,6 +1,6 @@
 ---
 title: Runtime Helpers
-description: _sz, _szIf, _szSwitch, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
+description: _sz, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
 ---
 
 import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
@@ -10,8 +10,8 @@ dynamically. For static sz props, no helpers are needed — the compiler
 produces plain strings at build time.
 
 <CardGrid>
-  <Card title="5 Helpers" icon="puzzle">
-    `_sz`, `_szIf`, `_szSwitch`, `_szMerge`, `__szColorVar`
+  <Card title="3 Helpers" icon="puzzle">
+    `_sz`, `_szMerge`, `__szColorVar`
   </Card>
   <Card title="~0B Runtime Cost" icon="rocket">
     Static sz props — zero overhead. Helpers only ship when you use them.
@@ -26,12 +26,12 @@ produces plain strings at build time.
 <Tabs>
   <TabItem label="Original">
     ```ts
-    import { _sz, _szIf, _szSwitch, _szMerge } from '@csszyx/runtime';
+    import { _sz, _szMerge } from '@csszyx/runtime';
     ```
   </TabItem>
   <TabItem label="Umbrella package">
     ```ts
-    import { _sz, _szIf, _szSwitch, _szMerge } from 'csszyx';
+    import { _sz, _szMerge } from 'csszyx';
     ```
   </TabItem>
 </Tabs>
@@ -60,59 +60,6 @@ import { _sz } from '@csszyx/runtime';
 const isActive = true;
 const hasError = false;
 <div className={_sz('base', isActive && 'active', hasError && 'error')} />
-```
-
-## `_szIf(condition, trueClass, falseClass?)`
-
-Applies `trueClass` when `condition` is truthy, `falseClass` otherwise.
-
-```ts
-function _szIf(
-  condition: boolean,
-  trueClass: string,
-  falseClass?: string
-): string
-```
-
-**Usage:**
-
-```tsx
-// Toggle class
-<div className={_szIf(isActive, 'ring-2 ring-blue-500')} />
-
-// Swap class
-<div className={_szIf(isDark, 'bg-gray-900 text-white', 'bg-white text-gray-900')} />
-
-// Inside _sz
-<button className={_sz(
-  'px-4 py-2 rounded-lg',
-  _szIf(variant === 'primary', 'bg-blue-500 text-white', 'bg-gray-100'),
-  _szIf(isDisabled, 'opacity-50 cursor-not-allowed'),
-)} />
-```
-
-## `_szSwitch(cases, defaultClass?)`
-
-Returns the class from the first truthy case. Optional `defaultClass` is used
-when no case matches.
-
-```ts
-function _szSwitch(
-  cases: Array<[condition: boolean, className: string]>,
-  defaultClass?: string
-): string
-```
-
-**Usage:**
-
-```tsx
-const buttonClass = _szSwitch([
-  [variant === 'primary',   'bg-blue-600 text-white'],
-  [variant === 'secondary', 'bg-gray-100 text-gray-900'],
-  [variant === 'danger',    'bg-red-600 text-white'],
-], 'bg-gray-500 text-white'); // default
-
-<button className={buttonClass} />
 ```
 
 ## `_szMerge(...objects)`
@@ -413,12 +360,12 @@ attribute.
 ## Lite Runtime
 
 For edge/serverless environments that can't afford the full runtime, the
-`@csszyx/runtime/lite` export provides `_sz` and `_szIf` without hydration
+`@csszyx/runtime/lite` export provides `_sz` without hydration
 guards:
 
 ```ts
-import { _sz, _szIf } from '@csszyx/runtime/lite';
+import { _sz } from '@csszyx/runtime/lite';
 ```
 
-Lite exports: `_sz`, `_sz2`, `_sz3`, `_szIf`, `_szSwitch`, `_szMerge`,
+Lite exports: `_sz`, `_sz2`, `_sz3`, `_szMerge`,
 `__szColorVar`. No hydration, no checksums, no recovery.

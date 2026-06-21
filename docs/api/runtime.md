@@ -11,8 +11,6 @@ CSSzyx provides two runtime entry points:
 | `_sz()`            | Yes                      | Yes (string-only)    |
 | `_sz2()`           | Yes                      | Yes                  |
 | `_sz3()`           | Yes                      | No                   |
-| `_szIf()`          | Yes                      | Yes (string-only)    |
-| `_szSwitch()`      | Yes                      | No                   |
 | `_szMerge()`       | Yes                      | No                   |
 | `__szColorVar()`   | No                       | Yes                  |
 | `SzObject` support | Yes (via compiler)       | No (strings only)    |
@@ -69,68 +67,6 @@ function _sz3(a: string, b: string, c: string): string;
 // In performance-critical code
 _sz2("base-class", "modifier-class");
 _sz3("base", "state", "variant");
-```
-
-### `_szIf()`
-
-Conditional className application.
-
-**Signature:**
-
-```ts
-function _szIf(
-  condition: boolean,
-  className: string,
-  fallback?: string,
-): string | false;
-```
-
-**Example:**
-
-```tsx
-import { _szIf } from "@csszyx/runtime";
-
-// Simple conditional
-_szIf(isActive, "active");
-// Returns: "active" if isActive is true, false otherwise
-
-// With fallback
-_szIf(isActive, "active", "inactive");
-// Returns: "active" if isActive is true, "inactive" otherwise
-
-// Use with _sz()
-_sz("base", _szIf(isActive, "active"));
-```
-
-### `_szSwitch()`
-
-Switch-like className selection based on multiple conditions.
-
-**Signature:**
-
-```ts
-function _szSwitch(
-  conditions: Array<[boolean, string]>,
-  defaultClassName?: string,
-): string;
-```
-
-**Example:**
-
-```tsx
-import { _szSwitch } from "@csszyx/runtime";
-
-const status = "error";
-const className = _szSwitch(
-  [
-    [status === "success", "text-green-500"],
-    [status === "error", "text-red-500"],
-    [status === "warning", "text-yellow-500"],
-  ],
-  "text-gray-500",
-); // default
-
-// Returns: "text-red-500"
 ```
 
 ### `_szMerge()`
@@ -531,26 +467,6 @@ initRuntime({ ... });
 function Component() {
     initRuntime({ ... }); // ❌ Don't do this
 }
-```
-
-### 3. Leverage \_szSwitch for Multiple Conditions
-
-```tsx
-// ✅ Good - Use _szSwitch for clarity
-_szSwitch(
-  [
-    [status === "success", "text-green-500"],
-    [status === "error", "text-red-500"],
-  ],
-  "text-gray-500",
-);
-
-// ⚠️ Okay but verbose
-status === "success"
-  ? "text-green-500"
-  : status === "error"
-    ? "text-red-500"
-    : "text-gray-500";
 ```
 
 ## See Also

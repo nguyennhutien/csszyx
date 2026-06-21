@@ -3477,20 +3477,21 @@ SSR-safe: on the server, returns class names without CSSOM access.
 For dynamic classes at runtime (the only runtime overhead):
 
 ```tsx
-import { _sz, _szIf, _szSwitch, _szMerge } from '@csszyx/runtime';
+import { _sz, _szMerge } from '@csszyx/runtime';
 
 // Concatenate class strings
 <div className={_sz('base-class', conditionalClass)} />
 
-// Conditional class
-<div className={_szIf(isActive, 'active-class', 'inactive-class')} />
+// Conditional class — plain JS conditionals compose with _sz
+<div className={_sz('base-class', isActive && 'active-class')} />
+<div className={isActive ? 'active-class' : 'inactive-class'} />
 
-// Switch/enum
-<div className={_szSwitch(status, {
+// Switch/enum — a plain object lookup
+<div className={{
   loading: 'opacity-50',
   error: 'border-red-500',
   success: 'border-green-500',
-})} />
+}[status]} />
 
 // Merge (last wins for conflicts)
 <div className={_szMerge(baseClasses, overrideClasses)} />
