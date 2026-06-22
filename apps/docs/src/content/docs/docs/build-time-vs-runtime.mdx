@@ -1,0 +1,188 @@
+---
+title: Build-Time vs Runtime
+description: How csszyx resolves sz into CSS — the build-time static path vs the runtime dynamic path, which helper runs when, why a class is or isn't safelisted, and how to keep a design system fast and overridable.
+---
+
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+csszyx has **two worlds**. Almost every question — "why is my class dead?", "does
+this run in the browser?", "will this tree-shake?" — comes down to which world a
+style lands in. Pick by one test:
+
+> **Is the value set finite and known at build time?**
+> Yes → static (build-time). No → runtime (`dynamic()`).
+
+<CardGrid>
+<Card title="Static — build-time" icon="rocket">
+Literals, enums, `szv` variants. The compiler lowers `sz` → Tailwind classes and
+safelists them; Tailwind generates the CSS at build. Zero runtime, SSR-safe. **The
+default — use it for almost everything.**
+</Card>
+<Card title="Runtime — dynamic()" icon="random">
+Unbounded values (CMS colors, user `#hex`, arbitrary data). CSS is generated and
+injected in the browser via `insertRule`. The escape hatch for genuinely infinite
+value sets — **not** a component's base mechanism.
+</Card>
+</CardGrid>
+
+## The engines (build-time only)
+
+Parsing your JSX source to find and transform `sz` props happens at build time
+through a three-tier engine pipeline:
+
+| Tier | Engine | When |
+| --- | --- | --- |
+| 1 (default) | **Rust** (native) | the default parser |
+| 2 (fallback) | **oxc** (pure JS) | when the native binary is unavailable for a platform |
+| 3 (last resort) | **babel** | a final compatibility safety net |
+
+The **runtime** (browser) never uses any of these — there is no parser at
+runtime. The runtime helpers are plain JavaScript; `dynamic()`'s sz-object
+lowering uses `@csszyx/compiler/browser`, a pure-JS `transform(szObject)` that
+lowers an *already-built* object to a class string (no source to parse).
+
+## The three sz → CSS paths
+
+| Path | sz → class | → CSS | When |
+| --- | --- | --- | --- |
+| **Static** | build-time | build-time (Tailwind) | a literal `sz` / `szv` — the default |
+| **`dynamic()`, class already built** | runtime | build-time (reuses the built CSS) | a dynamic value whose class was safelisted |
+| **`dynamic()`, new class** | runtime | **runtime** (`insertRule`) | a value not in the built CSS (truly dynamic) |
+
+Only the third path generates CSS in the browser, and only for classes that
+aren't already in your built stylesheet.
+
+## Which helper is build-time vs runtime
+
+| Helper | What it is | Build-time or runtime |
+| --- | --- | --- |
+| `sz={{ … }}` (literal) | the prop | **build-time** — compiler extracts + safelists |
+| [`szv`](/docs/szv/) | variant factory → sz **object** | **build-time** — the compiler extracts the `szv({…})` config (see below); the factory call merges objects at runtime, but the CSS is built |
+| [`splitBox`](/docs/box-model-splitbox/) (string) | partitions a className **string** | **runtime** routing only — operates on classes already resolved elsewhere; emits no new CSS |
+| `splitBoxSz` (object) | partitions an sz **object** | **runtime** routing only — the classes' CSS comes from their static source, not from this call |
+| [`dynamic()`](/docs/dynamic/) | resolves an sz object → className, injects CSS | **runtime** — the only helper that generates CSS in the browser |
+
+<Aside type="note" title="splitBox / splitBoxSz are routers, not generators">
+They re-partition classes that already exist; they do **not** add anything to the
+safelist and do **not** force `dynamic()`. Putting their output into `sz=` /
+`className=` is a runtime routing step — the CSS still comes from the static
+source (a literal or a `szv` config). They never make your app "go runtime".
+</Aside>
+
+## Why a class is — or isn't — safelisted
+
+A class gets CSS only if it appears in a **statically analyzable** position the
+compiler extracts:
+
+- a literal `sz={{ … }}`, or
+- a `szv({ … })` config literal.
+
+`szv` extraction is **declaration-based**: the compiler reads every variant class
+from the `szv({…})` config wherever it's declared, regardless of how the returned
+factory is later used — directly, through `splitBoxSz`, through `_sz`, or not at
+all. So *indirection does not break safelisting*.
+
+The one real gap is **file discovery**. The prescan only transforms files whose
+content contains `sz=` or `sz:`. A standalone `variants.ts` that holds only a
+`szv({…})` config (no JSX, no `sz=`) is **skipped**, so its variants are never
+extracted.
+
+<Aside type="tip" title="Co-locate szv with a usage">
+Keep each `szv` in the component file that uses it (which contains `sz=`). That
+file is always scanned, the unit of tree-shaking becomes the component, and a
+never-imported component contributes no CSS. For a sibling workspace package, opt
+it in with [`compilePackages`](/docs/monorepo-content-scope/).
+</Aside>
+
+## Tree-shaking
+
+csszyx safelists by **content presence**, exactly like Tailwind itself — a class
+is emitted if it appears in scanned content, not by import-graph reachability.
+Installing csszyx does not change your app's tree-shaking model: it mirrors
+Tailwind. Co-locating `szv` in its component file makes the component the natural
+shaking boundary (component never imported → file never transformed → its
+variants never safelisted).
+
+## `sz` on an HTML tag vs on a component (read this)
+
+The compiler rewrites `sz=` into **`className=`** on whatever element it's written
+on, and extracts/safelists the classes — but where that `className` ends up
+differs:
+
+```tsx
+<div sz={{ p: 4, bg: 'blue-500' }} />   // → <div className="p-4 bg-blue-500" />
+<Box sz={{ p: 4, bg: 'blue-500' }} />   // → <Box className="p-4 bg-blue-500" />
+```
+
+- On an **HTML tag** (`div`, `span`, …) the `className` lands on the DOM element →
+  the styles apply. ✅
+- On a **component** (`<Box>`) the `className` becomes a **prop passed to the
+  component**. The component receives `className` — **not** `sz`, and **not** an
+  object — and **must forward it onto a real HTML tag**, or the styling is lost.
+
+<Aside type="caution" title="Putting sz on a component is not enough">
+`sz` on a component is sugar that compiles to a `className` prop. A component does
+**not** receive an `sz` object — to be stylable from the outside it must accept
+`className` and render it on a DOM element. Eventually every style must reach an
+HTML tag.
+</Aside>
+
+```tsx
+// ✅ A stylable component forwards className to an HTML tag.
+function Box({ className = '', children }) {
+  return <div className={className}>{children}</div>;
+}
+<Box sz={{ p: 4, bg: 'blue-500' }} />   // → <Box className="p-4 bg-blue-500" /> → onto the div
+```
+
+## Design-system patterns
+
+Two rules keep a component library fast (build-time) and overridable.
+
+### Forward `className`; never `dynamic()` for finite styling
+
+A component is styled from the app via the `className` it receives (the compiled
+output of the app's `sz=`). Forward it to a DOM tag. Do **not** resolve styling
+inside the component with `dynamic()` — that turns every consumer into runtime CSS
+injection; one `dynamic()` in a foundational component infects the whole app.
+Reserve `dynamic()` for unbounded/untrusted values the app explicitly passes.
+
+### Multi-part components: route the forwarded className with `splitBox`
+
+A component that renders nested elements receives ONE `className` (the app's
+override). Split it at the box-model border with [`splitBox`](/docs/box-model-splitbox/)
+and combine each part with the component's own base classes:
+
+```tsx
+function ScrollArea({ className = '', children }) {
+  const { outer, inner } = splitBox(className);          // route the app's override
+  return (
+    <div className={`rounded-lg overflow-hidden ${outer}`}>   {/* frame + outer override */}
+      <div className={`p-4 ${inner}`}>{children}</div>        {/* viewport + inner override */}
+    </div>
+  );
+}
+<ScrollArea sz={{ m: 4, p: 2 }} />   // → className="m-4 p-2" → m-4 routed outer, p-2 inner
+```
+
+`splitBox` takes a **string** for exactly this reason — by the time the app's `sz`
+reaches the component it is already a className string. (`splitBoxSz`, which takes
+an **object**, is for routing an sz object the component builds *internally* — e.g.
+from a `szv` — onto nested `sz=` props before they compile.) Don't mix `sz=` and
+`className=` on the same element; keep a component's base and the routed override
+in one channel (plain `className` literals, as above).
+
+## Specificity: `dynamic()` vs static
+
+A `dynamic()`-injected rule is **unlayered**; static `sz` / Tailwind utilities
+live in `@layer utilities`. Per CSS Cascade Level 5, **unlayered beats all layered
+styles** at equal specificity — so a `dynamic()` rule wins over a static `sz`
+override regardless of source order. By design they don't collide (`dynamic()`
+only injects classes not already built), but if you mix them on one element the
+dynamic rule takes precedence. Prefer all-static within a component.
+
+## See also
+
+- [Reusing Styles](/docs/reusing-styles/) · [Component Variants (szv)](/docs/szv/)
+- [Box Model Routing](/docs/box-model-splitbox/) · [Runtime Injection](/docs/dynamic/)
+- [Monorepo & Content Scope](/docs/monorepo-content-scope/)
