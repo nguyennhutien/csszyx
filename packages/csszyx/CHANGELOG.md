@@ -1,5 +1,11 @@
 # csszyx
 
+## [0.10.1](https://github.com/nguyennhutien/csszyx/compare/v0.10.0...v0.10.1) (2026-06-22)
+
+### Features
+
+* **runtime:** partition an sz object with splitBoxSz ([#83](https://github.com/nguyennhutien/csszyx/issues/83))
+
 ## [0.10.0](https://github.com/nguyennhutien/csszyx/compare/v0.9.10...v0.10.0) (2026-06-21)
 
 ### Features
