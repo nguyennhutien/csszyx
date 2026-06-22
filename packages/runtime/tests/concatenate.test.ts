@@ -2,6 +2,7 @@
  * Tests for concatenate module.
  */
 
+import { transform } from '@csszyx/compiler/browser';
 import { describe, expect, it } from 'vitest';
 
 import { _sz, _sz2, _sz3, _szMerge } from '../src/concatenate.js';
@@ -189,6 +190,25 @@ describe('runtime class name mangling', () => {
             expect(res).toBe('w-8');
         } finally {
             delete (globalThis as any).__csszyx_ssr_mangle_map;
+        }
+    });
+});
+
+describe('_sz(object) matches the compiler transform (runtime ↔ build parity)', () => {
+    // _sz lowers an sz OBJECT at runtime via the same browser transform the
+    // compiler uses. The two must produce identical classes, or a static sz and
+    // its runtime fallback (e.g. a forwarded prop) would render differently.
+    const cases: Array<Record<string, unknown>> = [
+        { p: 4, bg: 'blue-500' },
+        { bg: { color: 'warning', op: 10 } }, // semantic color + opacity
+        { color: 'warning' },
+        { display: 'flex', md: { p: 8 } },
+    ];
+
+    it('agrees with transform() for each object', () => {
+        for (const sz of cases) {
+            const fromCompiler = transform(sz as Parameters<typeof transform>[0]).className;
+            expect(_sz(sz as never), JSON.stringify(sz)).toBe(fromCompiler);
         }
     });
 });
