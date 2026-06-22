@@ -53,12 +53,19 @@ export {
     type BoxSelector,
     type Classification,
     classify,
+    classifySzKey,
     has,
+    hasSz,
     omit,
+    omitSz,
     pick,
+    pickSz,
     type SplitBoxOptions,
     type SplitBoxResult,
+    type SplitBoxSzOptions,
+    type SplitBoxSzResult,
     splitBox,
+    splitBoxSz,
 } from './split-box.js';
 // Strip the sz prop before forwarding props to a host element
 export { stripSzProps } from './strip-sz-props.js';

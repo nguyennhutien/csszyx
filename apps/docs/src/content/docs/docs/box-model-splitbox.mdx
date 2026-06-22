@@ -305,6 +305,68 @@ pick('m-4 p-2 bg-white', 'outer');  // "m-4 bg-white"
 omit('p-2 overflow-y-auto flex', 'overflow'); // "p-2 flex"
 ```
 
+## Staying sz-native: `splitBoxSz`
+
+`splitBox` partitions a className **string**. But a component that stays
+sz-native — building styles with [`szv`](/docs/reusing-styles/) so the compiler
+statically safelists every variant — holds an **sz object**, not a string.
+Bridging through a className to reach `splitBox` throws that auto-safelisting
+away.
+
+`splitBoxSz` partitions the sz object **directly**, into `{ outer, inner }` sz
+objects you hand straight to nested `sz` props:
+
+```ts
+import { splitBoxSz } from '@csszyx/runtime';
+
+splitBoxSz({ m: 4, px: 2 });
+// → { outer: { m: 4 }, inner: { px: 2 } }
+```
+
+It routes each key to the **same side** its emitted class would land on, so
+`splitBoxSz(x)` agrees with `splitBox(compile(x))` by construction — a test gates
+the parity. Everything `splitBox` does, the sz version does on keys, not tokens:
+
+- **Variants & responsive** route by the property inside them, and split across
+  buckets when they disagree:
+
+```ts
+splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } });
+// → { outer: { md: { m: 4 } }, inner: { gap: 2, hover: { px: 1 } } }
+```
+
+- **Arrays flatten** (deep-merged last-write-wins; `null`/`false` drop), so a
+  conditional `szv` composition partitions in one call:
+
+```ts
+splitBoxSz([base, isLoading && { opacity: 50 }]);
+```
+
+- **Overrides** behave exactly like `SplitBoxOptions`. Flex-item utilities
+  (`grow`/`shrink`/`self`/`order`) default to the inner content; force them onto
+  the frame when the frame *is* the flex item:
+
+```ts
+splitBoxSz(
+  { grow: 2, self: 'center', order: 'first' },
+  { outer: ['grow', 'self', 'order'] },
+);
+// → { outer: { grow: 2, self: 'center', order: 'first' }, inner: {} }
+```
+
+The toolkit has sz-object twins as well — `classifySzKey(key)`, `hasSz`,
+`pickSz`, `omitSz` — reading the same generated truth keyed by sz prop instead of
+class token. The whole component stays sz-native end to end:
+
+```tsx
+import { splitBoxSz } from '@csszyx/runtime';
+
+function Box({ sz, children }) {
+  const { outer, inner } = splitBoxSz(sz);
+  return <div sz={outer}><div sz={inner}>{children}</div></div>;
+}
+```
+
 ## Why this is a csszyx superpower
 
 <CardGrid>
@@ -333,7 +395,8 @@ csszyx ships it as a primitive — because it already knows what every class doe
 ## See also
 
 - [Runtime Helpers reference](/docs/reference/runtime/) — full signatures for
-  `splitBox`, `classify`, `has`, `pick`, and `omit`.
+  `splitBox` / `splitBoxSz`, `classify` / `classifySzKey`, and the `has` / `pick`
+  / `omit` toolkit (string and sz-object forms).
 - [Sz Props Basics](/docs/sz-props/) — where the classNames come from in the
   first place.
 - [Reusing Styles](/docs/reusing-styles/) — share `sz` objects before they ever

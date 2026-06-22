@@ -248,11 +248,15 @@ compile error, so typos and legacy CSS-property names are caught by `tsc` (run
 `tsc --noEmit` in CI to enforce it).
 
 ```tsx
-{ bgColor: 'red-500' }   // ❌ tsc error — unknown key; canonical is { bg: 'red-500' }
+{
+  bgColor: "red-500";
+} // ❌ tsc error — unknown key; canonical is { bg: 'red-500' }
 
 // Forcing a brand-new Tailwind utility csszyx has no key for yet — opt out explicitly:
 // @ts-expect-error - forward-compat utility not yet in csszyx
-{ someNewUtility: 'x' }  // ✅ allowed; the runtime still emits the class
+{
+  someNewUtility: "x";
+} // ✅ allowed; the runtime still emits the class
 ```
 
 Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
@@ -260,7 +264,9 @@ Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[3
 Tailwind `@theme` and csszyx auto-generates the type:
 
 ```css
-@theme { --breakpoint-tablet: 40rem; }   /* → { tablet: { p: 6 } } now type-checks */
+@theme {
+  --breakpoint-tablet: 40rem;
+} /* → { tablet: { p: 6 } } now type-checks */
 ```
 
 ## Common Props Reference
@@ -692,29 +698,47 @@ import { __szColorVar } from "csszyx/lite";
 When a caller passes one flat `className` to a component that renders nested elements, `splitBox` partitions it at the CSS box-model border line so each element gets the classes that act on it. Pure string functions, framework-agnostic. The class-token → box-role map is generated from the compiler's property tables (never drifts).
 
 ```tsx
-import { splitBox, classify, has, pick, omit, stripSzProps } from '@csszyx/runtime';
+import {
+  splitBox,
+  splitBoxSz,
+  classify,
+  has,
+  pick,
+  omit,
+  stripSzProps,
+} from "@csszyx/runtime";
 
 // Partition: outer = border-outward (margin/position/border/sizing/bg/shadow/transform/visibility),
 //            inner = border-inward (padding/overflow/display/layout/gap/text/paint-inside/interactivity)
-const { outer, inner } = splitBox('m-4 px-2 md:flex');
+const { outer, inner } = splitBox("m-4 px-2 md:flex");
 // outer: "m-4"   inner: "px-2 md:flex"
 
 // Override any default per call (BoxSelector = box-role | category | class-prefix | { category: value })
-splitBox('overflow-hidden p-4', { outer: ['overflow'] });
+splitBox("overflow-hidden p-4", { outer: ["overflow"] });
 // outer: "overflow-hidden"   inner: "p-4"
 
 // Toolkit: csszyx owns the truth (box-role/category), your project owns the rule
-classify('inset-ring-2');                 // { role: 'inner', category: 'ring' }
-has('p-2 overflow-y-auto', 'overflow');   // true
-pick('m-4 text-sm', 'text');              // "text-sm"
-omit('p-2 overflow-y-auto flex', 'overflow'); // "p-2 flex"
+classify("inset-ring-2"); // { role: 'inner', category: 'ring' }
+has("p-2 overflow-y-auto", "overflow"); // true
+pick("m-4 text-sm", "text"); // "text-sm"
+omit("p-2 overflow-y-auto flex", "overflow"); // "p-2 flex"
 
 // A scroller scrolls only when the outer frame clips (project-owned dependency rule)
-const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
+const dep = has(outer, { overflow: "hidden" }) ? "overflow-y-auto h-full" : "";
+
+// sz-OBJECT routing: splitBoxSz partitions an sz OBJECT (not a className) into
+// { outer, inner } sz objects — keeps a szv-based component sz-native and routes
+// each key to the same side its class would (splitBoxSz(x) ≡ splitBox(compile(x))).
+splitBoxSz({ m: 4, px: 2 }); // { outer: { m: 4 }, inner: { px: 2 } }
+splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } }); // variants route by inner prop; split when they disagree
+splitBoxSz({ grow: 2, self: "center" }, { outer: ["grow", "self"] }); // force flex-item utils to the frame
+// classifySzKey(key) / hasSz / pickSz / omitSz — the sz-object toolkit twins
 
 // stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files
 // whose raw sz would leak as sz="[object Object]"; dev-warns once on a raw-object sz)
-function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
+function Box({ sz, ...rest }) {
+  return <div {...stripSzProps(rest)} />;
+}
 ```
 
 ## Security — untrusted sz
@@ -722,7 +746,7 @@ function Box({ sz, ...rest }) { return <div {...stripSzProps(rest)} />; }
 csszyx is safe-by-default for AUTHORED sz (compiled to class strings at build time). When sz comes from UNTRUSTED input (JSON-driven UI, CMS, user data), it controls keys and values that reach the runtime CSS pipeline — purify it.
 
 ```tsx
-import { dynamic, purifySz } from '@csszyx/dynamic';
+import { dynamic, purifySz } from "@csszyx/dynamic";
 // stripSzProps is exported from '@csszyx/runtime'
 
 // Untrusted sz → dynamic() runtime CSS: purify first (allowlist + value sanitize + proto guard)

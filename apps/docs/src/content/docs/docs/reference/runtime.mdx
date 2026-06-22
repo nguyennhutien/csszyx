@@ -309,6 +309,52 @@ const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
 </Frame>
 ```
 
+## `splitBoxSz(sz, options?)` — sz-Object Routing
+
+The sz-object twin of `splitBox`: partitions an **sz object** (not a className)
+into `{ outer, inner }` sz objects, so a component built with `szv` stays
+sz-native and keeps the compiler's auto-safelisting. Each key routes to the same
+side its emitted class would — `splitBoxSz(x)` ≡ `splitBox(compile(x))`.
+
+```ts
+function splitBoxSz(sz: SzInput, options?: {
+  outer?: BoxSelector[];
+  inner?: BoxSelector[];
+  fallback?: 'outer' | 'inner';   // unrecognized key → default 'outer'
+}): { outer: SzObject; inner: SzObject }
+```
+
+```ts
+import { splitBoxSz } from '@csszyx/runtime';
+
+splitBoxSz({ m: 4, px: 2 });
+// → { outer: { m: 4 }, inner: { px: 2 } }
+
+// Variants route by their inner property; arrays flatten; inner wins ties.
+splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } });
+// → { outer: { md: { m: 4 } }, inner: { gap: 2, hover: { px: 1 } } }
+
+// Force flex-item utilities onto the frame:
+splitBoxSz({ grow: 2, self: 'center' }, { outer: ['grow', 'self'] });
+// → { outer: { grow: 2, self: 'center' }, inner: {} }
+```
+
+Arrays are deep-merged (last-write-wins); `null` / `false` / `undefined` and
+empty objects yield `{ outer: {}, inner: {} }`. A raw className string has no
+sz-object form, so it throws in development.
+
+### `classifySzKey` / `hasSz` / `pickSz` / `omitSz`
+
+The sz-object forms of the class toolkit — same generated truth, keyed by sz prop
+instead of class token.
+
+```ts
+function classifySzKey(key: string): { role: 'outer' | 'inner'; category: string } | undefined
+function hasSz(sz: SzInput, selector: BoxSelector): boolean
+function pickSz(sz: SzInput, selector: BoxSelector): SzObject
+function omitSz(sz: SzInput, selector: BoxSelector): SzObject
+```
+
 ## `stripSzProps(props)` — Safe Prop Forwarding
 
 Removes `sz` before a component spreads `...rest` onto a host element. Compiled
