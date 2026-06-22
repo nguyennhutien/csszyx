@@ -122,7 +122,7 @@ jobs:
           fetch-depth: 0
 
       - name: Scan for committed secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           # Built-in token; no license/secret needed for a public repo.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
