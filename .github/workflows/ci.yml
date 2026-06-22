@@ -437,6 +437,17 @@ jobs:
       # forward case, so the Rust default engine is proven equivalent to the TS
       # engine for each key. Fail if regenerating would change it, so a snippet,
       # generator, or compiler change can't leave the corpus stale.
+      #
+      # This is also what closes the "rust-check only triggers on packages/core/**"
+      # gap for a pure-snippet key change: the corpus lives at
+      # packages/core/tests/fixtures/parity-corpus.json. A snippet that changes any
+      # key's emitted class makes this check fail until the corpus is regenerated;
+      # the regenerated corpus is a packages/core file, so committing it TRIGGERS
+      # rust-check (cargo test --test parity_corpus runs the Rust==TS comparison on
+      # the new cases). If the corpus does NOT change, there is nothing new for the
+      # Rust engine to verify. So do NOT add docs/specs/snippets to rust-check.yml
+      # paths — that would re-run the full Rust suite on every prose-only doc edit
+      # (the same over-trigger this repo deliberately avoids for release PRs).
       - name: Check Rust parity corpus is current
         run: pnpm gen:parity-corpus:check
 
