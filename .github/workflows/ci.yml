@@ -504,7 +504,7 @@ jobs:
         run: pnpm --filter @csszyx/core native:engine:smoke
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         if: always()
         with:
           directory: ./coverage
