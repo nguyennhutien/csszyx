@@ -72,7 +72,7 @@
     "@babel/types": "^7.23.6",
     "@csszyx/core": "workspace:*",
     "magic-string": "0.30.21",
-    "oxc-parser": "0.131.0"
+    "oxc-parser": "0.137.0"
   },
   "devDependencies": {
     "@types/babel__core": "^7.20.5",
@@ -81,7 +81,7 @@
     "csstype": "^3.0.0",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.9"
   },
   "sideEffects": false,
   "engines": {
