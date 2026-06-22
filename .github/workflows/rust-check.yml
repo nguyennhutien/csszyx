@@ -23,6 +23,18 @@ on:
 jobs:
   check:
     name: Rust Check
+    # Skip a release-please change: its only edits are version + CHANGELOG bumps,
+    # and the bump to packages/core/package.json matches this workflow's
+    # `packages/core/**` path filter — so without this gate a version-only release
+    # PR (and its merge commit) runs the whole Rust suite + native/WASM build for
+    # nothing. Two signals mirror ci.yml's detection: the PR's head_ref on the
+    # release-please branch, and the release commit subject on the merge push
+    # (where head_ref is empty). The broad path filter is deliberately left
+    # unchanged so EVERY real Rust-relevant change still runs the full check.
+    if: >-
+      ${{ !startsWith(github.head_ref, 'release-please--branches--main')
+      && !startsWith(github.event.head_commit.message, 'chore(main): release ')
+      && !startsWith(github.event.head_commit.message, 'chore: release ') }}
     runs-on: ubuntu-latest
     defaults:
       run:
