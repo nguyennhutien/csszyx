@@ -496,6 +496,67 @@ export function isCompilePackageOptedIn(id: string, compilePackages: readonly st
 }
 
 /**
+ * Resolve each `compilePackages` name to its absolute `packages/<name>` directory
+ * so the prescan can walk it. The prescan otherwise only walks `rootDir` (the
+ * build cwd, e.g. `apps/web`), so a sibling design-system package's `sz` / `szv`
+ * is never scanned and its classes never reach the safelist — the per-module
+ * transform compiles those files when imported but runs after the safelist is
+ * written. Walk up from `rootDir` looking for an ancestor that has
+ * `packages/<name>`; that mirrors the `/packages/<name>/` segment the opt-in
+ * matches. A directory already inside `rootDir` is skipped — the rootDir walk
+ * already covers it. Returns only existing directories; unresolved names are
+ * silently ignored (a typo surfaces as the usual skipped-`sz` warning).
+ *
+ * @param rootDir - the prescan root (build cwd).
+ * @param compilePackages - workspace package directory names to compile.
+ * @param dirExists - injectable existence check (defaults to a real fs stat).
+ * @returns absolute, deduplicated package directories outside `rootDir`.
+ */
+export function resolveCompilePackageDirs(
+    rootDir: string,
+    compilePackages: readonly string[],
+    dirExists: (dir: string) => boolean = dir => {
+        try {
+            return fs.statSync(dir).isDirectory();
+        } catch {
+            return false;
+        }
+    },
+): string[] {
+    if (compilePackages.length === 0) {
+        return [];
+    }
+    const root = path.resolve(rootDir);
+    const normalizedRoot = root.replace(/\\/g, '/');
+    const found: string[] = [];
+    // Names still to resolve — once a name is found at an ancestor, stop looking
+    // for it higher up (the nearest packages/<name> wins; a monorepo has one).
+    const pending = new Set(compilePackages);
+    let dir = root;
+    while (pending.size > 0) {
+        for (const name of [...pending]) {
+            const candidate = path.join(dir, 'packages', name);
+            const key = candidate.replace(/\\/g, '/');
+            // Skip a candidate inside rootDir (the rootDir walk already covers
+            // it) but keep searching higher ancestors for this name.
+            if (key === normalizedRoot || key.startsWith(`${normalizedRoot}/`)) {
+                continue;
+            }
+            if (dirExists(candidate)) {
+                found.push(candidate);
+                pending.delete(name);
+            }
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            break;
+        }
+        dir = parent;
+    }
+    return found;
+}
+
+/**
  * Whether a file lives in a built-in directory csszyx never transforms.
  *
  * `node_modules` and `.next` (non-static) are always ignored. `/packages/` is
@@ -2317,6 +2378,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         scanDir(state.rootDir);
+        // Also walk opted-in workspace packages that live OUTSIDE rootDir (a
+        // sibling design-system package), so their sz/szv classes reach the
+        // safelist. shouldProcessSource already relaxes the /packages/ ignore for
+        // these via compilePackages, so scanDir accepts their files.
+        for (const pkgDir of resolveCompilePackageDirs(state.rootDir, compilePackages)) {
+            scanDir(pkgDir);
+        }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
             if (!result.transformed) {

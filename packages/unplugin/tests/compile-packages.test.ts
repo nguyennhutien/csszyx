@@ -4,6 +4,7 @@ import {
     isCompilePackageOptedIn,
     isHardIgnoredPath,
     isPackagesSkippedSource,
+    resolveCompilePackageDirs,
     skippedSzFilesMessage,
 } from '../src/unplugin.js';
 
@@ -108,6 +109,58 @@ describe('isPackagesSkippedSource', () => {
         expect(isPackagesSkippedSource('/repo/node_modules/x/i.js', [])).toBe(false);
         expect(isPackagesSkippedSource('/repo/.next/server/i.js', [])).toBe(false);
         expect(isPackagesSkippedSource('/repo/src/app.tsx', [])).toBe(false);
+    });
+});
+
+describe('resolveCompilePackageDirs', () => {
+    // A monorepo where the build cwd is apps/web and the design system is a
+    // sibling at packages/vui — the exact layout the prescan must reach.
+    const exists = (dirs: string[]) => (d: string) => dirs.includes(d.replace(/\\/g, '/'));
+
+    it('resolves a sibling package dir by walking up from rootDir', () => {
+        const got = resolveCompilePackageDirs(
+            '/repo/apps/web',
+            ['vui'],
+            exists(['/repo/packages/vui']),
+        );
+        expect(got).toEqual(['/repo/packages/vui']);
+    });
+
+    it('returns empty when compilePackages is unset', () => {
+        expect(
+            resolveCompilePackageDirs('/repo/apps/web', [], exists(['/repo/packages/vui'])),
+        ).toEqual([]);
+    });
+
+    it('skips a package that lives inside rootDir (the rootDir walk covers it)', () => {
+        // rootDir is the repo root; packages/vui is under it → not returned.
+        expect(resolveCompilePackageDirs('/repo', ['vui'], exists(['/repo/packages/vui']))).toEqual(
+            [],
+        );
+    });
+
+    it('ignores a name whose directory does not exist (typo → no dir)', () => {
+        expect(resolveCompilePackageDirs('/repo/apps/web', ['typo'], exists([]))).toEqual([]);
+    });
+
+    it('resolves multiple packages, deduped', () => {
+        const got = resolveCompilePackageDirs(
+            '/repo/apps/web',
+            ['vui', 'icons'],
+            exists(['/repo/packages/vui', '/repo/packages/icons']),
+        );
+        expect(got.sort()).toEqual(['/repo/packages/icons', '/repo/packages/vui']);
+    });
+
+    it('prefers the nearest ancestor when packages/<name> exists at two levels', () => {
+        // Nearer ancestor wins (found first on the upward walk), and the farther
+        // duplicate is not added again.
+        const got = resolveCompilePackageDirs(
+            '/repo/apps/web/sub',
+            ['vui'],
+            exists(['/repo/apps/web/packages/vui', '/repo/packages/vui']),
+        );
+        expect(got).toEqual(['/repo/apps/web/packages/vui']);
     });
 });
 
