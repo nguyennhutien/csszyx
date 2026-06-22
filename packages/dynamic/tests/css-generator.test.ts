@@ -341,4 +341,15 @@ describe('generateCSSRule', () => {
         const rule = generateCSSRule('p-[13px]');
         expect(rule).toBe('.p-\\[13px\\] { padding: 13px }');
     });
+
+    // Injected rules must stay UNLAYERED. Tailwind v4 utilities live in
+    // `@layer utilities`; an unlayered rule beats all layered styles at equal
+    // specificity (CSS Cascade Level 5), so a dynamic() rule overrides the
+    // static sz/Tailwind class. Wrapping the injected rule in `@layer` would
+    // silently flip that precedence — lock it out.
+    it('emits an unlayered rule (no @layer wrapper)', () => {
+        for (const cls of ['p-4', 'bg-blue-500', 'hover:bg-blue-600', 'md:p-8']) {
+            expect(generateCSSRule(cls)).not.toContain('@layer');
+        }
+    });
 });

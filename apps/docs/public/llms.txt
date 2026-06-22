@@ -741,6 +741,63 @@ function Box({ sz, ...rest }) {
 }
 ```
 
+## Build-time vs runtime (when does sz become CSS)
+
+csszyx has two worlds; pick by "is the value set finite and known at build time?".
+
+- **Static (build-time, default):** literals + `szv` variants. The compiler lowers
+  sz → Tailwind classes and safelists them; Tailwind generates CSS at build. Zero
+  runtime, SSR-safe.
+- **Runtime (`dynamic()`):** unbounded values (CMS color, user `#hex`). CSS is
+  generated + injected in the browser via insertRule. Escape hatch only.
+
+Engines (BUILD-TIME parse of JSX source only): Rust native (default) → oxc (JS
+fallback) → babel (last resort). The RUNTIME has no parser: `_sz`/`szv`/`splitBox`
+are plain JS; `dynamic()` lowers an sz OBJECT via `@csszyx/compiler/browser` (pure
+JS, no JSX parsing).
+
+Helper build-time/runtime:
+
+- `sz={{…}}` literal → build-time (extracted + safelisted).
+- `szv` → build-time: the compiler extracts the `szv({…})` config from its
+  DECLARATION, regardless of how the factory output is used (direct sz=, through
+  splitBoxSz, or unused). Indirection does NOT break safelisting.
+- `splitBox`/`splitBoxSz` → RUNTIME routing only (pure JS). They re-partition
+  existing classes; they emit no new CSS and do NOT force `dynamic()`. CSS comes
+  from the static source (a literal or a szv config).
+- `dynamic()` → the only helper that generates CSS at runtime, and only for a
+  class not already in the built CSS.
+
+Safelist requires a statically analyzable position (a literal sz, or a szv config
+literal). File-discovery gap: the prescan only scans files containing `sz=`/`sz:`,
+so a standalone szv-config file (no JSX) is skipped → co-locate szv in the
+component file that has a `sz=` usage. For a sibling workspace package, opt it in
+with `compilePackages: ['name']`.
+
+Tree-shaking is content-presence (same as Tailwind), not import-graph. Co-locating
+szv makes the component the shaking unit.
+
+Specificity: a `dynamic()`-injected rule is UNLAYERED → beats static sz / Tailwind
+`@layer utilities` at equal specificity (CSS Cascade Level 5). They don't collide
+by design (dynamic injects only not-yet-built classes); prefer all-static in a
+component.
+
+CRITICAL — sz on an HTML tag vs a component: the compiler rewrites `sz=` to
+`className=` on ANY element. On an html tag (`<div sz>`) the class lands on the DOM
+and applies. On a COMPONENT (`<Box sz={{p:4}}>` → `<Box className="p-4">`) the
+class becomes a `className` PROP — the component does NOT receive an sz object and
+MUST forward `className` onto a real html tag, else the style is lost. Putting sz
+on a component is NOT enough; every style must reach an html tag.
+
+Design-system rules: (1) a component is styled from the app via the `className` it
+receives (the compiled app sz); forward it to a DOM tag
+(`function Box({className}) { return <div className={className}/> }`). NEVER
+`dynamic(sz)` inside a component (makes every consumer runtime). (2) a multi-part
+component receives ONE className and routes it with `splitBox(className)` (STRING),
+combining with its own base classes on plain className (don't mix sz= and
+className= on one element). `splitBoxSz` (object) is only for routing an sz object
+the component builds internally (e.g. from szv) onto nested sz= props.
+
 ## Security — untrusted sz
 
 csszyx is safe-by-default for AUTHORED sz (compiled to class strings at build time). When sz comes from UNTRUSTED input (JSON-driven UI, CMS, user data), it controls keys and values that reach the runtime CSS pipeline — purify it.

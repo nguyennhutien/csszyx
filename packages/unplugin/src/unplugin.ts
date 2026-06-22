@@ -478,6 +478,31 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
+ * Whether a csszyx build warning should be emitted. `quiet` mutes all of them;
+ * `devOnly` additionally suppresses the warning in a production build (for usage
+ * nudges that must not noise a host app's prod output). Pure so the gating policy
+ * is unit-tested without the worker-based buildEnd wiring.
+ *
+ * @param quiet - The `quiet` option: mute every warning.
+ * @param devOnly - This warning is a dev-only usage nudge.
+ * @param isProduction - Whether this is a production build.
+ * @returns true when the warning should be printed.
+ */
+export function shouldEmitWarning(
+    quiet: boolean,
+    devOnly: boolean,
+    isProduction: boolean,
+): boolean {
+    if (quiet) {
+        return false;
+    }
+    if (devOnly && isProduction) {
+        return false;
+    }
+    return true;
+}
+
+/**
  * Whether a `/packages/` file was opted into compilation via `compilePackages`.
  * Matches the package directory name as a path segment (`/packages/<name>/`).
  * `node_modules` is never opted in — real dependencies must not be compiled even
@@ -493,6 +518,67 @@ export function isCompilePackageOptedIn(id: string, compilePackages: readonly st
         return false;
     }
     return compilePackages.some(name => path.includes(`/packages/${name}/`));
+}
+
+/**
+ * Resolve each `compilePackages` name to its absolute `packages/<name>` directory
+ * so the prescan can walk it. The prescan otherwise only walks `rootDir` (the
+ * build cwd, e.g. `apps/web`), so a sibling design-system package's `sz` / `szv`
+ * is never scanned and its classes never reach the safelist — the per-module
+ * transform compiles those files when imported but runs after the safelist is
+ * written. Walk up from `rootDir` looking for an ancestor that has
+ * `packages/<name>`; that mirrors the `/packages/<name>/` segment the opt-in
+ * matches. A directory already inside `rootDir` is skipped — the rootDir walk
+ * already covers it. Returns only existing directories; unresolved names are
+ * silently ignored (a typo surfaces as the usual skipped-`sz` warning).
+ *
+ * @param rootDir - the prescan root (build cwd).
+ * @param compilePackages - workspace package directory names to compile.
+ * @param dirExists - injectable existence check (defaults to a real fs stat).
+ * @returns absolute, deduplicated package directories outside `rootDir`.
+ */
+export function resolveCompilePackageDirs(
+    rootDir: string,
+    compilePackages: readonly string[],
+    dirExists: (dir: string) => boolean = dir => {
+        try {
+            return fs.statSync(dir).isDirectory();
+        } catch {
+            return false;
+        }
+    },
+): string[] {
+    if (compilePackages.length === 0) {
+        return [];
+    }
+    const root = path.resolve(rootDir);
+    const normalizedRoot = root.replace(/\\/g, '/');
+    const found: string[] = [];
+    // Names still to resolve — once a name is found at an ancestor, stop looking
+    // for it higher up (the nearest packages/<name> wins; a monorepo has one).
+    const pending = new Set(compilePackages);
+    let dir = root;
+    while (pending.size > 0) {
+        for (const name of [...pending]) {
+            const candidate = path.join(dir, 'packages', name);
+            const key = candidate.replace(/\\/g, '/');
+            // Skip a candidate inside rootDir (the rootDir walk already covers
+            // it) but keep searching higher ancestors for this name.
+            if (key === normalizedRoot || key.startsWith(`${normalizedRoot}/`)) {
+                continue;
+            }
+            if (dirExists(candidate)) {
+                found.push(candidate);
+                pending.delete(name);
+            }
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            break;
+        }
+        dir = parent;
+    }
+    return found;
 }
 
 /**
@@ -1732,6 +1818,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
     // Workspace packages opted into compilation; relaxes the /packages/ hard-ignore.
     const compilePackages = options.compilePackages ?? [];
+    // `quiet` mutes every csszyx build warning (e.g. to focus on another tool's
+    // output). Errors that throw are unaffected — only warnings are silenced.
+    const quiet = options.quiet === true;
+    /**
+     * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
+     * additionally suppresses it in production — for usage nudges that should not
+     * noise a host app's production build (a csszyx-output defect is NOT devOnly).
+     *
+     * @param message - The warning text (already `[csszyx]`-prefixed).
+     * @param opts - Emission options.
+     * @param opts.devOnly - Suppress this warning in a production build.
+     */
+    function emitWarning(message: string, opts: { devOnly?: boolean } = {}): void {
+        if (
+            shouldEmitWarning(quiet, opts.devOnly ?? false, process.env.NODE_ENV === 'production')
+        ) {
+            console.warn(message);
+        }
+    }
     const parserOverride = process.env.CSSZYX_PARSER;
     const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'rust';
     const parserMode =
@@ -2317,6 +2422,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         scanDir(state.rootDir);
+        // Also walk opted-in workspace packages that live OUTSIDE rootDir (a
+        // sibling design-system package), so their sz/szv classes reach the
+        // safelist. shouldProcessSource already relaxes the /packages/ ignore for
+        // these via compilePackages, so scanDir accepts their files.
+        for (const pkgDir of resolveCompilePackageDirs(state.rootDir, compilePackages)) {
+            scanDir(pkgDir);
+        }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
             if (!result.transformed) {
@@ -2767,6 +2879,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // Emit remaining dev-mode warnings when the compiler had to fall back to
                         // _sz() runtime. Suppressed in production to avoid leaking source paths.
                         if (
+                            !quiet &&
                             result.diagnostics.length > 0 &&
                             process.env.NODE_ENV !== 'production'
                         ) {
@@ -2901,7 +3014,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     shouldWarnMissingTailwindEntry(state.ownedClasses.size, state.sawTailwindEntry)
                 ) {
                     state.tailwindWarningEmitted = true;
-                    console.warn(missingTailwindEntryMessage(state.ownedClasses.size));
+                    emitWarning(missingTailwindEntryMessage(state.ownedClasses.size));
                 }
                 // A Tailwind entry exists but does not scope content detection.
                 // In a monorepo that silently scans the whole repo (docs included)
@@ -2925,7 +3038,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         )
                     ) {
                         state.contentScopeWarningEmitted = true;
-                        console.warn(unscopedMonorepoMessage());
+                        emitWarning(unscopedMonorepoMessage());
                     }
                 }
                 // Workspace-package source under /packages/ is hard-ignored, so its
@@ -2933,13 +3046,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Surface the skipped files once so the no-op is visible.
                 if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
                     state.skipWarningEmitted = true;
-                    console.warn(skippedSzFilesMessage([...state.skippedSzFiles].sort()));
+                    // A usage nudge (opt the package into compilePackages), not a
+                    // csszyx-output defect — dev-only so it never noises a host
+                    // app's production build.
+                    emitWarning(skippedSzFilesMessage([...state.skippedSzFiles].sort()), {
+                        devOnly: true,
+                    });
                 }
                 // The safelist hit its hard cap; extra classes were dropped. This
                 // only happens on pathological/hostile class cardinality — surface
                 // it so the (otherwise silent) truncation is visible.
                 if (state.classesCapped) {
-                    console.warn(
+                    emitWarning(
                         `[csszyx] safelist exceeded ${MAX_SAFELIST_CLASSES} classes; ` +
                             'additional classes were dropped. This usually means an ' +
                             'unbounded set of arbitrary values reached an sz prop.',
@@ -2949,7 +3067,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // mode (collected during transform). The build log is not the
                 // shipped bundle, so this never leaks paths to end users.
                 for (const warning of state.spreadWarnings) {
-                    console.warn(`[csszyx] ${warning}`);
+                    emitWarning(`[csszyx] ${warning}`);
                 }
                 state.spreadWarnings.clear();
                 // Expose the mangle map as a Node.js global so that dynamic() SSR calls

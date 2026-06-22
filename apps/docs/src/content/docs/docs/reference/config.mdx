@@ -258,6 +258,21 @@ csszyx({
 
 See [Monorepo & Content Scope](/docs/monorepo-content-scope/) for the full fix.
 
+#### Quiet (`quiet`)
+
+Default `false`. Set `true` to silence **all** csszyx build warnings — the
+skipped-`sz`, missing-Tailwind-entry, unscoped-content, unresolvable-spread, and
+safelist-cap messages. Useful when those warnings are understood and intentional,
+or to keep csszyx quiet while you focus on another tool's output in the build log.
+Errors that abort the build (security / crash / build-break guards) still throw —
+only warnings are muted.
+
+```ts
+csszyx({
+  quiet: true, // silence every csszyx build warning
+});
+```
+
 #### Theme Auto-Scan (`scanCss`)
 
 When set, the plugin parses `@theme` blocks in your CSS entry point and generates

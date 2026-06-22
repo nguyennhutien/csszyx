@@ -127,3 +127,32 @@ const pill = szv({
 <span sz={pill()} />             // size: 'sm' (default)
 <span sz={pill({ size: 'lg' })} />
 ```
+
+## Build-time extraction & co-location
+
+The compiler reads every variant class from the `szv({…})` **config literal** at
+its declaration — regardless of how the returned factory is later used (directly
+in `sz=`, through `splitBoxSz`, or not at all). So routing the output through a
+helper never loses the CSS.
+
+The one requirement is **file discovery**: the prescan only transforms files whose
+content contains `sz=` or `sz:`. A standalone file holding *only* a `szv` config
+(no JSX) is skipped and its variants are never extracted. **Co-locate each `szv`
+in the component file that uses it** (which has `sz=`); that also makes the
+component the unit of tree-shaking. In a monorepo, opt a workspace package in with
+[`compilePackages`](/docs/monorepo-content-scope/) so its `szv` is scanned too.
+
+## Config validation (development)
+
+In development, `szv` validates the config shape and the selection and warns once
+on a problem — a missing `variants`, a non-object variant value, or a selection
+that names an unknown variant or value. It degrades safely (a broken config falls
+back to `base` / `{}` rather than throwing per render). TypeScript catches these
+at author time; the runtime guard covers configs built from JSON / `as any` / a
+plain-JS caller. Production is a no-op.
+
+## Dynamic & specificity
+
+`szv` returns a plain sz object — it does **not** run through `dynamic()`. Used as
+`sz={szv(…)}` it is fully build-time. Only wrap it in `dynamic()` for genuinely
+runtime values; see [Build-Time vs Runtime](/docs/build-time-vs-runtime/).
