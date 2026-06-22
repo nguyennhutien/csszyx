@@ -14,7 +14,19 @@
  * dependency rules (e.g. "if the frame clips, make the scroller scroll") without
  * hardcoding csszyx's class vocabulary.
  */
-import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS, type BoxRole } from './box-role-map.generated.js';
+import {
+    isForbiddenSzKey,
+    MAX_SZ_DEPTH,
+    SzDepthError,
+    type SzObject,
+} from '@csszyx/compiler/browser';
+import {
+    BOX_ROLE_BY_KEY,
+    BOX_ROLE_PREFIXES,
+    BOX_ROLE_TOKENS,
+    type BoxRole,
+} from './box-role-map.generated.js';
+import type { SzInput } from './concatenate.js';
 
 export type { BoxRole };
 
@@ -239,4 +251,286 @@ export function omit(classes: string, selector: BoxSelector): string {
     return tokenize(classes)
         .filter(t => !matches(inspect(t), selector))
         .join(' ');
+}
+
+// ── sz-object partitioning ──────────────────────────────────────────────────
+// The string functions above route an emitted className. A component that stays
+// sz-native (e.g. via `szv`) holds an sz OBJECT, not a string, and bridging
+// through a className loses `szv`'s auto-safelisting. The functions below
+// partition the sz object directly, using the same generated box-role map keyed
+// by sz prop key (`BOX_ROLE_BY_KEY`), so a key lands on the same side its
+// emitted class would: `splitBoxSz(x)` ≡ `splitBox(compile(x))` by construction.
+
+/** Options controlling how `splitBoxSz` partitions an sz object. */
+export interface SplitBoxSzOptions {
+    /** Force these selectors onto the outer object, overriding the default map. */
+    outer?: BoxSelector[];
+    /** Force these selectors onto the inner object, overriding the default map. */
+    inner?: BoxSelector[];
+    /** Where an unrecognized key goes. Defaults to `'outer'`. */
+    fallback?: BoxRole;
+}
+
+/** The two sz-object buckets produced by `splitBoxSz`. */
+export interface SplitBoxSzResult {
+    /** sz for the outer (border-outward) element. */
+    outer: SzObject;
+    /** sz for the inner (border-inward) element. */
+    inner: SzObject;
+}
+
+/**
+ * Classify an sz prop key by box-model role + semantic category, or `undefined`
+ * if it is not a csszyx-owned key. The sz-object analog of `classify` (which
+ * takes an emitted class token) — both read the same generated map, so
+ * `classifySzKey('m')` and `classify('m-4')` agree.
+ *
+ * @param key - An sz prop key (e.g. `'m'`, `'px'`, `'grow'`).
+ * @returns The key's role and category, or `undefined` if unowned.
+ */
+export function classifySzKey(key: string): Classification | undefined {
+    return BOX_ROLE_BY_KEY.get(key);
+}
+
+/**
+ * A non-null, non-array object — a nested sz / variant object.
+ *
+ * @param value - Any sz value.
+ * @returns `true` if `value` is a plain object.
+ */
+function isPlainObject(value: unknown): value is SzObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Does an sz key (with its classification) satisfy `selector`? A category+value
+ * object selector matches on category alone, since the value lives on the sz
+ * value rather than the key.
+ *
+ * @param key - The sz prop key.
+ * @param entry - The key's classification, or `undefined` if unowned.
+ * @param selector - The selector to test the key against.
+ * @returns `true` if the key matches the selector.
+ */
+function matchesKey(
+    key: string,
+    entry: Classification | undefined,
+    selector: BoxSelector,
+): boolean {
+    if (typeof selector === 'object') {
+        return !!entry && Object.keys(selector).every(category => entry.category === category);
+    }
+    if (selector === 'outer' || selector === 'inner') return entry?.role === selector;
+    if (selector === 'content') return entry?.role === 'inner';
+    if (key === selector) return true;
+    return !!entry && selector === entry.category;
+}
+
+/**
+ * Does any selector in `selectors` match the key?
+ *
+ * @param key - The sz prop key.
+ * @param entry - The key's classification, or `undefined` if unowned.
+ * @param selectors - The selectors to test the key against.
+ * @returns `true` if the key matches at least one selector.
+ */
+function anyMatchKey(
+    key: string,
+    entry: Classification | undefined,
+    selectors: BoxSelector[],
+): boolean {
+    return selectors.some(s => matchesKey(key, entry, s));
+}
+
+/**
+ * Deep-merge `source` into `target` (last-write-wins), bounded in depth and
+ * skipping prototype-polluting keys — sz can be untrusted runtime input.
+ *
+ * @param target - The object merged into (mutated and returned).
+ * @param source - The object whose values win on conflict.
+ * @param depth - Current recursion depth, bounded by `MAX_SZ_DEPTH`.
+ * @returns `target`.
+ */
+function mergeSzInto(target: SzObject, source: SzObject, depth: number): SzObject {
+    if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
+    for (const key of Object.keys(source)) {
+        if (isForbiddenSzKey(key)) continue;
+        const sv = source[key];
+        const tv = target[key];
+        target[key] =
+            isPlainObject(sv) && isPlainObject(tv) ? mergeSzInto({ ...tv }, sv, depth + 1) : sv;
+    }
+    return target;
+}
+
+/**
+ * Flatten an `SzInput` into one merged sz object: arrays are flattened and
+ * merged (last-write-wins), `null`/`false`/`undefined` are dropped. A raw string
+ * has no sz-object representation, so it throws in development (mirroring `_sz`)
+ * and is dropped in production.
+ *
+ * @param sz - The sz input to flatten.
+ * @param depth - Current recursion depth, bounded by `MAX_SZ_DEPTH`.
+ * @returns A single merged sz object.
+ */
+function flattenSz(sz: SzInput, depth: number): SzObject {
+    if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
+    if (!sz) return {};
+    if (typeof sz === 'string') {
+        if (process.env.NODE_ENV !== 'production' && sz.trim()) {
+            throw new TypeError(
+                `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for ${JSON.stringify(sz)}.`,
+            );
+        }
+        return {};
+    }
+    if (Array.isArray(sz)) {
+        const acc: SzObject = {};
+        for (const part of sz) mergeSzInto(acc, flattenSz(part, depth + 1), depth + 1);
+        return acc;
+    }
+    return sz;
+}
+
+/**
+ * Partition `obj`'s keys into the `outer` / `inner` accumulators. A property key
+ * routes by its box role (overrides win, `inner` checked first); an unowned key
+ * with a nested object is a variant container (`hover`, `md`, `[&_*]`, …) and is
+ * recursed, so it lands by the role of the property inside it and splits across
+ * buckets when its inner properties disagree.
+ *
+ * @param obj - The sz object to partition.
+ * @param options - The partition overrides and fallback.
+ * @param outer - Accumulator for outer keys (mutated).
+ * @param inner - Accumulator for inner keys (mutated).
+ * @param depth - Current recursion depth, bounded by `MAX_SZ_DEPTH`.
+ */
+function partitionSz(
+    obj: SzObject,
+    options: SplitBoxSzOptions,
+    outer: SzObject,
+    inner: SzObject,
+    depth: number,
+): void {
+    if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
+    const forceInner = options.inner ?? [];
+    const forceOuter = options.outer ?? [];
+    const fallback: BoxRole = options.fallback ?? 'outer';
+
+    for (const key of Object.keys(obj)) {
+        if (isForbiddenSzKey(key)) continue;
+        const value = obj[key];
+        const entry = BOX_ROLE_BY_KEY.get(key);
+
+        if (anyMatchKey(key, entry, forceInner)) {
+            inner[key] = value;
+        } else if (anyMatchKey(key, entry, forceOuter)) {
+            outer[key] = value;
+        } else if (entry) {
+            (entry.role === 'inner' ? inner : outer)[key] = value;
+        } else if (isPlainObject(value)) {
+            const subOuter: SzObject = {};
+            const subInner: SzObject = {};
+            partitionSz(value, options, subOuter, subInner, depth + 1);
+            if (Object.keys(subOuter).length > 0) outer[key] = subOuter;
+            if (Object.keys(subInner).length > 0) inner[key] = subInner;
+        } else {
+            (fallback === 'inner' ? inner : outer)[key] = value;
+        }
+    }
+}
+
+/**
+ * Partition an sz object (or any `SzInput`) into `{ outer, inner }` at the CSS
+ * box-model border line — the sz-object analog of `splitBox`. Each key routes to
+ * the same side its emitted class would (`splitBoxSz(x)` buckets keys to the
+ * roles `splitBox(compile(x))` gives the emitted classes). Arrays are flattened,
+ * `null`/`false` collapse to empty objects, and `options.inner`/`outer`/
+ * `fallback` behave like `SplitBoxOptions` (`inner` wins when a key matches both).
+ *
+ * @param sz - The sz object / input to partition.
+ * @param options - Overrides for forcing keys onto a node and the fallback role.
+ * @returns The `{ outer, inner }` sz-object buckets.
+ * @example splitBoxSz({ m: 4, px: 2 }) // → { outer: { m: 4 }, inner: { px: 2 } }
+ */
+export function splitBoxSz(sz: SzInput, options: SplitBoxSzOptions = {}): SplitBoxSzResult {
+    const outer: SzObject = {};
+    const inner: SzObject = {};
+    partitionSz(flattenSz(sz, 0), options, outer, inner, 0);
+    return { outer, inner };
+}
+
+/**
+ * Walk a flattened sz object (recursing into variant containers) keeping only
+ * the keys whose `selector` match equals `keep` — the engine behind
+ * `pickSz`/`omitSz`.
+ *
+ * @param obj - The flattened sz object.
+ * @param selector - The selector keys are tested against.
+ * @param keep - `true` to keep matches (pick), `false` to keep non-matches (omit).
+ * @param depth - Current recursion depth, bounded by `MAX_SZ_DEPTH`.
+ * @returns A new sz object with the filtered keys.
+ */
+function filterSz(obj: SzObject, selector: BoxSelector, keep: boolean, depth: number): SzObject {
+    if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
+    const result: SzObject = {};
+    for (const key of Object.keys(obj)) {
+        if (isForbiddenSzKey(key)) continue;
+        const value = obj[key];
+        const entry = BOX_ROLE_BY_KEY.get(key);
+        if (entry || !isPlainObject(value)) {
+            if (matchesKey(key, entry, selector) === keep) result[key] = value;
+        } else {
+            const sub = filterSz(value, selector, keep, depth + 1);
+            if (Object.keys(sub).length > 0) result[key] = sub;
+        }
+    }
+    return result;
+}
+
+/**
+ * Does any key in `sz` match `selector` (after flattening, recursing into
+ * variants)? The sz-object analog of `has`.
+ *
+ * @param sz - The sz input to scan.
+ * @param selector - The selector to test keys against.
+ * @returns `true` if any key matches.
+ */
+export function hasSz(sz: SzInput, selector: BoxSelector): boolean {
+    const scan = (obj: SzObject, depth: number): boolean => {
+        if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
+        for (const key of Object.keys(obj)) {
+            if (isForbiddenSzKey(key)) continue;
+            const value = obj[key];
+            const entry = BOX_ROLE_BY_KEY.get(key);
+            if (matchesKey(key, entry, selector)) return true;
+            if (!entry && isPlainObject(value) && scan(value, depth + 1)) return true;
+        }
+        return false;
+    };
+    return scan(flattenSz(sz, 0), 0);
+}
+
+/**
+ * Keep only the keys in `sz` that match `selector` (recursing into variants).
+ * The sz-object analog of `pick`.
+ *
+ * @param sz - The sz input to filter.
+ * @param selector - The selector keys must match to be kept.
+ * @returns A new sz object with the matching keys.
+ */
+export function pickSz(sz: SzInput, selector: BoxSelector): SzObject {
+    return filterSz(flattenSz(sz, 0), selector, true, 0);
+}
+
+/**
+ * Drop the keys in `sz` that match `selector`, keeping the rest (recursing into
+ * variants). The sz-object analog of `omit`.
+ *
+ * @param sz - The sz input to filter.
+ * @param selector - The selector keys must match to be dropped.
+ * @returns A new sz object with the non-matching keys.
+ */
+export function omitSz(sz: SzInput, selector: BoxSelector): SzObject {
+    return filterSz(flattenSz(sz, 0), selector, false, 0);
 }
