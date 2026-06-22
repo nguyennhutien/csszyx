@@ -478,6 +478,31 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
+ * Whether a csszyx build warning should be emitted. `quiet` mutes all of them;
+ * `devOnly` additionally suppresses the warning in a production build (for usage
+ * nudges that must not noise a host app's prod output). Pure so the gating policy
+ * is unit-tested without the worker-based buildEnd wiring.
+ *
+ * @param quiet - The `quiet` option: mute every warning.
+ * @param devOnly - This warning is a dev-only usage nudge.
+ * @param isProduction - Whether this is a production build.
+ * @returns true when the warning should be printed.
+ */
+export function shouldEmitWarning(
+    quiet: boolean,
+    devOnly: boolean,
+    isProduction: boolean,
+): boolean {
+    if (quiet) {
+        return false;
+    }
+    if (devOnly && isProduction) {
+        return false;
+    }
+    return true;
+}
+
+/**
  * Whether a `/packages/` file was opted into compilation via `compilePackages`.
  * Matches the package directory name as a path segment (`/packages/<name>/`).
  * `node_modules` is never opted in — real dependencies must not be compiled even
@@ -1793,6 +1818,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
     // Workspace packages opted into compilation; relaxes the /packages/ hard-ignore.
     const compilePackages = options.compilePackages ?? [];
+    // `quiet` mutes every csszyx build warning (e.g. to focus on another tool's
+    // output). Errors that throw are unaffected — only warnings are silenced.
+    const quiet = options.quiet === true;
+    /**
+     * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
+     * additionally suppresses it in production — for usage nudges that should not
+     * noise a host app's production build (a csszyx-output defect is NOT devOnly).
+     *
+     * @param message - The warning text (already `[csszyx]`-prefixed).
+     * @param opts - Emission options.
+     * @param opts.devOnly - Suppress this warning in a production build.
+     */
+    function emitWarning(message: string, opts: { devOnly?: boolean } = {}): void {
+        if (
+            shouldEmitWarning(quiet, opts.devOnly ?? false, process.env.NODE_ENV === 'production')
+        ) {
+            console.warn(message);
+        }
+    }
     const parserOverride = process.env.CSSZYX_PARSER;
     const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'rust';
     const parserMode =
@@ -2835,6 +2879,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // Emit remaining dev-mode warnings when the compiler had to fall back to
                         // _sz() runtime. Suppressed in production to avoid leaking source paths.
                         if (
+                            !quiet &&
                             result.diagnostics.length > 0 &&
                             process.env.NODE_ENV !== 'production'
                         ) {
@@ -2969,7 +3014,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     shouldWarnMissingTailwindEntry(state.ownedClasses.size, state.sawTailwindEntry)
                 ) {
                     state.tailwindWarningEmitted = true;
-                    console.warn(missingTailwindEntryMessage(state.ownedClasses.size));
+                    emitWarning(missingTailwindEntryMessage(state.ownedClasses.size));
                 }
                 // A Tailwind entry exists but does not scope content detection.
                 // In a monorepo that silently scans the whole repo (docs included)
@@ -2993,7 +3038,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         )
                     ) {
                         state.contentScopeWarningEmitted = true;
-                        console.warn(unscopedMonorepoMessage());
+                        emitWarning(unscopedMonorepoMessage());
                     }
                 }
                 // Workspace-package source under /packages/ is hard-ignored, so its
@@ -3001,13 +3046,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Surface the skipped files once so the no-op is visible.
                 if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
                     state.skipWarningEmitted = true;
-                    console.warn(skippedSzFilesMessage([...state.skippedSzFiles].sort()));
+                    // A usage nudge (opt the package into compilePackages), not a
+                    // csszyx-output defect — dev-only so it never noises a host
+                    // app's production build.
+                    emitWarning(skippedSzFilesMessage([...state.skippedSzFiles].sort()), {
+                        devOnly: true,
+                    });
                 }
                 // The safelist hit its hard cap; extra classes were dropped. This
                 // only happens on pathological/hostile class cardinality — surface
                 // it so the (otherwise silent) truncation is visible.
                 if (state.classesCapped) {
-                    console.warn(
+                    emitWarning(
                         `[csszyx] safelist exceeded ${MAX_SAFELIST_CLASSES} classes; ` +
                             'additional classes were dropped. This usually means an ' +
                             'unbounded set of arbitrary values reached an sz prop.',
@@ -3017,7 +3067,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // mode (collected during transform). The build log is not the
                 // shipped bundle, so this never leaks paths to end users.
                 for (const warning of state.spreadWarnings) {
-                    console.warn(`[csszyx] ${warning}`);
+                    emitWarning(`[csszyx] ${warning}`);
                 }
                 state.spreadWarnings.clear();
                 // Expose the mangle map as a Node.js global so that dynamic() SSR calls
