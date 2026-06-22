@@ -2,10 +2,12 @@
 
 ## [0.10.2](https://github.com/nguyennhutien/csszyx/compare/v0.10.1...v0.10.2) (2026-06-22)
 
-
 ### Features
 
-* compile workspace-package szv, szv validation, and the quiet warning gate ([#85](https://github.com/nguyennhutien/csszyx/issues/85)) ([653c0b6](https://github.com/nguyennhutien/csszyx/commit/653c0b6a990e3e7837c8c3fc84939842d3e87f13))
+* compile workspace-package szv, szv validation, and the quiet warning gate ([#85](https://github.com/nguyennhutien/csszyx/issues/85))
+* **unplugin:** prescan opted-in workspace package directories ([#85](https://github.com/nguyennhutien/csszyx/issues/85))
+* **runtime:** validate szv config and selection with dev warnings ([#85](https://github.com/nguyennhutien/csszyx/issues/85))
+* **unplugin:** add quiet option and route warnings through one gate ([#85](https://github.com/nguyennhutien/csszyx/issues/85))
 
 ## [0.10.1](https://github.com/nguyennhutien/csszyx/compare/v0.10.0...v0.10.1) (2026-06-22)
 
