@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.4](https://github.com/nguyennhutien/csszyx/compare/v0.10.3...v0.10.4) (2026-06-23)
+
+
+### Features
+
+* szcn directional override, szv prescan discovery, and path-based compileSources ([#91](https://github.com/nguyennhutien/csszyx/issues/91)) ([eb715f0](https://github.com/nguyennhutien/csszyx/commit/eb715f011652bbd4ed583e14d815e0106612b68c))
+
 ## [0.10.3](https://github.com/nguyennhutien/csszyx/compare/v0.10.2...v0.10.3) (2026-06-23)
 
 ### Features
