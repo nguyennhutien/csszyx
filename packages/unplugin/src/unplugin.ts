@@ -609,6 +609,24 @@ export function isHardIgnoredPath(id: string, compilePackages: readonly string[]
 }
 
 /**
+ * Whether a file's text may contain csszyx classes the prescan should extract
+ * into the safelist. The prescan reads files instead of parsing every one, so it
+ * needs a cheap text proxy for "worth transforming". A `sz=` / `sz:` prop is the
+ * obvious case, but a `szv(...)` declaration ALSO produces safelistable classes
+ * (the compiler extracts every variant from the config), and a layout component
+ * built as a prop API resolves szv via `_sz(...)` with NO `sz=` in the file — so
+ * gating on `sz` alone left those variants unsafelisted (silent dead classes).
+ * `szv(` is a precise, csszyx-owned token, so including it costs at most an extra
+ * file transform (the prescan is fail-open: when in doubt, scan).
+ *
+ * @param content - The source file text.
+ * @returns true when the file should be prescanned for safelist extraction.
+ */
+export function fileMayContainSafelistableSz(content: string): boolean {
+    return content.includes('sz=') || content.includes('sz:') || content.includes('szv(');
+}
+
+/**
  * Whether a file is workspace-package source that csszyx skipped only because it
  * lives under `/packages/` and was not opted into `compilePackages`. Used to
  * surface the silent no-op (skipped `sz` produces no CSS). `node_modules` and
@@ -2413,7 +2431,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     } catch {
                         continue;
                     }
-                    if (!content.includes('sz=') && !content.includes('sz:')) {
+                    if (!fileMayContainSafelistableSz(content)) {
                         continue;
                     }
                     prescanSources.push({ filePath, content });

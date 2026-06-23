@@ -1,12 +1,39 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    fileMayContainSafelistableSz,
     isCompilePackageOptedIn,
     isHardIgnoredPath,
     isPackagesSkippedSource,
     resolveCompilePackageDirs,
     skippedSzFilesMessage,
 } from '../src/unplugin.js';
+
+describe('fileMayContainSafelistableSz', () => {
+    it('accepts a file with a sz= prop', () => {
+        expect(fileMayContainSafelistableSz('const A = () => <div sz={{ p: 4 }} />;')).toBe(true);
+    });
+
+    it('accepts a file with a sz: object key (JS-transformed form)', () => {
+        expect(fileMayContainSafelistableSz('createElement(C, { sz: { p: 4 } })')).toBe(true);
+    });
+
+    it('accepts a szv-only prop-API layout file with NO sz= (the reported gap)', () => {
+        // Flex.tsx shape: szv configs resolved via _sz, no sz= anywhere.
+        const flex = `import { _sz, szv } from '@csszyx/runtime';
+            const flexSz = szv({ variants: { justify: { start: { justify: 'start' } } } });
+            export const Flex = (p) => <Box className={_sz(flexSz({ justify: p.justify }))} />;`;
+        expect(fileMayContainSafelistableSz(flex)).toBe(true);
+    });
+
+    it('rejects a file with neither sz nor szv', () => {
+        expect(fileMayContainSafelistableSz('export const x = clsx("flex", "p-4");')).toBe(false);
+    });
+
+    it('does not treat sx (the runtime style prop) as sz', () => {
+        expect(fileMayContainSafelistableSz('<Box sx={{ display: "flex" }} />')).toBe(false);
+    });
+});
 
 // The compilePackages opt-in + skip diagnostic decide which workspace-package
 // files csszyx compiles vs. silently skips. The build wiring runs in a worker
