@@ -526,16 +526,24 @@ export type PartialCsszyxConfig = {
     exclude?: FilePattern | FilePattern[];
 
     /**
-     * Opt workspace packages under `/packages/` into compilation.
+     * Opt extra source locations into compilation by PATH.
      *
-     * csszyx hard-ignores `/packages/` by default because published libraries
-     * are expected to ship pre-extracted CSS. In a monorepo, however, a
-     * design-system package is first-class source the developer authors, so its
-     * `sz` props must be compiled like app code. List the package directory
-     * names here (e.g. `['vui']`) to compile `**\/packages/<name>/**`. Only the
-     * `/packages/` rule is relaxed — `node_modules` and `.next` stay ignored.
+     * csszyx hard-ignores `/packages/` by default (published libraries are
+     * expected to ship pre-extracted CSS) and only pre-scans the build root, so
+     * a workspace design-system that lives under `/packages/` or as a sibling
+     * outside the build root is not compiled or safelisted. List its
+     * directory here to (a) exempt it from the ignore so its `sz`/`szv` is
+     * compiled, and (b) add it as a pre-scan root so its classes are safelisted.
+     *
+     * Paths resolve like Vite config paths: relative to the resolved project
+     * root (`config.root`, default the build cwd); absolute paths pass through.
+     * Examples: `['packages/vui']`, `['../libs/vui']`, `['/abs/path/ui']`.
+     * `node_modules`/`.next` stay ignored unless a listed path points into them.
+     *
+     * Symlinked workspace packages (pnpm) are matched after realpath resolution,
+     * which relies on Vite's default `resolve.preserveSymlinks: false`.
      */
-    compilePackages?: string[];
+    compileSources?: string[];
 
     /**
      * Warn when, inside a monorepo, the Tailwind entry imports `tailwindcss`

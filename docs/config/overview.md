@@ -202,28 +202,30 @@ in IO or AST work. Defence-in-depth angle: operators can quarantine
 suspect paths via `exclude` while keeping `build.astBudgetLimit` at its
 conservative default of 50000 nodes.
 
-### Workspace packages (`compilePackages`)
+### Extra sources (`compileSources`)
 
-csszyx hard-ignores `/packages/` by default: a published library is
-expected to ship pre-extracted CSS, so its `sz` is compiled once at
-release time, not in every consumer. In a monorepo, though, a
-design-system package is first-class source you author, so its `sz`
-must compile alongside app code.
+csszyx hard-ignores `/packages/` by default (a published library ships
+pre-extracted CSS) and pre-scans only the build root. In a monorepo, a
+design-system you author — under `/packages/` or a sibling outside the
+build root — is first-class source that should compile alongside app code.
+Opt it in **by path**:
 
 ```ts
 csszyx({
-  // Compile sz in these workspace packages (matched as `/packages/<name>/`).
-  compilePackages: ["vui"],
+  compileSources: ["packages/vui", "../libs/ui"],
 });
 ```
 
-Only the `/packages/` rule is relaxed — `node_modules` and `.next` stay
-ignored, so a real dependency is never compiled even if it shares a name.
-A file under `/packages/` that contains `sz` but is NOT opted in is
-skipped silently (it produces no CSS); csszyx warns at build end listing
-those files so the no-op is visible. Publishing convention: ship the
-package's pre-extracted CSS for external consumers, and use
-`compilePackages` to re-extract from source inside your own monorepo.
+Paths resolve like Vite config paths: relative to the resolved project
+root (`config.root`, default the build cwd); absolute paths pass through;
+pnpm symlinks are matched after realpath resolution. Each entry exempts
+that directory from the ignore AND adds it as a pre-scan root.
+`node_modules` and `.next` stay ignored unless a listed path points into
+them. A `/packages/` file with `sz` not under any `compileSources`
+directory is skipped silently (no CSS); csszyx warns at build end listing
+those files. A path that does not resolve to a directory is reported in a
+build warning. A non-`/packages/` lib inside the build root needs no
+config — it is compiled and scanned automatically.
 
 ### Hydration
 

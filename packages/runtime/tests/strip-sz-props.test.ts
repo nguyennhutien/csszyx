@@ -24,7 +24,7 @@ describe('stripSzProps', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         stripSzProps({ sz: { p: '4' }, id: 'x' });
         expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0][0]).toContain('compilePackages');
+        expect(warn.mock.calls[0][0]).toContain('compileSources');
     });
 
     it('warns at most once across renders', () => {

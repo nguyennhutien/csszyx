@@ -199,7 +199,7 @@ omit("p-2 overflow-y-auto flex", "overflow"); // → "p-2 flex"
 
 ### `stripSzProps()`
 
-Removes the `sz` prop before a component spreads `...rest` onto a host element. The compiler rewrites `sz` to `className` at build time, so a compiled component never carries a leftover `sz`. But a file that was **not** compiled (e.g. a workspace package missing from `compilePackages`, or any source the bundler skipped) keeps its raw `sz`, which then leaks to the DOM as `sz="[object Object]"`. `stripSzProps` drops it, and in development warns once when the leaked `sz` is a raw object — pointing at the real cause.
+Removes the `sz` prop before a component spreads `...rest` onto a host element. The compiler rewrites `sz` to `className` at build time, so a compiled component never carries a leftover `sz`. But a file that was **not** compiled (e.g. a workspace package missing from `compileSources`, or any source the bundler skipped) keeps its raw `sz`, which then leaks to the DOM as `sz="[object Object]"`. `stripSzProps` drops it, and in development warns once when the leaked `sz` is a raw object — pointing at the real cause.
 
 **Signature:**
 
