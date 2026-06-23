@@ -115,7 +115,7 @@ interface PluginState {
     spreadWarnings: Set<string>;
     /**
      * Workspace-package files under `/packages/` that contain `sz` but were
-     * skipped by the hard-ignore (not opted into `compilePackages`). Surfaced at
+     * skipped by the hard-ignore (not under any `compileSources` dir). Surfaced at
      * build end so the silent no-op (skipped `sz` → no CSS) becomes visible.
      */
     skippedSzFiles: Set<string>;
@@ -503,107 +503,103 @@ export function shouldEmitWarning(
 }
 
 /**
- * Whether a `/packages/` file was opted into compilation via `compilePackages`.
- * Matches the package directory name as a path segment (`/packages/<name>/`).
- * `node_modules` is never opted in — real dependencies must not be compiled even
- * if a dependency happens to share a name with a listed workspace package.
+ * Normalize a filesystem path / bundler id for prefix comparison: forward
+ * slashes, and no trailing slash (so `dir` and `dir/` compare equal).
  *
- * @param id - bundler file id or filesystem path (Windows backslashes accepted).
- * @param compilePackages - workspace package directory names to compile.
- * @returns true when the file belongs to a listed workspace package.
+ * @param p - A path or bundler id.
+ * @returns The normalized path.
  */
-export function isCompilePackageOptedIn(id: string, compilePackages: readonly string[]): boolean {
-    const path = id.replace(/\\/g, '/');
-    if (path.includes('node_modules')) {
-        return false;
-    }
-    return compilePackages.some(name => path.includes(`/packages/${name}/`));
+function normalizeForMatch(p: string): string {
+    const n = p.replace(/\\/g, '/');
+    return n.length > 1 && n.endsWith('/') ? n.slice(0, -1) : n;
 }
 
 /**
- * Resolve each `compilePackages` name to its absolute `packages/<name>` directory
- * so the prescan can walk it. The prescan otherwise only walks `rootDir` (the
- * build cwd, e.g. `apps/web`), so a sibling design-system package's `sz` / `szv`
- * is never scanned and its classes never reach the safelist — the per-module
- * transform compiles those files when imported but runs after the safelist is
- * written. Walk up from `rootDir` looking for an ancestor that has
- * `packages/<name>`; that mirrors the `/packages/<name>/` segment the opt-in
- * matches. A directory already inside `rootDir` is skipped — the rootDir walk
- * already covers it. Returns only existing directories; unresolved names are
- * silently ignored (a typo surfaces as the usual skipped-`sz` warning).
+ * Resolve `compileSources` entries to absolute, realpath-resolved directories.
+ * Each entry resolves like a Vite config path: relative to the project `root`
+ * (`config.root`), absolute passes through. The result is realpath-resolved so a
+ * pnpm-symlinked workspace package matches Vite's (realpath'd, since
+ * `resolve.preserveSymlinks` defaults to false) module ids. Done ONCE at
+ * config-resolved time; the per-module matcher then does pure prefix tests.
  *
- * @param rootDir - the prescan root (build cwd).
- * @param compilePackages - workspace package directory names to compile.
- * @param dirExists - injectable existence check (defaults to a real fs stat).
- * @returns absolute, deduplicated package directories outside `rootDir`.
+ * @param root - the resolved project root (Vite `config.root` / build cwd).
+ * @param sources - the configured `compileSources` paths (relative or absolute).
+ * @param realpathDir - injectable resolver → realpath if it is an existing
+ *   directory, else `null` (defaults to a real fs realpath + stat).
+ * @returns `dirs` (existing, deduped, normalized) and `missing` (entries that did
+ *   not resolve to a directory) for a build warning.
  */
-export function resolveCompilePackageDirs(
-    rootDir: string,
-    compilePackages: readonly string[],
-    dirExists: (dir: string) => boolean = dir => {
+export function resolveCompileSourceDirs(
+    root: string,
+    sources: readonly string[],
+    realpathDir: (p: string) => string | null = p => {
         try {
-            return fs.statSync(dir).isDirectory();
+            const real = fs.realpathSync(p);
+            return fs.statSync(real).isDirectory() ? real : null;
         } catch {
-            return false;
+            return null;
         }
     },
-): string[] {
-    if (compilePackages.length === 0) {
-        return [];
-    }
-    const root = path.resolve(rootDir);
-    const normalizedRoot = root.replace(/\\/g, '/');
-    const found: string[] = [];
-    // Names still to resolve — once a name is found at an ancestor, stop looking
-    // for it higher up (the nearest packages/<name> wins; a monorepo has one).
-    const pending = new Set(compilePackages);
-    let dir = root;
-    while (pending.size > 0) {
-        for (const name of [...pending]) {
-            const candidate = path.join(dir, 'packages', name);
-            const key = candidate.replace(/\\/g, '/');
-            // Skip a candidate inside rootDir (the rootDir walk already covers
-            // it) but keep searching higher ancestors for this name.
-            if (key === normalizedRoot || key.startsWith(`${normalizedRoot}/`)) {
-                continue;
-            }
-            if (dirExists(candidate)) {
-                found.push(candidate);
-                pending.delete(name);
-            }
+): { dirs: string[]; missing: string[] } {
+    const dirs: string[] = [];
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of sources) {
+        const abs = path.resolve(root, entry);
+        const real = realpathDir(abs);
+        if (!real) {
+            missing.push(entry);
+            continue;
         }
-        const parent = path.dirname(dir);
-        if (parent === dir) {
-            break;
+        const key = normalizeForMatch(real);
+        if (!seen.has(key)) {
+            seen.add(key);
+            dirs.push(key);
         }
-        dir = parent;
     }
-    return found;
+    return { dirs, missing };
 }
 
 /**
- * Whether a file lives in a built-in directory csszyx never transforms.
- *
- * `node_modules` and `.next` (non-static) are always ignored. `/packages/` is
- * ignored by default — published libraries ship pre-extracted CSS — but is
- * relaxed for packages listed in `compilePackages`, so a monorepo can author
- * `sz` in workspace source. Pulled out as a pure function so the precedence
- * (node_modules/.next stay hard regardless of `compilePackages`) is unit-tested.
+ * Whether `id` lives under one of the resolved `compileSources` directories.
+ * Pure prefix match on normalized absolute paths — no fs (the fs work was done
+ * once in {@link resolveCompileSourceDirs}).
  *
  * @param id - bundler file id or filesystem path.
- * @param compilePackages - workspace package directory names to compile.
+ * @param sourceDirs - resolved, normalized `compileSources` directories.
+ * @returns true when the file is in an opted-in source directory.
+ */
+export function isCompileSourceOptedIn(id: string, sourceDirs: readonly string[]): boolean {
+    const p = normalizeForMatch(id);
+    return sourceDirs.some(dir => p === dir || p.startsWith(`${dir}/`));
+}
+
+/**
+ * Whether a file lives in a directory csszyx never transforms.
+ *
+ * An explicitly opted-in `compileSources` path wins over every default ignore —
+ * the developer named the exact directory and takes responsibility for it. Then
+ * `node_modules`, `.next` (non-static), and `/packages/` are ignored by default
+ * (published libraries ship pre-extracted CSS). Pure so the precedence
+ * (opt-in > the default ignores) is unit-tested.
+ *
+ * @param id - bundler file id or filesystem path.
+ * @param sourceDirs - resolved, normalized `compileSources` directories.
  * @returns true when the file should be skipped regardless of user filters.
  */
-export function isHardIgnoredPath(id: string, compilePackages: readonly string[] = []): boolean {
-    const path = id.replace(/\\/g, '/');
-    if (path.includes('node_modules')) {
+export function isHardIgnoredPath(id: string, sourceDirs: readonly string[] = []): boolean {
+    const p = normalizeForMatch(id);
+    if (isCompileSourceOptedIn(p, sourceDirs)) {
+        return false;
+    }
+    if (p.includes('node_modules')) {
         return true;
     }
-    if (path.includes('.next') && !path.includes('static')) {
+    if (p.includes('.next') && !p.includes('static')) {
         return true;
     }
-    if (path.includes('/packages/')) {
-        return !isCompilePackageOptedIn(path, compilePackages);
+    if (p.includes('/packages/')) {
+        return true;
     }
     return false;
 }
@@ -628,36 +624,34 @@ export function fileMayContainSafelistableSz(content: string): boolean {
 
 /**
  * Whether a file is workspace-package source that csszyx skipped only because it
- * lives under `/packages/` and was not opted into `compilePackages`. Used to
- * surface the silent no-op (skipped `sz` produces no CSS). `node_modules` and
- * `.next` are excluded — those are never workspace source the developer authors,
- * and scanning `node_modules` for `sz` would be slow and false-positive-prone.
+ * lives under `/packages/` and is not under any opted-in `compileSources`
+ * directory. Used to surface the silent no-op (skipped `sz` produces no CSS).
+ * `node_modules` and `.next` are excluded — those are never workspace source the
+ * developer authors, and scanning `node_modules` for `sz` would be slow and
+ * false-positive-prone.
  *
  * @param id - filesystem path of the skipped file.
- * @param compilePackages - workspace package directory names already opted in.
+ * @param sourceDirs - resolved, normalized `compileSources` directories.
  * @returns true when the skip is a workspace-package `sz` skip worth warning on.
  */
-export function isPackagesSkippedSource(
-    id: string,
-    compilePackages: readonly string[] = [],
-): boolean {
-    const path = id.replace(/\\/g, '/');
-    if (path.includes('node_modules')) {
+export function isPackagesSkippedSource(id: string, sourceDirs: readonly string[] = []): boolean {
+    const p = normalizeForMatch(id);
+    if (p.includes('node_modules')) {
         return false;
     }
-    if (path.includes('.next') && !path.includes('static')) {
+    if (p.includes('.next') && !p.includes('static')) {
         return false;
     }
-    if (!path.includes('/packages/')) {
+    if (!p.includes('/packages/')) {
         return false;
     }
-    return !isCompilePackageOptedIn(path, compilePackages);
+    return !isCompileSourceOptedIn(p, sourceDirs);
 }
 
 /**
  * Build the workspace-package skip warning. Lists the skipped files that contain
- * `sz` so the developer can opt the package into `compilePackages` instead of
- * silently shipping no CSS for them.
+ * `sz` so the developer can add the package directory to `compileSources`
+ * instead of silently shipping no CSS for them.
  *
  * @param files - skipped `/packages/` file paths that contain `sz`.
  * @returns the warning string.
@@ -667,8 +661,8 @@ export function skippedSzFilesMessage(files: readonly string[]): string {
     return (
         `[csszyx] ${files.length} file(s) under packages/ contain \`sz\` but were ` +
         `skipped by ignore rules:\n${list}\n` +
-        'Add the package to `compilePackages` (or move the file out of packages/) — ' +
-        'otherwise their `sz` produces no CSS.'
+        'Add the package directory to `compileSources` (or move the file out of ' +
+        'packages/) — otherwise their `sz` produces no CSS.'
     );
 }
 
@@ -1834,8 +1828,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             '[csszyx] Transform cache disabled because package versions could not be resolved.',
         );
     }
-    // Workspace packages opted into compilation; relaxes the /packages/ hard-ignore.
-    const compilePackages = options.compilePackages ?? [];
+    // Source locations opted into compilation by path (relaxes the /packages/
+    // hard-ignore + adds prescan roots). Resolved to absolute realpath'd dirs
+    // lazily once the project root is known (configResolved / beforeCompile),
+    // because the entries resolve relative to that root.
+    const compileSources = options.compileSources ?? [];
     // `quiet` mutes every csszyx build warning (e.g. to focus on another tool's
     // output). Errors that throw are unaffected — only warnings are silenced.
     const quiet = options.quiet === true;
@@ -1968,6 +1965,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return result;
     }
 
+    // Resolved compileSources directories (absolute, realpath'd). Filled once the
+    // project root is known; recomputed if the root changes (e.g. webpack reuse).
+    let compileSourceDirs: string[] = [];
+    let compileSourceDirsRoot: string | null = null;
+
+    /**
+     * Resolve `compileSources` against the current project root (memoized per
+     * root) and warn once about entries that did not resolve to a directory.
+     */
+    function refreshCompileSourceDirs(): void {
+        if (compileSources.length === 0 || compileSourceDirsRoot === state.rootDir) {
+            return;
+        }
+        compileSourceDirsRoot = state.rootDir;
+        const { dirs, missing } = resolveCompileSourceDirs(state.rootDir, compileSources);
+        compileSourceDirs = dirs;
+        if (missing.length > 0) {
+            emitWarning(
+                `[csszyx] compileSources: ${missing.length} path(s) did not resolve to a ` +
+                    `directory (relative to ${state.rootDir}): ${missing.join(', ')}. ` +
+                    'Their `sz`/`szv` will not be compiled or safelisted.',
+            );
+        }
+    }
+
     /**
      * Checks built-in directories that csszyx never transforms.
      *
@@ -1975,7 +1997,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns True when the file should be skipped regardless of user filters.
      */
     function isHardIgnored(id: string): boolean {
-        return isHardIgnoredPath(id, compilePackages);
+        refreshCompileSourceDirs();
+        return isHardIgnoredPath(id, compileSourceDirs);
     }
 
     /**
@@ -2368,15 +2391,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Records a skipped file when it is workspace-package source under
-     * `/packages/` (not opted into `compilePackages`) that contains `sz`. These
-     * are the silent no-op cases — the file is never compiled, so its `sz`
+     * `/packages/` (not under any `compileSources` directory) that contains `sz`.
+     * These are the silent no-op cases — the file is never compiled, so its `sz`
      * produces no CSS — surfaced once at build end. node_modules/.next are never
      * scanned (handled by {@link isPackagesSkippedSource}).
      *
      * @param filePath - filesystem path of the file the prescan skipped.
      */
     function recordPackagesSkipIfSz(filePath: string): void {
-        if (!isPackagesSkippedSource(filePath, compilePackages)) {
+        if (!isPackagesSkippedSource(filePath, compileSourceDirs)) {
             return;
         }
         let content: string;
@@ -2397,6 +2420,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * This writes a manifest file with all discovered class names so Tailwind can scan it.
      */
     function prescanAndWriteClasses(): void {
+        refreshCompileSourceDirs();
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className attribute values — used only for TW JIT safelist, never for the mangle map.
@@ -2440,12 +2464,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         scanDir(state.rootDir);
-        // Also walk opted-in workspace packages that live OUTSIDE rootDir (a
-        // sibling design-system package), so their sz/szv classes reach the
-        // safelist. shouldProcessSource already relaxes the /packages/ ignore for
-        // these via compilePackages, so scanDir accepts their files.
-        for (const pkgDir of resolveCompilePackageDirs(state.rootDir, compilePackages)) {
-            scanDir(pkgDir);
+        // Also walk opted-in compileSources directories that live OUTSIDE rootDir
+        // (a sibling design-system package), so their sz/szv classes reach the
+        // safelist. Dirs inside rootDir are already covered by the walk above.
+        // shouldProcessSource relaxes the ignore for these (they are opted in), so
+        // scanDir accepts their files.
+        const normRoot = normalizeForMatch(state.rootDir);
+        for (const sourceDir of compileSourceDirs) {
+            if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) {
+                continue;
+            }
+            scanDir(sourceDir);
         }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
@@ -3060,11 +3089,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 }
                 // Workspace-package source under /packages/ is hard-ignored, so its
-                // sz silently produces no CSS unless opted into compilePackages.
+                // sz silently produces no CSS unless its dir is in compileSources.
                 // Surface the skipped files once so the no-op is visible.
                 if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
                     state.skipWarningEmitted = true;
-                    // A usage nudge (opt the package into compilePackages), not a
+                    // A usage nudge (add the package dir to compileSources), not a
                     // csszyx-output defect — dev-only so it never noises a host
                     // app's production build.
                     emitWarning(skippedSzFilesMessage([...state.skippedSzFiles].sort()), {

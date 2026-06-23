@@ -3588,10 +3588,11 @@ Helper build-time/runtime:
   class not already in the built CSS.
 
 Safelist requires a statically analyzable position (a literal sz, or a szv config
-literal). File-discovery gap: the prescan only scans files containing `sz=`/`sz:`,
-so a standalone szv-config file (no JSX) is skipped → co-locate szv in the
-component file that has a `sz=` usage. For a sibling workspace package, opt it in
-with `compilePackages: ['name']`.
+literal). File discovery: the prescan scans any file containing `sz=`/`sz:` or a
+`szv(` declaration, so a standalone szv-config file (no JSX) is still scanned.
+Co-locating szv in the component file is the recommended layout (tree-shaking
+unit). For a sibling workspace package, opt it in with
+`compileSources: ['packages/name']`.
 
 Tree-shaking is content-presence (same as Tailwind), not import-graph. Co-locating
 szv makes the component the shaking unit.
@@ -3707,15 +3708,21 @@ Or exclude the file from csszyx processing entirely before parsing:
 ...csszyx({ exclude: ['src/generated/**', /icon-dump\.tsx$/] })
 ```
 
-## Monorepo Workspace Packages (compilePackages)
+## Monorepo Workspace Sources (compileSources)
 
 `/packages/` is hard-ignored by default (a published library ships pre-extracted
-CSS). To compile `sz` in a monorepo workspace package you author, opt it in by
-directory name — only `/packages/` is relaxed, `node_modules`/`.next` stay ignored:
+CSS) and only the build root is pre-scanned. To compile `sz`/`szv` in a monorepo
+design-system you author — under `/packages/` or a sibling outside the build root
+— opt it in BY PATH. Paths resolve like Vite config paths (relative to
+`config.root`); pnpm symlinks matched after realpath; `node_modules`/`.next` stay
+ignored unless a path points into them:
 
 ```js
-...csszyx({ compilePackages: ['vui'] }) // compiles sz in /packages/vui/**
+...csszyx({ compileSources: ['packages/vui', '../libs/ui'] })
 ```
+
+A non-`/packages/` lib INSIDE the build root needs no config (compiled + scanned
+automatically); `compileSources` is for `/packages/` or sources OUTSIDE the root.
 
 A `/packages/` file with `sz` that is not opted in is skipped silently (no CSS);
 csszyx warns at build end and lists those files.

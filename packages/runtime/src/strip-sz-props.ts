@@ -3,7 +3,7 @@
  *
  * The compiler rewrites `sz` to `className` at build time, so a compiled
  * component never carries a leftover `sz` prop. But when a file is NOT compiled
- * — e.g. a workspace package missing from `compilePackages`, or any source the
+ * — e.g. a workspace package missing from `compileSources`, or any source the
  * bundler skipped — a hand-forwarded `sz` survives and React spreads it to the
  * DOM as `sz="[object Object]"`. `stripSzProps` removes `sz` from the forwarded
  * props so it never reaches the DOM, and in development warns once when the
@@ -24,7 +24,7 @@ const RAW_SZ_WARNING =
     '[csszyx] A raw `sz` object reached the runtime and was dropped before it ' +
     'could leak to the DOM as sz="[object Object]".\n' +
     'This means the file was not compiled — its `sz` produces no CSS. If it ' +
-    'lives in a workspace package, add that package to `compilePackages`; ' +
+    'lives in a workspace package, add that package directory to `compileSources`; ' +
     'otherwise check that the bundler is not skipping the file.';
 
 /** Warn once (in dev) that a raw, uncompiled `sz` object reached the runtime. */

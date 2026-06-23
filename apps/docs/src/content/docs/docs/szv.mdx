@@ -135,12 +135,13 @@ its declaration — regardless of how the returned factory is later used (direct
 in `sz=`, through `splitBoxSz`, or not at all). So routing the output through a
 helper never loses the CSS.
 
-The one requirement is **file discovery**: the prescan only transforms files whose
-content contains `sz=` or `sz:`. A standalone file holding *only* a `szv` config
-(no JSX) is skipped and its variants are never extracted. **Co-locate each `szv`
-in the component file that uses it** (which has `sz=`); that also makes the
-component the unit of tree-shaking. In a monorepo, opt a workspace package in with
-[`compilePackages`](/docs/monorepo-content-scope/) so its `szv` is scanned too.
+The prescan discovers a file by a cheap text check: it scans any file containing
+`sz=`, `sz:`, or a `szv(` declaration. So a standalone file holding *only* a
+`szv({…})` config (no JSX, no `sz=`) is still scanned and its variants extracted.
+Co-locating each `szv` in the component file that uses it is still the
+recommended layout — it makes the component the unit of tree-shaking. In a
+monorepo, opt a workspace package in with
+[`compileSources`](/docs/monorepo-content-scope/) so its `szv` is scanned too.
 
 ## Config validation (development)
 

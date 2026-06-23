@@ -359,7 +359,7 @@ function omitSz(sz: SzInput, selector: BoxSelector): SzObject
 
 Removes `sz` before a component spreads `...rest` onto a host element. Compiled
 components never carry a leftover `sz`, but a file that was **not** compiled
-(e.g. a workspace package missing from `compilePackages`) keeps its raw `sz`,
+(e.g. a workspace package missing from `compileSources`) keeps its raw `sz`,
 which leaks to the DOM as `sz="[object Object]"`. `stripSzProps` drops it and,
 in development, warns once when the leaked `sz` is a raw object.
 

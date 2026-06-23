@@ -223,23 +223,35 @@ csszyx({
 });
 ```
 
-#### Workspace Packages (`compilePackages`)
+#### Extra Sources (`compileSources`)
 
-`/packages/` is hard-ignored by default — a published library ships pre-extracted
-CSS rather than recompiling in every consumer. In a monorepo, a design-system
-package is source you author, so opt it into compilation by directory name:
+csszyx hard-ignores `/packages/` by default (a published library ships
+pre-extracted CSS) and pre-scans only the build root. In a monorepo, a
+design-system you author — whether under `/packages/` or a sibling outside the
+build root — is source you want compiled. Opt it in **by path**:
 
 ```ts
 csszyx({
-  compilePackages: ["vui"], // compiles sz in /packages/vui/**
+  compileSources: ["packages/vui", "../libs/ui"],
 });
 ```
 
-Only the `/packages/` rule is relaxed; `node_modules` and `.next` stay ignored, so
-a real dependency is never compiled. A `/packages/` file that contains `sz` but is
-not opted in is skipped silently (no CSS) — csszyx warns at build end and lists
-those files. Convention: ship pre-extracted CSS for external consumers, and use
-`compilePackages` to re-extract from source within your own monorepo.
+Paths resolve like Vite config paths: relative to the resolved project root
+(`config.root`, default the build cwd); absolute paths pass through. Each entry
+(a) exempts that directory from the ignore so its `sz`/`szv` is compiled, and
+(b) becomes a pre-scan root so its classes are safelisted. Symlinked workspace
+packages (pnpm) are matched after realpath resolution (relies on Vite's default
+`resolve.preserveSymlinks: false`).
+
+`node_modules` and `.next` stay ignored unless a listed path points into them. A
+`/packages/` file with `sz` that is not under any `compileSources` directory is
+skipped silently (no CSS) — csszyx warns at build end and lists those files. A
+path that does not resolve to a directory is reported in a build warning.
+
+A shared lib **outside** `/packages/` (e.g. `libs/ui`) that lives **inside** the
+build root needs no config — it is compiled and scanned automatically;
+`compileSources` is only needed for `/packages/` or for sources **outside** the
+build root.
 
 #### Content Scope Check (`contentScopeCheck`)
 

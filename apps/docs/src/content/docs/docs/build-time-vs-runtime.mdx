@@ -82,16 +82,15 @@ from the `szv({…})` config wherever it's declared, regardless of how the retur
 factory is later used — directly, through `splitBoxSz`, through `_sz`, or not at
 all. So *indirection does not break safelisting*.
 
-The one real gap is **file discovery**. The prescan only transforms files whose
-content contains `sz=` or `sz:`. A standalone `variants.ts` that holds only a
-`szv({…})` config (no JSX, no `sz=`) is **skipped**, so its variants are never
-extracted.
+Discovery is a cheap text check: the prescan scans any file containing `sz=`,
+`sz:`, or a `szv(` declaration. So a standalone `variants.ts` holding only a
+`szv({…})` config (no JSX, no `sz=`) is still scanned and its variants extracted.
 
 <Aside type="tip" title="Co-locate szv with a usage">
 Keep each `szv` in the component file that uses it (which contains `sz=`). That
 file is always scanned, the unit of tree-shaking becomes the component, and a
 never-imported component contributes no CSS. For a sibling workspace package, opt
-it in with [`compilePackages`](/docs/monorepo-content-scope/).
+it in with [`compileSources`](/docs/monorepo-content-scope/).
 </Aside>
 
 ## Tree-shaking
