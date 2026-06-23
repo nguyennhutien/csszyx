@@ -106,6 +106,36 @@ describe('szcn — directional shorthand/longhand override (padding/margin)', ()
     });
 });
 
+describe('szcn — directional override (inset / rounded)', () => {
+    it('inset subsumes axis + physical sides; refinement keeps both', () => {
+        expect(szcn('top-0', 'inset-0')).toBe('inset-0');
+        expect(szcn('inset-x-2', 'inset-0')).toBe('inset-0');
+        expect(szcn('inset-0', 'top-4')).toBe('inset-0 top-4');
+        expect(szcn('left-0', 'inset-x-2')).toBe('inset-x-2');
+        expect(szcn('inset-x-2', 'left-0')).toBe('inset-x-2 left-0');
+        expect(szcn('inset-x-2', 'top-4')).toBe('inset-x-2 top-4'); // x vs y → both
+    });
+
+    it('rounded subsumes edges + corners; refinement keeps both', () => {
+        expect(szcn('rounded-t-sm', 'rounded-lg')).toBe('rounded-lg');
+        expect(szcn('rounded-tl-sm', 'rounded-t-lg')).toBe('rounded-t-lg');
+        expect(szcn('rounded-lg', 'rounded-t-sm')).toBe('rounded-lg rounded-t-sm');
+        expect(szcn('rounded-tl-sm', 'rounded-r-lg')).toBe('rounded-tl-sm rounded-r-lg'); // tl ∉ r
+    });
+
+    it('keeps logical sides/corners separate from physical (RTL-safe under-merge)', () => {
+        // start/end (logical) and rounded-s/e are a different CSS longhand that can
+        // flip under RTL, so they are not crossed with physical — keep both.
+        expect(szcn('start-0', 'inset-0')).toBe('start-0 inset-0');
+        expect(szcn('rounded-s-lg', 'rounded-lg')).toBe('rounded-s-lg rounded-lg');
+    });
+
+    it('does not let inset coverage touch rounded or spacing', () => {
+        expect(szcn('rounded-lg', 'inset-0')).toBe('rounded-lg inset-0');
+        expect(szcn('p-4', 'inset-0')).toBe('p-4 inset-0');
+    });
+});
+
 describe('szcn — input handling', () => {
     it('skips falsy inputs', () => {
         expect(szcn('p-4', false, null, undefined, '', 'm-2')).toBe('p-4 m-2');

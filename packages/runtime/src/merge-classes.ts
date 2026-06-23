@@ -67,8 +67,17 @@ function decodeToken(token: string): string {
  * overrides earlier longhands it subsumes (CSS-cascade-correct): a later `p-8`
  * removes an earlier `pb-4` (p covers bottom), while a later `pb-8` keeps an
  * earlier `p-4` (it only refines the bottom). Each entry includes itself.
- * v1 covers padding + margin (incl. logical `ps/pe`, `ms/me`); TODO(v2):
- * `inset`/`top..left`, `rounded`, `border-width` follow the same shape.
+ *
+ * Covers padding, margin, inset (position), and border-radius. Logical sides
+ * (`ps/pe`, `ms/me`) are subsumed by their padding/margin shorthand, but for
+ * inset and rounded the coverage is PHYSICAL-only: `inset`/`rounded` do not
+ * subsume the logical `start`/`end` / `rounded-s*`/`rounded-e*` tokens, which
+ * are a different CSS longhand and could flip under RTL — leaving those as
+ * keep-both (still cascade-correct, never wrongly dropped).
+ *
+ * TODO(v2): `border-<width>` is directional too, but the `border` prefix is
+ * ambiguous (width vs color vs style), so it needs value-aware classification
+ * (the same work as collapsing two `text-<size>` / two `bg-<color>`); deferred.
  */
 const SHORTHAND_COVERAGE: Record<string, readonly string[]> = {
     p: ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'ps', 'pe'],
@@ -77,6 +86,26 @@ const SHORTHAND_COVERAGE: Record<string, readonly string[]> = {
     m: ['m', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'ms', 'me'],
     mx: ['mx', 'ml', 'mr', 'ms', 'me'],
     my: ['my', 'mt', 'mb'],
+    // inset (position) — physical sides only.
+    inset: ['inset', 'inset-x', 'inset-y', 'top', 'right', 'bottom', 'left'],
+    'inset-x': ['inset-x', 'left', 'right'],
+    'inset-y': ['inset-y', 'top', 'bottom'],
+    // border-radius — physical corners only (logical rounded-s*/e* stay keep-both).
+    rounded: [
+        'rounded',
+        'rounded-t',
+        'rounded-r',
+        'rounded-b',
+        'rounded-l',
+        'rounded-tl',
+        'rounded-tr',
+        'rounded-br',
+        'rounded-bl',
+    ],
+    'rounded-t': ['rounded-t', 'rounded-tl', 'rounded-tr'],
+    'rounded-r': ['rounded-r', 'rounded-tr', 'rounded-br'],
+    'rounded-b': ['rounded-b', 'rounded-bl', 'rounded-br'],
+    'rounded-l': ['rounded-l', 'rounded-tl', 'rounded-bl'],
 };
 
 /**
