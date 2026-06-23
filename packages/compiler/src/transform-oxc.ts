@@ -1556,23 +1556,13 @@ function collectSzvCallClasses(
         return;
     }
 
-    let config: SzObject;
-    try {
-        config = astObjectToSzObject(configNode, filename, bindings);
-    } catch (err) {
-        /**
-         *
-         * @param value
-         */
-        if (err instanceof OxcNotImplementedError) {
-            return;
-        }
-        throw err;
-    }
-
-    const base = isSzObject(config.base) ? config.base : {};
+    // Read `base` and `variants` INDEPENDENTLY rather than converting the whole
+    // config. A non-static sibling key (e.g. a `compoundVariants` array) used to
+    // throw OxcNotImplementedError for the entire config and drop every variant
+    // class; now unknown / dynamic keys are simply ignored.
+    const base = readConfigSubObject(configNode, 'base', filename, bindings);
     addCompiledClasses(base, classes);
-    const variants = isSzObject(config.variants) ? config.variants : {};
+    const variants = readConfigSubObject(configNode, 'variants', filename, bindings);
     for (const variantValues of Object.values(variants)) {
         if (!isSzObject(variantValues)) {
             continue;
@@ -1584,6 +1574,50 @@ function collectSzvCallClasses(
             addCompiledClasses({ ...base, ...variantObject }, classes);
         }
     }
+}
+
+/**
+ * Read a single named property (`base` / `variants`) of an szv config as a
+ * static SzObject, converting ONLY that sub-tree. Returns `{}` when the key is
+ * absent, non-static, or hits an unimplemented node — so sibling keys
+ * (compoundVariants, defaultVariants, unknown keys) never drop the catalog.
+ *
+ * @param configNode The szv config object node.
+ * @param key The property to read.
+ * @param filename For diagnostics.
+ * @param bindings Local const-binding map for indirection.
+ * @returns The converted SzObject, or `{}`.
+ */
+function readConfigSubObject(
+    configNode: ObjectExpressionNode,
+    key: string,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): SzObject {
+    for (const propRaw of configNode.properties) {
+        if (propRaw.type !== 'Property') {
+            continue;
+        }
+        const prop = propRaw as PropertyNode;
+        if (prop.computed || extractKeyName(prop.key) !== key) {
+            continue;
+        }
+        // Only an INLINE object literal — do not resolve an identifier binding for
+        // the sub-value. Keeps Babel/oxc parity (Babel reads inline only) and
+        // matches the documented "pass the config inline" guidance.
+        if (prop.value.type !== 'ObjectExpression') {
+            return {};
+        }
+        try {
+            return astObjectToSzObject(prop.value as ObjectExpressionNode, filename, bindings);
+        } catch (err) {
+            if (err instanceof OxcNotImplementedError) {
+                return {};
+            }
+            throw err;
+        }
+    }
+    return {};
 }
 
 /**

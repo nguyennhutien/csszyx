@@ -467,7 +467,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     .extend(lower_static_sz_object(&object));
             }
             "szv" => {
-                let Some(config) = static_object_from_argument(argument, self.resolve_context())
+                let Some(config) =
+                    lenient_szv_config_from_argument(argument, self.resolve_context())
                 else {
                     return;
                 };
@@ -496,6 +497,44 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         });
         Some(index)
     }
+}
+
+/// Parse an szv config argument leniently: keep only the top-level properties
+/// that are statically evaluable, skipping any that are not (e.g. a
+/// `compoundVariants` array, a dynamic `defaultVariants`). The strict whole-
+/// object parser `?`-bails on the first non-static property, which used to drop
+/// every variant class when a sibling key was not static. `szv_catalog_classes`
+/// only consumes `base` + `variants`, so a lenient parse loses nothing relevant.
+fn lenient_szv_config_from_argument(
+    argument: &Argument<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
+    let object = match argument {
+        Argument::ObjectExpression(object) => object,
+        Argument::Identifier(identifier) => {
+            match ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )? {
+                Expression::ObjectExpression(object) => object,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+
+    let mut properties = Vec::new();
+    for property in &object.properties {
+        if let ObjectPropertyKind::ObjectProperty(prop) = property {
+            if let Some(static_prop) = static_property_from_object_property(prop, ctx) {
+                merge_static_property(&mut properties, static_prop);
+            }
+            // A non-static sibling (compoundVariants array, etc.) is skipped, not
+            // bailed — so base/variants still extract.
+        }
+    }
+    Some(StaticSzObject { properties })
 }
 
 fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
@@ -2097,6 +2136,73 @@ mod tests {
             lowered.classes,
             ["min-h-2", "min-h-2", "opacity-50", "min-h-2", "opacity-70"]
         );
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_with_non_static_sibling_key() {
+        // A `compoundVariants` array (or any non-static sibling) must NOT drop the
+        // base/variants catalog — it is skipped, the variant classes still extract.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; const box = szv({ base: { rounded: 'md' }, variants: { tone: { ok: { bg: 'success' } } }, compoundVariants: [{ tone: 'ok', sz: { p: 4 } }] });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        // base (rounded-md) + base∪variant (rounded-md bg-success). compoundVariants ignored.
+        assert!(lowered.classes.contains(&"rounded-md".to_string()));
+        assert!(lowered.classes.contains(&"bg-success".to_string()));
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_dis_value_cases() {
+        // szv lowers "dị" variant/important/negative/arbitrary/css-var values in
+        // the catalog directly — these must match the same shapes the JS engines
+        // emit (the Babel/oxc szv-extraction parity suite locks the JS side).
+        let cases: &[(&str, &str)] = &[
+            (
+                "{ variants: { s: { x: { hover: { bg: 'red-500' } } } } }",
+                "hover:bg-red-500",
+            ),
+            ("{ variants: { s: { x: { md: { p: 8 } } } } }", "md:p-8"),
+            (
+                "{ variants: { s: { x: { group: { hover: { gap: 8 } } } } } }",
+                "group-hover:gap-8",
+            ),
+            (
+                "{ variants: { s: { x: { data: { 'state=open': { gap: 8 } } } } } }",
+                "data-[state=open]:gap-8",
+            ),
+            ("{ variants: { s: { x: { p: '8!' } } } }", "p-8!"),
+            ("{ variants: { s: { x: { mt: -2 } } } }", "-mt-2"),
+            ("{ variants: { s: { x: { w: '[400px]' } } } }", "w-[400px]"),
+            (
+                "{ variants: { s: { x: { bg: { color: 'warning', op: 10 } } } } }",
+                "bg-warning/10",
+            ),
+            (
+                "{ variants: { s: { x: { color: '--ds-primary' } } } }",
+                "text-(--ds-primary)",
+            ),
+        ];
+
+        for (config, expected) in cases {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!(
+                    "import {{ szv }} from '@csszyx/runtime'; const b = szv({config});"
+                ),
+            };
+            let parsed = parse_source_shell(&file);
+            let lowered = lower_source_ir_classes(&parsed.ir);
+            assert!(
+                lowered.classes.contains(&expected.to_string()),
+                "szv config {config} should emit {expected}, got {:?}",
+                lowered.classes
+            );
+        }
     }
 
     #[test]

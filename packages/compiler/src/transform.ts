@@ -879,16 +879,16 @@ export function transformSourceCode(
                             if (!t.isObjectExpression(configArg)) {
                                 return;
                             }
-                            const config = evaluateStaticObject(configArg);
-                            if (!config) {
-                                return;
-                            }
-
-                            const base = (config.base ?? {}) as SzObject;
-                            const variants = (config.variants ?? {}) as Record<
-                                string,
-                                Record<string, SzObject>
-                            >;
+                            // Read `base` and `variants` INDEPENDENTLY rather than
+                            // requiring the whole config to be statically evaluable.
+                            // A single non-static sibling key (e.g. a
+                            // `compoundVariants` array) used to null the entire
+                            // config and drop every variant class; now unknown /
+                            // dynamic keys are simply ignored.
+                            const base = (readStaticConfigObject(configArg, 'base') ??
+                                {}) as SzObject;
+                            const variants = (readStaticConfigObject(configArg, 'variants') ??
+                                {}) as Record<string, Record<string, SzObject>>;
 
                             const classStrings: string[] = [];
 
@@ -1241,6 +1241,44 @@ function tryHoistConditionalSpread(
  *
  * @param node - The ObjectExpression node to evaluate
  * @returns The evaluated object or null
+ */
+/**
+ * Read a single named property of an szv config ObjectExpression as a static
+ * SzObject, evaluating ONLY that sub-tree. Returns null when the key is absent
+ * or its value is not a statically-evaluable object. Used so szv extraction can
+ * pull `base` / `variants` without forcing sibling keys (compoundVariants,
+ * defaultVariants, unknown keys) to be static — a single dynamic sibling no
+ * longer drops the whole catalog.
+ *
+ * @param configExpr The szv config object expression.
+ * @param key The property to read (e.g. 'base' or 'variants').
+ * @returns The evaluated SzObject, or null if absent/non-static.
+ */
+function readStaticConfigObject(configExpr: t.ObjectExpression, key: string): SzObject | null {
+    for (const prop of configExpr.properties) {
+        if (!t.isObjectProperty(prop) || prop.computed) {
+            continue;
+        }
+        const k = t.isIdentifier(prop.key)
+            ? prop.key.name
+            : t.isStringLiteral(prop.key)
+              ? prop.key.value
+              : null;
+        if (k !== key) {
+            continue;
+        }
+        return t.isObjectExpression(prop.value) ? evaluateStaticObject(prop.value) : null;
+    }
+    return null;
+}
+
+/**
+ * Evaluate an ObjectExpression to a plain SzObject when every property (and
+ * nested object) is a static literal. Returns null on the first dynamic value —
+ * spread, computed key, identifier, call, etc.
+ *
+ * @param node The object expression to evaluate.
+ * @returns The static SzObject, or null if any part is dynamic.
  */
 function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
     const result: SzObject = {};
