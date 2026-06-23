@@ -72,6 +72,40 @@ describe('szcn — fail-safe: never drop an ambiguous/unknown class', () => {
     });
 });
 
+describe('szcn — directional shorthand/longhand override (padding/margin)', () => {
+    it('a later longhand refines an earlier shorthand (keeps both)', () => {
+        // default p-4, override pb-8 → padding all + bottom override
+        expect(szcn('p-4', 'pb-8')).toBe('p-4 pb-8');
+        expect(szcn('m-8', 'mb-2')).toBe('m-8 mb-2');
+    });
+
+    it('a later shorthand overrides an earlier longhand it subsumes', () => {
+        // default pb-4, override p-8 → p-8 wins (the reverse-direction fix)
+        expect(szcn('pb-4', 'p-8')).toBe('p-8');
+        expect(szcn('mt-2', 'm-8')).toBe('m-8');
+    });
+
+    it('a later mid-axis shorthand overrides the longhands it covers', () => {
+        expect(szcn('pl-4', 'px-2')).toBe('px-2'); // px covers pl/pr
+        expect(szcn('px-2', 'pl-4')).toBe('px-2 pl-4'); // pl refines px-left
+    });
+
+    it('keeps distinct shorthand + non-covered longhand', () => {
+        expect(szcn('p-4', 'px-2')).toBe('p-4 px-2'); // px refines x
+        expect(szcn('px-2', 'p-4')).toBe('p-4'); // p subsumes px
+    });
+
+    it('isolates directional coverage by variant', () => {
+        // a base p-8 must not remove an md: longhand, and vice-versa
+        expect(szcn('md:pb-4', 'p-8')).toBe('md:pb-4 p-8');
+        expect(szcn('p-4', 'md:p-8')).toBe('p-4 md:p-8');
+    });
+
+    it('does not let padding coverage touch margin', () => {
+        expect(szcn('mb-4', 'p-8')).toBe('mb-4 p-8');
+    });
+});
+
 describe('szcn — input handling', () => {
     it('skips falsy inputs', () => {
         expect(szcn('p-4', false, null, undefined, '', 'm-2')).toBe('p-4 m-2');
