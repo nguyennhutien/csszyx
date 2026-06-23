@@ -885,6 +885,65 @@ export const REMOVED_BOOLEAN_SUGAR: Record<string, { key: string; value: string 
     subpixelAntialiased: { key: 'fontSmoothing', value: 'subpixel' },
 };
 
+// Alignment sz-keys take csszyx's short value form (start/end/between/around/
+// evenly), NOT the CSS-spec longhand (flex-start/space-between/...). A longhand
+// value produces a DEAD class — `justify-flex-start` / `content-space-between`
+// have no Tailwind utility and render nothing — so warn (dev only) with the fix.
+// `content` is intentionally excluded: it is the pseudo-element content property,
+// which legitimately accepts arbitrary strings (use `alignContent` for alignment).
+const ALIGNMENT_KEYS: ReadonlySet<string> = new Set([
+    'justify',
+    'items',
+    'self',
+    'alignContent',
+    'placeItems',
+    'placeContent',
+    'justifyItems',
+    'justifySelf',
+]);
+
+const ALIGNMENT_CSS_VALUE_HINT: Readonly<Record<string, string>> = {
+    'flex-start': 'start',
+    'flex-end': 'end',
+    'space-between': 'between',
+    'space-around': 'around',
+    'space-evenly': 'evenly',
+};
+
+// Dev-only de-dup so a prop-API component rendering the same mistake every frame
+// (via `_sz`) does not spam the console.
+const warnedAlignmentValues = new Set<string>();
+
+/**
+ * Warn (dev only) when an alignment sz-key receives a CSS-spec longhand value
+ * that lowers to a dead class. No-op in production (dead-code-eliminated). Unlike
+ * the other dev warnings here, this is NOT gated on a non-browser env: the
+ * alignment props are most often resolved at runtime via `_sz` in a prop-API
+ * component, where `window` is defined — so it must fire in browser dev too.
+ *
+ * @param rawKey - The sz key being lowered.
+ * @param value - Its value.
+ */
+function warnAlignmentValue(rawKey: string, value: unknown): void {
+    if (process.env.NODE_ENV === 'production' || typeof value !== 'string') {
+        return;
+    }
+    const hint = ALIGNMENT_CSS_VALUE_HINT[value];
+    if (!hint || !ALIGNMENT_KEYS.has(rawKey)) {
+        return;
+    }
+    const sig = `${rawKey}:${value}`;
+    if (warnedAlignmentValues.has(sig)) {
+        return;
+    }
+    warnedAlignmentValues.add(sig);
+    console.warn(
+        `[csszyx] ${rawKey}: '${value}' is a CSS value — use the short form '${hint}' ` +
+            `(e.g. { ${rawKey}: '${hint}' }). '${rawKey}-${value}' has no Tailwind utility ` +
+            'and renders nothing.',
+    );
+}
+
 // ============================================================================
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
@@ -1650,6 +1709,9 @@ function transformImpl(
         if (value === false || value === null || value === undefined) {
             continue;
         }
+
+        // Dev: flag an alignment prop given a CSS-longhand value (dead class).
+        warnAlignmentValue(rawKey, value);
 
         // Removed boolean-sugar keys (flex/absolute/italic/...): emit nothing and,
         // in dev, point to the canonical form. Only the boolean `true` form was sugar;
