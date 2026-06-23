@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 import csszyxDarkTheme from './src/themes/csszyx-dark.json' with { type: 'json' };
 import csszyxLightTheme from './src/themes/csszyx-light.json' with { type: 'json' };
 import ecTwoslash from 'expressive-code-twoslash';
+import remarkGfm from 'remark-gfm';
 
 const docsLandingGlobalVarTokens = [
     '--lp-border',
@@ -20,6 +21,13 @@ export default defineConfig({
     site: 'https://csszyx.com',
     redirects: {
         '/docs': '/docs/introduction',
+    },
+    // GFM (tables, strikethrough, …) is not applied to .mdx by default in this
+    // setup, so markdown tables rendered as raw `| --- |` text. Adding remark-gfm
+    // here is inherited by the MDX pipeline (extendMarkdownConfig) and renders
+    // tables for both .md and .mdx.
+    markdown: {
+        remarkPlugins: [remarkGfm],
     },
     fonts: [
         {
