@@ -83,7 +83,7 @@ interface TokenInfo extends Classification {
  * @param token - A single class token, possibly variant-prefixed.
  * @returns The base utility with the variant prefix removed.
  */
-function stripVariant(token: string): string {
+export function stripVariant(token: string): string {
     let depth = 0;
     for (let i = token.length - 1; i >= 0; i--) {
         const ch = token[i];
@@ -100,7 +100,7 @@ function stripVariant(token: string): string {
  * @param base - The base utility, possibly important- or negative-marked.
  * @returns The base with important/negative markers stripped.
  */
-function normalizeBase(base: string): string {
+export function normalizeBase(base: string): string {
     let b = base;
     if (b.startsWith('!')) b = b.slice(1);
     if (b.endsWith('!')) b = b.slice(0, -1);
