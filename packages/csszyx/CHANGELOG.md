@@ -2,10 +2,14 @@
 
 ## [0.10.3](https://github.com/nguyennhutien/csszyx/compare/v0.10.2...v0.10.3) (2026-06-23)
 
-
 ### Features
 
-* **runtime:** szcn — mangle-aware className merge (+ docs table fix) ([#88](https://github.com/nguyennhutien/csszyx/issues/88)) ([05fa552](https://github.com/nguyennhutien/csszyx/commit/05fa552e13d0fd9edca9c24e4ee91d337e946694))
+* **runtime:** szcn — mangle-aware className merge (+ docs table fix) ([#88](https://github.com/nguyennhutien/csszyx/issues/88))
+* **runtime:** add mergeClasses for mangle-aware className override ([#88](https://github.com/nguyennhutien/csszyx/issues/88))
+
+### Bug Fixes
+
+* **docs:** render markdown tables (enable remark-gfm) ([#88](https://github.com/nguyennhutien/csszyx/issues/88))
 
 ## [0.10.2](https://github.com/nguyennhutien/csszyx/compare/v0.10.1...v0.10.2) (2026-06-22)
 
