@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/vars",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "CSS custom property helpers — inject and patch CSS variables for runtime-driven styling",
   "type": "module",
   "repository": {

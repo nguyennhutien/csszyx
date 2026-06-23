@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.10.4](https://github.com/nguyennhutien/csszyx/compare/v0.10.3...v0.10.4) (2026-06-23)
+
+### Features
+
+* szcn directional override, szv prescan discovery, and path-based compileSources ([#91](https://github.com/nguyennhutien/csszyx/issues/91))
+* **runtime:** szcn resolves directional shorthand/longhand spacing ([#91](https://github.com/nguyennhutien/csszyx/issues/91))
+* **unplugin:** prescan files that declare szv, not just sz props ([#91](https://github.com/nguyennhutien/csszyx/issues/91))
+* **compiler:** warn when an alignment prop gets a CSS-longhand value ([#91](https://github.com/nguyennhutien/csszyx/issues/91))
+* **runtime:** extend szcn directional override to inset and rounded ([#91](https://github.com/nguyennhutien/csszyx/issues/91))
+* **unplugin:** replace compilePackages with path-based compileSources ([#91](https://github.com/nguyennhutien/csszyx/issues/91))
+
 ## [0.10.3](https://github.com/nguyennhutien/csszyx/compare/v0.10.2...v0.10.3) (2026-06-23)
 
 ### Features
