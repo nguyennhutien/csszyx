@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/core-win32-arm64-msvc",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "description": "Windows arm64 MSVC native binding for @csszyx/core",
   "license": "MIT",
   "repository": {
