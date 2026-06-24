@@ -529,6 +529,15 @@ fn lenient_szv_config_from_argument(
     let mut properties = Vec::new();
     for property in &object.properties {
         if let ObjectPropertyKind::ObjectProperty(prop) = property {
+            // `{ base }` shorthand === `{ base: base }`: resolve the same-named
+            // `const` object binding (matching Babel/oxc). The general property
+            // helper rejects shorthand, which would drop a shorthand base/variants.
+            if prop.shorthand {
+                if let Some(static_prop) = static_shorthand_const_property(prop, ctx) {
+                    merge_static_property(&mut properties, static_prop);
+                }
+                continue;
+            }
             if let Some(static_prop) = static_property_from_object_property(prop, ctx) {
                 merge_static_property(&mut properties, static_prop);
             }
@@ -537,6 +546,32 @@ fn lenient_szv_config_from_argument(
         }
     }
     Some(StaticSzObject { properties })
+}
+
+/// Resolve a shorthand szv-config property (`{ base }` === `{ base: base }`) to a
+/// static property by following the same-named `const` object binding. Returns
+/// None unless the binding is a `const` initialized to an object literal.
+fn static_shorthand_const_property(
+    prop: &ObjectProperty<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzProperty> {
+    let key = static_property_key(&prop.key)?;
+    let Expression::Identifier(identifier) = &prop.value else {
+        return None;
+    };
+    let Expression::ObjectExpression(object) = ctx.scope.resolve_const_initializer_before(
+        &identifier.name,
+        identifier.span.start,
+        ctx.program,
+    )?
+    else {
+        return None;
+    };
+    Some(StaticSzProperty {
+        key,
+        span: text_span(prop.span),
+        value: StaticSzValue::Object(static_object_from_object_expression(object, ctx)?),
+    })
 }
 
 fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
@@ -562,6 +597,12 @@ fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
         }
     }
 
+    // Dedupe (first-seen order): `base` is emitted alone then merged with each
+    // variant, so its classes repeat. The oxc-JS catalog collects into a Set, so
+    // dedupe here too — otherwise the Rust-vs-oxc parity comparison sees Rust's
+    // duplicate entries as a class divergence.
+    let mut seen = std::collections::HashSet::new();
+    classes.retain(|class| seen.insert(class.clone()));
     classes
 }
 
@@ -2117,10 +2158,7 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
 
         assert!(parsed.diagnostics.is_empty());
-        assert_eq!(
-            lowered.classes,
-            ["text-xs/none", "text-xs/none", "p-4", "text-xs/none", "p-8"]
-        );
+        assert_eq!(lowered.classes, ["text-xs/none", "p-4", "p-8"]);
     }
 
     #[test]
@@ -2134,10 +2172,7 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
 
         assert!(parsed.diagnostics.is_empty());
-        assert_eq!(
-            lowered.classes,
-            ["min-h-2", "min-h-2", "opacity-50", "min-h-2", "opacity-70"]
-        );
+        assert_eq!(lowered.classes, ["min-h-2", "opacity-50", "opacity-70"]);
     }
 
     #[test]
