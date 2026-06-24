@@ -949,9 +949,24 @@ npx @csszyx/cli migrate src/           # migrate all JSX/TSX/HTML under src/
 npx @csszyx/cli migrate --dry-run      # preview changes without writing files
 npx @csszyx/cli migrate --ignore "**/*.test.tsx,**/fixtures/**"
 npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
+npx @csszyx/cli migrate --keys-only    # upgrade existing csszyx code: normalize sz KEYS only, leave className untouched
 ```
 
 Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
+
+### `--keys-only` — upgrade existing csszyx code (not a Tailwind→sz migration)
+
+Plain `migrate` converts Tailwind `className` strings into `sz` props — for
+adopting csszyx. If you ALREADY use csszyx and are bumping a version that renamed
+sz-prop keys to their canonical form (e.g. the 0.9.10 → 0.10.0 key normalization),
+use `--keys-only`: it rewrites legacy sz-prop keys to canonical inside `sz={...}`
+and leaves `className` (and everything else) completely untouched. It only edits
+JSX/TSX (HTML has no sz objects). This is the safe, surgical upgrade path — it
+won't touch your hand-written classes.
+
+```bash
+npx @csszyx/cli migrate --keys-only --dry-run   # preview the key rewrites first
+```
 
 ### Audit — discover unrecognized classes
 
