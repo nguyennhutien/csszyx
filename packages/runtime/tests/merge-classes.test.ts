@@ -207,3 +207,146 @@ describe('szcn — custom @theme semantic colors', () => {
         expect(szcn('leading-4', 'leading-8')).toBe('leading-8');
     });
 });
+
+describe('szcn — decode resilience (a broken map must never crash the merge)', () => {
+    afterEach(() => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+    });
+    const setDecode = (decode: (c: string) => unknown) => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = { decode };
+    };
+
+    it('falls back to raw tokens when decode THROWS (no crash, no merge)', () => {
+        setDecode(() => {
+            throw new Error('boom');
+        });
+        // szcn is the leaf merge of every layered component — a throwing decode
+        // must degrade to "keep both raw", never blank the render.
+        expect(() => szcn('q3', 'q7')).not.toThrow();
+        expect(szcn('q3', 'q7')).toBe('q3 q7');
+    });
+
+    it('falls back to the raw token when decode returns a non-string', () => {
+        setDecode(c => (c === 'q3' ? 42 : undefined));
+        expect(() => szcn('q3', 'q7')).not.toThrow();
+        expect(szcn('q3', 'q7')).toBe('q3 q7');
+    });
+
+    it('falls back when decode returns an object', () => {
+        setDecode(() => ({}));
+        expect(() => szcn('q3', 'q7')).not.toThrow();
+        expect(szcn('q3', 'q7')).toBe('q3 q7');
+    });
+
+    it('still merges normally with a valid decode map', () => {
+        setDecode(c => ({ q3: 'gap-2', q7: 'gap-8' })[c]);
+        expect(szcn('q3', 'q7')).toBe('q7');
+    });
+
+    it('handles a partial map (some tokens decode, some are already raw)', () => {
+        setDecode(c => ({ q3: 'gap-2' })[c]); // q3 → gap-2; gap-8 undecoded (raw)
+        expect(szcn('q3', 'gap-8')).toBe('gap-8'); // both are `gap` → override
+    });
+});
+
+describe('szcn — complex & arbitrary variants stay isolated and override', () => {
+    it('overrides within group/peer state variants', () => {
+        expect(szcn('group-hover:gap-2', 'group-hover:gap-8')).toBe('group-hover:gap-8');
+        expect(szcn('peer-checked:p-2', 'peer-checked:p-8')).toBe('peer-checked:p-8');
+    });
+
+    it('isolates a group variant from the base', () => {
+        expect(szcn('gap-2', 'group-hover:gap-8')).toBe('gap-2 group-hover:gap-8');
+    });
+
+    it('handles data/aria arbitrary variants with an inner = (and bracket)', () => {
+        expect(szcn('data-[state=open]:gap-2', 'data-[state=open]:gap-8')).toBe(
+            'data-[state=open]:gap-8',
+        );
+    });
+
+    it('does not mistake an inner colon inside [] for the variant separator', () => {
+        // supports-[display:grid]: the colon is INSIDE the brackets, not a variant sep.
+        expect(szcn('supports-[display:grid]:gap-2', 'supports-[display:grid]:gap-8')).toBe(
+            'supports-[display:grid]:gap-8',
+        );
+    });
+
+    it('handles arbitrary breakpoint, container, and arbitrary-selector variants', () => {
+        expect(szcn('min-[320px]:gap-2', 'min-[320px]:gap-8')).toBe('min-[320px]:gap-8');
+        expect(szcn('@md:gap-2', '@md:gap-8')).toBe('@md:gap-8');
+        expect(szcn('[&>span]:gap-2', '[&>span]:gap-8')).toBe('[&>span]:gap-8');
+    });
+});
+
+describe('szcn — negative & important markers with directional coverage', () => {
+    it('a negative shorthand subsumes a negative longhand it covers', () => {
+        expect(szcn('-mt-2', '-m-8')).toBe('-m-8');
+        expect(szcn('-m-4', '-mb-8')).toBe('-m-4 -mb-8'); // refine keeps both
+    });
+
+    it('leading-important directional coverage (subsume + refine)', () => {
+        expect(szcn('!pb-2', '!p-8')).toBe('!p-8');
+        expect(szcn('!p-8', '!pb-2')).toBe('!p-8 !pb-2');
+    });
+
+    it('trailing-important (Tailwind v4 canonical) directional coverage', () => {
+        expect(szcn('pb-2!', 'p-8!')).toBe('p-8!');
+        expect(szcn('p-8!', 'pb-2!')).toBe('p-8! pb-2!');
+        expect(szcn('p-2!', 'p-8!')).toBe('p-8!');
+    });
+
+    it('treats an important variant as the same utility regardless of marker side', () => {
+        expect(szcn('p-2', 'p-8!')).toBe('p-8!');
+        expect(szcn('gap-2!', 'gap-8')).toBe('gap-8');
+    });
+});
+
+describe('szcn — arbitrary values with directional coverage', () => {
+    it('a later shorthand with an arbitrary value subsumes a covered longhand', () => {
+        expect(szcn('pb-[2px]', 'p-[9px]')).toBe('p-[9px]');
+    });
+
+    it('a later arbitrary longhand refines an arbitrary shorthand (keeps both)', () => {
+        expect(szcn('p-[10px]', 'pb-[2px]')).toBe('p-[10px] pb-[2px]');
+    });
+});
+
+describe('szcn — logical vs physical spacing (documented v1 behavior)', () => {
+    // INTENTIONAL asymmetry vs inset/rounded: a padding/margin shorthand DOES
+    // subsume its logical sides (ps/pe via px, ms/me via mx), whereas inset/rounded
+    // keep logical separate. Documented here so a future RTL-correctness pass is a
+    // deliberate change, not a silent regression.
+    it('px subsumes the logical inline padding sides ps/pe', () => {
+        expect(szcn('ps-2', 'px-4')).toBe('px-4');
+        expect(szcn('pe-2', 'p-4')).toBe('p-4');
+    });
+
+    it('contrast: inset-x does NOT subsume the logical start/end', () => {
+        expect(szcn('start-0', 'inset-x-4')).toBe('start-0 inset-x-4');
+    });
+});
+
+describe('szcn — determinism & idempotency (flaky guards)', () => {
+    it('dedupes an exact duplicate ungroupable token', () => {
+        expect(szcn('flex', 'flex')).toBe('flex');
+        expect(szcn('custom-x custom-x', 'custom-x')).toBe('custom-x');
+    });
+
+    it('is idempotent: szcn(szcn(x)) === szcn(x)', () => {
+        const once = szcn('gap-2 p-4 m-4', 'gap-8 p-8');
+        expect(szcn(once)).toBe(once);
+    });
+
+    it('is deterministic: repeated calls return identical output', () => {
+        const run = () => szcn('gap-2 m-4 p-4 rounded-md', 'gap-8 p-8 rounded-xl');
+        const first = run();
+        for (let i = 0; i < 5; i++) {
+            expect(run()).toBe(first);
+        }
+    });
+
+    it('preserves a stable survivor order across many mixed inputs', () => {
+        expect(szcn('a gap-2 b', 'm-4 gap-8', false, 'c', 'm-2')).toBe('a b gap-8 c m-2');
+    });
+});

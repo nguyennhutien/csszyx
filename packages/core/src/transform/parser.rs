@@ -467,7 +467,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     .extend(lower_static_sz_object(&object));
             }
             "szv" => {
-                let Some(config) = static_object_from_argument(argument, self.resolve_context())
+                let Some(config) =
+                    lenient_szv_config_from_argument(argument, self.resolve_context())
                 else {
                     return;
                 };
@@ -498,6 +499,81 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     }
 }
 
+/// Parse an szv config argument leniently: keep only the top-level properties
+/// that are statically evaluable, skipping any that are not (e.g. a
+/// `compoundVariants` array, a dynamic `defaultVariants`). The strict whole-
+/// object parser `?`-bails on the first non-static property, which used to drop
+/// every variant class when a sibling key was not static. `szv_catalog_classes`
+/// only consumes `base` + `variants`, so a lenient parse loses nothing relevant.
+fn lenient_szv_config_from_argument(
+    argument: &Argument<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
+    let object = match argument {
+        Argument::ObjectExpression(object) => object,
+        Argument::Identifier(identifier) => {
+            // Only a `const` binding is followed (never a reassigned `let`), to
+            // match the const-guarded resolution on the Babel/oxc paths.
+            match ctx.scope.resolve_const_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )? {
+                Expression::ObjectExpression(object) => object,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+
+    let mut properties = Vec::new();
+    for property in &object.properties {
+        if let ObjectPropertyKind::ObjectProperty(prop) = property {
+            // `{ base }` shorthand === `{ base: base }`: resolve the same-named
+            // `const` object binding (matching Babel/oxc). The general property
+            // helper rejects shorthand, which would drop a shorthand base/variants.
+            if prop.shorthand {
+                if let Some(static_prop) = static_shorthand_const_property(prop, ctx) {
+                    merge_static_property(&mut properties, static_prop);
+                }
+                continue;
+            }
+            if let Some(static_prop) = static_property_from_object_property(prop, ctx) {
+                merge_static_property(&mut properties, static_prop);
+            }
+            // A non-static sibling (compoundVariants array, etc.) is skipped, not
+            // bailed — so base/variants still extract.
+        }
+    }
+    Some(StaticSzObject { properties })
+}
+
+/// Resolve a shorthand szv-config property (`{ base }` === `{ base: base }`) to a
+/// static property by following the same-named `const` object binding. Returns
+/// None unless the binding is a `const` initialized to an object literal.
+fn static_shorthand_const_property(
+    prop: &ObjectProperty<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzProperty> {
+    let key = static_property_key(&prop.key)?;
+    let Expression::Identifier(identifier) = &prop.value else {
+        return None;
+    };
+    let Expression::ObjectExpression(object) = ctx.scope.resolve_const_initializer_before(
+        &identifier.name,
+        identifier.span.start,
+        ctx.program,
+    )?
+    else {
+        return None;
+    };
+    Some(StaticSzProperty {
+        key,
+        span: text_span(prop.span),
+        value: StaticSzValue::Object(static_object_from_object_expression(object, ctx)?),
+    })
+}
+
 fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
     let base = object_property(config, "base")
         .cloned()
@@ -521,6 +597,12 @@ fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
         }
     }
 
+    // Dedupe (first-seen order): `base` is emitted alone then merged with each
+    // variant, so its classes repeat. The oxc-JS catalog collects into a Set, so
+    // dedupe here too — otherwise the Rust-vs-oxc parity comparison sees Rust's
+    // duplicate entries as a class divergence.
+    let mut seen = std::collections::HashSet::new();
+    classes.retain(|class| seen.insert(class.clone()));
     classes
 }
 
@@ -2076,10 +2158,7 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
 
         assert!(parsed.diagnostics.is_empty());
-        assert_eq!(
-            lowered.classes,
-            ["text-xs/none", "text-xs/none", "p-4", "text-xs/none", "p-8"]
-        );
+        assert_eq!(lowered.classes, ["text-xs/none", "p-4", "p-8"]);
     }
 
     #[test]
@@ -2093,9 +2172,123 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
 
         assert!(parsed.diagnostics.is_empty());
-        assert_eq!(
-            lowered.classes,
-            ["min-h-2", "min-h-2", "opacity-50", "min-h-2", "opacity-70"]
+        assert_eq!(lowered.classes, ["min-h-2", "opacity-50", "opacity-70"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_with_non_static_sibling_key() {
+        // A `compoundVariants` array (or any non-static sibling) must NOT drop the
+        // base/variants catalog — it is skipped, the variant classes still extract.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; const box = szv({ base: { rounded: 'md' }, variants: { tone: { ok: { bg: 'success' } } }, compoundVariants: [{ tone: 'ok', sz: { p: 4 } }] });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        // base (rounded-md) + base∪variant (rounded-md bg-success). compoundVariants ignored.
+        assert!(lowered.classes.contains(&"rounded-md".to_string()));
+        assert!(lowered.classes.contains(&"bg-success".to_string()));
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_dis_value_cases() {
+        // szv lowers "dị" variant/important/negative/arbitrary/css-var values in
+        // the catalog directly — these must match the same shapes the JS engines
+        // emit (the Babel/oxc szv-extraction parity suite locks the JS side).
+        let cases: &[(&str, &str)] = &[
+            (
+                "{ variants: { s: { x: { hover: { bg: 'red-500' } } } } }",
+                "hover:bg-red-500",
+            ),
+            ("{ variants: { s: { x: { md: { p: 8 } } } } }", "md:p-8"),
+            (
+                "{ variants: { s: { x: { group: { hover: { gap: 8 } } } } } }",
+                "group-hover:gap-8",
+            ),
+            (
+                "{ variants: { s: { x: { data: { 'state=open': { gap: 8 } } } } } }",
+                "data-[state=open]:gap-8",
+            ),
+            ("{ variants: { s: { x: { p: '8!' } } } }", "p-8!"),
+            ("{ variants: { s: { x: { mt: -2 } } } }", "-mt-2"),
+            ("{ variants: { s: { x: { w: '[400px]' } } } }", "w-[400px]"),
+            (
+                "{ variants: { s: { x: { bg: { color: 'warning', op: 10 } } } } }",
+                "bg-warning/10",
+            ),
+            (
+                "{ variants: { s: { x: { color: '--ds-primary' } } } }",
+                "text-(--ds-primary)",
+            ),
+        ];
+
+        for (config, expected) in cases {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!(
+                    "import {{ szv }} from '@csszyx/runtime'; const b = szv({config});"
+                ),
+            };
+            let parsed = parse_source_shell(&file);
+            let lowered = lower_source_ir_classes(&parsed.ir);
+            assert!(
+                lowered.classes.contains(&expected.to_string()),
+                "szv config {config} should emit {expected}, got {:?}",
+                lowered.classes
+            );
+        }
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_from_const_bindings() {
+        // Option C: resolve a `const` identifier bound to an object literal — the
+        // whole config (`szv(cfg)`) and inner base/variants (`{ variants: V }`).
+        let resolves: &[(&str, &str)] = &[
+            (
+                "const cfg = { base: { rounded: 'md' }, variants: { s: { x: { p: 4 } } } }; const b = szv(cfg);",
+                "rounded-md",
+            ),
+            (
+                "const V = { s: { x: { p: 4 } } }; const b = szv({ base: { m: 2 }, variants: V });",
+                "p-4",
+            ),
+            (
+                "const B = { rounded: 'md' }; const b = szv({ base: B, variants: { s: { x: { p: 4 } } } });",
+                "rounded-md",
+            ),
+        ];
+        for (source, expected) in resolves {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("import {{ szv }} from '@csszyx/runtime'; {source}"),
+            };
+            let parsed = parse_source_shell(&file);
+            let lowered = lower_source_ir_classes(&parsed.ir);
+            assert!(
+                lowered.classes.contains(&expected.to_string()),
+                "{source} should resolve and emit {expected}, got {:?}",
+                lowered.classes
+            );
+        }
+    }
+
+    #[test]
+    fn parser_shell_does_not_resolve_reassigned_let_in_szv() {
+        // Guard: a reassigned `let` must NOT be followed — its later value is not
+        // statically known, so resolving the first object literal would be wrong.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; let cfg = { variants: { s: { x: { p: 4 } } } }; cfg = { variants: { s: { x: { m: 9 } } } }; const b = szv(cfg);".to_string(),
+        };
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert!(
+            !lowered.classes.contains(&"p-4".to_string()),
+            "a reassigned let must not resolve to its first value, got {:?}",
+            lowered.classes
         );
     }
 

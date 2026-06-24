@@ -57,7 +57,17 @@ function decodeToken(token: string): string {
     const decode = (globalThis as { __csszyx?: { decode?: (c: string) => string | undefined } })
         .__csszyx?.decode;
     if (typeof decode === 'function') {
-        return decode(token) ?? token;
+        // The decode map is external (an inline script sets it). A buggy or
+        // mid-update map that throws, or returns a non-string, must NEVER break
+        // the merge — szcn is the leaf of every layered component, so a crash here
+        // is a blank render. Fall back to the raw token (still valid; it just
+        // won't be mangle-grouped, same as the no-map path). Fail-safe over clever.
+        try {
+            const decoded = decode(token);
+            return typeof decoded === 'string' ? decoded : token;
+        } catch {
+            return token;
+        }
     }
     return token;
 }
