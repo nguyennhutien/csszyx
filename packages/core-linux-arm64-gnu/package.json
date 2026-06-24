@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/core-linux-arm64-gnu",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "description": "Linux arm64 glibc native binding for @csszyx/core",
   "license": "MIT",
   "repository": {
