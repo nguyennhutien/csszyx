@@ -2,10 +2,16 @@
 
 ## [0.10.5](https://github.com/nguyennhutien/csszyx/compare/v0.10.4...v0.10.5) (2026-06-24)
 
-
 ### Features
 
-* szv const-binding + non-static-key extraction, and szcn crash hardening ([#93](https://github.com/nguyennhutien/csszyx/issues/93)) ([7905a7b](https://github.com/nguyennhutien/csszyx/commit/7905a7b4cb5dd33a7b1f43519591233df7c32286))
+* szv const-binding + non-static-key extraction, and szcn crash hardening ([#93](https://github.com/nguyennhutien/csszyx/issues/93))
+* **compiler:** resolve a const-bound szv config and base/variants ([#93](https://github.com/nguyennhutien/csszyx/issues/93))
+
+### Bug Fixes
+
+* **compiler:** keep szv catalog when a config key is non-static ([#93](https://github.com/nguyennhutien/csszyx/issues/93))
+* **runtime:** szcn must not crash on a broken decode map ([#93](https://github.com/nguyennhutien/csszyx/issues/93))
+* **core:** Rust szv parity — resolve shorthand const + dedup catalog ([#93](https://github.com/nguyennhutien/csszyx/issues/93))
 
 ## [0.10.4](https://github.com/nguyennhutien/csszyx/compare/v0.10.3...v0.10.4) (2026-06-23)
 
