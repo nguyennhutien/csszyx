@@ -512,7 +512,9 @@ fn lenient_szv_config_from_argument(
     let object = match argument {
         Argument::ObjectExpression(object) => object,
         Argument::Identifier(identifier) => {
-            match ctx.scope.resolve_initializer_before(
+            // Only a `const` binding is followed (never a reassigned `let`), to
+            // match the const-guarded resolution on the Babel/oxc paths.
+            match ctx.scope.resolve_const_initializer_before(
                 &identifier.name,
                 identifier.span.start,
                 ctx.program,
@@ -2203,6 +2205,56 @@ mod tests {
                 lowered.classes
             );
         }
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_from_const_bindings() {
+        // Option C: resolve a `const` identifier bound to an object literal — the
+        // whole config (`szv(cfg)`) and inner base/variants (`{ variants: V }`).
+        let resolves: &[(&str, &str)] = &[
+            (
+                "const cfg = { base: { rounded: 'md' }, variants: { s: { x: { p: 4 } } } }; const b = szv(cfg);",
+                "rounded-md",
+            ),
+            (
+                "const V = { s: { x: { p: 4 } } }; const b = szv({ base: { m: 2 }, variants: V });",
+                "p-4",
+            ),
+            (
+                "const B = { rounded: 'md' }; const b = szv({ base: B, variants: { s: { x: { p: 4 } } } });",
+                "rounded-md",
+            ),
+        ];
+        for (source, expected) in resolves {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("import {{ szv }} from '@csszyx/runtime'; {source}"),
+            };
+            let parsed = parse_source_shell(&file);
+            let lowered = lower_source_ir_classes(&parsed.ir);
+            assert!(
+                lowered.classes.contains(&expected.to_string()),
+                "{source} should resolve and emit {expected}, got {:?}",
+                lowered.classes
+            );
+        }
+    }
+
+    #[test]
+    fn parser_shell_does_not_resolve_reassigned_let_in_szv() {
+        // Guard: a reassigned `let` must NOT be followed — its later value is not
+        // statically known, so resolving the first object literal would be wrong.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; let cfg = { variants: { s: { x: { p: 4 } } } }; cfg = { variants: { s: { x: { m: 9 } } } }; const b = szv(cfg);".to_string(),
+        };
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert!(
+            !lowered.classes.contains(&"p-4".to_string()),
+            "a reassigned let must not resolve to its first value, got {:?}",
+            lowered.classes
+        );
     }
 
     #[test]

@@ -124,6 +124,10 @@ export function transformOxc(
 
     const edits = new MagicString(source);
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
+    // szv config resolution follows ONLY `const` bindings (a reassigned `let`
+    // would be unsound), so it uses a const-only map distinct from the general
+    // sz-object resolution above which keeps all binding kinds.
+    const constObjectBindings = collectObjectBindings(parsed.program as unknown as OxcNode, true);
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     const reservedCSSVariableNames = options?.mangleVars
         ? collectStaticStyleCustomPropertyNames(parsed.program as unknown as OxcNode)
@@ -157,7 +161,7 @@ export function transformOxc(
             collectSzvCallClasses(
                 node as CallExpressionNode,
                 effectiveFilename,
-                objectBindings,
+                constObjectBindings,
                 classes,
             );
             return;
@@ -1602,14 +1606,16 @@ function readConfigSubObject(
         if (prop.computed || extractKeyName(prop.key) !== key) {
             continue;
         }
-        // Only an INLINE object literal — do not resolve an identifier binding for
-        // the sub-value. Keeps Babel/oxc parity (Babel reads inline only) and
-        // matches the documented "pass the config inline" guidance.
-        if (prop.value.type !== 'ObjectExpression') {
+        // An inline object literal OR a same-scope `const` identifier bound to one
+        // (`const V = {…}; szv({ variants: V })`). `bindings` is const-only, so a
+        // reassigned `let` is never followed — matching Babel's const-guarded
+        // resolution.
+        const valueObj = resolveObjectExpression(prop.value, bindings);
+        if (!valueObj) {
             return {};
         }
         try {
-            return astObjectToSzObject(prop.value as ObjectExpressionNode, filename, bindings);
+            return astObjectToSzObject(valueObj, filename, bindings);
         } catch (err) {
             if (err instanceof OxcNotImplementedError) {
                 return {};
@@ -3006,22 +3012,46 @@ function astValueToSzValue(
  * semantics.
  *
  * @param root Program AST root.
+ * @param constOnly When true, only `const` declarations are collected (used by
+ *   szv config resolution, which must not follow a reassigned `let`).
  * @returns Identifier name to object-expression initializer.
  */
-function collectObjectBindings(root: OxcNode): Map<string, ObjectExpressionNode> {
+function collectObjectBindings(
+    root: OxcNode,
+    constOnly = false,
+): Map<string, ObjectExpressionNode> {
     const bindings = new Map<string, ObjectExpressionNode>();
     walk(root, node => {
-        if (node.type !== 'VariableDeclarator') {
+        if (node.type !== 'VariableDeclaration') {
             return;
         }
-        const id = (node as unknown as { id?: OxcNode }).id;
-        const init = (node as unknown as { init?: OxcNode | null }).init;
-        if (!id || id.type !== 'Identifier' || !init) {
+        const decl = node as unknown as { kind?: string; declarations?: OxcNode[] };
+        // szv binding-resolution (constOnly) follows ONLY `const`, so a reassigned
+        // `let`/`var` is never resolved to its first object literal. The general
+        // sz-object resolution keeps all kinds (existing behaviour / Babel parity).
+        if (constOnly && decl.kind !== 'const') {
             return;
         }
-        const unwrapped = unwrapExpression(init);
-        if (unwrapped.type === 'ObjectExpression') {
-            bindings.set(String((id as IdentifierNode).name), unwrapped as ObjectExpressionNode);
+        if (!decl.declarations) {
+            return;
+        }
+        for (const declaratorNode of decl.declarations) {
+            const declarator = declaratorNode as unknown as {
+                id?: OxcNode;
+                init?: OxcNode | null;
+            };
+            const id = declarator.id;
+            const init = declarator.init;
+            if (!id || id.type !== 'Identifier' || !init) {
+                continue;
+            }
+            const unwrapped = unwrapExpression(init);
+            if (unwrapped.type === 'ObjectExpression') {
+                bindings.set(
+                    String((id as IdentifierNode).name),
+                    unwrapped as ObjectExpressionNode,
+                );
+            }
         }
     });
     return bindings;

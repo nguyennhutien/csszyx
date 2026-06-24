@@ -137,6 +137,23 @@ impl DeclaratorScope {
         let entry = self.resolve_before(name, reference_start)?;
         find_initializer_at_span(program, entry.initializer)
     }
+
+    /// Like [`Self::resolve_initializer_before`] but only follows a `const`
+    /// binding. A `let`/`var` may be reassigned after its initializer, so
+    /// resolving its first value would be unsound — callers that fold a binding
+    /// into a static value (e.g. szv config resolution) must use this.
+    pub fn resolve_const_initializer_before<'a>(
+        &self,
+        name: &str,
+        reference_start: u32,
+        program: &'a Program<'a>,
+    ) -> Option<&'a Expression<'a>> {
+        let entry = self.resolve_before(name, reference_start)?;
+        if entry.kind != VariableDeclarationKind::Const {
+            return None;
+        }
+        find_initializer_at_span(program, entry.initializer)
+    }
 }
 
 fn find_initializer_at_span<'a>(

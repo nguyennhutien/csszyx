@@ -54,12 +54,21 @@ describe('szv extraction — Babel engine', () => {
         ).toEqual(['bg-blue-50', 'hover:bg-blue-100', 'md:p-8']);
     });
 
-    it('only reads inline object literals for base/variants (hoisted inner binding is skipped)', () => {
-        // Documented guidance is to pass the config inline; a hoisted inner object
-        // is intentionally NOT resolved (and must match oxc — see parity below).
-        expect(babel('const V = { s: { x: { p: 2 } } }; const b = szv({ variants: V });')).toEqual(
-            [],
-        );
+    it('resolves a const-bound config or inner base/variants (Option C)', () => {
+        // A same-scope `const` identifier bound to an object literal is followed —
+        // for the whole config and for an inner base/variants value.
+        expect(
+            babel('const cfg = { variants: { s: { x: { p: 2 } } } }; const b = szv(cfg);'),
+        ).toEqual(['p-2']);
+        expect(babel('const V = { s: { x: { p: 2 } } }; const b = szv({ variants: V });')).toEqual([
+            'p-2',
+        ]);
+    });
+
+    it('does NOT follow a reassigned `let` binding (unsound)', () => {
+        const src =
+            'let cfg = { variants: { s: { x: { p: 2 } } } }; cfg = { variants: {} }; const b = szv(cfg);';
+        expect(babel(src)).toEqual([]);
     });
 });
 
@@ -106,12 +115,24 @@ describe('szv extraction — Babel/oxc parity', () => {
             "const b = szv({ variants: { s: { x: { bg: { color: 'warning', op: 10 } } } } });",
         ],
         [
-            'hoisted inner binding (both skip)',
-            'const V = { s: { x: { p: 2 } } }; const b = szv({ variants: V });',
+            'const-bound whole config (both resolve)',
+            'const cfg = { base: { rounded: "md" }, variants: { s: { x: { p: 2 } } } }; const b = szv(cfg);',
         ],
         [
-            'hoisted base binding (both skip base)',
+            'const-bound inner variants (both resolve)',
+            'const V = { s: { x: { p: 2 } } }; const b = szv({ base: { m: 2 }, variants: V });',
+        ],
+        [
+            'const-bound inner base (both resolve)',
             'const B = { p: 4 }; const b = szv({ base: B, variants: { s: { x: { m: 2 } } } });',
+        ],
+        [
+            'reassigned let (both skip — unsound to follow)',
+            'let cfg = { variants: { s: { x: { p: 2 } } } }; cfg = { variants: {} }; const b = szv(cfg);',
+        ],
+        [
+            'value from const (both skip — primitive folding out of scope)',
+            'const T = "red-500"; const b = szv({ variants: { s: { x: { bg: T } } } });',
         ],
     ];
 

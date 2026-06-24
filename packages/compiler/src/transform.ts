@@ -875,8 +875,15 @@ export function transformSourceCode(
                                 return;
                             }
 
-                            const configArg = init.arguments[0];
-                            if (!t.isObjectExpression(configArg)) {
+                            // Resolve the config to an object literal — written
+                            // inline, or a same-scope `const` identifier bound to
+                            // one (`const cfg = {…}; szv(cfg)`). Only a constant
+                            // binding is followed (never a reassigned `let`).
+                            const configArg = resolveToConstObjectExpression(
+                                init.arguments[0],
+                                path.scope,
+                            );
+                            if (!configArg) {
                                 return;
                             }
                             // Read `base` and `variants` INDEPENDENTLY rather than
@@ -884,11 +891,15 @@ export function transformSourceCode(
                             // A single non-static sibling key (e.g. a
                             // `compoundVariants` array) used to null the entire
                             // config and drop every variant class; now unknown /
-                            // dynamic keys are simply ignored.
-                            const base = (readStaticConfigObject(configArg, 'base') ??
+                            // dynamic keys are simply ignored. A base/variants value
+                            // may itself be a const identifier bound to an object.
+                            const base = (readStaticConfigObject(configArg, 'base', path.scope) ??
                                 {}) as SzObject;
-                            const variants = (readStaticConfigObject(configArg, 'variants') ??
-                                {}) as Record<string, Record<string, SzObject>>;
+                            const variants = (readStaticConfigObject(
+                                configArg,
+                                'variants',
+                                path.scope,
+                            ) ?? {}) as Record<string, Record<string, SzObject>>;
 
                             const classStrings: string[] = [];
 
@@ -1236,13 +1247,6 @@ function tryHoistConditionalSpread(
 }
 
 /**
- * Recursively evaluates an ObjectExpression to a plain JS object if all properties are static literals.
- * Returns null if any part is dynamic.
- *
- * @param node - The ObjectExpression node to evaluate
- * @returns The evaluated object or null
- */
-/**
  * Read a single named property of an szv config ObjectExpression as a static
  * SzObject, evaluating ONLY that sub-tree. Returns null when the key is absent
  * or its value is not a statically-evaluable object. Used so szv extraction can
@@ -1252,9 +1256,14 @@ function tryHoistConditionalSpread(
  *
  * @param configExpr The szv config object expression.
  * @param key The property to read (e.g. 'base' or 'variants').
+ * @param scope The babel scope at the szv call site (for const-binding resolution).
  * @returns The evaluated SzObject, or null if absent/non-static.
  */
-function readStaticConfigObject(configExpr: t.ObjectExpression, key: string): SzObject | null {
+function readStaticConfigObject(
+    configExpr: t.ObjectExpression,
+    key: string,
+    scope: babel.NodePath['scope'],
+): SzObject | null {
     for (const prop of configExpr.properties) {
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
@@ -1267,7 +1276,39 @@ function readStaticConfigObject(configExpr: t.ObjectExpression, key: string): Sz
         if (k !== key) {
             continue;
         }
-        return t.isObjectExpression(prop.value) ? evaluateStaticObject(prop.value) : null;
+        const obj = resolveToConstObjectExpression(prop.value, scope);
+        return obj ? evaluateStaticObject(obj) : null;
+    }
+    return null;
+}
+
+/**
+ * Resolve a node to an object-literal expression: it either IS one, or is a
+ * same-scope `const` identifier bound to one. A reassigned binding (babel reports
+ * `binding.constant === false`) or any non-object initializer returns null — so
+ * szv follows `const cfg = {…}; szv(cfg)` but never a mutated `let`.
+ *
+ * @param node - The node to resolve (config arg or a base/variants value).
+ * @param scope - The babel scope at the szv call site.
+ * @returns The object expression, or null.
+ */
+function resolveToConstObjectExpression(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+): t.ObjectExpression | null {
+    if (t.isObjectExpression(node)) {
+        return node;
+    }
+    if (t.isIdentifier(node)) {
+        const binding = scope.getBinding(node.name);
+        // `const`-declared only (matches the oxc const-binding map + the Rust
+        // VariableDeclarationKind::Const guard), AND never reassigned.
+        if (binding?.kind === 'const' && binding.constant) {
+            const declNode = binding.path.node;
+            if (t.isVariableDeclarator(declNode) && t.isObjectExpression(declNode.init)) {
+                return declNode.init;
+            }
+        }
     }
     return null;
 }
