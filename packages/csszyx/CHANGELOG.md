@@ -2,10 +2,15 @@
 
 ## [0.10.6](https://github.com/nguyennhutien/csszyx/compare/v0.10.5...v0.10.6) (2026-06-25)
 
+### Features
+
+* **runtime:** add public szr — the hand-written name for the _sz resolver ([#96](https://github.com/nguyennhutien/csszyx/issues/96))
+* **unplugin:** degrade default rust parser to oxc when no native binary ([#96](https://github.com/nguyennhutien/csszyx/issues/96))
 
 ### Bug Fixes
 
-* **unplugin:** szv-only safelist + native fallback, public szr resolver ([#96](https://github.com/nguyennhutien/csszyx/issues/96)) ([88a8cef](https://github.com/nguyennhutien/csszyx/commit/88a8cef4bafbfce364aa8cd252eea0888df217cd))
+* **unplugin:** szv-only safelist + native fallback, public szr resolver ([#96](https://github.com/nguyennhutien/csszyx/issues/96))
+* **unplugin:** safelist a szv-only file's catalog (transformed=false) ([#96](https://github.com/nguyennhutien/csszyx/issues/96))
 
 ## [0.10.5](https://github.com/nguyennhutien/csszyx/compare/v0.10.4...v0.10.5) (2026-06-24)
 
