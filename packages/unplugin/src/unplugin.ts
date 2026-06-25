@@ -2478,7 +2478,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
-            if (!result.transformed) {
+            // A szv-only file (no `sz=` to rewrite) reports transformed=false but
+            // still extracts a catalog of classes — collect those, otherwise its
+            // variants are silently dropped from the safelist (the file is
+            // discovered by the `szv(` prescan token but its classes never land).
+            if (!result.transformed && result.classes.size === 0) {
                 continue;
             }
             collectPrescanResult(result, filePath, discoveredClasses, rawDiscoveredClasses);

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useState } from 'react';
 import { RecoveryFixture } from './Recovery';
 import { VerificationComponent } from './Verification';
+import { SzvStandalone } from './SzvStandalone';
+import { SzvFromTs } from './SzvFromTs';
 
 // Lazy-load DynamicForm so @csszyx/dynamic (and its deps) are NOT bundled into
 // the main chunk. This avoids a WASM pre-transform warning from Vite when the
@@ -51,6 +53,14 @@ function App() {
         <JsonFormEditor />
       </Suspense>
     );
+  }
+
+  if (page === 'szv-ts') {
+    return <SzvFromTs />;
+  }
+
+  if (page === 'szv') {
+    return <SzvStandalone />;
   }
 
   if (page === 'css-vars') {
