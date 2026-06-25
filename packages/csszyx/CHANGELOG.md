@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.6](https://github.com/nguyennhutien/csszyx/compare/v0.10.5...v0.10.6) (2026-06-25)
+
+
+### Bug Fixes
+
+* **unplugin:** szv-only safelist + native fallback, public szr resolver ([#96](https://github.com/nguyennhutien/csszyx/issues/96)) ([88a8cef](https://github.com/nguyennhutien/csszyx/commit/88a8cef4bafbfce364aa8cd252eea0888df217cd))
+
 ## [0.10.5](https://github.com/nguyennhutien/csszyx/compare/v0.10.4...v0.10.5) (2026-06-24)
 
 ### Features
