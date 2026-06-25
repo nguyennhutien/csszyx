@@ -3480,16 +3480,31 @@ SSR-safe: on the server, returns class names without CSSOM access.
 
 ## Runtime Helpers
 
-For dynamic classes at runtime (the only runtime overhead):
+For dynamic classes at runtime (the only runtime overhead). Use these PUBLIC,
+hand-written names (no `_` prefix — `_`-prefixed helpers like `_sz`/`_szMerge`
+are compiler-injected, do not hand-author them):
+
+- **`szr(...)`** — resolve sz OBJECT(s) and/or class strings → a mangle-aware
+  className (concatenates, filters falsy). The hand-name for the injected `_sz`.
+  Reach for it to build a className from `szv` factory output (e.g. a code-split
+  layout that declares variants in a `.ts` module and resolves them in a `.tsx`).
+- **`szcn(...)`** — merge className STRINGS with last-wins override on a
+  same-utility conflict, mangle-aware (the Box-level merge).
+- `szr` takes sz OBJECTS and concatenates; `szcn` takes STRINGS and overrides.
 
 ```tsx
-import { _sz, _szMerge } from '@csszyx/runtime';
+import { szr, szv, szcn } from '@csszyx/runtime';
+
+const cardSz = szv({ variants: { pad: { lg: { p: 8 } } } });
+
+// Resolve szv factory output → className (the split / no-`sz=` use case)
+<div className={szr(cardSz({ pad: 'lg' }), isWide && stackSz({ gap: 'xl' }))} />
 
 // Concatenate class strings
-<div className={_sz('base-class', conditionalClass)} />
+<div className={szr('base-class', conditionalClass)} />
 
-// Conditional class — plain JS conditionals compose with _sz
-<div className={_sz('base-class', isActive && 'active-class')} />
+// Conditional class — plain JS conditionals compose with szr
+<div className={szr('base-class', isActive && 'active-class')} />
 <div className={isActive ? 'active-class' : 'inactive-class'} />
 
 // Switch/enum — a plain object lookup
@@ -3499,8 +3514,8 @@ import { _sz, _szMerge } from '@csszyx/runtime';
   success: 'border-green-500',
 }[status]} />
 
-// Merge (last wins for conflicts)
-<div className={_szMerge(baseClasses, overrideClasses)} />
+// Merge className strings, last-wins for same-utility conflicts
+<div className={szcn(baseClasses, overrideClasses)} />
 ```
 
 For color CSS variables:

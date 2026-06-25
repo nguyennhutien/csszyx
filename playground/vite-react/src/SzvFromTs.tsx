@@ -1,13 +1,13 @@
-// Imports szv catalogs from a plain `.ts` module and resolves them via `_sz` to
+// Imports szv catalogs from a plain `.ts` module and resolves them via `szr` to
 // a className string. No `sz=` and no szv declaration in THIS file — the catalogs
 // live in flexVariants.ts. Verifies the cross-module / code-split shape: the
 // safelisting comes from the `.ts` module, the `.tsx` only consumes the factory.
-import { _sz } from '@csszyx/runtime';
+import { szr } from '@csszyx/runtime';
 import { cardSz, stackSz } from './flexVariants';
 
 export function SzvFromTs() {
-    const cardClass = _sz(cardSz({ pad: 'loose' }), cardSz({ size: 'a' }), cardSz({ radius: 'big' }));
-    const stackClass = _sz(stackSz({ gap: 'xl' }), stackSz({ gap: 'num' }));
+    const cardClass = szr(cardSz({ pad: 'loose' }), cardSz({ size: 'a' }), cardSz({ radius: 'big' }));
+    const stackClass = szr(stackSz({ gap: 'xl' }), stackSz({ gap: 'num' }));
 
     return (
         <section data-testid="szv-from-ts" className="border border-gray-300">

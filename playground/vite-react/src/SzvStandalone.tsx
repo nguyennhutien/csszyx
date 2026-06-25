@@ -1,5 +1,5 @@
 // szv STANDALONE fixture — this file uses NO `sz=` JSX prop anywhere. It declares
-// szv catalogs and resolves them via `_sz` only. The build prescan qualifies the
+// szv catalogs and resolves them via `szr` only. The build prescan qualifies the
 // file by its `szv(` token (0.10.4+) AND collects its catalog even though the
 // oxc/Rust engines report transformed=false for a no-`sz=` file (the fix in this
 // change) — so the catalog, incl. the arbitrary [Npx] values and the large
@@ -7,7 +7,7 @@
 // IMPORTANT: do not write any of these class names as literal text/comments —
 // Tailwind's unscoped scan would pick them up and mask whether szv safelisting
 // actually works.
-import { _sz, szv } from '@csszyx/runtime';
+import { szr, szv } from '@csszyx/runtime';
 
 // Arbitrary [Npx] values — pattern the design system uses for exact pixel sizes
 // outside the Tailwind spacing scale.
@@ -44,14 +44,14 @@ const largeEnumSz = szv({
 });
 
 export function SzvStandalone() {
-    // No `sz=` here — only `_sz(szv(...))`. The classes are resolved at runtime and
+    // No `sz=` here — only `szr(szv(...))`. The classes are resolved at runtime and
     // (because the catalog above is safelisted at build) styled by Tailwind.
-    const arbitraryClass = _sz(
+    const arbitraryClass = szr(
         arbitrarySz({ margin: 'b' }),
         arbitrarySz({ size: 'square' }),
         arbitrarySz({ gap: 'px' }),
     );
-    const largeEnumClass = _sz(
+    const largeEnumClass = szr(
         largeEnumSz({ pad: 100 }),
         largeEnumSz({ space: 50 }),
         largeEnumSz({ width: 96 }),
