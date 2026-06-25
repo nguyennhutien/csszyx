@@ -8,6 +8,7 @@ CSSzyx provides two runtime entry points:
 
 | Feature            | Full (`@csszyx/runtime`) | Lite (`csszyx/lite`) |
 | ------------------ | ------------------------ | -------------------- |
+| `szr()`            | Yes                      | Yes (string-only)    |
 | `_sz()`            | Yes                      | Yes (string-only)    |
 | `_sz2()`           | Yes                      | Yes                  |
 | `_sz3()`           | Yes                      | No                   |
@@ -22,31 +23,37 @@ Use the **lite** runtime when bundle size is critical. It only accepts pre-compi
 
 ## Concatenation Helpers
 
-### `_sz()`
+### `szr()` (public) / `_sz()` (compiler-injected)
 
-Zero-allocation className concatenation. Filters out falsy values.
+`szr` resolves sz object(s) and/or class strings into a single mangle-aware
+className, filtering falsy values (clsx-style). It is the PUBLIC, hand-written
+name; `_sz` is the identical helper the compiler injects (the `_` marks generated
+code — do not hand-author it). Use `szr` when you build a className from `szv`
+factory output or sz objects (e.g. a code-split layout that resolves variants at
+the leaf). `szr` CONCATENATES; to merge with last-wins override on a same-utility
+conflict use [`szcn()`](#szcn). `szr` accepts sz OBJECTS; `szcn` accepts STRINGS.
 
 **Signature:**
 
 ```ts
-function _sz(...classes: (string | null | undefined | false)[]): string;
+function szr(...classes: SzInput[]): string; // SzInput = SzObject | string | null | undefined | false | SzInput[]
 ```
 
 **Example:**
 
 ```tsx
-import { _sz } from "@csszyx/runtime";
+import { szr } from "@csszyx/runtime";
 
 // Basic usage
-_sz("a", "b", "c");
+szr("a", "b", "c");
 // Returns: "a b c"
 
 // With conditionals
-_sz("base", isActive && "active", hasError && "error");
+szr("base", isActive && "active", hasError && "error");
 // Returns: "base active" (if isActive is true, hasError is false)
 
 // Filters falsy values
-_sz("a", null, "b", undefined, false, "c");
+szr("a", null, "b", undefined, false, "c");
 // Returns: "a b c"
 ```
 

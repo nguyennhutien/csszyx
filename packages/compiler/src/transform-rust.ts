@@ -83,6 +83,33 @@ export function ensureRustTransformAvailable(): void {
     }
 }
 
+/** Memoized result of the native-availability probe (loading the addon is a
+ * one-time cost; the binary cannot appear or vanish mid-process). */
+let rustAvailability: boolean | undefined;
+
+/**
+ * Non-throwing companion to {@link ensureRustTransformAvailable}: returns whether
+ * the native Rust addon can be loaded on the current host. Build integrations use
+ * it to gracefully degrade the DEFAULT `rust` parser to `oxc` when no prebuilt
+ * binary is installed for the platform (unsupported arch, optional deps omitted,
+ * or a cross-platform frozen lockfile) — instead of hard-failing a build the user
+ * never explicitly opted into `rust` for. An EXPLICIT `rust` choice must still use
+ * {@link ensureRustTransformAvailable} so it fails loudly.
+ *
+ * @returns true when the native transform is usable, false otherwise.
+ */
+export function isRustTransformAvailable(): boolean {
+    if (rustAvailability === undefined) {
+        try {
+            ensureRustTransformAvailable();
+            rustAvailability = true;
+        } catch {
+            rustAvailability = false;
+        }
+    }
+    return rustAvailability;
+}
+
 /**
  * Transform a batch of files through the Rust native engine in one napi call.
  *

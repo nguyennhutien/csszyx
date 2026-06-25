@@ -5,7 +5,7 @@
 import { transform } from '@csszyx/compiler/browser';
 import { describe, expect, it } from 'vitest';
 
-import { _sz, _sz2, _sz3, _szMerge } from '../src/concatenate.js';
+import { _sz, _sz2, _sz3, _szMerge, szr } from '../src/concatenate.js';
 
 describe('_sz', () => {
     it('should concatenate multiple classes', () => {
@@ -210,5 +210,19 @@ describe('_sz(object) matches the compiler transform (runtime ↔ build parity)'
             const fromCompiler = transform(sz as Parameters<typeof transform>[0]).className;
             expect(_sz(sz as never), JSON.stringify(sz)).toBe(fromCompiler);
         }
+    });
+});
+
+describe('szr — public alias for _sz (hand-written sz resolver)', () => {
+    it('is the same resolver as the injected _sz', () => {
+        expect(szr).toBe(_sz);
+    });
+
+    it('resolves sz objects to a className (the split-module use case)', () => {
+        expect(szr({ p: 4 }, { m: 2 })).toBe('p-4 m-2');
+    });
+
+    it('skips falsy inputs (clsx-style) and concatenates', () => {
+        expect(szr('base', false, null, undefined, { gap: 8 })).toBe('base gap-8');
     });
 });

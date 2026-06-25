@@ -104,6 +104,31 @@ export function _sz(...classes: SzInput[]): string {
 }
 
 /**
+ * Resolve sz object(s) and/or class strings into a single className string,
+ * mangle-aware. This is the PUBLIC, hand-written name for the otherwise
+ * compiler-injected `_sz` helper (the `_` prefix marks compiler-generated code
+ * you should not hand-author; `szr` is the one you call by hand).
+ *
+ * Reach for `szr` when you build a className from `szv` factory output or sz
+ * objects — e.g. a split/layered design system that declares variants in a
+ * module and resolves them at the leaf:
+ *
+ * ```ts
+ * import { szr, szv } from '@csszyx/runtime';
+ * const cardSz = szv({ variants: { pad: { lg: { p: 8 } } } });
+ * const cls = szr(cardSz({ pad: 'lg' }), isWide && stackSz({ gap: 'xl' }));
+ * ```
+ *
+ * Falsy inputs are skipped (clsx-style). `szr` CONCATENATES (keeps every class);
+ * to combine with last-wins OVERRIDE on a same-utility conflict, use `szcn`.
+ * `szr` accepts sz OBJECTS; `szcn` accepts className STRINGS.
+ *
+ * @param classes - sz objects, class strings, or falsy values (skipped).
+ * @returns The resolved className string (mangled in a production build).
+ */
+export const szr: (...classes: SzInput[]) => string = _sz;
+
+/**
  * Depth-tracked worker for {@link _sz}. Nested arrays recurse with an incremented
  * depth so a deeply nested array (`[[[[…]]]]`, e.g. from untrusted data) is
  * bounded by {@link MAX_SZ_DEPTH} instead of overflowing the call stack.

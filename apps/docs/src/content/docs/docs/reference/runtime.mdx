@@ -1,6 +1,6 @@
 ---
 title: Runtime Helpers
-description: _sz, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
+description: szr (sz-resolve), _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
 ---
 
 import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
@@ -11,7 +11,7 @@ produces plain strings at build time.
 
 <CardGrid>
   <Card title="Runtime helpers" icon="puzzle">
-    `_sz` · `_szMerge` · `splitBox` + class toolkit · SSR hydration validator
+    `szr` · `szcn` · `splitBox` + class toolkit · SSR hydration validator
   </Card>
   <Card title="~0B Runtime Cost" icon="rocket">
     Static sz props — zero overhead. Helpers only ship when you use them.
@@ -26,40 +26,46 @@ produces plain strings at build time.
 <Tabs>
   <TabItem label="Original">
     ```ts
-    import { _sz, _szMerge } from '@csszyx/runtime';
+    import { szr, szcn } from '@csszyx/runtime';
     ```
   </TabItem>
   <TabItem label="Umbrella package">
     ```ts
-    import { _sz, _szMerge } from 'csszyx';
+    import { szr, szcn } from 'csszyx';
     ```
   </TabItem>
 </Tabs>
 
-## `_sz(...classes)`
+## `szr(...classes)`
 
-Concatenates multiple class strings or SzObjects into a single string.
-Falsy values (`false`, `null`, `undefined`) are skipped.
+Resolves multiple class strings or SzObjects into a single mangle-aware className.
+Falsy values (`false`, `null`, `undefined`) are skipped. `szr` is the public,
+hand-written name; `_sz` is the identical helper the compiler injects (the `_`
+marks generated code — do not hand-author it). Reach for `szr` when you build a
+className from `szv` factory output (e.g. a code-split layout that resolves
+variants at the leaf). `szr` concatenates; to merge with last-wins override on a
+same-utility conflict use `szcn` (mangle-aware className merge).
 
 ```ts twoslash
-import { _sz } from '@csszyx/runtime';
+import { szr, szv } from '@csszyx/runtime';
 
-const cls = _sz('p-4', 'bg-blue-500', false, null, 'text-white');
+const cardSz = szv({ variants: { pad: { lg: { p: 8 } } } });
+const cls = szr(cardSz({ pad: 'lg' }), 'bg-blue-500', false, null, 'text-white');
 ```
 
 **Usage:**
 
 ```tsx twoslash
 // @noErrors
-import { _sz } from '@csszyx/runtime';
+import { szr } from '@csszyx/runtime';
 // ---cut---
 // Basic concatenation
-<div className={_sz('p-4', 'bg-blue-500', 'text-white')} />
+<div className={szr('p-4', 'bg-blue-500', 'text-white')} />
 
 // Falsy values are skipped automatically
 const isActive = true;
 const hasError = false;
-<div className={_sz('base', isActive && 'active', hasError && 'error')} />
+<div className={szr('base', isActive && 'active', hasError && 'error')} />
 ```
 
 ## `_szMerge(...objects)`

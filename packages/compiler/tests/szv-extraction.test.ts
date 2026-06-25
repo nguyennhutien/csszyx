@@ -202,3 +202,25 @@ describe('szv extraction — "dị" value cases lower to the right TW class', ()
         expect(oxc(src)).toEqual(babel(src));
     });
 });
+
+describe('szv extraction — transformed flag must not gate class collection', () => {
+    // A szv-only file (no `sz=` to rewrite) extracts a catalog of classes but the
+    // oxc/Rust engines report `transformed: false` (no source edit happened),
+    // while Babel reports true. The unplugin prescan must collect the classes
+    // regardless of the flag — gating on `transformed` alone silently drops every
+    // szv class from the safelist on the oxc/Rust path (the real "szv standalone /
+    // arbitrary value does not work" bug). This locks the invariant the fix needs.
+    const szvOnly = `${IMPORT} const b = szv({ variants: { s: { x: { p: 4 } } } });`;
+
+    it('oxc reports transformed=false but still extracts the catalog', () => {
+        const r = transformOxc(szvOnly);
+        expect(r.transformed).toBe(false);
+        expect(r.classes.size).toBeGreaterThan(0);
+    });
+
+    it('Babel reports transformed=true for the same szv-only file', () => {
+        const r = transformSourceCode(szvOnly);
+        expect(r.transformed).toBe(true);
+        expect(r.classes.size).toBeGreaterThan(0);
+    });
+});
