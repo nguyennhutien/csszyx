@@ -1,6 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
-import { OxcRustNotImplementedError, transformRust, transformRustBatch } from '../src/index.js';
+import {
+    ensureRustTransformAvailable,
+    isRustTransformAvailable,
+    OxcRustNotImplementedError,
+    transformRust,
+    transformRustBatch,
+} from '../src/index.js';
+
+describe('isRustTransformAvailable — non-throwing native probe', () => {
+    it('returns a boolean and never throws (the whole point vs ensureRustTransformAvailable)', () => {
+        let value: unknown;
+        expect(() => {
+            value = isRustTransformAvailable();
+        }).not.toThrow();
+        expect(typeof value).toBe('boolean');
+    });
+
+    it('is stable across repeated calls (memoized — no per-call reprobe flakiness)', () => {
+        const first = isRustTransformAvailable();
+        for (let i = 0; i < 5; i++) {
+            expect(isRustTransformAvailable()).toBe(first);
+        }
+    });
+
+    it('agrees with ensureRustTransformAvailable: true ⇔ ensure does not throw', () => {
+        const available = isRustTransformAvailable();
+        if (available) {
+            expect(() => ensureRustTransformAvailable()).not.toThrow();
+        } else {
+            // false MUST mean the loud path throws the documented error — otherwise
+            // graceful degradation would mask a binary that is actually present.
+            expect(() => ensureRustTransformAvailable()).toThrow(OxcRustNotImplementedError);
+        }
+    });
+});
 
 describe('transformRust native wrapper', () => {
     it('transforms through native when available and otherwise fails explicitly', () => {

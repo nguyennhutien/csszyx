@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
+    isRustTransformAvailable,
     type SourceTransformResult,
     type TokenData,
     type TransformSourceCodeOptions,
@@ -52,6 +53,7 @@ import {
     injectRecoveryManifest,
 } from './html-transformer.js';
 import { escapeForDoubleQuotedString, escapeJsonForInlineScript } from './inline-script-escape.js';
+import { resolveParserMode } from './parser-mode.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -212,6 +214,7 @@ const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
 
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
+let _hasWarnedNativeFallback = false;
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 const PLUGIN_VERSION = findPackageVersionFromFile(
     fileURLToPath(import.meta.url),
@@ -1852,12 +1855,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             console.warn(message);
         }
     }
-    const parserOverride = process.env.CSSZYX_PARSER;
-    const defaultParser = DEFAULT_BUILD_CONFIG.parser ?? 'rust';
-    const parserMode =
-        parserOverride === 'babel' || parserOverride === 'oxc' || parserOverride === 'rust'
-            ? parserOverride
-            : (options.build?.parser ?? defaultParser);
+    // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
+    // prebuilt native binary is installed for this platform (unsupported arch,
+    // optional deps omitted, or a cross-platform frozen lockfile), fall back to
+    // `oxc` — which produces parity-identical classes — with a one-time warning,
+    // instead of hard-failing a build the user never asked to run on `rust`. An
+    // EXPLICIT `rust` (env or config) keeps its loud-failure contract.
+    const { parser: parserMode, degraded: parserDegraded } = resolveParserMode({
+        configParser: options.build?.parser,
+        envParser: process.env.CSSZYX_PARSER,
+        defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
+        isRustAvailable: isRustTransformAvailable,
+    });
+    if (parserDegraded && !_hasWarnedNativeFallback) {
+        _hasWarnedNativeFallback = true;
+        console.warn(
+            '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
+                'are identical (parity-tested); only parse speed differs. To use the native ' +
+                'engine, install the matching @csszyx/core-<platform> package (or do not ' +
+                'omit optional dependencies). Set `build.parser` explicitly to silence this.',
+        );
+    }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
 
