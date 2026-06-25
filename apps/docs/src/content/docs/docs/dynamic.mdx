@@ -10,11 +10,33 @@ classes not already present in the pre-built stylesheet.
 
 ## When to use
 
+`dynamic()` is an **escape hatch**, not a default. It is the only csszyx helper
+that generates CSS at **runtime** (it injects rules into the page on the fly), so
+it carries a real cost the build-time path does not: runtime work, a larger
+runtime bundle, a security surface for untrusted input, and **its classes are not
+mangled**. Reach for it only when the build genuinely cannot know the styles
+ahead of time:
+
+- ✅ **Use `dynamic()` when** the style values come from **runtime data you don't
+  control at build** — a JSON theme, an API response, user config, a CMS:
+  `sz={{ w: valueFromServer }}`.
+- ✅ Or, rarely, when a style genuinely **cannot be expressed** with the build-time
+  helpers (`sz` / `szv` / `szr` / `szcn`). This is uncommon — most "dynamic-looking"
+  cases are actually a fixed set of options, which `szv()` covers at build time.
+- ❌ **Do not use `dynamic()`** for styles written in your source, conditional
+  styles, or a known set of variants — those are all build-time. A literal like
+  `sz={{ p: condition ? 4 : 2 }}` and `szv()` variants are extracted and safelisted
+  at build with zero runtime CSS injection.
+
+**Default to build-time.** If a value is a literal or a finite set of choices, it
+belongs in `sz` / `szv` — not `dynamic()`.
+
 | Use case | Approach |
 |----------|----------|
 | Styles defined in source code | `sz` prop (build-time, zero runtime) |
-| Styles from JSON / API / user config | `@csszyx/dynamic` (runtime injection) |
-| Conditional / variant styles | `szv()` + `sz` array syntax (build-time) |
+| Conditional / variant styles (finite, known) | `szv()` + `sz` array syntax (build-time) |
+| Resolving `szv` output to a className by hand | `szr()` (build-time-safe, mangle-aware) |
+| Styles from JSON / API / user config (unbounded) | `@csszyx/dynamic` (runtime injection) — escape hatch |
 
 ## Install
 

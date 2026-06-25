@@ -93,6 +93,28 @@ Without it: \`Property 'sz' does not exist on type 'DetailedHTMLProps<...>'\`.
 \`\`\`tsx
 <div sz={{ p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }} />
 \`\`\`
+
+## Troubleshooting
+- **"No prebuilt native binary" warning / \`native engine unavailable\`**: the
+  default \`rust\` parser's native binary is missing (unsupported arch, optional
+  deps omitted, or a cross-platform frozen lockfile). It is NOT broken and classes
+  are UNCHANGED — all three engines (rust/oxc/babel) emit identical output
+  (parity-gated). If you only use the default, csszyx auto-falls back to \`oxc\` and
+  the build succeeds; ignore the warning or set \`build.parser: 'oxc'\` to silence
+  it. Only an EXPLICIT \`parser:'rust'\` hard-fails. Do NOT tell the user to debug
+  their styles over this.
+- **A class generates no CSS**: it wasn't safelisted. The file must contain a
+  statically analyzable \`sz=\` or \`szv(\` (the prescan qualifies files by those
+  tokens). Arbitrary values (\`m:'20px'\`→\`m-[20px]\`) and large numbers
+  (\`p:100\`→\`p-100\`) DO work — a missing class is a safelisting issue, not a
+  lowering one. For a sibling workspace package, opt it in with
+  \`compileSources: ['packages/name']\`. In a monorepo, scope Tailwind to the
+  generated safelist file.
+- **\`dynamic()\` vs build-time**: \`dynamic()\` is an escape hatch (runtime CSS
+  injection, not mangled) — use ONLY for values unknown at build (JSON/API/user
+  config). Literals and finite variant sets are build-time: \`sz\` / \`szv\`. To
+  resolve \`szv\` output to a className by hand, use \`szr\` (build-time-safe,
+  mangle-aware), not \`dynamic()\`.
 `;
 
 /** All resource URIs served by this MCP server. */

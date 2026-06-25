@@ -3586,9 +3586,16 @@ csszyx has two worlds; pick by "is the value set finite and known at build time?
   generated + injected in the browser via insertRule. Escape hatch only.
 
 Engines (BUILD-TIME parse of JSX source only): Rust native (default) → oxc (JS
-fallback) → babel (last resort). The RUNTIME has no parser: `_sz`/`szv`/`splitBox`
-are plain JS; `dynamic()` lowers an sz OBJECT via `@csszyx/compiler/browser` (pure
-JS, no JSX parsing).
+fallback) → babel (last resort). All three emit IDENTICAL classes (parity-gated) —
+engine only affects build speed, never output. The native binary ships as
+per-platform optional deps (`@csszyx/core-*`); if it's missing (unsupported arch,
+omitted optional deps, cross-platform frozen lockfile) the DEFAULT `rust` auto-
+degrades to `oxc` with a one-time warning — builds still succeed with identical
+classes. An EXPLICIT `parser:'rust'` (config or `CSSZYX_PARSER=rust`) hard-fails
+instead. Don't tell users a missing native binary breaks csszyx or changes
+classes; tell them to ignore the warning or set `build.parser:'oxc'`. The RUNTIME
+has no parser: `_sz`/`szr`/`szv`/`splitBox` are plain JS; `dynamic()` lowers an sz
+OBJECT via `@csszyx/compiler/browser` (pure JS, no JSX parsing).
 
 Helper build-time/runtime:
 
@@ -3599,8 +3606,12 @@ Helper build-time/runtime:
 - `splitBox`/`splitBoxSz` → RUNTIME routing only (pure JS). They re-partition
   existing classes; they emit no new CSS and do NOT force `dynamic()`. CSS comes
   from the static source (a literal or a szv config).
-- `dynamic()` → the only helper that generates CSS at runtime, and only for a
-  class not already in the built CSS.
+- `dynamic()` → ESCAPE HATCH, not a default. The only helper that generates CSS at
+  RUNTIME (injects rules), and the only one that is NOT mangled + has a security
+  surface. Use ONLY when style values come from runtime data unknown at build
+  (JSON/API/user config: `sz={{ w: serverValue }}`), or the rare case build-time
+  helpers can't express it. A literal or a finite set of choices is ALWAYS
+  build-time (`sz`/`szv`) — do not reach for `dynamic()` there.
 
 Safelist requires a statically analyzable position (a literal sz, or a szv config
 literal). File discovery: the prescan scans any file containing `sz=`/`sz:` or a
