@@ -93,6 +93,89 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
     merge_text_size_and_leading(classes)
 }
 
+/// Whether a key is a recognized sz property or variant, mirroring the JS
+/// `isKnown` check in transform-core so the native engine warns on the same set
+/// of typo'd keys as the oxc/Babel engines. Generous by construction — a key is
+/// "known" if ANY table or special form claims it (`property_prefix` already
+/// covers the many special-cased keys like `content`/`display`/`snapAlign`), so
+/// a valid key is never flagged as unknown.
+pub(crate) fn is_known_sz_key(key: &str) -> bool {
+    property_prefix(key).is_some()
+        || boolean_class(key).is_some()
+        || is_removed_boolean_sugar(key)
+        || is_known_variant(key)
+        || is_aria_state(key)
+        || variant_prefix(key).is_some()
+        || is_special_cased_property(key)
+        || key.starts_with("--")
+        || key.starts_with('[')
+        || key.starts_with('@')
+        || matches!(
+            key,
+            "min"
+                | "max"
+                | "fromPos"
+                | "viaPos"
+                | "toPos"
+                | "group"
+                | "peer"
+                | "has"
+                | "not"
+                | "data"
+                | "aria"
+                | "supports"
+        )
+}
+
+/// Keys that `format_static_class` handles by a dedicated branch WITHOUT a
+/// `property_prefix` table entry (they map to a fixed Tailwind utility, e.g.
+/// `alignContent` -> `content-*`). They are valid sz keys, so `is_known_sz_key`
+/// must not flag them as typos. Kept beside the format_static_class branches
+/// that own them; the engine parity test (rust warn-set == oxc warn-set) gates
+/// any drift if a new such branch is added without updating this list.
+fn is_special_cased_property(key: &str) -> bool {
+    matches!(
+        key,
+        "alignContent"
+            | "backgroundRepeat"
+            | "listStyle"
+            | "maskComposite"
+            | "maskMode"
+            | "maskType"
+            | "ordinal"
+            | "snapStrictness"
+    )
+}
+
+/// Collect the keys of unrecognized sz properties (likely typos) as
+/// `(key, byte_offset)` pairs. Walks nested SIMPLE-variant objects the same way
+/// the lowering does, but does NOT descend into parametric variants
+/// (`data`/`aria`/`group`/`peer`/`has`/`not`/`supports`), `css`, `bgImg`, or
+/// color-with-opacity objects — their members are parameters/values, not sz
+/// properties, so checking them would falsely warn (matches the oxc/Babel walk).
+pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
+    for property in &object.properties {
+        if !is_known_sz_key(&property.key) {
+            out.push((property.key.clone(), property.span.start));
+            continue;
+        }
+        if let StaticSzValue::Object(nested) = &property.value {
+            if matches!(
+                property.key.as_str(),
+                "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
+            ) {
+                continue;
+            }
+            if property_prefix(&property.key).is_some()
+                && object_string_property(nested, "color").is_some()
+            {
+                continue;
+            }
+            collect_unknown_sz_keys(nested, out);
+        }
+    }
+}
+
 fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
     let mut consumed = vec![false; classes.len()];
 
@@ -1230,7 +1313,8 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        has_slash_opacity, lower_source_ir_classes, lower_static_sz_object, needs_brackets,
+        collect_unknown_sz_keys, has_slash_opacity, is_known_sz_key, lower_source_ir_classes,
+        lower_static_sz_object, needs_brackets,
     };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
@@ -1243,6 +1327,83 @@ mod tests {
             span: TextSpan { start: 0, end: 0 },
             value,
         }
+    }
+
+    #[test]
+    fn is_known_sz_key_accepts_valid_keys_and_rejects_typos() {
+        // Real properties, variants, special-cased keys, removed sugar, escapes.
+        for key in [
+            "m",
+            "p",
+            "gap",
+            "bg",
+            "flexDir",
+            "hover",
+            "md",
+            "data",
+            "aria",
+            "group",
+            "min",
+            "max",
+            "fromPos",
+            "alignContent",
+            "backgroundRepeat",
+            "maskMode",
+            "snapStrictness",
+            "grid",
+            "flex",
+            "--brand",
+            "[mask-type]",
+            "@container",
+        ] {
+            assert!(is_known_sz_key(key), "expected known: {key}");
+        }
+        // Typos must be flagged.
+        for key in ["xyzzy", "pading", "colour", "fooBar", "wibble"] {
+            assert!(!is_known_sz_key(key), "expected unknown: {key}");
+        }
+    }
+
+    #[test]
+    fn collect_unknown_sz_keys_finds_typos_and_recurses_simple_variants() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("p", StaticSzValue::Number(4.0)),
+                property("xyzzy", StaticSzValue::Number(4.0)),
+                StaticSzProperty {
+                    key: "hover".to_string(),
+                    span: TextSpan { start: 0, end: 0 },
+                    value: StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("nope", StaticSzValue::Number(1.0))],
+                    }),
+                },
+            ],
+        };
+        let mut out = Vec::new();
+        collect_unknown_sz_keys(&object, &mut out);
+        let keys: Vec<&str> = out.iter().map(|(k, _)| k.as_str()).collect();
+        // Top-level typo + nested typo under a SIMPLE variant, but not `p`.
+        assert_eq!(keys, ["xyzzy", "nope"]);
+    }
+
+    #[test]
+    fn collect_unknown_sz_keys_does_not_descend_parametric_variants() {
+        // `data`/`aria`/etc. members are parameter names, not sz props.
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "data".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property("active", StaticSzValue::Boolean(true))],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_unknown_sz_keys(&object, &mut out);
+        assert!(
+            out.is_empty(),
+            "must not warn on parametric params: {out:?}"
+        );
     }
 
     #[test]

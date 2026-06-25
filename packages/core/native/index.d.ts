@@ -30,6 +30,8 @@ export interface NativeTransformOptions {
         /** Alias custom-property name, including `--`. */
         alias: string;
     }>;
+    /** Project root used only to render diagnostic file paths relative to it. */
+    rootDir?: string;
 }
 
 /** Native transform output shape returned per source file. */

@@ -137,6 +137,7 @@ export function transformRustBatch(
                 mangleVars: options?.mangleVars === true,
                 mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
                 globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
+                rootDir: options?.rootDir,
             },
         ).map(fromNativeResult);
     } catch (err) {
