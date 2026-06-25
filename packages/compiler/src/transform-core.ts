@@ -1659,6 +1659,57 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
 let szTransformDepth = 0;
 
 /**
+ * Build-time-only source location for the sz object currently being lowered, so
+ * the dev-mode "Unknown property" warning can point at the offending file
+ * (relative to the project root) and line instead of being un-locatable in a
+ * large codebase. A build engine sets this around its per-attribute lowering and
+ * clears it afterwards; the runtime/browser path never sets it (and keeps the
+ * location-free message). Single-threaded JS, same pattern as {@link szTransformDepth}.
+ */
+let szWarnLocation: string | undefined;
+
+/**
+ * Set (or clear, with `undefined`) the source location appended to the dev-mode
+ * unknown-property warning. Called by the build engines (oxc/babel) around each
+ * sz attribute; a balanced clear MUST follow so the location never leaks to an
+ * unrelated later transform.
+ *
+ * @param location - `relativePath:line` (or `relativePath`) to attribute the
+ *   warning to, or `undefined` to clear.
+ */
+export function setSzWarnLocation(location: string | undefined): void {
+    szWarnLocation = location;
+}
+
+/**
+ * Render a `relativePath:line` location string for the unknown-property warning,
+ * relative to the project root when one is known. Avoids a `node:path` dependency
+ * (this module is also browser-bundled) with a plain prefix strip — good enough
+ * for a human-facing diagnostic.
+ *
+ * @param file - the source filename (typically absolute, as the bundler gives it).
+ * @param line - 1-based line of the sz prop, or undefined to omit it.
+ * @param rootDir - project root to relativize against, or undefined to keep `file`.
+ * @returns `relativePath:line`, `relativePath`, or the raw filename.
+ */
+export function formatSzWarnLocation(
+    file: string,
+    line: number | undefined,
+    rootDir: string | undefined,
+): string {
+    let rel = file;
+    if (rootDir) {
+        const root = rootDir.replace(/[/\\]+$/, '');
+        if (file === root) {
+            rel = file;
+        } else if (file.startsWith(`${root}/`) || file.startsWith(`${root}\\`)) {
+            rel = file.slice(root.length + 1);
+        }
+    }
+    return line === undefined ? rel : `${rel}:${line}`;
+}
+
+/**
  * Transform an sz object into a className string plus any attributes, bounding
  * recursion depth via {@link szTransformDepth}.
  *
@@ -2898,15 +2949,18 @@ function transformImpl(
                 rawKey === 'max';
 
             if (!isKnown) {
+                // ` at <relativePath>:<line>` when a build engine set the location;
+                // empty on the runtime/browser path (no source file to point at).
+                const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
                 const suggestion = SUGGESTION_MAP[rawKey];
                 if (suggestion) {
                     console.warn(
-                        `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}".`,
+                        `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}"${at}.`,
                     );
                 } else {
                     // Object.entries guarantees unique keys, so each rawKey is visited once per call.
                     console.warn(
-                        `[csszyx] Unknown property "${rawKey}" in sz prop. ` +
+                        `[csszyx] Unknown property "${rawKey}" in sz prop${at}. ` +
                             'This will be ignored. Check for typos.',
                     );
                 }

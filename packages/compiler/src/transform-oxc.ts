@@ -49,11 +49,13 @@ import type {
 } from './transform.js';
 import {
     transform as compileSzObject,
+    formatSzWarnLocation,
     getVariantPrefix,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
     type SzObject,
     type SzValue,
+    setSzWarnLocation,
 } from './transform-core.js';
 
 /** Result shape returned by the oxc parser path. */
@@ -112,6 +114,9 @@ export function transformOxc(
     }
 
     const effectiveFilename = filename ?? 'file.tsx';
+    // Defensively clear any location a previous transform left set after an early
+    // return, so a runtime/browser warning never inherits a stale build location.
+    setSzWarnLocation(undefined);
     const astBudget = options?.astBudget ?? AST_BUDGET;
     const parsed = parseSync(effectiveFilename, source);
     if (parsed.errors.length > 0) {
@@ -289,6 +294,14 @@ export function transformOxc(
         let runtimeFallbackExpr: OxcNode | null = null;
         let runtimeFallbackAttr: JsxAttributeNode | null = null;
         for (const szAttr of szAttrs) {
+            // Point the dev-mode unknown-property warning at this sz prop. All
+            // lowering for this attribute (and nested objects) runs synchronously
+            // below, so the location is correct until the next attribute or the
+            // post-loop clear.
+            const { line: szWarnLine } = offsetToLineColumn(source, szAttr.start);
+            setSzWarnLocation(
+                formatSzWarnLocation(effectiveFilename, szWarnLine, options?.rootDir),
+            );
             const value = szAttr.value;
             if (!value) {
                 throw new OxcNotImplementedError(
@@ -581,6 +594,9 @@ export function transformOxc(
                 }
             }
         }
+        // Done lowering this element's sz attributes — drop the location so an
+        // unrelated later transform (or the runtime path) doesn't inherit it.
+        setSzWarnLocation(undefined);
 
         if (runtimeFallbackExpr && runtimeFallbackAttr) {
             // Non-static sz value → emit `className={_sz(<original-expr>)}`

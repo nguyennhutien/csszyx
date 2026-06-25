@@ -2141,6 +2141,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
             globalVarAliases:
                 earlyGlobalVarAliasEntries.length > 0 ? earlyGlobalVarAliasEntries : undefined,
+            // Render dev-mode unknown-property warnings relative to the project root.
+            rootDir: state.rootDir,
         };
     }
 
