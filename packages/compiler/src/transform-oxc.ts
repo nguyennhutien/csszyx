@@ -665,7 +665,13 @@ export function transformOxc(
             ...(existingRaw ? existingRaw.split(/\s+/).filter(Boolean) : []),
             ...szDerived,
         ];
-        const mergedAttr = `className="${mergedClasses.join(' ')}"`;
+        // An sz that lowers to zero classes (and has no className to merge into)
+        // emits `className={undefined}` so the DOM has no `class` attribute,
+        // instead of the noisy `class=""`.
+        const mergedAttr =
+            mergedClasses.length === 0
+                ? 'className={undefined}'
+                : `className="${mergedClasses.join(' ')}"`;
 
         if (classNameAttr) {
             // Replace className value (or whole attribute) in place, then
@@ -1754,7 +1760,9 @@ function buildConditionalSpreadClassExpression(
         }
     }
     const testSource = source.slice(conditionalSpread.test.start, conditionalSpread.test.end);
-    return `${testSource} ? ${JSON.stringify(consequent)} : ${JSON.stringify(alternate)}`;
+    // Bare className value: an empty branch becomes `undefined` (no class attribute).
+    const branch = (cls: string): string => (cls === '' ? 'undefined' : JSON.stringify(cls));
+    return `${testSource} ? ${branch(consequent)} : ${branch(alternate)}`;
 }
 
 /**
@@ -1876,7 +1884,11 @@ function buildPartialObjectTransform(
     const classNameAttr =
         partial.conditionalClasses.length > 0
             ? `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`
-            : `className="${className}"`;
+            : className === ''
+              ? // An sz that lowers to zero classes emits `className={undefined}` so the
+                // DOM has no `class` attribute, instead of the noisy `class=""`.
+                'className={undefined}'
+              : `className="${className}"`;
     const styleProps = [...partial.dynamicProps.entries()]
         .filter(([id]) => !hoistedNames?.has(id))
         .map(
@@ -2772,11 +2784,17 @@ function buildConditionalClassSource(
 ): string {
     if (conditionals.length === 1) {
         const [entry] = conditionals;
-        const ternary = `${source.slice(entry.test.start, entry.test.end)} ? ${JSON.stringify(entry.consequent)} : ${JSON.stringify(entry.alternate)}`;
         // classParts ends with the conditional's [consequent, alternate]; what
         // precedes them is the build-time static class list.
         const staticParts = classParts.slice(0, -2).filter(Boolean);
-        if (staticParts.length === 0) {
+        const bare = staticParts.length === 0;
+        // In bare value position an empty branch becomes `undefined` so it renders
+        // no class attribute. Inside the template literal below it MUST stay an
+        // empty string — `${undefined}` would render the text "undefined".
+        const branch = (cls: string): string =>
+            bare && cls === '' ? 'undefined' : JSON.stringify(cls);
+        const ternary = `${source.slice(entry.test.start, entry.test.end)} ? ${branch(entry.consequent)} : ${branch(entry.alternate)}`;
+        if (bare) {
             return ternary;
         }
         return `\`${staticParts.join(' ')} \${${ternary}}\``;
@@ -2892,7 +2910,10 @@ function buildStaticConditionalClassExpression(
         }
     }
     const testSource = source.slice(node.test.start, node.test.end);
-    return `${testSource} ? ${JSON.stringify(consequent)} : ${JSON.stringify(alternate)}`;
+    // This ternary is used directly as the className value (`className={…}`), so an
+    // empty branch becomes `undefined` (renders no class attribute) rather than "".
+    const branch = (cls: string): string => (cls === '' ? 'undefined' : JSON.stringify(cls));
+    return `${testSource} ? ${branch(consequent)} : ${branch(alternate)}`;
 }
 
 /**

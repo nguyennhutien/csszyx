@@ -299,6 +299,22 @@ fn rewrite_ternary_sz_attribute(
     let consequent = ternary.consequent_classes.join(" ");
     let alternate = ternary.alternate_classes.join(" ");
     let ternary_source = format!("{test_source} ? \"{consequent}\" : \"{alternate}\"");
+    // Bare value position (no companion static classes, no existing className): an
+    // empty branch becomes `undefined` so it renders no class attribute. The
+    // `_szMerge(...)` and template-literal forms below keep "" — `${undefined}`
+    // would render the text "undefined", and a bare `undefined` arg is needless.
+    let branch = |cls: &str| {
+        if cls.is_empty() {
+            "undefined".to_string()
+        } else {
+            format!("\"{cls}\"")
+        }
+    };
+    let bare_ternary_source = format!(
+        "{test_source} ? {} : {}",
+        branch(&consequent),
+        branch(&alternate)
+    );
 
     // Static classes accompanying the conditional (e.g. from a `...CONST` spread
     // or sibling static props): only the conditional stays runtime. Lower just
@@ -333,7 +349,7 @@ fn rewrite_ternary_sz_attribute(
         // No companion class: emit the conditional alone, or a template literal
         // `\`<static> ${cond ? "…" : "…"}\`` when static classes accompany it.
         let replacement = if static_classes.is_empty() {
-            format!("className={{{ternary_source}}}")
+            format!("className={{{bare_ternary_source}}}")
         } else {
             format!(
                 "className={{`{} ${{{ternary_source}}}`}}",
@@ -483,10 +499,18 @@ fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
 }
 
 fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class_name: &str) {
+    // An sz that lowers to zero classes (with no className to merge into) emits
+    // `className={undefined}` so the DOM has no `class` attribute, instead of the
+    // noisy `class=""`.
+    let replacement = if class_name.is_empty() {
+        "className={undefined}".to_string()
+    } else {
+        format!("className=\"{class_name}\"")
+    };
     magic.update_with(
         span.start as usize,
         span.end as usize,
-        format!("className=\"{class_name}\""),
+        replacement,
         UpdateOptions {
             overwrite: true,
             ..UpdateOptions::default()
@@ -613,9 +637,11 @@ mod tests {
         let source = "export const App = () => <div sz={{}} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
+        // An sz that lowers to zero classes emits `className={undefined}` so the
+        // DOM has no `class` attribute, instead of the noisy `class=""`.
         assert_eq!(
             rewritten,
-            "export const App = () => <div className=\"\" />;"
+            "export const App = () => <div className={undefined} />;"
         );
     }
 
@@ -808,9 +834,10 @@ mod tests {
         let source = "export const App = () => <div sz={[false, null, undefined]} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
+        // Zero classes → `className={undefined}` (no class attribute), not `class=""`.
         assert_eq!(
             rewritten,
-            "export const App = () => <div className=\"\" />;"
+            "export const App = () => <div className={undefined} />;"
         );
     }
 

@@ -201,6 +201,23 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'dynamic-existing-class.tsx',
         expected: 'surgical-parity',
     },
+    {
+        // An sz that lowers to zero classes emits `className={undefined}` (renders
+        // no class attribute) identically on babel and oxc, not `class=""`.
+        name: 'sz-empty-object',
+        source: 'const X = () => <div sz={{}} />;',
+        filename: 'empty-object.tsx',
+        expected: 'parity',
+    },
+    {
+        // The `className={on ? "p-4" : undefined}` rewrite is byte-identical on both
+        // engines; this is surgical-parity only because the `({ on })` destructured
+        // param makes Babel reformat the surrounding arrow function.
+        name: 'sz-ternary-empty-branch',
+        source: 'const X = ({ on }) => <div sz={on ? { p: 4 } : {}} />;',
+        filename: 'ternary-empty-branch.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

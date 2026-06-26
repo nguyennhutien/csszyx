@@ -292,17 +292,20 @@ Inside an array, `false`, `null`, `undefined`, and `0` are silently skipped —
 only truthy objects contribute classes.
 :::
 
-:::caution[A conditional `sz` can still render `class=""`]
-When a conditional `sz` is **statically lowered**, an empty branch produces an
-empty class string, e.g. `sz={cond ? { pl: 4 } : {}}` →
-`className={cond ? "pl-4" : ""}`. Using `undefined` instead of `{}` does **not**
-always avoid this: if the expression can't be lowered (for example a dynamic
-ternary on a SolidJS element), it compiles to a runtime `_sz(cond ? { pl: 4 } :
-undefined)` call which returns `""` for the empty branch, so the framework still
-sets `class=""`. It is harmless (an empty attribute) but noisy in generated
-HTML. To omit the attribute entirely, render the two cases as separate elements
-so the styleless one carries no `sz` prop at all (e.g. SolidJS `<Show>` with a
-`fallback`).
+:::note[An empty `sz` renders no `class` attribute]
+A **statically lowered** `sz` that resolves to zero classes — `sz={{}}`,
+`sz={[]}`, or the empty branch of a conditional like `sz={cond ? { pl: 4 } : {}}`
+— now compiles to `className={undefined}` (or `className={cond ? "pl-4" :
+undefined}`), so the framework omits the `class` attribute entirely instead of
+emitting `class=""`. This holds on all three engines (Babel, oxc, and the native
+Rust core).
+
+One case still emits `class=""`: a conditional that **can't be lowered at build
+time** (for example a dynamic ternary whose value isn't statically resolvable)
+falls back to a runtime `szr(…)` call, which returns `""` for an empty result.
+That is harmless but noisy; to drop the attribute there, render the two cases as
+separate elements so the styleless one carries no `sz` prop at all (e.g. SolidJS
+`<Show>` with a `fallback`).
 :::
 
 :::caution[Keep conditional branches statically resolvable]

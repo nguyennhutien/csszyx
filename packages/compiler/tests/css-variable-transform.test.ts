@@ -256,11 +256,14 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
             expect(result.transformed).toBe(false);
         });
 
-        it('should not transform empty sz', () => {
+        it('rewrites an empty sz to className={undefined} (renders no class attribute)', () => {
             const source = 'const App = () => <div sz={{}} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
-            expect(result.code).toContain('className=""');
+            // An sz that lowers to zero classes emits `className={undefined}` so the
+            // DOM has no `class` attribute, instead of the noisy `class=""`.
+            expect(result.code).toContain('className={undefined}');
+            expect(result.code).not.toContain('className=""');
         });
 
         it('should handle sz string passthrough', () => {

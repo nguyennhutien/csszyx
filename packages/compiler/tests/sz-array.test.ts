@@ -20,17 +20,19 @@ describe('sz array syntax', () => {
             expect(result.usesMerge).toBe(false);
         });
 
-        it('empty array → empty className', () => {
+        it('empty array → className={undefined} (no class attribute)', () => {
             const source = 'const A = () => <div sz={[]} />';
             const result = transformSourceCode(source);
-            expect(result.code).toContain('className=""');
+            expect(result.code).toContain('className={undefined}');
+            expect(result.code).not.toContain('className=""');
             expect(result.usesMerge).toBe(false);
         });
 
-        it('array with only null/false elements → empty className', () => {
+        it('array with only null/false elements → className={undefined}', () => {
             const source = 'const A = () => <div sz={[false, null]} />';
             const result = transformSourceCode(source);
-            expect(result.code).toContain('className=""');
+            expect(result.code).toContain('className={undefined}');
+            expect(result.code).not.toContain('className=""');
             expect(result.usesMerge).toBe(false);
         });
     });
