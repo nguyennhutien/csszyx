@@ -350,3 +350,23 @@ describe('szcn — determinism & idempotency (flaky guards)', () => {
         expect(szcn('a gap-2 b', 'm-4 gap-8', false, 'c', 'm-2')).toBe('a b gap-8 c m-2');
     });
 });
+
+describe('szcn — BEM base + modifier are distinct classes (never collapsed)', () => {
+    it('keeps a base whose name starts with a real utility prefix when its --modifier is present', () => {
+        // `tab` IS the real tab-size utility prefix, so `tab-item-header` used to
+        // classify as a `tab` utility and get dropped by `tab-item-header--active`.
+        expect(szcn('tab-item-header tab-item-header--active')).toBe(
+            'tab-item-header tab-item-header--active',
+        );
+    });
+
+    it('keeps base + modifier for non-utility names too', () => {
+        expect(szcn('foo-bar foo-bar--active')).toBe('foo-bar foo-bar--active');
+        expect(szcn('btn btn--lg')).toBe('btn btn--lg');
+    });
+
+    it('still overrides genuine same-utility value pairs', () => {
+        expect(szcn('gap-2 gap-8')).toBe('gap-8');
+        expect(szcn('p-2 p-8')).toBe('p-8');
+    });
+});

@@ -135,6 +135,15 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (!norm) {
         return null;
     }
+    // A BEM-style modifier (`tab-item-header--active`) is a DISTINCT class from its
+    // base (`tab-item-header`), not a value-pair of the same utility — collapsing
+    // them last-wins would drop the base (e.g. `tab-item-header` happens to start
+    // with the real `tab` utility prefix). `--` never appears in a Tailwind utility
+    // class (arbitrary values use `[…]`/`(…)`), so a token containing one — other
+    // than a leading CSS-variable class — keys by itself and is never merged away.
+    if (base.indexOf('--') > 0) {
+        return null;
+    }
     // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
     // properties under one category, so under-merge to avoid dropping a sibling.
     if (BOX_ROLE_TOKENS.has(norm)) {
