@@ -2,10 +2,23 @@
 
 ## [0.10.7](https://github.com/nguyennhutien/csszyx/compare/v0.10.6...v0.10.7) (2026-06-26)
 
-
 ### Features
 
-* **compiler:** locate unknown-sz-property warnings + DX/crash fixes from vui reports ([#98](https://github.com/nguyennhutien/csszyx/issues/98)) ([45bdd2c](https://github.com/nguyennhutien/csszyx/commit/45bdd2c6eb4226ca77c2a2af2bac0fe97c5b9d96))
+* **compiler:** locate unknown-sz-property warnings + DX/crash fixes from vui reports ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **compiler:** locate the unknown-sz-property warning by file and line ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **core:** locate unknown-sz-property warnings in the native Rust engine ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **types:** add @csszyx/types/jsx-react as an alias of /jsx ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+
+### Bug Fixes
+
+* **runtime:** keep a BEM base class when its --modifier sibling is present ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **mcp-server:** csszyx_validate flags removed boolean-sugar aliases ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **unplugin:** never apply the mangle map in a dev server ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **mcp-server:** resolve packaged llms-full.txt regardless of bundle layout ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **unplugin:** only warn about a missing Tailwind entry after observing CSS ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **compiler:** __szColorVar omits undefined/null instead of crashing ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **compiler:** avoid polynomial-ReDoS regex when relativizing the warn path ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
+* **unplugin:** keep the CSS-variable mangle map in a dev server ([#98](https://github.com/nguyennhutien/csszyx/issues/98))
 
 ## [0.10.6](https://github.com/nguyennhutien/csszyx/compare/v0.10.5...v0.10.6) (2026-06-25)
 
