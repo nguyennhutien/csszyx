@@ -1808,7 +1808,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 } {
     assertGlobalVarMangleConfig(options);
 
-    const manglingEnabled = options.production?.mangle !== false;
+    // Mangling is a production bundle-size optimization with no value in a dev
+    // server: the dev CSS pipeline (e.g. a separate @tailwindcss/vite) serves
+    // UN-mangled class names, so applying a mangle map at runtime via `szr` would
+    // emit class names that have no matching CSS — silently collapsing szv-driven
+    // layouts in `vite serve` only. Forced off for `command === 'serve'` below
+    // (configResolved), so dev always uses readable class names that match the
+    // dev CSS. `let` because the command is only known at configResolved.
+    let manglingEnabled = options.production?.mangle !== false;
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
@@ -3197,6 +3204,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 configResolved(config) {
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    // Never mangle in a dev server — the runtime mangle map would
+                    // not match the un-mangled dev CSS. See `manglingEnabled` above.
+                    if (config.command === 'serve') {
+                        manglingEnabled = false;
+                    }
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
@@ -3296,11 +3308,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                      */
                     handler(html) {
                         finalizeMangleMap();
-                        let result = injectHydrationData(html, state.mangleMap, state.checksum, {
+                        // When mangling is off (explicitly, or forced off in a dev
+                        // server), inject an EMPTY map so `szr`/`decode` are identity
+                        // and the runtime class names match the un-mangled CSS.
+                        const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
+                        let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
                             mode:
                                 options.production?.injectChecksum === false ? 'script' : 'script',
                             minify: process.env.NODE_ENV === 'production',
-                            varMangleMap: state.varMangleMap,
+                            varMangleMap: manglingEnabled ? state.varMangleMap : {},
                             globalVarAliasPrefix,
                         });
                         // Recovery manifest is a no-op when zero szRecover tokens were
