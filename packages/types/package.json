@@ -46,6 +46,9 @@
     "./jsx": {
       "types": "./dist/jsx.d.ts"
     },
+    "./jsx-react": {
+      "types": "./dist/jsx-react.d.ts"
+    },
     "./jsx-solid": {
       "types": "./dist/jsx-solid.d.ts"
     }

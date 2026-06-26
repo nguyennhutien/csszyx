@@ -22,7 +22,7 @@ export default defineBuildConfig({
         async 'build:done'(ctx) {
             const fs = await import('node:fs/promises');
             const path = await import('node:path');
-            for (const file of ['jsx.d.ts', 'jsx-solid.d.ts']) {
+            for (const file of ['jsx.d.ts', 'jsx-react.d.ts', 'jsx-solid.d.ts']) {
                 const src = path.resolve(ctx.options.rootDir, 'src', file);
                 const dest = path.resolve(ctx.options.outDir, file);
                 await fs.copyFile(src, dest);
