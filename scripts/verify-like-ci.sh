@@ -59,13 +59,18 @@ echo "[verify-like-ci] Building host native engine (matches CI step)..."
 env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
 # The Rust gates live in a separate workflow (rust-check.yml), so a local run
-# that only mirrored ci.yml would miss them — fmt, clippy -D warnings, the unit
-# tests, and both parity harnesses.
-echo "[verify-like-ci] Rust gates (rustfmt, clippy -D warnings, cargo test, parity harnesses)..."
+# that only mirrored ci.yml would miss them. Clippy must run under EVERY feature
+# set CI uses, or a lint that only trips under a non-default feature stays
+# invisible until CI: the default build, `native-engine` (transform engine in
+# engine.rs), and `native` (the napi/FFI binding in native.rs, checked by
+# check-native.mjs — e.g. a redundant clone there is default-clippy-invisible).
+echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check, cargo test, parity harnesses)..."
 (
     cd "$REPO/packages/core"
     cargo fmt --all -- --check
     cargo clippy --all-targets -- -D warnings
+    cargo clippy --features native-engine --all-targets -- -D warnings
+    node scripts/check-native.mjs
     cargo test
     cargo test --features native-engine transform::parser
     cargo test --features native-engine --test parity_corpus
