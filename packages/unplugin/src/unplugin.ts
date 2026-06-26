@@ -223,6 +223,10 @@ const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
+let _hasLoggedActiveParser = false;
+// Files for which an oxc→Babel fallback has already been reported, so the
+// per-file warning is emitted once per file rather than on every re-transform.
+const _babelFallbackFiles = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 const PLUGIN_VERSION = findPackageVersionFromFile(
     fileURLToPath(import.meta.url),
@@ -1898,6 +1902,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 'omit optional dependencies). Set `build.parser` explicitly to silence this.',
         );
     }
+    // Always announce the engine actually in effect, once per process. Without
+    // this the only signal was the degrade warning above, so a project could be
+    // running on `oxc` (or silently dropping to Babel per file) with no way to
+    // tell which parser produced its classes.
+    if (!_hasLoggedActiveParser) {
+        _hasLoggedActiveParser = true;
+        const detail = parserDegraded
+            ? 'oxc (degraded from default `rust`: no native binary for this platform)'
+            : parserMode === 'rust'
+              ? 'rust (native engine)'
+              : parserMode;
+        console.info(`[csszyx] active parser: ${detail}`);
+    }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
 
@@ -2140,6 +2157,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 result.diagnostics.push(
                     `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
                 );
+                // Surface the fallback to the console once per file. A silent
+                // per-file drop to Babel was invisible before (it only lived in
+                // the diagnostics array), so a project could be running on a
+                // different engine than intended without any signal.
+                if (!_babelFallbackFiles.has(effectiveFilename)) {
+                    _babelFallbackFiles.add(effectiveFilename);
+                    console.warn(
+                        `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason} ` +
+                            `(${_babelFallbackFiles.size} file(s) so far). Output is still correct; ` +
+                            'this usually means the file uses a syntax the oxc lane does not yet handle.',
+                    );
+                }
                 return result;
             }
         }
