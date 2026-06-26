@@ -61,4 +61,20 @@ describe('__szColorVar', () => {
             expect(__szColorVar('--theme-primary')).toBe('var(--theme-primary)');
         });
     });
+
+    describe('no colour (runtime-conditional undefined/null)', () => {
+        it('returns undefined for undefined/null/empty instead of crashing', () => {
+            // `sz={{ color: cond ? 'muted' : undefined }}` compiles to
+            // `__szColorVar(cond ? 'muted' : undefined)` — the else branch must omit
+            // the colour, not throw `Cannot read properties of undefined`.
+            expect(__szColorVar(undefined)).toBeUndefined();
+            expect(__szColorVar(null)).toBeUndefined();
+            expect(__szColorVar('')).toBeUndefined();
+        });
+
+        it('does not throw on a nullish value', () => {
+            expect(() => __szColorVar(undefined)).not.toThrow();
+            expect(() => __szColorVar(null)).not.toThrow();
+        });
+    });
 });
