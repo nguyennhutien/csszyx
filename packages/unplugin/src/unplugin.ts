@@ -98,6 +98,14 @@ interface PluginState {
      * emit their CSS (no entry → the classes resolve to no styles, silently).
      */
     sawTailwindEntry: boolean;
+    /**
+     * True once ANY CSS file passed through the transform hook. The missing-entry
+     * warning only fires when csszyx actually observed the CSS pipeline but found
+     * no `tailwindcss` entry — otherwise it false-positives in setups where CSS is
+     * handled outside this hook or not yet processed at build end (`astro check`,
+     * an early Astro build phase), where the build in fact emits valid CSS.
+     */
+    sawAnyCss: boolean;
     /** Guards the missing-Tailwind-entry warning so it fires at most once. */
     tailwindWarningEmitted: boolean;
     /** Whether a Tailwind entry scoped content detection (source()/@source not). */
@@ -365,13 +373,19 @@ export function hasInjectableTailwindCandidate(classes: Iterable<string>): boole
  *
  * @param ownedClassCount - number of csszyx-generated classes this build produced.
  * @param sawTailwindEntry - whether any processed CSS imported tailwindcss.
+ * @param sawAnyCss - whether ANY CSS file passed through the transform hook. When
+ *   false, csszyx never observed the CSS pipeline (e.g. `astro check`, an early
+ *   Astro build phase, or CSS handled outside this hook) and cannot conclude the
+ *   entry is missing — so it stays silent rather than false-positive on a build
+ *   that does emit valid CSS.
  * @returns true when the missing-entry warning should fire.
  */
 export function shouldWarnMissingTailwindEntry(
     ownedClassCount: number,
     sawTailwindEntry: boolean,
+    sawAnyCss: boolean,
 ): boolean {
-    return ownedClassCount > 0 && !sawTailwindEntry;
+    return ownedClassCount > 0 && sawAnyCss && !sawTailwindEntry;
 }
 
 /**
@@ -1890,6 +1904,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const state: PluginState = {
         classes: new Set<string>(),
         sawTailwindEntry: false,
+        sawAnyCss: false,
         tailwindWarningEmitted: false,
         tailwindEntryScoped: false,
         contentScopeWarningEmitted: false,
@@ -2881,6 +2896,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // directive to the CSS that imports tailwindcss is the reliable way to ensure
                 // Tailwind generates CSS for the classes that csszyx transforms sz props into.
                 if (/\.css(\?.*)?$/.test(id)) {
+                    // Record that we observed the CSS pipeline at all — the
+                    // missing-entry warning is only trustworthy once we have.
+                    state.sawAnyCss = true;
                     if (cssImportsTailwind(code)) {
                         // A Tailwind entry exists, so the build-end warning below
                         // must not fire even if there is nothing to inject yet.
@@ -3090,7 +3108,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // the @source), the rewritten classes silently resolve to no styles.
                 if (
                     !state.tailwindWarningEmitted &&
-                    shouldWarnMissingTailwindEntry(state.ownedClasses.size, state.sawTailwindEntry)
+                    shouldWarnMissingTailwindEntry(
+                        state.ownedClasses.size,
+                        state.sawTailwindEntry,
+                        state.sawAnyCss,
+                    )
                 ) {
                     state.tailwindWarningEmitted = true;
                     emitWarning(missingTailwindEntryMessage(state.ownedClasses.size));
