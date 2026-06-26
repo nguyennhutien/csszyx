@@ -99,6 +99,7 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
 /// "known" if ANY table or special form claims it (`property_prefix` already
 /// covers the many special-cased keys like `content`/`display`/`snapAlign`), so
 /// a valid key is never flagged as unknown.
+#[cfg(any(feature = "native-engine", test))]
 pub(crate) fn is_known_sz_key(key: &str) -> bool {
     property_prefix(key).is_some()
         || boolean_class(key).is_some()
@@ -133,6 +134,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
 /// must not flag them as typos. Kept beside the format_static_class branches
 /// that own them; the engine parity test (rust warn-set == oxc warn-set) gates
 /// any drift if a new such branch is added without updating this list.
+#[cfg(any(feature = "native-engine", test))]
 fn is_special_cased_property(key: &str) -> bool {
     matches!(
         key,
@@ -153,6 +155,7 @@ fn is_special_cased_property(key: &str) -> bool {
 /// (`data`/`aria`/`group`/`peer`/`has`/`not`/`supports`), `css`, `bgImg`, or
 /// color-with-opacity objects — their members are parameters/values, not sz
 /// properties, so checking them would falsely warn (matches the oxc/Babel walk).
+#[cfg(any(feature = "native-engine", test))]
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
     for property in &object.properties {
         if !is_known_sz_key(&property.key) {
