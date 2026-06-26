@@ -3330,15 +3330,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                      */
                     handler(html) {
                         finalizeMangleMap();
-                        // When mangling is off (explicitly, or forced off in a dev
-                        // server), inject an EMPTY map so `szr`/`decode` are identity
-                        // and the runtime class names match the un-mangled CSS.
+                        // Empty the CLASS mangle map when mangling is off (explicitly,
+                        // or forced off in a dev server) so `szr`/`decode` are identity
+                        // and the runtime class names match the un-mangled Tailwind CSS.
+                        // The CSS-VARIABLE mangle map is left intact: csszyx owns both
+                        // the runtime var name and the CSS it emits for it (Tailwind
+                        // never touches `--_sz-*`), so it is self-consistent in dev and
+                        // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
                             mode:
                                 options.production?.injectChecksum === false ? 'script' : 'script',
                             minify: process.env.NODE_ENV === 'production',
-                            varMangleMap: manglingEnabled ? state.varMangleMap : {},
+                            varMangleMap: state.varMangleMap,
                             globalVarAliasPrefix,
                         });
                         // Recovery manifest is a no-op when zero szRecover tokens were
