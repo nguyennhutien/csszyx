@@ -12,6 +12,7 @@ import {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
+    REMOVED_BOOLEAN_SUGAR,
     SUGGESTION_MAP,
     transform,
 } from '@csszyx/compiler';
@@ -51,6 +52,21 @@ export function handleValidate(input: ValidateInput): {
                 key,
                 message: `Unknown prop '${key}'. This is a CSS property name, not an sz key.`,
                 suggestion: `Use '${SUGGESTION_MAP[key]}' instead. Example: { ${SUGGESTION_MAP[key].split(/[\s/(]/)[0]}: ${JSON.stringify(input.sz[key])} }`,
+            });
+            continue;
+        }
+
+        // Removed boolean-sugar aliases in their BOOLEAN form (`{ flex: true }`,
+        // `{ absolute: true }`, …) now emit NO class — a silent no-op that passes a
+        // naive "is it a known key" check. Flag only the `=== true` form with the
+        // canonical replacement; the same keys stay valid for real shorthand values
+        // (`flex: 'auto'`, `flex: 1`), so don't touch those.
+        const removed = REMOVED_BOOLEAN_SUGAR[key];
+        if (removed && input.sz[key] === true) {
+            errors.push({
+                key,
+                message: `'${key}: true' boolean sugar was removed; it emits no class.`,
+                suggestion: `Use { ${removed.key}: ${JSON.stringify(removed.value)} } instead.`,
             });
             continue;
         }
