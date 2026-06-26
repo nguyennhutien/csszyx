@@ -1699,7 +1699,14 @@ export function formatSzWarnLocation(
 ): string {
     let rel = file;
     if (rootDir) {
-        const root = rootDir.replace(/[/\\]+$/, '');
+        // Strip trailing slashes WITHOUT a regex: `/[/\\]+$/` is a polynomial-ReDoS
+        // shape (CodeQL js/polynomial-redos) on a path with many trailing slashes.
+        // This linear scan is O(n) and intent-identical.
+        let end = rootDir.length;
+        while (end > 0 && (rootDir[end - 1] === '/' || rootDir[end - 1] === '\\')) {
+            end--;
+        }
+        const root = rootDir.slice(0, end);
         if (file === root) {
             rel = file;
         } else if (file.startsWith(`${root}/`) || file.startsWith(`${root}\\`)) {
