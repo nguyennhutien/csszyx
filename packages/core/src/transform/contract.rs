@@ -18,6 +18,9 @@ pub struct TransformOptions {
     pub mangle_var_hoist_max_depth: Option<usize>,
     /// Exact app-owned global custom-property aliases for static sz values.
     pub global_var_aliases: Vec<GlobalVarAliasEntry>,
+    /// Project root used only to render diagnostic file paths relative to it.
+    #[serde(default)]
+    pub root_dir: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.

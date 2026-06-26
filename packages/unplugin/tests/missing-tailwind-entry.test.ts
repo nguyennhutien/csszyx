@@ -32,17 +32,23 @@ describe('shouldEmitWarning', () => {
 // into pure functions and asserted directly (the build wiring is exercised by the
 // existing vite-build integration tests staying green).
 describe('shouldWarnMissingTailwindEntry', () => {
-    it('warns when csszyx generated classes but no CSS imported tailwindcss', () => {
-        expect(shouldWarnMissingTailwindEntry(5, false)).toBe(true);
+    it('warns when csszyx generated classes and CSS was seen but no tailwindcss entry', () => {
+        expect(shouldWarnMissingTailwindEntry(5, false, true)).toBe(true);
     });
 
     it('does not warn when a Tailwind entry was seen', () => {
-        expect(shouldWarnMissingTailwindEntry(5, true)).toBe(false);
+        expect(shouldWarnMissingTailwindEntry(5, true, true)).toBe(false);
     });
 
     it('does not warn when csszyx generated no classes', () => {
-        expect(shouldWarnMissingTailwindEntry(0, false)).toBe(false);
-        expect(shouldWarnMissingTailwindEntry(0, true)).toBe(false);
+        expect(shouldWarnMissingTailwindEntry(0, false, true)).toBe(false);
+        expect(shouldWarnMissingTailwindEntry(0, true, true)).toBe(false);
+    });
+
+    it('does NOT warn when no CSS was observed (astro check / early phase / external CSS)', () => {
+        // csszyx never saw the CSS pipeline, so it cannot conclude the entry is
+        // missing — staying silent avoids the Astro false-positive.
+        expect(shouldWarnMissingTailwindEntry(5, false, false)).toBe(false);
     });
 });
 

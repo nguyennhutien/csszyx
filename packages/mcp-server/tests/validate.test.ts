@@ -58,4 +58,19 @@ describe('csszyx_validate', () => {
         expect(data.valid).toBe(false);
         expect(data.errors.length).toBeGreaterThanOrEqual(3);
     });
+
+    it('flags a removed boolean-sugar alias (flex: true) with the canonical replacement', () => {
+        // `{ flex: true }` emits no class now — must not pass as valid (a silent
+        // no-op that drops the display utility on an upgrade).
+        const data = JSON.parse(handleValidate({ sz: { flex: true } }).content[0].text);
+        expect(data.valid).toBe(false);
+        expect(data.errors[0].key).toBe('flex');
+        expect(data.errors[0].suggestion).toContain('display: "flex"');
+    });
+
+    it('accepts the canonical display form the suggestion points to', () => {
+        const data = JSON.parse(handleValidate({ sz: { display: 'flex' } }).content[0].text);
+        expect(data.valid).toBe(true);
+        expect(data.transformResult.className).toBe('flex');
+    });
 });

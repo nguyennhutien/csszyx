@@ -11,11 +11,13 @@ import {
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
+    formatSzWarnLocation,
     getVariantPrefix,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
     type SzObject,
     type SzValue,
+    setSzWarnLocation,
     transform,
 } from './transform-core.js';
 
@@ -59,6 +61,13 @@ export interface TransformSourceCodeOptions {
      * token names to aliases, for example `--brand-primary` -> `---gz`.
      */
     globalVarAliases?: GlobalVarAliasTableInput;
+
+    /**
+     * Project root used only to render diagnostic file paths relative to it (so a
+     * dev-mode "Unknown property" warning reads `src/Foo.tsx:12`, not an absolute
+     * path). When omitted, diagnostics fall back to the filename as given.
+     */
+    rootDir?: string;
 }
 
 /**
@@ -168,6 +177,9 @@ export function transformSourceCode(
                     // before any sz transform work begins, and doesn't
                     // interfere with the JSXAttribute handler below.
                     pre(file: { ast: t.File }) {
+                        // Clear any unknown-property warn location a previous
+                        // transform left set after an early return.
+                        setSzWarnLocation(undefined);
                         let nodeCount = 0;
                         babel.traverse(file.ast, {
                             enter() {
@@ -181,6 +193,11 @@ export function transformSourceCode(
                                 }
                             },
                         });
+                    },
+                    // Drop the warn location after the file's visitor pass so it
+                    // never leaks to an unrelated later transform or the runtime path.
+                    post() {
+                        setSzWarnLocation(undefined);
                     },
                     visitor: {
                         JSXAttribute(path: babel.NodePath<t.JSXAttribute>) {
@@ -278,6 +295,17 @@ export function transformSourceCode(
                             if (attrName !== 'sz') {
                                 return;
                             }
+
+                            // Point the dev-mode unknown-property warning at this
+                            // sz prop. Cleared in the visitor's `exit` so it never
+                            // leaks to an unrelated later transform.
+                            setSzWarnLocation(
+                                formatSzWarnLocation(
+                                    filename ?? 'file.tsx',
+                                    path.node.loc?.start.line,
+                                    options?.rootDir,
+                                ),
+                            );
 
                             const value = path.node.value;
 

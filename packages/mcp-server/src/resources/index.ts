@@ -18,10 +18,33 @@ import { fileURLToPath } from 'node:url';
 
 import { KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS } from '@csszyx/compiler';
 
-// Resolve llms-full.txt relative to the package root, not CWD.
-// Works whether the package is installed globally, locally, or run from monorepo.
-const packageRoot = path.resolve(fileURLToPath(import.meta.url), '../../..');
-const LLMS_FULL_PATH = path.join(packageRoot, 'llms-full.txt');
+/**
+ * Resolve `llms-full.txt` (shipped at the package root) by walking up from this
+ * module. A fixed `../../..` guess broke once the ESM build flattened the bundle
+ * to `dist/index.mjs` (2 levels to the package root, not 3) — so the resource read
+ * `llms-full.txt not found` even though it is in the published package. Walking up
+ * to the file works regardless of how the bundle is laid out (flat or nested).
+ *
+ * @returns the absolute path to `llms-full.txt` (best-effort if never found).
+ */
+function resolveLlmsFullPath(): string {
+    let dir = path.dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 6; i++) {
+        const candidate = path.join(dir, 'llms-full.txt');
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            break;
+        }
+        dir = parent;
+    }
+    // Historical fallback so the path is always defined (read still error-handled).
+    return path.resolve(fileURLToPath(import.meta.url), '../../..', 'llms-full.txt');
+}
+
+const LLMS_FULL_PATH = resolveLlmsFullPath();
 
 /**
  * Project setup guide. Kept in sync with docs/installation. Exposed so an AI

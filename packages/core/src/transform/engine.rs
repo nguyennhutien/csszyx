@@ -7,7 +7,7 @@ use super::{
     css_var_planner::apply_css_variable_mangling,
     fast_path::{triage_source, FastPathTriage},
     global_var_aliases::apply_global_var_aliases,
-    lower::lower_source_ir_classes,
+    lower::{collect_unknown_sz_keys, lower_source_ir_classes},
     parser::parse_source_shell,
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
@@ -171,7 +171,7 @@ fn transform_fast_static_ir_with_options(
         map: None,
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
-        diagnostics: Vec::new(),
+        diagnostics: unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref()),
         recovery_tokens: Vec::new(),
         css_variable_map: global_var_aliases
             .map(|aliases| aliases.variable_map)
@@ -241,6 +241,11 @@ fn transform_static_classes_with_options(
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
+    diagnostics.extend(unknown_property_diagnostics(
+        file,
+        &parsed.ir,
+        options.root_dir.as_deref(),
+    ));
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
             "[csszyx] Rust native transform at {}: AST budget exceeded; leaving file unchanged for now.",
@@ -408,6 +413,49 @@ fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceI
             )
         })
         .collect()
+}
+
+/// Dev-mode build-log diagnostics for unrecognized sz property keys (likely
+/// typos), located by file and line so they are findable in a large codebase —
+/// parity with the oxc/Babel engines, which previously were the only ones to
+/// warn. The bundler plugin gates these to dev (and suppresses source paths in
+/// production), the same as the other soft diagnostics here.
+fn unknown_property_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    root_dir: Option<&str>,
+) -> Vec<String> {
+    let location = relativize_diagnostic_path(&file.filename, root_dir);
+    let mut out = Vec::new();
+    let mut unknown = Vec::new();
+    for attr in &ir.sz_attributes {
+        unknown.clear();
+        collect_unknown_sz_keys(&attr.object, &mut unknown);
+        for (key, offset) in &unknown {
+            let (line, _) = offset_to_line_column(&file.source, *offset);
+            out.push(format!(
+                "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
+            ));
+        }
+    }
+    out
+}
+
+/// Strip the project-root prefix from a diagnostic filename so it reads
+/// `src/Foo.tsx`, not an absolute path. Mirrors the JS `formatSzWarnLocation`
+/// prefix strip; falls back to the filename as given when no root is known or it
+/// is not a prefix.
+fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String {
+    if let Some(root) = root_dir {
+        let root = root.trim_end_matches(['/', '\\']);
+        if let Some(rest) = filename
+            .strip_prefix(root)
+            .and_then(|rest| rest.strip_prefix(['/', '\\']))
+        {
+            return rest.to_string();
+        }
+    }
+    filename.to_string()
 }
 
 fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {

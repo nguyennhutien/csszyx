@@ -21,4 +21,13 @@ describe('mcp resources', () => {
     it('throws on an unknown resource uri', () => {
         expect(() => readResource('csszyx://nope')).toThrow();
     });
+
+    it('serves the full reference from the packaged llms-full.txt (not "not found")', () => {
+        // A fixed `../../..` path guess broke when the ESM bundle flattened, so the
+        // reference returned the not-found fallback even though the file is packaged.
+        const text = readResource('csszyx://reference').contents[0].text;
+        expect(text).not.toContain('llms-full.txt not found');
+        expect(text).toContain('CSSzyx');
+        expect(text.length).toBeGreaterThan(1000);
+    });
 });

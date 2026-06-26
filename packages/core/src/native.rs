@@ -30,6 +30,8 @@ pub struct NativeTransformOptions {
     pub mangle_var_hoist_max_depth: Option<u32>,
     /// Exact app-owned global custom-property aliases for static sz values.
     pub global_var_aliases: Option<Vec<NativeGlobalVarAliasEntry>>,
+    /// Project root used only to render diagnostic file paths relative to it.
+    pub root_dir: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -171,6 +173,7 @@ pub fn transform_batch_native(
                     alias: entry.alias,
                 })
                 .collect(),
+            root_dir: options.root_dir,
         },
     )
     .map(|results| {
