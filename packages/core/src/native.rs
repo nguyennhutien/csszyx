@@ -173,7 +173,7 @@ pub fn transform_batch_native(
                     alias: entry.alias,
                 })
                 .collect(),
-            root_dir: options.root_dir.clone(),
+            root_dir: options.root_dir,
         },
     )
     .map(|results| {
