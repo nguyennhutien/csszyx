@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.7](https://github.com/nguyennhutien/csszyx/compare/v0.10.6...v0.10.7) (2026-06-26)
+
+
+### Features
+
+* **compiler:** locate unknown-sz-property warnings + DX/crash fixes from vui reports ([#98](https://github.com/nguyennhutien/csszyx/issues/98)) ([45bdd2c](https://github.com/nguyennhutien/csszyx/commit/45bdd2c6eb4226ca77c2a2af2bac0fe97c5b9d96))
+
 ## [0.10.6](https://github.com/nguyennhutien/csszyx/compare/v0.10.5...v0.10.6) (2026-06-25)
 
 ### Features
