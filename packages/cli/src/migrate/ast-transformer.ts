@@ -17,7 +17,7 @@
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
 import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
-
+import { disambiguateFont } from './class-parser.js';
 import {
     handleClsxCall,
     handleLogicalAnd,
@@ -207,6 +207,31 @@ function normalizeSzObject(obj: t.ObjectExpression, replacements: Replacement[])
             });
             count++;
             continue;
+        }
+
+        // Ambiguous passthrough `font` key: its SUGGESTION_MAP entry is a prose
+        // hint ("weight (for font-weight) or fontFamily (for family)"), so the
+        // clean-rename below skips it and `font` would survive the migration. But
+        // it IS resolvable from the value, exactly like the class migration does
+        // for `font-*`: `{ font: 'bold' }` → `{ weight: 'bold' }`,
+        // `{ font: 'sans' }` → `{ fontFamily: 'sans' }`. Keep the value untouched.
+        if (keyName === 'font' && key.start != null && key.end != null) {
+            let fontValue: string | null = null;
+            if (t.isStringLiteral(prop.value)) {
+                fontValue = prop.value.value;
+            } else if (t.isNumericLiteral(prop.value)) {
+                fontValue = String(prop.value.value);
+            }
+            const resolved = fontValue !== null ? disambiguateFont(fontValue)?.prop : undefined;
+            if (resolved && resolved !== 'font') {
+                replacements.push({
+                    start: key.start,
+                    end: key.end,
+                    text: t.isStringLiteral(key) ? `'${resolved}'` : resolved,
+                });
+                count++;
+                continue;
+            }
         }
 
         // Clean rename: rewrite only the key identifier, keep the value as-is.

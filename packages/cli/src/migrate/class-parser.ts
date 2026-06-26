@@ -509,11 +509,14 @@ function disambiguateText(value: string): ParsedClass | null {
 }
 
 /**
- * Disambiguates font-* classes by keyword type.
- * @param value - The value after the font prefix
+ * Disambiguates font-* classes (and the ambiguous `font` sz key) by value type:
+ * a weight keyword or 3-digit number → `weight`, a stretch keyword → `fontStretch`,
+ * anything else → `fontFamily`. Exported so the key-migration can resolve the
+ * passthrough `font` key the same way the class migration resolves `font-*`.
+ * @param value - The value after the font prefix (or the `font` sz value).
  * @returns {ParsedClass | null} Parsed font property result
  */
-function disambiguateFont(value: string): ParsedClass | null {
+export function disambiguateFont(value: string): ParsedClass | null {
     if (FONT_WEIGHT_KEYWORDS.has(value)) {
         return { prop: 'weight', value };
     }
