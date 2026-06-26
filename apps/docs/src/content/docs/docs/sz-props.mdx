@@ -86,6 +86,15 @@ TypeScript error, so a typo or a legacy CSS-property name fails at compile time.
 <div sz={{ bgColor: 'red-500' }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
 ```
 
+For untyped `sz` (string keys, dynamic objects, or JS files) the build prints a
+dev-mode warning instead — but lazily, only when a route is opened. To catch every
+file at once, run the standalone scan, which reports each unknown/aliased key with
+its `file:line` and exits non-zero so CI can gate on it:
+
+```bash
+npx @csszyx/cli check          # scan the whole project; no dev server needed
+```
+
 To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt out with
 `@ts-expect-error` — a conscious decision; the runtime still emits the class:
 

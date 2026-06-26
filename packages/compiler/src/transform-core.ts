@@ -1669,6 +1669,32 @@ let szTransformDepth = 0;
 let szWarnLocation: string | undefined;
 
 /**
+ * Whether the one-time "run a full project scan" hint has been shown. Build-time
+ * unknown-key warnings are lazy (a file warns only when its route is requested),
+ * so the first one points the developer at `csszyx check` for a complete pass.
+ * Suppressed when `CSSZYX_NO_PROJECT_SCAN_HINT` is set — `csszyx check` itself is
+ * the scan and sets it so it doesn't advertise itself.
+ */
+let szHintedProjectScan = false;
+
+/**
+ * Emits the project-scan hint at most once per process, alongside the first
+ * unknown/aliased sz key warning that carries a source location.
+ *
+ * @param location - the `at <file>:<line>` suffix, present only on the build path.
+ */
+function hintProjectScanOnce(location: string | undefined): void {
+    if (szHintedProjectScan || !location || process.env.CSSZYX_NO_PROJECT_SCAN_HINT === '1') {
+        return;
+    }
+    szHintedProjectScan = true;
+    console.info(
+        '[csszyx] Tip: run `npx @csszyx/cli check` to scan every file for sz key ' +
+            'issues at once (dev warnings only surface files as you open them).',
+    );
+}
+
+/**
  * Set (or clear, with `undefined`) the source location appended to the dev-mode
  * unknown-property warning. Called by the build engines (oxc/babel) around each
  * sz attribute; a balanced clear MUST follow so the location never leaks to an
@@ -2971,6 +2997,7 @@ function transformImpl(
                             'This will be ignored. Check for typos.',
                     );
                 }
+                hintProjectScanOnce(szWarnLocation);
             }
         }
 

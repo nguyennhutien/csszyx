@@ -22,6 +22,18 @@ npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
 
 Migration logs are written to `.csszyx/logs/`. Add `.csszyx/` to `.gitignore`.
 
+## Related: scan for sz issues
+
+The same CLI ships `csszyx check`, a static diagnostic pass that scans every
+source file for unknown or aliased `sz` keys (the build only warns about them
+lazily, as routes are opened). It prints each issue with its `file:line` and
+exits non-zero, so it works as a CI gate or pre-commit step:
+
+```bash
+npx @csszyx/cli check                     # scan the whole project
+npx @csszyx/cli check --pattern "src/**/*.tsx"
+```
+
 ## Breaking changes: single-way keys + closed type
 
 Two breaking changes affect how `sz` objects are written. `csszyx migrate`

@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import cac from 'cac';
 
 import { audit } from './commands/audit.js';
+import { check } from './commands/check.js';
 import { doctor } from './commands/doctor.js';
 import { explain } from './commands/explain.js';
 import { generateTypes } from './commands/generate-types.js';
@@ -136,6 +137,23 @@ cli.command('doctor', 'Diagnose mangling issues')
         await doctor({
             verbose: options.verbose,
             cwd: options.cwd,
+        });
+    });
+
+// check command
+cli.command('check', 'Scan the whole project for unknown/aliased sz keys (CI-friendly)')
+    .option('--pattern <glob>', 'Glob of source files to scan')
+    .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
+    .option('--cwd <dir>', 'Current working directory')
+    .action(async options => {
+        await check({
+            cwd: options.cwd,
+            pattern: options.pattern,
+            ignore: options.ignore
+                ? Array.isArray(options.ignore)
+                    ? options.ignore
+                    : [options.ignore]
+                : undefined,
         });
     });
 
