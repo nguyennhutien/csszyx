@@ -2,10 +2,26 @@
 
 ## [0.10.8](https://github.com/nguyennhutien/csszyx/compare/v0.10.7...v0.10.8) (2026-06-29)
 
-
 ### Features
 
-* hybrid-mangle safety, sz-forwarding type bridge, and DX/correctness fixes ([#101](https://github.com/nguyennhutien/csszyx/issues/101)) ([7826341](https://github.com/nguyennhutien/csszyx/commit/7826341faafab60ef15ed6c8d83323b52032fc2a))
+* hybrid-mangle safety, sz-forwarding type bridge, and DX/correctness fixes ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **unplugin:** announce the active parser and surface oxc→Babel fallbacks ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **cli:** add `csszyx check` to scan a whole project for sz key issues ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **unplugin:** warn on hybrid-mangle hazards instead of shipping silently ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **unplugin:** reserve class names from the mangler via production.mangleExclude ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **cli:** add scan-collisions to surface mangle-token risks ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **runtime:** bridge SzPropValue into SzInput so wrappers forward sz without a cast ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+
+### Bug Fixes
+
+* **cli:** migrate resolves the ambiguous `font` sz key by its value ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **compiler:** omit the class attribute for an sz that lowers to zero classes ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **unplugin:** rewrite ReDoS-prone regexes to linear time ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **cli:** ignore dots in comments, url() and strings in scan-collisions ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **unplugin:** guide the hybrid-mangle hotfix and rename-over-exclude order ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **unplugin:** clarify the disable-mangle syntax and Turbopack scope ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* send the parser banner and scan hint to stderr, not stdout ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
+* **mcp-server:** resolve llms-full.txt from the monorepo source too ([#101](https://github.com/nguyennhutien/csszyx/issues/101))
 
 ## [0.10.7](https://github.com/nguyennhutien/csszyx/compare/v0.10.6...v0.10.7) (2026-06-26)
 
