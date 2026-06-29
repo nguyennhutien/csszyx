@@ -32,6 +32,7 @@ import { init } from './commands/init.js';
 import { migrate } from './commands/migrate.js';
 import { nextPrebuild } from './commands/next-prebuild.js';
 import { nextWatch } from './commands/next-watch.js';
+import { scanCollisions } from './commands/scan-collisions.js';
 
 const cli = cac('csszyx');
 normalizeNextCommandAlias(process.argv);
@@ -147,6 +148,26 @@ cli.command('check', 'Scan the whole project for unknown/aliased sz keys (CI-fri
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
         await check({
+            cwd: options.cwd,
+            pattern: options.pattern,
+            ignore: options.ignore
+                ? Array.isArray(options.ignore)
+                    ? options.ignore
+                    : [options.ignore]
+                : undefined,
+        });
+    });
+
+// scan-collisions command
+cli.command(
+    'scan-collisions',
+    'Find class names that could collide with a mangled token (for production.mangleExclude)',
+)
+    .option('--pattern <glob>', 'Glob of stylesheet files to scan')
+    .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
+    .option('--cwd <dir>', 'Current working directory')
+    .action(async options => {
+        await scanCollisions({
             cwd: options.cwd,
             pattern: options.pattern,
             ignore: options.ignore

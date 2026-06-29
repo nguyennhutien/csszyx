@@ -47,13 +47,19 @@ describe('collectMangleHybridHazards', () => {
         expect(mangleHybridHazardMessage(hazards)).toBeNull();
     });
 
-    it('builds a message naming both hazard kinds and the fix', () => {
+    it('points collisions at the scan-collisions CLI to keep mangling on', () => {
         const message = mangleHybridHazardMessage({
             collisions: ['x', 'y'],
             orphans: ['bg-violet-a-100'],
         });
         expect(message).toContain('collide');
         expect(message).toContain('no emitted CSS rule');
+        expect(message).toContain('scan-collisions');
+        expect(message).toContain('mangleExclude');
+    });
+
+    it('suggests disabling mangle when there are only orphans, no collisions', () => {
+        const message = mangleHybridHazardMessage({ collisions: [], orphans: ['bg-violet-a-100'] });
         expect(message).toContain('production.mangle: false');
     });
 });

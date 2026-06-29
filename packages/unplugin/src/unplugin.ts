@@ -476,10 +476,21 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 'those elements lose styling.',
         );
     }
-    parts.push(
-        ' In a hybrid setup where a separate Tailwind plugin owns the utility CSS, set ' +
-            '`production.mangle: false` until the class namespaces are reconciled.',
-    );
+    if (collisions.length > 0) {
+        // The collisions are the actionable ones: reserve those names and keep
+        // mangling. Point at the CLI so a dev who doesn't know the project can
+        // discover the full list instead of reading every stylesheet.
+        parts.push(
+            ' Run `npx @csszyx/cli scan-collisions` to get a ready-to-paste ' +
+                '`production.mangleExclude` list, then add it so mangling stays on. Or set ' +
+                '`production.mangle: false` to disable mangling entirely.',
+        );
+    } else {
+        parts.push(
+            ' In a hybrid setup where a separate Tailwind plugin owns the utility CSS, set ' +
+                '`production.mangle: false` until the class namespaces are reconciled.',
+        );
+    }
     return parts.join('');
 }
 
