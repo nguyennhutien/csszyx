@@ -17,9 +17,19 @@
 export { __szColorVar } from '@csszyx/compiler/color-var';
 
 /**
- * Type for sz input - string-only (objects are pre-compiled at build time).
+ * Input to the lite runtime helpers: a pre-compiled class string or a falsy
+ * guard (skipped). The lite path has no compiler, so it never accepts objects —
+ * unlike the full `SzInput` from `@csszyx/runtime`, which also takes sz objects.
+ * Named distinctly so the two do not look interchangeable.
  */
-export type SzInput = string | null | undefined | false;
+export type SzStringInput = string | null | undefined | false;
+
+/**
+ * @deprecated Renamed to {@link SzStringInput} — the lite helpers accept only
+ * pre-compiled class strings, and the bare name collided with the object-accepting
+ * `SzInput` from `@csszyx/runtime`. This alias is kept for back-compat.
+ */
+export type SzInput = SzStringInput;
 
 /**
  * Dev-only guard: throw when a plain object reaches a string-only helper.
@@ -46,7 +56,7 @@ function assertNotObject(cls: unknown, fnName: string): void {
 /**
  * Zero-overhead className passthrough/concatenation.
  *
- * @param {...SzInput[]} classes - Class names to concatenate
+ * @param {...SzStringInput[]} classes - Class names to concatenate
  * @returns {string} Combined className string
  *
  * @example
@@ -55,7 +65,7 @@ function assertNotObject(cls: unknown, fnName: string): void {
  * _sz('base', isActive && 'active') // conditional
  * ```
  */
-export function _sz(...classes: SzInput[]): string {
+export function _sz(...classes: SzStringInput[]): string {
     if (classes.length === 1) {
         if (process.env.NODE_ENV !== 'production') {
             assertNotObject(classes[0], '_sz');
@@ -91,10 +101,10 @@ export function _sz(...classes: SzInput[]): string {
  * element is a runtime conditional. All arguments must be pre-compiled strings
  * (the compiler resolves each element to a string before passing it here).
  *
- * @param {...SzInput[]} classes - Pre-compiled class strings to merge
+ * @param {...SzStringInput[]} classes - Pre-compiled class strings to merge
  * @returns {string} Merged className string with duplicate tokens removed
  */
-export function _szMerge(...classes: SzInput[]): string {
+export function _szMerge(...classes: SzStringInput[]): string {
     const seen = new Set<string>();
     const result: string[] = [];
 
