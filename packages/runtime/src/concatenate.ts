@@ -39,8 +39,13 @@ interface CsszyxMangleGlobals {
  * @param szProp - The sz object to transform into a className.
  * @returns The transform result, with class names mangled when a map is active.
  */
-function transform(szProp: SzObject): TransformResult {
-    const res = rawTransform(szProp);
+function transform(szProp: object): TransformResult {
+    // `szProp` is typed `object` (not `SzObject`) so the public `SzInput` can stay
+    // broad enough to accept a precise `SzProps`/`SzPropValue` forwarded from the
+    // JSX boundary — a named type with specific keys is assignable to `object` but
+    // not to `SzObject`'s `{ [k]: SzValue }` index signature. The runtime lowers
+    // recognized keys and ignores the rest, so the cast is sound.
+    const res = rawTransform(szProp as SzObject);
     const className = res.className;
     if (!className) {
         return res;
@@ -69,9 +74,17 @@ function transform(szProp: SzObject): TransformResult {
 }
 
 /**
- * Type for sz input - can be a pre-compiled string, SzObject, or recursive array.
+ * Type for sz input — a pre-compiled class string, an sz object, a recursive
+ * array of those, or a falsy guard (skipped).
+ *
+ * The object member is the broad `object` rather than `SzObject` so that a
+ * precise `SzProps` / `SzPropValue` value (the type the JSX augmentation gives
+ * `sz` on a host element) forwards into the runtime helpers without a cast: a
+ * named type with specific keys is assignable to `object`, but not to
+ * `SzObject`'s `{ [k: string]: SzValue }` index signature. The runtime lowers the
+ * keys it recognizes and ignores the rest, so the looser input type is sound.
  */
-export type SzInput = string | SzObject | SzInput[] | null | undefined | false;
+export type SzInput = string | object | SzInput[] | null | undefined | false;
 
 /**
  * Zero-overhead className passthrough/concatenation helper.

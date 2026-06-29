@@ -769,7 +769,7 @@ function readImportedSymbols(clause: string): string[] {
             }
             const sourceName = trimmed
                 .replace(/^type[ \t]+/, '')
-                .split(/[ \t]+as[ \t]+/)[0]
+                .split(/(?<![ \t])[ \t]+as[ \t]+/)[0]
                 ?.trim();
             if (sourceName) {
                 symbols.push(sourceName);

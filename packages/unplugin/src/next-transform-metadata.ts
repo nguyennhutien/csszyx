@@ -96,7 +96,7 @@ function collectRuntimeStaticClasses(
  * @param discoveredClasses
  */
 function collectRuntimeStringClasses(objectSource: string, discoveredClasses: Set<string>): void {
-    const stringKeyValue = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
+    const stringKeyValue = /\b(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
     for (const match of objectSource.matchAll(stringKeyValue)) {
         try {
             collectTransformClasses(
@@ -115,7 +115,7 @@ function collectRuntimeStringClasses(objectSource: string, discoveredClasses: Se
  * @param discoveredClasses
  */
 function collectRuntimeNumberClasses(objectSource: string, discoveredClasses: Set<string>): void {
-    const numberKeyValue = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
+    const numberKeyValue = /\b(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
     for (const match of objectSource.matchAll(numberKeyValue)) {
         try {
             collectTransformClasses(
@@ -134,7 +134,7 @@ function collectRuntimeNumberClasses(objectSource: string, discoveredClasses: Se
  * @param discoveredClasses
  */
 function collectRuntimeBooleanClasses(objectSource: string, discoveredClasses: Set<string>): void {
-    const booleanKeyValue = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
+    const booleanKeyValue = /\b(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
     for (const match of objectSource.matchAll(booleanKeyValue)) {
         try {
             collectTransformClasses(

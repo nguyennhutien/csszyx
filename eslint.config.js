@@ -65,6 +65,10 @@ export default [
         rules: {
             ...regexp.configs['flat/recommended'].rules,
             'regexp/no-unused-capturing-group': 'off',
+            // Polynomial-ReDoS gate: catches quadratic-by-search patterns (e.g.
+            // `[/\\]+$`) that `no-super-linear-backtracking` misses. Closes the gap
+            // that was previously CodeQL-only.
+            'regexp/no-super-linear-move': 'error',
         },
     },
 

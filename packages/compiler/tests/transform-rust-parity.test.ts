@@ -310,6 +310,26 @@ const fixtures: readonly RustParityFixture[] = [
         filename: 'identifier-static-ternary.tsx',
         expected: 'parity',
     },
+    {
+        // An sz that lowers to zero classes emits `className={undefined}` (renders
+        // no class attribute) on every engine, not `class=""`.
+        name: 'sz-empty-object',
+        source: 'const X = () => <div sz={{}} />;',
+        filename: 'empty-object.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'sz-empty-array',
+        source: 'const X = () => <div sz={[]} />;',
+        filename: 'empty-array.tsx',
+        expected: 'parity',
+    },
+    {
+        name: 'sz-ternary-empty-branch',
+        source: 'const X = ({ on }) => <div sz={on ? { p: 4 } : {}} />;',
+        filename: 'ternary-empty-branch.tsx',
+        expected: 'parity',
+    },
 ];
 
 describe('Rust native engine — parity vs oxc-JS', () => {

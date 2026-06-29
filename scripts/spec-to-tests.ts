@@ -540,7 +540,7 @@ function parseSzProp(raw: string): Record<string, unknown> | null {
     let cleaned = stripMarkdown(raw).trim();
 
     // Strip trailing " etc." or " etc" that some spec rows have
-    cleaned = cleaned.replace(/\s+etc\.?\s*$/, '');
+    cleaned = cleaned.replace(/(?<!\s)\s+etc\.?\s*$/, '');
 
     // Must start with { and end with }
     if (!cleaned.startsWith('{') || !cleaned.endsWith('}')) {
@@ -639,8 +639,8 @@ function tryExpandRange(
     idCounter: Map<string, number>,
 ): RangeExpansionResult {
     // Normalize: treat " ... " (with spaces) the same as "..."
-    const twNorm = twCell.replace(/\s+\.\.\.\s+/g, '...');
-    const szNorm = szCell.replace(/\s+\.\.\.\s+/g, '...');
+    const twNorm = twCell.replace(/(?<!\s)\s+\.\.\.\s+/g, '...');
+    const szNorm = szCell.replace(/(?<!\s)\s+\.\.\.\s+/g, '...');
 
     // Check if cells contain range notation (...) OUTSIDE of brackets and quotes
     // Range notation: "class-1...class-n" or "{ key: 1 }...{ key: n }"
@@ -648,8 +648,8 @@ function tryExpandRange(
     const hasRangeDots = (s: string): boolean => {
         // Remove content inside [...] and (...) and '...' and "..."
         const stripped = s
-            .replace(/\[[^\]]*\]/g, '')
-            .replace(/\([^)]*\)/g, '')
+            .replace(/\[[^[\]]*\]/g, '')
+            .replace(/\([^()]*\)/g, '')
             .replace(/'[^']*'/g, '')
             .replace(/"[^"]*"/g, '');
         return stripped.includes('...');

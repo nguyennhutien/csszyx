@@ -215,14 +215,19 @@ const DIRECTIVE_PROLOGUE_PREFIX_RE =
 // skip the regex tests entirely when the runtime package is absent from
 // the transformed source.
 const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
-    _sz: /\{[^}]*\b_sz\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    _szMerge: /\{[^}]*\b_szMerge\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    __szColorVar: /\{[^}]*\b__szColorVar\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    _sz: /(?:import|export)\s+\{[^{}]*\b_sz\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    _szMerge: /(?:import|export)\s+\{[^{}]*\b_szMerge\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    __szColorVar:
+        /(?:import|export)\s+\{[^{}]*\b__szColorVar\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
 };
 
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
+let _hasLoggedActiveParser = false;
+// Files for which an oxc→Babel fallback has already been reported, so the
+// per-file warning is emitted once per file rather than on every re-transform.
+const _babelFallbackFiles = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 const PLUGIN_VERSION = findPackageVersionFromFile(
     fileURLToPath(import.meta.url),
@@ -400,6 +405,101 @@ export function missingTailwindEntryMessage(ownedClassCount: number): string {
         'in a CSS file (csszyx auto-injects @source for the generated classes) so Tailwind ' +
         'emits their styles.'
     );
+}
+
+/**
+ * Hazards that make production mangling unsafe in a hybrid build (a separate
+ * Tailwind plugin owns the utility CSS and/or hand-written CSS uses literal class
+ * names). Computed from data `mangleCSSSync` already returns across every CSS
+ * asset, so it is free to surface.
+ */
+export interface MangleHybridHazards {
+    /**
+     * Mangled tokens that ALSO appear as a class name in non-csszyx CSS. The
+     * short token (e.g. `y` for `w-full`) then matches external `.y` elements and
+     * cross-contaminates their styles — the core hybrid-mangle failure.
+     */
+    collisions: string[];
+    /**
+     * Map sources csszyx mangled but whose class never appeared in any emitted
+     * CSS (e.g. a utility Tailwind never generated, or a malformed key). Their
+     * DOM class is rewritten to a token with no rule → the element loses styling.
+     */
+    orphans: string[];
+}
+
+/**
+ * Detect hybrid-mangle hazards from the accumulated per-asset mangle results.
+ *
+ * @param mangleMap - the full original→token map injected into the runtime.
+ * @param mangledSources - map keys that were actually found and renamed in some CSS asset.
+ * @param externalClasses - class names found in CSS that are NOT in the mangle map (non-csszyx).
+ * @returns the colliding tokens and orphan sources (each sorted, deduped).
+ */
+export function collectMangleHybridHazards(
+    mangleMap: Record<string, string>,
+    mangledSources: ReadonlySet<string>,
+    externalClasses: ReadonlySet<string>,
+): MangleHybridHazards {
+    const tokenValues = new Set(Object.values(mangleMap));
+    const collisions = [...tokenValues].filter(token => externalClasses.has(token)).sort();
+    const orphans = Object.keys(mangleMap)
+        .filter(source => !mangledSources.has(source))
+        .sort();
+    return { collisions, orphans };
+}
+
+/**
+ * Build the hybrid-mangle hazard warning, or null when there is nothing to warn.
+ *
+ * @param hazards - the detected collisions and orphans.
+ * @returns a warning string, or null when both lists are empty.
+ */
+export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string | null {
+    const { collisions, orphans } = hazards;
+    if (collisions.length === 0 && orphans.length === 0) {
+        return null;
+    }
+    const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
+    if (collisions.length > 0) {
+        const sample = collisions.slice(0, 8).join(', ');
+        parts.push(
+            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
+                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
+                'elements.',
+        );
+    }
+    if (orphans.length > 0) {
+        const sample = orphans.slice(0, 8).join(', ');
+        parts.push(
+            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
+                'those elements lose styling.',
+        );
+    }
+    if (collisions.length > 0) {
+        // Guide the prod hotfix first, then the two real fixes. Renaming is
+        // preferred because single-letter / common class names collide with
+        // mangle tokens AND risk specificity clashes with other libraries; an
+        // exclude is the escape hatch only for names in code you cannot change.
+        parts.push(
+            ' HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
+                ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
+                ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
+                ' also clash on specificity with other libraries. Only for names in a' +
+                ' third-party stylesheet you cannot edit, list them in' +
+                ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
+                ' to find every offending name.',
+        );
+    } else {
+        parts.push(
+            ' Those classes are csszyx-owned but no CSS was emitted for them' +
+                ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
+                ' a real utility). Ensure that CSS is generated, or pass' +
+                ' `production: { mangle: false }` to the csszyx plugin until the pipelines' +
+                ' are reconciled.',
+        );
+    }
+    return parts.join('');
 }
 
 /**
@@ -1757,7 +1857,11 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // commas and operators (e.g. `_szMerge(x, "p-8 flex...")`, `pe && "text-right"`).
     // The lookbehind also covers && so that conditional array elements compiled by the
     // sz-array path (condition && "class-string") are mangled correctly.
-    result = result.replace(/(?<=(?:[,(]|&&)\s*)"([^"]+)"/g, (match, inner) => {
+    // The separator (`,`/`(`/`&&`) and any whitespace are consumed and re-emitted
+    // rather than matched in a variable-length `(?<=…\s*)` lookbehind, which is
+    // quadratic (the engine retries the `\s*` length at every position). Consuming
+    // them keeps the scan linear and re-prepends them unchanged.
+    result = result.replace(/([,(]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner) => {
         const tokens = inner.split(/\s+/).filter(Boolean);
         if (tokens.length === 0) {
             return match;
@@ -1777,7 +1881,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         if (!changed) {
             return match;
         }
-        return `"${mangled.join(' ')}"`;
+        return `${sep}${ws}"${mangled.join(' ')}"`;
     });
 
     return result;
@@ -1830,6 +1934,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle !== false;
+    // Class names the mangler must never produce as a token, so a short alias
+    // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
+    // from config, so it is available identically at every finalizeMangleMap call
+    // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
+    // reason a config exclude-list is consistent where a bundle-CSS scan would not.
+    const mangleReserved = new Set(options.production?.mangleExclude ?? []);
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
@@ -1897,6 +2007,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 'engine, install the matching @csszyx/core-<platform> package (or do not ' +
                 'omit optional dependencies). Set `build.parser` explicitly to silence this.',
         );
+    }
+    // Always announce the engine actually in effect, once per process. Without
+    // this the only signal was the degrade warning above, so a project could be
+    // running on `oxc` (or silently dropping to Babel per file) with no way to
+    // tell which parser produced its classes.
+    if (!_hasLoggedActiveParser) {
+        _hasLoggedActiveParser = true;
+        const detail = parserDegraded
+            ? 'oxc (degraded from default `rust`: no native binary for this platform)'
+            : parserMode === 'rust'
+              ? 'rust (native engine)'
+              : parserMode;
+        // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
+        // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
+        console.warn(`[csszyx] active parser: ${detail}`);
     }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
@@ -2140,6 +2265,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 result.diagnostics.push(
                     `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
                 );
+                // Surface the fallback to the console once per file. A silent
+                // per-file drop to Babel was invisible before (it only lived in
+                // the diagnostics array), so a project could be running on a
+                // different engine than intended without any signal.
+                if (!_babelFallbackFiles.has(effectiveFilename)) {
+                    _babelFallbackFiles.add(effectiveFilename);
+                    console.warn(
+                        `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason} ` +
+                            `(${_babelFallbackFiles.size} file(s) so far). Output is still correct; ` +
+                            'this usually means the file uses a syntax the oxc lane does not yet handle.',
+                    );
+                }
                 return result;
             }
         }
@@ -2618,7 +2755,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param discoveredClasses sz-generated class sink.
      */
     function collectRuntimeStringClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
+        const strKv = /\b(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
         for (const kv of objStr.matchAll(strKv)) {
             try {
                 const val = kv[2] ?? kv[3];
@@ -2636,7 +2773,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param discoveredClasses sz-generated class sink.
      */
     function collectRuntimeNumberClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
+        const numKv = /\b(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
         for (const kv of objStr.matchAll(numKv)) {
             try {
                 collectTransformClasses(
@@ -2656,7 +2793,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param discoveredClasses sz-generated class sink.
      */
     function collectRuntimeBooleanClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
+        const boolKv = /\b(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
         for (const kv of objStr.matchAll(boolKv)) {
             try {
                 collectTransformClasses(
@@ -2749,8 +2886,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // stylesheet or name-based JS lookup.
         const sortedClasses = Array.from(state.ownedClasses); // Keep insertion order for stability
         const newMap: Record<string, string> = {};
+        // Walk the encoder sequence, skipping any token that equals a reserved
+        // (external) class name, so no mangled alias collides with one. `tokenIndex`
+        // advances independently of the class index whenever a token is skipped.
+        let tokenIndex = 0;
         for (let i = 0; i < sortedClasses.length; i++) {
-            newMap[sortedClasses[i]] = encode(i);
+            let token = encode(tokenIndex);
+            while (mangleReserved.has(token)) {
+                tokenIndex++;
+                token = encode(tokenIndex);
+            }
+            newMap[sortedClasses[i]] = token;
+            tokenIndex++;
         }
         state.mangleMap = newMap;
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
@@ -3467,6 +3614,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             }
                         }
 
+                        // Accumulated across every CSS asset for the hybrid-mangle
+                        // hazard report emitted once after the loop.
+                        const mangledSources = new Set<string>();
+                        const externalClasses = new Set<string>();
+
                         for (const file in assets) {
                             const asset = assets[file];
                             const source = asset.source().toString();
@@ -3487,6 +3639,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                             debug: options.development?.debug,
                                             from: file,
                                         });
+                                        for (const c of result.mangledClasses) {
+                                            mangledSources.add(c);
+                                        }
+                                        for (const c of result.unmangledClasses) {
+                                            externalClasses.add(c);
+                                        }
                                         if (result.transformedCount > 0) {
                                             css = result.css;
                                         }
@@ -3579,6 +3737,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                 }
                             }
                         }
+
+                        if (
+                            manglingEnabled &&
+                            !isWebpackDevMode &&
+                            Object.keys(state.mangleMap).length > 0
+                        ) {
+                            const hazardMessage = mangleHybridHazardMessage(
+                                collectMangleHybridHazards(
+                                    state.mangleMap,
+                                    mangledSources,
+                                    externalClasses,
+                                ),
+                            );
+                            if (hazardMessage) {
+                                console.warn(hazardMessage);
+                            }
+                        }
                     },
                 );
             });
@@ -3649,6 +3824,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 }
 
+                // Accumulated across every CSS asset so hybrid-mangle hazards can
+                // be reported once after the whole bundle is rewritten.
+                const mangledSources = new Set<string>();
+                const externalClasses = new Set<string>();
+
                 for (const file in bundle) {
                     const chunk = bundle[file];
 
@@ -3665,6 +3845,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     debug: options.development?.debug,
                                     from: file,
                                 });
+                                for (const c of result.mangledClasses) {
+                                    mangledSources.add(c);
+                                }
+                                for (const c of result.unmangledClasses) {
+                                    externalClasses.add(c);
+                                }
                                 if (result.transformedCount > 0) {
                                     css = result.css;
                                 }
@@ -3708,6 +3894,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         if (replaced !== chunk.code) {
                             chunk.code = replaced;
                         }
+                    }
+                }
+
+                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                    const hazardMessage = mangleHybridHazardMessage(
+                        collectMangleHybridHazards(
+                            state.mangleMap,
+                            mangledSources,
+                            externalClasses,
+                        ),
+                    );
+                    if (hazardMessage) {
+                        console.warn(hazardMessage);
                     }
                 }
             },

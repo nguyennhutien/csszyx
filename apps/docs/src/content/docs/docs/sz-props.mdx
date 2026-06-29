@@ -86,6 +86,15 @@ TypeScript error, so a typo or a legacy CSS-property name fails at compile time.
 <div sz={{ bgColor: 'red-500' }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
 ```
 
+For untyped `sz` (string keys, dynamic objects, or JS files) the build prints a
+dev-mode warning instead — but lazily, only when a route is opened. To catch every
+file at once, run the standalone scan, which reports each unknown/aliased key with
+its `file:line` and exits non-zero so CI can gate on it:
+
+```bash
+npx @csszyx/cli check          # scan the whole project; no dev server needed
+```
+
 To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt out with
 `@ts-expect-error` — a conscious decision; the runtime still emits the class:
 
@@ -95,6 +104,54 @@ To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt 
 ```
 
 Arbitrary variants are allowed by pattern (`@container`, `min-[320px]`, `[&>span]`).
+
+## Typing a component that forwards `sz`
+
+csszyx exposes the `sz` value type from two places, for two different jobs:
+
+- **`SzPropValue`** (`@csszyx/compiler`, re-exported by `@csszyx/types`) is what the
+  JSX augmentation adds to host elements — the type of `sz` on `<div>`, `<span>`, ….
+- **`SzInput`** (`@csszyx/runtime`) is what the runtime helpers (`szr`, `szcn`, …)
+  accept — a wider union that also allows top-level `null` / `false` / `undefined`.
+
+For a **wrapper component** that takes `sz` and forwards it onto a host element,
+type the prop with the augmentation's type so it lines up with the element it
+lands on:
+
+```tsx
+import type { SzPropValue } from '@csszyx/types';
+
+function Box({ sz, ...rest }: { sz?: SzPropValue } & JSX.IntrinsicElements['div']) {
+  return <div sz={sz} {...rest} />;
+}
+```
+
+Type the prop as `SzPropValue` and it forwards both ways: onto the host element
+(same type) **and** into the runtime helpers, which accept it directly:
+
+```tsx
+import type { SzPropValue } from '@csszyx/types';
+import { szr } from '@csszyx/runtime';
+
+function Box({ sz, active }: { sz?: SzPropValue; active?: boolean }) {
+  // `sz` flows into szr() without a cast, and onto <div> below.
+  return <div sz={sz} className={szr(active && 'ring-2')} />;
+}
+```
+
+`SzPropValue` is assignable into the helpers' `SzInput`, so you no longer need a
+cast or `@ts-expect-error` when a wrapper both forwards `sz` and calls `szr` /
+`splitBoxSz`. Prefer `SzPropValue` at the JSX boundary; reach for `SzInput` only
+when a value genuinely originates from the runtime side.
+
+:::caution[Import the JSX augmentation exactly once]
+`@csszyx/types/jsx` uses `declare module 'react'` to add `sz`. Import it from a
+**single** global `.d.ts` (e.g. `src/csszyx-jsx.d.ts`), not per-component. Because
+it is a global augmentation, whether TypeScript has pulled it into a given program
+can shift which `@ts-expect-error` directives around `sz` are considered "used" —
+adding an unrelated file can surface a `TS2578` at a previously-quiet site. Keeping
+one import site keeps that deterministic.
+:::
 
 :::tip[Custom breakpoints are typed from your CSS]
 Define a breakpoint once in Tailwind `@theme` and csszyx auto-generates the type — no
@@ -292,17 +349,20 @@ Inside an array, `false`, `null`, `undefined`, and `0` are silently skipped —
 only truthy objects contribute classes.
 :::
 
-:::caution[A conditional `sz` can still render `class=""`]
-When a conditional `sz` is **statically lowered**, an empty branch produces an
-empty class string, e.g. `sz={cond ? { pl: 4 } : {}}` →
-`className={cond ? "pl-4" : ""}`. Using `undefined` instead of `{}` does **not**
-always avoid this: if the expression can't be lowered (for example a dynamic
-ternary on a SolidJS element), it compiles to a runtime `_sz(cond ? { pl: 4 } :
-undefined)` call which returns `""` for the empty branch, so the framework still
-sets `class=""`. It is harmless (an empty attribute) but noisy in generated
-HTML. To omit the attribute entirely, render the two cases as separate elements
-so the styleless one carries no `sz` prop at all (e.g. SolidJS `<Show>` with a
-`fallback`).
+:::note[An empty `sz` renders no `class` attribute]
+A **statically lowered** `sz` that resolves to zero classes — `sz={{}}`,
+`sz={[]}`, or the empty branch of a conditional like `sz={cond ? { pl: 4 } : {}}`
+— now compiles to `className={undefined}` (or `className={cond ? "pl-4" :
+undefined}`), so the framework omits the `class` attribute entirely instead of
+emitting `class=""`. This holds on all three engines (Babel, oxc, and the native
+Rust core).
+
+One case still emits `class=""`: a conditional that **can't be lowered at build
+time** (for example a dynamic ternary whose value isn't statically resolvable)
+falls back to a runtime `szr(…)` call, which returns `""` for an empty result.
+That is harmless but noisy; to drop the attribute there, render the two cases as
+separate elements so the styleless one carries no `sz` prop at all (e.g. SolidJS
+`<Show>` with a `fallback`).
 :::
 
 :::caution[Keep conditional branches statically resolvable]

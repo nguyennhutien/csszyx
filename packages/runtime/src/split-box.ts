@@ -389,7 +389,9 @@ function flattenSz(sz: SzInput, depth: number): SzObject {
         for (const part of sz) mergeSzInto(acc, flattenSz(part, depth + 1), depth + 1);
         return acc;
     }
-    return sz;
+    // `SzInput`'s object member is the broad `object` (so a forwarded `SzProps`
+    // type assigns in); here it is a real sz object the partitioner walks by key.
+    return sz as SzObject;
 }
 
 /**

@@ -348,6 +348,13 @@ export function transformSourceCode(
                                 szExpr: t.Expression,
                             ): t.StringLiteral | t.JSXExpressionContainer => {
                                 if (!existingClassExpr) {
+                                    // An sz that lowers to zero classes and has no
+                                    // className to merge into emits `className={undefined}`
+                                    // (renders no class attribute) rather than the noisy
+                                    // `className=""`.
+                                    if (t.isStringLiteral(szExpr) && szExpr.value === '') {
+                                        return t.jsxExpressionContainer(t.identifier('undefined'));
+                                    }
                                     return t.isStringLiteral(szExpr)
                                         ? szExpr
                                         : t.jsxExpressionContainer(szExpr);
@@ -1142,6 +1149,20 @@ function parseStyleStringToObjectExpr(styleStr: string): t.ObjectExpression {
 type GetBinding = (name: string) => { path: babel.NodePath } | null | undefined;
 
 /**
+ * Replaces an empty-string class branch with `undefined` so a ternary used
+ * directly as a className value (e.g. `cond ? 'pl-4' : {}`) renders no class
+ * attribute on the empty branch instead of `class=""`. Only safe in value
+ * position — never inside a template literal, where `${undefined}` would render
+ * the text "undefined".
+ *
+ * @param node - the compiled class expression for one ternary branch.
+ * @returns `undefined` identifier when the branch is an empty string, else the node unchanged.
+ */
+function emptyClassToUndefined(node: t.Expression): t.Expression {
+    return t.isStringLiteral(node) && node.value === '' ? t.identifier('undefined') : node;
+}
+
+/**
  * Recursively attempts to pre-compile an AST node to a static className expression.
  * Handles ObjectExpression (single static object), ConditionalExpression (ternary with static branches),
  * and StringLiteral (already resolved).
@@ -1200,7 +1221,11 @@ function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expres
         const consequent = tryStaticTransformNode(node.consequent, getBinding);
         const alternate = tryStaticTransformNode(node.alternate, getBinding);
         if (consequent !== null && alternate !== null) {
-            return t.conditionalExpression(node.test, consequent, alternate);
+            return t.conditionalExpression(
+                node.test,
+                emptyClassToUndefined(consequent),
+                emptyClassToUndefined(alternate),
+            );
         }
         return null;
     }
@@ -1271,7 +1296,11 @@ function tryHoistConditionalSpread(
         return null;
     }
 
-    return t.conditionalExpression(conditionalExpr.test, resolvedA, resolvedB);
+    return t.conditionalExpression(
+        conditionalExpr.test,
+        emptyClassToUndefined(resolvedA),
+        emptyClassToUndefined(resolvedB),
+    );
 }
 
 /**
@@ -1538,16 +1567,23 @@ function buildConditionalClassExpr(
         return t.stringLiteral(baseClasses);
     }
 
-    const makeCondExpr = (cc: ConditionalClassEntry): t.Expression =>
+    // `bare` is true only for a top-level ternary used directly as the className
+    // value (not interpolated). There, an empty branch becomes `undefined` so it
+    // renders no class attribute. Inside a template literal (`base ${…}`) the
+    // branch MUST stay an empty string — `${undefined}` would render the text
+    // "undefined".
+    const makeCondExpr = (cc: ConditionalClassEntry, bare: boolean): t.Expression =>
         t.conditionalExpression(
             cc.test,
-            t.stringLiteral(cc.consequent),
-            t.stringLiteral(cc.alternate),
+            bare && cc.consequent === ''
+                ? t.identifier('undefined')
+                : t.stringLiteral(cc.consequent),
+            bare && cc.alternate === '' ? t.identifier('undefined') : t.stringLiteral(cc.alternate),
         );
 
     // Simple case: single conditional, no static base → bare ternary, no template overhead
     if (conditionalClasses.length === 1 && !baseClasses) {
-        return makeCondExpr(conditionalClasses[0]);
+        return makeCondExpr(conditionalClasses[0], true);
     }
 
     // General case: template literal  `base ${c1} ${c2} …`
@@ -1556,7 +1592,7 @@ function buildConditionalClassExpr(
     for (let i = 0; i < conditionalClasses.length; i++) {
         const prefix = i === 0 ? (baseClasses ? `${baseClasses} ` : '') : ' ';
         quasis.push(t.templateElement({ raw: prefix, cooked: prefix }, false));
-        exprs.push(makeCondExpr(conditionalClasses[i]));
+        exprs.push(makeCondExpr(conditionalClasses[i], false));
     }
     quasis.push(t.templateElement({ raw: '', cooked: '' }, true));
     return t.templateLiteral(quasis, exprs);

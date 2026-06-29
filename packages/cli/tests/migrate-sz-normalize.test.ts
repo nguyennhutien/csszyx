@@ -53,4 +53,26 @@ describe('migrate normalizes legacy sz prop keys', () => {
         expect(out.code).not.toContain('className');
         expect(out.stats.classNamesTransformed).toBe(1);
     });
+
+    it('disambiguates the ambiguous passthrough `font` key by its value', () => {
+        // SUGGESTION_MAP only has a prose hint for `font`, but it is resolvable
+        // from the value just like the class migration resolves `font-*`. Without
+        // this `font` would survive the migration unchanged.
+        expect(run("<div sz={{ font: 'bold' }} />").code).toBe("<div sz={{ weight: 'bold' }} />");
+        expect(run('<div sz={{ font: 600 }} />').code).toBe('<div sz={{ weight: 600 }} />');
+        expect(run("<div sz={{ font: 'sans' }} />").code).toBe(
+            "<div sz={{ fontFamily: 'sans' }} />",
+        );
+        // Round-trip: the canonical keys compile to what `font: <value>` emitted.
+        expect(transform({ weight: 'bold' }).className).toBe(transform({ font: 'bold' }).className);
+        expect(transform({ fontFamily: 'sans' }).className).toBe(
+            transform({ font: 'sans' }).className,
+        );
+    });
+
+    it('leaves a `font` key with a non-literal value for the dev-warn', () => {
+        const src = '<div sz={{ font: weightVar }} />';
+        const out = run(src);
+        expect(out.code).toBe(src);
+    });
 });
