@@ -1688,7 +1688,9 @@ function hintProjectScanOnce(location: string | undefined): void {
         return;
     }
     szHintedProjectScan = true;
-    console.info(
+    // stderr (console.warn), not stdout: this can fire during a transform run inside
+    // a stdio JSON-RPC consumer (@csszyx/mcp-server), where stray stdout corrupts it.
+    console.warn(
         '[csszyx] Tip: run `npx @csszyx/cli check` to scan every file for sz key ' +
             'issues at once (dev warnings only surface files as you open them).',
     );

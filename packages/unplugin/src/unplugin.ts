@@ -2019,7 +2019,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             : parserMode === 'rust'
               ? 'rust (native engine)'
               : parserMode;
-        console.info(`[csszyx] active parser: ${detail}`);
+        // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
+        // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
+        console.warn(`[csszyx] active parser: ${detail}`);
     }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
