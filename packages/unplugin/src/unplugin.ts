@@ -1915,6 +1915,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle !== false;
+    // Class names the mangler must never produce as a token, so a short alias
+    // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
+    // from config, so it is available identically at every finalizeMangleMap call
+    // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
+    // reason a config exclude-list is consistent where a bundle-CSS scan would not.
+    const mangleReserved = new Set(options.production?.mangleExclude ?? []);
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
@@ -2859,8 +2865,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // stylesheet or name-based JS lookup.
         const sortedClasses = Array.from(state.ownedClasses); // Keep insertion order for stability
         const newMap: Record<string, string> = {};
+        // Walk the encoder sequence, skipping any token that equals a reserved
+        // (external) class name, so no mangled alias collides with one. `tokenIndex`
+        // advances independently of the class index whenever a token is skipped.
+        let tokenIndex = 0;
         for (let i = 0; i < sortedClasses.length; i++) {
-            newMap[sortedClasses[i]] = encode(i);
+            let token = encode(tokenIndex);
+            while (mangleReserved.has(token)) {
+                tokenIndex++;
+                token = encode(tokenIndex);
+            }
+            newMap[sortedClasses[i]] = token;
+            tokenIndex++;
         }
         state.mangleMap = newMap;
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);

@@ -64,6 +64,23 @@ export interface ProductionConfig {
     mangleVarHoistMaxDepth: number;
 
     /**
+     * Class names the mangler must never assign as a short token.
+     *
+     * Mangling allocates short aliases (`z`, `y`, `x`, …) over the classes csszyx
+     * generates, blind to class names that already exist in non-csszyx CSS. In a
+     * hybrid build — a separate Tailwind plugin owns the utility CSS, or
+     * hand-written CSS uses literal short class names (e.g. `.x`/`.y`) — a token
+     * can collide with one of those names and contaminate it. List those external
+     * names here and the allocator skips them, so no mangled token equals one.
+     *
+     * Run `csszyx scan-collisions` to discover which names to list. Exact names
+     * only (no globs).
+     *
+     * @default [] (nothing reserved)
+     */
+    mangleExclude?: string[];
+
+    /**
      * Alias stable app-owned global CSS custom properties.
      *
      * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
