@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.8](https://github.com/nguyennhutien/csszyx/compare/v0.10.7...v0.10.8) (2026-06-29)
+
+
+### Features
+
+* hybrid-mangle safety, sz-forwarding type bridge, and DX/correctness fixes ([#101](https://github.com/nguyennhutien/csszyx/issues/101)) ([7826341](https://github.com/nguyennhutien/csszyx/commit/7826341faafab60ef15ed6c8d83323b52032fc2a))
+
 ## [0.10.7](https://github.com/nguyennhutien/csszyx/compare/v0.10.6...v0.10.7) (2026-06-26)
 
 ### Features
