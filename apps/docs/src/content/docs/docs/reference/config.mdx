@@ -184,6 +184,24 @@ in order:
 it does not edit your files — apply the rename or the exclude yourself.
 :::
 
+:::note[Mangling follows your bundler, not your framework]
+Class mangling (and the collision warning above) run wherever csszyx builds your
+CSS/JS bundle — that is your **bundler**, not your UI framework. Any framework
+that builds on **Vite or Webpack** gets mangling:
+
+| Framework | Bundler | Mangling |
+| --- | --- | --- |
+| React, **SolidJS**, Vue, Svelte | Vite or Webpack | ✅ |
+| **Astro** | Vite | ✅ |
+| Next.js (`--webpack`) | Webpack | ✅ |
+| Next.js (`--turbopack`) | Turbopack | ❌ not yet (a Turbopack limitation) |
+
+So Astro and SolidJS mangle through the same Vite path as React — there is no
+separate setup, and the same warning / `mangleExclude` apply. The only place
+class mangling does not run is **Next.js Turbopack** (it lacks a deep-enough build
+hook); use `next --webpack` when you need mangling.
+:::
+
 ```ts
 interface GlobalVarMangleConfig {
   enabled: boolean;
