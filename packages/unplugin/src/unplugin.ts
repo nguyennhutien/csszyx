@@ -407,6 +407,82 @@ export function missingTailwindEntryMessage(ownedClassCount: number): string {
 }
 
 /**
+ * Hazards that make production mangling unsafe in a hybrid build (a separate
+ * Tailwind plugin owns the utility CSS and/or hand-written CSS uses literal class
+ * names). Computed from data `mangleCSSSync` already returns across every CSS
+ * asset, so it is free to surface.
+ */
+export interface MangleHybridHazards {
+    /**
+     * Mangled tokens that ALSO appear as a class name in non-csszyx CSS. The
+     * short token (e.g. `y` for `w-full`) then matches external `.y` elements and
+     * cross-contaminates their styles — the core hybrid-mangle failure.
+     */
+    collisions: string[];
+    /**
+     * Map sources csszyx mangled but whose class never appeared in any emitted
+     * CSS (e.g. a utility Tailwind never generated, or a malformed key). Their
+     * DOM class is rewritten to a token with no rule → the element loses styling.
+     */
+    orphans: string[];
+}
+
+/**
+ * Detect hybrid-mangle hazards from the accumulated per-asset mangle results.
+ *
+ * @param mangleMap - the full original→token map injected into the runtime.
+ * @param mangledSources - map keys that were actually found and renamed in some CSS asset.
+ * @param externalClasses - class names found in CSS that are NOT in the mangle map (non-csszyx).
+ * @returns the colliding tokens and orphan sources (each sorted, deduped).
+ */
+export function collectMangleHybridHazards(
+    mangleMap: Record<string, string>,
+    mangledSources: ReadonlySet<string>,
+    externalClasses: ReadonlySet<string>,
+): MangleHybridHazards {
+    const tokenValues = new Set(Object.values(mangleMap));
+    const collisions = [...tokenValues].filter(token => externalClasses.has(token)).sort();
+    const orphans = Object.keys(mangleMap)
+        .filter(source => !mangledSources.has(source))
+        .sort();
+    return { collisions, orphans };
+}
+
+/**
+ * Build the hybrid-mangle hazard warning, or null when there is nothing to warn.
+ *
+ * @param hazards - the detected collisions and orphans.
+ * @returns a warning string, or null when both lists are empty.
+ */
+export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string | null {
+    const { collisions, orphans } = hazards;
+    if (collisions.length === 0 && orphans.length === 0) {
+        return null;
+    }
+    const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
+    if (collisions.length > 0) {
+        const sample = collisions.slice(0, 8).join(', ');
+        parts.push(
+            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
+                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
+                'elements.',
+        );
+    }
+    if (orphans.length > 0) {
+        const sample = orphans.slice(0, 8).join(', ');
+        parts.push(
+            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
+                'those elements lose styling.',
+        );
+    }
+    parts.push(
+        ' In a hybrid setup where a separate Tailwind plugin owns the utility CSS, set ' +
+            '`production.mangle: false` until the class namespaces are reconciled.',
+    );
+    return parts.join('');
+}
+
+/**
  * Whether a CSS module scopes Tailwind's content detection — `source(none)` or
  * `source("…")` on the `@import "tailwindcss"`, or any `@source not` exclusion.
  * A plain additive `@source "…"` does NOT count: it only adds a path, it does
@@ -3496,6 +3572,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             }
                         }
 
+                        // Accumulated across every CSS asset for the hybrid-mangle
+                        // hazard report emitted once after the loop.
+                        const mangledSources = new Set<string>();
+                        const externalClasses = new Set<string>();
+
                         for (const file in assets) {
                             const asset = assets[file];
                             const source = asset.source().toString();
@@ -3516,6 +3597,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                             debug: options.development?.debug,
                                             from: file,
                                         });
+                                        for (const c of result.mangledClasses) {
+                                            mangledSources.add(c);
+                                        }
+                                        for (const c of result.unmangledClasses) {
+                                            externalClasses.add(c);
+                                        }
                                         if (result.transformedCount > 0) {
                                             css = result.css;
                                         }
@@ -3608,6 +3695,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                 }
                             }
                         }
+
+                        if (
+                            manglingEnabled &&
+                            !isWebpackDevMode &&
+                            Object.keys(state.mangleMap).length > 0
+                        ) {
+                            const hazardMessage = mangleHybridHazardMessage(
+                                collectMangleHybridHazards(
+                                    state.mangleMap,
+                                    mangledSources,
+                                    externalClasses,
+                                ),
+                            );
+                            if (hazardMessage) {
+                                console.warn(hazardMessage);
+                            }
+                        }
                     },
                 );
             });
@@ -3678,6 +3782,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 }
 
+                // Accumulated across every CSS asset so hybrid-mangle hazards can
+                // be reported once after the whole bundle is rewritten.
+                const mangledSources = new Set<string>();
+                const externalClasses = new Set<string>();
+
                 for (const file in bundle) {
                     const chunk = bundle[file];
 
@@ -3694,6 +3803,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                     debug: options.development?.debug,
                                     from: file,
                                 });
+                                for (const c of result.mangledClasses) {
+                                    mangledSources.add(c);
+                                }
+                                for (const c of result.unmangledClasses) {
+                                    externalClasses.add(c);
+                                }
                                 if (result.transformedCount > 0) {
                                     css = result.css;
                                 }
@@ -3737,6 +3852,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         if (replaced !== chunk.code) {
                             chunk.code = replaced;
                         }
+                    }
+                }
+
+                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                    const hazardMessage = mangleHybridHazardMessage(
+                        collectMangleHybridHazards(
+                            state.mangleMap,
+                            mangledSources,
+                            externalClasses,
+                        ),
+                    );
+                    if (hazardMessage) {
+                        console.warn(hazardMessage);
                     }
                 }
             },
