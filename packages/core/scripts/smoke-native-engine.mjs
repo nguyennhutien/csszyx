@@ -209,7 +209,8 @@ function assertNativeEngineTransform(binding) {
   }
 
   if (
-    emptyArraySz.code !== 'const EmptyArraySz = () => <div className="" />;'
+    emptyArraySz.code !==
+    'const EmptyArraySz = () => <div className={undefined} />;'
   ) {
     fail(`Unexpected empty array sz code: ${emptyArraySz.code}`);
   }
