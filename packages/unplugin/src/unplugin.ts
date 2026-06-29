@@ -215,9 +215,10 @@ const DIRECTIVE_PROLOGUE_PREFIX_RE =
 // skip the regex tests entirely when the runtime package is absent from
 // the transformed source.
 const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
-    _sz: /\{[^}]*\b_sz\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    _szMerge: /\{[^}]*\b_szMerge\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    __szColorVar: /\{[^}]*\b__szColorVar\b[^}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    _sz: /(?:import|export)\s+\{[^{}]*\b_sz\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    _szMerge: /(?:import|export)\s+\{[^{}]*\b_szMerge\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
+    __szColorVar:
+        /(?:import|export)\s+\{[^{}]*\b__szColorVar\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
 };
 
 let _hasWarnedTsConfig = false;
@@ -1837,7 +1838,11 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // commas and operators (e.g. `_szMerge(x, "p-8 flex...")`, `pe && "text-right"`).
     // The lookbehind also covers && so that conditional array elements compiled by the
     // sz-array path (condition && "class-string") are mangled correctly.
-    result = result.replace(/(?<=(?:[,(]|&&)\s*)"([^"]+)"/g, (match, inner) => {
+    // The separator (`,`/`(`/`&&`) and any whitespace are consumed and re-emitted
+    // rather than matched in a variable-length `(?<=…\s*)` lookbehind, which is
+    // quadratic (the engine retries the `\s*` length at every position). Consuming
+    // them keeps the scan linear and re-prepends them unchanged.
+    result = result.replace(/([,(]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner) => {
         const tokens = inner.split(/\s+/).filter(Boolean);
         if (tokens.length === 0) {
             return match;
@@ -1857,7 +1862,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         if (!changed) {
             return match;
         }
-        return `"${mangled.join(' ')}"`;
+        return `${sep}${ws}"${mangled.join(' ')}"`;
     });
 
     return result;
@@ -2723,7 +2728,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param discoveredClasses sz-generated class sink.
      */
     function collectRuntimeStringClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const strKv = /(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
+        const strKv = /\b(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
         for (const kv of objStr.matchAll(strKv)) {
             try {
                 const val = kv[2] ?? kv[3];
@@ -2741,7 +2746,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param discoveredClasses sz-generated class sink.
      */
     function collectRuntimeNumberClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const numKv = /(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
+        const numKv = /\b(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?=[,}\n])/g;
         for (const kv of objStr.matchAll(numKv)) {
             try {
                 collectTransformClasses(
@@ -2761,7 +2766,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param discoveredClasses sz-generated class sink.
      */
     function collectRuntimeBooleanClasses(objStr: string, discoveredClasses: Set<string>): void {
-        const boolKv = /(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
+        const boolKv = /\b(\w+)\s*:\s*(true|false)\s*(?=[,}\n])/g;
         for (const kv of objStr.matchAll(boolKv)) {
             try {
                 collectTransformClasses(
