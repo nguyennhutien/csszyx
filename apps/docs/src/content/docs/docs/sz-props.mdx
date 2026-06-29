@@ -126,11 +126,23 @@ function Box({ sz, ...rest }: { sz?: SzPropValue } & JSX.IntrinsicElements['div'
 }
 ```
 
-If you type the prop as `SzInput` instead (natural when the component also calls a
-runtime helper), the wider union won't assign cleanly onto the host element's
-`SzPropValue` — pass a concrete object/string through, or narrow before
-forwarding. A single canonical `sz` value type is planned; until then prefer
-`SzPropValue` at the JSX boundary.
+Type the prop as `SzPropValue` and it forwards both ways: onto the host element
+(same type) **and** into the runtime helpers, which accept it directly:
+
+```tsx
+import type { SzPropValue } from '@csszyx/types';
+import { szr } from '@csszyx/runtime';
+
+function Box({ sz, active }: { sz?: SzPropValue; active?: boolean }) {
+  // `sz` flows into szr() without a cast, and onto <div> below.
+  return <div sz={sz} className={szr(active && 'ring-2')} />;
+}
+```
+
+`SzPropValue` is assignable into the helpers' `SzInput`, so you no longer need a
+cast or `@ts-expect-error` when a wrapper both forwards `sz` and calls `szr` /
+`splitBoxSz`. Prefer `SzPropValue` at the JSX boundary; reach for `SzInput` only
+when a value genuinely originates from the runtime side.
 
 :::caution[Import the JSX augmentation exactly once]
 `@csszyx/types/jsx` uses `declare module 'react'` to add `sz`. Import it from a
