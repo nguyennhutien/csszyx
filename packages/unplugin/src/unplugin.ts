@@ -477,18 +477,25 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         );
     }
     if (collisions.length > 0) {
-        // The collisions are the actionable ones: reserve those names and keep
-        // mangling. Point at the CLI so a dev who doesn't know the project can
-        // discover the full list instead of reading every stylesheet.
+        // Guide the prod hotfix first, then the two real fixes. Renaming is
+        // preferred because single-letter / common class names collide with
+        // mangle tokens AND risk specificity clashes with other libraries; an
+        // exclude is the escape hatch only for names in code you cannot change.
         parts.push(
-            ' Run `npx @csszyx/cli scan-collisions` to get a ready-to-paste ' +
-                '`production.mangleExclude` list, then add it so mangling stays on. Or set ' +
-                '`production.mangle: false` to disable mangling entirely.',
+            ' HOTFIX: set `production.mangle: false` to ship now.' +
+                ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
+                ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
+                ' also clash on specificity with other libraries. Only for names in a' +
+                ' third-party stylesheet you cannot edit, list them in' +
+                ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
+                ' to find every offending name.',
         );
     } else {
         parts.push(
-            ' In a hybrid setup where a separate Tailwind plugin owns the utility CSS, set ' +
-                '`production.mangle: false` until the class namespaces are reconciled.',
+            ' Those classes are csszyx-owned but no CSS was emitted for them' +
+                ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
+                ' a real utility). Ensure that CSS is generated, or set' +
+                ' `production.mangle: false` until the pipelines are reconciled.',
         );
     }
     return parts.join('');

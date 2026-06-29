@@ -147,10 +147,11 @@ non-csszyx stylesheets keyed on the original names. To check a single `sz` objec
 without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 :::
 
-:::caution[Mangling is unsafe in a hybrid build — keep `mangle: false`]
-Mangling assumes csszyx owns the entire class namespace. That breaks when a
-**separate Tailwind plugin owns the utility CSS** and/or **hand-written CSS uses
-literal class names**, in two ways:
+:::caution[Mangling can clash with literal short class names in a hybrid build]
+Mangling is a **production-only** step, applied at **build time**. It assumes
+csszyx owns the entire class namespace, which breaks when a **separate Tailwind
+plugin owns the utility CSS** and/or **hand-written CSS uses literal class names**,
+in two ways:
 
 - **Token collision.** Short aliases start at single letters (`z`, `y`, `x`, …).
   If your own CSS already styles a literal `.x`/`.y` class (e.g. axis markers,
@@ -160,10 +161,27 @@ literal class names**, in two ways:
 - **Orphan tokens.** A class csszyx mangles but whose CSS another pipeline never
   emitted is rewritten to an alias with no rule, so the element loses styling.
 
-From the version that adds it, a production mangle build **warns** when it detects
-either hazard (the colliding tokens / orphaned classes), but does not auto-fix
-them. Until your class namespaces are reconciled, the correct setting for a hybrid
-app is **`production: { mangle: false }`**.
+A production build **warns** at build time when it detects either hazard. Fix it
+in order:
+
+1. **Hotfix (unblock the broken prod build):** set `production: { mangle: false }`
+   and ship. This is the fast escape; do the proper fix next.
+2. **Proper fix — rename (preferred).** Run **`npx @csszyx/cli scan-collisions`**
+   to list the offending names. If they are in **your own CSS**, rename them to
+   something specific (`.x` → `.resize-handle-x`). Single-letter / common names
+   collide with mangle tokens *and* invite specificity clashes with other
+   libraries or teammates, so a specific name is the more robust fix regardless of
+   mangling.
+3. **Exclude — escape hatch for code you can't change.** Only when a name lives in
+   a **third-party stylesheet** you cannot rename, reserve it so no token equals
+   it:
+
+   ```ts
+   production: { mangle: true, mangleExclude: ['x', 'y'] }
+   ```
+
+`scan-collisions` reports the candidates and prints a paste-ready `mangleExclude`;
+it does not edit your files — apply the rename or the exclude yourself.
 :::
 
 ```ts

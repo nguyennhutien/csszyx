@@ -135,7 +135,10 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
         const where = [...(risky.get(name) ?? [])].slice(0, 3).join(', ');
         printInfo(`  .${name}  (in ${where})`);
     }
-    printInfo('\nAdd these to your csszyx config to keep mangling safe:');
+    printInfo('\nPreferred: rename these in your own CSS to something specific');
+    printInfo('  (e.g. `.x` → `.resize-handle-x`) — short names also clash on');
+    printInfo('  specificity with other libraries.');
+    printInfo('\nFor names in a third-party stylesheet you cannot edit, reserve them:');
     printInfo(`  production: { mangle: true, mangleExclude: ${JSON.stringify(names)} }`);
     process.exitCode = 1;
 }

@@ -47,15 +47,22 @@ describe('collectMangleHybridHazards', () => {
         expect(mangleHybridHazardMessage(hazards)).toBeNull();
     });
 
-    it('points collisions at the scan-collisions CLI to keep mangling on', () => {
+    it('guides hotfix-first, then rename (preferred) over exclude (libs only)', () => {
         const message = mangleHybridHazardMessage({
             collisions: ['x', 'y'],
             orphans: ['bg-violet-a-100'],
         });
         expect(message).toContain('collide');
         expect(message).toContain('no emitted CSS rule');
-        expect(message).toContain('scan-collisions');
+        // Hotfix to unblock prod comes first.
+        expect(message).toContain('HOTFIX');
+        expect(message).toContain('production.mangle: false');
+        // Renaming is the preferred real fix; exclude is the library escape hatch.
+        expect(message).toContain('rename');
+        expect(message).toContain('third-party');
         expect(message).toContain('mangleExclude');
+        // CLI to discover the offending names.
+        expect(message).toContain('scan-collisions');
     });
 
     it('suggests disabling mangle when there are only orphans, no collisions', () => {
