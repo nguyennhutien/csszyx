@@ -147,6 +147,25 @@ non-csszyx stylesheets keyed on the original names. To check a single `sz` objec
 without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 :::
 
+:::caution[Mangling is unsafe in a hybrid build — keep `mangle: false`]
+Mangling assumes csszyx owns the entire class namespace. That breaks when a
+**separate Tailwind plugin owns the utility CSS** and/or **hand-written CSS uses
+literal class names**, in two ways:
+
+- **Token collision.** Short aliases start at single letters (`z`, `y`, `x`, …).
+  If your own CSS already styles a literal `.x`/`.y` class (e.g. axis markers,
+  state flags), a mangled utility like `w-full` → `.y` lands in the same global
+  namespace and contaminates those elements — especially when the mangled rule
+  carries `!important`.
+- **Orphan tokens.** A class csszyx mangles but whose CSS another pipeline never
+  emitted is rewritten to an alias with no rule, so the element loses styling.
+
+From the version that adds it, a production mangle build **warns** when it detects
+either hazard (the colliding tokens / orphaned classes), but does not auto-fix
+them. Until your class namespaces are reconciled, the correct setting for a hybrid
+app is **`production: { mangle: false }`**.
+:::
+
 ```ts
 interface GlobalVarMangleConfig {
   enabled: boolean;
