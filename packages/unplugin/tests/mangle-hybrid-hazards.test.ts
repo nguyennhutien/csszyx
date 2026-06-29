@@ -56,7 +56,7 @@ describe('collectMangleHybridHazards', () => {
         expect(message).toContain('no emitted CSS rule');
         // Hotfix to unblock prod comes first.
         expect(message).toContain('HOTFIX');
-        expect(message).toContain('production.mangle: false');
+        expect(message).toContain('production: { mangle: false }');
         // Renaming is the preferred real fix; exclude is the library escape hatch.
         expect(message).toContain('rename');
         expect(message).toContain('third-party');
@@ -67,6 +67,6 @@ describe('collectMangleHybridHazards', () => {
 
     it('suggests disabling mangle when there are only orphans, no collisions', () => {
         const message = mangleHybridHazardMessage({ collisions: [], orphans: ['bg-violet-a-100'] });
-        expect(message).toContain('production.mangle: false');
+        expect(message).toContain('production: { mangle: false }');
     });
 });

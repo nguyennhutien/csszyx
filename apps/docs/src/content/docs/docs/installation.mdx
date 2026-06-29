@@ -115,8 +115,14 @@ as-is; run `next dev --webpack` and `next build --webpack` (Next.js 16 defaults
 to Turbopack).
 
 **Turbopack mode is experimental** — it covers the `sz` transform and the
-Tailwind `@source` safelist, but **not** production class / CSS-variable
-mangling. Use webpack mode when you need those.
+Tailwind `@source` safelist, but **not yet** production class / CSS-variable
+mangling. This is a Turbopack limitation, not a csszyx design choice: mangling
+rewrites the final CSS and JS bundle, and Turbopack does not yet expose a
+deep-enough build hook to do that. Use webpack mode when you need mangling.
+
+Because Turbopack never mangles, the hybrid-mangle collision warning and
+`production.mangleExclude` are Vite/Webpack concerns only — there is nothing to
+disable or reserve on Turbopack.
 :::
 
 ### Next.js Turbopack setup

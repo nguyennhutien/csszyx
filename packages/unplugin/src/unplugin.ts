@@ -482,7 +482,7 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         // mangle tokens AND risk specificity clashes with other libraries; an
         // exclude is the escape hatch only for names in code you cannot change.
         parts.push(
-            ' HOTFIX: set `production.mangle: false` to ship now.' +
+            ' HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
                 ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
                 ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
                 ' also clash on specificity with other libraries. Only for names in a' +
@@ -494,8 +494,9 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         parts.push(
             ' Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
-                ' a real utility). Ensure that CSS is generated, or set' +
-                ' `production.mangle: false` until the pipelines are reconciled.',
+                ' a real utility). Ensure that CSS is generated, or pass' +
+                ' `production: { mangle: false }` to the csszyx plugin until the pipelines' +
+                ' are reconciled.',
         );
     }
     return parts.join('');
