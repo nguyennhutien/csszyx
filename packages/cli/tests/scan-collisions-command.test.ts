@@ -60,4 +60,49 @@ describe('csszyx scan-collisions', () => {
 
         expect(process.exitCode).not.toBe(1);
     });
+
+    it('does not flag dots inside comments, url() or strings (false positives)', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'src/a.scss': [
+                '/* .z is just a note */',
+                '// .q line comment',
+                "@import 'theme.css';",
+                '.box { background: url(hero.png); }',
+            ].join('\n'),
+        });
+
+        await scanCollisions({ cwd });
+
+        const out = log.mock.calls.map(c => c.join(' ')).join('\n');
+        // `.z` (comment), `.q` (line comment), `.css` (import string), `.png` (url)
+        // are NOT class selectors and must not be reported.
+        expect(out).not.toContain('"z"');
+        expect(out).not.toContain('"q"');
+        expect(out).not.toContain('"css"');
+        expect(out).not.toContain('"png"');
+        // The real selector `.box` is still flagged.
+        expect(out).toContain('"box"');
+    });
+
+    it('reads SCSS parent-selector classes (`&.x`)', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'src/a.scss': '.handle { &.x { left: 0 } &.y { top: 0 } }',
+        });
+
+        await scanCollisions({ cwd });
+
+        const out = log.mock.calls.map(c => c.join(' ')).join('\n');
+        expect(out).toContain('mangleExclude: ["x","y"]');
+    });
+
+    it('succeeds on a project with no stylesheets', async () => {
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({ 'src/App.tsx': 'export const A = () => null;' });
+
+        await scanCollisions({ cwd });
+
+        expect(process.exitCode).not.toBe(1);
+    });
 });

@@ -44,6 +44,29 @@ const DEFAULT_IGNORE = [
 const CLASS_SELECTOR_RE = /\.(-?[a-z_][\w-]*)/gi;
 
 /**
+ * Remove the parts of a stylesheet where a `.foo` is NOT a class selector —
+ * comments, `url(...)` contents, and string literals — so things like a comment
+ * note (`.z`), an `@import 'theme.css'`, or `url(hero.png)` are not mistaken for
+ * collision-prone class names.
+ *
+ * @param css - raw stylesheet text.
+ * @returns text with non-selector regions blanked out.
+ */
+function stripNonSelectorText(css: string): string {
+    return (
+        css
+            // /* block */ and // line comments (SCSS/Less).
+            .replace(/\/\*[\s\S]*?\*\//g, ' ')
+            .replace(/\/\/[^\n]*/g, ' ')
+            // url(...) — may be unquoted, e.g. url(hero.png).
+            .replace(/url\([^)]*\)/gi, ' ')
+            // 'single' and "double" quoted strings (@import paths, content, etc.).
+            .replace(/'[^']*'/g, ' ')
+            .replace(/"[^"]*"/g, ' ')
+    );
+}
+
+/**
  * True when `name` has the shape of a mangle token — short and purely
  * alphanumeric (base62, starting with a letter). Tokens never contain `-`/`_`,
  * so any class carrying those can never collide and is excluded here. The length
@@ -93,7 +116,7 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
             continue;
         }
         const rel = path.relative(cwd, file);
-        for (const match of css.matchAll(CLASS_SELECTOR_RE)) {
+        for (const match of stripNonSelectorText(css).matchAll(CLASS_SELECTOR_RE)) {
             const name = match[1];
             if (looksLikeToken(name)) {
                 (risky.get(name) ?? risky.set(name, new Set()).get(name))?.add(rel);

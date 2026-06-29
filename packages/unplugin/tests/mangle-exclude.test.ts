@@ -62,4 +62,33 @@ describe('production.mangleExclude reserves class names from the mangler', () =>
         // Same classes mapped, same count — just reassigned around the reserved tokens.
         expect(Object.keys(excluded).sort()).toEqual(Object.keys(baseline).sort());
     });
+
+    it('is a no-op for names that can never be a token (a hyphen excludes them)', async () => {
+        const baseline = await mangleMapWith(undefined);
+        // Tokens are base62 with no `-`/`_`, so these can never be produced anyway.
+        const excluded = await mangleMapWith(['main-body', 'some_name', 'a-very-long-name']);
+        expect(excluded).toEqual(baseline);
+    });
+
+    it('treats an empty exclude list the same as no exclude', async () => {
+        const baseline = await mangleMapWith(undefined);
+        expect(await mangleMapWith([])).toEqual(baseline);
+    });
+
+    it('skips across tiers when every single-letter token is reserved', async () => {
+        const allTier1 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+        const tokens = Object.values(await mangleMapWith(allTier1));
+        // No single-letter token may survive — allocation jumps to tier 2 (`z9`, …).
+        expect(tokens.every(t => t.length >= 2)).toBe(true);
+        expect(new Set(tokens).size).toBe(tokens.length);
+    });
+
+    it('produces an identical map on repeated finalize (consistency across hooks)', async () => {
+        // The whole reason exclude lives in config (not a bundle-CSS scan) is that
+        // the map MUST be identical at every finalizeMangleMap call site — HTML
+        // injection vs CSS rewrite. Re-running the flow must yield the same map.
+        const first = await mangleMapWith(['x', 'y', 'z']);
+        const second = await mangleMapWith(['x', 'y', 'z']);
+        expect(second).toEqual(first);
+    });
 });
