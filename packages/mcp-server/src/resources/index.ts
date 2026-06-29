@@ -19,20 +19,30 @@ import { fileURLToPath } from 'node:url';
 import { KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS } from '@csszyx/compiler';
 
 /**
- * Resolve `llms-full.txt` (shipped at the package root) by walking up from this
- * module. A fixed `../../..` guess broke once the ESM build flattened the bundle
- * to `dist/index.mjs` (2 levels to the package root, not 3) — so the resource read
- * `llms-full.txt not found` even though it is in the published package. Walking up
- * to the file works regardless of how the bundle is laid out (flat or nested).
+ * Resolve `llms-full.txt` by walking up from this module. A fixed `../../..`
+ * guess broke once the ESM build flattened the bundle to `dist/index.mjs` (2
+ * levels to the package root, not 3) — so the resource read `llms-full.txt not
+ * found` even though it is in the published package. Walking up works regardless
+ * of how the bundle is laid out.
+ *
+ * Two candidates per level: `<dir>/llms-full.txt` (the published-package location,
+ * copied to the package root by the build) AND `<dir>/apps/docs/public/llms-full.txt`
+ * (the monorepo source). The second makes dev / CI / test resilient when the
+ * build-time copy has not run (it is git-ignored and not a turbo cache output), so
+ * the file is found whether or not the package was built.
  *
  * @returns the absolute path to `llms-full.txt` (best-effort if never found).
  */
 function resolveLlmsFullPath(): string {
     let dir = path.dirname(fileURLToPath(import.meta.url));
-    for (let i = 0; i < 6; i++) {
-        const candidate = path.join(dir, 'llms-full.txt');
-        if (fs.existsSync(candidate)) {
-            return candidate;
+    for (let i = 0; i < 8; i++) {
+        for (const candidate of [
+            path.join(dir, 'llms-full.txt'),
+            path.join(dir, 'apps', 'docs', 'public', 'llms-full.txt'),
+        ]) {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
         }
         const parent = path.dirname(dir);
         if (parent === dir) {
