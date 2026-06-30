@@ -20,10 +20,9 @@ export default defineConfig({
         // is measured separately with `cargo llvm-cov`.
         //
         // OpenSSF coverage targets: Silver = statements >=80%; Gold =
-        // statements >=90% AND branches >=80%. Today's TS numbers are below
-        // Silver (statements ~76% / branches ~71%), so the thresholds below
-        // are a no-regression ratchet floor, not the target — raise them
-        // toward 80% as the interactive CLI package gains coverage.
+        // statements >=90% AND branches >=80%. TS statements now clear the
+        // Silver bar (~80%); the thresholds below are a no-regression ratchet.
+        // Raise statements/branches toward 90/80 (Gold) as coverage grows.
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html', 'lcov'],
@@ -39,16 +38,18 @@ export default defineConfig({
                 '**/*.type-test.ts', // type-only assertions, no runtime to cover
                 '**/scripts/**',
                 'packages/e2e/**',
+                'packages/types/**', // type declarations only — erased at runtime
+                'packages/vscode/**', // editor extension: VS Code host + static completion data
             ],
             // Ratchet floor — keeps coverage from regressing. Below the OpenSSF
             // gold target of 80% (statements 76% / branches 71% today); the gap
             // is concentrated in the interactive CLI package. Raise toward 80%
             // as CLI coverage grows, but never lower without a recorded reason.
             thresholds: {
-                statements: 75,
-                branches: 70,
-                functions: 80,
-                lines: 75,
+                statements: 80,
+                branches: 74,
+                functions: 85,
+                lines: 80,
             },
         },
     },
