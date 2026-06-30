@@ -30,9 +30,11 @@ interface ExtractedSnippet {
 
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
     parity: 8,
-    'surgical-parity': 129,
+    'surgical-parity': 130,
     'oxc-throws': 0,
-    'class-divergence': 1,
+    // Was 1: the `bg:{ color, op: cond ? 30 : 100 }` snippet — oxc used to diverge
+    // (incomplete safelist) and now expands the finite conditional like babel.
+    'class-divergence': 0,
     'diagnostics-divergence': 0,
     'metadata-divergence': 0,
 };

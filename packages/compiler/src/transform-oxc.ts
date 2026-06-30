@@ -491,6 +491,29 @@ export function transformOxc(
                         transformed = true;
                         return;
                     }
+                    const nestedConditionalClassExpr = buildNestedConditionalClassExpression(
+                        expression as ObjectExpressionNode,
+                        effectiveFilename,
+                        objectBindings,
+                        source,
+                        classes,
+                        globalVarAliases,
+                        cssVariableMap,
+                    );
+                    if (nestedConditionalClassExpr) {
+                        if (classNameAttr || szAttrs.length > 1) {
+                            runtimeFallbackExpr = expression;
+                            runtimeFallbackAttr = szAttr;
+                            break;
+                        }
+                        edits.overwrite(
+                            szAttr.start,
+                            szAttr.end,
+                            `className={${nestedConditionalClassExpr}}`,
+                        );
+                        transformed = true;
+                        return;
+                    }
                     const partial = buildPartialObjectTransform(
                         expression as ObjectExpressionNode,
                         effectiveFilename,
@@ -989,12 +1012,14 @@ interface OxcComponentHoistCandidate {
  * @param node The oxc ObjectExpression node.
  * @param filename Filename for diagnostic offsets.
  * @param bindings Local object-literal bindings available for spread resolution.
+ * @param branchPick When set, a nested conditional value resolves to this branch.
  * @returns Plain JS object with literal values.
  */
 function astObjectToSzObject(
     node: ObjectExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    branchPick?: 'consequent' | 'alternate',
 ): SzObject {
     const result: Record<string, SzValue> = {};
     for (const propRaw of node.properties) {
@@ -1032,7 +1057,7 @@ function astObjectToSzObject(
                 `unsupported key shape ${prop.key.type} at ${filename}:${prop.key.start}`,
             );
         }
-        result[key] = astValueToSzValue(prop.value, filename, bindings);
+        result[key] = astValueToSzValue(prop.value, filename, bindings, branchPick);
     }
     return result as SzObject;
 }
@@ -1692,6 +1717,121 @@ function resolveObjectExpression(
         return bindings.get(String((unwrapped as IdentifierNode).name)) ?? null;
     }
     return null;
+}
+
+/**
+ * Total ConditionalExpression values (recursing into sub-objects) in an oxc object.
+ * @param node Object expression to scan.
+ * @returns the count.
+ */
+function countOxcConditionals(node: ObjectExpressionNode): number {
+    let count = 0;
+    for (const propRaw of node.properties) {
+        if (propRaw.type !== 'Property') {
+            continue;
+        }
+        const value = (propRaw as PropertyNode).value;
+        if (value.type === 'ConditionalExpression') {
+            count++;
+        } else if (value.type === 'ObjectExpression') {
+            count += countOxcConditionals(value as ObjectExpressionNode);
+        }
+    }
+    return count;
+}
+
+/**
+ * The first ConditionalExpression value anywhere in the tree, or null.
+ * @param node Object expression to scan.
+ * @returns the first nested conditional node, or null.
+ */
+function firstOxcConditional(node: ObjectExpressionNode): ConditionalExpressionNode | null {
+    for (const propRaw of node.properties) {
+        if (propRaw.type !== 'Property') {
+            continue;
+        }
+        const value = (propRaw as PropertyNode).value;
+        if (value.type === 'ConditionalExpression') {
+            return value as ConditionalExpressionNode;
+        }
+        if (value.type === 'ObjectExpression') {
+            const found = firstOxcConditional(value as ObjectExpressionNode);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Hoist a single finite conditional nested in a sub-object value
+ * (`{ borderColor: { color: cond ? 'red-700' : 'charcoal', op: 18 } }`) into a
+ * class-level ternary, matching the native engine. A top-level conditional prop is
+ * left to the partial path; more than one nested conditional returns null.
+ *
+ * @param node Object expression used as the sz value.
+ * @param filename Filename for diagnostics.
+ * @param bindings Local object-literal bindings.
+ * @param source Original source for test expression slicing.
+ * @param classes Class set to populate with both branches' classes.
+ * @param globalVarAliases Exact global custom-property alias table.
+ * @param cssVariableMap CSS variable metadata map to populate.
+ * @returns Ternary className expression source, or null when unsupported.
+ */
+function buildNestedConditionalClassExpression(
+    node: ObjectExpressionNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    source: string,
+    classes: Set<string>,
+    globalVarAliases: ReadonlyMap<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
+): string | null {
+    // A direct top-level conditional prop is handled (factored) by the partial
+    // path; only hoist when the single conditional lives inside a sub-object.
+    let topLevel = 0;
+    for (const propRaw of node.properties) {
+        if (
+            propRaw.type === 'Property' &&
+            (propRaw as PropertyNode).value.type === 'ConditionalExpression'
+        ) {
+            topLevel++;
+        }
+    }
+    const first = firstOxcConditional(node);
+    if (topLevel !== 0 || countOxcConditionals(node) !== 1 || !first) {
+        return null;
+    }
+    const compileBranch = (pick: 'consequent' | 'alternate'): string | null => {
+        try {
+            return compileSzObject(
+                applyGlobalVarAliasesToSzObject(
+                    astObjectToSzObject(node, filename, bindings, pick),
+                    globalVarAliases,
+                    cssVariableMap,
+                ),
+            ).className;
+        } catch (err) {
+            if (err instanceof OxcNotImplementedError) {
+                return null;
+            }
+            throw err;
+        }
+    };
+    const consequent = compileBranch('consequent');
+    const alternate = compileBranch('alternate');
+    if (consequent === null || alternate === null) {
+        return null;
+    }
+    for (const cls of `${consequent} ${alternate}`.split(/\s+/)) {
+        if (cls) {
+            classes.add(cls);
+        }
+    }
+    const testSource = source.slice(first.test.start, first.test.end);
+    const branch = (cls: string): string => (cls === '' ? 'undefined' : JSON.stringify(cls));
+    return `${testSource} ? ${branch(consequent)} : ${branch(alternate)}`;
 }
 
 /**
@@ -2986,13 +3126,25 @@ function extractKeyName(key: OxcNode): string | null {
  * @param node The value AST node.
  * @param filename Filename for diagnostic offsets.
  * @param bindings Local object-literal bindings available for nested spread resolution.
+ * @param branchPick When set, a conditional value resolves to this branch.
  * @returns Plain JS value usable by `transform()`.
  */
 function astValueToSzValue(
     node: OxcNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    branchPick?: 'consequent' | 'alternate',
 ): SzValue {
+    // When resolving a single branch of a hoisted nested conditional, substitute
+    // the conditional value with its chosen branch and convert that statically.
+    if (branchPick && node.type === 'ConditionalExpression') {
+        return astValueToSzValue(
+            (node as ConditionalExpressionNode)[branchPick],
+            filename,
+            bindings,
+            branchPick,
+        );
+    }
     if (node.type === 'Literal') {
         const value = (node as unknown as { value: unknown }).value;
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -3020,7 +3172,7 @@ function astValueToSzValue(
         );
     }
     if (node.type === 'ObjectExpression') {
-        return astObjectToSzObject(node as ObjectExpressionNode, filename, bindings);
+        return astObjectToSzObject(node as ObjectExpressionNode, filename, bindings, branchPick);
     }
     if (node.type === 'Identifier' || node.type === 'MemberExpression') {
         throw new OxcNotImplementedError(
