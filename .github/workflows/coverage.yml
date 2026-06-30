@@ -1,0 +1,84 @@
+name: Coverage
+
+# Measures and uploads coverage for both languages as separate Codecov flags:
+#   - `typescript` — vitest v8 lcov
+#   - `rust`       — cargo-llvm-cov lcov (native engine)
+# Coverage gating itself is informational (see codecov.yml); ci.yml remains the
+# blocking test gate, so this job tolerates the known flaky watcher test.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Setup WASM toolchain
+        uses: ./.github/actions/setup-wasm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The default `rust` parser drives the rust-parity tests, so the host
+      # native addon must exist before the TS suite runs.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
+      # --- TypeScript coverage (vitest v8) ---
+      # The suite has one timing-sensitive watcher test that can flake under
+      # coverage instrumentation; `reportOnFailure` still writes the lcov, and
+      # ci.yml is the real gate, so this step does not fail the job.
+      - name: TypeScript coverage
+        run: pnpm test:coverage
+        continue-on-error: true
+
+      - name: Upload TypeScript coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: typescript
+          name: typescript
+          fail_ci_if_error: false
+
+      # --- Rust coverage (cargo-llvm-cov) ---
+      - name: Add llvm-tools
+        run: rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Rust coverage
+        run: pnpm cov:rust
+
+      - name: Upload Rust coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/rust-lcov.info
+          flags: rust
+          name: rust
+          fail_ci_if_error: false
