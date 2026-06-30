@@ -282,7 +282,50 @@ server.setRequestHandler(GetPromptRequestSchema, async request => {
 /**
  *
  */
+/**
+ * Handle conventional `--version` / `--help` flags by printing diagnostics to
+ * stdout and exiting, WITHOUT starting the stdio server. Lets a host or a human
+ * separate a server/package failure from an MCP attachment failure without having
+ * to speak JSON-RPC. Returns true when a flag was handled (caller should not start
+ * the server).
+ *
+ * @param argv - process arguments (`process.argv.slice(2)`).
+ * @returns whether a flag was handled.
+ */
+function handleCliFlags(argv: string[]): boolean {
+    if (argv.includes('--version') || argv.includes('-v')) {
+        console.log(VERSION);
+        return true;
+    }
+    if (argv.includes('--help') || argv.includes('-h')) {
+        console.log(
+            [
+                `csszyx MCP Server v${VERSION}`,
+                '',
+                'Usage: csszyx-mcp            start the MCP server on stdio (JSON-RPC)',
+                '       csszyx-mcp --version  print the version and exit',
+                '       csszyx-mcp --help     print this help and exit',
+                '',
+                `Exposes ${TOOLS.length} tools, ${listResources().length} resources, ${listPrompts().length} prompts.`,
+                '',
+                'Health probe (no extra deps) — a clean initialize over stdio:',
+                `  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' | csszyx-mcp`,
+                'A JSON-RPC result on stdout means the server/package is healthy; then',
+                'the problem is the host MCP attachment, not csszyx.',
+            ].join('\n'),
+        );
+        return true;
+    }
+    return false;
+}
+
+/**
+ *
+ */
 async function main(): Promise<void> {
+    if (handleCliFlags(process.argv.slice(2))) {
+        return;
+    }
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error(`csszyx MCP Server v${VERSION} running on stdio`);
