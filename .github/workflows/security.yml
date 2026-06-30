@@ -160,3 +160,71 @@ jobs:
           --config p/owasp-top-ten
           --config p/secrets
           --metrics=off
+
+  snyk:
+    name: Snyk (open source + code)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to the Security tab
+    # Fork PRs cannot read SNYK_TOKEN; the push + scheduled runs cover them.
+    if: >-
+      ${{ github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
+
+      # Open Source — every package.json AND Cargo manifest in the monorepo.
+      # Advisory: npm/cargo audit already block on high; this surfaces Snyk's
+      # richer advisory DB (incl. licenses) in the Security tab. Fails soft when
+      # SNYK_TOKEN is unset, so the job stays green until the secret is added.
+      - name: Snyk Open Source test
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --all-projects --severity-threshold=high --sarif-file-output=snyk-oss.sarif
+
+      - name: Upload Open Source results
+        if: ${{ hashFiles('snyk-oss.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          sarif_file: snyk-oss.sarif
+          category: snyk-oss
+
+      # Snyk Code (SAST) — complements CodeQL/semgrep with Snyk's engine.
+      - name: Snyk Code test
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --severity-threshold=high --sarif-file-output=snyk-code.sarif
+
+      - name: Upload Code results
+        if: ${{ hashFiles('snyk-code.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+
+      # Snapshot the dependency graph on the Snyk dashboard for drift alerts,
+      # from main only (avoids a project per branch).
+      - name: Snyk monitor
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk monitor --all-projects
