@@ -46,6 +46,7 @@
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",
+    "test:coverage": "vitest run --coverage",
     "test:unit": "turbo run test --filter=!@csszyx/e2e",
     "test:watch": "turbo run test:watch",
     "test:e2e": "pnpm --filter @csszyx/e2e test",
