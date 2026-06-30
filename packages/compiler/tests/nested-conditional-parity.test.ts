@@ -106,6 +106,31 @@ const FULL_PARITY: Array<{ name: string; src: string; contains: string[] }> = [
         src: 'export const A = ({ c }) => <div sz={{ md: { bg: { color: c ? "red-500" : "blue-500" } } }} />;',
         contains: ['md:bg-red-500', 'md:bg-blue-500'],
     },
+    {
+        name: 'group attachment variant (joins with -)',
+        src: 'export const A = ({ c }) => <div sz={{ group: { hover: { bg: { color: c ? "red-500" : "blue-500" } } } }} />;',
+        contains: ['group-hover:bg-red-500', 'group-hover:bg-blue-500'],
+    },
+    {
+        name: 'peer attachment variant',
+        src: 'export const A = ({ c }) => <div sz={{ peer: { hover: { bg: { color: c ? "red-500" : "blue-500" } } } }} />;',
+        contains: ['peer-hover:bg-red-500', 'peer-hover:bg-blue-500'],
+    },
+    {
+        name: 'has parametric variant (bracketed selector)',
+        src: 'export const A = ({ c }) => <div sz={{ has: { checked: { bg: { color: c ? "red-500" : "blue-500" } } } }} />;',
+        contains: ['has-[:checked]:bg-red-500', 'has-[:checked]:bg-blue-500'],
+    },
+    {
+        name: 'data parametric variant (bracketed attribute)',
+        src: 'export const A = ({ c }) => <div sz={{ data: { active: { bg: { color: c ? "red-500" : "blue-500" } } } }} />;',
+        contains: ['data-[active]:bg-red-500', 'data-[active]:bg-blue-500'],
+    },
+    {
+        name: 'group wraps a color+opacity conditional',
+        src: 'export const A = ({ c }) => <div sz={{ group: { hover: { borderColor: { color: c ? "red-700" : "charcoal", op: 18 } } } }} />;',
+        contains: ['group-hover:border-red-700/18', 'group-hover:border-charcoal/18'],
+    },
 ];
 
 describe('nested finite-conditional parity', () => {

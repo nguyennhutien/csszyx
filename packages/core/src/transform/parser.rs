@@ -926,7 +926,7 @@ fn candidate_classes_from_jsx_expression(
 ) -> Vec<String> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
-            candidate_classes_from_object_expression(object, ctx, None)
+            candidate_classes_from_object_expression(object, ctx, None, &[])
         }
         JSXExpression::ArrayExpression(array) => {
             candidate_classes_from_array_expression(array, ctx)
@@ -971,7 +971,7 @@ fn candidate_classes_from_expression(
     match expression {
         Expression::ArrayExpression(array) => candidate_classes_from_array_expression(array, ctx),
         Expression::ObjectExpression(object) => {
-            candidate_classes_from_object_expression(object, ctx, None)
+            candidate_classes_from_object_expression(object, ctx, None, &[])
         }
         Expression::Identifier(identifier) => ctx
             .scope
@@ -1010,6 +1010,7 @@ fn candidate_classes_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
+    variant_keys: &[String],
 ) -> Vec<String> {
     if let Some(static_object) = static_object_from_object_expression(object, ctx) {
         return prefix_classes(lower_static_sz_object(&static_object), variant_prefix);
@@ -1029,10 +1030,13 @@ fn candidate_classes_from_object_expression(
                                 ) =>
                         {
                             let variant = variant_prefix_string(variant_prefix, &key);
+                            let mut next_keys = variant_keys.to_vec();
+                            next_keys.push(key.clone());
                             classes.extend(candidate_classes_from_object_expression(
                                 nested,
                                 ctx,
                                 Some(variant.as_str()),
+                                &next_keys,
                             ));
                         }
                         Expression::ConditionalExpression(conditional) => {
@@ -1042,7 +1046,7 @@ fn candidate_classes_from_object_expression(
                                 classes.extend(conditional_property_classes(
                                     &key,
                                     consequent,
-                                    variant_prefix,
+                                    variant_keys,
                                 ));
                             } else {
                                 classes.extend(prefix_classes(
@@ -1056,7 +1060,7 @@ fn candidate_classes_from_object_expression(
                                 classes.extend(conditional_property_classes(
                                     &key,
                                     alternate,
-                                    variant_prefix,
+                                    variant_keys,
                                 ));
                             } else {
                                 classes.extend(prefix_classes(
@@ -1309,7 +1313,7 @@ fn partial_object_from_jsx_expression(
 )> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
-            let partial = partial_object_from_object_expression(object, ctx, None)?;
+            let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
             if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
                 return None;
             }
@@ -1347,7 +1351,7 @@ fn partial_object_from_expression(
 )> {
     match expression {
         Expression::ObjectExpression(object) => {
-            let partial = partial_object_from_object_expression(object, ctx, None)?;
+            let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
             if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
                 return None;
             }
@@ -1376,6 +1380,7 @@ fn partial_object_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
     variant_prefix: Option<&str>,
+    variant_keys: &[String],
 ) -> Option<PartialSzObject> {
     if variant_prefix.is_none() {
         if let Some(ternary) = conditional_spread_ternary_from_object_expression(object, ctx) {
@@ -1405,7 +1410,7 @@ fn partial_object_from_object_expression(
                 let key = static_property_key(&property.key)?;
                 if let Expression::ObjectExpression(nested) = &property.value {
                     if let Some(color_opacity_ternary) =
-                        color_opacity_ternary_from_object(&key, nested, ctx, variant_prefix)
+                        color_opacity_ternary_from_object(&key, nested, ctx, variant_keys)
                     {
                         if ternary.is_some() {
                             return None;
@@ -1427,8 +1432,14 @@ fn partial_object_from_object_expression(
                         return None;
                     }
                     let variant = variant_prefix_string(variant_prefix, &key);
-                    let nested =
-                        partial_object_from_object_expression(nested, ctx, Some(variant.as_str()))?;
+                    let mut next_keys = variant_keys.to_vec();
+                    next_keys.push(key.clone());
+                    let nested = partial_object_from_object_expression(
+                        nested,
+                        ctx,
+                        Some(variant.as_str()),
+                        &next_keys,
+                    )?;
                     if !nested.object.is_empty() {
                         properties.push(StaticSzProperty {
                             key,
@@ -1448,7 +1459,7 @@ fn partial_object_from_object_expression(
 
                 if let Expression::ConditionalExpression(conditional) = &property.value {
                     if let Some(conditional_ternary) =
-                        conditional_class_from_property(&key, conditional, ctx, variant_prefix)
+                        conditional_class_from_property(&key, conditional, ctx, variant_keys)
                     {
                         if ternary.is_some() {
                             return None;
@@ -1552,37 +1563,48 @@ fn conditional_class_from_property(
     key: &str,
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
-    variant_prefix: Option<&str>,
+    variant_keys: &[String],
 ) -> Option<StaticTernaryIr> {
     let consequent = static_value_from_expression(&conditional.consequent, ctx)?;
     let alternate = static_value_from_expression(&conditional.alternate, ctx)?;
     Some(StaticTernaryIr {
         test_span: text_span(conditional.test.span()),
-        consequent_classes: conditional_property_classes(key, consequent, variant_prefix),
-        alternate_classes: conditional_property_classes(key, alternate, variant_prefix),
+        consequent_classes: conditional_property_classes(key, consequent, variant_keys),
+        alternate_classes: conditional_property_classes(key, alternate, variant_keys),
     })
+}
+
+/// Wraps a leaf object in the given variant-key chain (outer→inner) so the full
+/// nesting lowers through `lower_object_into`, which knows the parametric/attachment
+/// joins (`group-hover:`, `peer-hover:`, `has-[:checked]:`, `data-[active]:`, …) that
+/// a flat `{prefix}:{class}` prepend gets wrong (it emitted `group:hover:…`).
+fn wrap_in_variant_keys(variant_keys: &[String], leaf: StaticSzObject) -> StaticSzObject {
+    let mut current = leaf;
+    for key in variant_keys.iter().rev() {
+        current = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: key.clone(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(current),
+            }],
+        };
+    }
+    current
 }
 
 fn conditional_property_classes(
     key: &str,
     value: StaticSzValue,
-    variant_prefix: Option<&str>,
+    variant_keys: &[String],
 ) -> Vec<String> {
-    let object = StaticSzObject {
+    let leaf = StaticSzObject {
         properties: vec![StaticSzProperty {
             key: key.to_string(),
             span: TextSpan { start: 0, end: 0 },
             value,
         }],
     };
-    let classes = lower_static_sz_object(&object);
-    let Some(prefix) = variant_prefix else {
-        return classes;
-    };
-    classes
-        .into_iter()
-        .map(|class_name| format!("{prefix}:{class_name}"))
-        .collect()
+    lower_static_sz_object(&wrap_in_variant_keys(variant_keys, leaf))
 }
 
 /// Detects a color-opacity sub-object whose `op` is a ternary, e.g.
@@ -1594,7 +1616,7 @@ fn color_opacity_ternary_from_object(
     parent_key: &str,
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
-    variant_prefix: Option<&str>,
+    variant_keys: &[String],
 ) -> Option<StaticTernaryIr> {
     super::generated::tables::property_prefix(parent_key)?;
 
@@ -1655,13 +1677,13 @@ fn color_opacity_ternary_from_object(
                     parent_key,
                     &color,
                     Some(consequent),
-                    variant_prefix,
+                    variant_keys,
                 ),
                 alternate_classes: color_opacity_branch_classes(
                     parent_key,
                     &color,
                     Some(alternate),
-                    variant_prefix,
+                    variant_keys,
                 ),
             })
         }
@@ -1682,13 +1704,13 @@ fn color_opacity_ternary_from_object(
                     parent_key,
                     &consequent,
                     static_op.clone(),
-                    variant_prefix,
+                    variant_keys,
                 ),
                 alternate_classes: color_opacity_branch_classes(
                     parent_key,
                     &alternate,
                     static_op,
-                    variant_prefix,
+                    variant_keys,
                 ),
             })
         }
@@ -1704,7 +1726,7 @@ fn color_opacity_branch_classes(
     parent_key: &str,
     color: &str,
     op: Option<StaticSzValue>,
-    variant_prefix: Option<&str>,
+    variant_keys: &[String],
 ) -> Vec<String> {
     let mut properties = vec![StaticSzProperty {
         key: "color".to_string(),
@@ -1719,21 +1741,14 @@ fn color_opacity_branch_classes(
         });
     }
     let nested = StaticSzObject { properties };
-    let object = StaticSzObject {
+    let leaf = StaticSzObject {
         properties: vec![StaticSzProperty {
             key: parent_key.to_string(),
             span: TextSpan { start: 0, end: 0 },
             value: StaticSzValue::Object(nested),
         }],
     };
-    let classes = lower_static_sz_object(&object);
-    match variant_prefix {
-        Some(prefix) => classes
-            .into_iter()
-            .map(|class_name| format!("{prefix}:{class_name}"))
-            .collect(),
-        None => classes,
-    }
+    lower_static_sz_object(&wrap_in_variant_keys(variant_keys, leaf))
 }
 
 fn dynamic_css_var_from_property(
@@ -2614,6 +2629,45 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_expands_conditional_under_attachment_variant() {
+        // A finite conditional nested under the `group` attachment variant must
+        // join the variants the way the static path does (`group-hover:`), not the
+        // flat `group:hover:` a `{prefix}:{class}` prepend produced.
+        let source = "const X = ({ c }) => <div sz={{ group: { hover: { bg: c ? \"red-500\" : \"blue-500\" } } }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        let ternary = parsed.ir.sz_attributes[0]
+            .ternary
+            .as_ref()
+            .expect("nested conditional should record a ternary");
+        assert_eq!(ternary.consequent_classes, ["group-hover:bg-red-500"]);
+        assert_eq!(ternary.alternate_classes, ["group-hover:bg-blue-500"]);
+    }
+
+    #[test]
+    fn parser_shell_expands_conditional_under_parametric_variant() {
+        // The `has` parametric variant brackets its selector child
+        // (`has-[:checked]:`); a nested conditional must reuse that lowering.
+        let source = "const X = ({ c }) => <div sz={{ has: { checked: { bg: c ? \"red-500\" : \"blue-500\" } } }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        let ternary = parsed.ir.sz_attributes[0]
+            .ternary
+            .as_ref()
+            .expect("nested conditional should record a ternary");
+        assert_eq!(ternary.consequent_classes, ["has-[:checked]:bg-red-500"]);
+        assert_eq!(ternary.alternate_classes, ["has-[:checked]:bg-blue-500"]);
     }
 
     #[test]
