@@ -1,10 +1,13 @@
 #!/bin/bash -eu
 # Build the cargo-fuzz targets and stage them for the fuzzing engine.
 
-# The repo pins stable Rust via rust-toolchain.toml, but cargo-fuzz needs the
-# nightly toolchain (and -Z sanitizer flags) the base image ships. Drop the pin
-# inside this build copy so rustup uses the image default; the repo is untouched.
+# cargo-fuzz needs nightly (-Z sanitizer flags), but the dependency tree (oxc
+# 0.131) requires rustc >= 1.93, and the base image's bundled nightly can lag
+# behind that (it shipped 1.91-nightly). Drop the repo's stable pin and install a
+# current nightly so the floor is met; cargo-fuzz uses whatever nightly is default.
 rm -f "$SRC/csszyx/rust-toolchain.toml"
+rustup toolchain install nightly --profile minimal --component rust-src --no-self-update
+rustup default nightly
 
 cd "$SRC/csszyx/packages/core"
 

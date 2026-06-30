@@ -45,6 +45,12 @@ jobs:
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+      # Tests import built artifacts (`@csszyx/compiler/browser`, the WASM
+      # `pkg-node`, `cli/dist`, …); without the workspace build ~86 suites fail
+      # to import and coverage collapses (~36%). turbo caches this.
+      - name: Build workspace
+        run: pnpm build
+
       # --- TypeScript coverage (vitest v8) ---
       # The suite has one timing-sensitive watcher test that can flake under
       # coverage instrumentation; `reportOnFailure` still writes the lcov, and

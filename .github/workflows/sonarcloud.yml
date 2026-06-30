@@ -47,6 +47,11 @@ jobs:
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+      # Tests import built artifacts; without the workspace build ~86 suites fail
+      # to import and coverage collapses. turbo caches this.
+      - name: Build workspace
+        run: pnpm build
+
       # Generate lcov for SonarCloud. The one flaky watcher test is tolerated
       # (reportOnFailure still writes the report); ci.yml is the real test gate.
       - name: Coverage
