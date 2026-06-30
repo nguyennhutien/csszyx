@@ -1,0 +1,6 @@
+language: rust
+sanitizers:
+  - address
+fuzzing_engines:
+  - libfuzzer
+main_repo: https://github.com/nguyennhutien/csszyx

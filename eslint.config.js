@@ -28,6 +28,7 @@ export default [
             '**/.next/**',
             '**/.astro/**',
             '**/coverage/**',
+            '**/fuzz/seed_corpus/**', // fuzzer input samples, not project source
             '**/examples/**',
             '**/pkg/**',
             '**/pkg-node/**',
