@@ -17,6 +17,10 @@
     "type": "git",
     "url": "https://github.com/nguyennhutien/csszyx.git"
   },
+  "homepage": "https://csszyx.com",
+  "bugs": {
+    "url": "https://github.com/nguyennhutien/csszyx/issues"
+  },
   "author": "Tien Nguyen",
   "license": "MIT",
   "workspaces": [
