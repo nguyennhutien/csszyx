@@ -547,6 +547,22 @@ export function transformSourceCode(
                                         return;
                                     }
 
+                                    // Hoist a finite conditional nested in a value
+                                    // (`{ borderColor: { color: cond ? a : b, op } }`)
+                                    // into both branches — matches the native engine,
+                                    // instead of falling to the runtime/CSS-var path.
+                                    const hoistedNested = tryHoistNestedConditional(
+                                        flatExpression,
+                                        getBinding,
+                                    );
+                                    if (hoistedNested !== null) {
+                                        path.node.name.name = 'className';
+                                        path.node.value = createMergedClassNameValue(hoistedNested);
+                                        collectFromExpr(hoistedNested, collectedClasses);
+                                        transformed = true;
+                                        return;
+                                    }
+
                                     // CSS Variable Auto-Compile: partial static/dynamic
                                     const partial = evaluatePartialObject(flatExpression);
                                     if (
@@ -1232,6 +1248,169 @@ function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expres
 
     // Unary expression for negative numbers: not applicable here, skip
     return null;
+}
+
+/**
+ * Counts ConditionalExpressions that appear as a (possibly nested) property value
+ * in an object literal, and captures the test of the first one found. A finite
+ * conditional inside a value — e.g. `borderColor: { color: cond ? 'red-700' :
+ * 'charcoal', op: 18 }` — is what the native engine expands into both branches.
+ *
+ * @param node - object literal to scan.
+ * @returns the count and the first conditional's test (null test when count 0).
+ */
+function scanNestedConditionals(node: t.ObjectExpression): {
+    topLevel: number;
+    nested: number;
+    test: t.Expression | null;
+} {
+    let topLevel = 0;
+    let nested = 0;
+    let test: t.Expression | null = null;
+    for (const prop of node.properties) {
+        if (!t.isObjectProperty(prop)) {
+            continue;
+        }
+        const value = prop.value;
+        if (t.isConditionalExpression(value)) {
+            // A direct property conditional (`scale: cond ? 75 : 100`) is handled
+            // better by the partial path, which factors the static classes out.
+            topLevel++;
+        } else if (t.isObjectExpression(value)) {
+            nested += countAllConditionals(value);
+            test ??= firstConditionalTest(value);
+        }
+    }
+    return { topLevel, nested, test };
+}
+
+/**
+ * Total ConditionalExpressions appearing as a (possibly nested) value in `node`.
+ *
+ * @param node - object literal to scan.
+ * @returns the count.
+ */
+function countAllConditionals(node: t.ObjectExpression): number {
+    let count = 0;
+    for (const prop of node.properties) {
+        if (!t.isObjectProperty(prop)) {
+            continue;
+        }
+        const value = prop.value;
+        if (t.isConditionalExpression(value)) {
+            count++;
+        } else if (t.isObjectExpression(value)) {
+            count += countAllConditionals(value);
+        }
+    }
+    return count;
+}
+
+/**
+ * The test of the first ConditionalExpression appearing as a (possibly nested)
+ * property value, or null.
+ *
+ * @param node - object literal to scan.
+ * @returns the first conditional's test, or null.
+ */
+function firstConditionalTest(node: t.ObjectExpression): t.Expression | null {
+    for (const prop of node.properties) {
+        if (!t.isObjectProperty(prop)) {
+            continue;
+        }
+        const value = prop.value;
+        if (t.isConditionalExpression(value)) {
+            return value.test;
+        }
+        if (t.isObjectExpression(value)) {
+            const inner = firstConditionalTest(value);
+            if (inner) {
+                return inner;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Deep-clones `node`, replacing the single nested ConditionalExpression value
+ * with its `pick` branch, so the result is a plain static object for that branch.
+ *
+ * @param node - object literal (assumed to hold exactly one nested conditional).
+ * @param pick - which branch to substitute.
+ * @returns the branch-specialized object clone.
+ */
+function cloneObjectPickingBranch(
+    node: t.ObjectExpression,
+    pick: 'consequent' | 'alternate',
+): t.ObjectExpression {
+    return t.objectExpression(
+        node.properties.map(prop => {
+            if (!t.isObjectProperty(prop)) {
+                return t.cloneNode(prop);
+            }
+            const value = prop.value;
+            let nextValue: t.ObjectProperty['value'] = t.cloneNode(value);
+            if (t.isConditionalExpression(value)) {
+                nextValue = t.cloneNode(value[pick]) as t.ObjectProperty['value'];
+            } else if (t.isObjectExpression(value)) {
+                nextValue = cloneObjectPickingBranch(value, pick);
+            }
+            return t.objectProperty(
+                t.cloneNode(prop.key),
+                nextValue,
+                prop.computed,
+                prop.shorthand,
+            );
+        }),
+    );
+}
+
+/**
+ * Hoist a single finite conditional nested in a value (`{ color: cond ? a : b }`)
+ * outward into a class-level ternary: compile the object with each branch and emit
+ * `cond ? "classesA" : "classesB"`. Matches the native engine, which expands the
+ * finite choice statically instead of falling through to runtime / a CSS variable.
+ *
+ * Only ONE nested conditional per object (a second would expand combinatorially);
+ * more than one returns null and the existing paths handle it.
+ *
+ * @param node - object literal that may hold one nested conditional value.
+ * @param getBinding - scope binding resolver.
+ * @returns a ConditionalExpression of two static class strings, or null.
+ */
+function tryHoistNestedConditional(
+    node: t.ObjectExpression,
+    getBinding: GetBinding,
+): t.Expression | null {
+    const { topLevel, nested, test } = scanNestedConditionals(node);
+    // Only handle a single conditional nested inside a sub-object value. A
+    // top-level conditional prop is left to the partial path (it factors the
+    // static classes out instead of repeating them in both branches).
+    if (topLevel !== 0 || nested !== 1 || test === null) {
+        return null;
+    }
+    const consequent = tryStaticTransformNode(
+        cloneObjectPickingBranch(node, 'consequent'),
+        getBinding,
+    );
+    const alternate = tryStaticTransformNode(
+        cloneObjectPickingBranch(node, 'alternate'),
+        getBinding,
+    );
+    if (
+        !consequent ||
+        !alternate ||
+        !t.isStringLiteral(consequent) ||
+        !t.isStringLiteral(alternate)
+    ) {
+        return null;
+    }
+    return t.conditionalExpression(
+        test,
+        emptyClassToUndefined(consequent),
+        emptyClassToUndefined(alternate),
+    );
 }
 
 /**
