@@ -14,6 +14,11 @@ The deterministic [`parser_panic_fuzz`](../tests/parser_panic_fuzz.rs) test cove
 the same entry point in normal CI; this harness lets a coverage-guided fuzzer
 explore far deeper.
 
+The `transform` target skips inputs nested deeper than `MAX_NESTING_DEPTH`
+brackets: that only overflows the stack inside the upstream `oxc_parser` recursive
+descent (a known parser limitation, not a csszyx bug), so exploring it just
+re-finds one upstream crash instead of csszyx's own code paths.
+
 ## Run locally
 
 Requires a nightly toolchain (libFuzzer needs `-Z` flags):
