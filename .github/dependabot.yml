@@ -23,6 +23,14 @@ updates:
     open-pull-requests-limit: 10
     cooldown:
       default-days: 7
+    # Skip SCHEDULED major bumps — a breaking API change is a maintainer decision
+    # to make deliberately, not a weekly chore PR to triage. This only affects
+    # version-update PRs; Dependabot SECURITY updates ignore this filter and will
+    # still open a PR (even a major one) when that is the only fix for an advisory.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       npm-development:
         dependency-type: "development"
