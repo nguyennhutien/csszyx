@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
-    "oxc-parser": "0.131.0"
+    "oxc-parser": "0.137.0"
   },
   "peerDependencies": {
     "svelte": "^4.0.0 || ^5.0.0"
