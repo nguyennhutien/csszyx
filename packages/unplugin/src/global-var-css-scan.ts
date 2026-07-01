@@ -1,3 +1,4 @@
+import { sortStrings } from '@csszyx/compiler';
 import postcss, { type Root } from 'postcss';
 
 import { buildScopeId, isInsideThemeAtRule, nodeLocation } from './global-var-postcss.js';
@@ -69,7 +70,7 @@ export function scanGlobalVarCss(
         filePath,
         definitions,
         references,
-        registered: [...registered].sort(),
+        registered: sortStrings(registered),
         thirdParty: isThirdPartyCssPath(filePath),
     };
 }
@@ -102,7 +103,7 @@ function extractVarReferences(value: string): string[] {
     for (const match of value.matchAll(VAR_REFERENCE_RE)) {
         references.add(match[1]);
     }
-    return [...references].sort();
+    return sortStrings(references);
 }
 
 /**

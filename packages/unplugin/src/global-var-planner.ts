@@ -1,3 +1,4 @@
+import { sortStrings } from '@csszyx/compiler';
 import { encode } from '@csszyx/core';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
@@ -56,9 +57,9 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
         entries.push({
             original,
             alias,
-            scopes: [
-                ...new Set((definitions.get(original) ?? []).map(definition => definition.scopeId)),
-            ].sort(),
+            scopes: sortStrings(
+                new Set((definitions.get(original) ?? []).map(definition => definition.scopeId)),
+            ),
         });
     }
 
@@ -117,7 +118,7 @@ function collectCandidates(
             }
         }
     }
-    return [...candidates].sort();
+    return sortStrings(candidates);
 }
 
 /**

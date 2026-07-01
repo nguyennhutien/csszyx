@@ -6,6 +6,7 @@
  * the abort protocol when necessary to preserve SSR invariants.
  */
 
+import { sortStrings } from './sort.js';
 import type { RecoveryManifest } from './verify.js';
 import { getRecoveryMode, hasRecoveryToken } from './verify.js';
 
@@ -229,8 +230,7 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
  *          ASCII class names).
  */
 export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
-    const canonical = Object.keys(map)
-        .sort()
+    const canonical = sortStrings(Object.keys(map))
         .map(key => `${key}:${map[key]}`)
         .join('|');
     const bytes = new TextEncoder().encode(canonical);
@@ -675,7 +675,7 @@ export function getSSRContext(): SSRContext | null {
  */
 export function validateHydrationClass(className: string, expectedClassName: string): boolean {
     // Normalize both class strings for comparison
-    const normalize = (s: string): string => s.split(/\s+/).filter(Boolean).sort().join(' ');
+    const normalize = (s: string): string => sortStrings(s.split(/\s+/).filter(Boolean)).join(' ');
 
     return normalize(className) === normalize(expectedClassName);
 }

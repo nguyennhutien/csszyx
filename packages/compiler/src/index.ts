@@ -51,6 +51,7 @@ export {
     type TokenMetadata,
     validateSzRecover,
 } from './recovery.js';
+export { sortStrings } from './sort.js';
 export {
     type CssVariableMangleValue,
     type GlobalVarAliasTableInput,

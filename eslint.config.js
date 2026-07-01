@@ -128,6 +128,25 @@ export default [
         },
     },
 
+    // Ban bare `.sort()` in shipped source — it coerces elements to strings and
+    // silently mis-orders numbers. Sort strings via `sortStrings()` (type-checked
+    // to reject non-string arrays) or pass an explicit comparator for other types.
+    // Scoped to src (not tests/scripts, where sort inputs are test data/tooling).
+    {
+        files: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx'],
+        rules: {
+            'no-restricted-syntax': [
+                'error',
+                {
+                    selector:
+                        "CallExpression[callee.type='MemberExpression'][callee.property.name='sort'][arguments.length=0]",
+                    message:
+                        'Bare .sort() mis-orders numbers. Use sortStrings() for strings, or pass an explicit comparator.',
+                },
+            ],
+        },
+    },
+
     // Relax in tests + dev tooling
     {
         files: [

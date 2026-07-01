@@ -15,6 +15,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { sortStrings } from '@csszyx/compiler';
 import fg from 'fast-glob';
 
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
@@ -129,7 +130,7 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
         return;
     }
 
-    const names = [...risky.keys()].sort();
+    const names = sortStrings(risky.keys());
     printWarn(`${names.length} class name(s) could collide with a mangled token:`);
     for (const name of names) {
         const where = [...(risky.get(name) ?? [])].slice(0, 3).join(', ');

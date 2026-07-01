@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { sortStrings } from '@csszyx/compiler';
 
 /** File matcher accepted by csszyx plugin include/exclude options. */
 export type FilePattern = string | RegExp;
@@ -208,5 +209,5 @@ export function expandFilePatterns(rootDir: string, patterns: string | string[])
         }
     }
 
-    return Array.from(files).sort();
+    return sortStrings(files);
 }

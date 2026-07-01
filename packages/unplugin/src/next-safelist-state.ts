@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
+import { sortStrings } from '@csszyx/compiler';
 
 import lockfile from 'proper-lockfile';
 
@@ -195,9 +196,9 @@ export function materializeNextSafelist(
     }
 
     const sortedSources = [...recordsBySource.values()]
-        .map(({ data }) => [data.sourcePath, [...new Set(data.classes)].sort()] as const)
+        .map(({ data }) => [data.sourcePath, sortStrings(new Set(data.classes))] as const)
         .sort(([left], [right]) => left.localeCompare(right));
-    const classNames = [...new Set(sortedSources.flatMap(([, classSet]) => classSet))].sort();
+    const classNames = sortStrings(new Set(sortedSources.flatMap(([, classSet]) => classSet)));
 
     const snapshot: SnapshotFile = {
         version: 1,
@@ -404,9 +405,9 @@ function isExistingShardEquivalent(filePath: string, shard: ShardFile): boolean 
  */
 function normalizeShardInput(input: NextSafelistShardInput): ShardFile {
     const sourcePath = path.resolve(input.sourcePath);
-    const classes = [
-        ...new Set(input.classes.map(className => className.trim()).filter(Boolean)),
-    ].sort();
+    const classes = sortStrings(
+        new Set(input.classes.map(className => className.trim()).filter(Boolean)),
+    );
     const cacheKey =
         input.cacheKey ??
         createHash('sha256').update(sourcePath).update('\0').update(input.sourceHash).digest('hex');

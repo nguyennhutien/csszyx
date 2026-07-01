@@ -3,12 +3,12 @@ import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-
 import {
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     type SourceTransformResult,
+    sortStrings,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
@@ -442,10 +442,10 @@ export function collectMangleHybridHazards(
     externalClasses: ReadonlySet<string>,
 ): MangleHybridHazards {
     const tokenValues = new Set(Object.values(mangleMap));
-    const collisions = [...tokenValues].filter(token => externalClasses.has(token)).sort();
-    const orphans = Object.keys(mangleMap)
-        .filter(source => !mangledSources.has(source))
-        .sort();
+    const collisions = sortStrings([...tokenValues].filter(token => externalClasses.has(token)));
+    const orphans = sortStrings(
+        Object.keys(mangleMap).filter(source => !mangledSources.has(source)),
+    );
     return { collisions, orphans };
 }
 
@@ -1100,7 +1100,7 @@ function buildVarMangleMap(
     entriesByFile: ReadonlyMap<string, Array<[string, string]>>,
 ): Record<string, CssVariableMangleValue> {
     const next: Record<string, CssVariableMangleValue> = {};
-    const files = [...entriesByFile.keys()].sort();
+    const files = sortStrings(entriesByFile.keys());
     for (const file of files) {
         for (const [original, mangled] of entriesByFile.get(file) ?? []) {
             addVarMangleMapping(next, original, mangled);
@@ -1206,7 +1206,7 @@ function createEarlyGlobalVarAliasEntries(
     if (config?.enabled !== true || !config.tokens || config.tokens.length === 0) {
         return [];
     }
-    const tokens = [...new Set(config.tokens)].sort();
+    const tokens = sortStrings(new Set(config.tokens));
     return tokens.map((original, index) => [original, `${aliasPrefix}${encode(index)}`]);
 }
 
@@ -1368,7 +1368,7 @@ function buildCSSVariableMetrics(
     metricsByFile: ReadonlyMap<string, CSSVariableMetrics>,
 ): CSSVariableMetrics {
     const total = emptyCSSVariableMetrics();
-    for (const file of [...metricsByFile.keys()].sort()) {
+    for (const file of sortStrings(metricsByFile.keys())) {
         const metrics = metricsByFile.get(file);
         if (!metrics) {
             continue;
@@ -3297,7 +3297,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // A usage nudge (add the package dir to compileSources), not a
                     // csszyx-output defect — dev-only so it never noises a host
                     // app's production build.
-                    emitWarning(skippedSzFilesMessage([...state.skippedSzFiles].sort()), {
+                    emitWarning(skippedSzFilesMessage(sortStrings(state.skippedSzFiles)), {
                         devOnly: true,
                     });
                 }

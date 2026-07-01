@@ -1,5 +1,7 @@
 import { parseSync } from 'oxc-parser';
 
+import { sortStrings } from './sort.js';
+
 /** Kind of out-of-band global custom-property usage. */
 export type GlobalVarUsageKind =
     | 'style-set-property'
@@ -412,7 +414,7 @@ function extractVarReferences(value: string): string[] {
     for (const match of value.matchAll(CSS_VAR_REFERENCE_RE)) {
         refs.add(match[1]);
     }
-    return [...refs].sort();
+    return sortStrings(refs);
 }
 
 /**

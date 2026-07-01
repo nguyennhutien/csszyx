@@ -1,5 +1,6 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import { createHash } from 'node:crypto';
+import { sortStrings } from '@csszyx/compiler';
 
 /** JSON-compatible value used for cache identity material. */
 export type JsonLike =
@@ -90,7 +91,7 @@ function pickEnv(
     envKeys: readonly string[],
 ): Record<string, string> {
     const selected: Record<string, string> = {};
-    for (const key of [...new Set(envKeys)].sort()) {
+    for (const key of sortStrings(new Set(envKeys))) {
         const value = env[key];
         if (value !== undefined) {
             selected[key] = value;

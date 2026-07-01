@@ -8,6 +8,7 @@
 import { createHash } from 'node:crypto';
 
 import type { RecoveryMode, TokenMetadata } from './recovery.js';
+import { sortStrings } from './sort.js';
 
 /**
  * Token data stored in the manifest.
@@ -131,7 +132,7 @@ export class ManifestBuilder {
      */
     private computeChecksum(tokens: Record<string, TokenData>): string {
         // Sort tokens by key for deterministic checksum
-        const sortedKeys = Object.keys(tokens).sort();
+        const sortedKeys = sortStrings(Object.keys(tokens));
         const sortedTokens: Record<string, TokenData> = {};
 
         for (const key of sortedKeys) {
