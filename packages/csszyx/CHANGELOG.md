@@ -2,10 +2,20 @@
 
 ## [0.10.9](https://github.com/nguyennhutien/csszyx/compare/v0.10.8...v0.10.9) (2026-07-01)
 
+### Features
+
+* **mcp-server:** support --version/--help and document a stdio health probe ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
 
 ### Bug Fixes
 
-* **compiler:** expand a finite conditional nested in an sz value across all engines ([#103](https://github.com/nguyennhutien/csszyx/issues/103)) ([735bcb5](https://github.com/nguyennhutien/csszyx/commit/735bcb5d790304fa199085ade8a96c5a73794e53))
+* **compiler:** expand a finite conditional nested in an sz value across all engines ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* **compiler:** babel expands a finite conditional nested in a color value ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* **compiler:** oxc expands a finite conditional nested in a value, matching rust ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* **core:** native engine joins parametric variants around a nested conditional ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* remove dead conditionals and suppress SonarCloud sz false positives ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* pin brace-expansion past the ReDoS advisory ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* suppress the string-sort SonarCloud false positive ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
+* **unplugin:** sort via a local helper so buildless tests still resolve ([#103](https://github.com/nguyennhutien/csszyx/issues/103))
 
 ## [0.10.8](https://github.com/nguyennhutien/csszyx/compare/v0.10.7...v0.10.8) (2026-06-29)
 
