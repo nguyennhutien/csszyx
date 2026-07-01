@@ -6,8 +6,11 @@
 # behind that (it shipped 1.91-nightly). Drop the repo's stable pin and install a
 # current nightly so the floor is met; cargo-fuzz uses whatever nightly is default.
 rm -f "$SRC/csszyx/rust-toolchain.toml"
-rustup toolchain install nightly --profile minimal --component rust-src --no-self-update
-rustup default nightly
+# `install` is a no-op when a (stale) nightly already exists, so `update` to pull
+# the current one, and pin via RUSTUP_TOOLCHAIN in case the image sets its own.
+rustup update nightly --no-self-update
+rustup component add rust-src --toolchain nightly
+export RUSTUP_TOOLCHAIN=nightly
 
 cd "$SRC/csszyx/packages/core"
 

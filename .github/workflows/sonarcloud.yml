@@ -39,6 +39,10 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+      # @csszyx/core#build runs wasm-pack, so the WASM toolchain must be present.
+      - name: Setup WASM toolchain
+        uses: ./.github/actions/setup-wasm
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
