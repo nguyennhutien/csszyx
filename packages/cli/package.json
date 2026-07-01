@@ -41,7 +41,7 @@
     "dev": "unbuild --stub"
   },
   "dependencies": {
-    "@babel/parser": "^7.23.0",
+    "@babel/parser": "^8.0.0",
     "@babel/types": "^7.23.0",
     "@csszyx/compiler": "workspace:*",
     "@csszyx/types": "workspace:*",
