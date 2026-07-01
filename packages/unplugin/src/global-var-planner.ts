@@ -4,7 +4,6 @@ import {
     isCsszyxGlobalAliasCustomProperty,
     isTailwindReservedCustomProperty,
 } from '@csszyx/types';
-
 import type {
     CssVarDefinition,
     CssVarScanResult,
@@ -13,6 +12,7 @@ import type {
     GlobalVarAliasPlan,
     PlanGlobalVarAliasesInput,
 } from './global-var-types.js';
+import { sortStrings } from './sort.js';
 
 /**
  * Plans deterministic global aliases for explicit app-owned tokens.
@@ -56,9 +56,9 @@ export function planGlobalVarAliases(input: PlanGlobalVarAliasesInput): GlobalVa
         entries.push({
             original,
             alias,
-            scopes: [
-                ...new Set((definitions.get(original) ?? []).map(definition => definition.scopeId)),
-            ].sort(),
+            scopes: sortStrings(
+                new Set((definitions.get(original) ?? []).map(definition => definition.scopeId)),
+            ),
         });
     }
 
@@ -117,7 +117,7 @@ function collectCandidates(
             }
         }
     }
-    return [...candidates].sort();
+    return sortStrings(candidates);
 }
 
 /**

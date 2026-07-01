@@ -63,7 +63,7 @@
     "@types/prompts": "^2.4.9",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.9"
   },
   "sideEffects": false,
   "engines": {

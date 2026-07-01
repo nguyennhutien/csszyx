@@ -44,7 +44,7 @@
     "typescript": "^6.0.3",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
-    "vitest": "^4.1.6",
+    "vitest": "^4.1.9",
     "unbuild": "^3.6.1"
   },
   "keywords": [

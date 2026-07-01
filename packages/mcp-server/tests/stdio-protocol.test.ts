@@ -61,4 +61,39 @@ describe('stdio protocol', () => {
         expect(messages[0].result.serverInfo.name).toBe('csszyx-mcp-server');
         expect(messages[0].result.protocolVersion).toBe('2024-11-05');
     }, 30_000);
+
+    /**
+     * Spawn the server binary with the given CLI args and collect its output.
+     * @param args - CLI arguments passed after the entry path (e.g. `['--version']`).
+     * @returns the captured stdout and the process exit code.
+     */
+    function runWithArgs(args: string[]): Promise<{ stdout: string; exitCode: number | null }> {
+        const child = spawn(process.execPath, [serverEntry, ...args], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        child.stdout.on('data', chunk => {
+            stdout += chunk;
+        });
+        return new Promise((resolve, reject) => {
+            child.on('error', reject);
+            child.on('close', exitCode => resolve({ stdout, exitCode }));
+        });
+    }
+
+    it('--version prints the version to stdout and exits without starting the server', async () => {
+        const { stdout, exitCode } = await runWithArgs(['--version']);
+        expect(exitCode).toBe(0);
+        // stdout carries ONLY the version (the stderr diagnostics are elsewhere).
+        expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+        expect(stdout).not.toContain('running on stdio');
+    }, 30_000);
+
+    it('--help prints usage to stdout and exits', async () => {
+        const { stdout, exitCode } = await runWithArgs(['--help']);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain('Usage:');
+        expect(stdout).toContain('--version');
+        expect(stdout).toContain('Health probe');
+    }, 30_000);
 });

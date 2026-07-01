@@ -1,0 +1,30 @@
+# cargo-fuzz harness for the native transform engine. Detached from the parent
+# workspace (`[workspace]` below) because libfuzzer-sys needs a nightly toolchain
+# and sanitizer flags that the normal `cargo build` must not pull in.
+[package]
+name = "csszyx-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.csszyx-core]
+path = ".."
+features = ["native-engine"]
+
+[[bin]]
+name = "transform"
+path = "fuzz_targets/transform.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
+
+[workspace]

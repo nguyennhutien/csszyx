@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
 import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
+import { sortStrings } from './sort.js';
 
 /**
  * Escape JSON for safe embedding inside an HTML `<script>` tag.
@@ -383,7 +384,7 @@ export function buildRecoveryManifest(
     const strippedDevOnlyPaths: string[] = [];
 
     const sorted: Record<string, TokenData> = {};
-    const sortedKeys = [...tokens.keys()].sort();
+    const sortedKeys = sortStrings(tokens.keys());
     for (const key of sortedKeys) {
         const data = tokens.get(key);
         if (!data) {

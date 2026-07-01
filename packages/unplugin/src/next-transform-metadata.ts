@@ -2,8 +2,8 @@
 import { createHash } from 'node:crypto';
 
 import { type SourceTransformResult, transform } from '@csszyx/compiler';
-
 import type { NextSafelistShardInput } from './next-safelist-state.js';
+import { sortStrings } from './sort.js';
 
 /** Metadata extracted from one compiler source transform result. */
 export interface NextTransformMetadata {
@@ -33,8 +33,8 @@ export function collectNextTransformMetadata(
     return {
         sourcePath,
         sourceHash: createHash('sha256').update(source).digest('hex'),
-        classes: [...classes].sort(),
-        rawClassNames: [...result.rawClassNames].sort(),
+        classes: sortStrings(classes),
+        rawClassNames: sortStrings(result.rawClassNames),
         recoveryTokenCount: result.recoveryTokens.size,
         cssVariableCount: result.cssVariableMap.size,
     };

@@ -1,0 +1,32 @@
+name: ClusterFuzzLite continuous build
+
+# Builds and uploads the fuzzers for main so PR fuzzing has a baseline to compare
+# new crashes against.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/core/**"
+      - ".clusterfuzzlite/**"
+      - ".github/workflows/cflite_build.yml"
+
+permissions: read-all
+
+concurrency:
+  group: cflite-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address]
+    steps:
+      - name: Build fuzzers (${{ matrix.sanitizer }})
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: rust
+          sanitizer: ${{ matrix.sanitizer }}
+          upload-build: true

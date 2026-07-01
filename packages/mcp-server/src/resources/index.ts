@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS } from '@csszyx/compiler';
+import { KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS, sortStrings } from '@csszyx/compiler';
 
 /**
  * Resolve `llms-full.txt` by walking up from this module. A fixed `../../..`
@@ -240,8 +240,8 @@ export function readResource(uri: string): {
                         mimeType: 'application/json',
                         text: JSON.stringify(
                             {
-                                standard: [...KNOWN_VARIANTS].sort(),
-                                parametric: [...SPECIAL_VARIANTS].sort(),
+                                standard: sortStrings(KNOWN_VARIANTS),
+                                parametric: sortStrings(SPECIAL_VARIANTS),
                             },
                             null,
                             2,

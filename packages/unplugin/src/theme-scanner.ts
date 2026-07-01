@@ -12,6 +12,8 @@
  *   - Multi-file merge via mergeThemes()
  */
 
+import { sortStrings } from './sort.js';
+
 /** Extracted and categorized custom tokens from @theme blocks. */
 export interface ParsedTheme {
     /** Custom color names (from --color-*): e.g. ['brand', 'brand-dark'] */
@@ -189,12 +191,12 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
     }
 
     return {
-        colors: [...result.colors].sort(),
-        spacings: [...result.spacings].sort(),
-        fonts: [...result.fonts].sort(),
-        radii: [...result.radii].sort(),
-        shadows: [...result.shadows].sort(),
-        breakpoints: [...result.breakpoints].sort(),
+        colors: sortStrings(result.colors),
+        spacings: sortStrings(result.spacings),
+        fonts: sortStrings(result.fonts),
+        radii: sortStrings(result.radii),
+        shadows: sortStrings(result.shadows),
+        breakpoints: sortStrings(result.breakpoints),
     };
 }
 
@@ -224,12 +226,12 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
         }
     }
     return {
-        colors: [...merged.colors].sort(),
-        spacings: [...merged.spacings].sort(),
-        fonts: [...merged.fonts].sort(),
-        radii: [...merged.radii].sort(),
-        shadows: [...merged.shadows].sort(),
-        breakpoints: [...merged.breakpoints].sort(),
+        colors: sortStrings(merged.colors),
+        spacings: sortStrings(merged.spacings),
+        fonts: sortStrings(merged.fonts),
+        radii: sortStrings(merged.radii),
+        shadows: sortStrings(merged.shadows),
+        breakpoints: sortStrings(merged.breakpoints),
     };
 }
 

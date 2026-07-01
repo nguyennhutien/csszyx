@@ -1,4 +1,4 @@
-# Contributing to csszyx
+# Contributing to CSSzyx
 
 Quick reference for committing to the repo. For project architecture and
 deeper guides, see the README and `docs/`.
@@ -149,3 +149,22 @@ prints a loud `SECURITY ENVELOPE DEGRADED` banner when the sandbox is not
 actually enforcing. If you see that banner, treat AI tool sessions in the
 container as having unrestricted outbound network access and apply your own
 judgment before granting them credentials.
+
+## Developer Certificate of Origin (DCO)
+
+All contributions to CSSzyx are made under the project's [MIT
+license](LICENSE). By submitting a pull request you certify the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/):
+you wrote the change, or have the right to submit it under the MIT
+license.
+
+Sign off each commit to record this certification:
+
+```bash
+git commit -s -m "fix(core): ..."
+```
+
+The `-s` flag appends a `Signed-off-by: Your Name <you@example.com>`
+trailer using your `git config user.name` / `user.email`. New
+contributors should sign off; existing unsigned history is accepted as
+contributed under the project license.

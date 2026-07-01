@@ -17,6 +17,10 @@
     "type": "git",
     "url": "https://github.com/nguyennhutien/csszyx.git"
   },
+  "homepage": "https://csszyx.com",
+  "bugs": {
+    "url": "https://github.com/nguyennhutien/csszyx/issues"
+  },
   "author": "Tien Nguyen",
   "license": "MIT",
   "workspaces": [
@@ -42,6 +46,9 @@
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",
+    "test:coverage": "vitest run --coverage",
+    "cov:rust": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine --lcov --output-path coverage/rust-lcov.info",
+    "cov:rust:summary": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine --summary-only",
     "test:unit": "turbo run test --filter=!@csszyx/e2e",
     "test:watch": "turbo run test:watch",
     "test:e2e": "pnpm --filter @csszyx/e2e test",
@@ -81,6 +88,7 @@
     "@tailwindcss/oxide-darwin-arm64": "*",
     "@typescript-eslint/eslint-plugin": "^8.53.0",
     "@typescript-eslint/parser": "^8.53.0",
+    "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^9.39.2",
     "eslint-plugin-jsdoc": "^62.1.0",
     "eslint-plugin-regexp": "3.1.0",
@@ -101,6 +109,7 @@
   },
   "pnpm": {
     "overrides": {
+      "brace-expansion@>=5.0.0 <5.0.7": "^5.0.7",
       "devalue@>=5.0.0 <5.8.1": "^5.8.1",
       "esbuild@>=0.17.0 <0.28.1": "^0.28.1",
       "form-data@>=4.0.0 <4.0.6": "^4.0.6",

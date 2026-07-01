@@ -22,6 +22,7 @@ import { pathToFileURL } from 'node:url';
 // dep is the contract — do NOT bump to v4 without rewriting the scanner.
 // New v4 projects bootstrap through `csszyx init`, which writes
 // `@import "tailwindcss"` and never touches this scanner.
+import { sortStrings } from '@csszyx/compiler';
 import type { Config } from 'tailwindcss';
 import resolveConfig from 'tailwindcss/resolveConfig.js';
 
@@ -170,7 +171,7 @@ export function flattenColors(colors: Record<string, string | Record<string, str
         }
     }
 
-    return result.sort();
+    return sortStrings(result);
 }
 
 /**

@@ -1,5 +1,4 @@
 import postcss, { type Root } from 'postcss';
-
 import { buildScopeId, isInsideThemeAtRule, nodeLocation } from './global-var-postcss.js';
 import type {
     CssVarDefinition,
@@ -7,6 +6,7 @@ import type {
     CssVarScanResult,
     ScanGlobalVarCssOptions,
 } from './global-var-types.js';
+import { sortStrings } from './sort.js';
 
 const VAR_REFERENCE_RE = /var\(\s*(--[\w-]+)/g;
 
@@ -69,7 +69,7 @@ export function scanGlobalVarCss(
         filePath,
         definitions,
         references,
-        registered: [...registered].sort(),
+        registered: sortStrings(registered),
         thirdParty: isThirdPartyCssPath(filePath),
     };
 }
@@ -102,7 +102,7 @@ function extractVarReferences(value: string): string[] {
     for (const match of value.matchAll(VAR_REFERENCE_RE)) {
         references.add(match[1]);
     }
-    return [...references].sort();
+    return sortStrings(references);
 }
 
 /**

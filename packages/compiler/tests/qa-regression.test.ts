@@ -90,10 +90,11 @@ describe('opacity sub-property compiles to a Tailwind modifier', () => {
     });
 });
 
-describe('a ternary on a value sub-property does not emit a dead class', () => {
-    // `op: cond ? 30 : 100` cannot be statically resolved, so the transform
-    // routes the whole object to the runtime fallback (which dev-throws and is
-    // build-flagged) instead of silently emitting a non-utility `bg:op-30` class.
+describe('a finite ternary in a value sub-property expands into both branches', () => {
+    // A finite conditional inside a value (`op: cond ? 30 : 100`) is a CHOICE
+    // between two static classes, so the transform expands it into a class-level
+    // ternary — matching the native engine — instead of routing the whole object
+    // to the runtime helper (which left the classes incompletely safelisted).
     const source =
         'const X = ({ c }) => <div sz={{ bg: { color: "black", op: c ? 30 : 100 } }} />;';
 
@@ -102,10 +103,18 @@ describe('a ternary on a value sub-property does not emit a dead class', () => {
         expect(code).not.toContain('bg:op-');
     });
 
-    it('falls back to the runtime helper with a build diagnostic', () => {
-        const { code, diagnostics } = transformOxc(source, 'App.tsx');
-        expect(code).toContain('_sz(');
-        expect(diagnostics.some(d => d.includes('sz fallback'))).toBe(true);
+    it('expands statically — no runtime fallback', () => {
+        const { code } = transformOxc(source, 'App.tsx');
+        expect(code).not.toContain('_sz(');
+        expect(code).toContain('c ? "bg-black/30" : "bg-black/100"');
+    });
+
+    it('matches the babel engine (parity)', () => {
+        const oxc = transformOxc(source, 'App.tsx').code;
+        const babel = transform({ bg: { color: 'black', op: 30 } }); // sanity: branch is real
+        expect(babel.className).toBe('bg-black/30');
+        expect(oxc).toContain('bg-black/30');
+        expect(oxc).toContain('bg-black/100');
     });
 });
 
