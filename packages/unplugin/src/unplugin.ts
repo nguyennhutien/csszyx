@@ -3486,8 +3486,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
-                            mode:
-                                options.production?.injectChecksum === false ? 'script' : 'script',
+                            // Always 'script'; the checksum itself is injected by
+                            // injectHydrationData regardless of this mode.
+                            mode: 'script',
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                             globalVarAliasPrefix,

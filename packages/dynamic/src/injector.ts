@@ -171,11 +171,9 @@ export function resolveTier(className: string): Tier {
     }
 
     const prefix = className.slice(0, colonIdx);
-    // Container query variants start with @
-    const normalizedPrefix = prefix.startsWith('@') ? prefix : prefix;
 
-    if (TIER_SET.has(normalizedPrefix)) {
-        return normalizedPrefix as Tier;
+    if (TIER_SET.has(prefix)) {
+        return prefix as Tier;
     }
     return 'base';
 }
