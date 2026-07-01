@@ -1,11 +1,9 @@
-import { sortStrings } from '@csszyx/compiler';
 import { encode } from '@csszyx/core';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     isCsszyxGlobalAliasCustomProperty,
     isTailwindReservedCustomProperty,
 } from '@csszyx/types';
-
 import type {
     CssVarDefinition,
     CssVarScanResult,
@@ -14,6 +12,7 @@ import type {
     GlobalVarAliasPlan,
     PlanGlobalVarAliasesInput,
 } from './global-var-types.js';
+import { sortStrings } from './sort.js';
 
 /**
  * Plans deterministic global aliases for explicit app-owned tokens.

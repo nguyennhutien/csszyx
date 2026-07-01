@@ -12,7 +12,7 @@
  *   - Multi-file merge via mergeThemes()
  */
 
-import { sortStrings } from '@csszyx/compiler';
+import { sortStrings } from './sort.js';
 
 /** Extracted and categorized custom tokens from @theme blocks. */
 export interface ParsedTheme {

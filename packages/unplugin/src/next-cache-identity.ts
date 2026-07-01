@@ -1,6 +1,6 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import { createHash } from 'node:crypto';
-import { sortStrings } from '@csszyx/compiler';
+import { sortStrings } from './sort.js';
 
 /** JSON-compatible value used for cache identity material. */
 export type JsonLike =

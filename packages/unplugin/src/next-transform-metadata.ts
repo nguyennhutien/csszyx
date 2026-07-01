@@ -1,9 +1,9 @@
 /* eslint-disable jsdoc/require-param-description */
 import { createHash } from 'node:crypto';
 
-import { type SourceTransformResult, sortStrings, transform } from '@csszyx/compiler';
-
+import { type SourceTransformResult, transform } from '@csszyx/compiler';
 import type { NextSafelistShardInput } from './next-safelist-state.js';
+import { sortStrings } from './sort.js';
 
 /** Metadata extracted from one compiler source transform result. */
 export interface NextTransformMetadata {

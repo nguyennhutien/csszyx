@@ -10,8 +10,8 @@
 import { createHash } from 'node:crypto';
 
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
-import { sortStrings } from '@csszyx/compiler';
 import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
+import { sortStrings } from './sort.js';
 
 /**
  * Escape JSON for safe embedding inside an HTML `<script>` tag.

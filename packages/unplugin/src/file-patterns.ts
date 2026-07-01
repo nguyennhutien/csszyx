@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { sortStrings } from '@csszyx/compiler';
+import { sortStrings } from './sort.js';
 
 /** File matcher accepted by csszyx plugin include/exclude options. */
 export type FilePattern = string | RegExp;

@@ -3,11 +3,9 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
-import { sortStrings } from '@csszyx/compiler';
-
 import lockfile from 'proper-lockfile';
-
 import { escapeHtmlAttribute } from './html-escape.js';
+import { sortStrings } from './sort.js';
 
 const DEFAULT_RENAME_RETRIES = 5;
 const DEFAULT_RENAME_RETRY_DELAY_MS = 10;

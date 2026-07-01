@@ -1,6 +1,4 @@
-import { sortStrings } from '@csszyx/compiler';
 import postcss, { type Root } from 'postcss';
-
 import { buildScopeId, isInsideThemeAtRule, nodeLocation } from './global-var-postcss.js';
 import type {
     CssVarDefinition,
@@ -8,6 +6,7 @@ import type {
     CssVarScanResult,
     ScanGlobalVarCssOptions,
 } from './global-var-types.js';
+import { sortStrings } from './sort.js';
 
 const VAR_REFERENCE_RE = /var\(\s*(--[\w-]+)/g;
 
