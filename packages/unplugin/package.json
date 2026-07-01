@@ -137,12 +137,12 @@
     "@types/node": "^20.11.0",
     "@types/proper-lockfile": "^4.1.4",
     "esbuild": "^0.28.1",
-    "rollup": "^4.56.0",
+    "rollup": "^4.62.2",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
-    "vite": "^8.0.13",
+    "vite": "^8.1.0",
     "vitest": "^4.1.9",
-    "webpack": "^5.104.1"
+    "webpack": "^5.107.2"
   },
   "sideEffects": false,
   "engines": {
