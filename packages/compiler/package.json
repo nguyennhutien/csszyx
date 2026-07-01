@@ -68,7 +68,7 @@
   },
   "dependencies": {
     "@babel/core": "^7.29.6",
-    "@babel/traverse": "^7.23.7",
+    "@babel/traverse": "^8.0.0",
     "@babel/types": "^7.23.6",
     "@csszyx/core": "workspace:*",
     "magic-string": "0.30.21",
