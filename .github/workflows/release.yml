@@ -302,7 +302,7 @@ jobs:
       # (wasm-pack --mode no-install) can skip wasm-pack's own install step.
       - name: Cache wasm-bindgen-cli
         id: cache-wasm-bindgen
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/.cargo/bin/wasm-bindgen
           key: wasm-bindgen-cli-0.2.93-${{ runner.os }}
