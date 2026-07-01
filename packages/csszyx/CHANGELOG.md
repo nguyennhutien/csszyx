@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.9](https://github.com/nguyennhutien/csszyx/compare/v0.10.8...v0.10.9) (2026-07-01)
+
+
+### Bug Fixes
+
+* **compiler:** expand a finite conditional nested in an sz value across all engines ([#103](https://github.com/nguyennhutien/csszyx/issues/103)) ([735bcb5](https://github.com/nguyennhutien/csszyx/commit/735bcb5d790304fa199085ade8a96c5a73794e53))
+
 ## [0.10.8](https://github.com/nguyennhutien/csszyx/compare/v0.10.7...v0.10.8) (2026-06-29)
 
 ### Features
