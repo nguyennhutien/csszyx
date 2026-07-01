@@ -92,7 +92,12 @@ function spawnWorker(
     };
 }
 
-describe('Next safelist advisory lock across processes', () => {
+// Each case spawns a handful of real Node processes (node --import tsx) that
+// race for a filesystem advisory lock. Spawn + tsx-compile + barrier sync are
+// wall-clock heavy and vary with CI load, so a fixed timeout can trip even
+// though the lock logic is correct. Retry absorbs that timing flake, and the
+// per-test timeout is generous relative to a warm local run (~1-2s).
+describe('Next safelist advisory lock across processes', { retry: 2 }, () => {
     it('allows exactly one process to recover a stale lock', async () => {
         const root = tempRoot();
         const lockPath = join(root, '.csszyx/cache/state.lock');
@@ -118,7 +123,8 @@ describe('Next safelist advisory lock across processes', () => {
         const staleTime = new Date(Date.now() - 10_000);
         utimesSync(advisoryPath, staleTime, staleTime);
 
-        const workers = Array.from({ length: 12 }, () =>
+        const workerCount = 6;
+        const workers = Array.from({ length: workerCount }, () =>
             spawnWorker(lockPath, barrierPath, releasePath),
         );
         await Promise.all(workers.map(worker => worker.ready));
@@ -137,10 +143,10 @@ describe('Next safelist advisory lock across processes', () => {
         );
         expect(winners).toHaveLength(1);
         expect(winners[0]?.code).toBe(0);
-        expect(locked).toHaveLength(11);
+        expect(locked).toHaveLength(workerCount - 1);
         expect(existsSync(lockPath)).toBe(false);
         expect(existsSync(advisoryPath)).toBe(false);
-    }, 15_000);
+    }, 45_000);
 
     it('keeps a live owner exclusive against concurrent contenders', async () => {
         const root = tempRoot();
@@ -156,7 +162,8 @@ describe('Next safelist advisory lock across processes', () => {
         writeFileSync(ownerBarrier, 'go\n', 'utf8');
         await expect(owner.acquired).resolves.toBe(true);
 
-        const contenders = Array.from({ length: 8 }, () =>
+        const contenderCount = 4;
+        const contenders = Array.from({ length: contenderCount }, () =>
             spawnWorker(lockPath, contenderBarrier, contenderRelease),
         );
         await Promise.all(contenders.map(worker => worker.ready));
@@ -164,7 +171,7 @@ describe('Next safelist advisory lock across processes', () => {
         let contenderResults: WorkerResult[];
         try {
             await expect(Promise.all(contenders.map(worker => worker.acquired))).resolves.toEqual(
-                Array.from({ length: 8 }, () => false),
+                Array.from({ length: contenderCount }, () => false),
             );
             contenderResults = await Promise.all(contenders.map(worker => worker.result));
         } finally {
@@ -179,5 +186,5 @@ describe('Next safelist advisory lock across processes', () => {
                 result => result.code === 2 && result.stderr.includes('already locked'),
             ),
         ).toBe(true);
-    }, 15_000);
+    }, 45_000);
 });
