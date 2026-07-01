@@ -24,7 +24,7 @@
         "@csszyx/compiler": "workspace:*",
         "@csszyx/types": "workspace:^",
         "@eslint/eslintrc": "^3.2.0",
-        "@types/node": "^20.11.0",
+        "@types/node": "^20.19.43",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
         "eslint": "^9.0.0",
