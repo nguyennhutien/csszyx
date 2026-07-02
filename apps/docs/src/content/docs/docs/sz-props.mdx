@@ -105,6 +105,47 @@ To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt 
 
 Arbitrary variants are allowed by pattern (`@container`, `min-[320px]`, `[&>span]`).
 
+## Does `sz` auto-type on a custom component?
+
+**Only on host elements** (`<div>`, `<span>`, …). The JSX augmentation adds `sz` to
+React's `HTMLAttributes` / `SVGAttributes`, so every DOM element accepts it. A custom
+component has its own props type, so `sz` is **not** added there automatically.
+
+Two separate layers, don't conflate them:
+
+- **Compile** — the transform lowers `sz` → `className` on _any_ element, custom
+  included: `<Card sz={{ p: 4 }} />` becomes `<Card className="p-4" />`. It works at
+  runtime as long as `Card` forwards `className` down to a host element.
+- **Type** — TypeScript checks the source _before_ the transform, so `<Card sz={…} />`
+  is a type error unless `Card`'s props include `sz`.
+
+Whether `sz` is typed depends on how the props are declared:
+
+| `Card`'s props type                                        | `sz` typed?    |
+| :--------------------------------------------------------- | :------------- |
+| `{ title: string }` (fresh type)                           | ❌ TS error    |
+| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`      | ✅ inherited   |
+| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>`    | ✅ just `sz`   |
+
+The `Pick` form is the tidiest way to add `sz` to a fresh props type — no import, and
+it tracks csszyx's own `sz` type:
+
+```tsx
+import type { ComponentProps } from 'react';
+
+type CardProps = { title: string } & Pick<ComponentProps<'div'>, 'sz' | 'className'>;
+
+function Card({ title, sz, className }: CardProps) {
+  // The transform rewrites `sz` → `className` before Card runs, so pick `className`
+  // too and forward it onto the host element.
+  return <div sz={sz} className={className}>{title}</div>;
+}
+```
+
+`Pick` only works when the augmentation is loaded (a `/// <reference types="@csszyx/types/jsx" />`
+in scope, or the project's `csszyx-env.d.ts`) — otherwise `sz` is not a key of
+`ComponentProps<'div'>`.
+
 ## Typing a component that forwards `sz`
 
 csszyx exposes the `sz` value type from two places, for two different jobs:

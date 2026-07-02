@@ -369,3 +369,34 @@ Strategy for static analysis vs runtime generation.
 
 - ✅ `sz({ color: isErr ? 'red-500' : 'green-500' })` (Zero Runtime)
 - ⚠️ `sz({ color:`red-${shade}`})` (Runtime injection overhead)
+
+## TypeScript: `sz` on custom components
+
+The JSX augmentation (`@csszyx/types/jsx`) adds `sz` to **host elements only**
+(`<div>`, `<span>`, … via React `HTMLAttributes` / `SVGAttributes`). A custom
+component has its own props type, so `sz` is **not auto-typed** there.
+
+Two independent layers:
+
+- **Compile** — the transform lowers `sz` → `className` on ANY element, custom
+  included: `<Card sz={{ p: 4 }} />` → `<Card className="p-4" />`. So it works at
+  runtime as long as the component forwards `className` down to a host element.
+- **Type** — only auto-typed when the component's props derive from host attributes.
+
+| Component props type                                       | `sz` typed?         |
+| :--------------------------------------------------------- | :------------------ |
+| `{ title: string }` (fresh type)                           | ❌ TS error         |
+| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`      | ✅ inherited        |
+| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>`    | ✅ just `sz`        |
+
+Add `sz` to a fresh props type by picking it (no import needed) or declaring it:
+
+```tsx
+import type { ComponentProps } from 'react';
+type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz'>;
+// equivalent: import type { SzPropValue } from '@csszyx/types'; then `sz?: SzPropValue`
+```
+
+The augmentation must be in scope (a `/// <reference types="@csszyx/types/jsx" />`
+or the project's `csszyx-env.d.ts`), otherwise `sz` is not a key of
+`ComponentProps<'div'>` and `Pick` fails.
