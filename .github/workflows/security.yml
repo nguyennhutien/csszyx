@@ -217,11 +217,8 @@ jobs:
           sarif_file: snyk-code.sarif
           category: snyk-code
 
-      # Snapshot the dependency graph on the Snyk dashboard for drift alerts,
-      # from main only (avoids a project per branch).
-      - name: Snyk monitor
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk monitor --all-projects
+      # No `snyk monitor` here: the Snyk GitHub App already imports this repo as
+      # an SCM project (recognized as public → unlimited tests) and feeds the
+      # dashboard. A CLI `snyk monitor` created a SECOND, CLI-imported project that
+      # is counted as private and hit the free-tier test limit. The App is the
+      # single dashboard source; this workflow only runs ephemeral test/code scans.
