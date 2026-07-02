@@ -1,0 +1,153 @@
+---
+title: Styling Component Parts
+description: Style the parts of a compound component — each part accepts its own sz prop, compiled and safelisted at build time with no new API.
+---
+
+Sometimes one component has several parts you want to style separately — a card
+with a header, body, and icon. csszyx has **no special API for this**: because the
+`sz` prop compiles to `className` on _any_ element (host tags, custom components,
+and dotted names like `Card.Header`), you build a normal React **compound
+component** and give each part its own `sz`.
+
+Each part's `sz` is compiled to Tailwind classes at build time and added to the
+safelist — exactly like `sz` on a `<div>`. No runtime cost, and it mangles in
+production the same way.
+
+## The idea in one line
+
+```tsx
+<Card sz={{ p: 4 }}>
+  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Body sz={{ text: 'sm' }}>Body copy</Card.Body>
+</Card>
+```
+
+Every `sz` above is a separate build-time style on a separate part. Nothing is
+resolved at runtime.
+
+## Build a compound component
+
+The pattern is plain React: a parent component plus sub-components attached as
+properties. Each sub-component forwards `sz` (which the transform has already
+rewritten to `className`) onto a host element.
+
+```tsx
+import type { ComponentProps, PropsWithChildren } from 'react';
+
+// Each part derives its props from a host element, so `sz` + `className` are
+// already typed (see "Typing" below). The transform rewrites `sz` → `className`
+// before the component runs, so the component reads `className`.
+function Card({ className, children }: ComponentProps<'div'>) {
+  return <div className={className}>{children}</div>;
+}
+
+function CardHeader({ className, children }: ComponentProps<'header'>) {
+  return <header className={className}>{children}</header>;
+}
+
+function CardBody({ className, children }: ComponentProps<'div'>) {
+  return <div className={className}>{children}</div>;
+}
+
+// Attach the parts so consumers can write <Card.Header>.
+Card.Header = CardHeader;
+Card.Body = CardBody;
+
+export { Card };
+```
+
+Now a consumer styles each part independently:
+
+```tsx
+<Card sz={{ p: 4, rounded: 'lg', shadow: 'md' }}>
+  <Card.Header sz={{ bg: 'gray-100', p: 3, fontWeight: 'bold' }}>
+    Invoice
+  </Card.Header>
+  <Card.Body sz={{ p: 3, text: 'sm', textColor: 'gray-700' }}>
+    Amount due: $42
+  </Card.Body>
+</Card>
+```
+
+At build time this becomes:
+
+```tsx
+<Card className="p-4 rounded-lg shadow-md">
+  <Card.Header className="bg-gray-100 p-3 font-bold">Invoice</Card.Header>
+  <Card.Body className="p-3 text-sm text-gray-700">Amount due: $42</Card.Body>
+</Card>
+```
+
+All six classes are safelisted, so real Tailwind CSS is generated, and they mangle
+in a production build like any other csszyx class.
+
+## Merge a part's own defaults with the consumer's `sz`
+
+A part usually has base styles of its own. The transform turns the consumer's
+`sz` into a `className` string, so combine it with the part's defaults using
+[`szcn`](/docs/reference/runtime/#szcn) (mangle-aware, last-wins on a conflicting
+utility) or plain `clsx` for concat-only:
+
+```tsx
+import { szcn } from '@csszyx/runtime';
+
+function CardHeader({ className, children }: ComponentProps<'header'>) {
+  // Base header styles, then the consumer's className wins on any conflict.
+  return (
+    <header className={szcn('flex items-center gap-2', className)}>
+      {children}
+    </header>
+  );
+}
+```
+
+The part's own base styles can be written as a `sz` object too — put them on the
+element and let csszyx compile them:
+
+```tsx
+function CardHeader({ className, children }: ComponentProps<'header'>) {
+  // `sz` here is the part's OWN default; `className` is the consumer override.
+  return (
+    <header sz={{ display: 'flex', items: 'center', gap: 2 }} className={className}>
+      {children}
+    </header>
+  );
+}
+```
+
+:::note
+When an element has **both** `sz` and `className`, csszyx compiles `sz` and merges
+it with the existing `className` for you — the consumer override still applies.
+:::
+
+## Typing
+
+Deriving each part's props from a host element (`ComponentProps<'div'>`,
+`ComponentProps<'header'>`, …) gives you `sz` **and** `className` for free, because
+the JSX augmentation adds `sz` to every host element. If a part has extra props of
+its own, intersect them:
+
+```tsx
+type CardHeaderProps = ComponentProps<'header'> & { collapsible?: boolean };
+```
+
+If you prefer a fresh props type, add just `sz` (and `className`) with `Pick`:
+
+```tsx
+type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz' | 'className'>;
+```
+
+See [Sz Props Basics → custom components](/docs/sz-props/#does-sz-auto-type-on-a-custom-component)
+for the full typing rules.
+
+## When to reach for this
+
+- **Use compound components** when each part has its own **content** (a header with
+  text, a body with children) — the React-idiomatic way, and it fails loudly if you
+  mistype a part (`<Card.Hedaer>` is an undefined component).
+- If you only need to style parts the component renders internally (parts with no
+  consumer content), a compound component still works — just render the part
+  yourself and forward its `sz`.
+
+There is no csszyx-specific machinery here: it is standard React composition plus
+the `sz` prop you already use everywhere.

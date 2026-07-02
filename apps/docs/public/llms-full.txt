@@ -674,6 +674,26 @@ The augmentation must be in scope (a `/// <reference types="@csszyx/types/jsx" /
 or the project's `csszyx-env.d.ts`), otherwise `sz` is not a key of
 `ComponentProps<'div'>` and `Pick` fails.
 
+## Styling parts of a compound component
+
+No special API. `sz` compiles to `className` on ANY element — host tags, custom
+components, and dotted names (`Card.Header`) — and each is safelisted + mangled like
+a normal `sz`. So style a compound component's parts by giving each part its own `sz`:
+
+```tsx
+<Card sz={{ p: 4 }}>
+  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Body sz={{ text: 'sm' }}>Body</Card.Body>
+</Card>
+// → each part compiled to className at build time; all classes safelisted.
+```
+
+Build it as a plain React compound component; each part forwards `sz` (already
+rewritten to `className` by the transform) onto a host element. Type each part with
+`ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
+Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
+last-wins) or `clsx`. There is no per-slot prop syntax — use composition.
+
 
 # Backgrounds
 
