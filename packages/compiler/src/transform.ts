@@ -1390,26 +1390,64 @@ function tryHoistNestedConditional(
     if (topLevel !== 0 || nested !== 1 || test === null) {
         return null;
     }
+
+    // Factor like the native engine: the non-conditional props emit once as a
+    // static prefix, and only the conditional prop varies inside the ternary
+    // (`bg-white/70 ${cond ? "border-red-700/18" : "border-charcoal/18"}`).
+    // Repeating the static classes in both branches yielded the same class SET but
+    // a different discovery ORDER, so mangle IDs (assigned in discovery order)
+    // diverged from Rust/oxc.
+    const condPropIndex = node.properties.findIndex(
+        prop =>
+            t.isObjectProperty(prop) &&
+            t.isObjectExpression(prop.value) &&
+            countAllConditionals(prop.value) === 1,
+    );
+    if (condPropIndex === -1) {
+        return null;
+    }
+    const staticNode = t.objectExpression(node.properties.filter((_, i) => i !== condPropIndex));
+    const condNode = t.objectExpression([node.properties[condPropIndex]]);
+
+    const staticClasses =
+        staticNode.properties.length > 0 ? tryStaticTransformNode(staticNode, getBinding) : null;
     const consequent = tryStaticTransformNode(
-        cloneObjectPickingBranch(node, 'consequent'),
+        cloneObjectPickingBranch(condNode, 'consequent'),
         getBinding,
     );
     const alternate = tryStaticTransformNode(
-        cloneObjectPickingBranch(node, 'alternate'),
+        cloneObjectPickingBranch(condNode, 'alternate'),
         getBinding,
     );
     if (
         !consequent ||
         !alternate ||
         !t.isStringLiteral(consequent) ||
-        !t.isStringLiteral(alternate)
+        !t.isStringLiteral(alternate) ||
+        (staticNode.properties.length > 0 && (!staticClasses || !t.isStringLiteral(staticClasses)))
     ) {
         return null;
     }
-    return t.conditionalExpression(
+
+    const ternary = t.conditionalExpression(
         test,
         emptyClassToUndefined(consequent),
         emptyClassToUndefined(alternate),
+    );
+    if (!staticClasses || !t.isStringLiteral(staticClasses) || staticClasses.value === '') {
+        return ternary;
+    }
+    // `${staticClasses} ${cond ? "…" : "…"}` — discovery order: static, then the
+    // consequent branch, then the alternate branch (matches Rust/oxc).
+    return t.templateLiteral(
+        [
+            t.templateElement(
+                { raw: `${staticClasses.value} `, cooked: `${staticClasses.value} ` },
+                false,
+            ),
+            t.templateElement({ raw: '', cooked: '' }, true),
+        ],
+        [ternary],
     );
 }
 
@@ -2087,6 +2125,21 @@ function collectFromExpr(node: t.Expression, classes: Set<string>): void {
     } else if (t.isConditionalExpression(node)) {
         collectFromExpr(node.consequent as t.Expression, classes);
         collectFromExpr(node.alternate as t.Expression, classes);
+    } else if (t.isTemplateLiteral(node)) {
+        // A hoisted nested conditional emits `${static} ${cond ? a : b}`. Walk
+        // quasis and interpolated expressions INTERLEAVED in source order so the
+        // discovery order stays [static, consequent, alternate] — matching Rust.
+        for (let i = 0; i < node.quasis.length; i++) {
+            for (const c of (node.quasis[i].value.cooked ?? '').split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            const expr = node.expressions[i];
+            if (expr && t.isExpression(expr)) {
+                collectFromExpr(expr, classes);
+            }
+        }
     }
 }
 

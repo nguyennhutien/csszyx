@@ -59,7 +59,7 @@ function rust(code: string): string {
 }
 
 /**
- * Sorted class tokens extracted by an engine — the safelist-parity contract.
+ * Sorted class tokens extracted by an engine — for set-equality checks.
  * @param result - a transform result (or a raw code string).
  * @returns the extracted classes, sorted.
  */
@@ -68,6 +68,20 @@ function classesOf(result: { classes?: Iterable<string> } | string): string[] {
         return [];
     }
     return [...(result.classes ?? [])].sort();
+}
+
+/**
+ * Class tokens in DISCOVERY order (not sorted) — production mangle IDs are
+ * assigned in this order, so it must match across engines for byte-identical
+ * mangled artifacts.
+ * @param result - a transform result.
+ * @returns the extracted classes in discovery order.
+ */
+function orderedClassesOf(result: { classes?: Iterable<string> } | string): string[] {
+    if (typeof result === 'string') {
+        return [];
+    }
+    return [...(result.classes ?? [])];
 }
 
 /**
@@ -156,14 +170,22 @@ describe('nested finite-conditional parity', () => {
         });
 
         it.skipIf(!isRustTransformAvailable())(
-            `rust safelists the same classes as oxc — ${fixture.name}`,
+            `rust is byte-identical to oxc/babel — ${fixture.name}`,
             () => {
-                // rust factors a static sibling out of the ternary while oxc/babel
-                // repeat it in both branches — same classes, different code shape.
-                // The safelist-parity contract is the extracted class set.
+                // All three engines factor the static sibling out and emit the same
+                // template literal in the same order. Byte-identical code AND identical
+                // discovery ORDER are required: production mangle IDs are assigned in
+                // discovery order, so a different order (even with the same class set)
+                // makes the mangled artifacts diverge between engines.
                 expect(rust(fixture.src), 'rust must not fall back').not.toContain('_sz(');
-                expect(classesOf(transformRust(fixture.src, 'F.tsx'))).toEqual(
-                    classesOf(transformOxc(fixture.src, 'F.tsx')),
+                expect(rust(fixture.src), 'rust vs oxc code').toBe(oxc(fixture.src));
+                expect(rust(fixture.src), 'rust vs babel code').toBe(babel(fixture.src));
+                const rustClasses = orderedClassesOf(transformRust(fixture.src, 'F.tsx'));
+                expect(rustClasses, 'rust vs oxc class ORDER').toEqual(
+                    orderedClassesOf(transformOxc(fixture.src, 'F.tsx')),
+                );
+                expect(rustClasses, 'rust vs babel class ORDER').toEqual(
+                    orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx')),
                 );
             },
         );

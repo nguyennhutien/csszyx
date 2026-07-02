@@ -1803,11 +1803,39 @@ function buildNestedConditionalClassExpression(
     if (topLevel !== 0 || countOxcConditionals(node) !== 1 || !first) {
         return null;
     }
-    const compileBranch = (pick: 'consequent' | 'alternate'): string | null => {
+
+    // Match the native engine's factored shape: the non-conditional props emit
+    // once as a static prefix, and only the conditional prop varies inside the
+    // ternary — `bg-white/70 ${cond ? "border-red-700/18" : "border-charcoal/18"}`.
+    // Repeating the static classes in both branches (the previous shape) produced
+    // the same class SET but a different discovery ORDER than Rust, so production
+    // mangle IDs — assigned in discovery order — diverged between engines.
+    const condPropIndex = node.properties.findIndex(
+        prop =>
+            prop.type === 'Property' &&
+            (prop as PropertyNode).value.type === 'ObjectExpression' &&
+            countOxcConditionals((prop as PropertyNode).value as ObjectExpressionNode) === 1,
+    );
+    if (condPropIndex === -1) {
+        return null;
+    }
+    const staticNode: ObjectExpressionNode = {
+        ...node,
+        properties: node.properties.filter((_, i) => i !== condPropIndex),
+    };
+    const condNode: ObjectExpressionNode = {
+        ...node,
+        properties: [node.properties[condPropIndex]],
+    };
+
+    const compile = (
+        target: ObjectExpressionNode,
+        pick?: 'consequent' | 'alternate',
+    ): string | null => {
         try {
             return compileSzObject(
                 applyGlobalVarAliasesToSzObject(
-                    astObjectToSzObject(node, filename, bindings, pick),
+                    astObjectToSzObject(target, filename, bindings, pick),
                     globalVarAliases,
                     cssVariableMap,
                 ),
@@ -1819,19 +1847,28 @@ function buildNestedConditionalClassExpression(
             throw err;
         }
     };
-    const consequent = compileBranch('consequent');
-    const alternate = compileBranch('alternate');
-    if (consequent === null || alternate === null) {
+
+    const staticClasses = staticNode.properties.length > 0 ? compile(staticNode) : '';
+    const consequent = compile(condNode, 'consequent');
+    const alternate = compile(condNode, 'alternate');
+    if (staticClasses === null || consequent === null || alternate === null) {
         return null;
     }
-    for (const cls of `${consequent} ${alternate}`.split(/\s+/)) {
+    // Discovery order (Rust parity): static classes, then the consequent branch,
+    // then the alternate branch.
+    for (const cls of `${staticClasses} ${consequent} ${alternate}`.split(/\s+/)) {
         if (cls) {
             classes.add(cls);
         }
     }
+
     const testSource = source.slice(first.test.start, first.test.end);
     const branch = (cls: string): string => (cls === '' ? 'undefined' : JSON.stringify(cls));
-    return `${testSource} ? ${branch(consequent)} : ${branch(alternate)}`;
+    const ternary = `${testSource} ? ${branch(consequent)} : ${branch(alternate)}`;
+    if (staticClasses === '') {
+        return ternary;
+    }
+    return `\`${staticClasses} \${${ternary}}\``;
 }
 
 /**
