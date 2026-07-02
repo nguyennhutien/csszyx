@@ -18,7 +18,7 @@ use super::{
     lower::lower_static_sz_object, ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr,
     JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SourceIr, StaticArrayPartIr,
     StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr,
-    SzAttributeIr, TextSpan, TransformFile, TransformTimings,
+    SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -172,6 +172,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             return;
         }
 
+        let element_name = jsx_element_name(&element.name);
         let mut sz_attribute_indices = Vec::new();
         let mut class_attribute_index = None;
         let mut style_attribute_index = None;
@@ -217,12 +218,14 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                     "data-sz-recovery-token" => {
                         has_recovery_token_attribute = true;
                     }
+                    "szs" => {
+                        self.collect_szs_attribute(attr, is_style_host_element_name(&element_name));
+                    }
                     _ => {}
                 }
             }
         }
 
-        let element_name = jsx_element_name(&element.name);
         self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span: text_span(element.span),
             parent_element_index: self.element_stack.last().copied(),
@@ -265,6 +268,92 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             scope: self.scope,
             program: self.program,
         }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    /// Collect a `szs` slot-map attribute. Enforces the shared v1 contract
+    /// (identifier keys; pure-literal object or class-string values) and lowers
+    /// each object slot at parse time. Host elements and unsupported shapes
+    /// leave the attribute untouched and record a diagnostic instead.
+    fn collect_szs_attribute(&mut self, attr: &JSXAttribute<'_>, is_host: bool) {
+        if is_host {
+            let message = format!(
+                "[csszyx] szs at {}: szs has no effect on a host element \u{2014} it maps slot names of a custom component. Attribute left unchanged.",
+                self.ir.filename
+            );
+            self.ir.szs_diagnostics.push(message);
+            return;
+        }
+        let unsupported_message = format!(
+            "[csszyx] szs at {}: every slot must be an identifier key with a static object literal (or class string) value. Attribute left unchanged.",
+            self.ir.filename
+        );
+        let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
+            self.ir.szs_diagnostics.push(unsupported_message);
+            return;
+        };
+        let JSXExpression::ObjectExpression(slot_map) = &container.expression else {
+            self.ir.szs_diagnostics.push(unsupported_message);
+            return;
+        };
+        let ctx = self.resolve_context();
+        let mut entries = Vec::with_capacity(slot_map.properties.len());
+        let mut any_compiled = false;
+        for property in &slot_map.properties {
+            let ObjectPropertyKind::ObjectProperty(prop) = property else {
+                self.ir.szs_diagnostics.push(unsupported_message);
+                return;
+            };
+            if prop.computed {
+                self.ir.szs_diagnostics.push(unsupported_message);
+                return;
+            }
+            let PropertyKey::StaticIdentifier(identifier) = &prop.key else {
+                self.ir.szs_diagnostics.push(unsupported_message);
+                return;
+            };
+            let key = identifier.name.to_string();
+            match &prop.value {
+                Expression::StringLiteral(value) => {
+                    // Raw class string (also pass-1 output, so the transform is
+                    // idempotent): safelist, keep the original text.
+                    let value_span = prop.value.span();
+                    entries.push(SzsSlotEntryIr {
+                        key,
+                        class_name: value.value.to_string(),
+                        emit_text: self.source[value_span.start as usize..value_span.end as usize]
+                            .to_string(),
+                    });
+                }
+                Expression::ObjectExpression(object) => {
+                    if !is_pure_literal_szs_object(object) {
+                        self.ir.szs_diagnostics.push(unsupported_message);
+                        return;
+                    }
+                    let Some(static_object) = static_object_from_object_expression(object, ctx)
+                    else {
+                        self.ir.szs_diagnostics.push(unsupported_message);
+                        return;
+                    };
+                    let class_name = lower_static_sz_object(&static_object).join(" ");
+                    entries.push(SzsSlotEntryIr {
+                        emit_text: format!("\"{}\"", escape_json_string(&class_name)),
+                        class_name,
+                        key,
+                    });
+                    any_compiled = true;
+                }
+                _ => {
+                    self.ir.szs_diagnostics.push(unsupported_message);
+                    return;
+                }
+            }
+        }
+        self.ir.szs_attributes.push(SzsAttributeIr {
+            attribute_span: text_span(attr.span),
+            entries,
+            any_compiled,
+        });
     }
 
     #[allow(clippy::too_many_lines)]
@@ -623,6 +712,56 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
         JSXAttributeName::Identifier(identifier) => Some(identifier.name.as_str()),
         JSXAttributeName::NamespacedName(_) => None,
     }
+}
+
+/// Whether a value is allowed inside an `szs` slot object: string / number /
+/// boolean literals, a negated number, or a nested object of the same.
+/// Deliberately STRICTER than the sz path (no identifiers, spreads,
+/// conditionals, parens, or `as` casts) so all three engines can enforce the
+/// exact same contract without a scope resolver.
+fn is_pure_literal_szs_value(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_) => true,
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::UnaryNegation
+                && matches!(unary.argument, Expression::NumericLiteral(_))
+        }
+        Expression::ObjectExpression(object) => is_pure_literal_szs_object(object),
+        _ => false,
+    }
+}
+
+/// Whether every property of an object is a non-computed identifier-keyed
+/// pure-literal value (see [`is_pure_literal_szs_value`]).
+fn is_pure_literal_szs_object(object: &ObjectExpression<'_>) -> bool {
+    object.properties.iter().all(|property| {
+        let ObjectPropertyKind::ObjectProperty(prop) = property else {
+            return false;
+        };
+        !prop.computed
+            && matches!(prop.key, PropertyKey::StaticIdentifier(_))
+            && is_pure_literal_szs_value(&prop.value)
+    })
+}
+
+/// Minimal JSON string-body escape (backslash, quote, control chars) so the
+/// emitted `szs` value text is byte-identical to `JSON.stringify` in the JS
+/// engines for the class strings the lowering can produce.
+fn escape_json_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 fn jsx_element_name(name: &JSXElementName<'_>) -> String {
@@ -2629,6 +2768,75 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_compiles_szs_slot_map() {
+        // Each szs slot VALUE compiles to its class string (key kept); classes
+        // flow into the manifest AFTER sz-derived classes; the rewrite emits the
+        // shared cross-engine format.
+        let source = r#"const X = () => <Card sz={{ p: 4 }} szs={{ header: { bg: "gray-100" }, icon: { color: "red-500" } }} />;"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(parsed.ir.szs_diagnostics.is_empty());
+        assert_eq!(parsed.ir.szs_attributes.len(), 1);
+        let szs = &parsed.ir.szs_attributes[0];
+        assert!(szs.any_compiled);
+        assert_eq!(szs.entries.len(), 2);
+        assert_eq!(szs.entries[0].key, "header");
+        assert_eq!(szs.entries[0].class_name, "bg-gray-100");
+        assert_eq!(szs.entries[0].emit_text, "\"bg-gray-100\"");
+        assert_eq!(szs.entries[1].class_name, "text-red-500");
+
+        // sz classes first, szs classes after (discovery-order parity).
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert_eq!(lowered.classes, ["p-4", "bg-gray-100", "text-red-500"]);
+
+        let rewritten = crate::transform::rewrite::rewrite_static_sz_attributes(
+            source,
+            "/repo/src/App.tsx",
+            &parsed.ir,
+        )
+        .expect("rewrite succeeds");
+        assert!(rewritten.contains(r#"szs={{ header: "bg-gray-100", icon: "text-red-500" }}"#));
+        assert!(rewritten.contains(r#"className="p-4""#));
+    }
+
+    #[test]
+    fn parser_shell_szs_host_and_unsupported_shapes_left_unchanged() {
+        // Host misuse and non-static slot values leave the attribute untouched
+        // and record a dev diagnostic instead.
+        let host = "const X = () => <div szs={{ header: { p: 2 } }} />;";
+        let parsed_host = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: host.to_string(),
+        });
+        assert_eq!(parsed_host.ir.szs_attributes.len(), 0);
+        assert_eq!(parsed_host.ir.szs_diagnostics.len(), 1);
+        assert!(parsed_host.ir.szs_diagnostics[0].contains("host element"));
+
+        let non_static = "const X = ({ v }) => <Card szs={{ header: v }} />;";
+        let parsed_dynamic = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: non_static.to_string(),
+        });
+        assert_eq!(parsed_dynamic.ir.szs_attributes.len(), 0);
+        assert_eq!(parsed_dynamic.ir.szs_diagnostics.len(), 1);
+        assert!(parsed_dynamic.ir.szs_diagnostics[0].contains("identifier key"));
+
+        // All-string map = pass-1 output: classes collected, nothing rewritten.
+        let strings = r#"const X = () => <Card szs={{ header: "p-4 bg-red-500" }} />;"#;
+        let parsed_strings = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: strings.to_string(),
+        });
+        let szs = &parsed_strings.ir.szs_attributes[0];
+        assert!(!szs.any_compiled);
+        let lowered = lower_source_ir_classes(&parsed_strings.ir);
+        assert_eq!(lowered.classes, ["p-4", "bg-red-500"]);
     }
 
     #[test]

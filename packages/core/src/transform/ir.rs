@@ -59,6 +59,42 @@ pub struct SourceIr {
     pub unsupported_recovery_attribute_spans: Vec<TextSpan>,
     /// JSX opening elements that contain csszyx-relevant static attributes.
     pub jsx_opening_elements: Vec<JsxOpeningElementIr>,
+    /// JSX `szs` slot-map attributes found in source order.
+    #[serde(default)]
+    pub szs_attributes: Vec<SzsAttributeIr>,
+    /// Diagnostics from `szs` attributes (host misuse / unsupported shapes).
+    #[serde(default)]
+    pub szs_diagnostics: Vec<String>,
+}
+
+/// One compiled `szs` slot.
+///
+/// Holds the original key text, the lowered classes, and the value text the
+/// rewrite emits (a JSON string for compiled objects, the original source
+/// slice for kept class strings).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzsSlotEntryIr {
+    /// Original identifier key text.
+    pub key: String,
+    /// Space-separated lowered class names for this slot.
+    pub class_name: String,
+    /// Exact value text to emit in the rewritten attribute.
+    pub emit_text: String,
+}
+
+/// A `szs` slot-map attribute with every slot compiled.
+///
+/// `any_compiled` gates the source rewrite — an all-string map is pass-1
+/// output (`szs={{ header: "..." }}`), so it stays untouched, keeping the
+/// transform idempotent across re-runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzsAttributeIr {
+    /// Full attribute span (`szs={{ ... }}`).
+    pub attribute_span: TextSpan,
+    /// Compiled slots in source order.
+    pub entries: Vec<SzsSlotEntryIr>,
+    /// Whether any slot value was an object literal that got compiled.
+    pub any_compiled: bool,
 }
 
 impl SourceIr {
@@ -78,6 +114,8 @@ impl SourceIr {
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: Vec::new(),
+            szs_attributes: Vec::new(),
+            szs_diagnostics: Vec::new(),
         }
     }
 
@@ -88,6 +126,8 @@ impl SourceIr {
             && self.class_attributes.is_empty()
             && self.recovery_attributes.is_empty()
             && self.unsupported_recovery_attribute_spans.is_empty()
+            && self.szs_attributes.is_empty()
+            && self.szs_diagnostics.is_empty()
     }
 }
 
@@ -416,6 +456,8 @@ mod tests {
                 element_name: "div".to_string(),
                 hoisted_dynamic_css_vars: Vec::new(),
             }],
+            szs_attributes: Vec::new(),
+            szs_diagnostics: Vec::new(),
         };
 
         assert!(!ir.is_noop());

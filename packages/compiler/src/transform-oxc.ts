@@ -92,6 +92,12 @@ export function transformOxc(
     options?: TransformSourceCodeOptions,
 ): TransformOxcResult {
     const classes = new Set<string>();
+    // Classes discovered from `szs` slot values. Kept OUT of `classes` until the
+    // walk completes so the discovery order is deterministic across engines: all
+    // sz-derived classes (document order) first, then all szs-derived classes
+    // (document order). Mangle IDs are assigned in discovery order, so this
+    // ordering is part of the three-engine parity contract.
+    const szsPendingClasses: string[] = [];
     const rawClassNames = new Set<string>();
     const diagnostics: string[] = [];
     const recoveryTokens = new Map<string, TokenData>();
@@ -177,6 +183,7 @@ export function transformOxc(
         const openingNode = node as unknown as JsxOpeningElementNode;
         const attrs = openingNode.attributes ?? [];
         const szAttrs: JsxAttributeNode[] = [];
+        const szsAttrs: JsxAttributeNode[] = [];
         let classNameAttr: JsxAttributeNode | null = null;
         let styleAttr: JsxAttributeNode | null = null;
         let szRecoverAttr: JsxAttributeNode | null = null;
@@ -210,6 +217,8 @@ export function transformOxc(
             const name = attr.name?.name;
             if (name === 'sz') {
                 szAttrs.push(attr);
+            } else if (name === 'szs') {
+                szsAttrs.push(attr);
             } else if (name === 'className' || name === 'class') {
                 classNameAttr = attr;
             } else if (name === 'style') {
@@ -275,6 +284,108 @@ export function transformOxc(
                 for (const c of rawValue.split(/\s+/)) {
                     if (c) {
                         rawClassNames.add(c);
+                    }
+                }
+            }
+        }
+
+        // szs handling: compile each slot VALUE of the slot-map to its class
+        // string (keeping the key) so the component can forward
+        // `props.szs?.<slot>` into a child className. Runs BEFORE the sz loop
+        // because that loop returns early on several paths. The v1 contract
+        // (identifier keys; pure-literal object or class-string values) is
+        // enforced identically across all three engines.
+        for (const szsAttr of szsAttrs) {
+            if (isHostOpeningElementName(openingNode.name as unknown as OxcNode)) {
+                diagnostics.push(
+                    `[csszyx] szs at ${effectiveFilename}: ` +
+                        'szs has no effect on a host element — it maps slot names of a ' +
+                        'custom component. Attribute left unchanged.',
+                );
+                continue;
+            }
+            const szsValue = szsAttr.value;
+            const szsExpression =
+                szsValue && szsValue.type === 'JSXExpressionContainer'
+                    ? (szsValue as unknown as { expression: OxcNode }).expression
+                    : null;
+            if (!szsExpression || szsExpression.type !== 'ObjectExpression') {
+                diagnostics.push(szsUnsupportedMessage(effectiveFilename));
+                continue;
+            }
+            const slotMap = szsExpression as ObjectExpressionNode;
+            if (!isValidSzsSlotMap(slotMap)) {
+                diagnostics.push(szsUnsupportedMessage(effectiveFilename));
+                continue;
+            }
+            const { line: szsWarnLine } = offsetToLineColumn(source, szsAttr.start);
+            setSzWarnLocation(
+                formatSzWarnLocation(effectiveFilename, szsWarnLine, options?.rootDir),
+            );
+            // Two phases so a failure never leaves the attribute partially
+            // rewritten: compile everything first, then emit.
+            const slotEntries: Array<{ keyText: string; classNames: string; text: string }> = [];
+            let anyCompiled = false;
+            let slotFailed = false;
+            for (const propRaw of slotMap.properties) {
+                const prop = propRaw as PropertyNode;
+                const keyText = source.slice(prop.key.start, prop.key.end);
+                const propValue = prop.value;
+                const literal =
+                    propValue.type === 'Literal'
+                        ? (propValue as unknown as { value: unknown }).value
+                        : null;
+                if (typeof literal === 'string') {
+                    // Raw class string (also pass-1 output, so the transform is
+                    // idempotent): safelist, keep the original text.
+                    slotEntries.push({
+                        keyText,
+                        classNames: literal,
+                        text: source.slice(propValue.start, propValue.end),
+                    });
+                    continue;
+                }
+                try {
+                    const slotObject = astObjectToSzObject(
+                        propValue as ObjectExpressionNode,
+                        effectiveFilename,
+                        objectBindings,
+                    );
+                    const compiled = compileSzObject(
+                        applyGlobalVarAliasesToSzObject(
+                            slotObject,
+                            globalVarAliases,
+                            cssVariableMap,
+                        ),
+                    ).className;
+                    slotEntries.push({
+                        keyText,
+                        classNames: compiled,
+                        text: JSON.stringify(compiled),
+                    });
+                    anyCompiled = true;
+                } catch (err) {
+                    if (err instanceof OxcNotImplementedError) {
+                        slotFailed = true;
+                        break;
+                    }
+                    throw err;
+                }
+            }
+            setSzWarnLocation(undefined);
+            if (slotFailed) {
+                diagnostics.push(szsUnsupportedMessage(effectiveFilename));
+                continue;
+            }
+            if (anyCompiled) {
+                const body = slotEntries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
+                edits.overwrite(szsAttr.start, szsAttr.end, `szs={{ ${body} }}`);
+                transformed = true;
+            }
+            for (const entry of slotEntries) {
+                for (const c of entry.classNames.split(/\s+/)) {
+                    if (c) {
+                        szsPendingClasses.push(c);
                     }
                 }
             }
@@ -720,6 +831,12 @@ export function transformOxc(
         transformed = true;
     });
 
+    // szs classes join AFTER every sz-derived class so the discovery order
+    // (which fixes production mangle IDs) matches the other engines.
+    for (const c of szsPendingClasses) {
+        classes.add(c);
+    }
+
     return {
         code: transformed ? edits.toString() : source,
         transformed,
@@ -842,6 +959,111 @@ function buildRuntimeFallbackDiagnostic(expression: OxcNode, source: string): st
 /**
  * Extract the element name from a JSXOpeningElement's `name` field.
  * Mirrors the fallback chain used at `transform.ts:191-195`:
+ *   JSXIdentifier → its name; JSXMemberExpression → `<member>`;
+ *   anything else → `<unknown>`.
+ *
+ * @param nameNode The opening element's `name` AST node.
+ * @returns Display name used in the recovery-token hash input.
+ */
+/**
+ * Whether a JSX opening-element name is a host (DOM) element — a plain
+ * lowercase identifier like `div`. Uppercase identifiers and member
+ * expressions (`Card.Header`) are custom components.
+ *
+ * @param nameNode The opening element's name AST node.
+ * @returns true for a host element name.
+ */
+function isHostOpeningElementName(nameNode: OxcNode): boolean {
+    return (
+        nameNode.type === 'JSXIdentifier' &&
+        /^[a-z]/.test(String((nameNode as unknown as { name: string }).name))
+    );
+}
+
+/**
+ * The shared unsupported-szs diagnostic — the exact contract (identifier keys,
+ * pure-literal object or class-string values) is enforced identically by all
+ * three engines so their outputs stay in parity.
+ *
+ * @param filename Source filename for context.
+ * @returns The diagnostic message.
+ */
+function szsUnsupportedMessage(filename: string): string {
+    return (
+        `[csszyx] szs at ${filename}: ` +
+        'every slot must be an identifier key with a static object literal ' +
+        '(or class string) value. Attribute left unchanged.'
+    );
+}
+
+/**
+ * Whether a value is allowed inside an szs slot object: string / number /
+ * boolean literals, a negated number, or a nested object of the same.
+ * Deliberately STRICTER than the sz path (no identifiers, spreads,
+ * conditionals, parens, or `as` casts) so all three engines can enforce the
+ * exact same contract without a scope resolver.
+ *
+ * @param node The candidate value node.
+ * @returns true when the value is a pure literal.
+ */
+function isPureLiteralSzValue(node: OxcNode): boolean {
+    if (node.type === 'Literal') {
+        const value = (node as unknown as { value: unknown }).value;
+        return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+    }
+    if (node.type === 'UnaryExpression') {
+        const unary = node as unknown as { operator: string; argument: OxcNode };
+        return (
+            unary.operator === '-' &&
+            unary.argument.type === 'Literal' &&
+            typeof (unary.argument as unknown as { value: unknown }).value === 'number'
+        );
+    }
+    if (node.type === 'ObjectExpression') {
+        const properties = (node as unknown as { properties: OxcNode[] }).properties;
+        return properties.every(propRaw => {
+            if (propRaw.type !== 'Property') {
+                return false;
+            }
+            const prop = propRaw as PropertyNode;
+            return (
+                !prop.computed && prop.key.type === 'Identifier' && isPureLiteralSzValue(prop.value)
+            );
+        });
+    }
+    return false;
+}
+
+/**
+ * Whether an szs value is a valid v1 slot map: every property is a
+ * non-computed identifier-keyed Property whose value is a class string or a
+ * pure-literal sz object.
+ *
+ * @param slotMap The szs object expression.
+ * @returns true when every slot satisfies the v1 contract.
+ */
+function isValidSzsSlotMap(slotMap: ObjectExpressionNode): boolean {
+    return slotMap.properties.every(propRaw => {
+        if (propRaw.type !== 'Property') {
+            return false;
+        }
+        const prop = propRaw as PropertyNode;
+        if (prop.computed || prop.key.type !== 'Identifier') {
+            return false;
+        }
+        const value = prop.value;
+        if (
+            value.type === 'Literal' &&
+            typeof (value as unknown as { value: unknown }).value === 'string'
+        ) {
+            return true;
+        }
+        return value.type === 'ObjectExpression' && isPureLiteralSzValue(value);
+    });
+}
+
+/**
+ * Best-effort display name for an opening element:
  *   JSXIdentifier → its name; JSXMemberExpression → `<member>`;
  *   anything else → `<unknown>`.
  *

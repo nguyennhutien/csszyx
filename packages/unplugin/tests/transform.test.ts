@@ -495,3 +495,31 @@ className="p-4 text-white"
         expect(classes.size).toBe(3); // p-4, bg-red-500, text-white
     });
 });
+
+describe('mangleCodeClassesSync — Pass 4 (szs slot maps)', () => {
+    it('mangles each quoted value of a bundled szs slot map per-token', () => {
+        expect(
+            mangleCodeClassesSync(
+                'jsx(Card,{szs:{header:"flex items-center",icon:"p-4"},x:1})',
+                TEST_MANGLE,
+            ),
+        ).toBe('jsx(Card,{szs:{header:"z h",icon:"c"},x:1})');
+    });
+
+    it('keeps unknown tokens and stays idempotent', () => {
+        const once = mangleCodeClassesSync('szs:{a:"flex custom-thing"}', TEST_MANGLE);
+        expect(once).toBe('szs:{a:"z custom-thing"}');
+        expect(mangleCodeClassesSync(once, TEST_MANGLE)).toBe(once);
+    });
+
+    it('handles single-quoted values and spaced maps', () => {
+        expect(mangleCodeClassesSync("szs: { header: 'flex-row p-4' }", TEST_MANGLE)).toBe(
+            "szs: { header: 'a c' }",
+        );
+    });
+
+    it('does not touch look-alike keys', () => {
+        const input = 'foo({szsomething:{a:"flex"}})';
+        expect(mangleCodeClassesSync(input, TEST_MANGLE)).toBe(input);
+    });
+});

@@ -25,11 +25,22 @@ pub struct LoweredSourceClasses {
 
 /// Lower parser-neutral source IR into class lists without rewriting source.
 pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
+    // szs classes join AFTER every sz-derived class so the discovery order
+    // (which fixes production mangle IDs) matches the other engines.
     let classes = ir
         .extracted_classes
         .iter()
         .cloned()
         .chain(ir.sz_attributes.iter().flat_map(lower_sz_attribute_classes))
+        .chain(ir.szs_attributes.iter().flat_map(|attribute| {
+            attribute.entries.iter().flat_map(|entry| {
+                entry
+                    .class_name
+                    .split_whitespace()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+        }))
         .collect();
     // Split each static class attribute into individual class tokens, matching
     // the oxc path: consumers (safelist, mangle) iterate raw_class_names as
@@ -1873,6 +1884,8 @@ mod tests {
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: Vec::new(),
+            szs_attributes: Vec::new(),
+            szs_diagnostics: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);

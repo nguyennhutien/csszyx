@@ -419,4 +419,24 @@ Build it as a plain React compound component; each part forwards `sz` (already
 rewritten to `className` by the transform) onto a host element. Type each part with
 `ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
 Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
-last-wins) or `clsx`. There is no per-slot prop syntax — use composition.
+last-wins) or `clsx`.
+
+## `szs` — slot map for a component's internal parts
+
+For parts a component renders ITSELF (no consumer content), `szs` maps slot names
+to sz values. The transform compiles each VALUE to its class string (key kept),
+safelisting + mangling like `sz`; the component forwards `props.szs?.<slot>` into
+the matching child's `className`.
+
+```tsx
+type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
+<Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
+// → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
+// component: <header className={props.szs?.header} />
+```
+
+Rules: custom components only (host element → dev warn, unchanged). Slot values
+must be STATIC — a pure object literal (nested variants OK) or a raw class string;
+identifiers/conditionals/spreads leave the attribute unchanged with a dev warning.
+Keys are identifiers. `sz` styles the element itself; `szs` styles its internal
+parts — a component can take both.

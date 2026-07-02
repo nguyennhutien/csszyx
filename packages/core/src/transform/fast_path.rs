@@ -85,6 +85,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         let opening = &file.source[opening_start..opening_end];
         if opening.contains("class=")
             || opening.contains("className=")
+            || opening.contains("szs=")
             || opening.contains("szRecover")
             || opening.contains("data-sz-recovery-token")
             || opening.contains("{...")

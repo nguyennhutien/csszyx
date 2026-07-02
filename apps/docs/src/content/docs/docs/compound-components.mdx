@@ -146,8 +146,60 @@ for the full typing rules.
   text, a body with children) — the React-idiomatic way, and it fails loudly if you
   mistype a part (`<Card.Hedaer>` is an undefined component).
 - If you only need to style parts the component renders internally (parts with no
-  consumer content), a compound component still works — just render the part
-  yourself and forward its `sz`.
+  consumer content), reach for the **`szs` prop** below — one prop that maps slot
+  names to sz values.
 
-There is no csszyx-specific machinery here: it is standard React composition plus
-the `sz` prop you already use everywhere.
+## The `szs` prop — style internal parts in one prop
+
+When a component renders its parts itself (an icon, a divider, a badge) there is
+nothing for the consumer to compose — they just want to style those parts. `szs`
+is a slot map: each key names a part, each value is a normal sz object. The build
+transform compiles **each value** to its class string (keeping the key), safelists
+and mangles the classes exactly like `sz`:
+
+```tsx
+<Card szs={{ header: { bg: 'gray-100', fontWeight: 'bold' }, icon: { color: 'red-500' } }} />
+// compiles to:
+<Card szs={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
+```
+
+The component forwards each slot into the matching child's `className`:
+
+```tsx
+import type { Szs } from '@csszyx/types';
+
+type CardProps = {
+  title: string;
+  /** Declaring the slot union gives consumers autocompletion + typo checking. */
+  szs?: Szs<'header' | 'icon'>;
+};
+
+function Card({ title, szs }: CardProps) {
+  // After the transform, each slot is already a class string.
+  return (
+    <div>
+      <header className={szs?.header}>{title}</header>
+      <svg className={szs?.icon} />
+    </div>
+  );
+}
+```
+
+Rules to know:
+
+- **Custom components only.** On a host element (`<div szs={…}>`) there are no
+  slots — TypeScript already rejects it, and the transform warns in dev and leaves
+  it unchanged.
+- **Values must be static**: a pure object literal (nested variants like
+  `hover:`/`md:` are fine) or a raw class string. Anything dynamic — an identifier,
+  a conditional, a spread — leaves the whole attribute unchanged with a dev
+  warning, because an uncompiled slot can't be safelisted.
+- **Keys are identifiers** (`header`, not `'header-x'` or `[computed]`).
+- Slot classes are mangled in production like every other csszyx class.
+
+**`sz` vs `szs`:** `sz` styles THE element it sits on; `szs` styles the parts the
+component renders internally. A component can take both — `sz` for its root,
+`szs` for its slots.
+
+Prefer compound components when parts carry **content**; prefer `szs` when the
+consumer only needs to **style** internal parts.
