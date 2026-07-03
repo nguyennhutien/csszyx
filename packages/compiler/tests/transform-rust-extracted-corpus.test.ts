@@ -31,9 +31,11 @@ interface ExtractedSnippet {
 }
 
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
-    parity: 136,
+    parity: 137,
     'rust-ahead': 0,
-    'code-divergence': 2,
+    // Was 2: the className-expression + static-sz snippet — oxc used to overwrite
+    // the expression with the compiled string and now merges like rust.
+    'code-divergence': 1,
     // Was 1: the `bg:{ color, op: cond ? 30 : 100 }` snippet — oxc used to diverge
     // (incomplete safelist) and now expands the finite conditional like Rust.
     'class-divergence': 0,

@@ -808,6 +808,34 @@ export function transformOxc(
                 : `className="${mergedClasses.join(' ')}"`;
 
         if (classNameAttr) {
+            const classNameValue = classNameAttr.value;
+            if (
+                existingRaw === null &&
+                classNameValue &&
+                classNameValue.type === 'JSXExpressionContainer'
+            ) {
+                // className holds an EXPRESSION (ternary / identifier / clsx(...)).
+                // Overwriting it with the compiled string would silently delete the
+                // expression's classes at runtime — the classic symptom was a panel
+                // losing its `dems-panel` class next to a static sz. Merge instead,
+                // keeping the expression, exactly like babel and the native engine:
+                // `className={_szMerge(<expr>, "<compiled>")}`.
+                const exprNode = (classNameValue as unknown as { expression: OxcNode }).expression;
+                const exprSource = source.slice(exprNode.start, exprNode.end);
+                edits.overwrite(
+                    classNameAttr.start,
+                    classNameAttr.end,
+                    `className={_szMerge(${exprSource}, ${JSON.stringify(szDerived.join(' '))})}`,
+                );
+                for (const szAttr of szAttrs) {
+                    const deleteStart = whitespaceStart(source, szAttr.start);
+                    edits.remove(deleteStart, szAttr.end);
+                }
+                usesRuntime = true;
+                usesMerge = true;
+                transformed = true;
+                return;
+            }
             // Replace className value (or whole attribute) in place, then
             // delete each sz attribute + the whitespace preceding it.
             edits.overwrite(classNameAttr.start, classNameAttr.end, mergedAttr);
