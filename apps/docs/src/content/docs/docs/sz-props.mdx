@@ -146,6 +146,22 @@ function Card({ title, sz, className }: CardProps) {
 in scope, or the project's `csszyx-env.d.ts`) — otherwise `sz` is not a key of
 `ComponentProps<'div'>`.
 
+:::caution[Generic wrappers: declare `sz` directly, don't Pick]
+Reserve the `Pick` recipe for **concrete** tags (`ComponentProps<'div'>`). On a
+generic component (`<E extends ElementType>(props: BoxProps<E>)`),
+`Pick<ComponentProps<E>, 'sz'>` distributes over every member of the
+`ElementType` union — including SVG tags and `ComponentType`s that lack the
+augmentation — and resolves **order-dependently**: deleting one unrelated file
+can flip `sz` from optional to required across the codebase. Declare the prop
+yourself instead; it is stable and also accepts `szv` factory output:
+
+```tsx
+import type { SzInput } from 'csszyx';
+
+type BoxProps<E extends ElementType> = { as?: E; sz?: SzInput };
+```
+:::
+
 ## Typing a component that forwards `sz`
 
 csszyx exposes the `sz` value type from two places, for two different jobs:

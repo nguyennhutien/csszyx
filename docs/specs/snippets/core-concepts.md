@@ -397,6 +397,13 @@ type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz'>;
 // equivalent: import type { SzPropValue } from '@csszyx/types'; then `sz?: SzPropValue`
 ```
 
+Pick is for CONCRETE tags only. On a generic component (`E extends ElementType`),
+`Pick<ComponentProps<E>, 'sz'>` distributes over union members without the
+augmentation and resolves order-dependently (sz can flip optional→required when an
+unrelated file changes). Generic wrappers declare the prop directly — `sz?: SzInput`
+(from `csszyx`) — which is stable and also accepts szv factory output
+(`sz={someSzv({ v })}`; `SzPropValue` rejects it, `SzInput` is the forwarding type).
+
 The augmentation must be in scope (a `/// <reference types="@csszyx/types/jsx" />`
 or the project's `csszyx-env.d.ts`), otherwise `sz` is not a key of
 `ComponentProps<'div'>` and `Pick` fails.
@@ -435,7 +442,10 @@ the matching child's `className`.
 type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
 <Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
 // → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
-// component: <header className={props.szs?.header} />
+// component: <header className={szsClass(props.szs?.header)} />
+// szsClass (from @csszyx/runtime) narrows the compiled slot to string | undefined —
+// slots TYPE as sz values but ARE class strings after the transform; the helper
+// is also fail-safe (uncompiled slot -> undefined, never "[object Object]").
 ```
 
 Rules: custom components only (host element → dev warn, unchanged). Slot values

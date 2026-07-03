@@ -1102,6 +1102,12 @@ function handleImportant(value: string): { value: string; important: boolean } {
     return { value, important: false };
 }
 
+/** Named colors whose slash-opacity always works (alpha-capable by definition). */
+const ALPHA_SAFE_NAMED_COLORS = new Set(['white', 'black', 'transparent', 'current', 'inherit']);
+
+/** Custom theme tokens already nudged about slash-opacity (once per token). */
+const _warnedOpacityTokens = new Set<string>();
+
 /**
  * Formats an opacity value for Tailwind class output.
  * Handles numbers, CSS variables, and arbitrary values.
@@ -1954,6 +1960,32 @@ function transformImpl(
 
             if (colorObj.op !== undefined) {
                 const opStr = formatOpacity(colorObj.op);
+                // Dev nudge for custom theme tokens: `border-tag-violet-fg/35` is
+                // minted here, but whether the /35 actually applies depends on the
+                // token being alpha-capable (oklch / space-separated RGB). A token
+                // defined as a comma-separated RGB triplet (or one that carries its
+                // own alpha var) silently ignores the modifier — the class NAME then
+                // advertises an opacity the CSS does not deliver. Standard palette
+                // shades (`red-500`) and alpha-safe named colors are exempt.
+                if (
+                    process.env.NODE_ENV !== 'production' &&
+                    typeof window === 'undefined' &&
+                    !rawColorBase.startsWith('--') &&
+                    !needsArbitraryBrackets(rawColorBase) &&
+                    !/-\d{2,3}$/.test(rawColorBase) &&
+                    !ALPHA_SAFE_NAMED_COLORS.has(rawColorBase) &&
+                    !_warnedOpacityTokens.has(rawColorBase)
+                ) {
+                    _warnedOpacityTokens.add(rawColorBase);
+                    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+                    console.warn(
+                        `[csszyx] "${prefix}${twPrefix}-${colorBase}/${opStr}"${at}: the ` +
+                            `/${opStr} opacity applies only if the "${rawColorBase}" theme token ` +
+                            'is alpha-capable (oklch or space-separated RGB). A comma-separated ' +
+                            'RGB triplet, or a token that resolves through its own alpha ' +
+                            'variable, silently ignores the modifier — verify the emitted rule.',
+                    );
+                }
                 classes.push(`${prefix}${twPrefix}-${colorBase}/${opStr}`);
             } else {
                 classes.push(`${prefix}${twPrefix}-${colorBase}`);

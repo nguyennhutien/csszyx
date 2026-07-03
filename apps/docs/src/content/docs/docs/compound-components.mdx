@@ -185,15 +185,20 @@ type CardProps = {
 };
 
 function Card({ title, szs }: CardProps) {
-  // After the transform, each slot is already a class string.
+  // After the transform, each slot is already a class string — but its TYPE is
+  // still an sz value, so `className={szs?.header}` is a strict-TS error.
+  // `szsClass` does the narrowing once, and fail-safe: an uncompiled slot
+  // becomes `undefined` instead of `class="[object Object]"`.
   return (
     <div>
-      <header className={szs?.header}>{title}</header>
-      <svg className={szs?.icon} />
+      <header className={szsClass(szs?.header)}>{title}</header>
+      <svg className={szsClass(szs?.icon)} />
     </div>
   );
 }
 ```
+
+`szsClass` is exported from `@csszyx/runtime` (same home as `szcn`).
 
 Rules to know:
 
