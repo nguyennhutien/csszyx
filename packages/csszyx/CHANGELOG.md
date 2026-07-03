@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.10.10](https://github.com/nguyennhutien/csszyx/compare/v0.10.9...v0.10.10) (2026-07-03)
+
+### Features
+
+* szs slot styling, engine order parity, and component typing docs ([#117](https://github.com/nguyennhutien/csszyx/issues/117))
+* szs slot map styles a compound component's internal parts ([#117](https://github.com/nguyennhutien/csszyx/issues/117))
+
+### Bug Fixes
+
+* **compiler:** factor a hoisted nested conditional so all engines emit one order ([#117](https://github.com/nguyennhutien/csszyx/issues/117))
+
 ## [0.10.9](https://github.com/nguyennhutien/csszyx/compare/v0.10.8...v0.10.9) (2026-07-01)
 
 ### Features
