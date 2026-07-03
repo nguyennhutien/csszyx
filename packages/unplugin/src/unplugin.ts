@@ -885,6 +885,20 @@ function recordFileVarMangleEntries(
 }
 
 /**
+ * Whether transformed source text must be retained for global-var alias
+ * validation. Retention is only consumed when `production.mangleGlobalVars`
+ * is explicitly enabled; recording without that consumer keeps the full text
+ * of every transformed JS/TS module alive for the plugin lifetime.
+ *
+ * @param config The `production.mangleGlobalVars` option value.
+ * @param config.enabled Whether global-var mangling is turned on.
+ * @returns True only when the feature is explicitly enabled.
+ */
+export function shouldTrackGlobalVarSources(config?: { enabled?: boolean }): boolean {
+    return config?.enabled === true;
+}
+
+/**
  * Records source text available before bundling/minification for Phase H
  * global-var diagnostics.
  *
@@ -892,7 +906,7 @@ function recordFileVarMangleEntries(
  * @param filename Source filename that owns the text.
  * @param code Source text, or null to clear this file.
  */
-function recordGlobalVarSourceFile(
+export function recordGlobalVarSourceFile(
     state: Pick<PluginState, 'globalVarSourceFilesByFile'>,
     filename: string,
     code: string | null,
@@ -2000,6 +2014,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const cacheEnabled = cacheRequested && cacheVersionsKnown;
     const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
     const globalVarMangleConfig = options.production?.mangleGlobalVars;
+    const globalVarSourceTrackingEnabled = shouldTrackGlobalVarSources(globalVarMangleConfig);
     const globalVarAliasPrefix = globalVarMangleConfig?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
     const encodedGlobalVarAliasPrefix = encodeURIComponent(globalVarAliasPrefix);
     const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
@@ -2200,6 +2215,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         assertNoGlobalVarAliasValidationErrors(result);
         assertGlobalVarPlanMatchesEarlyAliases(result, earlyGlobalVarAliasEntries);
         return result;
+    }
+
+    /**
+     * Records source text for global-var diagnostics, but only while the
+     * feature that consumes it (`production.mangleGlobalVars`) is enabled.
+     * The delete path (`watchChange`) stays on `recordGlobalVarSourceFile`
+     * directly — clearing is always safe.
+     *
+     * @param filename Source filename that owns the text.
+     * @param code Source text to retain.
+     */
+    function trackGlobalVarSourceFile(filename: string, code: string): void {
+        if (!globalVarSourceTrackingEnabled) {
+            return;
+        }
+        recordGlobalVarSourceFile(state, filename, code);
     }
 
     // Resolved compileSources directories (absolute, realpath'd). Filled once the
@@ -3150,7 +3181,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return null;
                 }
                 if (shouldProcessSource(id)) {
-                    recordGlobalVarSourceFile(state, id, code);
+                    trackGlobalVarSourceFile(id, code);
                 }
 
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
@@ -3575,7 +3606,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         !fileContent.includes('szs=') &&
                         !/\bsz\s*:\s*["'{]/.test(fileContent)
                     ) {
-                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        trackGlobalVarSourceFile(ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
@@ -3590,21 +3621,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             performance.now() - hmrTransformStarted,
                         );
                     } catch {
-                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        trackGlobalVarSourceFile(ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     if (!result.transformed) {
-                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        trackGlobalVarSourceFile(ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     const sizeBefore = state.classes.size;
-                    recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                    trackGlobalVarSourceFile(ctx.file, fileContent);
                     for (const cls of result.classes) {
                         addSafelistClass(cls);
                         state.ownedClasses.add(cls);
