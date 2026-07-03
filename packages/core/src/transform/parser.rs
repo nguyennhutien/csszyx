@@ -576,7 +576,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             return;
         };
         match callee.name.as_str() {
-            "dynamic" => {
+            // szr(static-object) resolves the same classes at runtime that
+            // dynamic() would inject; both need their literal args safelisted.
+            "dynamic" | "szr" => {
                 let Some(object) = static_object_from_argument(argument, self.resolve_context())
                 else {
                     return;
@@ -2804,6 +2806,24 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_bare_szr_literal_args() {
+        let source =
+            r#"import {szr} from "@csszyx/runtime"; export const c = szr({ tracking: "widest" });"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        assert!(
+            parsed
+                .ir
+                .extracted_classes
+                .contains(&"tracking-widest".to_string()),
+            "bare szr literal args must reach the safelist: {:?}",
+            parsed.ir.extracted_classes
+        );
     }
 
     #[test]

@@ -745,7 +745,8 @@ export function fileMayContainSafelistableSz(content: string): boolean {
         content.includes('sz=') ||
         content.includes('szs=') ||
         content.includes('sz:') ||
-        content.includes('szv(')
+        content.includes('szv(') ||
+        content.includes('szr(')
     );
 }
 

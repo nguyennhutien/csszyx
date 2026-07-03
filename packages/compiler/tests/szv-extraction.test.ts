@@ -263,3 +263,43 @@ describe('szv extraction — TypeScript wrappers are looked through', () => {
         });
     }
 });
+
+describe('szr literal-arg extraction', () => {
+    // A bare static `szr({...})` type-checks and resolves correctly at runtime,
+    // but contributed nothing to the safelist — a silently dead class under
+    // Tailwind `source(none)` (vui 0.10.10 field report item 4). Literal args
+    // (and const-bound / TS-wrapped ones) now extract exactly like dynamic().
+    const shapes: Array<[string, string, string[]]> = [
+        [
+            'bare literal',
+            'import {szr} from "@csszyx/runtime"; export const c = szr({ tracking: "widest" });',
+            ['tracking-widest'],
+        ],
+        [
+            'const-bound object',
+            'import {szr} from "@csszyx/runtime"; const obj = { leading: "loose" }; export const c = szr(obj);',
+            ['leading-loose'],
+        ],
+        [
+            'satisfies-wrapped literal',
+            'import {szr} from "@csszyx/runtime"; export const c = szr({ indent: 8 } satisfies object);',
+            ['indent-8'],
+        ],
+    ];
+
+    for (const [name, source, expected] of shapes) {
+        it(`extracts a ${name} (both JS engines agree)`, () => {
+            const babel = [...transformSourceCode(source, 'F.tsx').classes].sort();
+            const oxc = [...transformOxc(source, 'F.tsx').classes].sort();
+            expect(babel).toEqual(expected);
+            expect(oxc).toEqual(expected);
+        });
+    }
+
+    it('a runtime-dependent szr arg extracts nothing (no false candidates)', () => {
+        const source =
+            'import {szr} from "@csszyx/runtime"; export const f = (x) => szr({ p: x });';
+        expect([...transformSourceCode(source, 'F.tsx').classes]).toEqual([]);
+        expect([...transformOxc(source, 'F.tsx').classes]).toEqual([]);
+    });
+});

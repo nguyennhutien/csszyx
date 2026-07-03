@@ -1805,7 +1805,13 @@ function collectDynamicCallClasses(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     classes: Set<string>,
 ): void {
-    if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'dynamic') {
+    if (node.callee.type !== 'Identifier') {
+        return;
+    }
+    const calleeName = (node.callee as IdentifierNode).name;
+    // szr(static-object) resolves the same classes at runtime that dynamic()
+    // would inject; both need their literal args safelisted at build time.
+    if (calleeName !== 'dynamic' && calleeName !== 'szr') {
         return;
     }
     const [firstArg] = node.arguments;
