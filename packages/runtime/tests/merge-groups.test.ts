@@ -6,7 +6,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { szcn } from '../src/merge-classes.js';
-import { _resetSzcnGroups, registerSzcnGroups } from '../src/merge-groups.js';
+import {
+    _resetSzcnGroups,
+    getSzcnGroupsGeneration,
+    registerSzcnGroups,
+} from '../src/merge-groups.js';
 
 afterEach(() => {
     _resetSzcnGroups();
@@ -277,5 +281,51 @@ describe('szcn memo invalidation (perf layer must never change results)', () => 
             expect(szcn('gap-2 p-4 text-sm', 'gap-8 text-base')).toBe(first);
         }
         expect(first).toBe('p-4 gap-8 text-base');
+    });
+});
+
+describe('generation bumps only on real registry changes', () => {
+    it('an identical re-registration does not bump the generation', () => {
+        registerSzcnGroups({ colors: ['brand'] });
+        const generation = getSzcnGroupsGeneration();
+
+        // Idempotent boot code and HMR re-executions replay the same
+        // registration — the szcn memo must survive them.
+        registerSzcnGroups({ colors: ['brand'] });
+        expect(getSzcnGroupsGeneration()).toBe(generation);
+    });
+
+    it('registering a new name bumps the generation', () => {
+        registerSzcnGroups({ colors: ['brand'] });
+        const generation = getSzcnGroupsGeneration();
+
+        registerSzcnGroups({ colors: ['accent'] });
+        expect(getSzcnGroupsGeneration()).toBe(generation + 1);
+    });
+
+    it('a registration rejected by the collision blocklist does not bump', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        registerSzcnGroups({ colors: ['brand'] });
+        const generation = getSzcnGroupsGeneration();
+
+        registerSzcnGroups({ colors: ['cover'] }); // bg-cover is background-size
+        expect(getSzcnGroupsGeneration()).toBe(generation);
+        warn.mockRestore();
+    });
+
+    it('a cross-category ambiguity drop bumps (sets lost names)', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        registerSzcnGroups({ colors: ['huge'] });
+        const generation = getSzcnGroupsGeneration();
+
+        registerSzcnGroups({ textSizes: ['huge'] }); // drops 'huge' from both
+        expect(getSzcnGroupsGeneration()).toBe(generation + 1);
+        warn.mockRestore();
+    });
+
+    it('an empty registration does not bump', () => {
+        const generation = getSzcnGroupsGeneration();
+        registerSzcnGroups({});
+        expect(getSzcnGroupsGeneration()).toBe(generation);
     });
 });

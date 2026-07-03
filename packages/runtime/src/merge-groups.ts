@@ -184,6 +184,11 @@ const _warned = new Set<string>();
  * @param groups - Custom token names per theme category.
  */
 export function registerSzcnGroups(groups: SzcnThemeGroups): void {
+    // Classification only changes when a set gains or loses a name. Bumping
+    // the generation on a no-op re-registration (idempotent boot code, an HMR
+    // re-execution of the generated registration module, or a misplaced call
+    // inside a component) would needlessly flush szcn's merge memo.
+    let changed = false;
     const entries: ReadonlyArray<[keyof typeof customTokens, readonly string[] | undefined]> = [
         ['colors', groups.colors],
         ['textSizes', groups.textSizes],
@@ -203,7 +208,10 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
                 );
                 continue;
             }
-            customTokens[category].add(name);
+            if (!customTokens[category].has(name)) {
+                customTokens[category].add(name);
+                changed = true;
+            }
         }
     }
     // Cross-category ambiguity: `--color-huge` + `--text-huge` makes `text-huge`
@@ -212,6 +220,7 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
         if (customTokens.textSizes.has(name)) {
             customTokens.colors.delete(name);
             customTokens.textSizes.delete(name);
+            changed = true;
             warnOnce(
                 `theme token "${name}" is defined as BOTH a color and a text size — ` +
                     `szcn cannot classify \`text-${name}\` and will keep-both instead of merging.`,
@@ -222,13 +231,16 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
         if (customTokens.fontWeights.has(name)) {
             customTokens.fontFamilies.delete(name);
             customTokens.fontWeights.delete(name);
+            changed = true;
             warnOnce(
                 `theme token "${name}" is defined as BOTH a font family and a font weight — ` +
                     `szcn cannot classify \`font-${name}\` and will keep-both instead of merging.`,
             );
         }
     }
-    _generation++;
+    if (changed) {
+        _generation++;
+    }
 }
 
 /**
