@@ -120,6 +120,31 @@ pub fn rewrite_static_sz_attributes_with_options(
         }
     }
 
+    // szs slot-map attributes: overwrite with the compiled per-slot class
+    // strings. All-string maps (pass-1 output) have no compiled slot and stay
+    // untouched, keeping the transform idempotent.
+    for szs in &ir.szs_attributes {
+        if !szs.any_compiled {
+            continue;
+        }
+        let body = szs
+            .entries
+            .iter()
+            .map(|entry| format!("{}: {}", entry.key, entry.emit_text))
+            .collect::<Vec<_>>()
+            .join(", ");
+        magic.update_with(
+            szs.attribute_span.start as usize,
+            szs.attribute_span.end as usize,
+            format!("szs={{{{ {body} }}}}"),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+        rewrote = true;
+    }
+
     if !rewrote {
         return if ir.sz_attributes.is_empty() {
             Err(StaticRewriteUnsupported::NoStaticSzAttribute)

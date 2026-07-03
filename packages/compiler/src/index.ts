@@ -117,6 +117,7 @@ export type {
     SzProps,
     SzPropsBase,
     SzPropValue,
+    Szs,
     TableProps,
     TransformProps,
     TransitionAnimationProps,

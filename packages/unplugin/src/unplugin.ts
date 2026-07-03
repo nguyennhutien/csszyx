@@ -736,7 +736,12 @@ export function isHardIgnoredPath(id: string, sourceDirs: readonly string[] = []
  * @returns true when the file should be prescanned for safelist extraction.
  */
 export function fileMayContainSafelistableSz(content: string): boolean {
-    return content.includes('sz=') || content.includes('sz:') || content.includes('szv(');
+    return (
+        content.includes('sz=') ||
+        content.includes('szs=') ||
+        content.includes('sz:') ||
+        content.includes('szv(')
+    );
 }
 
 /**
@@ -1884,6 +1889,26 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         return `${sep}${ws}"${mangled.join(' ')}"`;
     });
 
+    // Pass 4: `szs` slot maps. The compiled `szs={{ header: "bg-gray-100" }}`
+    // bundles to `szs: { header: "bg-gray-100", ... }` (a flat map of class
+    // strings), which none of the passes above match — the values sit after a
+    // `:`, not a className= prefix or a helper-argument separator. The `szs:`
+    // key makes the context unambiguous, so each quoted value is mangled
+    // per-token like Pass 1 (known classes swapped, unknown left, already-
+    // mangled tokens are not map keys so double-mangling cannot happen).
+    result = result.replace(/\bszs:\s*\{([^{}]*)\}/g, (whole: string, body: string) => {
+        const mangledBody = body
+            .replace(
+                /"((?:[^"\\]|\\.)*)"/g,
+                (_m: string, inner: string) => `"${mangleClassString(inner)}"`,
+            )
+            .replace(
+                /'((?:[^'\\]|\\.)*)'/g,
+                (_m: string, inner: string) => `'${mangleClassString(inner)}'`,
+            );
+        return whole.replace(body, mangledBody);
+    });
+
     return result;
 }
 
@@ -2588,7 +2613,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         } catch {
             return;
         }
-        if (content.includes('sz=') || content.includes('sz:')) {
+        if (content.includes('sz=') || content.includes('szs=') || content.includes('sz:')) {
             state.skippedSzFiles.add(filePath);
         }
     }
@@ -3079,7 +3104,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 // Detect sz prop in both JSX (sz="...", sz={{...}}) and JS/JSX-transformed (sz: "...", sz: {...}) formats
                 const hasSzProp =
-                    code.includes('sz=') || /\bsz\s*:\s*["'{]/.test(code) || code.includes('sz: "');
+                    code.includes('sz=') ||
+                    code.includes('szs=') ||
+                    /\bsz\s*:\s*["'{]/.test(code) ||
+                    code.includes('sz: "');
 
                 if (hasSzProp) {
                     if (id.endsWith('.vue')) {
@@ -3416,7 +3444,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         return;
                     }
 
-                    if (!fileContent.includes('sz=') && !/\bsz\s*:\s*["'{]/.test(fileContent)) {
+                    if (
+                        !fileContent.includes('sz=') &&
+                        !fileContent.includes('szs=') &&
+                        !/\bsz\s*:\s*["'{]/.test(fileContent)
+                    ) {
                         recordGlobalVarSourceFile(state, ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);

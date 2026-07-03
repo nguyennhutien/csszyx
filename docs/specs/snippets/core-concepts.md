@@ -369,3 +369,74 @@ Strategy for static analysis vs runtime generation.
 
 - ✅ `sz({ color: isErr ? 'red-500' : 'green-500' })` (Zero Runtime)
 - ⚠️ `sz({ color:`red-${shade}`})` (Runtime injection overhead)
+
+## TypeScript: `sz` on custom components
+
+The JSX augmentation (`@csszyx/types/jsx`) adds `sz` to **host elements only**
+(`<div>`, `<span>`, … via React `HTMLAttributes` / `SVGAttributes`). A custom
+component has its own props type, so `sz` is **not auto-typed** there.
+
+Two independent layers:
+
+- **Compile** — the transform lowers `sz` → `className` on ANY element, custom
+  included: `<Card sz={{ p: 4 }} />` → `<Card className="p-4" />`. So it works at
+  runtime as long as the component forwards `className` down to a host element.
+- **Type** — only auto-typed when the component's props derive from host attributes.
+
+| Component props type                                       | `sz` typed?         |
+| :--------------------------------------------------------- | :------------------ |
+| `{ title: string }` (fresh type)                           | ❌ TS error         |
+| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`      | ✅ inherited        |
+| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>`    | ✅ just `sz`        |
+
+Add `sz` to a fresh props type by picking it (no import needed) or declaring it:
+
+```tsx
+import type { ComponentProps } from 'react';
+type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz'>;
+// equivalent: import type { SzPropValue } from '@csszyx/types'; then `sz?: SzPropValue`
+```
+
+The augmentation must be in scope (a `/// <reference types="@csszyx/types/jsx" />`
+or the project's `csszyx-env.d.ts`), otherwise `sz` is not a key of
+`ComponentProps<'div'>` and `Pick` fails.
+
+## Styling parts of a compound component
+
+No special API. `sz` compiles to `className` on ANY element — host tags, custom
+components, and dotted names (`Card.Header`) — and each is safelisted + mangled like
+a normal `sz`. So style a compound component's parts by giving each part its own `sz`:
+
+```tsx
+<Card sz={{ p: 4 }}>
+  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Body sz={{ text: 'sm' }}>Body</Card.Body>
+</Card>
+// → each part compiled to className at build time; all classes safelisted.
+```
+
+Build it as a plain React compound component; each part forwards `sz` (already
+rewritten to `className` by the transform) onto a host element. Type each part with
+`ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
+Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
+last-wins) or `clsx`.
+
+## `szs` — slot map for a component's internal parts
+
+For parts a component renders ITSELF (no consumer content), `szs` maps slot names
+to sz values. The transform compiles each VALUE to its class string (key kept),
+safelisting + mangling like `sz`; the component forwards `props.szs?.<slot>` into
+the matching child's `className`.
+
+```tsx
+type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
+<Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
+// → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
+// component: <header className={props.szs?.header} />
+```
+
+Rules: custom components only (host element → dev warn, unchanged). Slot values
+must be STATIC — a pure object literal (nested variants OK) or a raw class string;
+identifiers/conditionals/spreads leave the attribute unchanged with a dev warning.
+Keys are identifiers. `sz` styles the element itself; `szs` styles its internal
+parts — a component can take both.

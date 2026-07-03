@@ -1975,3 +1975,22 @@ export type SzArrayElement = SzProps | false | null | undefined;
  * ```
  */
 export type SzPropValue = string | SzProps | SzArrayElement[];
+
+/**
+ * Value of the `szs` prop — a map of a component's slot names to sz values, so a
+ * consumer styles the parts a compound component renders internally. The build
+ * transform compiles each slot VALUE to its Tailwind class string (keeping the
+ * key), safelists and mangles the classes exactly like `sz`, and the component
+ * forwards `props.szs?.<slot>` into the matching child's `className`.
+ *
+ * Component authors declare their slot set so consumers get autocompletion and
+ * typo checking:
+ *
+ * @example
+ * ```tsx
+ * type CardProps = { szs?: Szs<'header' | 'icon'> };
+ * // consumer:
+ * <Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
+ * ```
+ */
+export type Szs<Slots extends string = string> = Partial<Record<Slots, SzPropValue>>;

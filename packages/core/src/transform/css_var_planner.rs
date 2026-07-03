@@ -630,6 +630,8 @@ mod tests {
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
             jsx_opening_elements: vec![opening_element(10, vec![0]), opening_element(40, vec![1])],
+            szs_attributes: Vec::new(),
+            szs_diagnostics: Vec::new(),
         };
 
         let planned = apply_scoped_css_variable_names(&ir);

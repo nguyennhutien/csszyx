@@ -134,6 +134,12 @@ export function transformSourceCode(
     let usesColorVar = false;
     let transformed = false;
     const collectedClasses = new Set<string>();
+    // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
+    // until after the traversal so the discovery order is deterministic across
+    // engines: all sz-derived classes (document order) first, then all
+    // szs-derived classes (document order). Mangle IDs are assigned in discovery
+    // order, so this ordering is part of the three-engine parity contract.
+    const szsPendingClasses: string[] = [];
     // Raw class names from className="..." attributes — used for TW JIT safelist only, NOT for mangling.
     const rawClassNames = new Set<string>();
     // Dev-mode diagnostics: emitted when sz props fall back to runtime transforms.
@@ -289,6 +295,95 @@ export function transformSourceCode(
                                     path: `${file}:${line}:${column}`,
                                 });
                                 transformed = true;
+                                return;
+                            }
+
+                            // szs handling: compile each slot VALUE of the slot-map
+                            // to its class string (keeping the key) so the component
+                            // can forward `props.szs?.<slot>` into a child className.
+                            // Only meaningful on custom components; the v1 contract
+                            // (pure-literal object or class-string values, identifier
+                            // keys) is enforced identically across all three engines.
+                            if (attrName === 'szs') {
+                                const openingEl = path.parentPath?.isJSXOpeningElement()
+                                    ? path.parentPath.node
+                                    : null;
+                                if (openingEl && isHostElementName(openingEl.name)) {
+                                    diagnostics.push(
+                                        `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
+                                            'szs has no effect on a host element — it maps slot names of a ' +
+                                            'custom component. Attribute left unchanged.',
+                                    );
+                                    return;
+                                }
+                                const container = path.node.value;
+                                if (
+                                    !t.isJSXExpressionContainer(container) ||
+                                    !t.isObjectExpression(container.expression)
+                                ) {
+                                    diagnostics.push(szsUnsupportedMessage(filename));
+                                    return;
+                                }
+                                const slotMap = container.expression;
+                                if (!isValidSzsSlotMap(slotMap)) {
+                                    diagnostics.push(szsUnsupportedMessage(filename));
+                                    return;
+                                }
+                                setSzWarnLocation(
+                                    formatSzWarnLocation(
+                                        filename ?? 'file.tsx',
+                                        path.node.loc?.start.line,
+                                        options?.rootDir,
+                                    ),
+                                );
+                                // Two phases so a failure never leaves the attribute
+                                // partially rewritten: compile everything first, then
+                                // apply the mutations and record the classes.
+                                const compiledSlots: Array<{
+                                    slot: t.ObjectProperty;
+                                    classes: string;
+                                    rewrite: boolean;
+                                }> = [];
+                                for (const prop of slotMap.properties) {
+                                    // Validated above: every prop is a non-computed
+                                    // identifier-keyed ObjectProperty.
+                                    const slot = prop as t.ObjectProperty;
+                                    if (t.isStringLiteral(slot.value)) {
+                                        // Raw class string (also pass-1 output, so the
+                                        // transform is idempotent): safelist, keep as-is.
+                                        compiledSlots.push({
+                                            slot,
+                                            classes: slot.value.value,
+                                            rewrite: false,
+                                        });
+                                        continue;
+                                    }
+                                    const compiled = tryStaticTransformNode(slot.value as t.Node);
+                                    if (!compiled || !t.isStringLiteral(compiled)) {
+                                        diagnostics.push(szsUnsupportedMessage(filename));
+                                        return;
+                                    }
+                                    compiledSlots.push({
+                                        slot,
+                                        classes: compiled.value,
+                                        rewrite: true,
+                                    });
+                                }
+                                for (const {
+                                    slot,
+                                    classes: slotClasses,
+                                    rewrite,
+                                } of compiledSlots) {
+                                    if (rewrite) {
+                                        slot.value = t.stringLiteral(slotClasses);
+                                        transformed = true;
+                                    }
+                                    for (const c of slotClasses.split(/\s+/)) {
+                                        if (c) {
+                                            szsPendingClasses.push(c);
+                                        }
+                                    }
+                                }
                                 return;
                             }
 
@@ -1095,6 +1190,12 @@ export function transformSourceCode(
             ],
         });
 
+        // szs classes join AFTER every sz-derived class so the discovery order
+        // (which fixes production mangle IDs) matches the other engines.
+        for (const c of szsPendingClasses) {
+            collectedClasses.add(c);
+        }
+
         return {
             code: result?.code || source,
             transformed: transformed,
@@ -1163,6 +1264,82 @@ function parseStyleStringToObjectExpr(styleStr: string): t.ObjectExpression {
 
 /** Scope binding resolver — wraps `path.scope.getBinding` for testability and optional use. */
 type GetBinding = (name: string) => { path: babel.NodePath } | null | undefined;
+
+/**
+ * Whether a JSX opening-element name is a host (DOM) element — a plain
+ * lowercase identifier like `div`. Uppercase identifiers and member
+ * expressions (`Card.Header`) are custom components.
+ *
+ * @param name - the opening element's name node.
+ * @returns true for a host element name.
+ */
+function isHostElementName(name: t.Node): boolean {
+    return t.isJSXIdentifier(name) && /^[a-z]/.test(name.name);
+}
+
+/**
+ * The shared unsupported-szs diagnostic — the exact contract (identifier keys,
+ * pure-literal object or class-string values) is enforced identically by all
+ * three engines so their outputs stay in parity.
+ *
+ * @param filename - source filename for context.
+ * @returns the diagnostic message.
+ */
+function szsUnsupportedMessage(filename: string | undefined): string {
+    return (
+        `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
+        'every slot must be an identifier key with a static object literal ' +
+        '(or class string) value. Attribute left unchanged.'
+    );
+}
+
+/**
+ * Whether a value is allowed inside an szs slot object: string / number /
+ * boolean literals, a negated number, or a nested object of the same. This is
+ * deliberately STRICTER than the sz path (no identifiers, spreads,
+ * conditionals, parens, or `as` casts) so all three engines can enforce the
+ * exact same contract without a scope resolver.
+ *
+ * @param node - the candidate value node.
+ * @returns true when the value is a pure literal.
+ */
+function isPureLiteralSzValue(node: t.Node): boolean {
+    if (t.isStringLiteral(node) || t.isNumericLiteral(node) || t.isBooleanLiteral(node)) {
+        return true;
+    }
+    if (t.isUnaryExpression(node) && node.operator === '-' && t.isNumericLiteral(node.argument)) {
+        return true;
+    }
+    if (t.isObjectExpression(node)) {
+        return node.properties.every(
+            prop =>
+                t.isObjectProperty(prop) &&
+                !prop.computed &&
+                t.isIdentifier(prop.key) &&
+                isPureLiteralSzValue(prop.value as t.Node),
+        );
+    }
+    return false;
+}
+
+/**
+ * Whether an szs value is a valid v1 slot map: every property is a
+ * non-computed identifier-keyed ObjectProperty whose value is a class string
+ * or a pure-literal sz object.
+ *
+ * @param slotMap - the szs object expression.
+ * @returns true when every slot satisfies the v1 contract.
+ */
+function isValidSzsSlotMap(slotMap: t.ObjectExpression): boolean {
+    return slotMap.properties.every(
+        prop =>
+            t.isObjectProperty(prop) &&
+            !prop.computed &&
+            t.isIdentifier(prop.key) &&
+            (t.isStringLiteral(prop.value) ||
+                (t.isObjectExpression(prop.value) && isPureLiteralSzValue(prop.value))),
+    );
+}
 
 /**
  * Replaces an empty-string class branch with `undefined` so a ternary used
@@ -1390,26 +1567,64 @@ function tryHoistNestedConditional(
     if (topLevel !== 0 || nested !== 1 || test === null) {
         return null;
     }
+
+    // Factor like the native engine: the non-conditional props emit once as a
+    // static prefix, and only the conditional prop varies inside the ternary
+    // (`bg-white/70 ${cond ? "border-red-700/18" : "border-charcoal/18"}`).
+    // Repeating the static classes in both branches yielded the same class SET but
+    // a different discovery ORDER, so mangle IDs (assigned in discovery order)
+    // diverged from Rust/oxc.
+    const condPropIndex = node.properties.findIndex(
+        prop =>
+            t.isObjectProperty(prop) &&
+            t.isObjectExpression(prop.value) &&
+            countAllConditionals(prop.value) === 1,
+    );
+    if (condPropIndex === -1) {
+        return null;
+    }
+    const staticNode = t.objectExpression(node.properties.filter((_, i) => i !== condPropIndex));
+    const condNode = t.objectExpression([node.properties[condPropIndex]]);
+
+    const staticClasses =
+        staticNode.properties.length > 0 ? tryStaticTransformNode(staticNode, getBinding) : null;
     const consequent = tryStaticTransformNode(
-        cloneObjectPickingBranch(node, 'consequent'),
+        cloneObjectPickingBranch(condNode, 'consequent'),
         getBinding,
     );
     const alternate = tryStaticTransformNode(
-        cloneObjectPickingBranch(node, 'alternate'),
+        cloneObjectPickingBranch(condNode, 'alternate'),
         getBinding,
     );
     if (
         !consequent ||
         !alternate ||
         !t.isStringLiteral(consequent) ||
-        !t.isStringLiteral(alternate)
+        !t.isStringLiteral(alternate) ||
+        (staticNode.properties.length > 0 && (!staticClasses || !t.isStringLiteral(staticClasses)))
     ) {
         return null;
     }
-    return t.conditionalExpression(
+
+    const ternary = t.conditionalExpression(
         test,
         emptyClassToUndefined(consequent),
         emptyClassToUndefined(alternate),
+    );
+    if (!staticClasses || !t.isStringLiteral(staticClasses) || staticClasses.value === '') {
+        return ternary;
+    }
+    // `${staticClasses} ${cond ? "…" : "…"}` — discovery order: static, then the
+    // consequent branch, then the alternate branch (matches Rust/oxc).
+    return t.templateLiteral(
+        [
+            t.templateElement(
+                { raw: `${staticClasses.value} `, cooked: `${staticClasses.value} ` },
+                false,
+            ),
+            t.templateElement({ raw: '', cooked: '' }, true),
+        ],
+        [ternary],
     );
 }
 
@@ -2087,6 +2302,21 @@ function collectFromExpr(node: t.Expression, classes: Set<string>): void {
     } else if (t.isConditionalExpression(node)) {
         collectFromExpr(node.consequent as t.Expression, classes);
         collectFromExpr(node.alternate as t.Expression, classes);
+    } else if (t.isTemplateLiteral(node)) {
+        // A hoisted nested conditional emits `${static} ${cond ? a : b}`. Walk
+        // quasis and interpolated expressions INTERLEAVED in source order so the
+        // discovery order stays [static, consequent, alternate] — matching Rust.
+        for (let i = 0; i < node.quasis.length; i++) {
+            for (const c of (node.quasis[i].value.cooked ?? '').split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            const expr = node.expressions[i];
+            if (expr && t.isExpression(expr)) {
+                collectFromExpr(expr, classes);
+            }
+        }
     }
 }
 

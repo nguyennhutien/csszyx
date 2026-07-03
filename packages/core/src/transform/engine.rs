@@ -171,7 +171,12 @@ fn transform_fast_static_ir_with_options(
         map: None,
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
-        diagnostics: unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref()),
+        diagnostics: {
+            let mut diagnostics =
+                unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
+            diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
+            diagnostics
+        },
         recovery_tokens: Vec::new(),
         css_variable_map: global_var_aliases
             .map(|aliases| aliases.variable_map)
@@ -246,6 +251,7 @@ fn transform_static_classes_with_options(
         &parsed.ir,
         options.root_dir.as_deref(),
     ));
+    diagnostics.extend(parsed.ir.szs_diagnostics.iter().cloned());
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
             "[csszyx] Rust native transform at {}: AST budget exceeded; leaving file unchanged for now.",
