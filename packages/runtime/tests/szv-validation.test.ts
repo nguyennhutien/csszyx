@@ -30,11 +30,12 @@ describe('szv config/selection validation (dev)', () => {
         expect(warn).not.toHaveBeenCalled();
     });
 
-    it('warns and falls back to base when variants is missing', () => {
-        // @ts-expect-error — intentionally invalid config (runtime/JSON path)
+    it('accepts a base-only config without warning', () => {
+        // A base-only szv declares one reusable class bundle — valid, not a
+        // mis-shape (warning while returning the base anyway helped nobody).
         const f = szv({ base: { p: 4 } });
-        expect(f()).toEqual({ p: 4 }); // safe fallback to base
-        expect(warned(/variants is required/)).toBe(true);
+        expect(f()).toEqual({ p: 4 });
+        expect(warn).not.toHaveBeenCalled();
     });
 
     it('warns and falls back to {} when config is not an object', () => {
