@@ -77,13 +77,30 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
         visitor.ast_budget_exceeded
     };
 
+    let mut diagnostics: Vec<String> = parsed
+        .errors
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
+    if !parsed.errors.is_empty() || parsed.panicked {
+        // A file the parser rejects contributes nothing (or only fragments) to
+        // the safelist, and unlike the JS engines there is no Babel fallback on
+        // the native path — so make the skip observable. The bundler plugin
+        // promotes this marker to a build warning when the file yielded no
+        // classes, instead of letting the classes die silently under
+        // Tailwind `source(none)`.
+        diagnostics.insert(
+            0,
+            format!(
+                "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
+                file.filename,
+                parsed.errors.len()
+            ),
+        );
+    }
     ParsedSourceShell {
         ir,
-        diagnostics: parsed
-            .errors
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect(),
+        diagnostics,
         panicked: parsed.panicked,
         ast_budget_exceeded,
         timings,
@@ -95,7 +112,20 @@ fn elapsed_ns(start: Instant) -> u64 {
 }
 
 fn source_type_for_path(filename: &str) -> SourceType {
-    SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx())
+    let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
+    // React-17-era codebases routinely keep JSX in plain `.js` files (Babel and
+    // swc accept that by default). oxc maps `.js` to a JSX-less grammar, so the
+    // parse failed and the file silently contributed NOTHING to the safelist —
+    // whole files of classes went missing under the native engine while the JS
+    // engines recovered via the Babel fallback. JSX-enabled parsing of plain JS
+    // is a superset (a leading `<` is a syntax error otherwise), so opt every
+    // JavaScript file in. TypeScript stays as mapped: `.ts` genuinely cannot
+    // carry JSX (generic-cast ambiguity) and `.tsx` already parses it.
+    if source_type.is_javascript() {
+        source_type.with_jsx(true)
+    } else {
+        source_type
+    }
 }
 
 struct CsszyxIrVisitor<'source, 'ir, 'p> {

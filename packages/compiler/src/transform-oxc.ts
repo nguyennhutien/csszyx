@@ -124,7 +124,13 @@ export function transformOxc(
     // return, so a runtime/browser warning never inherits a stale build location.
     setSzWarnLocation(undefined);
     const astBudget = options?.astBudget ?? AST_BUDGET;
-    const parsed = parseSync(effectiveFilename, source);
+    // Parse plain `.js` / `.mjs` / `.cjs` with JSX enabled: React-17-era code
+    // keeps JSX in `.js`, oxc's extension mapping picks a JSX-less grammar, and
+    // the parse error used to bounce every such file to the Babel fallback (and
+    // silently emptied the native engine's scan). JSX-enabled JS is a superset.
+    const parsed = /\.(?:js|mjs|cjs)$/.test(effectiveFilename)
+        ? parseSync(effectiveFilename, source, { lang: 'jsx' })
+        : parseSync(effectiveFilename, source);
     if (parsed.errors.length > 0) {
         throw new Error(
             `oxc-parser errors in ${effectiveFilename}: ` +

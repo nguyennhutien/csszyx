@@ -3003,6 +3003,15 @@ function transformImpl(
             }
         }
 
+        // A purely numeric key can never be a CSS property or Tailwind utility —
+        // it is almost always a numeric lookup table (`{ 50: 100 }`) swallowed by
+        // extraction, and the generic fallbacks below would mint garbage classes
+        // like `50-100` straight into the safelist. Skip it (the unknown-property
+        // dev warning above already fired).
+        if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
+            continue;
+        }
+
         // ================================================================
         // HANDLE BOOLEAN TRUE VALUES
         // ================================================================

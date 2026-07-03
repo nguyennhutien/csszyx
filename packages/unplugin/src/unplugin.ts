@@ -224,7 +224,12 @@ const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
-let _hasLoggedActiveParser = false;
+// Keyed by resolved parser mode, not a single boolean: one process can hold
+// several plugin instances (client + SSR configs, or a tool that loads the
+// config twice), and when the first instance resolved a different mode the log
+// used to claim an engine the real build never used — which cost a field user
+// an investigation. Each distinct mode announces itself once.
+const _loggedActiveParsers = new Set<string>();
 // Files for which an oxc→Babel fallback has already been reported, so the
 // per-file warning is emitted once per file rather than on every re-transform.
 const _babelFallbackFiles = new Set<string>();
@@ -2037,8 +2042,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // this the only signal was the degrade warning above, so a project could be
     // running on `oxc` (or silently dropping to Babel per file) with no way to
     // tell which parser produced its classes.
-    if (!_hasLoggedActiveParser) {
-        _hasLoggedActiveParser = true;
+    if (!_loggedActiveParsers.has(parserMode)) {
+        _loggedActiveParsers.add(parserMode);
         const detail = parserDegraded
             ? 'oxc (degraded from default `rust`: no native binary for this platform)'
             : parserMode === 'rust'
@@ -2487,8 +2492,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     filePath: file.filePath,
                     result: transformConfiguredSource(file.content, file.filePath),
                 });
-            } catch {
-                // Preserve historical prescan behavior: skip files that fail to transform.
+            } catch (err) {
+                // Historical prescan behavior keeps the build alive, but the skip
+                // itself must be visible: every class in this file is silently
+                // dead under Tailwind `source(none)`.
+                console.warn(
+                    `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
+                        `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,
+                );
             }
         }
         return results;
@@ -2683,6 +2694,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            // A parse-rejected file contributes nothing to the safelist, and its
+            // classes render only while some other usage donates the same class —
+            // a silently dead class under Tailwind `source(none)`. Surface the
+            // skip as a build warning (correctness of extracted output, so it is
+            // not a dev-only nudge).
+            if (
+                result.classes.size === 0 &&
+                result.rawClassNames.size === 0 &&
+                result.diagnostics.some(d => d.includes('[csszyx] parse error in '))
+            ) {
+                console.warn(
+                    `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
+                        'none of its classes reached the safelist. Fix the syntax error ' +
+                        '(or check the file extension matches its contents).',
+                );
+                continue;
+            }
             // A szv-only file (no `sz=` to rewrite) reports transformed=false but
             // still extracts a catalog of classes — collect those, otherwise its
             // variants are silently dropped from the safelist (the file is
