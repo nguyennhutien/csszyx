@@ -187,3 +187,65 @@ describe('regression: previous under-merge behaviour that must stay', () => {
         expect(szcn('pb-2', 'p-4')).toBe('p-4');
     });
 });
+
+describe('QA expansion — edge cases from review', () => {
+    it('registered custom color with an opacity modifier stays in the color group', () => {
+        registerSzcnGroups({ colors: ['brand'] });
+        expect(szcn('text-brand/50', 'text-blue-600')).toBe('text-blue-600');
+        expect(szcn('text-brand/50', 'text-sm')).toBe('text-brand/50 text-sm');
+    });
+
+    it('registered custom size with a line-height modifier stays in the size group', () => {
+        registerSzcnGroups({ textSizes: ['huge'] });
+        expect(szcn('text-huge/8', 'text-sm')).toBe('text-sm');
+    });
+
+    it('shaded custom colors classify by SHAPE with no registration at all', () => {
+        // `--color-brand-*` produces classes like text-brand-500 — the
+        // {name}-{shade} shape is recognized without any registration.
+        expect(szcn('text-brand-500', 'text-red-500')).toBe('text-red-500');
+        expect(szcn('bg-brand-500', 'bg-cover')).toBe('bg-brand-500 bg-cover');
+    });
+
+    it('stacked variants scope the group as one prefix', () => {
+        expect(szcn('md:hover:text-sm', 'md:hover:text-base')).toBe('md:hover:text-base');
+        expect(szcn('md:hover:text-sm', 'hover:text-base')).toBe(
+            'md:hover:text-sm hover:text-base',
+        );
+    });
+
+    it('arbitrary flex values classify as the shorthand group', () => {
+        expect(szcn('flex-[2]', 'flex-1')).toBe('flex-1');
+        expect(szcn('flex-[2]', 'flex-row')).toBe('flex-[2] flex-row');
+    });
+
+    it('important markers merge into the same group (later token is the intent)', () => {
+        // Passing a later class IS the override intent, so `!text-sm` earlier
+        // loses to a later `text-base` — same semantics single-property
+        // prefixes have always had (normalizeBase strips the marker).
+        expect(szcn('!text-sm', 'text-base')).toBe('text-base');
+        expect(szcn('text-base', '!text-sm')).toBe('!text-sm');
+    });
+
+    it('hostile registration input never throws and registers nothing wrong', () => {
+        registerSzcnGroups({
+            colors: [null as unknown as string, 42 as unknown as string, '', 'ok-token'],
+        });
+        expect(szcn('text-ok-token', 'text-red-500')).toBe('text-red-500');
+        expect(szcn('text-42', 'text-red-500')).toBe('text-42 text-red-500');
+    });
+
+    it('mangled custom-token classes classify through decode + registration', () => {
+        registerSzcnGroups({ colors: ['brand'] });
+        const reverse = new Map([
+            ['z1', 'text-brand'],
+            ['z2', 'text-red-500'],
+            ['z3', 'text-sm'],
+        ]);
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: (token: string) => reverse.get(token),
+        };
+        expect(szcn('z1', 'z2')).toBe('z2'); // both colors → last wins, mangled output
+        expect(szcn('z1', 'z3')).toBe('z1 z3'); // color + size co-exist
+    });
+});

@@ -11,6 +11,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -19,9 +20,6 @@ import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 const FIXTURE_FILES: Record<string, string> = {
-    'index.html': `<!doctype html>
-<html><head></head><body><script type="module" src="/src/main.ts"></script></body></html>
-`,
     'src/theme.css': `
 @import 'tailwindcss';
 @theme {
@@ -32,9 +30,14 @@ const FIXTURE_FILES: Record<string, string> = {
 }
 `,
     // The ONLY wiring the app does: define tokens in @theme and call szcn.
+    // The exports are computed INSIDE the built bundle, so importing the dist
+    // file proves the whole chain executed: scan → generated registration →
+    // injected import → szcn actually deduping the custom tokens.
     'src/main.ts': `
 import { szcn } from '@csszyx/runtime';
-document.body.textContent = szcn('text-brand', 'text-red-500');
+export const customColorOverride = szcn('text-brand', 'text-red-500');
+export const customSizeOverride = szcn('text-base', 'text-huge');
+export const customFamilyVsWeight = szcn('font-display', 'font-chunky');
 `,
 };
 
@@ -48,6 +51,11 @@ afterAll(() => {
 
 describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
     let bundle: string;
+    let builtModule: {
+        customColorOverride: string;
+        customSizeOverride: string;
+        customFamilyVsWeight: string;
+    };
 
     beforeAll(async () => {
         loadNativeBinding(resolve(__dirname, '../../core-linux-arm64-gnu'));
@@ -67,18 +75,26 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
                     production: { mangle: false },
                 }),
             ],
+            resolve: {
+                // Inline the workspace runtime so the built file is
+                // self-contained and executable from the temp dir.
+                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+            },
             build: {
                 minify: false,
-                rollupOptions: { external: ['@csszyx/runtime', 'csszyx', 'tailwindcss'] },
+                lib: { entry: join(root, 'src/main.ts'), formats: ['es'], fileName: 'bundle' },
+                rollupOptions: { external: ['tailwindcss'] },
             },
         });
 
-        const assetsDir = join(root, 'dist', 'assets');
-        bundle = readdirSync(assetsDir)
-            .filter(f => f.endsWith('.js'))
-            .map(f => readFileSync(join(assetsDir, f), 'utf8'))
-            .join('\n');
+        const distDir = join(root, 'dist');
+        const files = readdirSync(distDir).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
+        bundle = files.map(f => readFileSync(join(distDir, f), 'utf8')).join('\n');
         expect(bundle.length).toBeGreaterThan(0);
+        const entryFile = files.find(f => f.startsWith('bundle')) ?? files[0];
+        builtModule = (await import(
+            pathToFileURL(join(distDir, entryFile as string)).href
+        )) as typeof builtModule;
     }, 60_000);
 
     it('the registration call ships inside the bundle', () => {
@@ -93,5 +109,57 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
         expect(bundle).toMatch(entry('textSizes', 'huge'));
         expect(bundle).toMatch(entry('fontFamilies', 'display'));
         expect(bundle).toMatch(entry('fontWeights', 'chunky'));
+    });
+
+    it('EXECUTING the bundle proves szcn dedupes the custom tokens at runtime', () => {
+        // Not just "the registration shipped" — the built code ran it and the
+        // merge results below were computed inside the bundle.
+        expect(builtModule.customColorOverride).toBe('text-red-500');
+        expect(builtModule.customSizeOverride).toBe('text-huge');
+        expect(builtModule.customFamilyVsWeight).toBe('font-display font-chunky');
+    });
+});
+
+describe('HMR: editing @theme reloads the generated registration module', () => {
+    it('invalidates the virtual module when a scanned CSS file changes', () => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-theme-hmr-'));
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(join(root, 'src/theme.css'), '@theme { --color-brand: red; }', 'utf8');
+        writeFileSync(
+            join(root, 'src/App.tsx'),
+            'export const A = () => <div sz={{ p: 4 }} />;',
+            'utf8',
+        );
+
+        type HotUpdateHook = {
+            configResolved?: (config: { root: string }) => void;
+            handleHotUpdate?: (ctx: unknown) => void;
+        };
+        const [prePlugin] = vitePlugin({
+            build: { cache: false, scanCss: ['src/theme.css'] },
+        }) as HotUpdateHook[];
+        prePlugin?.configResolved?.({ root });
+
+        const invalidated: string[] = [];
+        const fakeModule = { id: '\0virtual:csszyx/theme-groups' };
+        prePlugin?.handleHotUpdate?.({
+            file: join(root, 'src/theme.css'),
+            server: {
+                config: { root },
+                moduleGraph: {
+                    getModuleById: (id: string) =>
+                        id === '\0virtual:csszyx/theme-groups' ? fakeModule : undefined,
+                    invalidateModule: (mod: { id: string }) => {
+                        invalidated.push(mod.id);
+                    },
+                },
+            },
+        });
+
+        expect(
+            invalidated,
+            'a theme edit must reload the registration module, or the dev server serves stale groups until restart',
+        ).toContain('\0virtual:csszyx/theme-groups');
     });
 });

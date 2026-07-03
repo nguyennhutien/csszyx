@@ -33,6 +33,13 @@ export const tagSz = szv({ variants: { c: { blue: { bg: 'tag-blue-bg' } } satisf
     'src/toolbar.js': `
 export const Toolbar = () => <div className="toolbar" sz={{ mx: 0 }} />;
 `,
+    // An szcn-using module: the theme-groups import injection must be
+    // cache-safe (it keys on the source, not on scan-time state), so cached
+    // and uncached runs of this file must agree like every other.
+    'src/merge.ts': `
+import { szcn } from '@csszyx/runtime';
+export const cls = szcn('gap-2 p-4', 'gap-8');
+`,
 };
 
 const tempDirs: string[] = [];
