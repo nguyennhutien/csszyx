@@ -1734,6 +1734,29 @@ function readStaticConfigObject(
 }
 
 /**
+ * Peel TypeScript-only wrapper expressions (`satisfies`, `as`, non-null `!`,
+ * parentheses) off a node. They are type-level annotations with no runtime
+ * effect, so extraction must look straight through them — `{...} satisfies
+ * Record<Token, object>` is the natural way to keep a variant table complete
+ * against a union, and it used to silently disable szv extraction.
+ *
+ * @param node - The node to unwrap.
+ * @returns The innermost non-wrapper expression node.
+ */
+function unwrapTsExpression(node: t.Node | null | undefined): t.Node | null | undefined {
+    let current = node;
+    while (
+        t.isTSSatisfiesExpression(current) ||
+        t.isTSAsExpression(current) ||
+        t.isTSNonNullExpression(current) ||
+        t.isParenthesizedExpression(current)
+    ) {
+        current = current.expression;
+    }
+    return current;
+}
+
+/**
  * Resolve a node to an object-literal expression: it either IS one, or is a
  * same-scope `const` identifier bound to one. A reassigned binding (babel reports
  * `binding.constant === false`) or any non-object initializer returns null — so
@@ -1747,17 +1770,21 @@ function resolveToConstObjectExpression(
     node: t.Node | null | undefined,
     scope: babel.NodePath['scope'],
 ): t.ObjectExpression | null {
-    if (t.isObjectExpression(node)) {
-        return node;
+    const unwrapped = unwrapTsExpression(node);
+    if (t.isObjectExpression(unwrapped)) {
+        return unwrapped;
     }
-    if (t.isIdentifier(node)) {
-        const binding = scope.getBinding(node.name);
+    if (t.isIdentifier(unwrapped)) {
+        const binding = scope.getBinding(unwrapped.name);
         // `const`-declared only (matches the oxc const-binding map + the Rust
         // VariableDeclarationKind::Const guard), AND never reassigned.
         if (binding?.kind === 'const' && binding.constant) {
             const declNode = binding.path.node;
-            if (t.isVariableDeclarator(declNode) && t.isObjectExpression(declNode.init)) {
-                return declNode.init;
+            if (t.isVariableDeclarator(declNode)) {
+                const init = unwrapTsExpression(declNode.init);
+                if (t.isObjectExpression(init)) {
+                    return init;
+                }
             }
         }
     }
@@ -1794,7 +1821,7 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
             return null;
         }
 
-        const value = prop.value;
+        const value = unwrapTsExpression(prop.value);
         if (t.isStringLiteral(value)) {
             result[key] = value.value;
         } else if (t.isNumericLiteral(value)) {

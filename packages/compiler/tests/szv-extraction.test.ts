@@ -224,3 +224,42 @@ describe('szv extraction — transformed flag must not gate class collection', (
         expect(r.classes.size).toBeGreaterThan(0);
     });
 });
+
+describe('szv extraction — TypeScript wrappers are looked through', () => {
+    // `satisfies Record<Token, object>` is the natural way to keep a large
+    // variant table complete against a union type; it (and `as`) used to
+    // silently disable extraction (vui 0.10.10 field report item 3). The
+    // wrappers are type-level only, so every engine unwraps them at every
+    // position: the whole config, a variants/group value, and a leaf object.
+    const wrapped: Array<[string, string]> = [
+        [
+            'satisfies on a variant group value',
+            'import {szv} from "@csszyx/runtime"; export const t = szv({ variants: { c: { blue: { bg: "tag-blue" }, red: { bg: "tag-red" } } satisfies Record<string, object> } });',
+        ],
+        [
+            'as on a variant group value',
+            'import {szv} from "@csszyx/runtime"; export const t = szv({ variants: { c: { blue: { bg: "tag-blue" }, red: { bg: "tag-red" } } as Record<string, object> } });',
+        ],
+        [
+            'satisfies on the whole config',
+            'import {szv} from "@csszyx/runtime"; export const t = szv({ variants: { c: { blue: { bg: "tag-blue" }, red: { bg: "tag-red" } } } } satisfies object);',
+        ],
+        [
+            'as on a leaf variant object',
+            'import {szv} from "@csszyx/runtime"; export const t = szv({ variants: { c: { blue: ({ bg: "tag-blue" }) as object, red: { bg: "tag-red" } } } });',
+        ],
+        [
+            'satisfies on a const-bound config',
+            'import {szv} from "@csszyx/runtime"; const cfg = { variants: { c: { blue: { bg: "tag-blue" }, red: { bg: "tag-red" } } } } satisfies object; export const t = szv(cfg);',
+        ],
+    ];
+
+    for (const [name, source] of wrapped) {
+        it(`extracts through ${name} (both JS engines agree)`, () => {
+            const babel = [...transformSourceCode(source, 'F.tsx').classes].sort();
+            const oxc = [...transformOxc(source, 'F.tsx').classes].sort();
+            expect(babel, 'babel extracts the catalog').toContain('bg-tag-blue');
+            expect(oxc, 'oxc extracts the catalog').toEqual(babel);
+        });
+    }
+});

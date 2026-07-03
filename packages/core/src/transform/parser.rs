@@ -598,16 +598,22 @@ fn lenient_szv_config_from_argument(
     argument: &Argument<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<StaticSzObject> {
-    let object = match argument {
-        Argument::ObjectExpression(object) => object,
-        Argument::Identifier(identifier) => {
+    // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
+    // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
+    let object = match argument.as_expression().map(unwrap_expression) {
+        Some(Expression::ObjectExpression(object)) => object,
+        Some(Expression::Identifier(identifier)) => {
             // Only a `const` binding is followed (never a reassigned `let`), to
             // match the const-guarded resolution on the Babel/oxc paths.
-            match ctx.scope.resolve_const_initializer_before(
-                &identifier.name,
-                identifier.span.start,
-                ctx.program,
-            )? {
+            match ctx
+                .scope
+                .resolve_const_initializer_before(
+                    &identifier.name,
+                    identifier.span.start,
+                    ctx.program,
+                )
+                .map(unwrap_expression)?
+            {
                 Expression::ObjectExpression(object) => object,
                 _ => return None,
             }
@@ -2768,6 +2774,25 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_catalog_through_ts_wrappers() {
+        // `satisfies` / `as` are type-level; extraction must look through them
+        // on the config argument and inside the variants tree.
+        let source = r#"import {szv} from "@csszyx/runtime"; export const t = szv({ variants: { c: { blue: { bg: "tag-blue" } } satisfies Record<string, object> } } satisfies object);"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        assert!(
+            parsed
+                .ir
+                .extracted_classes
+                .contains(&"bg-tag-blue".to_string()),
+            "szv catalog should extract through TS wrappers: {:?}",
+            parsed.ir.extracted_classes
+        );
     }
 
     #[test]

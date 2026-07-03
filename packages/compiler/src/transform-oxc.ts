@@ -3422,6 +3422,10 @@ function astValueToSzValue(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     branchPick?: 'consequent' | 'alternate',
 ): SzValue {
+    // TypeScript wrappers (`satisfies` / `as` / `!` / parens) are type-level
+    // only — look straight through them so e.g. a variant table written as
+    // `{ … } satisfies Record<Token, object>` still converts.
+    node = unwrapExpression(node);
     // When resolving a single branch of a hoisted nested conditional, substitute
     // the conditional value with its chosen branch and convert that statically.
     if (branchPick && node.type === 'ConditionalExpression') {
