@@ -13,9 +13,6 @@
  * the gap is visible.
  */
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
@@ -341,10 +338,8 @@ describe('Rust native engine — parity vs oxc-JS', () => {
         // before this suite. When the build is absent, fixtures
         // marked `pending` continue to pass and non-pending fixtures
         // fail loudly with a missing-build message.
-        const here = path.dirname(fileURLToPath(import.meta.url));
-        const platformDir = path.resolve(here, '../../core-linux-arm64-gnu');
         try {
-            loadNativeBinding(platformDir);
+            loadNativeBinding();
         } catch {
             // Binding absent or wrong platform — `transformRust` will
             // continue to throw the compatibility unavailable error.

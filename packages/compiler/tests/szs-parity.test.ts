@@ -16,8 +16,6 @@
  * Fixtures are field-named (not `const source = ...`) so the extracted-corpus
  * meta-test does not sample them.
  */
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -174,9 +172,8 @@ const REJECTED: Array<{ name: string; tsx: string }> = [
 
 describe('szs slot-map parity', () => {
     beforeAll(() => {
-        const here = path.dirname(fileURLToPath(import.meta.url));
         try {
-            loadNativeBinding(path.resolve(here, '../../core-linux-arm64-gnu'));
+            loadNativeBinding();
         } catch {
             // Binding absent — rust assertions are skipped below.
         }

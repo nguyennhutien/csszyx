@@ -14,8 +14,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
-import { loadWorkspaceNativeBinding } from './load-workspace-native.js';
 
 type ViteConfigHook = {
     configResolved?: (config: { root: string }) => void;
@@ -70,7 +70,7 @@ function runPrescan(root: string, parser: 'rust' | 'oxc', cache: boolean): strin
 
 describe('prescan cache equivalence (off == cold == warm)', () => {
     beforeAll(() => {
-        loadWorkspaceNativeBinding();
+        loadNativeBinding();
     });
 
     for (const parser of ['rust', 'oxc'] as const) {

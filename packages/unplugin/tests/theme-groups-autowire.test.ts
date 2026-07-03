@@ -58,7 +58,7 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
     };
 
     beforeAll(async () => {
-        loadNativeBinding(resolve(__dirname, '../../core-linux-arm64-gnu'));
+        loadNativeBinding();
         const root = mkdtempSync(join(tmpdir(), 'csszyx-theme-auto-'));
         tempDirs.push(root);
         mkdirSync(join(root, 'src'), { recursive: true });

@@ -10,8 +10,6 @@
  * engine silently switches the whole object to `_sz(...)`. Fixtures are an array
  * (not `const source = ...`) so the extracted-corpus meta-test does not sample them.
  */
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -137,9 +135,8 @@ const FULL_PARITY: Array<{ name: string; src: string; contains: string[] }> = [
 
 describe('nested finite-conditional parity', () => {
     beforeAll(() => {
-        const here = path.dirname(fileURLToPath(import.meta.url));
         try {
-            loadNativeBinding(path.resolve(here, '../../core-linux-arm64-gnu'));
+            loadNativeBinding();
         } catch {
             // Binding absent — rust assertions are skipped below.
         }

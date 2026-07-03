@@ -24,8 +24,8 @@ import { basename, join } from 'node:path';
 import { szcn } from '@csszyx/runtime';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
-import { loadWorkspaceNativeBinding } from './load-workspace-native.js';
 
 const FIXTURE_FILES: Record<string, string> = {
     'index.html': `<!doctype html>
@@ -122,7 +122,7 @@ describe('production mangle — real-build round-trip (rust vs oxc)', () => {
     let oxc: MangleArtifacts;
 
     beforeAll(async () => {
-        loadWorkspaceNativeBinding();
+        loadNativeBinding();
         rust = await buildWithMangle('rust');
         oxc = await buildWithMangle('oxc');
     }, 60_000);
