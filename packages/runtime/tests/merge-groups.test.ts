@@ -329,3 +329,52 @@ describe('generation bumps only on real registry changes', () => {
         expect(getSzcnGroupsGeneration()).toBe(generation);
     });
 });
+
+describe('cross-category ambiguity memory', () => {
+    it('a later single-side registration cannot resurrect a dropped color', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        registerSzcnGroups({ colors: ['huge'] });
+        registerSzcnGroups({ textSizes: ['huge'] }); // drops 'huge' from both
+
+        // The theme still defines both meanings — re-registering one side in a
+        // later batch (split manual calls, HMR replay) must stay keep-both.
+        registerSzcnGroups({ colors: ['huge'] });
+        expect(szcn('text-huge', 'text-red-500')).toBe('text-huge text-red-500');
+        expect(szcn('text-huge', 'text-sm')).toBe('text-huge text-sm');
+        warn.mockRestore();
+    });
+
+    it('a rejected replay does not bump the generation', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        registerSzcnGroups({ colors: ['huge'] });
+        registerSzcnGroups({ textSizes: ['huge'] });
+        const generation = getSzcnGroupsGeneration();
+
+        registerSzcnGroups({ colors: ['huge'] });
+        expect(getSzcnGroupsGeneration()).toBe(generation);
+        warn.mockRestore();
+    });
+
+    it('the font family/weight pair keeps the same memory', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        registerSzcnGroups({ fontFamilies: ['fancy'] });
+        registerSzcnGroups({ fontWeights: ['fancy'] }); // drops 'fancy' from both
+
+        registerSzcnGroups({ fontWeights: ['fancy'] });
+        expect(szcn('font-fancy', 'font-bold')).toBe('font-fancy font-bold');
+        expect(szcn('font-fancy', 'font-sans')).toBe('font-fancy font-sans');
+        warn.mockRestore();
+    });
+
+    it('_resetSzcnGroups clears the memory', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        registerSzcnGroups({ colors: ['huge'] });
+        registerSzcnGroups({ textSizes: ['huge'] });
+        _resetSzcnGroups();
+
+        // A fresh registry has no record of the old theme's ambiguity.
+        registerSzcnGroups({ colors: ['huge'] });
+        expect(szcn('text-huge', 'text-red-500')).toBe('text-red-500');
+        warn.mockRestore();
+    });
+});

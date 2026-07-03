@@ -19,7 +19,9 @@
  * collides with a static value keyword of an affected prefix (e.g. a color
  * token named `cover` — `bg-cover` is background-size) or that is registered in
  * two conflicting categories is dropped with a dev warning, falling back to
- * keep-both rather than guessing.
+ * keep-both rather than guessing. The ambiguity drop is remembered across
+ * registration batches, so a later batch re-registering only one side cannot
+ * resurrect the name into a single category.
  *
  * @module
  */
@@ -119,6 +121,45 @@ const customTokens = {
     fontWeights: new Set<string>(),
 };
 
+/** A pair of categories whose token names collide on one utility prefix. */
+interface AmbiguityPair {
+    /** Names dropped from both categories — the ambiguity is permanent. */
+    dropped: Set<string>;
+    /** Builds the keep-both warning for a name in this pair. */
+    message: (name: string) => string;
+}
+
+/**
+ * Cross-category ambiguity memory. A name dropped from both categories of a
+ * pair must STAY unclassifiable regardless of registration order: the theme
+ * still defines both meanings, so a later batch re-registering only one side
+ * (split manual calls, or an HMR re-execution replaying a partial batch) must
+ * not silently resurrect the name in a single category and start merging
+ * classes the other meaning still owns.
+ */
+const AMBIGUITY_PAIRS: { colorTextSize: AmbiguityPair; fontFamilyWeight: AmbiguityPair } = {
+    colorTextSize: {
+        dropped: new Set<string>(),
+        message: name =>
+            `theme token "${name}" is defined as BOTH a color and a text size — ` +
+            `szcn cannot classify \`text-${name}\` and will keep-both instead of merging.`,
+    },
+    fontFamilyWeight: {
+        dropped: new Set<string>(),
+        message: name =>
+            `theme token "${name}" is defined as BOTH a font family and a font weight — ` +
+            `szcn cannot classify \`font-${name}\` and will keep-both instead of merging.`,
+    },
+};
+
+/** The ambiguity pair each category participates in. */
+const AMBIGUITY_PAIR_BY_CATEGORY: Record<keyof typeof customTokens, AmbiguityPair> = {
+    colors: AMBIGUITY_PAIRS.colorTextSize,
+    textSizes: AMBIGUITY_PAIRS.colorTextSize,
+    fontFamilies: AMBIGUITY_PAIRS.fontFamilyWeight,
+    fontWeights: AMBIGUITY_PAIRS.fontFamilyWeight,
+};
+
 /** Custom token categories accepted by {@link registerSzcnGroups}. */
 export interface SzcnThemeGroups {
     /** Color token names (`brand` → `text-brand`, `bg-brand`, `border-brand`, …). */
@@ -179,7 +220,10 @@ const _warned = new Set<string>();
  * - a name colliding with a static utility keyword of an affected prefix is
  *   rejected (e.g. a color named `cover`);
  * - a name registered in two conflicting categories (e.g. both a color and a
- *   text size — `text-huge` would be unclassifiable) is removed from both.
+ *   text size — `text-huge` would be unclassifiable) is removed from both,
+ *   and STAYS removed: later batches re-registering only one side are
+ *   rejected too, so registration order can never resurrect an ambiguous
+ *   name into a single category.
  *
  * @param groups - Custom token names per theme category.
  */
@@ -208,6 +252,13 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
                 );
                 continue;
             }
+            const ambiguityPair = AMBIGUITY_PAIR_BY_CATEGORY[category];
+            if (ambiguityPair.dropped.has(name)) {
+                // warnOnce de-dupes: the drop that recorded the name already
+                // warned with the same message, so replays stay quiet.
+                warnOnce(ambiguityPair.message(name));
+                continue;
+            }
             if (!customTokens[category].has(name)) {
                 customTokens[category].add(name);
                 changed = true;
@@ -220,22 +271,18 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
         if (customTokens.textSizes.has(name)) {
             customTokens.colors.delete(name);
             customTokens.textSizes.delete(name);
+            AMBIGUITY_PAIRS.colorTextSize.dropped.add(name);
             changed = true;
-            warnOnce(
-                `theme token "${name}" is defined as BOTH a color and a text size — ` +
-                    `szcn cannot classify \`text-${name}\` and will keep-both instead of merging.`,
-            );
+            warnOnce(AMBIGUITY_PAIRS.colorTextSize.message(name));
         }
     }
     for (const name of [...customTokens.fontFamilies]) {
         if (customTokens.fontWeights.has(name)) {
             customTokens.fontFamilies.delete(name);
             customTokens.fontWeights.delete(name);
+            AMBIGUITY_PAIRS.fontFamilyWeight.dropped.add(name);
             changed = true;
-            warnOnce(
-                `theme token "${name}" is defined as BOTH a font family and a font weight — ` +
-                    `szcn cannot classify \`font-${name}\` and will keep-both instead of merging.`,
-            );
+            warnOnce(AMBIGUITY_PAIRS.fontFamilyWeight.message(name));
         }
     }
     if (changed) {
@@ -264,6 +311,8 @@ export function _resetSzcnGroups(): void {
     for (const set of Object.values(customTokens)) {
         set.clear();
     }
+    AMBIGUITY_PAIRS.colorTextSize.dropped.clear();
+    AMBIGUITY_PAIRS.fontFamilyWeight.dropped.clear();
     _warned.clear();
     _generation++;
 }
