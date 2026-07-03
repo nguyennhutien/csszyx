@@ -59,18 +59,6 @@ function rust(code: string): string {
 }
 
 /**
- * Sorted class tokens extracted by an engine — for set-equality checks.
- * @param result - a transform result (or a raw code string).
- * @returns the extracted classes, sorted.
- */
-function classesOf(result: { classes?: Iterable<string> } | string): string[] {
-    if (typeof result === 'string') {
-        return [];
-    }
-    return [...(result.classes ?? [])].sort();
-}
-
-/**
  * Class tokens in DISCOVERY order (not sorted) — production mangle IDs are
  * assigned in this order, so it must match across engines for byte-identical
  * mangled artifacts.
