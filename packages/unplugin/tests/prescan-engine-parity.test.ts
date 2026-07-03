@@ -16,12 +16,11 @@
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-
-import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
+import { loadWorkspaceNativeBinding } from './load-workspace-native.js';
 
 type ViteConfigHook = {
     configResolved?: (config: { root: string }) => void;
@@ -170,7 +169,7 @@ function runPrescan(parser: 'rust' | 'oxc' | 'babel'): {
 
 describe('prescan engine parity (real pipeline, no mocks)', () => {
     beforeAll(() => {
-        loadNativeBinding(resolve(__dirname, '../../core-linux-arm64-gnu'));
+        loadWorkspaceNativeBinding();
     });
 
     // Computed once; every assertion below reuses the same three runs.

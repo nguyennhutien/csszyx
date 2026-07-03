@@ -11,13 +11,12 @@
  */
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
-import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
+import { loadWorkspaceNativeBinding } from './load-workspace-native.js';
 
 const FIXTURE_FILES: Record<string, string> = {
     // Field shape: className EXPRESSION + static sz — the expression must
@@ -120,7 +119,7 @@ describe('vite production build — engine diff (rust vs oxc)', () => {
     let oxc: BuildArtifacts;
 
     beforeAll(async () => {
-        loadNativeBinding(resolve(__dirname, '../../core-linux-arm64-gnu'));
+        loadWorkspaceNativeBinding();
         rust = await buildWith('rust');
         oxc = await buildWith('oxc');
     }, 60_000);

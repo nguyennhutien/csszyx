@@ -19,14 +19,13 @@
  */
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { szcn } from '@csszyx/runtime';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
-import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
+import { loadWorkspaceNativeBinding } from './load-workspace-native.js';
 
 const FIXTURE_FILES: Record<string, string> = {
     'index.html': `<!doctype html>
@@ -123,7 +122,7 @@ describe('production mangle — real-build round-trip (rust vs oxc)', () => {
     let oxc: MangleArtifacts;
 
     beforeAll(async () => {
-        loadNativeBinding(resolve(__dirname, '../../core-linux-arm64-gnu'));
+        loadWorkspaceNativeBinding();
         rust = await buildWithMangle('rust');
         oxc = await buildWithMangle('oxc');
     }, 60_000);
