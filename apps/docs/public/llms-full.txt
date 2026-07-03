@@ -682,7 +682,7 @@ a normal `sz`. So style a compound component's parts by giving each part its own
 
 ```tsx
 <Card sz={{ p: 4 }}>
-  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Header sz={{ bg: 'gray-100', font: 'bold' }}>Title</Card.Header>
   <Card.Body sz={{ text: 'sm' }}>Body</Card.Body>
 </Card>
 // → each part compiled to className at build time; all classes safelisted.

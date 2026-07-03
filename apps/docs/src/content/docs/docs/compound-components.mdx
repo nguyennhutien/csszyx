@@ -17,7 +17,7 @@ production the same way.
 
 ```tsx
 <Card sz={{ p: 4 }}>
-  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Header sz={{ bg: 'gray-100', font: 'bold' }}>Title</Card.Header>
   <Card.Body sz={{ text: 'sm' }}>Body copy</Card.Body>
 </Card>
 ```
@@ -60,7 +60,7 @@ Now a consumer styles each part independently:
 
 ```tsx
 <Card sz={{ p: 4, rounded: 'lg', shadow: 'md' }}>
-  <Card.Header sz={{ bg: 'gray-100', p: 3, fontWeight: 'bold' }}>
+  <Card.Header sz={{ bg: 'gray-100', p: 3, font: 'bold' }}>
     Invoice
   </Card.Header>
   <Card.Body sz={{ p: 3, text: 'sm', textColor: 'gray-700' }}>
@@ -168,7 +168,7 @@ transform compiles **each value** to its class string (keeping the key), safelis
 and mangles the classes exactly like `sz`:
 
 ```tsx
-<Card szs={{ header: { bg: 'gray-100', fontWeight: 'bold' }, icon: { color: 'red-500' } }} />
+<Card szs={{ header: { bg: 'gray-100', font: 'bold' }, icon: { color: 'red-500' } }} />
 // compiles to:
 <Card szs={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
 ```
