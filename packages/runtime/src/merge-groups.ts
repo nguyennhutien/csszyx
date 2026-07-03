@@ -228,6 +228,23 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
             );
         }
     }
+    _generation++;
+}
+
+/**
+ * Monotonic generation counter — bumped whenever the registered token sets
+ * change, so szcn's memo can invalidate cached merges that were classified
+ * under the old groups.
+ */
+let _generation = 0;
+
+/**
+ * Current registration generation (see {@link registerSzcnGroups}).
+ *
+ * @returns The generation counter value.
+ */
+export function getSzcnGroupsGeneration(): number {
+    return _generation;
 }
 
 /** Reset the custom registry — test-only. */
@@ -236,6 +253,7 @@ export function _resetSzcnGroups(): void {
         set.clear();
     }
     _warned.clear();
+    _generation++;
 }
 
 /**

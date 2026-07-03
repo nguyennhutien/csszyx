@@ -66,6 +66,7 @@ import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner
 import { writeThemeDts } from './theme-type-writer.js';
 import {
     createTransformCacheKey,
+    evictMemoryCacheToBudget,
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
@@ -200,6 +201,12 @@ const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
+// Entry count alone is not a memory bound: each entry retains the FULL
+// transformed code string, so 1000 large generated files could hold ~hundreds
+// of MB in a long-lived dev server. Cap the total retained code size too
+// (~32M chars ≈ 64MB of JS string memory) and evict oldest-first past either
+// limit.
+const TRANSFORM_MEMORY_CACHE_MAX_CODE_CHARS = 32_000_000;
 // Upper bound on the safelist class set. Far above any real project (a large app
 // emits a few thousand unique utilities); the cap only trips on pathological /
 // hostile input — e.g. unbounded unique arbitrary values — and bounds the memory
@@ -2075,6 +2082,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
+    let transformMemoryCacheCodeChars = 0;
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -2551,15 +2559,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param result Transform result.
      */
     function rememberTransformCacheEntry(key: string, result: SourceTransformResult): void {
-        transformMemoryCache.delete(key);
+        const existing = transformMemoryCache.get(key);
+        if (existing) {
+            transformMemoryCacheCodeChars -= existing.code.length;
+            transformMemoryCache.delete(key);
+        }
         transformMemoryCache.set(key, result);
-        if (transformMemoryCache.size <= TRANSFORM_MEMORY_CACHE_MAX_ENTRIES) {
-            return;
-        }
-        const oldest = transformMemoryCache.keys().next().value;
-        if (oldest) {
-            transformMemoryCache.delete(oldest);
-        }
+        transformMemoryCacheCodeChars += result.code.length;
+        transformMemoryCacheCodeChars = evictMemoryCacheToBudget(
+            transformMemoryCache,
+            transformMemoryCacheCodeChars,
+            TRANSFORM_MEMORY_CACHE_MAX_ENTRIES,
+            TRANSFORM_MEMORY_CACHE_MAX_CODE_CHARS,
+        );
     }
 
     /** Runs transform-cache eviction once per resolved project cache root. */

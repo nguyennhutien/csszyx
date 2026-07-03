@@ -413,3 +413,36 @@ function listJsonFiles(dir: string): string[] {
     }
     return files;
 }
+
+/**
+ * Evicts oldest-first from an insertion-ordered in-memory result cache until it
+ * fits BOTH budgets: entry count and total retained code characters. Entry
+ * count alone is not a memory bound — each entry keeps the full transformed
+ * code string, so a fixed 1000-entry cap could retain hundreds of MB of large
+ * generated files in a long-lived dev server. Always leaves at least one entry
+ * so a single oversized file still gets its cache hit.
+ *
+ * @param cache - Insertion-ordered cache (oldest entry first).
+ * @param totalCodeChars - Current sum of `code.length` across entries.
+ * @param maxEntries - Entry-count budget.
+ * @param maxCodeChars - Retained-code budget in characters.
+ * @returns The updated total code characters after eviction.
+ */
+export function evictMemoryCacheToBudget(
+    cache: Map<string, { code: string }>,
+    totalCodeChars: number,
+    maxEntries: number,
+    maxCodeChars: number,
+): number {
+    let total = totalCodeChars;
+    while (cache.size > maxEntries || (total > maxCodeChars && cache.size > 1)) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) {
+            break;
+        }
+        const evicted = cache.get(oldest);
+        cache.delete(oldest);
+        total -= evicted?.code.length ?? 0;
+    }
+    return total;
+}

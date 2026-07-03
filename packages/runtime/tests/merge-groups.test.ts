@@ -249,3 +249,33 @@ describe('QA expansion — edge cases from review', () => {
         expect(szcn('z1', 'z3')).toBe('z1 z3'); // color + size co-exist
     });
 });
+
+describe('szcn memo invalidation (perf layer must never change results)', () => {
+    it('a merge cached BEFORE registration is re-derived after it', () => {
+        // Cold call caches under generation N (unregistered → keep-both)…
+        expect(szcn('text-brand', 'text-accent')).toBe('text-brand text-accent');
+        // …registration bumps the generation, so the same key re-classifies.
+        registerSzcnGroups({ colors: ['brand', 'accent'] });
+        expect(szcn('text-brand', 'text-accent')).toBe('text-accent');
+    });
+
+    it('a merge cached BEFORE the decode bridge appears is re-derived after it', () => {
+        expect(szcn('q1', 'q2')).toBe('q1 q2'); // unknown tokens, cached
+        const reverse = new Map([
+            ['q1', 'gap-2'],
+            ['q2', 'gap-8'],
+        ]);
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: (token: string) => reverse.get(token),
+        };
+        expect(szcn('q1', 'q2')).toBe('q2'); // now mangle-aware: same utility, last wins
+    });
+
+    it('repeated hot calls return the identical result (memo hit path)', () => {
+        const first = szcn('gap-2 p-4 text-sm', 'gap-8 text-base');
+        for (let i = 0; i < 50; i++) {
+            expect(szcn('gap-2 p-4 text-sm', 'gap-8 text-base')).toBe(first);
+        }
+        expect(first).toBe('p-4 gap-8 text-base');
+    });
+});

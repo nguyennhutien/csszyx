@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
     type CacheableTransformResult,
     createTransformCacheKey,
+    evictMemoryCacheToBudget,
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
@@ -284,5 +285,45 @@ describe('transform cache', () => {
         prePlugin.transform.call({ warn: () => undefined }, source, id);
 
         expect(existsSync(cacheRoot)).toBe(false);
+    });
+});
+
+describe('evictMemoryCacheToBudget', () => {
+    const entry = (chars: number): { code: string } => ({ code: 'x'.repeat(chars) });
+
+    it('evicts oldest-first past the byte budget, not just the entry count', () => {
+        const cache = new Map<string, { code: string }>([
+            ['a', entry(600)],
+            ['b', entry(300)],
+            ['c', entry(200)],
+        ]);
+        const total = evictMemoryCacheToBudget(cache, 1100, 1000, 500);
+        // Evicting 'a' (600 chars) brings the total to exactly the 500 budget.
+        expect([...cache.keys()]).toEqual(['b', 'c']);
+        expect(total).toBe(500);
+    });
+
+    it('keeps at least one entry even when it alone exceeds the byte budget', () => {
+        const cache = new Map<string, { code: string }>([['huge', entry(5000)]]);
+        const total = evictMemoryCacheToBudget(cache, 5000, 1000, 500);
+        expect(cache.size).toBe(1);
+        expect(total).toBe(5000);
+    });
+
+    it('entry-count budget still applies independently', () => {
+        const cache = new Map<string, { code: string }>([
+            ['a', entry(1)],
+            ['b', entry(1)],
+            ['c', entry(1)],
+        ]);
+        const total = evictMemoryCacheToBudget(cache, 3, 2, 1_000_000);
+        expect([...cache.keys()]).toEqual(['b', 'c']);
+        expect(total).toBe(2);
+    });
+
+    it('no-ops under both budgets', () => {
+        const cache = new Map<string, { code: string }>([['a', entry(10)]]);
+        expect(evictMemoryCacheToBudget(cache, 10, 1000, 500)).toBe(10);
+        expect(cache.size).toBe(1);
     });
 });

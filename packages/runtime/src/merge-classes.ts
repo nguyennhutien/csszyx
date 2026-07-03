@@ -30,7 +30,7 @@
  * @module
  */
 import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS } from './box-role-map.generated.js';
-import { classifyAmbiguousValue } from './merge-groups.js';
+import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
 import { normalizeBase, stripVariant } from './split-box.js';
 
 /**
@@ -49,6 +49,28 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'outline', // outline-2 (width) vs outline-red-500 (color)
     'font', // font-sans (font-family) vs font-bold (font-weight)
 ]);
+
+/**
+ * `BOX_ROLE_PREFIXES` bucketed by first dash-segment. A matching prefix is
+ * either the whole normalized base or one of its dash-prefixes, so it always
+ * shares the base's first segment — bucketing (267 entries → ~2 per bucket,
+ * original order preserved within a bucket) returns exactly what the previous
+ * full linear scan did, at a fraction of the per-token cost. szcn is the leaf
+ * merge of layered design-system components, so this runs per token per render.
+ */
+const PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<string, ReadonlyArray<string>> = (() => {
+    const buckets = new Map<string, string[]>();
+    for (const [prefix] of BOX_ROLE_PREFIXES) {
+        const segment = prefix.split('-', 1)[0] as string;
+        let bucket = buckets.get(segment);
+        if (!bucket) {
+            bucket = [];
+            buckets.set(segment, bucket);
+        }
+        bucket.push(prefix);
+    }
+    return buckets;
+})();
 
 /**
  * Resolve a token to its original (un-mangled) name using the runtime reverse
@@ -154,7 +176,8 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (BOX_ROLE_TOKENS.has(norm)) {
         return null;
     }
-    for (const [prefix] of BOX_ROLE_PREFIXES) {
+    const bucket = PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
+    for (const prefix of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             if (AMBIGUOUS_PREFIXES.has(prefix)) {
                 // Value-set classification: same property group → last wins
@@ -181,7 +204,21 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
 }
 
 /**
- * Merge className strings with last-wins override per utility, mangle-aware.
+ * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
+ * every render (component defaults are constants), so a small LRU turns the
+ * per-render cost into one Map lookup. The cache self-invalidates when either
+ * classification input changes: the custom-group registration generation, or
+ * the identity of the runtime decode bridge (both normally settle at startup,
+ * before render loops, so steady-state renders never clear).
+ */
+const MEMO_MAX_ENTRIES = 500;
+const memo = new Map<string, string>();
+let memoGroupsGeneration = -1;
+let memoDecodeRef: unknown;
+
+/**
+ * Merge className strings with last-wins override per utility, mangle-aware and
+ * memoized (see the memo note above — repeated inputs return in one Map lookup).
  *
  * Intended for the single resolution point in a layered design-system component
  * (typically at the leaf Box): combine the component's default classes with the
@@ -193,6 +230,48 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
 export function szcn(...inputs: (string | false | null | undefined)[]): string {
+    let key = '';
+    for (const input of inputs) {
+        if (input && typeof input === 'string') {
+            key = key === '' ? input : `${key} ${input}`;
+        }
+    }
+    const generation = getSzcnGroupsGeneration();
+    // Compare the decode FUNCTION IDENTITY, not mere presence: a swapped bridge
+    // (tests, or an exotic host replacing the inline script's object) must not
+    // serve merges memoized under the previous map. In production the identity
+    // is stable for the page lifetime, so this never clears.
+    const decodeRef = (globalThis as { __csszyx?: { decode?: unknown } }).__csszyx?.decode;
+    if (generation !== memoGroupsGeneration || decodeRef !== memoDecodeRef) {
+        memo.clear();
+        memoGroupsGeneration = generation;
+        memoDecodeRef = decodeRef;
+    }
+    const cached = memo.get(key);
+    if (cached !== undefined) {
+        // Refresh recency so hot merges never age out.
+        memo.delete(key);
+        memo.set(key, cached);
+        return cached;
+    }
+    const merged = mergeUncached(inputs);
+    memo.set(key, merged);
+    if (memo.size > MEMO_MAX_ENTRIES) {
+        const oldest = memo.keys().next().value;
+        if (oldest !== undefined) {
+            memo.delete(oldest);
+        }
+    }
+    return merged;
+}
+
+/**
+ * The uncached merge — see {@link szcn} for the contract.
+ *
+ * @param inputs - Class strings; falsy inputs are skipped.
+ * @returns The merged className string.
+ */
+function mergeUncached(inputs: readonly (string | false | null | undefined)[]): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
 
