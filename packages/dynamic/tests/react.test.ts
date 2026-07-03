@@ -12,6 +12,8 @@
  * - useSz() calls preloadManifest on mount
  * - useSz() schedules deferred cleanup (injectorCleanup + resetManifest) on unmount
  * - useSz() cancels pending cleanup when remounted (StrictMode resilience)
+ * - useSz() ref-counts consumers: one unmount must not release sheets shared
+ *   with still-mounted consumers, and no orphaned timer may fire later
  * - CsszyxProvider calls setManifestUrl + preloadManifest on mount
  */
 
@@ -71,7 +73,7 @@ vi.mock('../src/manifest.js', () => ({
 
 // ── Import subject under test (after mocks) ───────────────────────────────────
 
-const { sz, useSz, CsszyxProvider } = await import('../src/react.js');
+const { sz, useSz, CsszyxProvider, _resetUseSzLifecycle } = await import('../src/react.js');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ describe('useSz()', () => {
         capturedEffects = [];
         capturedCallback = null;
         contextValue = { manifestUrl: '/csszyx-manifest.json' };
+        _resetUseSzLifecycle();
         vi.useFakeTimers();
     });
 
@@ -188,6 +191,56 @@ describe('useSz()', () => {
         vi.runAllTimers();
         expect(mockInjectorCleanup).toHaveBeenCalledOnce();
         expect(mockResetManifest).toHaveBeenCalledOnce();
+    });
+
+    it('does not release shared sheets while other consumers stay mounted', () => {
+        // Two components mount, each with its own effect.
+        useSz();
+        useSz();
+        const [cleanupA] = runCapturedEffects();
+
+        // Only the first unmounts; the second still renders classNames backed
+        // by the shared injector sheets.
+        cleanupA();
+        vi.runAllTimers();
+
+        expect(mockInjectorCleanup).not.toHaveBeenCalled();
+        expect(mockResetManifest).not.toHaveBeenCalled();
+    });
+
+    it('runs cleanup exactly once after the last of several consumers unmounts', () => {
+        useSz();
+        useSz();
+        const [cleanupA, cleanupB] = runCapturedEffects();
+
+        cleanupA();
+        vi.runAllTimers();
+        expect(mockInjectorCleanup).not.toHaveBeenCalled();
+
+        cleanupB();
+        vi.runAllTimers();
+        expect(mockInjectorCleanup).toHaveBeenCalledOnce();
+        expect(mockResetManifest).toHaveBeenCalledOnce();
+    });
+
+    it('a mount after sequential unmounts cancels the pending cleanup (no orphaned timer)', () => {
+        // A and B mount, then BOTH unmount before any timer fires — the second
+        // unmount must not orphan a live timer handle from the first.
+        useSz();
+        useSz();
+        const [cleanupA, cleanupB] = runCapturedEffects();
+        cleanupA();
+        cleanupB();
+
+        // C mounts before the deferred cleanup fires and cancels it. If an
+        // orphaned timer survived, it would fire here and wipe C's sheets.
+        capturedEffects = [];
+        useSz();
+        runCapturedEffects();
+
+        vi.runAllTimers();
+        expect(mockInjectorCleanup).not.toHaveBeenCalled();
+        expect(mockResetManifest).not.toHaveBeenCalled();
     });
 });
 
