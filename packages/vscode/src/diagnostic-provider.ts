@@ -133,6 +133,13 @@ export function createDebouncedValidator(
             key,
             setTimeout(() => {
                 timers.delete(key);
+                // The document can close inside the debounce window. Validating
+                // it anyway would re-add diagnostics AFTER the close handler
+                // deleted them, leaving ghost entries in the collection for a
+                // file that is no longer open.
+                if (doc.isClosed) {
+                    return;
+                }
                 validateDocument(doc, collection);
             }, 300),
         );
