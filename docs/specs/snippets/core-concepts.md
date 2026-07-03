@@ -426,10 +426,14 @@ Build it as a plain React compound component; each part forwards `sz` (already
 rewritten to `className` by the transform) onto a host element. Type each part with
 `ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
 Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
-last-wins) or `clsx`. CAVEAT: `szcn` under-merges multi-property prefixes
-(`text`, `bg`, `border`, `font`, `flex` — both classes kept, stylesheet order
-decides), so e.g. `text-sm` cannot override a default `text-base` through it; for
-slot defaults containing those, use replace semantics (`szs?.slot ?? defaults`).
+last-wins) — the RECOMMENDED pattern for slot defaults. Multi-property prefixes
+(`text`, `bg`, `border`, `font`, `flex`, `divide`, `ring`, `outline`) are
+value-classified into property groups: same property → later wins
+(`szcn('text-base','text-sm')` → `text-sm`); different properties co-exist
+(`text-red-500` never removes `text-sm`); unclassifiable values are always kept
+(fail-safe). Custom `@theme` tokens join their groups automatically when the CSS
+is scanned (`build.scanCss`); classes written in plain CSS register via
+`registerSzcnGroups({ colors: [...], textSizes: [...] })` from `@csszyx/runtime`.
 
 ## `szs` — slot map for a component's internal parts
 

@@ -120,14 +120,21 @@ When an element has **both** `sz` and `className`, csszyx compiles `sz` and merg
 it with the existing `className` for you — the consumer override still applies.
 :::
 
-:::caution[szcn merge limits]
-`szcn` merges by **utility prefix**. Prefixes that span several CSS properties
-(`text`, `bg`, `border`, `font`, `flex`, …) are deliberately under-merged — both
-classes are kept so nothing is ever wrongly dropped — which means the stylesheet
-order, not the argument order, decides such a conflict. In practice: a consumer's
-`text-sm` cannot override a default `text-base` through `szcn`. If a slot default
-contains one of these (a text size, a font weight), prefer **replace semantics**
-(`szs?.title ?? defaultTitleClasses`) over merging.
+:::tip[szcn understands property groups]
+For prefixes that span several CSS properties (`text`, `bg`, `border`, `font`,
+`flex`, …), `szcn` classifies the token **value**: same property → the later
+class wins (`szcn('text-base', 'text-sm')` → `text-sm`), different properties
+co-exist (`text-red-500` never removes `text-sm`). So merging slot overrides
+with defaults (`szcn(defaultTitleClasses, szsClass(szs?.title))`) is the
+recommended pattern — replace semantics are no longer needed for text sizes or
+font weights.
+
+Custom `@theme` tokens join automatically: define `--color-brand` or
+`--text-huge` in a scanned CSS file (`build.scanCss`) and `szcn` dedupes
+`text-brand` / `text-huge` with zero extra wiring. For utility-shaped classes
+written in plain CSS (outside `@theme`), register them once with
+`registerSzcnGroups({ colors: ['...'] })` from `@csszyx/runtime`. A value csszyx
+cannot classify is always kept — never wrongly dropped.
 :::
 
 ## Typing
