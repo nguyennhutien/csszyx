@@ -30,14 +30,21 @@ interface ExtractedSnippet {
     source: string;
 }
 
+// ZERO-DIVERGENCE POLICY: every divergence budget below is 0 and stays 0. A
+// nonzero count is never an acceptable expectation — a field report proved that
+// an "expected: 2" here was a shipped CRITICAL bug (the oxc static path deleting
+// className expressions) sitting in plain sight for releases. If a change makes
+// a category nonzero, either fix the divergence or list the snippet INDIVIDUALLY
+// in KNOWN_DIVERGENT_SNIPPETS with a reason and a tracking pointer — counts hide
+// bugs, names don't.
+const KNOWN_DIVERGENT_SNIPPETS: ReadonlyArray<{ id: string; reason: string }> = [
+    // (empty — keep it that way)
+];
+
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
-    parity: 137,
+    parity: 138 - KNOWN_DIVERGENT_SNIPPETS.length,
     'rust-ahead': 0,
-    // Was 2: the className-expression + static-sz snippet — oxc used to overwrite
-    // the expression with the compiled string and now merges like rust.
-    'code-divergence': 1,
-    // Was 1: the `bg:{ color, op: cond ? 30 : 100 }` snippet — oxc used to diverge
-    // (incomplete safelist) and now expands the finite conditional like Rust.
+    'code-divergence': KNOWN_DIVERGENT_SNIPPETS.length,
     'class-divergence': 0,
     'metadata-divergence': 0,
     'rust-unavailable': 0,

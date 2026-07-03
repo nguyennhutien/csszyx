@@ -1649,9 +1649,12 @@ fn partial_object_from_object_expression(
                 if !is_runtime_expression(&property.value) {
                     return None;
                 }
+                // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
+                // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
+                // — redundant parens broke rust==oxc byte parity.
                 dynamic_css_vars.push(dynamic_css_var_from_property(
                     &key,
-                    text_span(property.value.span()),
+                    text_span(unwrap_expression(&property.value).span()),
                     variant_prefix,
                 ));
             }
