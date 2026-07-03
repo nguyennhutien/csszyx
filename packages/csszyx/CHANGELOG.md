@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.10](https://github.com/nguyennhutien/csszyx/compare/v0.10.9...v0.10.10) (2026-07-03)
+
+
+### Features
+
+* szs slot styling, engine order parity, and component typing docs ([#117](https://github.com/nguyennhutien/csszyx/issues/117)) ([7f3f589](https://github.com/nguyennhutien/csszyx/commit/7f3f5891fdd31177279a38b7c2f442a411d849e7))
+
 ## [0.10.9](https://github.com/nguyennhutien/csszyx/compare/v0.10.8...v0.10.9) (2026-07-01)
 
 ### Features
