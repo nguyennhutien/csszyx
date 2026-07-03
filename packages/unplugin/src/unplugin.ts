@@ -746,7 +746,11 @@ export function fileMayContainSafelistableSz(content: string): boolean {
         content.includes('szs=') ||
         content.includes('sz:') ||
         content.includes('szv(') ||
-        content.includes('szr(')
+        content.includes('szr(') ||
+        // dynamic() literal args are extracted for the safelist, but a module
+        // containing ONLY dynamic() calls never passed this gate — the
+        // engine-parity harness caught its classes missing on all engines.
+        content.includes('dynamic(')
     );
 }
 
@@ -2029,30 +2033,37 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
         isRustAvailable: isRustTransformAvailable,
     });
-    if (parserDegraded && !_hasWarnedNativeFallback) {
-        _hasWarnedNativeFallback = true;
-        console.warn(
-            '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
-                'are identical (parity-tested); only parse speed differs. To use the native ' +
-                'engine, install the matching @csszyx/core-<platform> package (or do not ' +
-                'omit optional dependencies). Set `build.parser` explicitly to silence this.',
-        );
-    }
-    // Always announce the engine actually in effect, once per process. Without
-    // this the only signal was the degrade warning above, so a project could be
-    // running on `oxc` (or silently dropping to Babel per file) with no way to
-    // tell which parser produced its classes.
-    if (!_loggedActiveParsers.has(parserMode)) {
-        _loggedActiveParsers.add(parserMode);
-        const detail = parserDegraded
-            ? 'oxc (degraded from default `rust`: no native binary for this platform)'
-            : parserMode === 'rust'
-              ? 'rust (native engine)'
-              : parserMode;
-        // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
-        // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
-        console.warn(`[csszyx] active parser: ${detail}`);
+    /**
+     * Announce the engine actually in effect (and the native-binary degrade, if
+     * any). Called from build-lifecycle hooks, NOT from the factory body: the
+     * module exports a default plugin instance for compatibility, so the factory
+     * runs at import time with default options — announcing there printed
+     * `active parser: rust (native engine)` in processes whose real build was
+     * configured for another engine, which cost a field user an investigation.
+     * Once per resolved mode per process.
+     */
+    function announceActiveParser(): void {
+        if (parserDegraded && !_hasWarnedNativeFallback) {
+            _hasWarnedNativeFallback = true;
+            console.warn(
+                '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                    'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
+                    'are identical (parity-tested); only parse speed differs. To use the native ' +
+                    'engine, install the matching @csszyx/core-<platform> package (or do not ' +
+                    'omit optional dependencies). Set `build.parser` explicitly to silence this.',
+            );
+        }
+        if (!_loggedActiveParsers.has(parserMode)) {
+            _loggedActiveParsers.add(parserMode);
+            const detail = parserDegraded
+                ? 'oxc (degraded from default `rust`: no native binary for this platform)'
+                : parserMode === 'rust'
+                  ? 'rust (native engine)'
+                  : parserMode;
+            // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
+            // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
+            console.warn(`[csszyx] active parser: ${detail}`);
+        }
     }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
@@ -2087,7 +2098,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
-    const SOURCE_EXTENSIONS = new Set(['.tsx', '.jsx', '.ts', '.js']);
+    // Module flavours included: the engine-parity harness caught the prescan
+    // walk skipping `.mjs` entirely — every class in such a file was silently
+    // dead under Tailwind `source(none)` on ALL engines.
+    const SOURCE_EXTENSIONS = new Set([
+        '.tsx',
+        '.jsx',
+        '.ts',
+        '.js',
+        '.mjs',
+        '.cjs',
+        '.mts',
+        '.cts',
+    ]);
     const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
 
     /**
@@ -2205,11 +2228,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns True when csszyx should parse and transform the source file.
      */
     function shouldProcessSource(id: string): boolean {
+        // `[cm]?` admits the ESM/CJS module flavours (.mjs/.cjs/.mts/.cts): the
+        // engine-parity harness caught `.mjs` files being neither transformed
+        // nor scanned — their sz props reached the bundle untouched and every
+        // class was silently dead under Tailwind `source(none)`.
         return (
             !isHardIgnored(id) &&
             !isUserExcluded(id) &&
             isUserIncluded(id) &&
-            (/\.[tj]sx?(\?.*)?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte'))
+            (/\.([cm]?[tj]s|[tj]sx)(\?.*)?$/.test(id) ||
+                id.endsWith('.vue') ||
+                id.endsWith('.svelte'))
         );
     }
 
@@ -3080,6 +3109,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns transformed code with source map, or null if no changes were made
              */
             transform(code, id) {
+                // Bundlers without the vite/webpack lifecycle hooks (rollup,
+                // esbuild) still announce on the first real transform.
+                announceActiveParser();
                 if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
                     return null;
                 }
@@ -3401,6 +3433,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             webpack(compiler: WebpackCompiler) {
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
+                    announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
                     evictTransformCacheOnce();
@@ -3428,6 +3461,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * @param config - the resolved Vite configuration object
                  */
                 configResolved(config) {
+                    announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
                     // Never mangle in a dev server — the runtime mangle map would
