@@ -86,6 +86,35 @@ describe('abortHydration', () => {
         abortHydration(element, error);
         expect(getAbortedSubtreeCount()).toBe(initialCount + 1);
     });
+
+    it('should not inflate the aborted count when the same element aborts twice', () => {
+        abortHydration(element, error);
+        abortHydration(element, error);
+        expect(getAbortedSubtreeCount()).toBe(1);
+    });
+
+    it('should cap retained errors and evict the oldest first', () => {
+        // The error log holds element references at module scope, so it must
+        // stay bounded even when aborts recur across an SPA session.
+        for (let i = 0; i < 150; i++) {
+            abortHydration(document.createElement('div'), {
+                type: 'checksum_mismatch',
+                message: `error-${i}`,
+                timestamp: i,
+            });
+        }
+        const errors = getHydrationErrors();
+        expect(errors).toHaveLength(100);
+        expect(errors[0].message).toBe('error-50');
+        expect(errors[errors.length - 1].message).toBe('error-149');
+    });
+
+    it('should reset the aborted count on clearHydrationErrors', () => {
+        abortHydration(element, error);
+        clearHydrationErrors();
+        expect(getAbortedSubtreeCount()).toBe(0);
+        expect(getHydrationErrors()).toHaveLength(0);
+    });
 });
 
 describe('isHydrationAborted', () => {
@@ -158,6 +187,22 @@ describe('attemptCSRRecovery', () => {
         const result = attemptCSRRecovery(element);
         expect(result).toBe(true);
         expect(isHydrationAborted(element)).toBe(false);
+    });
+
+    it('should decrement the aborted count on recovery', () => {
+        enableCSRRecovery();
+        element.setAttribute('data-sz-recovery-token', 'token1');
+        element.setAttribute('szRecover', 'csr');
+
+        abortHydration(element, {
+            type: 'checksum_mismatch',
+            message: 'Test',
+            timestamp: Date.now(),
+        });
+        expect(getAbortedSubtreeCount()).toBe(1);
+
+        attemptCSRRecovery(element);
+        expect(getAbortedSubtreeCount()).toBe(0);
     });
 
     it('should remove abort markers', () => {
