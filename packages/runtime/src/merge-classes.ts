@@ -18,22 +18,26 @@
  * NEVER merged away — it keys by itself, so at worst two classes coexist (the
  * pre-merge status quo), never a wrongly-dropped class.
  *
- * v1 scope: merges by the box-role-map utility prefix for single-property
- * prefixes (gap, p, m, w, h, rounded, …). Prefixes that span multiple CSS
- * properties (`flex` covers flex-grow AND flex-direction; `font` covers family AND weight; `text` covers
- * font-size AND text-color; `bg` covers color AND position AND size) are treated
- * as AMBIGUOUS and under-merged. TODO(v2): full tailwind-merge-style conflict
- * groups would let these override precisely (flex-1 vs flex-none) while keeping
- * distinct properties (flex-1 vs flex-row).
+ * Single-property prefixes (gap, p, m, w, h, rounded, …) merge by prefix.
+ * Prefixes that span multiple CSS properties (`text` covers font-size AND
+ * color; `font` covers family AND weight; `bg`, `border`, `divide`, `ring`,
+ * `outline`, `flex`) classify the token VALUE into a property group (see
+ * `merge-groups.ts`): same group → last wins (`text-base` + `text-sm` →
+ * `text-sm`), different group → co-exist, unclassifiable → keep-both.
+ * Custom `@theme` tokens join their groups via `registerSzcnGroups` (the build
+ * plugin injects this automatically from the theme scan).
  *
  * @module
  */
 import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS } from './box-role-map.generated.js';
+import { classifyAmbiguousValue } from './merge-groups.js';
 import { normalizeBase, stripVariant } from './split-box.js';
 
 /**
- * Utility prefixes that map to more than one CSS property, so merging by the
- * prefix would drop a class for a DIFFERENT property. Under-merge these.
+ * Utility prefixes that map to more than one CSS property. These route through
+ * value-set classification (`merge-groups.ts`) instead of prefix-keyed merging
+ * — merging by the prefix alone deleted a legitimate class of the OTHER
+ * property (`font-sans` + `font-bold` → only `font-bold` survived).
  */
 const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'flex', // flex-1 (flex shorthand) vs flex-row (flex-direction)
@@ -43,11 +47,7 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'divide', // divide-x (width) vs divide-red-500 (color)
     'ring', // ring-2 (width) vs ring-red-500 (color)
     'outline', // outline-2 (width) vs outline-red-500 (color)
-    'font', // font-sans (font-family) vs font-bold (font-weight) — merging by the
-    // prefix deleted a legitimate class of the OTHER property (`font-sans` +
-    // `font-bold` → only `font-bold` survived), violating this module's own
-    // never-drop fail-safe. Under-merging trades that for the same
-    // stylesheet-order caveat the other ambiguous prefixes already have.
+    'font', // font-sans (font-family) vs font-bold (font-weight)
 ]);
 
 /**
@@ -157,7 +157,16 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     for (const [prefix] of BOX_ROLE_PREFIXES) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             if (AMBIGUOUS_PREFIXES.has(prefix)) {
-                return null;
+                // Value-set classification: same property group → last wins
+                // (`text-base` + `text-sm` → `text-sm`); different property →
+                // co-exist; unclassifiable value → keep-both as before.
+                const value = norm === prefix ? '' : norm.slice(prefix.length + 1);
+                const group = classifyAmbiguousValue(prefix, value);
+                if (group === null) {
+                    return null;
+                }
+                const key = `${variant} ${group}`;
+                return { key, covers: [key] };
             }
             // Key = variant + utility prefix. The space separator can't appear in
             // a class token, so distinct (variant, prefix) pairs never collide.
