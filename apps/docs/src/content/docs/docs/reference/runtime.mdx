@@ -68,6 +68,150 @@ const hasError = false;
 <div className={szr('base', isActive && 'active', hasError && 'error')} />
 ```
 
+## `szcn(...classes)` — Mangle-Aware Override Merge
+
+Merges className strings with **last-wins override per utility** — the merge to
+use at the single resolution point of a layered component (typically the leaf
+`Box`), and for merging a part's own defaults with a consumer override. Falsy
+inputs (`false`, `null`, `undefined`, `''`) are skipped.
+
+```ts
+function szcn(...inputs: (string | false | null | undefined)[]): string
+```
+
+npm `tailwind-merge` cannot do this job here: in a production build csszyx
+**mangles** owned classes (`gap-2` → `q3`, `gap-8` → `q7`), and tailwind-merge
+can't tell `q3`/`q7` are the same utility. `szcn` decodes each token through the
+runtime reverse mangle map (`window.__csszyx.decode`) before grouping, so
+overrides keep working with mangling on.
+
+```tsx twoslash
+import { szcn } from '@csszyx/runtime';
+// ---cut---
+szcn('gap-2 p-4', 'gap-8');   // → 'p-4 gap-8'        gap-8 overrides gap-2
+szcn('md:gap-2', 'gap-8');    // → 'md:gap-2 gap-8'   variants isolate — both kept
+```
+
+**Fail-safe contract:** a token whose conflict group can't be determined
+confidently is NEVER merged away — it keys by itself, so the worst case is two
+classes co-existing (the pre-merge status quo), never a wrongly-dropped class.
+
+### Directional shorthand coverage
+
+A shorthand appearing **later** removes the longhands it subsumes; a longhand
+appearing later only refines. Covers padding, margin, inset, and border-radius:
+
+```ts
+szcn('pb-4', 'p-8');   // → 'p-8'        p covers pb
+szcn('p-4', 'pb-8');   // → 'p-4 pb-8'   pb only refines the bottom
+szcn('ml-2', 'mx-4');  // → 'mx-4'
+szcn('top-2', 'inset-4');            // → 'inset-4'
+szcn('rounded-tl-sm', 'rounded-lg'); // → 'rounded-lg'
+```
+
+Logical sides (`ps`/`pe`, `ms`/`me`) are subsumed by their `p`/`m` shorthands.
+For inset and rounded the coverage is **physical-only**: `inset`/`rounded` do
+not subsume logical `start`/`end` / `rounded-s*` tokens, which could flip under
+RTL — those stay keep-both (still cascade-correct).
+
+### Property groups for ambiguous prefixes
+
+Eight prefixes span more than one CSS property (`text-sm` is font-size,
+`text-red-500` is color). For these, `szcn` classifies the token **value** into
+a property group: same group → last wins, different group → co-exist,
+unclassifiable → keep-both.
+
+```ts
+// text: size / color / align / wrap / overflow
+szcn('text-base', 'text-sm');      // → 'text-sm'
+szcn('text-red-500', 'text-sm');   // → 'text-red-500 text-sm'
+szcn('text-sm/6', 'text-lg/7');    // → 'text-lg/7'   modifiers stay in-group
+
+// font: family vs weight
+szcn('font-semibold', 'font-normal'); // → 'font-normal'
+szcn('font-sans', 'font-bold');       // → 'font-sans font-bold'
+
+// bg: color / size / position / repeat / attachment / clip / image
+szcn('bg-red-500', 'bg-blue-500'); // → 'bg-blue-500'
+szcn('bg-red-500', 'bg-cover');    // → 'bg-red-500 bg-cover'
+
+// border / divide / ring / outline: width / color / style
+szcn('border-2', 'border-4');      // → 'border-4'
+
+// flex: shorthand / direction / wrap
+szcn('flex-row', 'flex-col');      // → 'flex-col'
+szcn('flex', 'flex-1');            // → 'flex flex-1'   bare flex is display
+```
+
+Still keep-both by design: directional/axis forms of border-family prefixes
+(`border-t-2` vs `border-2`, `divide-x-2` vs `divide-y-2`), CSS-variable values
+(`text-(--brand)` — the type is unknown), and any value csszyx cannot classify.
+
+:::tip[Custom `@theme` tokens join automatically]
+With `build.scanCss` configured, tokens from your `@theme` blocks
+(`--color-brand`, `--text-huge`, …) are registered into their groups by the
+build plugin — `szcn('text-brand', 'text-accent')` → `'text-accent'` with zero
+wiring, updated on HMR. For utility-shaped classes written in plain CSS outside
+`@theme`, register them once with [`registerSzcnGroups`](#registerszcngroupsgroups).
+:::
+
+## `registerSzcnGroups(groups)`
+
+Registers custom token names so `szcn` can classify classes built from them.
+Idempotent and additive; the build plugin calls it automatically from the
+app's `@theme` blocks — call it manually only for hand-written CSS utilities.
+
+```ts
+interface SzcnThemeGroups {
+  colors?: readonly string[];        // 'brand' → text-brand, bg-brand, border-brand, …
+  textSizes?: readonly string[];     // 'huge' → text-huge
+  fontFamilies?: readonly string[];  // 'display' → font-display
+  fontWeights?: readonly string[];   // 'chunky' → font-chunky
+}
+
+function registerSzcnGroups(groups: SzcnThemeGroups): void
+```
+
+```ts
+import { registerSzcnGroups } from '@csszyx/runtime';
+
+// once, at app startup — not per-render
+registerSzcnGroups({ colors: ['brand', 'tag-blue-bg'], fontFamilies: ['display'] });
+```
+
+Guard rails — both fall back to keep-both with a one-time dev warning, never a
+wrong merge:
+
+- A name that **shadows a built-in value keyword** of an affected prefix is
+  rejected: a color named `cover` would make `szcn` misread `bg-cover`
+  (background-size) as a color and merge it wrongly.
+- A name registered in **two conflicting categories** (both a color and a text
+  size — `text-huge` becomes unclassifiable) is dropped from both, and the drop
+  is remembered: later registrations of either side are rejected too, so
+  registration order can never resurrect an ambiguous name into one category.
+
+## `szsClass(slot)`
+
+Narrows a compiled [`szs`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
+slot to its class string. Authored as an sz value, every slot is compiled to a
+string before the component runs — `szsClass` does the type narrowing once and
+fail-safe: an uncompiled slot (misconfigured build) returns `undefined` instead
+of coercing into `class="[object Object]"`.
+
+```ts
+function szsClass(slot: unknown): string | undefined
+```
+
+```tsx
+import { szcn, szsClass } from '@csszyx/runtime';
+import type { Szs } from '@csszyx/types';
+
+function Card({ szs }: { szs?: Szs<'title' | 'body'> }) {
+  // Slot default + consumer override — szcn resolves conflicts last-wins.
+  return <h3 className={szcn('font-medium text-base', szsClass(szs?.title))} />;
+}
+```
+
 ## `_szMerge(...objects)`
 
 Merges multiple SzObjects. Later objects override earlier ones for the same key.

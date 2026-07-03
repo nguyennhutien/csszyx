@@ -381,6 +381,18 @@ autocomplete and type-checking.
 `scanCss` accepts a glob or array: `['src/index.css', 'src/tokens.css']`.
 Theme files are watched in dev mode — hot-reload triggers type regeneration.
 
+The same scan also registers your color, text-size, font-family, and
+font-weight tokens into [`szcn`'s merge groups](/docs/reference/runtime/#szcnclasses--mangle-aware-override-merge),
+so classes built from them dedupe correctly with zero extra wiring. This
+matters for **semantic token names**: with `--color-warning` and
+`--color-danger` scanned, `szcn('text-warning', 'text-danger')` keeps only the
+later class, while `text-warning` + `text-sm` co-exist (color vs size). Without
+the scan, szcn cannot tell `warning` is a color and safely keeps both.
+(Shade-shaped names like `brand-500` classify by their `{name}-{shade}` shape
+alone and dedupe even unscanned.) Tokens from hand-written CSS outside `@theme`
+can be registered manually with
+[`registerSzcnGroups`](/docs/reference/runtime/#registerszcngroupsgroups).
+
 ### `hydration`
 
 Controls SSR hydration verification.
