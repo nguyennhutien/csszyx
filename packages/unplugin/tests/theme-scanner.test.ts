@@ -208,6 +208,8 @@ describe('mergeThemes', () => {
             colors: ['brand'],
             spacings: ['xl'],
             fonts: [],
+            textSizes: [],
+            fontWeights: [],
             radii: [],
             shadows: [],
             breakpoints: ['tablet'],
@@ -216,6 +218,8 @@ describe('mergeThemes', () => {
             colors: ['accent'],
             spacings: ['xl'],
             fonts: ['display'],
+            textSizes: [],
+            fontWeights: [],
             radii: [],
             shadows: [],
             breakpoints: ['desktop'],
@@ -232,6 +236,8 @@ describe('mergeThemes', () => {
             colors: ['z-color', 'a-color'],
             spacings: [],
             fonts: [],
+            textSizes: [],
+            fontWeights: [],
             radii: [],
             shadows: [],
             breakpoints: [],
@@ -240,6 +246,8 @@ describe('mergeThemes', () => {
             colors: ['m-color'],
             spacings: [],
             fonts: [],
+            textSizes: [],
+            fontWeights: [],
             radii: [],
             shadows: [],
             breakpoints: [],
@@ -256,6 +264,8 @@ describe('hasTokens', () => {
                 colors: [],
                 spacings: [],
                 fonts: [],
+                textSizes: [],
+                fontWeights: [],
                 radii: [],
                 shadows: [],
                 breakpoints: [],
@@ -269,6 +279,8 @@ describe('hasTokens', () => {
                 colors: ['brand'],
                 spacings: [],
                 fonts: [],
+                textSizes: [],
+                fontWeights: [],
                 radii: [],
                 shadows: [],
                 breakpoints: [],
@@ -279,10 +291,37 @@ describe('hasTokens', () => {
                 colors: [],
                 spacings: [],
                 fonts: [],
+                textSizes: [],
+                fontWeights: [],
                 radii: [],
                 shadows: [],
                 breakpoints: ['tablet'],
             }),
         ).toBe(true);
+    });
+});
+
+describe('szcn merge-group namespaces (--text-*, --font-weight-*)', () => {
+    it('routes font-weight tokens to fontWeights, not font families', () => {
+        // Ordering trap: `font-weight-` must match BEFORE `font-` — startsWith
+        // would otherwise file `font-weight-chunky` under FAMILIES as the
+        // garbage token "weight-chunky".
+        const theme = parseThemeBlocks(`
+            @theme {
+                --font-display: 'Inter', sans-serif;
+                --font-weight-chunky: 900;
+                --text-huge: 4rem;
+                --color-brand: oklch(0.7 0.1 250);
+            }
+        `);
+        expect(theme.fonts).toEqual(['display']);
+        expect(theme.fontWeights).toEqual(['chunky']);
+        expect(theme.textSizes).toEqual(['huge']);
+        expect(theme.colors).toEqual(['brand']);
+    });
+
+    it('numeric font-weight token names survive (no shade collapse)', () => {
+        const theme = parseThemeBlocks('@theme { --font-weight-450: 450; }');
+        expect(theme.fontWeights).toEqual(['450']);
     });
 });

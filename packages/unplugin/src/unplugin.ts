@@ -62,7 +62,7 @@ import {
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
-import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
+import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
     createTransformCacheKey,
@@ -76,10 +76,13 @@ import {
 import {
     createChecksumModule,
     createMangleMapModule,
+    createThemeGroupsModule,
     isVirtualModule,
+    RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
+    THEME_GROUPS_VIRTUAL_ID,
 } from './virtual-modules.js';
 
 /**
@@ -92,6 +95,8 @@ interface PluginState {
      * Drives the `@source` safelist; NOT the mangle map.
      */
     classes: Set<string>;
+    /** Merged @theme scan result — feeds the theme-groups virtual module. */
+    parsedTheme: import('./theme-scanner.js').ParsedTheme | null;
     /**
      * True once any processed CSS file was seen importing `tailwindcss`. Used to
      * warn at build end when csszyx generated classes but nothing makes Tailwind
@@ -1442,14 +1447,16 @@ function traceBenchTiming(label: string, filename: string, elapsedMs: number): v
  * No-ops silently if scanCss is not configured or if files can't be read.
  * @param rootDir - project root directory (used to resolve relative paths and output dir)
  * @param scanCss - path or glob patterns to CSS files (from BuildConfig.scanCss)
+ * @returns the merged parsed theme (feeds the szcn theme-groups virtual
+ *   module), or null when nothing was scanned.
  */
-function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): void {
+function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): ParsedTheme | null {
     if (!scanCss) {
-        return;
+        return null;
     }
     const sourceFiles = expandFilePatterns(rootDir, scanCss).filter(file => file.endsWith('.css'));
     if (sourceFiles.length === 0) {
-        return;
+        return null;
     }
     const themes = sourceFiles
         .map(f => {
@@ -1495,6 +1502,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
             // Ignore file read errors
         }
     }
+    return merged;
 }
 
 /**
@@ -2070,6 +2078,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     const state: PluginState = {
         classes: new Set<string>(),
+        parsedTheme: null,
         sawTailwindEntry: false,
         sawAnyCss: false,
         tailwindWarningEmitted: false,
@@ -3061,7 +3070,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns true only for csszyx virtual modules
              */
             loadInclude(id) {
-                return id === RESOLVED_VIRTUAL_MODULE_ID || id === RESOLVED_VIRTUAL_CHECKSUM_ID;
+                return (
+                    id === RESOLVED_VIRTUAL_MODULE_ID ||
+                    id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
+                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID
+                );
             },
 
             /**
@@ -3082,6 +3095,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
                     finalizeMangleMap();
                     return createChecksumModule(state.checksum);
+                }
+                if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
+                    const theme = state.parsedTheme;
+                    return createThemeGroupsModule({
+                        colors: theme?.colors ?? [],
+                        textSizes: theme?.textSizes ?? [],
+                        fontFamilies: theme?.fonts ?? [],
+                        fontWeights: theme?.fontWeights ?? [],
+                    });
                 }
                 return null;
             },
@@ -3297,6 +3319,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 }
 
+                // Theme-groups injection: a module that merges classes at runtime
+                // needs the app's custom @theme tokens registered into szcn's
+                // merge groups. Injecting the side-effect import into every
+                // szcn-USING module (rather than one entry) means the same
+                // registration travels with the code into every bundle that can
+                // call szcn — client, SSR, edge — so merge results (and rendered
+                // classNames) stay identical across environments. The module is
+                // generated from the theme scan; with no scan it registers
+                // nothing and szcn keeps its keep-both fail-safe.
+                if (
+                    /\bszcn\s*\(/.test(code) &&
+                    !transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) &&
+                    shouldProcessSource(id)
+                ) {
+                    transformedCode = `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
+                    transformed = true;
+                }
+
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
                     assertNoRSCBoundaryViolation(transformedCode, id);
                     const record = createRSCModuleRecord(transformedCode, id);
@@ -3441,7 +3481,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         prescanAndWriteClasses();
                     }
                     // Generate theme type augmentation from @theme CSS blocks
-                    runThemeScan(root, options.build?.scanCss);
+                    state.parsedTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
                 if (options.build?.scanCss) {
@@ -3473,7 +3514,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
                     // Generate theme type augmentation from @theme CSS blocks
-                    runThemeScan(root, options.build?.scanCss);
+                    state.parsedTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
                 },
 
                 /**
@@ -3487,7 +3529,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (scanCss) {
                         const root = ctx.server.config.root || process.cwd();
                         if (matchesAnyPattern(ctx.file, scanCss, root)) {
-                            runThemeScan(root, scanCss);
+                            state.parsedTheme = runThemeScan(root, scanCss) ?? state.parsedTheme;
+                            // New/removed @theme tokens change the szcn merge
+                            // groups — reload the generated registration module
+                            // so a dev server picks them up without a restart.
+                            const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
+                                RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+                            );
+                            if (themeGroupsModule) {
+                                ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+                            }
                         }
                     }
 

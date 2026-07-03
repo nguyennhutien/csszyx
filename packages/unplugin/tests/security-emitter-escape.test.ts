@@ -6,6 +6,8 @@ const emptyTheme = {
     colors: [],
     spacings: [],
     fonts: [],
+    textSizes: [],
+    fontWeights: [],
     radii: [],
     shadows: [],
     breakpoints: [],
