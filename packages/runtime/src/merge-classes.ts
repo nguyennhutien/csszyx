@@ -29,9 +29,9 @@
  *
  * @module
  */
-import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS } from './box-role-map.generated.js';
+import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
 import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
-import { normalizeBase, stripVariant } from './split-box.js';
+import { BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT, normalizeBase, stripVariant } from './split-box.js';
 
 /**
  * Utility prefixes that map to more than one CSS property. These route through
@@ -49,28 +49,6 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'outline', // outline-2 (width) vs outline-red-500 (color)
     'font', // font-sans (font-family) vs font-bold (font-weight)
 ]);
-
-/**
- * `BOX_ROLE_PREFIXES` bucketed by first dash-segment. A matching prefix is
- * either the whole normalized base or one of its dash-prefixes, so it always
- * shares the base's first segment — bucketing (267 entries → ~2 per bucket,
- * original order preserved within a bucket) returns exactly what the previous
- * full linear scan did, at a fraction of the per-token cost. szcn is the leaf
- * merge of layered design-system components, so this runs per token per render.
- */
-const PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<string, ReadonlyArray<string>> = (() => {
-    const buckets = new Map<string, string[]>();
-    for (const [prefix] of BOX_ROLE_PREFIXES) {
-        const segment = prefix.split('-', 1)[0] as string;
-        let bucket = buckets.get(segment);
-        if (!bucket) {
-            bucket = [];
-            buckets.set(segment, bucket);
-        }
-        bucket.push(prefix);
-    }
-    return buckets;
-})();
 
 /**
  * Resolve a token to its original (un-mangled) name using the runtime reverse
@@ -176,8 +154,8 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (BOX_ROLE_TOKENS.has(norm)) {
         return null;
     }
-    const bucket = PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
-    for (const prefix of bucket) {
+    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
+    for (const [prefix] of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             if (AMBIGUOUS_PREFIXES.has(prefix)) {
                 // Value-set classification: same property group → last wins
