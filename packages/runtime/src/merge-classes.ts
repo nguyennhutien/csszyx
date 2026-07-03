@@ -20,7 +20,7 @@
  *
  * v1 scope: merges by the box-role-map utility prefix for single-property
  * prefixes (gap, p, m, w, h, rounded, …). Prefixes that span multiple CSS
- * properties (`flex` covers flex-grow AND flex-direction; `text` covers
+ * properties (`flex` covers flex-grow AND flex-direction; `font` covers family AND weight; `text` covers
  * font-size AND text-color; `bg` covers color AND position AND size) are treated
  * as AMBIGUOUS and under-merged. TODO(v2): full tailwind-merge-style conflict
  * groups would let these override precisely (flex-1 vs flex-none) while keeping
@@ -43,6 +43,11 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'divide', // divide-x (width) vs divide-red-500 (color)
     'ring', // ring-2 (width) vs ring-red-500 (color)
     'outline', // outline-2 (width) vs outline-red-500 (color)
+    'font', // font-sans (font-family) vs font-bold (font-weight) — merging by the
+    // prefix deleted a legitimate class of the OTHER property (`font-sans` +
+    // `font-bold` → only `font-bold` survived), violating this module's own
+    // never-drop fail-safe. Under-merging trades that for the same
+    // stylesheet-order caveat the other ambiguous prefixes already have.
 ]);
 
 /**

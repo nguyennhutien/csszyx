@@ -120,6 +120,16 @@ When an element has **both** `sz` and `className`, csszyx compiles `sz` and merg
 it with the existing `className` for you — the consumer override still applies.
 :::
 
+:::caution[szcn merge limits]
+`szcn` merges by **utility prefix**. Prefixes that span several CSS properties
+(`text`, `bg`, `border`, `font`, `flex`, …) are deliberately under-merged — both
+classes are kept so nothing is ever wrongly dropped — which means the stylesheet
+order, not the argument order, decides such a conflict. In practice: a consumer's
+`text-sm` cannot override a default `text-base` through `szcn`. If a slot default
+contains one of these (a text size, a font weight), prefer **replace semantics**
+(`szs?.title ?? defaultTitleClasses`) over merging.
+:::
+
 ## Typing
 
 Deriving each part's props from a host element (`ComponentProps<'div'>`,

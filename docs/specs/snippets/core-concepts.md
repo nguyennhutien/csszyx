@@ -419,7 +419,10 @@ Build it as a plain React compound component; each part forwards `sz` (already
 rewritten to `className` by the transform) onto a host element. Type each part with
 `ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
 Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
-last-wins) or `clsx`.
+last-wins) or `clsx`. CAVEAT: `szcn` under-merges multi-property prefixes
+(`text`, `bg`, `border`, `font`, `flex` — both classes kept, stylesheet order
+decides), so e.g. `text-sm` cannot override a default `text-base` through it; for
+slot defaults containing those, use replace semantics (`szs?.slot ?? defaults`).
 
 ## `szs` — slot map for a component's internal parts
 

@@ -65,6 +65,17 @@ describe('szcn — fail-safe: never drop an ambiguous/unknown class', () => {
         expect(szcn('a b', 'c')).toBe('a b c');
     });
 
+    it('under-merges font-* (font-family vs font-weight are different properties)', () => {
+        // Regression: `font` was NOT in the ambiguous set, so the prefix merge
+        // deleted `font-sans` when `font-bold` followed — a wrongly-dropped
+        // class across two CSS properties.
+        expect(szcn('font-sans', 'font-bold')).toBe('font-sans font-bold');
+        // Same-property pairs now under-merge too (the shared ambiguous-prefix
+        // trade-off); exact duplicates still dedupe by name.
+        expect(szcn('font-semibold', 'font-normal')).toBe('font-semibold font-normal');
+        expect(szcn('font-bold', 'font-bold')).toBe('font-bold');
+    });
+
     it('under-merges exact value-keyed display tokens (flex vs block)', () => {
         // both set `display`, but the box-role map keys them only by category,
         // so they are under-merged rather than risk dropping a sibling.
