@@ -24,6 +24,17 @@
             "biome.json",
             "tsconfig.json",
             "tsconfig.eslint.json",
+            "*.json",
+            "*.jsonc",
+            ".devcontainer/*.json",
+            "apps/**/*.json",
+            "apps/**/*.jsonc",
+            "playground/**/*.json",
+            "!package.json",
+            "!apps/**/package.json",
+            "!playground/**/package.json",
+            "!tests/generated/",
+            "!.release-please-manifest.json",
             "!**/dist",
             "!**/build",
             "!**/node_modules",
@@ -125,6 +136,31 @@
     "overrides": [
         {
             "includes": ["**/package.json"],
+            "json": {
+                "formatter": {
+                    "indentWidth": 2
+                }
+            }
+        },
+        {
+            "includes": [
+                "*.json",
+                "*.jsonc",
+                ".devcontainer/*.json",
+                "apps/**/*.json",
+                "apps/**/*.jsonc",
+                "playground/**/*.json",
+                "!**/package.json",
+                "!tsconfig.json",
+                "!tsconfig.eslint.json",
+                "!biome.json",
+                "!packages/**",
+                "!tests/generated/",
+                "!.release-please-manifest.json"
+            ],
+            "formatter": {
+                "lineWidth": 80
+            },
             "json": {
                 "formatter": {
                     "indentWidth": 2

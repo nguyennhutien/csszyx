@@ -17,16 +17,25 @@ pre-commit:
     # tsc -b verifies the workspace types end-to-end. set -e + chained
     # invocations preserve the fail-fast behaviour the separate-commands
     # version had.
+    #
+    # Biome owns ALL JSON formatting now (the former prettier-json chain).
+    # biome.json carries a prettier-matching override (2-space, 80 cols)
+    # for the root/app/playground JSON that prettier used to format —
+    # verified byte-identical output on every file of that set — while
+    # packages/tsconfig-root JSON keeps biome's 4-space. json5 is out: no
+    # tracked .json5 exists and biome does not parse json5; if one ever
+    # appears it needs its own formatter.
     ts-js:
       # `.mjs` and `.cjs` MUST stay in this glob: biome.json includes
       # `scripts/**/*.mjs` and `**/*.mjs`, and eslint.config.js lints both
       # `**/*.cjs` and `**/*.mjs`. Dropping them lets the same kind of
       # format/import-order regression that escaped PR #28's first push
       # slip through the local gate again.
-      glob: "*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc,json5,css}"
+      glob: "*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc,css}"
       exclude:
         - "package.json"
         - "**/package.json"
+        - ".release-please-manifest.json"
         - "apps/docs/src/styles/landing.css"
       run: |
         set -e
@@ -34,23 +43,6 @@ pre-commit:
         pnpm exec biome check --no-errors-on-unmatched {staged_files}
         pnpm exec eslint --fix --no-warn-ignored --cache --cache-location node_modules/.cache/eslint {staged_files}
         pnpm exec tsc -b --pretty false
-      stage_fixed: true
-
-    # Root- and app-level JSON files that biome's includes (only
-    # packages/**/*.json) intentionally skip. Disjoint with the ts-js
-    # chain because biome and prettier write to different file sets
-    # under the same excludes; runs in parallel.
-    prettier-json:
-      glob: "*.{json,jsonc,json5}"
-      exclude:
-        - "package.json"
-        - "**/package.json"
-        - "biome.json"
-        - "tsconfig.json"
-        - "tsconfig.eslint.json"
-        - "packages/**/*.json"
-        - "packages/**/*.jsonc"
-      run: pnpm exec prettier --write {staged_files}
       stage_fixed: true
 
     # Rust chain. rustfmt writes formatted source, then clippy --fix
