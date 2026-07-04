@@ -54,6 +54,9 @@ Full walkthrough: <https://csszyx.com>
 - **Class-name mangling** — reversed-tier encoding (`p-4` → `z`, `bg-red-500` → `y`) drives ~40% bundle reduction on typical apps
 - **SSR-safe hydration** — SHA-256 checksum validation detects mangle-map mismatch between server and client and preserves server HTML
 - **Zero-runtime static path** — fully-static `sz` objects compile to string literals; dynamic objects stay light (5ns zero-alloc for 0–4 keys)
+- **Variant authoring (`szv`)** — CVA-style factories for finite enum props; every combination extracted and safelisted at build time
+- **Mangle-aware merge (`szcn`)** — last-wins override per utility that keeps working on mangled classes, where `tailwind-merge` can't
+- **Slot styling (`szs`)** — style a compound component's internal parts in one prop, compiled per slot at build time
 - **Arbitrary CSS via `css: {}`** — escape hatch for properties Tailwind doesn't cover
 - **Container queries & `:has()`** — first-class support via `container` and `has` variants
 - **Variant nesting** — `hover`, `md`, `dark`, `group-hover/name`, `peer-*`, `data-*`, `aria-*`, `supports-*`
@@ -82,21 +85,21 @@ Full walkthrough: <https://csszyx.com>
 
 ## Packages
 
-| Package                  | Description                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `csszyx`                 | Umbrella — re-exports all; provides `csszyx/vite`, `csszyx/webpack`, `csszyx/lite` |
-| `@csszyx/compiler`       | `sz` object → Tailwind className transform (TypeScript)                            |
-| `@csszyx/runtime`        | `_sz`, `_szMerge`, `splitBox` + class toolkit + SSR hydration validator            |
-| `@csszyx/core`           | Rust/WASM core: encoder, SHA-256 checksum, collision detection                     |
-| `@csszyx/unplugin`       | Build plugin — Vite + Webpack + esbuild + Rollup + Next.js                         |
-| `@csszyx/dynamic`        | Runtime CSS injection for API/CMS-driven styling                                   |
-| `@csszyx/cli`            | Migration CLI (Tailwind → `sz`) + type generator                                   |
-| `@csszyx/vars`           | CSS custom-property helpers (`applySzVars`, React `useSzVars`)                     |
-| `@csszyx/mcp-server`     | Model Context Protocol server for AI agents                                        |
-| `@csszyx/vscode`         | VS Code extension — IntelliSense, hover, diagnostics                               |
-| `@csszyx/types`          | Shared TypeScript types + `CsszyxConfig`                                           |
-| `@csszyx/vue-adapter`    | Vue SFC support (experimental)                                                     |
-| `@csszyx/svelte-adapter` | Svelte support (experimental)                                                      |
+| Package                  | Description                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| `csszyx`                 | Umbrella — re-exports all; provides `csszyx/vite`, `csszyx/webpack`, `csszyx/lite`  |
+| `@csszyx/compiler`       | `sz` object → Tailwind className transform (TypeScript)                             |
+| `@csszyx/runtime`        | `szr`/`szcn`/`szv` composition + `splitBox` class toolkit + SSR hydration validator |
+| `@csszyx/core`           | Rust/WASM core: encoder, SHA-256 checksum, collision detection                      |
+| `@csszyx/unplugin`       | Build plugin — Vite + Webpack + esbuild + Rollup + Next.js                          |
+| `@csszyx/dynamic`        | Runtime CSS injection for API/CMS-driven styling                                    |
+| `@csszyx/cli`            | Migration CLI (Tailwind → `sz`) + type generator                                    |
+| `@csszyx/vars`           | CSS custom-property helpers (`applySzVars`, React `useSzVars`)                      |
+| `@csszyx/mcp-server`     | Model Context Protocol server for AI agents                                         |
+| `@csszyx/vscode`         | VS Code extension — IntelliSense, hover, diagnostics                                |
+| `@csszyx/types`          | Shared TypeScript types + `CsszyxConfig`                                            |
+| `@csszyx/vue-adapter`    | Vue SFC support (experimental)                                                      |
+| `@csszyx/svelte-adapter` | Svelte support (experimental)                                                       |
 
 ## Examples
 
@@ -119,9 +122,13 @@ Full walkthrough: <https://csszyx.com>
 **Runtime helpers:**
 
 ```tsx
-import { _sz } from "@csszyx/runtime";
+import { szr, szcn } from "@csszyx/runtime";
 
-<div className={_sz("base", isActive ? "active" : "inactive")} />;
+// Concatenate (mangle-aware, filters falsy)
+<div className={szr("base", isActive ? "active" : "inactive")} />;
+
+// Merge with last-wins override per utility (gap-8 wins over gap-2)
+<div className={szcn("gap-2 p-4", "gap-8")} />;
 ```
 
 **Dynamic (runtime-injected styles):**

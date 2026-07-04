@@ -1,6 +1,6 @@
 # CSSzyx Astro Solid Playground
 
-Small validation app for `.agent/handoffs/solidjs-astro-news-app.md`.
+Small validation app for the Astro + SolidJS integration path.
 
 It intentionally covers only the risky integration points:
 

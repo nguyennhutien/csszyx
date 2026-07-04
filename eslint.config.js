@@ -67,8 +67,14 @@ export default [
             ...regexp.configs['flat/recommended'].rules,
             'regexp/no-unused-capturing-group': 'off',
             // Polynomial-ReDoS gate: catches quadratic-by-search patterns (e.g.
-            // `[/\\]+$`) that `no-super-linear-backtracking` misses. Closes the gap
-            // that was previously CodeQL-only.
+            // `[/\\]+$`) that `no-super-linear-backtracking` misses.
+            //
+            // KNOWN LIMIT: neither rule (nor any of this plugin's 82 rules, at any
+            // option level) detects the rejecting-suffix class where a non-dotAll
+            // `.*` before `$` fails on a newline — `/\.[tj]sx?(?:\?.*)?$/` was
+            // measurably quadratic (`'.js?'.repeat(n) + '\n'`) and passed this
+            // config. CodeQL's js/polynomial-redos is the gate for that class;
+            // `recheck` also detects it if a local gate is ever wanted.
             'regexp/no-super-linear-move': 'error',
         },
     },

@@ -1,15 +1,17 @@
 # csszyx
 
-> Universal CSS-in-JS for Tailwind CSS with WASM core.
+> CSS-in-JS for Tailwind CSS v4 — object syntax at build time, class mangling
+> in production, SSR-safe hydration.
 
 ## Features
 
-- **Build-time transforms** -- `sz` prop compiles to atomic Tailwind classes
-- **Zero-runtime overhead** -- Styles extracted to static CSS at build time
-- **SSR hydration safety** -- SHA-256 checksum validation, abort on mismatch
-- **Tailwind CSS v4** -- Full compatibility with Tailwind's JIT engine
-- **Production minification** -- Class names mangled (`p-4` -> `z`) for smaller output
-- **TypeScript support** -- Fully typed `sz` prop with autocomplete
+- **Build-time transforms** — the `sz` prop compiles to atomic Tailwind classes; static styles cost zero runtime
+- **Production mangling** — class names compress (`p-4` → `z`) with a native Rust engine driving the build
+- **SSR hydration safety** — SHA-256 checksum validation, abort-and-preserve on mismatch
+- **Variant authoring** — `szv` factories for finite enum props, extracted and safelisted at build time
+- **Mangle-aware merging** — `szcn` resolves last-wins overrides even on mangled classes
+- **Tailwind CSS v4** — full compatibility with Tailwind's JIT engine, including custom `@theme` tokens
+- **TypeScript** — fully typed `sz` prop with autocomplete for utilities, variants, and your theme
 
 ## Installation
 
@@ -33,6 +35,9 @@ export default defineConfig({
 });
 ```
 
+Webpack (including Next.js) uses `csszyx/webpack`; other bundlers go through
+[`@csszyx/unplugin`](https://www.npmjs.com/package/@csszyx/unplugin).
+
 ### 2. Use the `sz` prop
 
 ```tsx
@@ -43,7 +48,8 @@ function Button() {
 }
 ```
 
-At build time, `sz={{ bg: 'blue-500', color: 'white', p: 4 }}` compiles to `className="bg-blue-500 text-white p-4"`.
+At build time this compiles to `className="bg-blue-500 text-white p-4"` — and
+in production those classes mangle to short tokens backed by the same CSS.
 
 ## Object Syntax
 
@@ -79,27 +85,61 @@ The `sz` prop accepts an object where keys are Tailwind property names and value
 // -> className="bg-blue-500/20"
 ```
 
-## Runtime Helpers
+## Variants with `szv`
 
-For dynamic class composition, use the runtime helpers from `@csszyx/runtime` (re-exported by `csszyx`):
+For a finite enum prop (severity, size, intent), declare the variants once —
+every combination is compiled and safelisted at build time:
 
 ```tsx
-import { _sz } from "@csszyx/runtime";
+import { szv } from "csszyx";
 
-<div className={_sz("p-4", isActive ? "bg-blue-500" : "bg-gray-200")} />;
+const calloutSz = szv({
+  variants: {
+    severity: {
+      info: { bg: { color: "sky-500", op: 10 }, color: "sky-700" },
+      warning: { bg: { color: "amber-500", op: 10 }, color: "amber-700" },
+    },
+  },
+  defaultVariants: { severity: "info" },
+});
+
+<div sz={calloutSz({ severity })} />;
+```
+
+## Runtime composition
+
+For dynamic class composition use the public helpers from
+[`@csszyx/runtime`](https://www.npmjs.com/package/@csszyx/runtime):
+
+```tsx
+import { szr, szcn } from "@csszyx/runtime";
+
+// Concatenate (mangle-aware, filters falsy)
+<div className={szr("p-4", isActive && "bg-blue-500")} />;
+
+// Merge with last-wins override per utility (survives production mangling)
+<div className={szcn("gap-2 p-4", overrideClasses)} />;
 ```
 
 ## Packages
 
-| Package                                                              | Description                             |
-| -------------------------------------------------------------------- | --------------------------------------- |
-| [`csszyx`](https://www.npmjs.com/package/csszyx)                     | Umbrella package (re-exports all)       |
-| [`@csszyx/unplugin`](https://www.npmjs.com/package/@csszyx/unplugin) | Vite + Webpack + esbuild plugin         |
-| [`@csszyx/compiler`](https://www.npmjs.com/package/@csszyx/compiler) | sz object to Tailwind class transform   |
-| [`@csszyx/runtime`](https://www.npmjs.com/package/@csszyx/runtime)   | Runtime helpers + SSR hydration         |
-| [`@csszyx/core`](https://www.npmjs.com/package/@csszyx/core)         | Rust/WASM: encoder, checksum, collision |
-| [`@csszyx/cli`](https://www.npmjs.com/package/@csszyx/cli)           | Migration CLI + type generator          |
-| [`@csszyx/types`](https://www.npmjs.com/package/@csszyx/types)       | Shared TypeScript types                 |
+| Package                                                                  | Description                                           |
+| ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| [`csszyx`](https://www.npmjs.com/package/csszyx)                         | Umbrella package (re-exports all)                     |
+| [`@csszyx/unplugin`](https://www.npmjs.com/package/@csszyx/unplugin)     | Vite + Webpack + esbuild + Rollup plugin              |
+| [`@csszyx/compiler`](https://www.npmjs.com/package/@csszyx/compiler)     | sz object to Tailwind class transform                 |
+| [`@csszyx/runtime`](https://www.npmjs.com/package/@csszyx/runtime)       | szr / szcn / szv / splitBox + SSR hydration           |
+| [`@csszyx/core`](https://www.npmjs.com/package/@csszyx/core)             | Rust core: native transform engine, encoder, checksum |
+| [`@csszyx/dynamic`](https://www.npmjs.com/package/@csszyx/dynamic)       | Runtime CSS injection for API/CMS-driven styling      |
+| [`@csszyx/cli`](https://www.npmjs.com/package/@csszyx/cli)               | Migration CLI, project doctor, collision scanner      |
+| [`@csszyx/vars`](https://www.npmjs.com/package/@csszyx/vars)             | CSS custom-property helpers for runtime values        |
+| [`@csszyx/mcp-server`](https://www.npmjs.com/package/@csszyx/mcp-server) | MCP server for AI agents (Cursor, Claude, …)          |
+| [`@csszyx/types`](https://www.npmjs.com/package/@csszyx/types)           | Shared TypeScript types                               |
+
+## Documentation
+
+Guides, full sz-prop reference, SSR, and migration:
+<https://csszyx.com>
 
 ## License
 

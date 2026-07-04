@@ -55,4 +55,41 @@ describe('recordGlobalVarSourceFile', () => {
 
         expect(state.globalVarSourceFilesByFile.size).toBe(0);
     });
+
+    // The script-id gate was a `/\.[tj]sx?(\?.*)?$/`-shaped regex that CodeQL
+    // flagged as polynomial ReDoS on adversarial ids. The linear replacement
+    // must keep the regex's semantics EXACTLY — including its quirks — so
+    // these cases pin both sides of the contract.
+    it('accepts Vite-style query ids (extension followed by ?)', () => {
+        const state = { globalVarSourceFilesByFile: new Map<string, string>() };
+
+        recordGlobalVarSourceFile(state, '/app/src/Button.tsx?v=123', 'v1');
+        // vue-SFC script sub-requests end in `&lang.ts` — the old regex
+        // accepted them via the trailing-extension branch; keep that.
+        recordGlobalVarSourceFile(state, '/app/src/A.vue?vue&type=script&lang.ts', 'v2');
+
+        expect(state.globalVarSourceFilesByFile.size).toBe(2);
+    });
+
+    it('rejects non-script ids, including near-miss extensions', () => {
+        const state = { globalVarSourceFilesByFile: new Map<string, string>() };
+
+        recordGlobalVarSourceFile(state, '/app/src/styles.css?inline', 'v1');
+        recordGlobalVarSourceFile(state, '/app/src/data.ts.bak', 'v2');
+        recordGlobalVarSourceFile(state, '/app/src/notes.md', 'v3');
+
+        expect(state.globalVarSourceFilesByFile.size).toBe(0);
+    });
+
+    it('classifies adversarial repeated ".js?" ids without pathological time', () => {
+        const state = { globalVarSourceFilesByFile: new Map<string, string>() };
+
+        // The CodeQL counterexample shape: many `.js?` repetitions. The old
+        // regex scanned this polynomially; the gate must stay linear. Both a
+        // matching and a non-matching adversarial id are exercised.
+        recordGlobalVarSourceFile(state, `/x${'.js?'.repeat(50_000)}end`, 'v1');
+        recordGlobalVarSourceFile(state, `/x${'.jsX'.repeat(50_000)}end`, 'v2');
+
+        expect(state.globalVarSourceFilesByFile.size).toBe(1);
+    });
 });

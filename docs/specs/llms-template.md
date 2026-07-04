@@ -434,7 +434,22 @@ are compiler-injected, do not hand-author them):
   Reach for it to build a className from `szv` factory output (e.g. a code-split
   layout that declares variants in a `.ts` module and resolves them in a `.tsx`).
 - **`szcn(...)`** — merge className STRINGS with last-wins override on a
-  same-utility conflict, mangle-aware (the Box-level merge).
+  same-utility conflict, mangle-aware (the Box-level merge). Contract:
+  - Variants isolate: `szcn('md:gap-2','gap-8')` keeps both; same variant+utility → last wins.
+  - Directional shorthand coverage (padding/margin/inset/rounded): a LATER
+    shorthand removes the longhands it subsumes (`szcn('pb-4','p-8')` → `p-8`);
+    a later longhand only refines (`szcn('p-4','pb-8')` → `p-4 pb-8`). Physical
+    only for inset/rounded — logical `start`/`end` stay keep-both (RTL-safe).
+  - Ambiguous prefixes (`text` `font` `bg` `border` `divide` `ring` `outline`
+    `flex`) classify the token VALUE into a property group: same property →
+    last wins (`szcn('text-base','text-sm')` → `text-sm`), different → co-exist
+    (`text-red-500` never removes `text-sm`), unclassifiable → keep-both.
+  - Custom `@theme` tokens join their groups automatically via `build.scanCss`;
+    plain-CSS utility names register once via
+    `registerSzcnGroups({ colors: [...], textSizes: [...] })` (guard-railed:
+    names shadowing built-in keywords, or defined in two conflicting
+    categories, are rejected to keep-both — never a wrong merge).
+  - Fail-safe: a token szcn cannot confidently group is NEVER dropped.
 - `szr` takes sz OBJECTS and concatenates; `szcn` takes STRINGS and overrides.
 
 ```tsx

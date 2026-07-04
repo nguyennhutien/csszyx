@@ -2,7 +2,8 @@
 
 > Command-line tools for CSSzyx.
 
-Review usage stats, diagnose issues, and initialize projects.
+Initialize projects, migrate Tailwind classNames to `sz`, diagnose configuration
+and mangling issues, and maintain the Next.js Turbopack safelist.
 
 ## Installation
 
@@ -28,6 +29,46 @@ Diagnose configuration and mangling issues.
 
 ```bash
 npx csszyx doctor
+```
+
+### `check`
+
+Scan the whole project for unknown or aliased `sz` keys — CI-friendly (non-zero
+exit on findings).
+
+```bash
+npx csszyx check
+```
+
+### `explain`
+
+Print the Tailwind className an sz object compiles to — quick one-off checks
+without a build.
+
+```bash
+npx csszyx explain '{ p: 4, hover: { bg: "blue-500" } }'
+# → p-4 hover:bg-blue-500
+```
+
+### `scan-collisions`
+
+Find app-owned class names that could collide with a production mangle token
+(short names like `x`, `y` in hand-written CSS of a hybrid Tailwind setup).
+Feed the results to `production.mangleExclude`.
+
+```bash
+npx csszyx scan-collisions --pattern "src/**/*.css"
+```
+
+### `next-prebuild` / `next-watch`
+
+Maintain the Tailwind `@source` safelist for the Next.js Turbopack dev path:
+`next-prebuild` seeds it before `next build --turbopack`; `next-watch` runs
+beside `next dev --turbo` and keeps it fresh as sources change.
+
+```bash
+npx csszyx next-prebuild
+npx csszyx next-watch
 ```
 
 ### `audit`
