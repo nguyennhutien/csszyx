@@ -1032,47 +1032,73 @@ export function transformSourceCode(
                             if (!configArg) {
                                 return;
                             }
-                            // Read `base` and `variants` INDEPENDENTLY rather than
-                            // requiring the whole config to be statically evaluable.
-                            // A single non-static sibling key (e.g. a
-                            // `compoundVariants` array) used to null the entire
-                            // config and drop every variant class; now unknown /
-                            // dynamic keys are simply ignored. A base/variants value
-                            // may itself be a const identifier bound to an object.
-                            const base = (readStaticConfigObject(configArg, 'base', path.scope) ??
-                                {}) as SzObject;
-                            const variants = (readStaticConfigObject(
+                            // Read `base` and `variants` INDEPENDENTLY, and convert
+                            // both PER KEY: one unresolvable leaf (a runtime
+                            // conditional, a call, a template) used to null the
+                            // entire catalog — every static sibling key and every
+                            // other variant included — silently missing CSS under
+                            // Tailwind `source(none)`. The lenient walk keeps
+                            // everything it can classify, expands finite
+                            // conditionals into BOTH branches (the runtime picks
+                            // one, so both must be safelisted), and skips only what
+                            // it genuinely cannot read. A base/variants value may
+                            // itself be a const identifier bound to an object.
+                            const budget: CatalogExtrasBudget = {
+                                extras: MAX_CATALOG_BRANCH_EXTRAS,
+                            };
+                            const baseNode = readConfigSubObjectNode(configArg, 'base', path.scope);
+                            const baseCandidates = baseNode
+                                ? lenientCatalogObjects(baseNode, path.scope, new Set(), 0, budget)
+                                : [{} as SzObject];
+                            const base = baseCandidates[0] ?? ({} as SzObject);
+
+                            const classStrings: string[] = [];
+                            const pushCompiled = (object: SzObject): void => {
+                                const result = transform(object);
+                                const cls = typeof result === 'string' ? result : result.className;
+                                if (cls) {
+                                    classStrings.push(cls);
+                                }
+                            };
+
+                            // Emit the base styles alone (covers defaultVariants case)
+                            pushCompiled(base);
+                            for (const extra of baseCandidates.slice(1)) {
+                                pushCompiled(extra);
+                            }
+
+                            // Emit base merged with each variant candidate — per
+                            // dimension, not cross-product. Covers all unique
+                            // classes in O(total variant values + branches).
+                            const variantsNode = readConfigSubObjectNode(
                                 configArg,
                                 'variants',
                                 path.scope,
-                            ) ?? {}) as Record<string, Record<string, SzObject>>;
-
-                            const classStrings: string[] = [];
-
-                            // Emit the base styles alone (covers defaultVariants case)
-                            const baseResult = transform(base);
-                            const baseCls =
-                                typeof baseResult === 'string' ? baseResult : baseResult.className;
-                            if (baseCls) {
-                                classStrings.push(baseCls);
-                            }
-
-                            // Emit base merged with each variant value — per-dimension, not
-                            // cross-product. Covers all unique classes in O(total variant values).
-                            for (const variantValues of Object.values(variants)) {
-                                for (const variantObj of Object.values(variantValues)) {
-                                    if (!variantObj || typeof variantObj !== 'object') {
+                            );
+                            for (const dimensionRaw of variantsNode?.properties ?? []) {
+                                if (!t.isObjectProperty(dimensionRaw) || dimensionRaw.computed) {
+                                    continue;
+                                }
+                                const dimensionValue = resolveCatalogObjectExpression(
+                                    dimensionRaw.value,
+                                    path.scope,
+                                    new Set(),
+                                );
+                                if (!dimensionValue) {
+                                    continue;
+                                }
+                                for (const variantRaw of dimensionValue.properties) {
+                                    if (!t.isObjectProperty(variantRaw) || variantRaw.computed) {
                                         continue;
                                     }
-                                    const merged: SzObject = {
-                                        ...base,
-                                        ...(variantObj as SzObject),
-                                    };
-                                    const result = transform(merged);
-                                    const cls =
-                                        typeof result === 'string' ? result : result.className;
-                                    if (cls) {
-                                        classStrings.push(cls);
+                                    for (const candidate of lenientCatalogObjectCandidates(
+                                        variantRaw.value,
+                                        path.scope,
+                                        new Set(),
+                                        0,
+                                        budget,
+                                    )) {
+                                        pushCompiled({ ...base, ...candidate });
                                     }
                                 }
                             }
@@ -1696,23 +1722,21 @@ function tryHoistConditionalSpread(
 }
 
 /**
- * Read a single named property of an szv config ObjectExpression as a static
- * SzObject, evaluating ONLY that sub-tree. Returns null when the key is absent
- * or its value is not a statically-evaluable object. Used so szv extraction can
- * pull `base` / `variants` without forcing sibling keys (compoundVariants,
- * defaultVariants, unknown keys) to be static — a single dynamic sibling no
- * longer drops the whole catalog.
+ * Read a single named property (`base` / `variants`) of an szv config as an
+ * OBJECT NODE, without converting it. Returns null when the key is absent or
+ * its value is not an object literal / const-bound object — so sibling keys
+ * (compoundVariants, defaultVariants, unknown keys) never affect the catalog.
  *
  * @param configExpr The szv config object expression.
  * @param key The property to read (e.g. 'base' or 'variants').
  * @param scope The babel scope at the szv call site (for const-binding resolution).
- * @returns The evaluated SzObject, or null if absent/non-static.
+ * @returns The sub-object node, or null.
  */
-function readStaticConfigObject(
+function readConfigSubObjectNode(
     configExpr: t.ObjectExpression,
     key: string,
     scope: babel.NodePath['scope'],
-): SzObject | null {
+): t.ObjectExpression | null {
     for (const prop of configExpr.properties) {
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
@@ -1725,10 +1749,286 @@ function readStaticConfigObject(
         if (k !== key) {
             continue;
         }
-        const obj = resolveToConstObjectExpression(prop.value, scope);
-        return obj ? evaluateStaticObject(obj) : null;
+        return resolveToConstObjectExpression(prop.value, scope);
     }
     return null;
+}
+
+/** Nesting cap for the lenient catalog walk (matches the Rust/oxc walkers). */
+const MAX_CATALOG_DEPTH = 16;
+
+/**
+ * Cap on alternate-branch objects one szv call may add to the catalog, so a
+ * pathological conditional pile-up cannot balloon the safelist walk.
+ * (Matches the Rust/oxc walkers.)
+ */
+const MAX_CATALOG_BRANCH_EXTRAS = 32;
+
+/** Mutable extras budget threaded through one szv call's lenient walk. */
+interface CatalogExtrasBudget {
+    /** Remaining alternate-branch objects this call may still emit. */
+    extras: number;
+}
+
+/**
+ * Resolve an identifier to its const initializer (const-only, never
+ * reassigned), unwrapped of TS-only wrappers. Used by the szv catalog's
+ * lenient leaf resolution (`mx: GUTTER` where `const GUTTER = 0`).
+ *
+ * @param name Identifier name to resolve.
+ * @param scope The babel scope at the szv call site.
+ * @returns The unwrapped initializer node, or null.
+ */
+function resolveConstInitializer(name: string, scope: babel.NodePath['scope']): t.Node | null {
+    const binding = scope.getBinding(name);
+    if (binding?.kind !== 'const' || !binding.constant) {
+        return null;
+    }
+    const declNode = binding.path.node;
+    if (!t.isVariableDeclarator(declNode)) {
+        return null;
+    }
+    return unwrapTsExpression(declNode.init) ?? null;
+}
+
+/**
+ * Convert an object node into catalog candidates, PER KEY: index 0 is the
+ * primary object (conditionals resolved to their consequent), the rest are
+ * minimal path-preserving objects carrying alternate branch values (e.g.
+ * `{ hover: { mx: dense ? 0 : 2 } }` → `[{hover:{mx:0}}, {hover:{mx:2}}]`).
+ * Keys whose value cannot be classified are skipped INDIVIDUALLY — sz keys
+ * lower independently, so sibling classes survive. Catalog-only: the strict
+ * sz-attribute conversion keeps its fall-to-runtime contract.
+ *
+ * @param node Object expression to walk.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; primary always present at index 0.
+ */
+function lenientCatalogObjects(
+    node: t.ObjectExpression,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [{} as SzObject];
+    }
+    const primary: Record<string, SzValue> = {};
+    const extras: SzObject[] = [];
+    for (const prop of node.properties) {
+        if (t.isSpreadElement(prop)) {
+            const spreadCandidates = lenientCatalogObjectCandidates(
+                prop.argument,
+                scope,
+                seen,
+                depth + 1,
+                budget,
+            );
+            const [first, ...rest] = spreadCandidates;
+            if (first) {
+                Object.assign(primary, first);
+            }
+            for (const extra of rest) {
+                pushCatalogExtra(extras, extra, budget);
+            }
+            continue;
+        }
+        if (!t.isObjectProperty(prop) || prop.computed) {
+            continue;
+        }
+        const key = t.isIdentifier(prop.key)
+            ? prop.key.name
+            : t.isStringLiteral(prop.key)
+              ? prop.key.value
+              : t.isNumericLiteral(prop.key)
+                ? String(prop.key.value)
+                : null;
+        if (key === null) {
+            continue;
+        }
+        const values = lenientCatalogValues(prop.value, scope, seen, depth + 1, budget);
+        const [firstValue, ...restValues] = values;
+        if (firstValue === undefined) {
+            continue;
+        }
+        primary[key] = firstValue;
+        for (const value of restValues) {
+            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
+        }
+    }
+    return [primary as SzObject, ...extras];
+}
+
+/**
+ * Classify one leaf value into catalog candidates. Empty result = skip the
+ * key. Finite conditionals contribute BOTH branches (the runtime resolves one
+ * of them, so both classes must exist); `null`/`undefined` mean "key unset";
+ * const identifiers resolve through their initializer (const-only, cycle
+ * guarded); everything else — calls, members, templates — is skipped.
+ *
+ * @param node Value node to classify.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate values in branch order (consequent first).
+ */
+function lenientCatalogValues(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const value = unwrapTsExpression(node);
+    if (!value) {
+        return [];
+    }
+    if (t.isStringLiteral(value) || t.isNumericLiteral(value) || t.isBooleanLiteral(value)) {
+        return [value.value];
+    }
+    if (t.isNullLiteral(value)) {
+        return [];
+    }
+    if (t.isUnaryExpression(value) && t.isNumericLiteral(value.argument)) {
+        if (value.operator === '-') {
+            return [-value.argument.value];
+        }
+        if (value.operator === '+') {
+            return [value.argument.value];
+        }
+        return [];
+    }
+    if (t.isObjectExpression(value)) {
+        return lenientCatalogObjects(value, scope, seen, depth, budget);
+    }
+    if (t.isConditionalExpression(value)) {
+        return [
+            ...lenientCatalogValues(value.consequent, scope, seen, depth, budget),
+            ...lenientCatalogValues(value.alternate, scope, seen, depth, budget),
+        ];
+    }
+    if (t.isIdentifier(value)) {
+        if (value.name === 'undefined') {
+            return [];
+        }
+        if (seen.has(value.name)) {
+            return [];
+        }
+        const init = resolveConstInitializer(value.name, scope);
+        if (!init) {
+            return [];
+        }
+        return lenientCatalogValues(init, scope, new Set([...seen, value.name]), depth, budget);
+    }
+    return [];
+}
+
+/**
+ * Resolve a node position that must yield OBJECT candidates (a variant value,
+ * a spread argument): object literals, const-bound identifiers, and finite
+ * conditionals between such objects.
+ *
+ * @param node Node to resolve.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; empty when the position is not object-like.
+ */
+function lenientCatalogObjectCandidates(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const value = unwrapTsExpression(node);
+    if (!value) {
+        return [];
+    }
+    if (t.isObjectExpression(value)) {
+        return lenientCatalogObjects(value, scope, seen, depth, budget);
+    }
+    if (t.isConditionalExpression(value)) {
+        return [
+            ...lenientCatalogObjectCandidates(value.consequent, scope, seen, depth, budget),
+            ...lenientCatalogObjectCandidates(value.alternate, scope, seen, depth, budget),
+        ];
+    }
+    if (t.isIdentifier(value)) {
+        if (seen.has(value.name)) {
+            return [];
+        }
+        const init = resolveConstInitializer(value.name, scope);
+        if (!init) {
+            return [];
+        }
+        return lenientCatalogObjectCandidates(
+            init,
+            scope,
+            new Set([...seen, value.name]),
+            depth,
+            budget,
+        );
+    }
+    return [];
+}
+
+/**
+ * Resolve a node to an object expression through const bindings (used for
+ * variant DIMENSION values, which cannot fork into candidates).
+ *
+ * @param node Node to resolve.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @returns Object expression, or null.
+ */
+function resolveCatalogObjectExpression(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+): t.ObjectExpression | null {
+    const value = unwrapTsExpression(node);
+    if (!value) {
+        return null;
+    }
+    if (t.isObjectExpression(value)) {
+        return value;
+    }
+    if (t.isIdentifier(value) && !seen.has(value.name)) {
+        const init = resolveConstInitializer(value.name, scope);
+        if (!init) {
+            return null;
+        }
+        return resolveCatalogObjectExpression(init, scope, new Set([...seen, value.name]));
+    }
+    return null;
+}
+
+/**
+ * Append an alternate-branch object to the extras list within budget.
+ *
+ * @param extras Extras collected so far.
+ * @param extra Path-preserving alternate object.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ */
+function pushCatalogExtra(extras: SzObject[], extra: SzObject, budget: CatalogExtrasBudget): void {
+    if (budget.extras <= 0) {
+        return;
+    }
+    budget.extras -= 1;
+    extras.push(extra);
 }
 
 /**

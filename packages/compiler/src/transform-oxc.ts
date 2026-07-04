@@ -145,6 +145,10 @@ export function transformOxc(
     // would be unsound), so it uses a const-only map distinct from the general
     // sz-object resolution above which keeps all binding kinds.
     const constObjectBindings = collectObjectBindings(parsed.program as unknown as OxcNode, true);
+    // Any-initializer const map for the szv catalog's per-key leaf resolution
+    // (`mx: GUTTER` where `const GUTTER = 0`); the object-only map above cannot
+    // hold scalar initializers.
+    const constInitializers = collectConstInitializers(parsed.program as unknown as OxcNode);
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     const reservedCSSVariableNames = options?.mangleVars
         ? collectStaticStyleCustomPropertyNames(parsed.program as unknown as OxcNode)
@@ -177,8 +181,8 @@ export function transformOxc(
             );
             collectSzvCallClasses(
                 node as CallExpressionNode,
-                effectiveFilename,
                 constObjectBindings,
+                constInitializers,
                 classes,
             );
             return;
@@ -1842,14 +1846,14 @@ function collectDynamicCallClasses(
  * Collect every static class reachable from an szv configuration.
  *
  * @param node Call expression to inspect.
- * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
+ * @param constInits Const-only initializer map for per-key leaf resolution.
  * @param classes Class set to populate.
  */
 function collectSzvCallClasses(
     node: CallExpressionNode,
-    filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    constInits: ReadonlyMap<string, OxcNode>,
     classes: Set<string>,
 ): void {
     if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'szv') {
@@ -1859,54 +1863,86 @@ function collectSzvCallClasses(
     if (!firstArg) {
         return;
     }
-    /**
-     *
-     * @param object
-     * @param classes
-     */
     const configNode = resolveObjectExpression(firstArg, bindings);
     if (!configNode) {
         return;
     }
 
-    // Read `base` and `variants` INDEPENDENTLY rather than converting the whole
-    // config. A non-static sibling key (e.g. a `compoundVariants` array) used to
-    // throw OxcNotImplementedError for the entire config and drop every variant
-    // class; now unknown / dynamic keys are simply ignored.
-    const base = readConfigSubObject(configNode, 'base', filename, bindings);
+    // Read `base` and `variants` INDEPENDENTLY, and convert both PER KEY: one
+    // unresolvable leaf (a runtime conditional, a call, a template) used to
+    // drop the ENTIRE catalog — every static sibling key and every other
+    // variant included — which under Tailwind `source(none)` is silently
+    // missing CSS. The lenient walk keeps everything it can classify, expands
+    // finite conditionals into both branches (the runtime picks one, so both
+    // must be safelisted), and skips only what it genuinely cannot read.
+    const budget = { extras: MAX_CATALOG_BRANCH_EXTRAS };
+    const baseNode = readConfigSubObjectNode(configNode, 'base', bindings);
+    const baseCandidates = baseNode
+        ? lenientCatalogObjects(baseNode, constInits, new Set(), 0, budget)
+        : [{} as SzObject];
+    const base = baseCandidates[0] ?? ({} as SzObject);
     addCompiledClasses(base, classes);
-    const variants = readConfigSubObject(configNode, 'variants', filename, bindings);
-    for (const variantValues of Object.values(variants)) {
-        if (!isSzObject(variantValues)) {
+    for (const extra of baseCandidates.slice(1)) {
+        addCompiledClasses(extra, classes);
+    }
+
+    const variantsNode = readConfigSubObjectNode(configNode, 'variants', bindings);
+    if (!variantsNode) {
+        return;
+    }
+    for (const dimensionRaw of variantsNode.properties) {
+        if (dimensionRaw.type !== 'Property') {
             continue;
         }
-        for (const variantObject of Object.values(variantValues)) {
-            if (!isSzObject(variantObject)) {
+        const dimension = dimensionRaw as PropertyNode;
+        if (dimension.computed) {
+            continue;
+        }
+        const dimensionValue = resolveCatalogObjectExpression(
+            dimension.value,
+            constInits,
+            new Set(),
+        );
+        if (!dimensionValue) {
+            continue;
+        }
+        for (const variantRaw of dimensionValue.properties) {
+            if (variantRaw.type !== 'Property') {
                 continue;
             }
-            addCompiledClasses({ ...base, ...variantObject }, classes);
+            const variant = variantRaw as PropertyNode;
+            if (variant.computed) {
+                continue;
+            }
+            for (const candidate of lenientCatalogObjectCandidates(
+                variant.value,
+                constInits,
+                new Set(),
+                0,
+                budget,
+            )) {
+                addCompiledClasses({ ...base, ...candidate }, classes);
+            }
         }
     }
 }
 
 /**
- * Read a single named property (`base` / `variants`) of an szv config as a
- * static SzObject, converting ONLY that sub-tree. Returns `{}` when the key is
- * absent, non-static, or hits an unimplemented node — so sibling keys
- * (compoundVariants, defaultVariants, unknown keys) never drop the catalog.
+ * Read a single named property (`base` / `variants`) of an szv config as an
+ * OBJECT NODE, without converting it. Returns null when the key is absent or
+ * its value is not an object literal / const-bound object — so sibling keys
+ * (compoundVariants, defaultVariants, unknown keys) never affect the catalog.
  *
  * @param configNode The szv config object node.
  * @param key The property to read.
- * @param filename For diagnostics.
  * @param bindings Local const-binding map for indirection.
- * @returns The converted SzObject, or `{}`.
+ * @returns The sub-object node, or null.
  */
-function readConfigSubObject(
+function readConfigSubObjectNode(
     configNode: ObjectExpressionNode,
     key: string,
-    filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
-): SzObject {
+): ObjectExpressionNode | null {
     for (const propRaw of configNode.properties) {
         if (propRaw.type !== 'Property') {
             continue;
@@ -1919,20 +1955,280 @@ function readConfigSubObject(
         // (`const V = {…}; szv({ variants: V })`). `bindings` is const-only, so a
         // reassigned `let` is never followed — matching Babel's const-guarded
         // resolution.
-        const valueObj = resolveObjectExpression(prop.value, bindings);
-        if (!valueObj) {
-            return {};
-        }
-        try {
-            return astObjectToSzObject(valueObj, filename, bindings);
-        } catch (err) {
-            if (err instanceof OxcNotImplementedError) {
-                return {};
+        return resolveObjectExpression(prop.value, bindings);
+    }
+    return null;
+}
+
+/** Nesting cap for the lenient catalog walk (matches the Rust/Babel walkers). */
+const MAX_CATALOG_DEPTH = 16;
+
+/**
+ * Cap on alternate-branch objects one szv call may add to the catalog, so a
+ * pathological conditional pile-up cannot balloon the safelist walk.
+ * (Matches the Rust/Babel walkers.)
+ */
+const MAX_CATALOG_BRANCH_EXTRAS = 32;
+
+/** Mutable extras budget threaded through one szv call's lenient walk. */
+interface CatalogExtrasBudget {
+    /** Remaining alternate-branch objects this call may still emit. */
+    extras: number;
+}
+
+/**
+ * Convert an object node into catalog candidates, PER KEY: index 0 is the
+ * primary object (conditionals resolved to their consequent), the rest are
+ * minimal path-preserving objects carrying alternate branch values (e.g.
+ * `{ hover: { mx: dense ? 0 : 2 } }` → `[{hover:{mx:0}}, {hover:{mx:2}}]`).
+ * Keys whose value cannot be classified are skipped INDIVIDUALLY — sz keys
+ * lower independently, so sibling classes survive. Catalog-only: the strict
+ * sz-attribute conversion keeps its fall-to-runtime contract.
+ *
+ * @param node Object expression to walk.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; `[{}]`-like primary always present.
+ */
+function lenientCatalogObjects(
+    node: ObjectExpressionNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [{} as SzObject];
+    }
+    const primary: Record<string, SzValue> = {};
+    const extras: SzObject[] = [];
+    for (const propRaw of node.properties) {
+        if (propRaw.type === 'SpreadElement') {
+            const spreadCandidates = lenientCatalogObjectCandidates(
+                (propRaw as SpreadElementNode).argument,
+                constInits,
+                seen,
+                depth + 1,
+                budget,
+            );
+            const [first, ...rest] = spreadCandidates;
+            if (first) {
+                Object.assign(primary, first);
             }
-            throw err;
+            for (const extra of rest) {
+                pushCatalogExtra(extras, extra, budget);
+            }
+            continue;
+        }
+        if (propRaw.type !== 'Property') {
+            continue;
+        }
+        const prop = propRaw as PropertyNode;
+        if (prop.computed) {
+            continue;
+        }
+        const key = extractKeyName(prop.key);
+        if (key === null) {
+            continue;
+        }
+        const values = lenientCatalogValues(prop.value, constInits, seen, depth + 1, budget);
+        const [firstValue, ...restValues] = values;
+        if (firstValue === undefined) {
+            continue;
+        }
+        primary[key] = firstValue;
+        for (const value of restValues) {
+            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
         }
     }
-    return {};
+    return [primary as SzObject, ...extras];
+}
+
+/**
+ * Classify one leaf value into catalog candidates. Empty result = skip the
+ * key. Finite conditionals contribute BOTH branches (the runtime resolves one
+ * of them, so both classes must exist); `null`/`undefined` mean "key unset";
+ * const identifiers resolve through their initializer (const-only, cycle
+ * guarded); everything else — calls, members, templates — is skipped.
+ *
+ * @param node Value node to classify.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate values in branch order (consequent first).
+ */
+function lenientCatalogValues(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'Literal') {
+        const value = (unwrapped as unknown as { value: unknown }).value;
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            return [value];
+        }
+        return [];
+    }
+    if (unwrapped.type === 'UnaryExpression') {
+        const operator = (unwrapped as unknown as { operator: string }).operator;
+        const argument = (unwrapped as unknown as { argument: OxcNode }).argument;
+        if ((operator === '-' || operator === '+') && argument.type === 'Literal') {
+            const argValue = (argument as unknown as { value: unknown }).value;
+            if (typeof argValue === 'number') {
+                return [operator === '-' ? -argValue : argValue];
+            }
+        }
+        return [];
+    }
+    if (unwrapped.type === 'ObjectExpression') {
+        return lenientCatalogObjects(
+            unwrapped as ObjectExpressionNode,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+    }
+    if (unwrapped.type === 'ConditionalExpression') {
+        const conditional = unwrapped as ConditionalExpressionNode;
+        return [
+            ...lenientCatalogValues(conditional.consequent, constInits, seen, depth, budget),
+            ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
+        ];
+    }
+    if (unwrapped.type === 'Identifier') {
+        const name = String((unwrapped as IdentifierNode).name);
+        if (name === 'undefined') {
+            return [];
+        }
+        const init = constInits.get(name);
+        if (!init || seen.has(name)) {
+            return [];
+        }
+        return lenientCatalogValues(init, constInits, new Set([...seen, name]), depth, budget);
+    }
+    return [];
+}
+
+/**
+ * Resolve a node position that must yield OBJECT candidates (a variant value,
+ * a spread argument): object literals, const-bound identifiers, and finite
+ * conditionals between such objects.
+ *
+ * @param node Node to resolve.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; empty when the position is not object-like.
+ */
+function lenientCatalogObjectCandidates(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'ObjectExpression') {
+        return lenientCatalogObjects(
+            unwrapped as ObjectExpressionNode,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+    }
+    if (unwrapped.type === 'ConditionalExpression') {
+        const conditional = unwrapped as ConditionalExpressionNode;
+        return [
+            ...lenientCatalogObjectCandidates(
+                conditional.consequent,
+                constInits,
+                seen,
+                depth,
+                budget,
+            ),
+            ...lenientCatalogObjectCandidates(
+                conditional.alternate,
+                constInits,
+                seen,
+                depth,
+                budget,
+            ),
+        ];
+    }
+    if (unwrapped.type === 'Identifier') {
+        const name = String((unwrapped as IdentifierNode).name);
+        const init = constInits.get(name);
+        if (!init || seen.has(name)) {
+            return [];
+        }
+        return lenientCatalogObjectCandidates(
+            init,
+            constInits,
+            new Set([...seen, name]),
+            depth,
+            budget,
+        );
+    }
+    return [];
+}
+
+/**
+ * Resolve a node to an object expression through the const-initializer map
+ * (used for variant DIMENSION values, which cannot fork into candidates).
+ *
+ * @param node Node to resolve.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @returns Object expression, or null.
+ */
+function resolveCatalogObjectExpression(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+): ObjectExpressionNode | null {
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'ObjectExpression') {
+        return unwrapped as ObjectExpressionNode;
+    }
+    if (unwrapped.type === 'Identifier') {
+        const name = String((unwrapped as IdentifierNode).name);
+        const init = constInits.get(name);
+        if (!init || seen.has(name)) {
+            return null;
+        }
+        return resolveCatalogObjectExpression(init, constInits, new Set([...seen, name]));
+    }
+    return null;
+}
+
+/**
+ * Append an alternate-branch object to the extras list within budget.
+ *
+ * @param extras Extras collected so far.
+ * @param extra Path-preserving alternate object.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ */
+function pushCatalogExtra(extras: SzObject[], extra: SzObject, budget: CatalogExtrasBudget): void {
+    if (budget.extras <= 0) {
+        return;
+    }
+    budget.extras -= 1;
+    extras.push(extra);
 }
 
 /**
@@ -1948,16 +2244,6 @@ function addCompiledClasses(object: SzObject, classes: Set<string>): void {
             classes.add(cls);
         }
     }
-}
-
-/**
- * Narrow an unknown value to a plain (non-array) sz object.
- *
- * @param value Candidate value.
- * @returns True when the value is a plain object usable as an sz config.
- */
-function isSzObject(value: unknown): value is SzObject {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -3547,6 +3833,42 @@ function collectObjectBindings(
         }
     });
     return bindings;
+}
+
+/**
+ * Collect const-declared identifier initializers of ANY expression shape,
+ * unwrapped of TS-only wrappers. The szv catalog's lenient leaf resolution
+ * needs scalar initializers (`const GUTTER = 0`) that the object-only binding
+ * map cannot hold. Const-only, so a reassigned `let` is never followed.
+ *
+ * @param root Program root.
+ * @returns Identifier name to unwrapped initializer node.
+ */
+function collectConstInitializers(root: OxcNode): Map<string, OxcNode> {
+    const inits = new Map<string, OxcNode>();
+    walk(root, node => {
+        if (node.type !== 'VariableDeclaration') {
+            return;
+        }
+        const decl = node as unknown as { kind?: string; declarations?: OxcNode[] };
+        if (decl.kind !== 'const' || !decl.declarations) {
+            return;
+        }
+        for (const declaratorNode of decl.declarations) {
+            const declarator = declaratorNode as unknown as {
+                id?: OxcNode;
+                init?: OxcNode | null;
+            };
+            if (!declarator.id || declarator.id.type !== 'Identifier' || !declarator.init) {
+                continue;
+            }
+            inits.set(
+                String((declarator.id as IdentifierNode).name),
+                unwrapExpression(declarator.init),
+            );
+        }
+    });
+    return inits;
 }
 
 /**

@@ -377,7 +377,12 @@ buttonSz({ variant: "invalid" }); // ❌ TS error: '"invalid"' not assignable
 ```
 
 All variant class combinations are catalogued at build time (compiler prescan) — Tailwind
-generates CSS for every combination, no runtime injection needed.
+generates CSS for every combination, no runtime injection needed. Cataloguing is
+lenient PER KEY, identically in all three parser engines: an unreadable value (a
+call, a template string, an imported constant) skips only that key while sibling
+keys and other variants still reach the safelist; a finite conditional
+(`p: dense ? 2 : 4`) contributes BOTH branches; `null`/`undefined` mean "key
+unset"; same-file `const` references and `const` object spreads are followed.
 
 ## @csszyx/dynamic — Runtime CSS Injection
 

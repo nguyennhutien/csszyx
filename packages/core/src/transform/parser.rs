@@ -604,14 +604,11 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     .extend(lower_static_sz_object(&object));
             }
             "szv" => {
-                let Some(config) =
-                    lenient_szv_config_from_argument(argument, self.resolve_context())
+                let Some(classes) = collect_szv_catalog_classes(argument, self.resolve_context())
                 else {
                     return;
                 };
-                self.ir
-                    .extracted_classes
-                    .extend(szv_catalog_classes(&config));
+                self.ir.extracted_classes.extend(classes);
             }
             _ => {}
         }
@@ -636,23 +633,40 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     }
 }
 
-/// Parse an szv config argument leniently: keep only the top-level properties
-/// that are statically evaluable, skipping any that are not (e.g. a
-/// `compoundVariants` array, a dynamic `defaultVariants`). The strict whole-
-/// object parser `?`-bails on the first non-static property, which used to drop
-/// every variant class when a sibling key was not static. `szv_catalog_classes`
-/// only consumes `base` + `variants`, so a lenient parse loses nothing relevant.
-fn lenient_szv_config_from_argument(
+/// Nesting cap for the lenient catalog walk (matches the oxc/Babel walkers).
+const MAX_CATALOG_DEPTH: usize = 16;
+
+/// Cap on alternate-branch objects one szv call may add to the catalog, so a
+/// pathological conditional pile-up cannot balloon the safelist walk.
+/// (Matches the oxc/Babel walkers.)
+const MAX_CATALOG_BRANCH_EXTRAS: usize = 32;
+
+/// Mutable extras budget threaded through one szv call's lenient walk.
+struct CatalogExtrasBudget {
+    /// Remaining alternate-branch objects this call may still emit.
+    extras: usize,
+}
+
+/// Collect every static class reachable from an szv configuration.
+///
+/// `base` and `variants` are read INDEPENDENTLY, and both convert PER KEY: one
+/// unresolvable leaf (a runtime conditional, a call, a template) used to drop
+/// the ENTIRE catalog — every static sibling key and every other variant
+/// included — which under Tailwind `source(none)` is silently missing CSS.
+/// The lenient walk keeps everything it can classify, expands finite
+/// conditionals into BOTH branches (the runtime picks one, so both must be
+/// safelisted), and skips only what it genuinely cannot read.
+fn collect_szv_catalog_classes(
     argument: &Argument<'_>,
     ctx: ResolveContext<'_>,
-) -> Option<StaticSzObject> {
+) -> Option<Vec<String>> {
     // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
     // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
-    let object = match argument.as_expression().map(unwrap_expression) {
+    // Only a `const` binding is followed (never a reassigned `let`), to match
+    // the const-guarded resolution on the Babel/oxc paths.
+    let config = match argument.as_expression().map(unwrap_expression) {
         Some(Expression::ObjectExpression(object)) => object,
         Some(Expression::Identifier(identifier)) => {
-            // Only a `const` binding is followed (never a reassigned `let`), to
-            // match the const-guarded resolution on the Babel/oxc paths.
             match ctx
                 .scope
                 .resolve_const_initializer_before(
@@ -669,74 +683,54 @@ fn lenient_szv_config_from_argument(
         _ => return None,
     };
 
-    let mut properties = Vec::new();
-    for property in &object.properties {
-        if let ObjectPropertyKind::ObjectProperty(prop) = property {
-            // `{ base }` shorthand === `{ base: base }`: resolve the same-named
-            // `const` object binding (matching Babel/oxc). The general property
-            // helper rejects shorthand, which would drop a shorthand base/variants.
-            if prop.shorthand {
-                if let Some(static_prop) = static_shorthand_const_property(prop, ctx) {
-                    merge_static_property(&mut properties, static_prop);
-                }
-                continue;
-            }
-            if let Some(static_prop) = static_property_from_object_property(prop, ctx) {
-                merge_static_property(&mut properties, static_prop);
-            }
-            // A non-static sibling (compoundVariants array, etc.) is skipped, not
-            // bailed — so base/variants still extract.
-        }
-    }
-    Some(StaticSzObject { properties })
-}
-
-/// Resolve a shorthand szv-config property (`{ base }` === `{ base: base }`) to a
-/// static property by following the same-named `const` object binding. Returns
-/// None unless the binding is a `const` initialized to an object literal.
-fn static_shorthand_const_property(
-    prop: &ObjectProperty<'_>,
-    ctx: ResolveContext<'_>,
-) -> Option<StaticSzProperty> {
-    let key = static_property_key(&prop.key)?;
-    let Expression::Identifier(identifier) = &prop.value else {
-        return None;
+    let mut budget = CatalogExtrasBudget {
+        extras: MAX_CATALOG_BRANCH_EXTRAS,
     };
-    let Expression::ObjectExpression(object) = ctx.scope.resolve_const_initializer_before(
-        &identifier.name,
-        identifier.span.start,
-        ctx.program,
-    )?
-    else {
-        return None;
-    };
-    Some(StaticSzProperty {
-        key,
-        span: text_span(prop.span),
-        value: StaticSzValue::Object(static_object_from_object_expression(object, ctx)?),
-    })
-}
-
-fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
-    let base = object_property(config, "base")
+    let base_candidates = read_config_sub_object_node(config, "base", ctx).map_or_else(
+        || vec![StaticSzObject::empty()],
+        |node| lenient_catalog_objects(node, ctx, &mut Vec::new(), 0, &mut budget),
+    );
+    let base = base_candidates
+        .first()
         .cloned()
         .unwrap_or_else(StaticSzObject::empty);
     let mut classes = lower_static_sz_object(&base);
-    let Some(variants) = object_property(config, "variants") else {
-        return classes;
-    };
+    for extra in base_candidates.iter().skip(1) {
+        classes.extend(lower_static_sz_object(extra));
+    }
 
-    for variant_dimension in &variants.properties {
-        let StaticSzValue::Object(variant_values) = &variant_dimension.value else {
-            continue;
-        };
-        for variant_value in &variant_values.properties {
-            let StaticSzValue::Object(variant_object) = &variant_value.value else {
+    if let Some(variants) = read_config_sub_object_node(config, "variants", ctx) {
+        for dimension in &variants.properties {
+            let ObjectPropertyKind::ObjectProperty(dimension) = dimension else {
                 continue;
             };
-            let mut merged = base.clone();
-            merge_static_properties(&mut merged.properties, variant_object.properties.clone());
-            classes.extend(lower_static_sz_object(&merged));
+            if dimension.computed {
+                continue;
+            }
+            let Some(dimension_value) =
+                resolve_catalog_object_expression(&dimension.value, ctx, &mut Vec::new())
+            else {
+                continue;
+            };
+            for variant in &dimension_value.properties {
+                let ObjectPropertyKind::ObjectProperty(variant) = variant else {
+                    continue;
+                };
+                if variant.computed {
+                    continue;
+                }
+                for candidate in lenient_catalog_object_candidates(
+                    &variant.value,
+                    ctx,
+                    &mut Vec::new(),
+                    0,
+                    &mut budget,
+                ) {
+                    let mut merged = base.clone();
+                    merge_static_properties(&mut merged.properties, candidate.properties);
+                    classes.extend(lower_static_sz_object(&merged));
+                }
+            }
         }
     }
 
@@ -746,19 +740,272 @@ fn szv_catalog_classes(config: &StaticSzObject) -> Vec<String> {
     // duplicate entries as a class divergence.
     let mut seen = std::collections::HashSet::new();
     classes.retain(|class| seen.insert(class.clone()));
-    classes
+    Some(classes)
 }
 
-fn object_property<'a>(object: &'a StaticSzObject, key: &str) -> Option<&'a StaticSzObject> {
-    object.properties.iter().find_map(|property| {
-        if property.key != key {
-            return None;
+/// Read a single named property (`base` / `variants`) of an szv config as an
+/// OBJECT NODE, without converting it. Returns None when the key is absent or
+/// its value is not an object literal / const-bound object — so sibling keys
+/// (compoundVariants, defaultVariants, unknown keys) never affect the catalog.
+/// A shorthand `{ base }` resolves through the same-named `const` binding.
+fn read_config_sub_object_node<'a>(
+    object: &'a ObjectExpression<'a>,
+    key: &str,
+    ctx: ResolveContext<'a>,
+) -> Option<&'a ObjectExpression<'a>> {
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(prop) = property else {
+            continue;
+        };
+        if prop.computed || static_property_key(&prop.key).as_deref() != Some(key) {
+            continue;
         }
-        match &property.value {
-            StaticSzValue::Object(value) => Some(value),
-            _ => None,
+        return resolve_catalog_object_expression(&prop.value, ctx, &mut Vec::new());
+    }
+    None
+}
+
+/// Resolve a node to an object expression through const bindings (used for
+/// variant DIMENSION values, which cannot fork into candidates).
+fn resolve_catalog_object_expression<'a>(
+    expression: &'a Expression<'a>,
+    ctx: ResolveContext<'a>,
+    seen: &mut Vec<String>,
+) -> Option<&'a ObjectExpression<'a>> {
+    match unwrap_expression(expression) {
+        Expression::ObjectExpression(object) => Some(object),
+        Expression::Identifier(identifier) => {
+            if seen.iter().any(|name| name == identifier.name.as_str()) {
+                return None;
+            }
+            let init = ctx.scope.resolve_const_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
+            seen.push(identifier.name.to_string());
+            let resolved = resolve_catalog_object_expression(init, ctx, seen);
+            seen.pop();
+            resolved
         }
-    })
+        _ => None,
+    }
+}
+
+/// Convert an object node into catalog candidates, PER KEY: index 0 is the
+/// primary object (conditionals resolved to their consequent), the rest are
+/// minimal path-preserving objects carrying alternate branch values (e.g.
+/// `{ hover: { mx: dense ? 0 : 2 } }` → `[{hover:{mx:0}}, {hover:{mx:2}}]`).
+/// Keys whose value cannot be classified are skipped INDIVIDUALLY — sz keys
+/// lower independently, so sibling classes survive. Catalog-only: the strict
+/// sz-attribute conversion keeps its fall-to-runtime contract.
+fn lenient_catalog_objects<'a>(
+    object: &'a ObjectExpression<'a>,
+    ctx: ResolveContext<'a>,
+    seen: &mut Vec<String>,
+    depth: usize,
+    budget: &mut CatalogExtrasBudget,
+) -> Vec<StaticSzObject> {
+    if depth > MAX_CATALOG_DEPTH {
+        return vec![StaticSzObject::empty()];
+    }
+    let mut primary = StaticSzObject::empty();
+    let mut extras: Vec<StaticSzObject> = Vec::new();
+    for property in &object.properties {
+        match property {
+            ObjectPropertyKind::SpreadProperty(spread) => {
+                let mut candidates = lenient_catalog_object_candidates(
+                    &spread.argument,
+                    ctx,
+                    seen,
+                    depth + 1,
+                    budget,
+                );
+                if candidates.is_empty() {
+                    continue;
+                }
+                let rest = candidates.split_off(1);
+                if let Some(first) = candidates.pop() {
+                    merge_static_properties(&mut primary.properties, first.properties);
+                }
+                for extra in rest {
+                    push_catalog_extra(&mut extras, extra, budget);
+                }
+            }
+            ObjectPropertyKind::ObjectProperty(prop) => {
+                if prop.computed || prop.method {
+                    continue;
+                }
+                let Some(key) = static_property_key(&prop.key) else {
+                    continue;
+                };
+                let mut values = lenient_catalog_values(&prop.value, ctx, seen, depth + 1, budget);
+                if values.is_empty() {
+                    continue;
+                }
+                let rest = values.split_off(1);
+                let Some(first) = values.pop() else {
+                    continue;
+                };
+                let span = text_span(prop.span);
+                merge_static_property(
+                    &mut primary.properties,
+                    StaticSzProperty {
+                        key: key.clone(),
+                        span,
+                        value: first,
+                    },
+                );
+                for value in rest {
+                    push_catalog_extra(
+                        &mut extras,
+                        StaticSzObject {
+                            properties: vec![StaticSzProperty {
+                                key: key.clone(),
+                                span,
+                                value,
+                            }],
+                        },
+                        budget,
+                    );
+                }
+            }
+        }
+    }
+    let mut result = vec![primary];
+    result.extend(extras);
+    result
+}
+
+/// Classify one leaf value into catalog candidates. Empty result = skip the
+/// key. Finite conditionals contribute BOTH branches (the runtime resolves one
+/// of them, so both classes must exist); `null`/`undefined` mean "key unset";
+/// const identifiers resolve through their initializer (const-only, cycle
+/// guarded); everything else — calls, members, templates — is skipped.
+fn lenient_catalog_values<'a>(
+    expression: &'a Expression<'a>,
+    ctx: ResolveContext<'a>,
+    seen: &mut Vec<String>,
+    depth: usize,
+    budget: &mut CatalogExtrasBudget,
+) -> Vec<StaticSzValue> {
+    if depth > MAX_CATALOG_DEPTH {
+        return Vec::new();
+    }
+    match unwrap_expression(expression) {
+        Expression::StringLiteral(value) => vec![StaticSzValue::String(value.value.to_string())],
+        Expression::NumericLiteral(value) => vec![StaticSzValue::Number(value.value)],
+        Expression::BooleanLiteral(value) => vec![StaticSzValue::Boolean(value.value)],
+        // `null` means "key unset" and falls through to the catch-all skip,
+        // exactly like `undefined` below.
+        Expression::UnaryExpression(value) => static_value_from_unary_expression(value)
+            .into_iter()
+            .collect(),
+        Expression::ObjectExpression(object) => {
+            lenient_catalog_objects(object, ctx, seen, depth, budget)
+                .into_iter()
+                .map(StaticSzValue::Object)
+                .collect()
+        }
+        Expression::ConditionalExpression(conditional) => {
+            let mut values =
+                lenient_catalog_values(&conditional.consequent, ctx, seen, depth, budget);
+            values.extend(lenient_catalog_values(
+                &conditional.alternate,
+                ctx,
+                seen,
+                depth,
+                budget,
+            ));
+            values
+        }
+        Expression::Identifier(identifier) => {
+            if identifier.name == "undefined"
+                || seen.iter().any(|name| name == identifier.name.as_str())
+            {
+                return Vec::new();
+            }
+            let Some(init) = ctx.scope.resolve_const_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            ) else {
+                return Vec::new();
+            };
+            seen.push(identifier.name.to_string());
+            let values = lenient_catalog_values(init, ctx, seen, depth, budget);
+            seen.pop();
+            values
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Resolve a node position that must yield OBJECT candidates (a variant value,
+/// a spread argument): object literals, const-bound identifiers, and finite
+/// conditionals between such objects.
+fn lenient_catalog_object_candidates<'a>(
+    expression: &'a Expression<'a>,
+    ctx: ResolveContext<'a>,
+    seen: &mut Vec<String>,
+    depth: usize,
+    budget: &mut CatalogExtrasBudget,
+) -> Vec<StaticSzObject> {
+    if depth > MAX_CATALOG_DEPTH {
+        return Vec::new();
+    }
+    match unwrap_expression(expression) {
+        Expression::ObjectExpression(object) => {
+            lenient_catalog_objects(object, ctx, seen, depth, budget)
+        }
+        Expression::ConditionalExpression(conditional) => {
+            let mut candidates = lenient_catalog_object_candidates(
+                &conditional.consequent,
+                ctx,
+                seen,
+                depth,
+                budget,
+            );
+            candidates.extend(lenient_catalog_object_candidates(
+                &conditional.alternate,
+                ctx,
+                seen,
+                depth,
+                budget,
+            ));
+            candidates
+        }
+        Expression::Identifier(identifier) => {
+            if seen.iter().any(|name| name == identifier.name.as_str()) {
+                return Vec::new();
+            }
+            let Some(init) = ctx.scope.resolve_const_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            ) else {
+                return Vec::new();
+            };
+            seen.push(identifier.name.to_string());
+            let candidates = lenient_catalog_object_candidates(init, ctx, seen, depth, budget);
+            seen.pop();
+            candidates
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Append an alternate-branch object to the extras list within budget.
+fn push_catalog_extra(
+    extras: &mut Vec<StaticSzObject>,
+    extra: StaticSzObject,
+    budget: &mut CatalogExtrasBudget,
+) {
+    if budget.extras == 0 {
+        return;
+    }
+    budget.extras -= 1;
+    extras.push(extra);
 }
 
 fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
@@ -2370,6 +2617,49 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.classes, ["text-xs/none", "p-4", "p-8"]);
+    }
+
+    #[test]
+    fn szv_catalog_is_per_key_lenient_and_expands_conditional_branches() {
+        // One unreadable leaf (a call) skips ONLY its key; a finite conditional
+        // contributes BOTH branches; sibling variants always survive. Matches
+        // the oxc/Babel lenient catalog walk (locked by the TS parity suite
+        // `szv-catalog-leniency.test.ts`).
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; declare const dense: boolean; declare function calc(): number; const s = szv({ variants: { layout: { a: { grow: 1, w: calc(), p: dense ? 2 : 4, my: 4 }, b: { m: 4 } } } });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert_eq!(lowered.classes, ["grow-1", "p-2", "my-4", "p-4", "m-4"]);
+    }
+
+    #[test]
+    fn szv_catalog_resolves_const_scalar_refs_and_skips_null_undefined() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; const GUTTER = 0; const s = szv({ variants: { layout: { a: { grow: 1, mx: GUTTER, mt: null, mb: undefined, my: 4 } } } });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert_eq!(lowered.classes, ["grow-1", "mx-0", "my-4"]);
+    }
+
+    #[test]
+    fn szv_catalog_keeps_variant_prefix_on_alternate_branches() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; declare const dense: boolean; const s = szv({ variants: { tone: { hot: { hover: { mx: dense ? 0 : 2 }, bg: 'red-500' } } } });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert_eq!(lowered.classes, ["hover:mx-0", "bg-red-500", "hover:mx-2"]);
     }
 
     #[test]
