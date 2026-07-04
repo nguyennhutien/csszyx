@@ -32,6 +32,8 @@ export interface NativeTransformOptions {
     }>;
     /** Project root used only to render diagnostic file paths relative to it. */
     rootDir?: string;
+    /** Per-file AST node cap override (`build.astBudgetLimit`). */
+    astBudget?: number;
 }
 
 /** Native transform output shape returned per source file. */

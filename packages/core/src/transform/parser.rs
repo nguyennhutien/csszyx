@@ -44,6 +44,19 @@ pub struct ParsedSourceShell {
 /// The AST is intentionally not returned. Future walkers should lower parser
 /// nodes into [`SourceIr`] inside this module and keep AST lifetimes private.
 pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
+    parse_source_shell_with_budget(file, AST_BUDGET)
+}
+
+/// [`parse_source_shell`] with an explicit AST node budget.
+///
+/// The budget is caller-configurable (`build.astBudgetLimit` reaches here
+/// through the napi options) because engines count AST nodes differently:
+/// a real-world page file can exceed the default under one engine while
+/// staying under it in another, and the only remedy is raising the cap.
+pub fn parse_source_shell_with_budget(
+    file: &TransformFile,
+    ast_budget: usize,
+) -> ParsedSourceShell {
     let allocator = Allocator::default();
     let source_type = source_type_for_path(&file.filename);
     let parse_start = Instant::now();
@@ -66,6 +79,7 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
             source: &file.source,
             ir: &mut ir,
             node_count: 0,
+            ast_budget,
             ast_budget_exceeded: false,
             scope: &scope,
             program: &parsed.program,
@@ -132,6 +146,8 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     source: &'source str,
     ir: &'ir mut SourceIr,
     node_count: usize,
+    /// Effective AST node cap for this parse (default [`AST_BUDGET`]).
+    ast_budget: usize,
     ast_budget_exceeded: bool,
     /// Top-level declarator scope used to resolve `sz={NAME}` references
     /// to their initializer expression. Stored by reference so its
@@ -147,7 +163,7 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
     fn enter_node(&mut self, _kind: AstKind<'a>) {
         self.node_count = self.node_count.saturating_add(1);
-        if self.node_count > AST_BUDGET {
+        if self.node_count > self.ast_budget {
             self.ast_budget_exceeded = true;
         }
     }

@@ -9,6 +9,7 @@
  */
 
 // Export transform functionality
+export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export { CsszyxCompiler } from './compiler.js';
 export {
     type GlobalVarUsageDiagnostic,

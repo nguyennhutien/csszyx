@@ -201,7 +201,7 @@ csszyx({
     injectChecksum: true,     // Inject SSR hydration checksum
   },
   build: {
-    astBudgetLimit: 50_000,   // Per-file AST node cap; throws past it
+    astBudgetLimit: 50_000,   // Per-file AST node cap; file skipped (warned) past it
     scanCss: 'src/index.css', // CSS file(s) to scan for @theme tokens
   },
 });

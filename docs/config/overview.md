@@ -139,7 +139,7 @@ interface BuildConfig {
   tailwindConfig?: string; // Path to Tailwind config file
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
-  astBudgetLimit?: number; // Max AST nodes per file before warning
+  astBudgetLimit?: number; // Max AST nodes per file before the transform skips it (warned; safelist prescan runs at 10x)
   scanCss?: string | string[]; // CSS files/globs with @theme blocks
   parser?: "rust" | "oxc" | "babel"; // Source-transform parser (default: 'rust' since v0.9.0)
 }

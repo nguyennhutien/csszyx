@@ -915,9 +915,13 @@ compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard
 
-Files larger than 50 000 AST nodes throw `ASTBudgetExceededError` at
-build time — pathologically large generated files (json-as-ts fixtures,
-GraphQL schemas) would otherwise hang the build. Raise the cap when you
+Files larger than 50 000 AST nodes are skipped by the transform with a
+build warning — pathologically large generated files (json-as-ts fixtures,
+GraphQL schemas) would otherwise hang the build. A skipped file is left
+unrewritten and contributes no classes to the safelist. The safelist
+prescan runs with a 10× cap by default so legitimate large page files keep
+their CSS; every parser engine (including the native `rust` one) honours
+the cap and the warning. Raise the cap when a warning names a file you
 need:
 
 ```js

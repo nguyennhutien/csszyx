@@ -8,7 +8,7 @@ use super::{
     fast_path::{triage_source, FastPathTriage},
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
-    parser::parse_source_shell,
+    parser::{parse_source_shell_with_budget, AST_BUDGET},
     recovery::{generate_inline_recovery_token, offset_to_line_column},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
@@ -217,7 +217,7 @@ fn transform_static_classes_with_options(
     total_start: Instant,
     options: TransformOptions,
 ) -> TransformResult {
-    let parsed = parse_source_shell(file);
+    let parsed = parse_source_shell_with_budget(file, options.ast_budget.unwrap_or(AST_BUDGET));
     let global_var_aliases = (!options.global_var_aliases.is_empty())
         .then(|| apply_global_var_aliases(&parsed.ir, &options.global_var_aliases));
     let alias_ir = global_var_aliases
@@ -254,7 +254,9 @@ fn transform_static_classes_with_options(
     diagnostics.extend(parsed.ir.szs_diagnostics.iter().cloned());
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
-            "[csszyx] Rust native transform at {}: AST budget exceeded; leaving file unchanged for now.",
+            "[csszyx] AST budget exceeded in {}: the IR walk stopped mid-file, so the file was \
+             left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` \
+             or split the file.",
             file.filename
         ));
     }
@@ -315,11 +317,22 @@ fn transform_static_classes_with_options(
                 .any(|prop| prop.category == DynamicCssVarCategory::Color)
         });
 
+    // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
+    // sit before the cut would flow into the safelist and the rest silently
+    // vanish — under Tailwind `source(none)` that is wrong CSS with no signal
+    // (and a rust-vs-oxc parity break, since the JS engines throw instead).
+    // Contribute nothing and let the diagnostic above carry the loud skip.
+    let (classes, raw_class_names) = if parsed.ast_budget_exceeded {
+        (Vec::new(), Vec::new())
+    } else {
+        (lowered.classes, lowered.raw_class_names)
+    };
+
     TransformResult {
         code: rewritten_code.unwrap_or_else(|| file.source.clone()),
         map: None,
-        classes: lowered.classes,
-        raw_class_names: lowered.raw_class_names,
+        classes,
+        raw_class_names,
         diagnostics,
         recovery_tokens,
         css_variable_map: merge_variable_maps(
@@ -504,8 +517,8 @@ fn elapsed_ns(start: Instant) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{transform_file, transform_static_classes};
-    use crate::transform::{ParserPath, TransformFile, TransformProducer};
+    use super::{transform_file, transform_static_classes, transform_static_classes_with_options};
+    use crate::transform::{ParserPath, TransformFile, TransformOptions, TransformProducer};
 
     #[test]
     fn transform_file_skips_parser_for_no_sz_sources() {
@@ -672,6 +685,64 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.contains("AST budget exceeded")));
+    }
+
+    #[test]
+    fn budget_exceeded_file_contributes_no_partial_classes() {
+        // szv catalog at the TOP so a partial walk WOULD have collected it —
+        // the result must still be empty: partial safelists are silent wrong
+        // CSS under `source(none)` and a parity break vs the throwing JS lanes.
+        let source = format!(
+            "import {{ szv }} from 'csszyx';\n\
+             const controlSz = szv({{ variants: {{ layout: {{ a: {{ mx: 0, my: 4 }} }} }} }});\n\
+             export const App = () => <>{}</>;",
+            "<span className=\"cell\" />".repeat(crate::transform::parser::AST_BUDGET)
+        );
+        let file = TransformFile {
+            filename: "/repo/src/Big.tsx".to_string(),
+            source,
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.metadata.ast_budget_exceeded);
+        assert!(result.classes.is_empty(), "partial classes must be dropped");
+        assert!(
+            result.raw_class_names.is_empty(),
+            "partial raw class names must be dropped"
+        );
+    }
+
+    #[test]
+    fn ast_budget_option_reaches_the_parser() {
+        let source = format!(
+            "import {{ szv }} from 'csszyx';\n\
+             export const App = () => <>{}</>;\n\
+             const controlSz = szv({{ variants: {{ layout: {{ a: {{ mx: 0, my: 4 }} }} }} }});",
+            "<span />".repeat(crate::transform::parser::AST_BUDGET)
+        );
+        let file = TransformFile {
+            filename: "/repo/src/Big.tsx".to_string(),
+            source,
+        };
+
+        // Default budget: too big → no classes.
+        let default_result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(default_result.metadata.ast_budget_exceeded);
+        assert!(default_result.classes.is_empty());
+
+        // Raised budget (build.astBudgetLimit): full extraction, mx-0 included.
+        let raised = transform_static_classes_with_options(
+            &file,
+            0,
+            std::time::Instant::now(),
+            TransformOptions {
+                ast_budget: Some(crate::transform::parser::AST_BUDGET * 20),
+                ..TransformOptions::default()
+            },
+        );
+        assert!(!raised.metadata.ast_budget_exceeded);
+        assert!(raised.classes.iter().any(|class| class == "mx-0"));
     }
 
     #[test]

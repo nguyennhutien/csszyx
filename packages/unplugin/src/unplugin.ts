@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
+    ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
@@ -2108,6 +2109,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    // The prescan is the build's ONLY safelist source under Tailwind
+    // `source(none)`: a file the budget bails contributes zero classes and its
+    // CSS silently never exists. Engines also count AST nodes differently, so a
+    // real page file can trip the 50k default under one engine and pass under
+    // another (a parser-flip safelist divergence, field-reported). The prescan
+    // is a one-shot batch over sz-bearing files where correctness outranks the
+    // per-file latency the default cap protects, so it runs with a 10× budget;
+    // an explicit `build.astBudgetLimit` still wins in both lanes.
+    const prescanAstBudget = astBudgetOverride ?? 500_000;
     const cacheRequested = (options.build?.cache ?? DEFAULT_BUILD_CONFIG.cache) !== false;
     const cacheVersionsKnown =
         PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
@@ -2409,10 +2419,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *
      * @param source Source module contents.
      * @param filename Source filename for parser diagnostics.
+     * @param astBudget Effective AST node cap for this lane; defaults to the
+     *        transform-hook budget (`build.astBudgetLimit` or the compiler's
+     *        50 000 default), while the prescan passes its larger cap.
      * @returns Compiler transform result.
      */
-    function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
-        const compilerOptions = createCompilerOptions();
+    function transformConfiguredSource(
+        source: string,
+        filename: string,
+        astBudget?: number,
+    ): SourceTransformResult {
+        const compilerOptions = createCompilerOptions(astBudget);
         const effectiveFilename = normalizeSourceFilename(filename);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -2499,11 +2516,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Builds compiler options shared by single-file and prescan-batch transforms.
      *
+     * @param astBudget Effective AST node cap for this lane (transform hook
+     *        default vs the larger prescan budget).
      * @returns Compiler options.
      */
-    function createCompilerOptions(): TransformSourceCodeOptions {
+    function createCompilerOptions(
+        astBudget: number | undefined = astBudgetOverride,
+    ): TransformSourceCodeOptions {
         return {
-            astBudget: astBudgetOverride,
+            astBudget,
             mangleVars: options.production?.mangleVars === true,
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
             globalVarAliases:
@@ -2532,7 +2553,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             nativeIdentity: parserMode === 'rust' ? resolveNativeCacheIdentity() : undefined,
             parserMode,
             producer: parserMode,
-            astBudget: astBudgetOverride,
+            // The EFFECTIVE budget, not the raw override: prescan-lane results
+            // (larger budget) must not be served to the transform hook, whose
+            // smaller budget could not have produced them (and vice versa).
+            astBudget: compilerOptions.astBudget,
             mangleVars: compilerOptions.mangleVars,
             mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
             globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
@@ -2552,7 +2576,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return transformPrescanSourcesIndividually(files);
         }
 
-        const compilerOptions = createCompilerOptions();
+        const compilerOptions = createCompilerOptions(prescanAstBudget);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
         const results = new Map<string, SourceTransformResult>();
         const misses: Array<{
@@ -2637,7 +2661,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 try {
                     results.set(
                         miss.filePath,
-                        transformConfiguredSource(miss.content, miss.effectiveFilename),
+                        transformConfiguredSource(
+                            miss.content,
+                            miss.effectiveFilename,
+                            prescanAstBudget,
+                        ),
                     );
                 } catch {
                     // Preserve historical prescan behavior: a file that cannot
@@ -2655,6 +2683,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Warns that the prescan dropped a whole file for exceeding the AST node
+     * budget. Under Tailwind `source(none)` every class in that file is
+     * silently dead CSS, so the skip must name the file and the fix.
+     *
+     * @param filePath Source file the prescan skipped.
+     */
+    function warnPrescanBudgetSkip(filePath: string): void {
+        console.warn(
+            `[csszyx] prescan skipped ${filePath}: the file exceeds the AST node budget, so ` +
+                'NONE of its classes reached the safelist and their CSS will not be generated. ' +
+                'Raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.',
+        );
+    }
+
+    /**
      * Transforms prescan files one by one.
      *
      * @param files Source files discovered during prescan.
@@ -2668,12 +2711,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             try {
                 results.push({
                     filePath: file.filePath,
-                    result: transformConfiguredSource(file.content, file.filePath),
+                    result: transformConfiguredSource(
+                        file.content,
+                        file.filePath,
+                        prescanAstBudget,
+                    ),
                 });
             } catch (err) {
                 // Historical prescan behavior keeps the build alive, but the skip
                 // itself must be visible: every class in this file is silently
                 // dead under Tailwind `source(none)`.
+                if (err instanceof ASTBudgetExceededError) {
+                    warnPrescanBudgetSkip(file.filePath);
+                    continue;
+                }
                 console.warn(
                     `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
                         `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,
@@ -2876,6 +2927,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            // The native engine cannot throw like the JS lanes do, so a
+            // budget-tripped file comes back as a normal result carrying the
+            // budget diagnostic and zero classes. Same silent-dead-CSS stakes
+            // as the parse-error skip below — surface it with the fix attached.
+            if (result.diagnostics.some(d => d.includes('AST budget exceeded'))) {
+                warnPrescanBudgetSkip(filePath);
+                continue;
+            }
             // A parse-rejected file contributes nothing to the safelist, and its
             // classes render only while some other usage donates the same class —
             // a silently dead class under Tailwind `source(none)`. Surface the
@@ -3372,6 +3431,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         for (const msg of result.diagnostics) {
                             if (msg.includes('unresolvable sz spread')) {
                                 state.spreadWarnings.add(`${id}\n  ${msg}`);
+                            } else if (msg.includes('AST budget exceeded')) {
+                                // Every mode, like the spread warnings: the file's
+                                // sz attributes were NOT rewritten (wrong output),
+                                // and the native lane cannot throw the way the JS
+                                // lanes surface this.
+                                console.warn(`[csszyx] ${id}\n  ${msg}`);
                             }
                         }
                         // Emit remaining dev-mode warnings when the compiler had to fall back to
@@ -3382,7 +3447,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             process.env.NODE_ENV !== 'production'
                         ) {
                             for (const msg of result.diagnostics) {
-                                if (msg.includes('unresolvable sz spread')) continue;
+                                if (
+                                    msg.includes('unresolvable sz spread') ||
+                                    msg.includes('AST budget exceeded')
+                                ) {
+                                    continue;
+                                }
                                 this.warn(`[csszyx] ${id}\n  ${msg}`);
                             }
                         }
