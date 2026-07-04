@@ -1,6 +1,6 @@
 /**
- * @csszyx/dynamic/react — React hook for CSS variable injection.
- * Requires React >=18. Import from "@csszyx/dynamic/react".
+ * @csszyx/vars/react — React hook for CSS variable injection.
+ * Requires React >=18. Import from "@csszyx/vars/react".
  */
 
 import { type RefObject, useEffect, useRef } from 'react';
