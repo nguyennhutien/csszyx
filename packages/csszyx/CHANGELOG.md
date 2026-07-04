@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.10.11](https://github.com/nguyennhutien/csszyx/compare/v0.10.10...v0.10.11) (2026-07-04)
+
+
+### Features
+
+* szcn merge groups, engine scan fixes, and runtime memory hardening ([#120](https://github.com/nguyennhutien/csszyx/issues/120)) ([8f2946d](https://github.com/nguyennhutien/csszyx/commit/8f2946da9dd48e7290643425e96a3535c05bae9d))
+
 ## [0.10.10](https://github.com/nguyennhutien/csszyx/compare/v0.10.9...v0.10.10) (2026-07-03)
 
 ### Features
