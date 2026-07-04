@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { szv } from '../src/variants.js';
 
@@ -98,5 +98,62 @@ describe('szv()', () => {
             expect(pill().px).toBe(2);
             expect(pill({ size: 'lg' }).px).toBe(4);
         });
+    });
+});
+
+describe('szv base-only configs', () => {
+    it('returns the base without any warning', () => {
+        const warnings: string[] = [];
+        const spy = vi.spyOn(console, 'warn').mockImplementation((msg: string) => {
+            warnings.push(String(msg));
+        });
+        try {
+            const titleSz = szv({ base: { weight: 'semibold', text: 'base' } });
+            expect(titleSz()).toEqual({ weight: 'semibold', text: 'base' });
+            expect(
+                warnings.filter(w => w.includes('variants')),
+                'a base-only config is valid and must not warn',
+            ).toEqual([]);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('still warns when variants is present but mis-typed', () => {
+        const warnings: string[] = [];
+        const spy = vi.spyOn(console, 'warn').mockImplementation((msg: string) => {
+            warnings.push(String(msg));
+        });
+        try {
+            szv({ base: { p: 2 }, variants: 'nope' as never });
+            expect(warnings.some(w => w.includes('variants must be an object'))).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+});
+
+describe('szv output string-coercion guard (dev)', () => {
+    it('warns and yields an empty string when the object lands in className', () => {
+        const warnings: string[] = [];
+        const spy = vi.spyOn(console, 'warn').mockImplementation((msg: string) => {
+            warnings.push(String(msg));
+        });
+        try {
+            const boxSz = szv({ variants: { v: { x: { p: 2 } } } });
+            const coerced = String(boxSz({ v: 'x' }));
+            expect(coerced).toBe('');
+            expect(warnings.some(w => w.includes('[object Object]'))).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('the trap is invisible to spreads, entries, and JSON', () => {
+        const boxSz = szv({ base: { m: 1 }, variants: { v: { x: { p: 2 } } } });
+        const out = boxSz({ v: 'x' });
+        expect({ ...out }).toEqual({ m: 1, p: 2 });
+        expect(Object.keys(out)).toEqual(['m', 'p']);
+        expect(JSON.parse(JSON.stringify(out))).toEqual({ m: 1, p: 2 });
     });
 });

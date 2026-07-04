@@ -1109,23 +1109,29 @@ export function transformSourceCode(
                             }
                         },
 
-                        // ── dynamic() literal extraction ──────────────────────────────────
-                        // Detects `dynamic({...})` and `dynamic(CONST_IDENTIFIER)` calls
-                        // with statically-analyzable arguments and adds the resulting
-                        // class tokens to collectedClasses so prescanAndWriteClasses()
-                        // includes them in csszyx-classes.html for Tailwind to scan.
-                        // This means dynamic() with static/const args works in Astro SSR
-                        // without needing client:* directives.
+                        // ── dynamic() / szr() literal extraction ─────────────────────────
+                        // Detects `dynamic({...})` / `szr({...})` and their
+                        // `(CONST_IDENTIFIER)` forms with statically-analyzable arguments
+                        // and adds the resulting class tokens to collectedClasses so
+                        // prescanAndWriteClasses() includes them in csszyx-classes.html
+                        // for Tailwind to scan. A bare static `szr({...})` type-checks and
+                        // resolves at runtime, so without this its classes were silently
+                        // dead under Tailwind `source(none)`.
                         CallExpression(path: babel.NodePath<t.CallExpression>) {
                             const callee = path.node.callee;
-                            if (!t.isIdentifier(callee) || callee.name !== 'dynamic') {
+                            if (
+                                !t.isIdentifier(callee) ||
+                                (callee.name !== 'dynamic' && callee.name !== 'szr')
+                            ) {
                                 return;
                             }
                             if (path.node.arguments.length === 0) {
                                 return;
                             }
 
-                            const arg = path.node.arguments[0];
+                            // TS wrappers (`satisfies` / `as`) are type-level; look
+                            // through them before shape-testing the argument.
+                            const arg = unwrapTsExpression(path.node.arguments[0]);
 
                             // Case 1: dynamic({ key: value, ... }) — inline literal object
                             if (t.isObjectExpression(arg)) {
@@ -1143,16 +1149,8 @@ export function transformSourceCode(
                             }
 
                             // Case 2: dynamic(IDENTIFIER) — module-level const reference
-                            // Also handles `dynamic(CONST as any)` / `dynamic(CONST as T)` —
-                            // unwrap TSAs/TSSatisfies wrappers on the argument itself before
-                            // checking for an Identifier (the inner expression is the const ref).
-                            let argExpr: t.Expression = arg as t.Expression;
-                            while (
-                                t.isTSAsExpression(argExpr) ||
-                                t.isTSSatisfiesExpression(argExpr)
-                            ) {
-                                argExpr = argExpr.expression;
-                            }
+                            // (wrappers were already unwrapped above).
+                            const argExpr = arg;
                             if (t.isIdentifier(argExpr)) {
                                 const binding = path.scope.getBinding(argExpr.name);
                                 if (!binding) {
@@ -1734,6 +1732,29 @@ function readStaticConfigObject(
 }
 
 /**
+ * Peel TypeScript-only wrapper expressions (`satisfies`, `as`, non-null `!`,
+ * parentheses) off a node. They are type-level annotations with no runtime
+ * effect, so extraction must look straight through them — `{...} satisfies
+ * Record<Token, object>` is the natural way to keep a variant table complete
+ * against a union, and it used to silently disable szv extraction.
+ *
+ * @param node - The node to unwrap.
+ * @returns The innermost non-wrapper expression node.
+ */
+function unwrapTsExpression(node: t.Node | null | undefined): t.Node | null | undefined {
+    let current = node;
+    while (
+        t.isTSSatisfiesExpression(current) ||
+        t.isTSAsExpression(current) ||
+        t.isTSNonNullExpression(current) ||
+        t.isParenthesizedExpression(current)
+    ) {
+        current = current.expression;
+    }
+    return current;
+}
+
+/**
  * Resolve a node to an object-literal expression: it either IS one, or is a
  * same-scope `const` identifier bound to one. A reassigned binding (babel reports
  * `binding.constant === false`) or any non-object initializer returns null — so
@@ -1747,17 +1768,21 @@ function resolveToConstObjectExpression(
     node: t.Node | null | undefined,
     scope: babel.NodePath['scope'],
 ): t.ObjectExpression | null {
-    if (t.isObjectExpression(node)) {
-        return node;
+    const unwrapped = unwrapTsExpression(node);
+    if (t.isObjectExpression(unwrapped)) {
+        return unwrapped;
     }
-    if (t.isIdentifier(node)) {
-        const binding = scope.getBinding(node.name);
+    if (t.isIdentifier(unwrapped)) {
+        const binding = scope.getBinding(unwrapped.name);
         // `const`-declared only (matches the oxc const-binding map + the Rust
         // VariableDeclarationKind::Const guard), AND never reassigned.
         if (binding?.kind === 'const' && binding.constant) {
             const declNode = binding.path.node;
-            if (t.isVariableDeclarator(declNode) && t.isObjectExpression(declNode.init)) {
-                return declNode.init;
+            if (t.isVariableDeclarator(declNode)) {
+                const init = unwrapTsExpression(declNode.init);
+                if (t.isObjectExpression(init)) {
+                    return init;
+                }
             }
         }
     }
@@ -1794,7 +1819,7 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
             return null;
         }
 
-        const value = prop.value;
+        const value = unwrapTsExpression(prop.value);
         if (t.isStringLiteral(value)) {
             result[key] = value.value;
         } else if (t.isNumericLiteral(value)) {

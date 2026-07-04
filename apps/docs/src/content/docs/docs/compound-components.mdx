@@ -17,7 +17,7 @@ production the same way.
 
 ```tsx
 <Card sz={{ p: 4 }}>
-  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Header sz={{ bg: 'gray-100', font: 'bold' }}>Title</Card.Header>
   <Card.Body sz={{ text: 'sm' }}>Body copy</Card.Body>
 </Card>
 ```
@@ -60,7 +60,7 @@ Now a consumer styles each part independently:
 
 ```tsx
 <Card sz={{ p: 4, rounded: 'lg', shadow: 'md' }}>
-  <Card.Header sz={{ bg: 'gray-100', p: 3, fontWeight: 'bold' }}>
+  <Card.Header sz={{ bg: 'gray-100', p: 3, font: 'bold' }}>
     Invoice
   </Card.Header>
   <Card.Body sz={{ p: 3, text: 'sm', textColor: 'gray-700' }}>
@@ -120,6 +120,23 @@ When an element has **both** `sz` and `className`, csszyx compiles `sz` and merg
 it with the existing `className` for you — the consumer override still applies.
 :::
 
+:::tip[szcn understands property groups]
+For prefixes that span several CSS properties (`text`, `bg`, `border`, `font`,
+`flex`, …), `szcn` classifies the token **value**: same property → the later
+class wins (`szcn('text-base', 'text-sm')` → `text-sm`), different properties
+co-exist (`text-red-500` never removes `text-sm`). So merging slot overrides
+with defaults (`szcn(defaultTitleClasses, szsClass(szs?.title))`) is the
+recommended pattern — replace semantics are no longer needed for text sizes or
+font weights.
+
+Custom `@theme` tokens join automatically: define `--color-brand` or
+`--text-huge` in a scanned CSS file (`build.scanCss`) and `szcn` dedupes
+`text-brand` / `text-huge` with zero extra wiring. For utility-shaped classes
+written in plain CSS (outside `@theme`), register them once with
+`registerSzcnGroups({ colors: ['...'] })` from `@csszyx/runtime`. A value csszyx
+cannot classify is always kept — never wrongly dropped.
+:::
+
 ## Typing
 
 Deriving each part's props from a host element (`ComponentProps<'div'>`,
@@ -158,7 +175,7 @@ transform compiles **each value** to its class string (keeping the key), safelis
 and mangles the classes exactly like `sz`:
 
 ```tsx
-<Card szs={{ header: { bg: 'gray-100', fontWeight: 'bold' }, icon: { color: 'red-500' } }} />
+<Card szs={{ header: { bg: 'gray-100', font: 'bold' }, icon: { color: 'red-500' } }} />
 // compiles to:
 <Card szs={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
 ```
@@ -175,15 +192,20 @@ type CardProps = {
 };
 
 function Card({ title, szs }: CardProps) {
-  // After the transform, each slot is already a class string.
+  // After the transform, each slot is already a class string — but its TYPE is
+  // still an sz value, so `className={szs?.header}` is a strict-TS error.
+  // `szsClass` does the narrowing once, and fail-safe: an uncompiled slot
+  // becomes `undefined` instead of `class="[object Object]"`.
   return (
     <div>
-      <header className={szs?.header}>{title}</header>
-      <svg className={szs?.icon} />
+      <header className={szsClass(szs?.header)}>{title}</header>
+      <svg className={szsClass(szs?.icon)} />
     </div>
   );
 }
 ```
+
+`szsClass` is exported from `@csszyx/runtime` (same home as `szcn`).
 
 Rules to know:
 

@@ -222,3 +222,50 @@ describe('cleanup', () => {
         expect(mockAdoptedSheets).toHaveLength(21);
     });
 });
+
+// ── unbounded-growth warning ──────────────────────────────────────────────────
+
+describe('injected-class growth warning', () => {
+    // Empty cssRule still marks the class as injected but skips CSSOM work,
+    // so crossing the threshold in a test stays cheap.
+    /**
+     * Injects `count` unique classes without touching the CSSOM.
+     * @param count - how many unique class names to inject
+     * @param prefix - class-name prefix to keep batches disjoint
+     */
+    function injectUnique(count: number, prefix: string): void {
+        for (let i = 0; i < count; i++) {
+            injectRule(`${prefix}-${i}`, '', 'base');
+        }
+    }
+
+    it('warns once when unique injected classes cross the threshold', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        injectUnique(4999, 'a');
+        expect(warn).not.toHaveBeenCalled();
+
+        injectUnique(2, 'b');
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls[0][0]).toContain('unique classes');
+
+        // Growth past the threshold stays quiet — one nudge per session.
+        injectUnique(100, 'c');
+        expect(warn).toHaveBeenCalledOnce();
+
+        warn.mockRestore();
+    });
+
+    it('re-arms the warning after cleanup starts a new session', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        injectUnique(5001, 'a');
+        expect(warn).toHaveBeenCalledOnce();
+
+        cleanup();
+        injectUnique(5001, 'b');
+        expect(warn).toHaveBeenCalledTimes(2);
+
+        warn.mockRestore();
+    });
+});

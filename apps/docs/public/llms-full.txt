@@ -670,6 +670,13 @@ type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz'>;
 // equivalent: import type { SzPropValue } from '@csszyx/types'; then `sz?: SzPropValue`
 ```
 
+Pick is for CONCRETE tags only. On a generic component (`E extends ElementType`),
+`Pick<ComponentProps<E>, 'sz'>` distributes over union members without the
+augmentation and resolves order-dependently (sz can flip optional→required when an
+unrelated file changes). Generic wrappers declare the prop directly — `sz?: SzInput`
+(from `csszyx`) — which is stable and also accepts szv factory output
+(`sz={someSzv({ v })}`; `SzPropValue` rejects it, `SzInput` is the forwarding type).
+
 The augmentation must be in scope (a `/// <reference types="@csszyx/types/jsx" />`
 or the project's `csszyx-env.d.ts`), otherwise `sz` is not a key of
 `ComponentProps<'div'>` and `Pick` fails.
@@ -682,7 +689,7 @@ a normal `sz`. So style a compound component's parts by giving each part its own
 
 ```tsx
 <Card sz={{ p: 4 }}>
-  <Card.Header sz={{ bg: 'gray-100', fontWeight: 'bold' }}>Title</Card.Header>
+  <Card.Header sz={{ bg: 'gray-100', font: 'bold' }}>Title</Card.Header>
   <Card.Body sz={{ text: 'sm' }}>Body</Card.Body>
 </Card>
 // → each part compiled to className at build time; all classes safelisted.
@@ -692,7 +699,14 @@ Build it as a plain React compound component; each part forwards `sz` (already
 rewritten to `className` by the transform) onto a host element. Type each part with
 `ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
 Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
-last-wins) or `clsx`.
+last-wins) — the RECOMMENDED pattern for slot defaults. Multi-property prefixes
+(`text`, `bg`, `border`, `font`, `flex`, `divide`, `ring`, `outline`) are
+value-classified into property groups: same property → later wins
+(`szcn('text-base','text-sm')` → `text-sm`); different properties co-exist
+(`text-red-500` never removes `text-sm`); unclassifiable values are always kept
+(fail-safe). Custom `@theme` tokens join their groups automatically when the CSS
+is scanned (`build.scanCss`); classes written in plain CSS register via
+`registerSzcnGroups({ colors: [...], textSizes: [...] })` from `@csszyx/runtime`.
 
 ## `szs` — slot map for a component's internal parts
 
@@ -705,7 +719,10 @@ the matching child's `className`.
 type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
 <Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
 // → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
-// component: <header className={props.szs?.header} />
+// component: <header className={szsClass(props.szs?.header)} />
+// szsClass (from @csszyx/runtime) narrows the compiled slot to string | undefined —
+// slots TYPE as sz values but ARE class strings after the transform; the helper
+// is also fail-safe (uncompiled slot -> undefined, never "[object Object]").
 ```
 
 Rules: custom components only (host element → dev warn, unchanged). Slot values
@@ -3560,7 +3577,22 @@ are compiler-injected, do not hand-author them):
   Reach for it to build a className from `szv` factory output (e.g. a code-split
   layout that declares variants in a `.ts` module and resolves them in a `.tsx`).
 - **`szcn(...)`** — merge className STRINGS with last-wins override on a
-  same-utility conflict, mangle-aware (the Box-level merge).
+  same-utility conflict, mangle-aware (the Box-level merge). Contract:
+  - Variants isolate: `szcn('md:gap-2','gap-8')` keeps both; same variant+utility → last wins.
+  - Directional shorthand coverage (padding/margin/inset/rounded): a LATER
+    shorthand removes the longhands it subsumes (`szcn('pb-4','p-8')` → `p-8`);
+    a later longhand only refines (`szcn('p-4','pb-8')` → `p-4 pb-8`). Physical
+    only for inset/rounded — logical `start`/`end` stay keep-both (RTL-safe).
+  - Ambiguous prefixes (`text` `font` `bg` `border` `divide` `ring` `outline`
+    `flex`) classify the token VALUE into a property group: same property →
+    last wins (`szcn('text-base','text-sm')` → `text-sm`), different → co-exist
+    (`text-red-500` never removes `text-sm`), unclassifiable → keep-both.
+  - Custom `@theme` tokens join their groups automatically via `build.scanCss`;
+    plain-CSS utility names register once via
+    `registerSzcnGroups({ colors: [...], textSizes: [...] })` (guard-railed:
+    names shadowing built-in keywords, or defined in two conflicting
+    categories, are rejected to keep-both — never a wrong merge).
+  - Fail-safe: a token szcn cannot confidently group is NEVER dropped.
 - `szr` takes sz OBJECTS and concatenates; `szcn` takes STRINGS and overrides.
 
 ```tsx

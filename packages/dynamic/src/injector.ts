@@ -86,6 +86,17 @@ let fallbackStyle: HTMLStyleElement | null = null;
 /** Set of all class names injected this session (prevents double inject). */
 const injected = new Set<string>();
 
+/**
+ * Dev-only growth nudge. Injected rules are never removed within a session, so
+ * an app feeding continuously varying values (`w-[${x}px]` per animation frame
+ * or drag tick) grows the CSSOM without bound — style recalc slows down and
+ * memory climbs, with no error anywhere. Crossing this many UNIQUE classes in
+ * one session almost always means unbounded dynamic values; warn once so the
+ * developer moves the varying value into a CSS variable instead.
+ */
+const INJECTED_GROWTH_WARN_THRESHOLD = 5000;
+let warnedInjectedGrowth = false;
+
 // ── Sheet initialisation ──────────────────────────────────────────────────────
 
 /**
@@ -194,6 +205,20 @@ export function injectRule(className: string, cssRule: string, tier: Tier = 'bas
     }
     injected.add(className);
 
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        !warnedInjectedGrowth &&
+        injected.size >= INJECTED_GROWTH_WARN_THRESHOLD
+    ) {
+        warnedInjectedGrowth = true;
+        console.warn(
+            `[csszyx] dynamic() has injected ${INJECTED_GROWTH_WARN_THRESHOLD}+ unique classes this session. ` +
+                'Injected CSS rules are never removed, so continuously varying values ' +
+                '(e.g. w-[`${x}px`] per animation frame) grow the CSSOM and slow style recalc. ' +
+                'Drive continuously changing values through a CSS variable instead.',
+        );
+    }
+
     if (!cssRule) {
         return;
     } // unknown class — still mark as "seen" to avoid repeat lookups
@@ -251,4 +276,5 @@ export function cleanup(): void {
     }
 
     injected.clear();
+    warnedInjectedGrowth = false;
 }

@@ -124,7 +124,13 @@ export function transformOxc(
     // return, so a runtime/browser warning never inherits a stale build location.
     setSzWarnLocation(undefined);
     const astBudget = options?.astBudget ?? AST_BUDGET;
-    const parsed = parseSync(effectiveFilename, source);
+    // Parse plain `.js` / `.mjs` / `.cjs` with JSX enabled: React-17-era code
+    // keeps JSX in `.js`, oxc's extension mapping picks a JSX-less grammar, and
+    // the parse error used to bounce every such file to the Babel fallback (and
+    // silently emptied the native engine's scan). JSX-enabled JS is a superset.
+    const parsed = /\.(?:js|mjs|cjs)$/.test(effectiveFilename)
+        ? parseSync(effectiveFilename, source, { lang: 'jsx' })
+        : parseSync(effectiveFilename, source);
     if (parsed.errors.length > 0) {
         throw new Error(
             `oxc-parser errors in ${effectiveFilename}: ` +
@@ -808,6 +814,34 @@ export function transformOxc(
                 : `className="${mergedClasses.join(' ')}"`;
 
         if (classNameAttr) {
+            const classNameValue = classNameAttr.value;
+            if (
+                existingRaw === null &&
+                classNameValue &&
+                classNameValue.type === 'JSXExpressionContainer'
+            ) {
+                // className holds an EXPRESSION (ternary / identifier / clsx(...)).
+                // Overwriting it with the compiled string would silently delete the
+                // expression's classes at runtime — the classic symptom was a panel
+                // losing its `dems-panel` class next to a static sz. Merge instead,
+                // keeping the expression, exactly like babel and the native engine:
+                // `className={_szMerge(<expr>, "<compiled>")}`.
+                const exprNode = (classNameValue as unknown as { expression: OxcNode }).expression;
+                const exprSource = source.slice(exprNode.start, exprNode.end);
+                edits.overwrite(
+                    classNameAttr.start,
+                    classNameAttr.end,
+                    `className={_szMerge(${exprSource}, ${JSON.stringify(szDerived.join(' '))})}`,
+                );
+                for (const szAttr of szAttrs) {
+                    const deleteStart = whitespaceStart(source, szAttr.start);
+                    edits.remove(deleteStart, szAttr.end);
+                }
+                usesRuntime = true;
+                usesMerge = true;
+                transformed = true;
+                return;
+            }
             // Replace className value (or whole attribute) in place, then
             // delete each sz attribute + the whitespace preceding it.
             edits.overwrite(classNameAttr.start, classNameAttr.end, mergedAttr);
@@ -1771,7 +1805,13 @@ function collectDynamicCallClasses(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     classes: Set<string>,
 ): void {
-    if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'dynamic') {
+    if (node.callee.type !== 'Identifier') {
+        return;
+    }
+    const calleeName = (node.callee as IdentifierNode).name;
+    // szr(static-object) resolves the same classes at runtime that dynamic()
+    // would inject; both need their literal args safelisted at build time.
+    if (calleeName !== 'dynamic' && calleeName !== 'szr') {
         return;
     }
     const [firstArg] = node.arguments;
@@ -3394,6 +3434,10 @@ function astValueToSzValue(
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     branchPick?: 'consequent' | 'alternate',
 ): SzValue {
+    // TypeScript wrappers (`satisfies` / `as` / `!` / parens) are type-level
+    // only — look straight through them so e.g. a variant table written as
+    // `{ … } satisfies Record<Token, object>` still converts.
+    node = unwrapExpression(node);
     // When resolving a single branch of a hoisted nested conditional, substitute
     // the conditional value with its chosen branch and convert that statically.
     if (branchPick && node.type === 'ConditionalExpression') {

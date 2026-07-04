@@ -91,6 +91,40 @@ export interface UseSzReturn {
 let _cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * Count of currently mounted useSz consumers.
+ *
+ * The injector sheets, injected-class set, and manifest cache are module-level
+ * state SHARED by every useSz consumer, so cleanup may only run when the LAST
+ * consumer unmounts. Without this counter, one component unmounting while
+ * siblings stayed mounted released the adopted stylesheets out from under
+ * them — their classNames kept pointing at CSS rules that no longer existed,
+ * and memoized components never re-rendered to re-inject.
+ */
+let _mountedConsumers = 0;
+
+/**
+ * Cancel a pending deferred cleanup, if any. Clearing before every overwrite
+ * also prevents an orphaned timer: losing a pending handle would let it fire
+ * later and wipe sheets a newer consumer just populated.
+ */
+function cancelPendingCleanup(): void {
+    if (_cleanupTimer !== null) {
+        clearTimeout(_cleanupTimer);
+        _cleanupTimer = null;
+    }
+}
+
+/**
+ * Reset the shared consumer counter and pending timer — test-only. Module
+ * state persists across tests in one suite, so suites that simulate
+ * mount/unmount cycles must start from a known-empty lifecycle.
+ */
+export function _resetUseSzLifecycle(): void {
+    cancelPendingCleanup();
+    _mountedConsumers = 0;
+}
+
+/**
  * React hook for runtime dynamic styling.
  *
  * Returns a stable `{ sz }` object. Preloads the manifest on mount.
@@ -107,16 +141,22 @@ export function useSz(): UseSzReturn {
     const stableSz = useCallback((props: SzObject) => dynamic(props), []);
 
     useEffect(() => {
+        _mountedConsumers++;
         // Cancel any pending cleanup from a previous unmount (handles StrictMode remount).
-        if (_cleanupTimer !== null) {
-            clearTimeout(_cleanupTimer);
-            _cleanupTimer = null;
-        }
+        cancelPendingCleanup();
         // Pre-fetch manifest (non-blocking)
         preloadManifest(manifestUrl);
 
         return () => {
-            // Defer cleanup so a StrictMode remount can cancel it before it fires.
+            _mountedConsumers--;
+            if (_mountedConsumers > 0) {
+                // Other consumers still render classNames backed by the shared
+                // sheets — releasing them here would unstyle live components.
+                return;
+            }
+            // Last consumer gone: defer cleanup so a StrictMode remount can
+            // cancel it before it fires.
+            cancelPendingCleanup();
             _cleanupTimer = setTimeout(() => {
                 injectorCleanup();
                 resetManifest();

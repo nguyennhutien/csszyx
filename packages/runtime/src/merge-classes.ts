@@ -18,22 +18,26 @@
  * NEVER merged away — it keys by itself, so at worst two classes coexist (the
  * pre-merge status quo), never a wrongly-dropped class.
  *
- * v1 scope: merges by the box-role-map utility prefix for single-property
- * prefixes (gap, p, m, w, h, rounded, …). Prefixes that span multiple CSS
- * properties (`flex` covers flex-grow AND flex-direction; `text` covers
- * font-size AND text-color; `bg` covers color AND position AND size) are treated
- * as AMBIGUOUS and under-merged. TODO(v2): full tailwind-merge-style conflict
- * groups would let these override precisely (flex-1 vs flex-none) while keeping
- * distinct properties (flex-1 vs flex-row).
+ * Single-property prefixes (gap, p, m, w, h, rounded, …) merge by prefix.
+ * Prefixes that span multiple CSS properties (`text` covers font-size AND
+ * color; `font` covers family AND weight; `bg`, `border`, `divide`, `ring`,
+ * `outline`, `flex`) classify the token VALUE into a property group (see
+ * `merge-groups.ts`): same group → last wins (`text-base` + `text-sm` →
+ * `text-sm`), different group → co-exist, unclassifiable → keep-both.
+ * Custom `@theme` tokens join their groups via `registerSzcnGroups` (the build
+ * plugin injects this automatically from the theme scan).
  *
  * @module
  */
-import { BOX_ROLE_PREFIXES, BOX_ROLE_TOKENS } from './box-role-map.generated.js';
-import { normalizeBase, stripVariant } from './split-box.js';
+import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
+import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
+import { BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT, normalizeBase, stripVariant } from './split-box.js';
 
 /**
- * Utility prefixes that map to more than one CSS property, so merging by the
- * prefix would drop a class for a DIFFERENT property. Under-merge these.
+ * Utility prefixes that map to more than one CSS property. These route through
+ * value-set classification (`merge-groups.ts`) instead of prefix-keyed merging
+ * — merging by the prefix alone deleted a legitimate class of the OTHER
+ * property (`font-sans` + `font-bold` → only `font-bold` survived).
  */
 const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'flex', // flex-1 (flex shorthand) vs flex-row (flex-direction)
@@ -43,6 +47,7 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'divide', // divide-x (width) vs divide-red-500 (color)
     'ring', // ring-2 (width) vs ring-red-500 (color)
     'outline', // outline-2 (width) vs outline-red-500 (color)
+    'font', // font-sans (font-family) vs font-bold (font-weight)
 ]);
 
 /**
@@ -149,10 +154,20 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (BOX_ROLE_TOKENS.has(norm)) {
         return null;
     }
-    for (const [prefix] of BOX_ROLE_PREFIXES) {
+    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
+    for (const [prefix] of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             if (AMBIGUOUS_PREFIXES.has(prefix)) {
-                return null;
+                // Value-set classification: same property group → last wins
+                // (`text-base` + `text-sm` → `text-sm`); different property →
+                // co-exist; unclassifiable value → keep-both as before.
+                const value = norm === prefix ? '' : norm.slice(prefix.length + 1);
+                const group = classifyAmbiguousValue(prefix, value);
+                if (group === null) {
+                    return null;
+                }
+                const key = `${variant} ${group}`;
+                return { key, covers: [key] };
             }
             // Key = variant + utility prefix. The space separator can't appear in
             // a class token, so distinct (variant, prefix) pairs never collide.
@@ -167,7 +182,21 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
 }
 
 /**
- * Merge className strings with last-wins override per utility, mangle-aware.
+ * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
+ * every render (component defaults are constants), so a small LRU turns the
+ * per-render cost into one Map lookup. The cache self-invalidates when either
+ * classification input changes: the custom-group registration generation, or
+ * the identity of the runtime decode bridge (both normally settle at startup,
+ * before render loops, so steady-state renders never clear).
+ */
+const MEMO_MAX_ENTRIES = 500;
+const memo = new Map<string, string>();
+let memoGroupsGeneration = -1;
+let memoDecodeRef: unknown;
+
+/**
+ * Merge className strings with last-wins override per utility, mangle-aware and
+ * memoized (see the memo note above — repeated inputs return in one Map lookup).
  *
  * Intended for the single resolution point in a layered design-system component
  * (typically at the leaf Box): combine the component's default classes with the
@@ -179,6 +208,48 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
 export function szcn(...inputs: (string | false | null | undefined)[]): string {
+    let key = '';
+    for (const input of inputs) {
+        if (input && typeof input === 'string') {
+            key = key === '' ? input : `${key} ${input}`;
+        }
+    }
+    const generation = getSzcnGroupsGeneration();
+    // Compare the decode FUNCTION IDENTITY, not mere presence: a swapped bridge
+    // (tests, or an exotic host replacing the inline script's object) must not
+    // serve merges memoized under the previous map. In production the identity
+    // is stable for the page lifetime, so this never clears.
+    const decodeRef = (globalThis as { __csszyx?: { decode?: unknown } }).__csszyx?.decode;
+    if (generation !== memoGroupsGeneration || decodeRef !== memoDecodeRef) {
+        memo.clear();
+        memoGroupsGeneration = generation;
+        memoDecodeRef = decodeRef;
+    }
+    const cached = memo.get(key);
+    if (cached !== undefined) {
+        // Refresh recency so hot merges never age out.
+        memo.delete(key);
+        memo.set(key, cached);
+        return cached;
+    }
+    const merged = mergeUncached(inputs);
+    memo.set(key, merged);
+    if (memo.size > MEMO_MAX_ENTRIES) {
+        const oldest = memo.keys().next().value;
+        if (oldest !== undefined) {
+            memo.delete(oldest);
+        }
+    }
+    return merged;
+}
+
+/**
+ * The uncached merge — see {@link szcn} for the contract.
+ *
+ * @param inputs - Class strings; falsy inputs are skipped.
+ * @returns The merged className string.
+ */
+function mergeUncached(inputs: readonly (string | false | null | undefined)[]): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
 

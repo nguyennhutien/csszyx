@@ -62,10 +62,11 @@ import {
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
-import { mergeThemes, parseThemeBlocks } from './theme-scanner.js';
+import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
     createTransformCacheKey,
+    evictMemoryCacheToBudget,
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
@@ -76,10 +77,13 @@ import {
 import {
     createChecksumModule,
     createMangleMapModule,
+    createThemeGroupsModule,
     isVirtualModule,
+    RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
+    THEME_GROUPS_VIRTUAL_ID,
 } from './virtual-modules.js';
 
 /**
@@ -92,6 +96,8 @@ interface PluginState {
      * Drives the `@source` safelist; NOT the mangle map.
      */
     classes: Set<string>;
+    /** Merged @theme scan result — feeds the theme-groups virtual module. */
+    parsedTheme: import('./theme-scanner.js').ParsedTheme | null;
     /**
      * True once any processed CSS file was seen importing `tailwindcss`. Used to
      * warn at build end when csszyx generated classes but nothing makes Tailwind
@@ -195,6 +201,12 @@ const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
 const TRANSFORM_MEMORY_CACHE_MAX_ENTRIES = 1_000;
+// Entry count alone is not a memory bound: each entry retains the FULL
+// transformed code string, so 1000 large generated files could hold ~hundreds
+// of MB in a long-lived dev server. Cap the total retained code size too
+// (~32M chars ≈ 64MB of JS string memory) and evict oldest-first past either
+// limit.
+const TRANSFORM_MEMORY_CACHE_MAX_CODE_CHARS = 32_000_000;
 // Upper bound on the safelist class set. Far above any real project (a large app
 // emits a few thousand unique utilities); the cap only trips on pathological /
 // hostile input — e.g. unbounded unique arbitrary values — and bounds the memory
@@ -224,7 +236,12 @@ const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
-let _hasLoggedActiveParser = false;
+// Keyed by resolved parser mode, not a single boolean: one process can hold
+// several plugin instances (client + SSR configs, or a tool that loads the
+// config twice), and when the first instance resolved a different mode the log
+// used to claim an engine the real build never used — which cost a field user
+// an investigation. Each distinct mode announces itself once.
+const _loggedActiveParsers = new Set<string>();
 // Files for which an oxc→Babel fallback has already been reported, so the
 // per-file warning is emitted once per file rather than on every re-transform.
 const _babelFallbackFiles = new Set<string>();
@@ -740,7 +757,12 @@ export function fileMayContainSafelistableSz(content: string): boolean {
         content.includes('sz=') ||
         content.includes('szs=') ||
         content.includes('sz:') ||
-        content.includes('szv(')
+        content.includes('szv(') ||
+        content.includes('szr(') ||
+        // dynamic() literal args are extracted for the safelist, but a module
+        // containing ONLY dynamic() calls never passed this gate — the
+        // engine-parity harness caught its classes missing on all engines.
+        content.includes('dynamic(')
     );
 }
 
@@ -863,6 +885,20 @@ function recordFileVarMangleEntries(
 }
 
 /**
+ * Whether transformed source text must be retained for global-var alias
+ * validation. Retention is only consumed when `production.mangleGlobalVars`
+ * is explicitly enabled; recording without that consumer keeps the full text
+ * of every transformed JS/TS module alive for the plugin lifetime.
+ *
+ * @param config The `production.mangleGlobalVars` option value.
+ * @param config.enabled Whether global-var mangling is turned on.
+ * @returns True only when the feature is explicitly enabled.
+ */
+export function shouldTrackGlobalVarSources(config?: { enabled?: boolean }): boolean {
+    return config?.enabled === true;
+}
+
+/**
  * Records source text available before bundling/minification for Phase H
  * global-var diagnostics.
  *
@@ -870,7 +906,7 @@ function recordFileVarMangleEntries(
  * @param filename Source filename that owns the text.
  * @param code Source text, or null to clear this file.
  */
-function recordGlobalVarSourceFile(
+export function recordGlobalVarSourceFile(
     state: Pick<PluginState, 'globalVarSourceFilesByFile'>,
     filename: string,
     code: string | null,
@@ -1432,14 +1468,16 @@ function traceBenchTiming(label: string, filename: string, elapsedMs: number): v
  * No-ops silently if scanCss is not configured or if files can't be read.
  * @param rootDir - project root directory (used to resolve relative paths and output dir)
  * @param scanCss - path or glob patterns to CSS files (from BuildConfig.scanCss)
+ * @returns the merged parsed theme (feeds the szcn theme-groups virtual
+ *   module), or null when nothing was scanned.
  */
-function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): void {
+function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): ParsedTheme | null {
     if (!scanCss) {
-        return;
+        return null;
     }
     const sourceFiles = expandFilePatterns(rootDir, scanCss).filter(file => file.endsWith('.css'));
     if (sourceFiles.length === 0) {
-        return;
+        return null;
     }
     const themes = sourceFiles
         .map(f => {
@@ -1485,6 +1523,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
             // Ignore file read errors
         }
     }
+    return merged;
 }
 
 /**
@@ -1975,6 +2014,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const cacheEnabled = cacheRequested && cacheVersionsKnown;
     const varMangleMapMaxBytes = resolveVarMangleMapMaxBytes();
     const globalVarMangleConfig = options.production?.mangleGlobalVars;
+    const globalVarSourceTrackingEnabled = shouldTrackGlobalVarSources(globalVarMangleConfig);
     const globalVarAliasPrefix = globalVarMangleConfig?.aliasPrefix ?? CSSZYX_GLOBAL_ALIAS_PREFIX;
     const encodedGlobalVarAliasPrefix = encodeURIComponent(globalVarAliasPrefix);
     const earlyGlobalVarAliasEntries = createEarlyGlobalVarAliasEntries(
@@ -2023,36 +2063,45 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
         isRustAvailable: isRustTransformAvailable,
     });
-    if (parserDegraded && !_hasWarnedNativeFallback) {
-        _hasWarnedNativeFallback = true;
-        console.warn(
-            '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
-                'are identical (parity-tested); only parse speed differs. To use the native ' +
-                'engine, install the matching @csszyx/core-<platform> package (or do not ' +
-                'omit optional dependencies). Set `build.parser` explicitly to silence this.',
-        );
-    }
-    // Always announce the engine actually in effect, once per process. Without
-    // this the only signal was the degrade warning above, so a project could be
-    // running on `oxc` (or silently dropping to Babel per file) with no way to
-    // tell which parser produced its classes.
-    if (!_hasLoggedActiveParser) {
-        _hasLoggedActiveParser = true;
-        const detail = parserDegraded
-            ? 'oxc (degraded from default `rust`: no native binary for this platform)'
-            : parserMode === 'rust'
-              ? 'rust (native engine)'
-              : parserMode;
-        // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
-        // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
-        console.warn(`[csszyx] active parser: ${detail}`);
+    /**
+     * Announce the engine actually in effect (and the native-binary degrade, if
+     * any). Called from build-lifecycle hooks, NOT from the factory body: the
+     * module exports a default plugin instance for compatibility, so the factory
+     * runs at import time with default options — announcing there printed
+     * `active parser: rust (native engine)` in processes whose real build was
+     * configured for another engine, which cost a field user an investigation.
+     * Once per resolved mode per process.
+     */
+    function announceActiveParser(): void {
+        if (parserDegraded && !_hasWarnedNativeFallback) {
+            _hasWarnedNativeFallback = true;
+            console.warn(
+                '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                    'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
+                    'are identical (parity-tested); only parse speed differs. To use the native ' +
+                    'engine, install the matching @csszyx/core-<platform> package (or do not ' +
+                    'omit optional dependencies). Set `build.parser` explicitly to silence this.',
+            );
+        }
+        if (!_loggedActiveParsers.has(parserMode)) {
+            _loggedActiveParsers.add(parserMode);
+            const detail = parserDegraded
+                ? 'oxc (degraded from default `rust`: no native binary for this platform)'
+                : parserMode === 'rust'
+                  ? 'rust (native engine)'
+                  : parserMode;
+            // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
+            // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
+            console.warn(`[csszyx] active parser: ${detail}`);
+        }
     }
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
+    let transformMemoryCacheCodeChars = 0;
 
     const state: PluginState = {
         classes: new Set<string>(),
+        parsedTheme: null,
         sawTailwindEntry: false,
         sawAnyCss: false,
         tailwindWarningEmitted: false,
@@ -2081,7 +2130,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     const SAFELIST_FILENAME = 'csszyx-classes.html';
-    const SOURCE_EXTENSIONS = new Set(['.tsx', '.jsx', '.ts', '.js']);
+    // Module flavours included: the engine-parity harness caught the prescan
+    // walk skipping `.mjs` entirely — every class in such a file was silently
+    // dead under Tailwind `source(none)` on ALL engines.
+    const SOURCE_EXTENSIONS = new Set([
+        '.tsx',
+        '.jsx',
+        '.ts',
+        '.js',
+        '.mjs',
+        '.cjs',
+        '.mts',
+        '.cts',
+    ]);
     const IGNORE_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.turbo']);
 
     /**
@@ -2156,6 +2217,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return result;
     }
 
+    /**
+     * Records source text for global-var diagnostics, but only while the
+     * feature that consumes it (`production.mangleGlobalVars`) is enabled.
+     * The delete path (`watchChange`) stays on `recordGlobalVarSourceFile`
+     * directly — clearing is always safe.
+     *
+     * @param filename Source filename that owns the text.
+     * @param code Source text to retain.
+     */
+    function trackGlobalVarSourceFile(filename: string, code: string): void {
+        if (!globalVarSourceTrackingEnabled) {
+            return;
+        }
+        recordGlobalVarSourceFile(state, filename, code);
+    }
+
     // Resolved compileSources directories (absolute, realpath'd). Filled once the
     // project root is known; recomputed if the root changes (e.g. webpack reuse).
     let compileSourceDirs: string[] = [];
@@ -2199,11 +2276,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns True when csszyx should parse and transform the source file.
      */
     function shouldProcessSource(id: string): boolean {
+        // `[cm]?` admits the ESM/CJS module flavours (.mjs/.cjs/.mts/.cts): the
+        // engine-parity harness caught `.mjs` files being neither transformed
+        // nor scanned — their sz props reached the bundle untouched and every
+        // class was silently dead under Tailwind `source(none)`.
         return (
             !isHardIgnored(id) &&
             !isUserExcluded(id) &&
             isUserIncluded(id) &&
-            (/\.[tj]sx?(\?.*)?$/.test(id) || id.endsWith('.vue') || id.endsWith('.svelte'))
+            (/\.([cm]?[tj]s|[tj]sx)(\?.*)?$/.test(id) ||
+                id.endsWith('.vue') ||
+                id.endsWith('.svelte'))
         );
     }
 
@@ -2487,8 +2570,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     filePath: file.filePath,
                     result: transformConfiguredSource(file.content, file.filePath),
                 });
-            } catch {
-                // Preserve historical prescan behavior: skip files that fail to transform.
+            } catch (err) {
+                // Historical prescan behavior keeps the build alive, but the skip
+                // itself must be visible: every class in this file is silently
+                // dead under Tailwind `source(none)`.
+                console.warn(
+                    `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
+                        `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,
+                );
             }
         }
         return results;
@@ -2501,15 +2590,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param result Transform result.
      */
     function rememberTransformCacheEntry(key: string, result: SourceTransformResult): void {
-        transformMemoryCache.delete(key);
+        const existing = transformMemoryCache.get(key);
+        if (existing) {
+            transformMemoryCacheCodeChars -= existing.code.length;
+            transformMemoryCache.delete(key);
+        }
         transformMemoryCache.set(key, result);
-        if (transformMemoryCache.size <= TRANSFORM_MEMORY_CACHE_MAX_ENTRIES) {
-            return;
-        }
-        const oldest = transformMemoryCache.keys().next().value;
-        if (oldest) {
-            transformMemoryCache.delete(oldest);
-        }
+        transformMemoryCacheCodeChars += result.code.length;
+        transformMemoryCacheCodeChars = evictMemoryCacheToBudget(
+            transformMemoryCache,
+            transformMemoryCacheCodeChars,
+            TRANSFORM_MEMORY_CACHE_MAX_ENTRIES,
+            TRANSFORM_MEMORY_CACHE_MAX_CODE_CHARS,
+        );
     }
 
     /** Runs transform-cache eviction once per resolved project cache root. */
@@ -2683,6 +2776,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            // A parse-rejected file contributes nothing to the safelist, and its
+            // classes render only while some other usage donates the same class —
+            // a silently dead class under Tailwind `source(none)`. Surface the
+            // skip as a build warning (correctness of extracted output, so it is
+            // not a dev-only nudge).
+            if (
+                result.classes.size === 0 &&
+                result.rawClassNames.size === 0 &&
+                result.diagnostics.some(d => d.includes('[csszyx] parse error in '))
+            ) {
+                console.warn(
+                    `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
+                        'none of its classes reached the safelist. Fix the syntax error ' +
+                        '(or check the file extension matches its contents).',
+                );
+                continue;
+            }
             // A szv-only file (no `sz=` to rewrite) reports transformed=false but
             // still extracts a catalog of classes — collect those, otherwise its
             // variants are silently dropped from the safelist (the file is
@@ -3003,7 +3113,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns true only for csszyx virtual modules
              */
             loadInclude(id) {
-                return id === RESOLVED_VIRTUAL_MODULE_ID || id === RESOLVED_VIRTUAL_CHECKSUM_ID;
+                return (
+                    id === RESOLVED_VIRTUAL_MODULE_ID ||
+                    id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
+                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID
+                );
             },
 
             /**
@@ -3024,6 +3138,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
                     finalizeMangleMap();
                     return createChecksumModule(state.checksum);
+                }
+                if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
+                    const theme = state.parsedTheme;
+                    return createThemeGroupsModule({
+                        colors: theme?.colors ?? [],
+                        textSizes: theme?.textSizes ?? [],
+                        fontFamilies: theme?.fonts ?? [],
+                        fontWeights: theme?.fontWeights ?? [],
+                    });
                 }
                 return null;
             },
@@ -3051,11 +3174,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @returns transformed code with source map, or null if no changes were made
              */
             transform(code, id) {
+                // Bundlers without the vite/webpack lifecycle hooks (rollup,
+                // esbuild) still announce on the first real transform.
+                announceActiveParser();
                 if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
                     return null;
                 }
                 if (shouldProcessSource(id)) {
-                    recordGlobalVarSourceFile(state, id, code);
+                    trackGlobalVarSourceFile(id, code);
                 }
 
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
@@ -3236,6 +3362,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                 }
 
+                // Theme-groups injection: a module that merges classes at runtime
+                // needs the app's custom @theme tokens registered into szcn's
+                // merge groups. Injecting the side-effect import into every
+                // szcn-USING module (rather than one entry) means the same
+                // registration travels with the code into every bundle that can
+                // call szcn — client, SSR, edge — so merge results (and rendered
+                // classNames) stay identical across environments. The module is
+                // generated from the theme scan; with no scan it registers
+                // nothing and szcn keeps its keep-both fail-safe.
+                if (
+                    /\bszcn\s*\(/.test(code) &&
+                    !transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) &&
+                    shouldProcessSource(id)
+                ) {
+                    transformedCode = `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
+                    transformed = true;
+                }
+
                 if (/\.[tj]sx?(\?.*)?$/.test(id)) {
                     assertNoRSCBoundaryViolation(transformedCode, id);
                     const record = createRSCModuleRecord(transformedCode, id);
@@ -3372,6 +3516,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             webpack(compiler: WebpackCompiler) {
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
+                    announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
                     evictTransformCacheOnce();
@@ -3379,7 +3524,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         prescanAndWriteClasses();
                     }
                     // Generate theme type augmentation from @theme CSS blocks
-                    runThemeScan(root, options.build?.scanCss);
+                    state.parsedTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
                 if (options.build?.scanCss) {
@@ -3399,6 +3545,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * @param config - the resolved Vite configuration object
                  */
                 configResolved(config) {
+                    announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
                     // Never mangle in a dev server — the runtime mangle map would
@@ -3410,7 +3557,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
                     // Generate theme type augmentation from @theme CSS blocks
-                    runThemeScan(root, options.build?.scanCss);
+                    state.parsedTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
                 },
 
                 /**
@@ -3424,7 +3572,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (scanCss) {
                         const root = ctx.server.config.root || process.cwd();
                         if (matchesAnyPattern(ctx.file, scanCss, root)) {
-                            runThemeScan(root, scanCss);
+                            state.parsedTheme = runThemeScan(root, scanCss) ?? state.parsedTheme;
+                            // New/removed @theme tokens change the szcn merge
+                            // groups — reload the generated registration module
+                            // so a dev server picks them up without a restart.
+                            const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
+                                RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+                            );
+                            if (themeGroupsModule) {
+                                ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+                            }
                         }
                     }
 
@@ -3449,7 +3606,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         !fileContent.includes('szs=') &&
                         !/\bsz\s*:\s*["'{]/.test(fileContent)
                     ) {
-                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        trackGlobalVarSourceFile(ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
@@ -3464,21 +3621,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             performance.now() - hmrTransformStarted,
                         );
                     } catch {
-                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        trackGlobalVarSourceFile(ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     if (!result.transformed) {
-                        recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                        trackGlobalVarSourceFile(ctx.file, fileContent);
                         recordFileVarMangleEntries(state, ctx.file, []);
                         recordFileCSSVariableMetrics(state, ctx.file, null);
                         return;
                     }
 
                     const sizeBefore = state.classes.size;
-                    recordGlobalVarSourceFile(state, ctx.file, fileContent);
+                    trackGlobalVarSourceFile(ctx.file, fileContent);
                     for (const cls of result.classes) {
                         addSafelistClass(cls);
                         state.ownedClasses.add(cls);

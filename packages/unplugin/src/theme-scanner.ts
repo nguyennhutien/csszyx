@@ -22,6 +22,10 @@ export interface ParsedTheme {
     spacings: string[];
     /** Custom font families (from --font-*): e.g. ['display', 'body'] */
     fonts: string[];
+    /** Custom font sizes (from --text-*): e.g. ['huge'] */
+    textSizes: string[];
+    /** Custom font weights (from --font-weight-*): e.g. ['chunky'] */
+    fontWeights: string[];
     /** Custom border radii (from --radius-*): e.g. ['button'] */
     radii: string[];
     /** Custom shadows (from --shadow-*): e.g. ['card'] */
@@ -34,6 +38,8 @@ const EMPTY_THEME: ParsedTheme = {
     colors: [],
     spacings: [],
     fonts: [],
+    textSizes: [],
+    fontWeights: [],
     radii: [],
     shadows: [],
     breakpoints: [],
@@ -136,7 +142,12 @@ function categorizeProperty(prop: string): { category: keyof ParsedTheme; token:
     const categoryMap: Array<[string, keyof ParsedTheme]> = [
         ['color-', 'colors'],
         ['spacing-', 'spacings'],
+        // `font-weight-` MUST precede `font-`: startsWith would otherwise route
+        // `font-weight-chunky` into font FAMILIES as token "weight-chunky".
+        ['font-weight-', 'fontWeights'],
         ['font-', 'fonts'],
+        // `--text-*` defines font-size utilities (text-huge) in Tailwind v4.
+        ['text-', 'textSizes'],
         ['radius-', 'radii'],
         ['shadow-', 'shadows'],
         ['breakpoint-', 'breakpoints'],
@@ -170,6 +181,8 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
         colors: new Set(),
         spacings: new Set(),
         fonts: new Set(),
+        textSizes: new Set(),
+        fontWeights: new Set(),
         radii: new Set(),
         shadows: new Set(),
         breakpoints: new Set(),
@@ -194,6 +207,8 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
         colors: sortStrings(result.colors),
         spacings: sortStrings(result.spacings),
         fonts: sortStrings(result.fonts),
+        textSizes: sortStrings(result.textSizes),
+        fontWeights: sortStrings(result.fontWeights),
         radii: sortStrings(result.radii),
         shadows: sortStrings(result.shadows),
         breakpoints: sortStrings(result.breakpoints),
@@ -214,6 +229,8 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
         colors: new Set(),
         spacings: new Set(),
         fonts: new Set(),
+        textSizes: new Set(),
+        fontWeights: new Set(),
         radii: new Set(),
         shadows: new Set(),
         breakpoints: new Set(),
@@ -229,6 +246,8 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
         colors: sortStrings(merged.colors),
         spacings: sortStrings(merged.spacings),
         fonts: sortStrings(merged.fonts),
+        textSizes: sortStrings(merged.textSizes),
+        fontWeights: sortStrings(merged.fontWeights),
         radii: sortStrings(merged.radii),
         shadows: sortStrings(merged.shadows),
         breakpoints: sortStrings(merged.breakpoints),

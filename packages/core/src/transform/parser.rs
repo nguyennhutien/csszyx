@@ -77,13 +77,30 @@ pub fn parse_source_shell(file: &TransformFile) -> ParsedSourceShell {
         visitor.ast_budget_exceeded
     };
 
+    let mut diagnostics: Vec<String> = parsed
+        .errors
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
+    if !parsed.errors.is_empty() || parsed.panicked {
+        // A file the parser rejects contributes nothing (or only fragments) to
+        // the safelist, and unlike the JS engines there is no Babel fallback on
+        // the native path — so make the skip observable. The bundler plugin
+        // promotes this marker to a build warning when the file yielded no
+        // classes, instead of letting the classes die silently under
+        // Tailwind `source(none)`.
+        diagnostics.insert(
+            0,
+            format!(
+                "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
+                file.filename,
+                parsed.errors.len()
+            ),
+        );
+    }
     ParsedSourceShell {
         ir,
-        diagnostics: parsed
-            .errors
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect(),
+        diagnostics,
         panicked: parsed.panicked,
         ast_budget_exceeded,
         timings,
@@ -95,7 +112,20 @@ fn elapsed_ns(start: Instant) -> u64 {
 }
 
 fn source_type_for_path(filename: &str) -> SourceType {
-    SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx())
+    let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
+    // React-17-era codebases routinely keep JSX in plain `.js` files (Babel and
+    // swc accept that by default). oxc maps `.js` to a JSX-less grammar, so the
+    // parse failed and the file silently contributed NOTHING to the safelist —
+    // whole files of classes went missing under the native engine while the JS
+    // engines recovered via the Babel fallback. JSX-enabled parsing of plain JS
+    // is a superset (a leading `<` is a syntax error otherwise), so opt every
+    // JavaScript file in. TypeScript stays as mapped: `.ts` genuinely cannot
+    // carry JSX (generic-cast ambiguity) and `.tsx` already parses it.
+    if source_type.is_javascript() {
+        source_type.with_jsx(true)
+    } else {
+        source_type
+    }
 }
 
 struct CsszyxIrVisitor<'source, 'ir, 'p> {
@@ -546,7 +576,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             return;
         };
         match callee.name.as_str() {
-            "dynamic" => {
+            // szr(static-object) resolves the same classes at runtime that
+            // dynamic() would inject; both need their literal args safelisted.
+            "dynamic" | "szr" => {
                 let Some(object) = static_object_from_argument(argument, self.resolve_context())
                 else {
                     return;
@@ -598,16 +630,22 @@ fn lenient_szv_config_from_argument(
     argument: &Argument<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<StaticSzObject> {
-    let object = match argument {
-        Argument::ObjectExpression(object) => object,
-        Argument::Identifier(identifier) => {
+    // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
+    // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
+    let object = match argument.as_expression().map(unwrap_expression) {
+        Some(Expression::ObjectExpression(object)) => object,
+        Some(Expression::Identifier(identifier)) => {
             // Only a `const` binding is followed (never a reassigned `let`), to
             // match the const-guarded resolution on the Babel/oxc paths.
-            match ctx.scope.resolve_const_initializer_before(
-                &identifier.name,
-                identifier.span.start,
-                ctx.program,
-            )? {
+            match ctx
+                .scope
+                .resolve_const_initializer_before(
+                    &identifier.name,
+                    identifier.span.start,
+                    ctx.program,
+                )
+                .map(unwrap_expression)?
+            {
                 Expression::ObjectExpression(object) => object,
                 _ => return None,
             }
@@ -1611,9 +1649,12 @@ fn partial_object_from_object_expression(
                 if !is_runtime_expression(&property.value) {
                     return None;
                 }
+                // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
+                // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
+                // — redundant parens broke rust==oxc byte parity.
                 dynamic_css_vars.push(dynamic_css_var_from_property(
                     &key,
-                    text_span(property.value.span()),
+                    text_span(unwrap_expression(&property.value).span()),
                     variant_prefix,
                 ));
             }
@@ -2768,6 +2809,43 @@ mod tests {
         // full set of possible runtime outputs.
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert_eq!(lowered.classes, ["p-4", "p-8"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_bare_szr_literal_args() {
+        let source =
+            r#"import {szr} from "@csszyx/runtime"; export const c = szr({ tracking: "widest" });"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        assert!(
+            parsed
+                .ir
+                .extracted_classes
+                .contains(&"tracking-widest".to_string()),
+            "bare szr literal args must reach the safelist: {:?}",
+            parsed.ir.extracted_classes
+        );
+    }
+
+    #[test]
+    fn parser_shell_extracts_szv_catalog_through_ts_wrappers() {
+        // `satisfies` / `as` are type-level; extraction must look through them
+        // on the config argument and inside the variants tree.
+        let source = r#"import {szv} from "@csszyx/runtime"; export const t = szv({ variants: { c: { blue: { bg: "tag-blue" } } satisfies Record<string, object> } } satisfies object);"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        assert!(
+            parsed
+                .ir
+                .extracted_classes
+                .contains(&"bg-tag-blue".to_string()),
+            "szv catalog should extract through TS wrappers: {:?}",
+            parsed.ir.extracted_classes
+        );
     }
 
     #[test]

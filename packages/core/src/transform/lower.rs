@@ -562,6 +562,14 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
         return Some(format!("{prefix}[animation-delay:{ms}]"));
     }
 
+    // A purely numeric key can never be a CSS property or Tailwind utility —
+    // it is almost always a numeric lookup table (`{ 50: 100 }`) swallowed by
+    // extraction, and the fallback below would mint garbage classes like
+    // `50-100` straight into the safelist. Emit nothing (matches the JS core).
+    if property_prefix(key).is_none() && key.parse::<f64>().is_ok() {
+        return None;
+    }
+
     // Unknown keys fall back to a kebab-cased utility name (breakWord →
     // break-word) the way the oxc path does, instead of the raw camelCase key.
     let class_key: Cow<str> =

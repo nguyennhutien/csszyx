@@ -109,19 +109,74 @@ export function normalizeBase(base: string): string {
 }
 
 /**
+ * `BOX_ROLE_PREFIXES` bucketed by first dash-segment: a matching prefix always
+ * shares the base's first segment, so per-token classification scans ~2 entries
+ * instead of all 267 while returning exactly what the full ordered scan did.
+ * Shared with `merge-classes.ts` (szcn), which classifies through the same
+ * table.
+ */
+export const BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<
+    string,
+    ReadonlyArray<[string, (typeof BOX_ROLE_PREFIXES)[number][1]]>
+> = (() => {
+    const buckets = new Map<string, Array<[string, (typeof BOX_ROLE_PREFIXES)[number][1]]>>();
+    for (const [prefix, entry] of BOX_ROLE_PREFIXES) {
+        const segment = prefix.split('-', 1)[0] as string;
+        let bucket = buckets.get(segment);
+        if (!bucket) {
+            bucket = [];
+            buckets.set(segment, bucket);
+        }
+        bucket.push([prefix, entry]);
+    }
+    return buckets;
+})();
+
+/**
+ * Per-token classification memo. `inspect` is a pure function of the static
+ * generated tables (custom szcn theme groups do not affect box roles), so
+ * entries never invalidate; the cap only bounds adversarial dynamic classNames.
+ * The cached info objects are shared across callers — every consumer
+ * (`splitBox`, `matches`, `classify`) reads, never mutates.
+ */
+const INSPECT_MEMO_MAX = 4096;
+const inspectMemo = new Map<string, TokenInfo | undefined>();
+
+/**
  * Classify a single class token, or `undefined` if csszyx does not own it.
+ * `splitBox` runs this per token per render at the leaf of a layered
+ * design-system component, so it is memoized per token.
  *
  * @param token - A single class token to classify.
  * @returns Token info (role, category, base, value), or `undefined` if unowned.
  */
 function inspect(token: string): TokenInfo | undefined {
+    if (inspectMemo.has(token)) {
+        return inspectMemo.get(token);
+    }
+    const info = inspectUncached(token);
+    if (inspectMemo.size >= INSPECT_MEMO_MAX) {
+        inspectMemo.clear();
+    }
+    inspectMemo.set(token, info);
+    return info;
+}
+
+/**
+ * The uncached classification — see {@link inspect}.
+ *
+ * @param token - A single class token to classify.
+ * @returns Token info, or `undefined` if unowned.
+ */
+function inspectUncached(token: string): TokenInfo | undefined {
     const base = normalizeBase(stripVariant(token));
     if (!base) return undefined;
 
     const exact = BOX_ROLE_TOKENS.get(base);
     if (exact) return { ...exact, base, value: base };
 
-    for (const [prefix, entry] of BOX_ROLE_PREFIXES) {
+    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
+    for (const [prefix, entry] of bucket) {
         if (base === prefix) return { ...entry, base, value: '' };
         if (base.startsWith(`${prefix}-`)) {
             return { ...entry, base, value: base.slice(prefix.length + 1) };

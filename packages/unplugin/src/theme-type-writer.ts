@@ -76,6 +76,12 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
     if (theme.fonts.length > 0) {
         entries.push(`        fonts: ${toUnion(theme.fonts)};`);
     }
+    if (theme.textSizes.length > 0) {
+        entries.push(`        textSizes: ${toUnion(theme.textSizes)};`);
+    }
+    if (theme.fontWeights.length > 0) {
+        entries.push(`        fontWeights: ${toUnion(theme.fontWeights)};`);
+    }
     if (theme.radii.length > 0) {
         entries.push(`        radii: ${toUnion(theme.radii)};`);
     }

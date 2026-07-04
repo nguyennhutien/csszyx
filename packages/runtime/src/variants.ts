@@ -24,10 +24,14 @@ type VariantSelection<V extends VariantSchema> = {
     [K in keyof V]?: keyof V[K] | null | undefined;
 };
 
-/** Configuration for a variant component: base styles, variants, and defaults. */
+/**
+ * Configuration for a variant component: base styles, variants, and defaults.
+ * `variants` is optional — a base-only config is a legitimate way to declare
+ * one compiled-and-extracted class bundle for reuse.
+ */
 interface SzvConfig<V extends VariantSchema> {
     base?: SzObject;
-    variants: V;
+    variants?: V;
     defaultVariants?: Partial<VariantSelection<V>>;
 }
 
@@ -105,9 +109,15 @@ function validateSzvConfig(config: unknown): boolean {
     if (config.base !== undefined && !isPlainObject(config.base)) {
         devWarn(`szv(config): base must be an sz object, got ${describe(config.base)}.`);
     }
+    // A base-only config (no `variants` key) is valid: it declares one reusable
+    // class bundle. Warning here while still returning the base object was the
+    // worst of both — the warning spammed and the behaviour didn't change.
+    if (config.variants === undefined) {
+        return true;
+    }
     if (!isPlainObject(config.variants)) {
         devWarn(
-            `szv(config): variants is required and must be an object, got ${describe(config.variants)}. Ignoring.`,
+            `szv(config): variants must be an object when present, got ${describe(config.variants)}. Ignoring.`,
         );
         return false;
     }
@@ -235,20 +245,26 @@ export function szv<V extends VariantSchema>(
 
     return function szVariantFn(selection?: VariantSelection<V>): SzObject {
         if (!configValid) {
-            return isPlainObject(config?.base) ? { ...(config.base as SzObject) } : {};
+            return attachStringCoercionGuard(
+                isPlainObject(config?.base) ? { ...(config.base as SzObject) } : {},
+            );
         }
         // Validate the selection tokens (dev only): an unknown variant dimension
         // or an unknown value silently produced no styles before.
         if (process.env.NODE_ENV !== 'production' && selection) {
             for (const key of Object.keys(selection)) {
-                if (!(key in config.variants)) {
+                if (!(key in (config.variants ?? {}))) {
                     devWarn(
                         `szv()(selection): unknown variant "${key}" — not declared in config.variants.`,
                     );
                     continue;
                 }
                 const val = (selection as Record<string, unknown>)[key];
-                if (val !== null && val !== undefined && !(String(val) in config.variants[key])) {
+                if (
+                    val !== null &&
+                    val !== undefined &&
+                    !(String(val) in (config.variants?.[key] ?? {}))
+                ) {
                     devWarn(
                         `szv()(selection): "${String(val)}" is not a value of variant "${key}" — it has no styles.`,
                     );
@@ -279,7 +295,7 @@ export function szv<V extends VariantSchema>(
                 continue;
             }
 
-            const variantObj = config.variants[variantKey][selectedValue as string];
+            const variantObj = config.variants?.[variantKey]?.[selectedValue as string];
             // Only merge a plain sz object — a primitive/array at this slot is a
             // mis-shaped config (already warned by validateSzvConfig) and would
             // otherwise spread into char-indexed keys.
@@ -288,6 +304,37 @@ export function szv<V extends VariantSchema>(
             }
         }
 
-        return result;
+        return attachStringCoercionGuard(result);
     };
+}
+
+/**
+ * Dev-only trap for the classic misuse `className={someSzv({ v })}`: an szv
+ * factory returns the sz OBJECT (only an `sz=` attribute position receives the
+ * compile-time wrapping), so assigning it to className silently rendered
+ * `class="[object Object]"`. The DOM coerces via `toString`, so a
+ * non-enumerable override fires exactly at the misuse site — spreads,
+ * Object.entries-based transforms, and JSON never see it. Production behaviour
+ * is untouched.
+ *
+ * @param result - The sz object a variant factory is about to return.
+ * @returns The same object, with the dev-only coercion trap attached.
+ */
+function attachStringCoercionGuard(result: SzObject): SzObject {
+    if (process.env.NODE_ENV !== 'production') {
+        Object.defineProperty(result, 'toString', {
+            value: (): string => {
+                devWarn(
+                    'szv() returned an sz OBJECT that was used as a string (e.g. ' +
+                        'className={someSzv({...})}) — this renders "[object Object]". ' +
+                        'Pass it to an sz= prop, or resolve it with szr(...) first.',
+                );
+                return '';
+            },
+            enumerable: false,
+            writable: true,
+            configurable: true,
+        });
+    }
+    return result;
 }

@@ -52,11 +52,28 @@ export interface HydrationError {
 }
 
 /**
+ * Cap on retained hydration errors. Each error can hold an element reference,
+ * and the state is module-level — without a bound, an SPA hitting recurring
+ * aborts across navigations would retain every detached subtree it ever
+ * aborted. Oldest errors are evicted first; recent ones matter for debugging.
+ */
+const MAX_HYDRATION_ERRORS = 100;
+
+/**
  * Global hydration state.
+ *
+ * `abortedSubtrees` is a WeakSet so an aborted subtree that leaves the DOM can
+ * be garbage-collected — membership only needs to answer `isHydrationAborted`
+ * for elements someone still holds. The count and clear semantics that a
+ * WeakSet cannot provide live in `abortedSubtreeCount` (counts abort marks
+ * minus recoveries this session, independent of element lifetime) and in
+ * replacing the WeakSet wholesale on clear. The DOM attribute written by
+ * `abortHydration` remains the durable marker.
  */
 interface HydrationState {
     errors: HydrationError[];
-    abortedSubtrees: Set<HTMLElement>;
+    abortedSubtrees: WeakSet<HTMLElement>;
+    abortedSubtreeCount: number;
     recoveryAllowed: boolean;
 }
 
@@ -65,7 +82,8 @@ interface HydrationState {
  */
 const state: HydrationState = {
     errors: [],
-    abortedSubtrees: new Set(),
+    abortedSubtrees: new WeakSet(),
+    abortedSubtreeCount: 0,
     recoveryAllowed: false,
 };
 
@@ -366,8 +384,12 @@ export function verifyMangleMapIntegrity(): boolean {
  * ```
  */
 export function abortHydration(element: HTMLElement, error: HydrationError): void {
-    // Step 1: Mark subtree as aborted
-    state.abortedSubtrees.add(element);
+    // Step 1: Mark subtree as aborted (idempotent — a re-abort of the same
+    // element must not inflate the count).
+    if (!state.abortedSubtrees.has(element)) {
+        state.abortedSubtrees.add(element);
+        state.abortedSubtreeCount++;
+    }
 
     // Step 2: Preserve static HTML (no re-render needed, just mark)
     // React/framework-specific implementation would go here
@@ -383,11 +405,15 @@ export function abortHydration(element: HTMLElement, error: HydrationError): voi
     // For now, add a marker that frameworks can check
     element.setAttribute('data-sz-interactive', 'false');
 
-    // Store error
+    // Store error, bounded — evict the oldest so the retained element
+    // references cannot grow past the cap.
     state.errors.push({
         ...error,
         element,
     });
+    if (state.errors.length > MAX_HYDRATION_ERRORS) {
+        state.errors.shift();
+    }
 }
 
 /**
@@ -491,7 +517,9 @@ export function attemptCSRRecovery(element: HTMLElement): boolean {
     element.removeAttribute('data-sz-abort-reason');
     element.removeAttribute('data-sz-interactive');
 
-    state.abortedSubtrees.delete(element);
+    if (state.abortedSubtrees.delete(element)) {
+        state.abortedSubtreeCount--;
+    }
 
     return true;
 }
@@ -516,16 +544,21 @@ export function getHydrationErrors(): HydrationError[] {
  */
 export function clearHydrationErrors(): void {
     state.errors = [];
-    state.abortedSubtrees.clear();
+    state.abortedSubtrees = new WeakSet();
+    state.abortedSubtreeCount = 0;
 }
 
 /**
  * Gets the count of aborted subtrees.
  *
+ * Counts abort marks minus recoveries this session. Aborted elements that were
+ * garbage-collected after leaving the DOM stay counted — the number reports
+ * how many aborts happened, not how many aborted elements are still alive.
+ *
  * @returns {number} Number of aborted subtrees
  */
 export function getAbortedSubtreeCount(): number {
-    return state.abortedSubtrees.size;
+    return state.abortedSubtreeCount;
 }
 
 // ============================================================================
