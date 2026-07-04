@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/runtime",
-  "version": "0.10.11",
+  "version": "0.10.12",
   "description": "Runtime helpers and hydration guards for csszyx",
   "keywords": [
     "csszyx",
