@@ -1,11 +1,14 @@
 # @csszyx/core
 
-> Rust/WASM core for CSSzyx -- encoder, checksum, collision detection, and recovery tokens.
+> Rust core for CSSzyx -- the native transform engine, encoder, checksum, collision detection, and recovery tokens.
 
-Compiled to WebAssembly, this package provides the performance-critical operations for the CSSzyx ecosystem. It runs in Node.js, browsers, and edge environments.
+The Rust core ships in two forms:
 
-The future Node-native transform boundary is documented in
-[NATIVE-TRANSFORM.md](./NATIVE-TRANSFORM.md). Existing WASM exports stay stable.
+- **Native N-API addon** (per-platform `@csszyx/core-*` optional packages) —
+  the default source-transform engine the build plugin uses since v0.9. The
+  boundary is documented in [NATIVE-TRANSFORM.md](./NATIVE-TRANSFORM.md).
+- **WebAssembly** — the WASM exports below run in Node.js, browsers, and edge
+  environments, and stay stable independently of the native engine.
 
 ## Installation
 

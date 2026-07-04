@@ -1,206 +1,31 @@
-# CSSzyx Documentation
+# docs/ — specifications and internal docs
 
-Official documentation for CSSzyx, built with VitePress.
+This directory holds the **specification sources** for CSSzyx. It is not the
+documentation website: the user-facing docs site (csszyx.com) is an Astro
+Starlight app that lives in [`apps/docs`](../apps/docs) — run it with
+`pnpm --filter @csszyx/docs dev` from the repo root.
 
-## Development
+## What lives here
 
-### Install Dependencies
+| Path                                           | Purpose                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`specs/snippets/`](./specs/snippets)          | **The sz-prop specification** — per-category mapping tables (`sz` key → Tailwind class), edge cases, and notes. Together with `packages/compiler/tests/` these are the source of truth for what the compiler supports; the website and `llms*.txt` files are derived from them. |
+| [`specs/SPEC_INDEX.md`](./specs/SPEC_INDEX.md) | Index into the snippet categories.                                                                                                                                                                                                                                              |
+| [`guides/migration.md`](./guides/migration.md) | Migration notes (Tailwind `className` → `sz`).                                                                                                                                                                                                                                  |
+| [`security.md`](./security.md)                 | Security notes for runtime injection (`purifySz`, untrusted sz input).                                                                                                                                                                                                          |
 
-From the monorepo root:
+When changing sz-prop behavior, the snippet tables here must be updated in the
+same change as the compiler tests, the website reference pages, and the
+`llms*.txt` files — the four surfaces must tell the same truth.
 
-```bash
-pnpm install
-```
+## Legacy content
 
-### Start Dev Server
-
-```bash
-cd docs
-pnpm dev
-```
-
-The documentation site will be available at [http://localhost:5173](http://localhost:5173).
-
-### Build for Production
-
-```bash
-pnpm build
-```
-
-Output will be in `docs/.vitepress/dist`.
-
-### Preview Production Build
-
-```bash
-pnpm preview
-```
-
-## Structure
-
-```
-docs/
-├── .vitepress/
-│   └── config.ts          # VitePress configuration
-├── guide/
-│   ├── what-is-csszyx.md  # Introduction
-│   ├── getting-started.md # Quick start guide
-│   ├── installation.md    # Installation guide
-│   ├── object-syntax.md   # Object syntax guide
-│   ├── runtime-helpers.md # Runtime helpers guide
-│   ├── build-pipeline.md  # Build pipeline docs
-│   └── ssr-safety.md      # SSR safety guide
-├── api/
-│   ├── compiler.md        # Compiler API reference
-│   ├── runtime.md         # Runtime API reference
-│   └── types.md           # Types API reference
-├── examples/
-│   ├── vite-react.md      # Vite + React example
-│   └── nextjs.md          # Next.js example
-├── config/
-│   ├── overview.md        # Configuration overview
-│   ├── development.md     # Development config
-│   └── production.md      # Production config
-├── index.md               # Homepage
-└── package.json
-```
-
-## Writing Documentation
-
-### Markdown Features
-
-VitePress supports:
-
-- GitHub-flavored Markdown
-- Syntax highlighting
-- Custom containers
-- Table of contents
-- Emoji :tada:
-
-### Code Blocks
-
-Use syntax highlighting:
-
-\`\`\`tsx
-import { \_sz } from '@csszyx/runtime';
-
-function Component() {
-return <div className={\_sz('p-4', 'bg-red-500')} />;
-}
-\`\`\`
-
-### Custom Containers
-
-Highlight important information:
-
-::: tip
-This is a tip
-:::
-
-::: warning
-This is a warning
-:::
-
-::: danger
-This is a danger notice
-:::
-
-### Links
-
-Internal links are automatically detected:
-
-- Relative: `[Getting Started](./getting-started.md)`
-- Absolute: `[API Reference](/api/runtime)`
-
-### Images
-
-Place images in `docs/public/`:
-
-```md
-![Alt text](/images/example.png)
-```
-
-## Contributing
-
-### Adding a New Page
-
-1. Create markdown file in appropriate directory
-2. Update sidebar in `.vitepress/config.ts`
-3. Test locally with `pnpm dev`
-4. Submit PR
-
-### Style Guide
-
-- Use **bold** for emphasis
-- Use `code` for inline code
-- Use code blocks for examples
-- Keep paragraphs concise
-- Use headings hierarchically (h2 → h3 → h4)
-
-### Code Examples
-
-- Provide complete, runnable examples
-- Include TypeScript types
-- Add comments for clarity
-- Show both input and output when relevant
-
-### API Documentation
-
-Follow this structure:
-
-```md
-## FunctionName
-
-Brief description.
-
-**Signature:**
-\`\`\`ts
-function name(param: Type): ReturnType
-\`\`\`
-
-**Parameters:**
-
-- `param` - Description
-
-**Returns:**
-Description of return value
-
-**Example:**
-\`\`\`tsx
-// Example code
-\`\`\`
-```
-
-## Deployment
-
-Documentation can be deployed to:
-
-- Vercel
-- Netlify
-- GitHub Pages
-- Any static hosting
-
-### GitHub Pages
-
-1. Build the docs:
-
-```bash
-pnpm build
-```
-
-2. Deploy `.vitepress/dist` directory
-
-### Vercel
-
-1. Connect repository
-2. Set build command: `pnpm build`
-3. Set output directory: `docs/.vitepress/dist`
-
-## Resources
-
-- [VitePress Documentation](https://vitepress.dev/)
-- [Markdown Guide](https://www.markdownguide.org/)
-- [Vue 3 in Markdown](https://vitepress.dev/guide/using-vue)
+`.vitepress/`, `guide/`, `api/`, `config/`, `examples/`, and `index.md` are the
+remains of an earlier VitePress site that predates `apps/docs`. The local
+`package.json` is not part of the pnpm workspace, so this content is not built
+or deployed anywhere. Do not update it — new documentation goes to
+`apps/docs/src/content/docs/`.
 
 ## License
 
-MIT © 2024-present csszyx contributors
+MIT

@@ -25,6 +25,7 @@ import type {
   CsszyxConfig,
   RecoveryManifest,
   BuildResult,
+  Szs, // slot-map type for the `szs` prop (Szs<'title' | 'body'>)
 } from "@csszyx/types";
 ```
 

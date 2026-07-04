@@ -1,13 +1,13 @@
 # @csszyx/runtime
 
-Runtime package for CSSzyx - provides zero-allocation className helpers, recovery token verification, and hydration guards.
+Runtime helpers for [CSSzyx](https://github.com/nguyennhutien/csszyx) — className
+composition, mangle-aware merging, variant authoring, box-model class routing,
+and SSR hydration guards.
 
-## Features
-
-- **Zero-Allocation Helpers**: Efficient className concatenation with `_sz()` and variants
-- **Token Verification**: Runtime validation of recovery tokens
-- **Hydration Guards**: SSR/CSR consistency with abort protocol
-- **Type Safety**: Full TypeScript support with strict types
+Most CSSzyx styling is **zero-runtime**: the build plugin compiles `sz` props to
+static class strings. This package is what runs in the browser for the parts
+that can't be static — resolving variant factories, merging overrides, routing
+classes to nested elements, and verifying the mangle map during hydration.
 
 ## Installation
 
@@ -15,238 +15,139 @@ Runtime package for CSSzyx - provides zero-allocation className helpers, recover
 pnpm add @csszyx/runtime
 ```
 
-## Usage
+Keep it a **direct** dependency: the build transform injects bare
+`@csszyx/runtime` imports into your modules, which strict package managers
+(pnpm) only resolve for direct dependencies.
 
-### Basic Concatenation
+## The helpers you author with
 
-```typescript
-import { _sz } from "@csszyx/runtime";
+> Helpers with a `_` prefix (`_sz`, `_szMerge`, …) are **compiler-injected** —
+> the build transform emits calls to them. Don't hand-author them; use the
+> public names below.
 
-// Basic usage
-const className = _sz("a", "b", "c");
-// Returns: "a b c"
+### `szr(...inputs)` — resolve to a className
 
-// With conditionals
-const className = _sz("base", isActive && "active", hasError && "error");
-// Returns: "base active" (if isActive is true, hasError is false)
+Resolves sz objects and/or class strings into one mangle-aware className.
+Concatenates, filters falsy — the hand-written name for what the compiler
+injects as `_sz`.
 
-// Filters out falsy values
-const className = _sz("a", null, "b", undefined, false, "c");
-// Returns: "a b c"
+```tsx
+import { szr, szv } from "@csszyx/runtime";
+
+const cardSz = szv({ variants: { pad: { lg: { p: 8 } } } });
+
+<div className={szr(cardSz({ pad: "lg" }), isActive && "active")} />;
 ```
 
-### Conditional Classes
+### `szcn(...classes)` — merge with last-wins override
 
-Plain JS conditionals compose with `_sz` — no dedicated helper needed:
+Merges className strings so a later class **overrides** an earlier one of the
+same utility — the merge for the single resolution point of a layered
+component, and for combining a part's defaults with a consumer override.
 
-```typescript
-import { _sz } from "@csszyx/runtime";
+```ts
+import { szcn } from "@csszyx/runtime";
 
-// Simple conditional
-_sz("base", isActive && "active");
-
-// With fallback
-_sz("base", isActive ? "active" : "inactive");
-
-// Switch-like — a plain object lookup
-const className =
-  {
-    success: "text-green-500",
-    error: "text-red-500",
-    warning: "text-yellow-500",
-  }[status] ?? "text-gray-500";
+szcn("gap-2 p-4", "gap-8"); // → 'p-4 gap-8'   (gap-8 wins)
+szcn("pb-4", "p-8"); // → 'p-8'         (shorthand covers the longhand)
+szcn("text-base", "text-sm"); // → 'text-sm'     (same property group)
+szcn("text-red-500", "text-sm"); // → 'text-red-500 text-sm' (color vs size co-exist)
 ```
 
-### Merging Classes
+Unlike `tailwind-merge`, `szcn` keeps working in production builds where CSSzyx
+**mangles** class names — it decodes tokens through the runtime mangle map
+before grouping. Fail-safe contract: a class it cannot confidently group is
+kept, never dropped.
 
-```typescript
-import { _szMerge } from "@csszyx/runtime";
+Custom `@theme` tokens join the merge groups automatically when the build
+plugin scans your CSS (`build.scanCss`); for utility-shaped classes written in
+plain CSS, register them once with `registerSzcnGroups({ colors: [...] })`.
 
-// Merge with duplicate removal
-_szMerge("a b", "b c", "c d");
-// Returns: "a b c d"
-```
+### `szv(config)` — variant authoring
 
-### Runtime Initialization
+Type-safe variant factory (the CVA equivalent for sz objects). Every variant
+combination is extracted and safelisted at build time.
 
-```typescript
-import { initRuntime } from "@csszyx/runtime";
+```tsx
+import { szv } from "@csszyx/runtime";
 
-// Initialize at app startup
-initRuntime({
-  development: process.env.NODE_ENV === "development",
-  strictHydration: true,
-  debug: false,
+const buttonSz = szv({
+  base: { display: "inline-flex", rounded: "md" },
+  variants: {
+    intent: {
+      primary: { bg: "blue-500", color: "white" },
+      danger: { bg: "red-500", color: "white" },
+    },
+  },
+  defaultVariants: { intent: "primary" },
 });
+
+<button sz={buttonSz({ intent: "danger" })} />;
 ```
 
-Per-element CSR recovery is opted in via the `szRecover` JSX attribute
-on individual elements (`"csr"` or `"dev-only"`) rather than a global
-runtime flag. See `@csszyx/runtime/verify` for token verification helpers.
+### `splitBox(className)` — route one className to nested elements
 
-### Recovery Token Verification
+Partitions a flat className at the CSS box-model border line: margin/position
+onto the outer element, padding/overflow/text onto the inner one. Comes with a
+class toolkit — `classify`, `has`, `pick`, `omit` — and sz-object analogs
+(`splitBoxSz`, `hasSz`, `pickSz`, `omitSz`).
 
-```typescript
-import { verifyRecoveryToken, loadManifestFromDOM } from "@csszyx/runtime";
+```ts
+import { splitBox } from "@csszyx/runtime";
 
-// Load manifest from embedded script
-const manifest = loadManifestFromDOM();
-
-if (manifest) {
-  const element = document.querySelector("[data-sz-recovery-token]");
-  const result = verifyRecoveryToken(element, manifest);
-
-  if (result.valid) {
-    console.log("Token verified:", result.tokenData);
-  } else {
-    console.error("Invalid token:", result.error);
-  }
-}
+const { outer, inner } = splitBox("m-4 px-2 md:flex");
+// outer: "m-4"   inner: "px-2 md:flex"
 ```
 
-### Hydration Guard
+### `szsClass(slot)` — narrow a compiled `szs` slot
 
-```typescript
-import {
-  guardHydration,
-  loadManifestFromDOM,
-  enableCSRRecovery,
-} from "@csszyx/runtime";
+Slots of the `szs` prop are authored as sz values but compiled to class strings
+at build time. `szsClass` narrows a slot to `string | undefined`, fail-safe
+against uncompiled values.
 
-// Enable CSR recovery in development
-if (process.env.NODE_ENV === "development") {
-  enableCSRRecovery();
-}
+```tsx
+import { szcn, szsClass } from "@csszyx/runtime";
 
-// Guard hydration process
+<h3 className={szcn("text-base font-medium", szsClass(szs?.title))} />;
+```
+
+### `stripSzProps(props)` — safe prop forwarding
+
+Removes `sz`/`szs`/`szRecover` from a props object before spreading onto a DOM
+element, so wrappers don't leak framework props into the DOM.
+
+## SSR hydration guards
+
+In production, CSSzyx injects a mangle map and SHA-256 checksum into the HTML.
+These helpers verify integrity during hydration and abort — preserving the
+server-rendered HTML — instead of hydrating against a mismatched map:
+
+```ts
+import { guardHydration, loadManifestFromDOM } from "@csszyx/runtime";
+
 const manifest = loadManifestFromDOM();
 if (manifest && !guardHydration(manifest)) {
-  console.error("Hydration guard failed - mangle map mismatch");
+  console.error("Hydration guard failed — mangle map mismatch");
 }
 ```
 
-## API Reference
+The full surface — `verifyMangleChecksum` / `verifyMangleChecksumAsync`,
+`abortHydration`, `isHydrationAborted`, `attemptCSRRecovery`,
+`verifyRecoveryToken`, `getHydrationErrors` — is documented in the
+[runtime reference](https://csszyx.com/docs/reference/runtime/). Per-element
+recovery is opted in via the `szRecover` JSX attribute (`"csr"` or
+`"dev-only"`), not a global flag.
 
-### Concatenation Helpers
+## Lite entry
 
-#### `_sz(...classes): string`
+`@csszyx/runtime/lite` ships only the injected concatenation helpers (`_sz`,
+`_sz2`, `_sz3`, `_szMerge`, `__szColorVar`) with no hydration machinery — for
+edge/serverless bundles that only need the compiled output to run.
 
-Zero-allocation className concatenation. Filters out falsy values.
+## Documentation
 
-#### `_sz2(a, b): string`
-
-Optimized two-argument version.
-
-#### `_sz3(a, b, c): string`
-
-Optimized three-argument version.
-
-#### `_szMerge(...classes): string`
-
-Merge className strings with duplicate removal.
-
-### Verification
-
-#### `verifyRecoveryToken(element, manifest): VerificationResult`
-
-Verifies a recovery token against the manifest.
-
-#### `loadManifestFromDOM(): RecoveryManifest | null`
-
-Loads the recovery manifest from the DOM.
-
-#### `hasRecoveryToken(element): boolean`
-
-Checks if an element has a recovery token.
-
-#### `getRecoveryMode(element): RecoveryMode | null`
-
-Gets the recovery mode from an element.
-
-#### `verifyAllTokens(root, manifest): VerificationResult[]`
-
-Verifies all tokens in a subtree.
-
-### Hydration
-
-#### `guardHydration(manifest): boolean`
-
-Guards the hydration process by verifying mangle map integrity.
-
-#### `loadMangleMapFromDOM(): MangleMap | null`
-
-Loads the checksum mangle map from `#__CSSZYX_MANGLE_MAP__`, with a fallback
-for the legacy `#__SZ_MANGLE_MAP__` id.
-
-#### `verifyMangleChecksum(expectedChecksum): boolean`
-
-Verifies the mangle map checksum.
-
-#### `abortHydration(element, error): void`
-
-Executes the hydration abort protocol for a subtree.
-
-#### `isHydrationAborted(element): boolean`
-
-Checks if a subtree has been aborted.
-
-#### `attemptCSRRecovery(element): boolean`
-
-Attempts client-side recovery for an aborted subtree.
-
-#### `enableCSRRecovery(): void`
-
-Enables CSR recovery mode (development only).
-
-#### `disableCSRRecovery(): void`
-
-Disables CSR recovery mode.
-
-#### `isCSRRecoveryAllowed(): boolean`
-
-Checks if CSR recovery is allowed.
-
-#### `getHydrationErrors(): HydrationError[]`
-
-Gets all hydration errors.
-
-#### `getAbortedSubtreeCount(): number`
-
-Gets the count of aborted subtrees.
-
-### Runtime Initialization
-
-#### `initRuntime(config?): void`
-
-Initializes the CSSzyx runtime with optional configuration.
-
-#### `getRuntimeConfig(): RuntimeConfig`
-
-Gets the current runtime configuration.
-
-#### `isRuntimeInitialized(): boolean`
-
-Checks if the runtime has been initialized.
-
-## Configuration Options
-
-```typescript
-interface RuntimeConfig {
-  development?: boolean; // Enable development mode features
-  strictHydration?: boolean; // Enable strict hydration checks
-  debug?: boolean; // Enable debug logging
-}
-```
-
-## Performance
-
-The `_sz()` family of functions are optimized for zero-allocation concatenation:
-
-- `_sz()` - Variadic version for any number of arguments
-- `_sz2()` - 10-15% faster for exactly 2 arguments
-- `_sz3()` - 10-15% faster for exactly 3 arguments
-
-Use the optimized versions in hot paths when the argument count is known at compile time.
+Full API reference with worked examples:
+<https://csszyx.com/docs/reference/runtime/>
 
 ## License
 
