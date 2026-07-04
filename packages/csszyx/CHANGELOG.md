@@ -2,10 +2,11 @@
 
 ## [0.10.12](https://github.com/nguyennhutien/csszyx/compare/v0.10.11...v0.10.12) (2026-07-04)
 
-
 ### Bug Fixes
 
-* umbrella runtime exports and linear script-id gates ([#122](https://github.com/nguyennhutien/csszyx/issues/122)) ([a5bba9a](https://github.com/nguyennhutien/csszyx/commit/a5bba9a8e10985cf25d514168d32d7b8ba0aa078))
+* umbrella runtime exports and linear script-id gates ([#122](https://github.com/nguyennhutien/csszyx/issues/122))
+* **csszyx:** export szr, szcn, and szsClass from the umbrella package ([#122](https://github.com/nguyennhutien/csszyx/issues/122))
+* **unplugin:** replace backtracking script-id regexes with linear scans ([#122](https://github.com/nguyennhutien/csszyx/issues/122))
 
 ## [0.10.11](https://github.com/nguyennhutien/csszyx/compare/v0.10.10...v0.10.11) (2026-07-04)
 
