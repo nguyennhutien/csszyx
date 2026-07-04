@@ -6,11 +6,15 @@ name: Release VS Code Extension
 #   - @csszyx/vscode is `private: true` in package.json so npm publish
 #     auto-skips it. Marketplace publish therefore needs its own trigger.
 #
-# Auto-trigger: release-please creates a single `v<version>` tag (e.g.
-# v0.7.0) when the umbrella release PR is merged on main. This workflow
-# listens for that tag pattern; the publish job then pauses on the
-# `vscode-publish` environment for maintainer approval before any
-# Marketplace API call. The version itself is read from
+# Auto-trigger: the release-please job in release.yml dispatches this
+# workflow explicitly after cutting a release. The `v*` tag trigger below
+# is kept as a manual belt-and-braces path, but it CANNOT fire for normal
+# releases: release-please creates tags with the workflow's GITHUB_TOKEN,
+# and GitHub never triggers workflows from events made with a workflow's
+# own token (Marketplace publishes were silently skipped from v0.9.1
+# until the explicit dispatch was added). Either way the publish job
+# pauses on the `vscode-publish` environment for maintainer approval
+# before any Marketplace API call. The version itself is read from
 # packages/vscode/package.json — extra-files keeps that field in sync
 # with every release.
 #

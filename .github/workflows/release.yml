@@ -17,6 +17,13 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
+  # Dispatch release-vscode.yml after a release is cut. Tags minted by
+  # release-please carry GITHUB_TOKEN identity, and GitHub never fires
+  # workflows from events created with a workflow's own token — so the
+  # extension's `on: push: tags` trigger has been dead since the v5
+  # upgrade. An explicit workflow_dispatch API call is exempt from that
+  # anti-recursion rule.
+  actions: write
 
 jobs:
   # release-please reads conventional-commit history since the last release
@@ -131,6 +138,33 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: node scripts/enrich-release-changelog.mjs
+
+      # Chain the VS Code Marketplace publish. release-vscode.yml listens on
+      # `v*` tag pushes, but the tags release-please creates carry this
+      # workflow's GITHUB_TOKEN, and GitHub never triggers workflows from
+      # events made with a workflow's own token — Marketplace publishes went
+      # silent from v0.9.1 until this dispatch was added. An explicit
+      # workflow_dispatch API call is exempt from that rule; the dispatched
+      # job still pauses on the `vscode-publish` environment for maintainer
+      # approval (same gate model as npm-publish), so this only STARTS the
+      # run, it cannot publish anything by itself. Mirrors the npm publish
+      # condition: a fresh release, or tags repaired by the recovery step.
+      - name: Dispatch VS Code Marketplace publish
+        if: >-
+          steps.release.outputs.releases_created == 'true' ||
+          (steps.recovery.outputs.recovered != '' && steps.recovery.outputs.recovered != '0')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          # Prefer the exact tag so the extension builds the released commit;
+          # recovery runs may not expose a tag output — fall back to main,
+          # whose package.json version release-please has already bumped.
+          ref="${TAG_NAME:-main}"
+          echo "Dispatching release-vscode.yml on ${ref}"
+          gh workflow run release-vscode.yml --ref "${ref}"
 
   build-native-artifacts:
     name: Build native package artifacts
@@ -249,9 +283,10 @@ jobs:
           if-no-files-found: error
 
   # Runs only when release-please created releases (i.e. the release PR was
-  # just merged). Builds the workspace and publishes to npm. Per-package
-  # tags created by release-please (e.g. @csszyx/vscode-0.6.0) will
-  # separately trigger release-vscode.yml for Marketplace publish.
+  # just merged). Builds the workspace and publishes to npm. The Marketplace
+  # publish for @csszyx/vscode is chained by the explicit dispatch step in
+  # the release-please job above — bot-created tags cannot trigger
+  # release-vscode.yml on their own.
   publish:
     name: Publish to npm
     needs: [release-please, build-native-artifacts]
