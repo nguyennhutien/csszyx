@@ -9,8 +9,8 @@
     "test:debug": "playwright test --debug"
   },
   "devDependencies": {
-    "@playwright/test": "^1.42.1",
-    "@types/node": "^20.11.24",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^20.19.43",
     "csszyx": "workspace:*",
     "@csszyx/compiler": "workspace:*",
     "@csszyx/runtime": "workspace:*",
