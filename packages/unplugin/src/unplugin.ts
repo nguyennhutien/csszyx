@@ -912,7 +912,7 @@ export function recordGlobalVarSourceFile(
     code: string | null,
 ): void {
     const normalizedFilename = normalizeSourceFilename(filename);
-    if (!/\.[tj]sx?(?:\?.*)?$/.test(normalizedFilename)) {
+    if (!matchesScriptExtension(normalizedFilename, SCRIPT_ID_EXTENSIONS)) {
         return;
     }
     if (code === null) {
@@ -1581,6 +1581,30 @@ function findPackageVersionFromFile(file: string, fallback: string): string {
  */
 function normalizeSourceFilename(filename: string): string {
     return filename.replace(/\\/g, '/');
+}
+
+/** TS/JS extensions accepted by the plain script-id gates. */
+const SCRIPT_ID_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'] as const;
+
+/** Script extensions accepted by the transform gate, incl. module flavours. */
+const SOURCE_MODULE_EXTENSIONS = [...SCRIPT_ID_EXTENSIONS, '.cts', '.mts', '.cjs', '.mjs'] as const;
+
+/**
+ * Whether a bundler id names a script file: an extension at the end of the id,
+ * or an extension immediately followed by a `?` query (Vite-style resource
+ * queries, including vue-SFC sub-request ids ending in `&lang.ts`).
+ *
+ * Exactly equivalent to the previous `/\.ext(\?.*)?$/`-shaped regexes, but in
+ * two linear string scans — the regex form backtracked polynomially on
+ * adversarial ids built from repeated `.js?` segments (CodeQL
+ * js/polynomial-redos), and ids reach this check from outside the plugin.
+ *
+ * @param id Bundler module id (possibly carrying a query).
+ * @param extensions Extensions to accept.
+ * @returns True when the id names a script file with one of the extensions.
+ */
+function matchesScriptExtension(id: string, extensions: readonly string[]): boolean {
+    return extensions.some(ext => id.endsWith(ext) || id.includes(`${ext}?`));
 }
 
 /**
@@ -2284,7 +2308,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             !isHardIgnored(id) &&
             !isUserExcluded(id) &&
             isUserIncluded(id) &&
-            (/\.([cm]?[tj]s|[tj]sx)(\?.*)?$/.test(id) ||
+            (matchesScriptExtension(id, SOURCE_MODULE_EXTENSIONS) ||
                 id.endsWith('.vue') ||
                 id.endsWith('.svelte'))
         );
@@ -3184,7 +3208,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     trackGlobalVarSourceFile(id, code);
                 }
 
-                if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(code, id);
                 }
 
@@ -3380,7 +3404,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     transformed = true;
                 }
 
-                if (/\.[tj]sx?(\?.*)?$/.test(id)) {
+                if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(transformedCode, id);
                     const record = createRSCModuleRecord(transformedCode, id);
                     state.rscModules.set(record.id, record);
