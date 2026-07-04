@@ -62,7 +62,8 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "dev": "unbuild --stub"
+    "dev": "unbuild --stub",
+    "test": "vitest run"
   },
   "dependencies": {
     "@csszyx/core": "workspace:*",
@@ -74,6 +75,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
+    "vitest": "^4.1.9",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1"
   },
