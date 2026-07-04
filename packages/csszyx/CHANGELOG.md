@@ -1,5 +1,37 @@
 # csszyx
 
+## [0.10.11](https://github.com/nguyennhutien/csszyx/compare/v0.10.10...v0.10.11) (2026-07-04)
+
+### Features
+
+* szcn merge groups, engine scan fixes, and runtime memory hardening ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **runtime:** szcn classifies ambiguous-prefix values into property groups ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **unplugin:** custom @theme tokens join szcn merge groups with zero wiring ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+
+### Bug Fixes
+
+* **runtime:** szcn under-merges font-* instead of dropping a class ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **compiler:** oxc keeps a className expression next to a static sz ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **compiler:** szv extraction looks through satisfies and as expressions ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **compiler:** native scan no longer silently loses JSX-in-.js files ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **runtime:** szv supports base-only configs and traps string coercion ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **compiler:** bare szr() static args reach the safelist ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **compiler:** nudge when slash-opacity may not apply to a theme token ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **compiler:** native engine unwraps parens in dynamic css-var emission ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **unplugin:** scan module-flavour files and announce the parser at build time ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **dynamic:** ref-count useSz so one unmount cannot wipe live styles ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **runtime:** bound hydration error state so aborted subtrees can be GC'd ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **dynamic:** warn once when runtime injection grows without bound ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **vscode:** drop debounced validation for documents closed mid-window ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **runtime:** remember szcn ambiguity drops across registration batches ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+
+### Performance
+
+* **runtime:** memoize szcn and bucket the prefix table ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **runtime:** memoize token classification and share the prefix buckets ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **unplugin:** retain source text only while global-var mangling is on ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+* **runtime:** bump szcn group generation only on real registry changes ([#120](https://github.com/nguyennhutien/csszyx/issues/120))
+
 ## [0.10.10](https://github.com/nguyennhutien/csszyx/compare/v0.10.9...v0.10.10) (2026-07-03)
 
 ### Features
