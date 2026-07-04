@@ -61,6 +61,7 @@ import {
     deleteRSCModuleRecord,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
+import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
@@ -217,21 +218,50 @@ const GLOBAL_VAR_ALIAS_MAP_OWNER = '\0csszyx:global-var-aliases';
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
-// Precomputed regexes for the runtime-helper import-injection pass. The
-// previous version called `new RegExp(...)` for every helper on every
-// file, which compiles the same three patterns ~tens of thousands of
-// times during a full project build. The helper set is closed (only
-// these three names ever ship), so we cache the regexes here and reuse
-// them on every transform. The matching string `@csszyx/runtime` only
-// appears in modules that already import a helper, so callers can also
-// skip the regex tests entirely when the runtime package is absent from
-// the transformed source.
-const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
-    _sz: /(?:import|export)\s+\{[^{}]*\b_sz\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    _szMerge: /(?:import|export)\s+\{[^{}]*\b_szMerge\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    __szColorVar:
-        /(?:import|export)\s+\{[^{}]*\b__szColorVar\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-};
+// Runtime-helper import detection now lives in runtime-import-scan.ts as a
+// linear forward scan — the previous `\{[^{}]*\bNAME\b[^{}]*\}` regexes were
+// quadratic-by-search (two open runs around the needle).
+
+/** Byte span of an opening tag `<name …>` inside a source string. */
+interface OpeningTagSpan {
+    /** Index of the `<`. */
+    readonly start: number;
+    /** Index of the `>`. */
+    readonly close: number;
+}
+
+/**
+ * Locate the FIRST `<tag …>` opening (case-insensitive), or null when absent.
+ * Linear indexOf scan replacing `/<tag([^>]*)>/i`, whose `[^>]*` re-scanned
+ * from each `<tag` position when no `>` followed.
+ *
+ * @param source - Source to scan.
+ * @param tag - Lowercase tag name.
+ * @returns The `<`…`>` span, or null when the tag is absent.
+ */
+function findOpeningTag(source: string, tag: string): OpeningTagSpan | null {
+    const lower = source.toLowerCase();
+    const marker = `<${tag}`;
+    let from = 0;
+    for (;;) {
+        const start = lower.indexOf(marker, from);
+        if (start === -1) {
+            return null;
+        }
+        // The char after `<tag` must end the tag name so `<body` does not match
+        // `<bodyguard` — the regex `<body[^>]*>` required a `>` or attribute
+        // char (whitespace/`/`) next, never a name character.
+        const after = source[start + marker.length];
+        if (after === undefined || after === '>' || after === '/' || /\s/.test(after)) {
+            const close = source.indexOf('>', start + marker.length);
+            if (close !== -1) {
+                return { start, close };
+            }
+            return null;
+        }
+        from = start + marker.length;
+    }
+}
 
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
@@ -1960,19 +1990,65 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // per-token like Pass 1 (known classes swapped, unknown left, already-
     // mangled tokens are not map keys so double-mangling cannot happen).
     result = result.replace(/\bszs:\s*\{([^{}]*)\}/g, (whole: string, body: string) => {
-        const mangledBody = body
-            .replace(
-                /"((?:[^"\\]|\\.)*)"/g,
-                (_m: string, inner: string) => `"${mangleClassString(inner)}"`,
-            )
-            .replace(
-                /'((?:[^'\\]|\\.)*)'/g,
-                (_m: string, inner: string) => `'${mangleClassString(inner)}'`,
-            );
+        const mangledBody = mangleQuotedStringLiterals(body, mangleClassString);
         return whole.replace(body, mangledBody);
     });
 
     return result;
+}
+
+/**
+ * Mangle the inner text of every `"…"` / `'…'` string literal in `body`,
+ * leaving everything else verbatim. Linear single forward pass replacing the
+ * two `/("|')((?:[^\1\\]|\\.)*)\1/g` replaces — those "unrolled" string regexes
+ * are linear WITHIN a match but quadratic ACROSS search positions (the `/g`
+ * scan retries from every quote when a literal is unterminated), which a ReDoS
+ * checker flags. A backslash escapes the next character inside a literal, as in
+ * the `\\.` alternative it replaces.
+ *
+ * @param body - The `szs` map body (already brace-bounded by the caller).
+ * @param mangle - Per-literal transform applied to each string's inner text.
+ * @returns `body` with every literal's inner text mangled.
+ */
+function mangleQuotedStringLiterals(body: string, mangle: (inner: string) => string): string {
+    let out = '';
+    let i = 0;
+    while (i < body.length) {
+        const quote = body[i];
+        if (quote !== '"' && quote !== "'") {
+            out += quote;
+            i++;
+            continue;
+        }
+        let inner = '';
+        let j = i + 1;
+        let closed = false;
+        while (j < body.length) {
+            const ch = body[j];
+            if (ch === '\\') {
+                // Escape: consume the backslash and the character it escapes.
+                inner += ch + (body[j + 1] ?? '');
+                j += 2;
+                continue;
+            }
+            if (ch === quote) {
+                closed = true;
+                break;
+            }
+            inner += ch;
+            j++;
+        }
+        if (!closed) {
+            // Unterminated — the regex would not have matched here; emit the
+            // opening quote and resume scanning after it.
+            out += quote;
+            i++;
+            continue;
+        }
+        out += `${quote}${mangle(inner)}${quote}`;
+        i = j + 1;
+    }
+    return out;
 }
 
 /**
@@ -2321,7 +2397,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns True when csszyx should process the CSS file.
      */
     function shouldProcessCss(id: string): boolean {
-        return !isHardIgnored(id) && !isUserExcluded(id) && /\.css(\?.*)?$/.test(id);
+        return !isHardIgnored(id) && !isUserExcluded(id) && matchesScriptExtension(id, ['.css']);
     }
 
     /**
@@ -3217,7 +3293,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // is not imported anywhere, so it's invisible to Tailwind. Appending an @source
                 // directive to the CSS that imports tailwindcss is the reliable way to ensure
                 // Tailwind generates CSS for the classes that csszyx transforms sz props into.
-                if (/\.css(\?.*)?$/.test(id)) {
+                if (matchesScriptExtension(id, ['.css'])) {
                     // Record that we observed the CSS pipeline at all — the
                     // missing-entry warning is only trustworthy once we have.
                     state.sawAnyCss = true;
@@ -3326,18 +3402,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     /(?:layout|Root|Document|app)\.tsx?$/i.test(id)
                 ) {
                     const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
-                    transformedCode = transformedCode.replace(
-                        /<html([^>]*)>/i,
-                        `<html$1 ${attrName}="${CHECKSUM_PLACEHOLDER}">`,
-                    );
+                    const htmlTag = findOpeningTag(transformedCode, 'html');
+                    if (htmlTag) {
+                        // Insert the attribute just before the `>`, after any
+                        // existing attributes — matching `<html$1 attr>`.
+                        transformedCode = `${transformedCode.slice(0, htmlTag.close)} ${attrName}="${CHECKSUM_PLACEHOLDER}"${transformedCode.slice(htmlTag.close)}`;
+                    }
 
                     // Inject mangle map debug script with placeholders
                     const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
-                    if (transformedCode.includes('<body')) {
-                        transformedCode = transformedCode.replace(
-                            /(<body[^>]*>)/i,
-                            `$1${debugScript}`,
-                        );
+                    const bodyTag = findOpeningTag(transformedCode, 'body');
+                    if (bodyTag) {
+                        // Insert the debug script right after the `<body …>` tag.
+                        transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${debugScript}${transformedCode.slice(bodyTag.close + 1)}`;
                     }
                     transformed = true;
                 }
@@ -3364,19 +3441,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     const hasRuntimeImport =
                         imports.length > 0 && transformedCode.includes('@csszyx/runtime');
                     const needed = hasRuntimeImport
-                        ? imports.filter(
-                              name => !RUNTIME_HELPER_IMPORT_RE[name]?.test(transformedCode),
-                          )
+                        ? imports.filter(name => !importsRuntimeHelper(transformedCode, name))
                         : imports;
                     if (needed.length > 0) {
-                        const existingImport = transformedCode.match(
-                            /^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m,
-                        );
+                        const existingImport = findRuntimeImportClause(transformedCode);
                         if (existingImport) {
                             // Append to the existing @csszyx/runtime import
                             transformedCode = transformedCode.replace(
-                                existingImport[0],
-                                `${existingImport[1]}, ${needed.join(', ')} } from '@csszyx/runtime'`,
+                                existingImport.statement,
+                                `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
                             );
                         } else {
                             const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;

@@ -1,13 +1,8 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
+import { importsRuntimeHelper } from './runtime-import-scan.js';
+
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
-
-const RUNTIME_HELPER_IMPORT_RE: Record<NextRuntimeHelper, RegExp> = {
-    _sz: /(?:import|export)\s+\{[^{}]*\b_sz\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    _szMerge: /(?:import|export)\s+\{[^{}]*\b_szMerge\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    __szColorVar:
-        /(?:import|export)\s+\{[^{}]*\b__szColorVar\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-};
 
 /** Runtime helpers emitted by csszyx compiler transforms. */
 export type NextRuntimeHelper = '_sz' | '_szMerge' | '__szColorVar';
@@ -43,7 +38,7 @@ export function injectNextRuntimeImports(
 
     const hasRuntimeImport = code.includes('@csszyx/runtime');
     const missing = hasRuntimeImport
-        ? helpers.filter(helper => !RUNTIME_HELPER_IMPORT_RE[helper].test(code))
+        ? helpers.filter(helper => !importsRuntimeHelper(code, helper))
         : helpers;
     if (missing.length === 0) {
         return { code, injected: [] };

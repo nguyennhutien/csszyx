@@ -633,22 +633,228 @@ function readRuntimeImportSymbols(source: string, clause: string): string[] {
  * @param code module source
  * @returns local import specifiers
  */
-function findLocalImportSources(code: string): string[] {
+/**
+ * Extract relative/absolute local module specifiers from `code`. Exported for
+ * the linear-scan equivalence test; the module graph consumes it via
+ * {@link createRSCModuleRecord}.
+ *
+ * @param code - Module source.
+ * @returns Local (`.`/`/`) import specifiers, in the legacy pass order.
+ */
+export function findLocalImportSources(code: string): string[] {
     const out: string[] = [];
-    const staticImportRe = /import\s+(?!type\b)(?:\S(?:.*\S)?\s+from\s+)?['"]([^'"]+)['"]/g;
-    const exportFromRe = /export\s+(?!type\b)\S(?:.*\S)?\s+from\s+['"]([^'"]+)['"]/g;
-    const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-
-    for (const re of [staticImportRe, exportFromRe, dynamicImportRe]) {
-        for (const match of code.matchAll(re)) {
-            const source = match[1];
-            if (source.startsWith('.') || source.startsWith('/')) {
-                out.push(source);
-            }
+    // Static `import … '<spec>'` and `export … from '<spec>'` are line-scoped:
+    // the old regexes used `.`, which never crosses a newline. Scanning each
+    // line with indexOf keeps that scope while dropping the `\S(?:.*\S)?` run
+    // that made the regexes quadratic-by-search. Order (all static, then all
+    // export) matches the previous two-regex pass.
+    //
+    // Behaviour is identical for the universal one-statement-per-line case. For
+    // the rare (formatter-discouraged) multiple-imports-on-one-line case, the
+    // old greedy `.*` collapsed them into a single match anchored on the LAST
+    // `from`, silently dropping the earlier specifiers; this scanner reports
+    // every one. That is the safe direction for the dependency graph — it can
+    // only ever find MORE edges, never miss one the old code caught.
+    for (const line of code.split('\n')) {
+        for (const spec of staticImportSpecifiers(line)) {
+            pushIfLocal(out, spec);
         }
     }
-
+    for (const line of code.split('\n')) {
+        for (const spec of exportFromSpecifiers(line)) {
+            pushIfLocal(out, spec);
+        }
+    }
+    // Dynamic `import( '<spec>' )` can span lines; this regex has no open run
+    // and is already linear.
+    for (const match of code.matchAll(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+        pushIfLocal(out, match[1]);
+    }
     return out;
+}
+
+/**
+ * Push `spec` when it is a relative/absolute local specifier.
+ *
+ * @param out - Accumulator.
+ * @param spec - A module specifier, or null to skip.
+ */
+function pushIfLocal(out: string[], spec: string | null): void {
+    if (spec !== null && (spec.startsWith('.') || spec.startsWith('/'))) {
+        out.push(spec);
+    }
+}
+
+/**
+ * Every quoted specifier from `import` statements on a single line, matching
+ * `import\s+(?!type\b)(?:\S(?:.*\S)?\s+from\s+)?['"]([^'"]+)['"]/g`: side-effect
+ * `import '<spec>'` or `import … from '<spec>'`, but never `import type …`. The
+ * old regex had no leading word boundary, so this keys only on `import` being
+ * followed by whitespace (the `\s+`), not on the character before it.
+ *
+ * @param line - One source line (no newline).
+ * @returns The specifiers, in order of appearance.
+ */
+function staticImportSpecifiers(line: string): string[] {
+    const specs: string[] = [];
+    for (const kw of allOccurrences(line, 'import')) {
+        const afterKw = skipSpaces(line, kw + 'import'.length);
+        // `import` must be followed by whitespace (\s+) then a non-`type` token.
+        if (afterKw === kw + 'import'.length || startsWithWord(line, afterKw, 'type')) {
+            continue;
+        }
+        // Side-effect form: a quote immediately follows `import `.
+        if (line[afterKw] === '"' || line[afterKw] === "'") {
+            const spec = readQuoted(line, afterKw);
+            if (spec !== null) {
+                specs.push(spec);
+            }
+            continue;
+        }
+        // Clause form: `import <clause> from '<spec>'`.
+        const spec = specifierAfterFrom(line, afterKw);
+        if (spec !== null) {
+            specs.push(spec);
+        }
+    }
+    return specs;
+}
+
+/**
+ * Every quoted specifier from `export … from` statements on a single line,
+ * matching `export\s+(?!type\b)\S(?:.*\S)?\s+from\s+['"]([^'"]+)['"]/g` — a
+ * re-export with a clause, never `export type …`.
+ *
+ * @param line - One source line (no newline).
+ * @returns The specifiers, in order of appearance.
+ */
+function exportFromSpecifiers(line: string): string[] {
+    const specs: string[] = [];
+    for (const kw of allOccurrences(line, 'export')) {
+        const afterKw = skipSpaces(line, kw + 'export'.length);
+        // Requires `\s+` after export, a non-`type` non-empty clause, then from.
+        if (afterKw === kw + 'export'.length || startsWithWord(line, afterKw, 'type')) {
+            continue;
+        }
+        const spec = specifierAfterFrom(line, afterKw);
+        if (spec !== null) {
+            specs.push(spec);
+        }
+    }
+    return specs;
+}
+
+/**
+ * From position `from` on a line, require a ` from ` keyword (whitespace on
+ * both sides) followed by a quoted specifier, and a non-empty clause before it.
+ *
+ * @param line - The line.
+ * @param clauseStart - Index where the import/export clause begins.
+ * @returns The specifier, or null.
+ */
+function specifierAfterFrom(line: string, clauseStart: number): string | null {
+    const fromAt = findKeywordFrom(line, clauseStart);
+    if (fromAt === -1) {
+        return null;
+    }
+    // A clause must sit between the keyword and `from` (the old `\S(?:.*\S)?`).
+    if (skipSpaces(line, clauseStart) >= fromAt) {
+        return null;
+    }
+    const afterFrom = skipSpaces(line, fromAt + 'from'.length);
+    return readQuoted(line, afterFrom);
+}
+
+/**
+ * Index of the first word-boundaried `from` at/after `at` that has whitespace
+ * before it, or -1.
+ *
+ * @param line - The line.
+ * @param at - Search start.
+ * @returns The `from` index, or -1.
+ */
+function findKeywordFrom(line: string, at: number): number {
+    let i = line.indexOf('from', at);
+    while (i !== -1) {
+        const before = line[i - 1];
+        const after = line[i + 'from'.length];
+        if (before !== undefined && /\s/.test(before) && after !== undefined && /\s/.test(after)) {
+            return i;
+        }
+        i = line.indexOf('from', i + 1);
+    }
+    return -1;
+}
+
+/**
+ * Read a `'…'` / `"…"` string starting at `at` (which must be the opening
+ * quote), returning its inner text with no quotes — mirroring `['"]([^'"]+)['"]`
+ * (at least one non-quote character; a backslash is an ordinary char here).
+ *
+ * @param line - The line.
+ * @param at - Index of the opening quote.
+ * @returns The inner text, or null when not a non-empty quoted string.
+ */
+function readQuoted(line: string, at: number): string | null {
+    const quote = line[at];
+    if (quote !== '"' && quote !== "'") {
+        return null;
+    }
+    const close = line.indexOf(quote, at + 1);
+    if (close <= at + 1) {
+        return null;
+    }
+    return line.slice(at + 1, close);
+}
+
+/**
+ * All indices where `word` appears. The old regexes had no leading word
+ * boundary before `import`/`export`, so every occurrence is a candidate; the
+ * `\s+`-after check in the callers does the real filtering.
+ *
+ * @param line - The line.
+ * @param word - The keyword.
+ * @returns Start indices in order.
+ */
+function allOccurrences(line: string, word: string): number[] {
+    const positions: number[] = [];
+    let i = line.indexOf(word);
+    while (i !== -1) {
+        positions.push(i);
+        i = line.indexOf(word, i + 1);
+    }
+    return positions;
+}
+
+/**
+ * Whether `word` starts at `at` as a whole word (followed by a non-word char).
+ *
+ * @param line - The line.
+ * @param at - Index to test.
+ * @param word - The word.
+ * @returns True on a whole-word match.
+ */
+function startsWithWord(line: string, at: number, word: string): boolean {
+    if (!line.startsWith(word, at)) {
+        return false;
+    }
+    const after = line[at + word.length];
+    return after === undefined || !/\w/.test(after);
+}
+
+/**
+ * First index at/after `at` that is not an ASCII space or tab on this line.
+ *
+ * @param line - The line.
+ * @param at - Search start.
+ * @returns The first non-space index.
+ */
+function skipSpaces(line: string, at: number): number {
+    let i = at;
+    while (i < line.length && /\s/.test(line[i] as string)) {
+        i++;
+    }
+    return i;
 }
 
 /**

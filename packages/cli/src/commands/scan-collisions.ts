@@ -54,17 +54,49 @@ const CLASS_SELECTOR_RE = /\.(-?[a-z_][\w-]*)/gi;
  * @returns text with non-selector regions blanked out.
  */
 function stripNonSelectorText(css: string): string {
-    return (
-        css
-            // /* block */ and // line comments (SCSS/Less).
-            .replace(/\/\*[\s\S]*?\*\//g, ' ')
-            .replace(/\/\/[^\n]*/g, ' ')
-            // url(...) — may be unquoted, e.g. url(hero.png).
-            .replace(/url\([^)]*\)/gi, ' ')
-            // 'single' and "double" quoted strings (@import paths, content, etc.).
-            .replace(/'[^']*'/g, ' ')
-            .replace(/"[^"]*"/g, ' ')
-    );
+    // Block comments and `url(…)` are blanked with a linear open→close scan
+    // instead of a regex: `[\s\S]*?`/`[^)]*` re-scanned from each opener on a
+    // stylesheet missing the closer (quadratic-by-search, ReDoS-flagged). The
+    // line-comment and quoted-string strips keep their regexes — a single
+    // negated class terminated by a different character is already linear.
+    return blankSpans(blankSpans(css, '/*', '*/'), 'url(', ')', true)
+        .replace(/\/\/[^\n]*/g, ' ')
+        .replace(/'[^']*'/g, ' ')
+        .replace(/"[^"]*"/g, ' ');
+}
+
+/**
+ * Replace every `open … close` span with a single space, scanning left to
+ * right. Equivalent to `.replace(/open[\s\S]*?close/g, ' ')` (shortest span,
+ * one space per span) but linear — a missing `close` cannot drive a
+ * quadratic re-scan.
+ *
+ * @param text - Text to blank spans in.
+ * @param open - Literal opening delimiter.
+ * @param close - Literal closing delimiter.
+ * @param caseInsensitive - Match the opener case-insensitively (e.g. `URL(`).
+ * @returns Text with each span collapsed to a space.
+ */
+function blankSpans(text: string, open: string, close: string, caseInsensitive = false): string {
+    const haystack = caseInsensitive ? text.toLowerCase() : text;
+    const needle = caseInsensitive ? open.toLowerCase() : open;
+    let out = '';
+    let i = 0;
+    for (;;) {
+        const start = haystack.indexOf(needle, i);
+        if (start === -1) {
+            out += text.slice(i);
+            return out;
+        }
+        const closeAt = text.indexOf(close, start + open.length);
+        if (closeAt === -1) {
+            // No closer — the regex would not have matched; keep the rest as-is.
+            out += text.slice(i);
+            return out;
+        }
+        out += `${text.slice(i, start)} `;
+        i = closeAt + close.length;
+    }
 }
 
 /**

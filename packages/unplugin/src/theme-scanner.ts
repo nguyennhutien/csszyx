@@ -191,12 +191,13 @@ export function parseThemeBlocks(cssContent: string): ParsedTheme {
     const stripped = stripLayerWrappers(cssContent);
     const blocks = extractThemeBlocks(stripped);
 
-    // Match CSS custom properties: --category-name: value;
-    const propPattern = /--([a-z][a-z0-9-]*)(?:\s*:[^;]+)?;/g;
-
+    // Extract custom-property NAMES from `--name: value;` / `--name;`
+    // declarations. See scanCustomPropertyNames — a linear scan replacing
+    // `/--([a-z][a-z0-9-]*)(?:\s*:[^;]+)?;/g`, whose `[^;]+` value run was
+    // quadratic-by-search on a `;`-less block.
     for (const block of blocks) {
-        for (const match of block.matchAll(propPattern)) {
-            const categorized = categorizeProperty(match[1]);
+        for (const name of scanCustomPropertyNames(block)) {
+            const categorized = categorizeProperty(name);
             if (categorized) {
                 result[categorized.category].add(categorized.token);
             }
@@ -262,4 +263,69 @@ export function mergeThemes(themes: ParsedTheme[]): ParsedTheme {
  */
 export function hasTokens(theme: ParsedTheme): boolean {
     return Object.values(theme).some(arr => arr.length > 0);
+}
+
+/**
+ * Yield the NAME of every `--name: value;` / `--name;` custom-property
+ * declaration in `block`, exactly as `/--([a-z][a-z0-9-]*)(?:\s*:[^;]+)?;/g`
+ * captured group 1 — including its terminator rules (a value, when present,
+ * must be non-empty and end at a `;`; otherwise the `;` follows the name
+ * directly). Linear: each `--` is examined once, with a single forward scan to
+ * the terminating `;`, so a `;`-less block can no longer drive the quadratic
+ * `[^;]+` re-scan.
+ *
+ * Exported for the equivalence test.
+ *
+ * @param block - The inside of a `@theme { … }` block.
+ * @returns The declared custom-property names, in source order.
+ */
+export function scanCustomPropertyNames(block: string): string[] {
+    const names: string[] = [];
+    let i = 0;
+    while (i < block.length) {
+        const dashes = block.indexOf('--', i);
+        if (dashes === -1) {
+            break;
+        }
+        // Name: `[a-z][a-z0-9-]*` right after `--`.
+        let end = dashes + 2;
+        if (end >= block.length || !/[a-z]/.test(block[end] as string)) {
+            // No valid name here — the /g scan would retry one char over,
+            // which matters for overlapping runs like `---name;`.
+            i = dashes + 1;
+            continue;
+        }
+        end++;
+        while (end < block.length && /[a-z0-9-]/.test(block[end] as string)) {
+            end++;
+        }
+        const name = block.slice(dashes + 2, end);
+
+        // `(?:\s*:[^;]+)?;` — try the optional `\s*:<value>` branch, else a `;`
+        // directly after the name.
+        let matchEnd = -1;
+        let cursor = end;
+        while (cursor < block.length && /\s/.test(block[cursor] as string)) {
+            cursor++;
+        }
+        if (block[cursor] === ':') {
+            const valueStart = cursor + 1;
+            const semi = block.indexOf(';', valueStart);
+            // `[^;]+` needs at least one non-`;` character before the `;`.
+            if (semi > valueStart) {
+                matchEnd = semi + 1;
+            }
+        }
+        if (matchEnd === -1 && block[end] === ';') {
+            matchEnd = end + 1;
+        }
+
+        if (matchEnd === -1) {
+            i = dashes + 1;
+            continue;
+        }
+        names.push(name);
+        i = matchEnd;
+    }
+    return names;
 }
