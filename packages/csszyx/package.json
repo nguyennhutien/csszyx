@@ -1,6 +1,6 @@
 {
   "name": "csszyx",
-  "version": "0.10.11",
+  "version": "0.10.12",
   "description": "Universal CSS-in-JS for Tailwind CSS with WASM core",
   "keywords": [
     "css",
