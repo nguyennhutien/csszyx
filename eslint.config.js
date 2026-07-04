@@ -73,8 +73,11 @@ export default [
             // option level) detects the rejecting-suffix class where a non-dotAll
             // `.*` before `$` fails on a newline — `/\.[tj]sx?(?:\?.*)?$/` was
             // measurably quadratic (`'.js?'.repeat(n) + '\n'`) and passed this
-            // config. CodeQL's js/polynomial-redos is the gate for that class;
-            // `recheck` also detects it if a local gate is ever wanted.
+            // config. That class is now caught by the recheck-backed
+            // `pnpm lint:redos` gate (eslint.redos.config.mjs), which runs in CI
+            // and verify-like-ci; CodeQL's js/polynomial-redos remains the cloud
+            // backstop. Keep this rule too — it is instant and runs in the editor,
+            // where the slow recheck pass does not.
             'regexp/no-super-linear-move': 'error',
         },
     },
