@@ -12,7 +12,7 @@
  */
 export const VERSION = '0.0.0';
 
-export type { Szs } from '@csszyx/compiler';
+export type { Szs, SzsCompiled, SzsProps } from '@csszyx/compiler';
 // Re-export all compiler types
 export type {
     BuildPhase,

@@ -1980,17 +1980,74 @@ export type SzPropValue = string | SzProps | SzArrayElement[];
  * Value of the `szs` prop — a map of a component's slot names to sz values, so a
  * consumer styles the parts a compound component renders internally. The build
  * transform compiles each slot VALUE to its Tailwind class string (keeping the
- * key), safelists and mangles the classes exactly like `sz`, and the component
- * forwards `props.szs?.<slot>` into the matching child's `className`.
+ * key), safelists and mangles the classes exactly like `sz`, and rewrites the
+ * whole attribute to `szsc` — the string-typed prop the component reads (see
+ * {@link SzsProps}).
  *
  * Component authors declare their slot set so consumers get autocompletion and
  * typo checking:
  *
  * @example
  * ```tsx
- * type CardProps = { szs?: Szs<'header' | 'icon'> };
+ * type CardProps = { title: string } & SzsProps<'header' | 'icon'>;
  * // consumer:
  * <Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
  * ```
  */
 export type Szs<Slots extends string = string> = Partial<Record<Slots, SzPropValue>>;
+
+/**
+ * The compiled form of an {@link Szs} slot map — what a component actually
+ * RECEIVES at runtime.
+ *
+ * The build replaces every `szs={{ … }}` call site with
+ * `szsc={{ slot: "class string" }}`, so slot values arrive as plain class
+ * strings and forward straight into a child `className` with no cast:
+ *
+ * @example
+ * ```tsx
+ * function Card({ szsc }: SzsProps<'header'>) {
+ *     return <div className={szsc?.header} />;
+ * }
+ * ```
+ */
+export type SzsCompiled<Slots extends string = string> = Partial<Record<Slots, string>>;
+
+/**
+ * Both faces of slot styling for a compound component, from ONE slot union.
+ *
+ * A prop cannot be typed differently for its writer and its reader, so slot
+ * styling is split into two props bridged by the compiler: consumers write
+ * `szs` (the sz-object authoring surface, with autocompletion), the build
+ * rewrites the attribute into `szsc` (compiled class strings), and the
+ * component reads only `szsc`. Declaring both through this helper keeps the
+ * two sides on the same slot union — adding a slot in one place can never
+ * silently desync the other.
+ *
+ * @example
+ * ```tsx
+ * type CardProps = { title: string } & SzsProps<'header' | 'icon'>;
+ *
+ * function Card({ title, szsc }: CardProps) {
+ *     return <div className={szsc?.header}>{title}</div>;
+ * }
+ * // consumer:
+ * <Card title="Hi" szs={{ header: { bg: 'gray-100' } }} />
+ * ```
+ */
+export interface SzsProps<Slots extends string = string> {
+    /**
+     * The AUTHORING face: consumers pass sz objects (or class strings) per
+     * slot. The compiler replaces this attribute at build time, so the
+     * component never receives it at runtime — read {@link SzsProps.szsc}.
+     */
+    szs?: Szs<Slots>;
+    /**
+     * The COMPILED face: class strings the build derived from the consumer's
+     * `szs`. This is the prop the component reads and forwards into child
+     * `className`s. `undefined` when the call site was not compiled (no `szs`
+     * passed, or the value broke the pure-literal v1 contract — the build
+     * warns in that case).
+     */
+    szsc?: SzsCompiled<Slots>;
+}

@@ -1983,14 +1983,15 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         return `${sep}${ws}"${mangled.join(' ')}"`;
     });
 
-    // Pass 4: `szs` slot maps. The compiled `szs={{ header: "bg-gray-100" }}`
-    // bundles to `szs: { header: "bg-gray-100", ... }` (a flat map of class
-    // strings), which none of the passes above match — the values sit after a
-    // `:`, not a className= prefix or a helper-argument separator. The `szs:`
-    // key makes the context unambiguous, so each quoted value is mangled
-    // per-token like Pass 1 (known classes swapped, unknown left, already-
-    // mangled tokens are not map keys so double-mangling cannot happen).
-    result = result.replace(/\bszs:\s*\{([^{}]*)\}/g, (whole: string, body: string) => {
+    // Pass 4: compiled szs slot maps. The compiler replaces `szs={{...}}` with
+    // `szsc={{ header: "bg-gray-100" }}`, which bundles to
+    // `szsc: { header: "bg-gray-100", ... }` (a flat map of class strings) —
+    // none of the passes above match it: the values sit after a `:`, not a
+    // className= prefix or a helper-argument separator. The `szsc:` key makes
+    // the context unambiguous, so each quoted value is mangled per-token like
+    // Pass 1 (known classes swapped, unknown left, already-mangled tokens are
+    // not map keys so double-mangling cannot happen).
+    result = result.replace(/\bszsc:\s*\{([^{}]*)\}/g, (whole: string, body: string) => {
         const mangledBody = mangleQuotedStringLiterals(body, mangleClassString);
         return whole.replace(body, mangledBody);
     });

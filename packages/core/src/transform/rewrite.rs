@@ -120,23 +120,28 @@ pub fn rewrite_static_sz_attributes_with_options(
         }
     }
 
-    // szs slot-map attributes: overwrite with the compiled per-slot class
-    // strings. All-string maps (pass-1 output) have no compiled slot and stay
-    // untouched, keeping the transform idempotent.
+    // szs slot-map attributes: replace the whole authoring attribute with the
+    // compiled per-slot class strings on `szsc` — the read-side prop typed as
+    // strings — so the component forwards `szsc?.<slot>` into a child
+    // className with no cast. Renamed even when every slot was already a
+    // class string (the component reads only `szsc`); idempotent because a
+    // `szsc` attribute is never collected as an szs attribute.
     for szs in &ir.szs_attributes {
-        if !szs.any_compiled {
-            continue;
-        }
         let body = szs
             .entries
             .iter()
             .map(|entry| format!("{}: {}", entry.key, entry.emit_text))
             .collect::<Vec<_>>()
             .join(", ");
+        let replacement = if body.is_empty() {
+            "szsc={{}}".to_string()
+        } else {
+            format!("szsc={{{{ {body} }}}}")
+        };
         magic.update_with(
             szs.attribute_span.start as usize,
             szs.attribute_span.end as usize,
-            format!("szs={{{{ {body} }}}}"),
+            replacement,
             UpdateOptions {
                 overwrite: true,
                 ..UpdateOptions::default()

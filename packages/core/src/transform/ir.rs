@@ -84,17 +84,15 @@ pub struct SzsSlotEntryIr {
 
 /// A `szs` slot-map attribute with every slot compiled.
 ///
-/// `any_compiled` gates the source rewrite — an all-string map is pass-1
-/// output (`szs={{ header: "..." }}`), so it stays untouched, keeping the
-/// transform idempotent across re-runs.
+/// The rewrite replaces the whole authoring attribute with
+/// `szsc={{ slot: "classes" }}` — the string-typed read-side prop — so
+/// re-runs are idempotent by construction (`szsc` is never collected here).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SzsAttributeIr {
     /// Full attribute span (`szs={{ ... }}`).
     pub attribute_span: TextSpan,
     /// Compiled slots in source order.
     pub entries: Vec<SzsSlotEntryIr>,
-    /// Whether any slot value was an object literal that got compiled.
-    pub any_compiled: bool,
 }
 
 impl SourceIr {

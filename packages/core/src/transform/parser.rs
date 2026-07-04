@@ -344,7 +344,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         };
         let ctx = self.resolve_context();
         let mut entries = Vec::with_capacity(slot_map.properties.len());
-        let mut any_compiled = false;
         for property in &slot_map.properties {
             let ObjectPropertyKind::ObjectProperty(prop) = property else {
                 self.ir.szs_diagnostics.push(unsupported_message);
@@ -387,7 +386,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         class_name,
                         key,
                     });
-                    any_compiled = true;
                 }
                 _ => {
                     self.ir.szs_diagnostics.push(unsupported_message);
@@ -398,7 +396,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         self.ir.szs_attributes.push(SzsAttributeIr {
             attribute_span: text_span(attr.span),
             entries,
-            any_compiled,
         });
     }
 
@@ -3168,7 +3165,6 @@ mod tests {
         assert!(parsed.ir.szs_diagnostics.is_empty());
         assert_eq!(parsed.ir.szs_attributes.len(), 1);
         let szs = &parsed.ir.szs_attributes[0];
-        assert!(szs.any_compiled);
         assert_eq!(szs.entries.len(), 2);
         assert_eq!(szs.entries[0].key, "header");
         assert_eq!(szs.entries[0].class_name, "bg-gray-100");
@@ -3185,7 +3181,7 @@ mod tests {
             &parsed.ir,
         )
         .expect("rewrite succeeds");
-        assert!(rewritten.contains(r#"szs={{ header: "bg-gray-100", icon: "text-red-500" }}"#));
+        assert!(rewritten.contains(r#"szsc={{ header: "bg-gray-100", icon: "text-red-500" }}"#));
         assert!(rewritten.contains(r#"className="p-4""#));
     }
 
@@ -3211,16 +3207,31 @@ mod tests {
         assert_eq!(parsed_dynamic.ir.szs_diagnostics.len(), 1);
         assert!(parsed_dynamic.ir.szs_diagnostics[0].contains("identifier key"));
 
-        // All-string map = pass-1 output: classes collected, nothing rewritten.
+        // All-string map: classes collected AND the attribute still renames to
+        // `szsc` — the component reads only the compiled prop.
         let strings = r#"const X = () => <Card szs={{ header: "p-4 bg-red-500" }} />;"#;
         let parsed_strings = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: strings.to_string(),
         });
-        let szs = &parsed_strings.ir.szs_attributes[0];
-        assert!(!szs.any_compiled);
         let lowered = lower_source_ir_classes(&parsed_strings.ir);
         assert_eq!(lowered.classes, ["p-4", "bg-red-500"]);
+        let rewritten = crate::transform::rewrite::rewrite_static_sz_attributes(
+            strings,
+            "/repo/src/App.tsx",
+            &parsed_strings.ir,
+        )
+        .expect("rewrite succeeds");
+        assert!(rewritten.contains(r#"szsc={{ header: "p-4 bg-red-500" }}"#));
+
+        // The compiled output parses as plain JSX: `szsc` is never re-collected,
+        // so a second pass leaves it untouched (idempotent by construction).
+        let second = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: rewritten.clone(),
+        });
+        assert_eq!(second.ir.szs_attributes.len(), 0);
+        assert!(second.ir.szs_diagnostics.is_empty());
     }
 
     #[test]

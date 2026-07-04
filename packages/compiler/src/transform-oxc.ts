@@ -335,7 +335,6 @@ export function transformOxc(
             // Two phases so a failure never leaves the attribute partially
             // rewritten: compile everything first, then emit.
             const slotEntries: Array<{ keyText: string; classNames: string; text: string }> = [];
-            let anyCompiled = false;
             let slotFailed = false;
             for (const propRaw of slotMap.properties) {
                 const prop = propRaw as PropertyNode;
@@ -373,7 +372,6 @@ export function transformOxc(
                         classNames: compiled,
                         text: JSON.stringify(compiled),
                     });
-                    anyCompiled = true;
                 } catch (err) {
                     if (err instanceof OxcNotImplementedError) {
                         slotFailed = true;
@@ -387,11 +385,19 @@ export function transformOxc(
                 diagnostics.push(szsUnsupportedMessage(effectiveFilename));
                 continue;
             }
-            if (anyCompiled) {
-                const body = slotEntries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
-                edits.overwrite(szsAttr.start, szsAttr.end, `szs={{ ${body} }}`);
-                transformed = true;
-            }
+            // The compiled map lands on `szsc` — the read-side prop typed as
+            // strings — so the authoring prop `szs` never reaches runtime and
+            // the component forwards `szsc?.<slot>` into a child className
+            // with no cast. Renamed even when every slot was already a class
+            // string (the component reads only `szsc`); idempotent because
+            // `szsc` attributes are never matched by this loop.
+            const body = slotEntries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
+            edits.overwrite(
+                szsAttr.start,
+                szsAttr.end,
+                body === '' ? 'szsc={{}}' : `szsc={{ ${body} }}`,
+            );
+            transformed = true;
             for (const entry of slotEntries) {
                 for (const c of entry.classNames.split(/\s+/)) {
                     if (c) {

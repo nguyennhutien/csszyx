@@ -64,61 +64,61 @@ const COMPILED: Array<{ name: string; tsx: string; expectAttr: string; classes: 
     {
         name: 'two object slots',
         tsx: 'export const A = () => <Card szs={{ header: { bg: "gray-100" }, icon: { color: "red-500" } }} />;',
-        expectAttr: 'szs={{ header: "bg-gray-100", icon: "text-red-500" }}',
+        expectAttr: 'szsc={{ header: "bg-gray-100", icon: "text-red-500" }}',
         classes: ['bg-gray-100', 'text-red-500'],
     },
     {
         name: 'variant nested in a slot (hover + md + dark)',
         tsx: 'export const A = () => <Card szs={{ cta: { hover: { bg: "blue-700" }, md: { p: 6 }, dark: { bg: "slate-800" } } }} />;',
-        expectAttr: 'szs={{ cta: "hover:bg-blue-700 md:p-6 dark:bg-slate-800" }}',
+        expectAttr: 'szsc={{ cta: "hover:bg-blue-700 md:p-6 dark:bg-slate-800" }}',
         classes: ['hover:bg-blue-700', 'md:p-6', 'dark:bg-slate-800'],
     },
     {
         name: 'color+opacity object in a slot',
         tsx: 'export const A = () => <Card szs={{ frame: { borderColor: { color: "red-700", op: 18 } } }} />;',
-        expectAttr: 'szs={{ frame: "border-red-700/18" }}',
+        expectAttr: 'szsc={{ frame: "border-red-700/18" }}',
         classes: ['border-red-700/18'],
     },
     {
         name: 'arbitrary value in a slot',
         tsx: 'export const A = () => <Card szs={{ media: { w: "337px", m: -2 } }} />;',
-        expectAttr: 'szs={{ media: "w-[337px] -m-2" }}',
+        expectAttr: 'szsc={{ media: "w-[337px] -m-2" }}',
         classes: ['w-[337px]', '-m-2'],
     },
     {
         name: 'empty object slot compiles to an empty string',
         tsx: 'export const A = () => <Card szs={{ header: {}, body: { p: 2 } }} />;',
-        expectAttr: 'szs={{ header: "", body: "p-2" }}',
+        expectAttr: 'szsc={{ header: "", body: "p-2" }}',
         classes: ['p-2'],
     },
     {
         name: 'many slots keep source order',
         tsx: 'export const A = () => <Card szs={{ a: { p: 1 }, b: { p: 2 }, c: { p: 3 }, d: { p: 4 }, e: { p: 5 }, f: { p: 6 } }} />;',
-        expectAttr: 'szs={{ a: "p-1", b: "p-2", c: "p-3", d: "p-4", e: "p-5", f: "p-6" }}',
+        expectAttr: 'szsc={{ a: "p-1", b: "p-2", c: "p-3", d: "p-4", e: "p-5", f: "p-6" }}',
         classes: ['p-1', 'p-2', 'p-3', 'p-4', 'p-5', 'p-6'],
     },
     {
         name: 'dotted (compound) component',
         tsx: 'export const A = () => <Card.Sub szs={{ header: { p: 2 } }} />;',
-        expectAttr: 'szs={{ header: "p-2" }}',
+        expectAttr: 'szsc={{ header: "p-2" }}',
         classes: ['p-2'],
     },
     {
         name: 'duplicate slot keys both compile (runtime last-wins)',
         tsx: 'export const A = () => <Card szs={{ a: { p: 1 }, a: { p: 2 } }} />;',
-        expectAttr: 'szs={{ a: "p-1", a: "p-2" }}',
+        expectAttr: 'szsc={{ a: "p-1", a: "p-2" }}',
         classes: ['p-1', 'p-2'],
     },
     {
         name: 'a slot named sz is just a slot',
         tsx: 'export const A = () => <Card szs={{ sz: { p: 1 } }} />;',
-        expectAttr: 'szs={{ sz: "p-1" }}',
+        expectAttr: 'szsc={{ sz: "p-1" }}',
         classes: ['p-1'],
     },
     {
         name: 'mixed object + string slots (string kept verbatim)',
         tsx: "export const A = () => <Card szs={{ a: { p: 1 }, b: 'flex gap-2' }} />;",
-        expectAttr: `szs={{ a: "p-1", b: 'flex gap-2' }}`,
+        expectAttr: `szsc={{ a: "p-1", b: 'flex gap-2' }}`,
         classes: ['p-1', 'flex', 'gap-2'],
     },
 ];
@@ -254,16 +254,17 @@ describe('szs slot-map parity', () => {
         }
     });
 
-    it('empty szs map is a no-op without diagnostics', () => {
+    it('empty szs map renames to szsc without classes or diagnostics', () => {
         const tsx = 'export const A = () => <Card szs={{}} />;';
         for (const engine of ['oxc', 'babel'] as const) {
             const out = run(engine, tsx);
+            expect(norm(out.code)).toContain(norm('szsc={{}}'));
             expect(out.classes).toEqual([]);
             expect(out.diagnostics).toBe(0);
         }
         if (isRustTransformAvailable()) {
             const out = run('rust', tsx);
-            expect(out.code).toBe(tsx);
+            expect(out.code).toContain('szsc={{}}');
             expect(out.diagnostics).toBe(0);
         }
     });

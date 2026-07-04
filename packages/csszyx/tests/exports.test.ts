@@ -15,7 +15,7 @@ import * as csszyx from '../src/index.js';
 describe('csszyx umbrella exports', () => {
     it('exposes the documented authoring helpers', () => {
         // Public composition/authoring names users import from `csszyx`.
-        for (const name of ['szr', 'szcn', 'szv', 'szsClass'] as const) {
+        for (const name of ['szr', 'szcn', 'szv'] as const) {
             expect(typeof csszyx[name], name).toBe('function');
         }
     });

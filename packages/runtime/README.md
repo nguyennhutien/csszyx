@@ -99,18 +99,6 @@ const { outer, inner } = splitBox("m-4 px-2 md:flex");
 // outer: "m-4"   inner: "px-2 md:flex"
 ```
 
-### `szsClass(slot)` — narrow a compiled `szs` slot
-
-Slots of the `szs` prop are authored as sz values but compiled to class strings
-at build time. `szsClass` narrows a slot to `string | undefined`, fail-safe
-against uncompiled values.
-
-```tsx
-import { szcn, szsClass } from "@csszyx/runtime";
-
-<h3 className={szcn("text-base font-medium", szsClass(szs?.title))} />;
-```
-
 ### `stripSzProps(props)` — safe prop forwarding
 
 Removes `sz`/`szs`/`szRecover` from a props object before spreading onto a DOM

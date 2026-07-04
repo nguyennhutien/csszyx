@@ -190,25 +190,21 @@ wrong merge:
   is remembered: later registrations of either side are rejected too, so
   registration order can never resurrect an ambiguous name into one category.
 
-## `szsClass(slot)`
+## `szsc` — reading compiled `szs` slots
 
-Narrows a compiled [`szs`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
-slot to its class string. Authored as an sz value, every slot is compiled to a
-string before the component runs — `szsClass` does the type narrowing once and
-fail-safe: an uncompiled slot (misconfigured build) returns `undefined` instead
-of coercing into `class="[object Object]"`.
-
-```ts
-function szsClass(slot: unknown): string | undefined
-```
+Not a runtime function: the build rewrites every
+[`szs={{…}}`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
+call site to `szsc={{ slot: "class string" }}`, so the component receives plain
+strings on a dedicated prop and forwards them into a child `className` with no
+helper. Declare both faces from one slot union with `SzsProps`:
 
 ```tsx
-import { szcn, szsClass } from '@csszyx/runtime';
-import type { Szs } from '@csszyx/types';
+import { szcn } from '@csszyx/runtime';
+import type { SzsProps } from '@csszyx/types';
 
-function Card({ szs }: { szs?: Szs<'title' | 'body'> }) {
+function Card({ szsc }: SzsProps<'title' | 'body'>) {
   // Slot default + consumer override — szcn resolves conflicts last-wins.
-  return <h3 className={szcn('font-medium text-base', szsClass(szs?.title))} />;
+  return <h3 className={szcn('font-medium text-base', szsc?.title)} />;
 }
 ```
 

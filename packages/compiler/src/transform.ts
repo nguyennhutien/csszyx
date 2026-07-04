@@ -376,7 +376,6 @@ export function transformSourceCode(
                                 } of compiledSlots) {
                                     if (rewrite) {
                                         slot.value = t.stringLiteral(slotClasses);
-                                        transformed = true;
                                     }
                                     for (const c of slotClasses.split(/\s+/)) {
                                         if (c) {
@@ -384,6 +383,17 @@ export function transformSourceCode(
                                         }
                                     }
                                 }
+                                // The compiled map lands on `szsc` — the read-side
+                                // prop typed as strings — so the authoring prop
+                                // `szs` (typed as sz objects) never reaches runtime
+                                // and the component forwards `szsc?.<slot>` into a
+                                // child className with no cast. The rename also
+                                // keeps the transform idempotent: `szsc` is never
+                                // matched by this branch. Renamed even when every
+                                // slot was already a class string — the component
+                                // reads only `szsc`.
+                                path.node.name = t.jsxIdentifier('szsc');
+                                transformed = true;
                                 return;
                             }
 

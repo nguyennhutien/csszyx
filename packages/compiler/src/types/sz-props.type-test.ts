@@ -3,7 +3,7 @@
  * a `@ts-expect-error` line that does NOT error becomes a tsc error itself,
  * so this file passing type-check is the assertion.
  */
-import type { SzProps } from './sz-props.js';
+import type { SzProps, SzsProps } from './sz-props.js';
 
 // Known scalar + object props pass.
 const _known: SzProps = { p: 4, bg: 'blue-500', m: 2, color: 'red-500' };
@@ -44,3 +44,32 @@ void _typo;
 // @ts-expect-error - intentional forward-compat utility csszyx has no key for yet.
 const _forward: SzProps = { someBrandNewTwUtility: 'x' };
 void _forward;
+
+// SzsProps: the authoring face takes sz objects, the compiled face takes strings,
+// both keyed by the SAME slot union.
+const _szsWrite: SzsProps<'header' | 'icon'> = {
+    szs: { header: { bg: 'gray-100' }, icon: 'p-2 text-red-500' },
+};
+const _szsRead: SzsProps<'header' | 'icon'> = {
+    szsc: { header: 'bg-gray-100' },
+};
+void _szsWrite;
+void _szsRead;
+
+// A compiled slot forwards into `className?: string` with no cast.
+declare const _receivedSzsc: SzsProps<'header'>['szsc'];
+const _classNameSlot: string | undefined = _receivedSzsc?.header;
+void _classNameSlot;
+
+// An unknown slot name is a tsc ERROR on both faces.
+// @ts-expect-error - `footer` is not in the declared slot union.
+const _szsTypo: SzsProps<'header'> = { szs: { footer: { p: 2 } } };
+void _szsTypo;
+// @ts-expect-error - `footer` is not in the declared slot union.
+const _szscTypo: SzsProps<'header'> = { szsc: { footer: 'p-2' } };
+void _szscTypo;
+
+// The compiled face only carries strings — an sz object cannot land on it.
+// @ts-expect-error - szsc slots are compiled class strings, not sz objects.
+const _szscObject: SzsProps<'header'> = { szsc: { header: { p: 2 } } };
+void _szscObject;

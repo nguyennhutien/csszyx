@@ -125,7 +125,7 @@ For prefixes that span several CSS properties (`text`, `bg`, `border`, `font`,
 `flex`, …), `szcn` classifies the token **value**: same property → the later
 class wins (`szcn('text-base', 'text-sm')` → `text-sm`), different properties
 co-exist (`text-red-500` never removes `text-sm`). So merging slot overrides
-with defaults (`szcn(defaultTitleClasses, szsClass(szs?.title))`) is the
+with defaults (`szcn(defaultTitleClasses, szsc?.title)`) is the
 recommended pattern — replace semantics are no longer needed for text sizes or
 font weights.
 
@@ -172,40 +172,37 @@ When a component renders its parts itself (an icon, a divider, a badge) there is
 nothing for the consumer to compose — they just want to style those parts. `szs`
 is a slot map: each key names a part, each value is a normal sz object. The build
 transform compiles **each value** to its class string (keeping the key), safelists
-and mangles the classes exactly like `sz`:
+and mangles the classes exactly like `sz` — and rewrites the whole attribute to
+**`szsc`** ("szs, compiled"), the string-typed prop the component reads:
 
 ```tsx
 <Card szs={{ header: { bg: 'gray-100', font: 'bold' }, icon: { color: 'red-500' } }} />
 // compiles to:
-<Card szs={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
+<Card szsc={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
 ```
 
-The component forwards each slot into the matching child's `className`:
+Why two names? A prop cannot be typed one way for the consumer who writes it (sz
+objects, with autocompletion) and another way for the component that reads it
+(plain strings) — so the build bridges two props: consumers **write `szs`**,
+components **read `szsc`**. Declare both from one slot union with `SzsProps`,
+and each slot forwards straight into a child `className` — no cast, no helper:
 
 ```tsx
-import type { Szs } from '@csszyx/types';
+import type { SzsProps } from '@csszyx/types';
 
-type CardProps = {
-  title: string;
-  /** Declaring the slot union gives consumers autocompletion + typo checking. */
-  szs?: Szs<'header' | 'icon'>;
-};
+type CardProps = { title: string } & SzsProps<'header' | 'icon'>;
 
-function Card({ title, szs }: CardProps) {
-  // After the transform, each slot is already a class string — but its TYPE is
-  // still an sz value, so `className={szs?.header}` is a strict-TS error.
-  // `szsClass` does the narrowing once, and fail-safe: an uncompiled slot
-  // becomes `undefined` instead of `class="[object Object]"`.
+function Card({ title, szsc }: CardProps) {
+  // Each szsc slot IS the compiled class string (or undefined when the
+  // consumer didn't style that slot / the call site wasn't compiled).
   return (
     <div>
-      <header className={szsClass(szs?.header)}>{title}</header>
-      <svg className={szsClass(szs?.icon)} />
+      <header className={szsc?.header}>{title}</header>
+      <svg className={szsc?.icon} />
     </div>
   );
 }
 ```
-
-`szsClass` is exported from `@csszyx/runtime` (same home as `szcn`).
 
 Rules to know:
 

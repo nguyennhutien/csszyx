@@ -712,17 +712,17 @@ is scanned (`build.scanCss`); classes written in plain CSS register via
 
 For parts a component renders ITSELF (no consumer content), `szs` maps slot names
 to sz values. The transform compiles each VALUE to its class string (key kept),
-safelisting + mangling like `sz`; the component forwards `props.szs?.<slot>` into
-the matching child's `className`.
+safelisting + mangling like `sz`, and rewrites the attribute to `szsc` ("szs,
+compiled") — the string-typed prop the component reads. Consumers WRITE `szs`,
+components READ `szsc`; declare both from one slot union with `SzsProps`.
 
 ```tsx
-type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
+type CardProps = { title: string } & SzsProps<'header' | 'icon'>;  // from @csszyx/types
 <Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
-// → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
-// component: <header className={szsClass(props.szs?.header)} />
-// szsClass (from @csszyx/runtime) narrows the compiled slot to string | undefined —
-// slots TYPE as sz values but ARE class strings after the transform; the helper
-// is also fail-safe (uncompiled slot -> undefined, never "[object Object]").
+// → <Card szsc={{ header: "bg-gray-100", icon: "text-red-500" }} />
+// component: <header className={props.szsc?.header} />   // plain string — no cast
+// szsc is undefined when the consumer didn't style the slot or the call site
+// wasn't compiled (build warns) — an object can never reach className.
 ```
 
 Rules: custom components only (host element → dev warn, unchanged). Slot values
