@@ -193,6 +193,8 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         transformed: result.metadata.transformed,
         usesRuntime: result.metadata.usesRuntime,
         usesMerge: result.metadata.usesMerge,
+        usesSzcn: result.metadata.usesSzcn,
+        usesSzPart: result.metadata.usesSzPart,
         usesColorVar: result.metadata.usesColorVar,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),

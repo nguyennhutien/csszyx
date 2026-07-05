@@ -292,17 +292,27 @@ Works inside `dynamic()` at runtime.
 
 ## sz Array Syntax
 
-Pass an array to the `sz` prop to compose multiple sz objects with conditional items.
-Static items are pre-computed at build time; conditional items use `_szMerge` at runtime:
+Pass an array to the `sz` prop to compose styles with LATER-WINS semantics: on
+the same property, a later element overrides an earlier one. All-static-object
+arrays deep-merge at build time (later leaf wins per key path, sibling keys
+survive) into one className with zero runtime. Arrays containing class strings,
+`cond && …` guards, or dynamic values compose at runtime through `szcn(...)` —
+the same later-wins rule applied per property group, mangle-safe; dynamic
+elements (e.g. a forwarded `szsc` slot) pass through `_szPart`:
 
 ```tsx
+<div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />
+// → className="text-lg p-4"   (text-lg overrode text-base at build)
+
 <div
   sz={[
-    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — compiled at build time
     isActive && { bg: "blue-500" }, // runtime conditional
-    isDisabled && { opacity: 50, cursor: "not-allowed" },
+    szsc?.title, // dynamic — resolved by _szPart, merged by szcn
   ]}
 />
+// slot-default one-liner in a compound component:
+<h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]} />
 ```
 
 ## Reusing Styles

@@ -185,6 +185,14 @@ fn rewrite_array_sz_attribute(
         ));
     }
     for part in &attribute.array_parts {
+        // Dynamic elements resolve at runtime through `_szPart` (string
+        // passthrough / sz-object compile); static and conditional parts are
+        // pre-compiled. `szcn` then applies later-wins per property group.
+        if let Some(span) = part.dynamic_span {
+            let expression = &source[span.start as usize..span.end as usize];
+            arguments.push(format!("_szPart({expression})"));
+            continue;
+        }
         let classes = js_string_literal(&part.classes.join(" "));
         arguments.push(part.condition_span.map_or_else(
             || classes.clone(),
@@ -194,7 +202,7 @@ fn rewrite_array_sz_attribute(
             },
         ));
     }
-    let replacement = format!("className={{_szMerge({})}}", arguments.join(", "));
+    let replacement = format!("className={{szcn({})}}", arguments.join(", "));
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
@@ -850,12 +858,14 @@ mod tests {
 
     #[test]
     fn keeps_array_entries_as_composed_style_objects() {
+        // Later-wins deep merge: the later element's `p: 4` replaces `p: 2`
+        // at the same key path; `m: 1` survives.
         let source = "const App = () => <div sz={[{ p: 2, m: 1 }, { p: 4 }]} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
         assert_eq!(
             rewritten,
-            "const App = () => <div className=\"p-2 m-1 p-4\" />;"
+            "const App = () => <div className=\"p-4 m-1\" />;"
         );
     }
 
@@ -1120,7 +1130,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const base = { p: 4 }; const App = ({ active }) => <div className={_szMerge(\"p-4\", active && \"m-2\")} />;"
+            "const base = { p: 4 }; const App = ({ active }) => <div className={szcn(\"p-4\", active && \"m-2\")} />;"
         );
     }
 

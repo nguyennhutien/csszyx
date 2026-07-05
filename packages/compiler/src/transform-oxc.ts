@@ -49,6 +49,7 @@ import type {
 } from './transform.js';
 import {
     transform as compileSzObject,
+    deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
     KNOWN_VARIANTS,
@@ -110,6 +111,8 @@ export function transformOxc(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
             usesColorVar: false,
             classes,
             rawClassNames,
@@ -169,6 +172,8 @@ export function transformOxc(
     let transformed = false;
     let usesRuntime = false;
     let usesMerge = false;
+    let usesSzcn = false;
+    let usesSzPart = false;
     let usesColorVar = false;
 
     walk(parsed.program, node => {
@@ -525,7 +530,7 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'ArrayExpression') {
-                const arrayMergeExpression = buildArrayMergeExpression(
+                const composition = buildArrayComposition(
                     expression as ArrayExpressionNode,
                     effectiveFilename,
                     objectBindings,
@@ -534,36 +539,8 @@ export function transformOxc(
                     source,
                     classes,
                 );
-                if (arrayMergeExpression) {
-                    const existingExpression = classNameAttr
-                        ? classNameMergeArgument(classNameAttr, source)
-                        : null;
-                    const mergeExpression = existingExpression
-                        ? `_szMerge(${existingExpression}, ${arrayMergeExpression})`
-                        : `_szMerge(${arrayMergeExpression})`;
-                    if (classNameAttr) {
-                        edits.overwrite(
-                            classNameAttr.start,
-                            classNameAttr.end,
-                            `className={${mergeExpression}}`,
-                        );
-                        edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                    } else {
-                        edits.overwrite(szAttr.start, szAttr.end, `className={${mergeExpression}}`);
-                    }
-                    usesRuntime = true;
-                    usesMerge = true;
-                    transformed = true;
-                    return;
-                }
-                const arrayClasses = astArrayToStaticClasses(
-                    expression as ArrayExpressionNode,
-                    effectiveFilename,
-                    objectBindings,
-                    globalVarAliases,
-                    cssVariableMap,
-                );
-                if (arrayClasses === null) {
+                if (composition === null) {
+                    // Spread element etc. — the whole array stays a runtime value.
                     collectArrayCandidateClasses(
                         expression as ArrayExpressionNode,
                         effectiveFilename,
@@ -575,11 +552,32 @@ export function transformOxc(
                     runtimeFallbackAttr = szAttr;
                     break;
                 }
-                for (const c of arrayClasses) {
-                    szDerived.push(c);
-                    classes.add(c);
+                if (composition.kind === 'static') {
+                    for (const c of composition.classes) {
+                        szDerived.push(c);
+                        classes.add(c);
+                    }
+                    continue;
                 }
-                continue;
+                // szcn lane: later element wins per property group at runtime.
+                // An existing className joins as the FIRST argument, so sz
+                // composition (and its overrides) applies after it.
+                const existingExpression = classNameAttr
+                    ? classNameMergeArgument(classNameAttr, source)
+                    : null;
+                const call = existingExpression
+                    ? `szcn(${existingExpression}, ${composition.args})`
+                    : `szcn(${composition.args})`;
+                if (classNameAttr) {
+                    edits.overwrite(classNameAttr.start, classNameAttr.end, `className={${call}}`);
+                    edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
+                } else {
+                    edits.overwrite(szAttr.start, szAttr.end, `className={${call}}`);
+                }
+                usesSzcn = true;
+                usesSzPart ||= composition.usesSzPart;
+                transformed = true;
+                return;
             }
             if (expression.type !== 'ObjectExpression') {
                 runtimeFallbackExpr = expression;
@@ -886,6 +884,8 @@ export function transformOxc(
         transformed,
         usesRuntime,
         usesMerge,
+        usesSzcn,
+        usesSzPart,
         usesColorVar,
         classes,
         rawClassNames,
@@ -1328,78 +1328,46 @@ function astObjectToSzObject(
     return result as SzObject;
 }
 
-/**
- * Compile a fully-static sz array into class tokens.
- *
- * Mirrors Babel's no-runtime fast path for arrays containing only object
- * literals and falsy literal placeholders. Conditional/logical elements
- * intentionally return null so a later slice can emit `_szMerge(...)`.
- *
- * @param node The oxc ArrayExpression node.
- * @param filename Filename for diagnostic offsets.
- * @param bindings Local object-literal bindings available for identifier/spread resolution.
- * @param globalVarAliases Exact global custom-property alias table.
- * @param cssVariableMap CSS variable metadata map to populate.
- * @returns Static class tokens, or null when runtime handling is required.
- */
-function astArrayToStaticClasses(
-    node: ArrayExpressionNode,
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    globalVarAliases: ReadonlyMap<string, string>,
-    cssVariableMap: Map<string, CssVariableMangleValue>,
-): string[] | null {
-    const out: string[] = [];
-    for (const element of node.elements) {
-        if (!element || isFalsyLiteral(element)) {
-            continue;
-        }
-        let objectNode: ObjectExpressionNode | null = null;
-        if (element.type === 'ObjectExpression') {
-            objectNode = element as ObjectExpressionNode;
-        } else if (element.type === 'Identifier') {
-            objectNode = bindings.get(String((element as IdentifierNode).name)) ?? null;
-        }
-        if (!objectNode) {
-            return null;
-        }
-        let result: ReturnType<typeof compileSzObject>;
-        try {
-            result = compileSzObject(
-                applyGlobalVarAliasesToSzObject(
-                    astObjectToSzObject(objectNode, filename, bindings),
-                    globalVarAliases,
-                    cssVariableMap,
-                ),
-            );
-        } catch (err) {
-            if (err instanceof OxcNotImplementedError) {
-                return null;
-            }
-            throw err;
-        }
-        for (const c of result.className.split(/\s+/)) {
-            if (c) {
-                out.push(c);
-            }
-        }
-    }
-    return out;
-}
+/** Result of classifying an sz array for later-wins composition. */
+type ArrayComposition =
+    | {
+          /** Every element was a static object: deep-merged and compiled at build. */
+          kind: 'static';
+          /** Class tokens of the merged object. */
+          classes: string[];
+      }
+    | {
+          /** Runtime group-merge required: emit `szcn(<args>)`. */
+          kind: 'szcn';
+          /** Comma-joined `szcn` argument source text. */
+          args: string;
+          /** Whether any argument wraps a dynamic element in `_szPart`. */
+          usesSzPart: boolean;
+      };
 
 /**
- * Compile a conditional sz array (`[base, cond && extra]`) to `_szMerge` args.
+ * Classify an sz array (`sz={[a, b, …]}`) for later-wins composition.
+ *
+ * All-static-object arrays deep-merge at build time (later element's leaf
+ * wins per key path, sibling keys survive) and compile to plain classes.
+ * Anything else — class strings, `cond && obj` guards, dynamic expressions —
+ * becomes a `szcn(...)` call: static parts pre-compiled to string literals,
+ * conditional parts kept as `cond && "classes"`, dynamic parts wrapped in
+ * `_szPart(expr)` so a runtime sz object still compiles and a forwarded slot
+ * string passes through. `szcn` then applies the same later-wins semantics
+ * per property group. Element order is preserved in both lanes.
  *
  * @param node Array expression used as the sz value.
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param globalVarAliases Exact global custom-property alias table.
  * @param cssVariableMap Original-to-mangled CSS variable map to populate.
- * @param source Original source for preserving condition expressions.
+ * @param source Original source for preserving condition/dynamic expressions.
  * @param classes Output set collecting every compiled class for the catalog.
- * @returns Comma-joined `_szMerge` arguments, or null when fully static or unresolvable.
+ * @returns The composition, or null when the whole array must stay a runtime
+ *   value (a spread element).
  */
-function buildArrayMergeExpression(
+function buildArrayComposition(
     node: ArrayExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
@@ -1407,59 +1375,162 @@ function buildArrayMergeExpression(
     cssVariableMap: Map<string, CssVariableMangleValue>,
     source: string,
     classes: Set<string>,
-): string | null {
-    const parts: string[] = [];
-    let hasConditional = false;
+): ArrayComposition | null {
+    /** One classified array element. */
+    type Part =
+        | { kind: 'obj'; sz: SzObject }
+        | { kind: 'str'; value: string }
+        | { kind: 'cond'; condSource: string; classNames: string }
+        | { kind: 'dyn'; src: string; node: OxcNode };
+    const parts: Part[] = [];
+
+    /**
+     * Compile one static sz object with the alias table applied.
+     *
+     * @param sz Static sz object.
+     * @returns Space-joined class names.
+     */
+    const compilePart = (sz: SzObject): string =>
+        compileSzObject(applyGlobalVarAliasesToSzObject(sz, globalVarAliases, cssVariableMap))
+            .className;
 
     for (const element of node.elements) {
         if (!element || isFalsyLiteral(element)) {
             continue;
         }
+        if (element.type === 'SpreadElement') {
+            return null;
+        }
         const unwrapped = unwrapExpression(element);
-        let condition: OxcNode | null = null;
-        let candidate = unwrapped;
+        if (
+            isFalsyLiteral(unwrapped) ||
+            (unwrapped.type === 'Identifier' &&
+                String((unwrapped as IdentifierNode).name) === 'undefined')
+        ) {
+            continue;
+        }
+        const literalValue =
+            unwrapped.type === 'Literal'
+                ? (unwrapped as unknown as { value: unknown }).value
+                : undefined;
+        if (typeof literalValue === 'string') {
+            parts.push({ kind: 'str', value: literalValue });
+            continue;
+        }
         if (
             unwrapped.type === 'LogicalExpression' &&
             (unwrapped as LogicalExpressionNode).operator === '&&'
         ) {
             const logical = unwrapped as LogicalExpressionNode;
-            condition = logical.left;
-            candidate = unwrapExpression(logical.right);
-            hasConditional = true;
-        }
-        const objectNode = resolveObjectExpression(candidate, bindings);
-        if (!objectNode) {
-            return null;
-        }
-        let result: ReturnType<typeof compileSzObject>;
-        try {
-            result = compileSzObject(
-                applyGlobalVarAliasesToSzObject(
-                    astObjectToSzObject(objectNode, filename, bindings),
-                    globalVarAliases,
-                    cssVariableMap,
-                ),
-            );
-        } catch (err) {
-            if (err instanceof OxcNotImplementedError) {
-                return null;
+            const right = unwrapExpression(logical.right);
+            const rightLiteral =
+                right.type === 'Literal'
+                    ? (right as unknown as { value: unknown }).value
+                    : undefined;
+            let classNames: string | null = typeof rightLiteral === 'string' ? rightLiteral : null;
+            if (classNames === null) {
+                const objectNode = resolveObjectExpression(right, bindings);
+                if (objectNode) {
+                    try {
+                        classNames = compilePart(
+                            astObjectToSzObject(objectNode, filename, bindings),
+                        );
+                    } catch (err) {
+                        if (!(err instanceof OxcNotImplementedError)) {
+                            throw err;
+                        }
+                    }
+                }
             }
-            throw err;
+            if (classNames !== null) {
+                if (classNames !== '') {
+                    parts.push({
+                        kind: 'cond',
+                        condSource: source.slice(logical.left.start, logical.left.end),
+                        classNames,
+                    });
+                }
+                continue;
+            }
+            // Dynamic right side: the whole guarded element resolves at runtime.
+            parts.push({
+                kind: 'dyn',
+                src: source.slice(element.start, element.end),
+                node: element,
+            });
+            continue;
         }
-        for (const cls of result.className.split(/\s+/)) {
-            if (cls) {
-                classes.add(cls);
+        const objectNode = resolveObjectExpression(unwrapped, bindings);
+        if (objectNode) {
+            try {
+                parts.push({
+                    kind: 'obj',
+                    sz: astObjectToSzObject(objectNode, filename, bindings),
+                });
+                continue;
+            } catch (err) {
+                if (!(err instanceof OxcNotImplementedError)) {
+                    throw err;
+                }
             }
         }
-        const classLiteral = JSON.stringify(result.className);
-        parts.push(
-            condition
-                ? `${source.slice(condition.start, condition.end)} && ${classLiteral}`
-                : classLiteral,
-        );
+        parts.push({
+            kind: 'dyn',
+            src: source.slice(element.start, element.end),
+            node: element,
+        });
     }
 
-    return hasConditional ? parts.join(', ') : null;
+    if (parts.every(part => part.kind === 'obj')) {
+        const merged = (parts as Array<{ kind: 'obj'; sz: SzObject }>).reduce<SzObject>(
+            (acc, part) => deepMergeSzObjects(acc, part.sz),
+            {},
+        );
+        const compiled = compilePart(merged);
+        const staticClasses: string[] = [];
+        for (const c of compiled.split(/\s+/)) {
+            if (c) {
+                staticClasses.push(c);
+                classes.add(c);
+            }
+        }
+        return { kind: 'static', classes: staticClasses };
+    }
+
+    const args: string[] = [];
+    let usesSzPart = false;
+    for (const part of parts) {
+        if (part.kind === 'obj') {
+            const compiled = compilePart(part.sz);
+            for (const c of compiled.split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            args.push(JSON.stringify(compiled));
+        } else if (part.kind === 'str') {
+            for (const c of part.value.split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            args.push(JSON.stringify(part.value));
+        } else if (part.kind === 'cond') {
+            for (const c of part.classNames.split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            args.push(`${part.condSource} && ${JSON.stringify(part.classNames)}`);
+        } else {
+            // Safelist best-effort: static object literals reachable inside the
+            // dynamic expression (ternary branches, etc.) still get their CSS.
+            collectCandidateClassesFromExpression(part.node, filename, bindings, classes, '');
+            args.push(`_szPart(${part.src})`);
+            usesSzPart = true;
+        }
+    }
+    return { kind: 'szcn', args: args.join(', '), usesSzPart };
 }
 
 /**

@@ -74,6 +74,10 @@ export interface NativeTransformResult {
         usesRuntime: boolean;
         /** Whether the result imports the runtime _szMerge helper. */
         usesMerge: boolean;
+        /** Whether the result imports the runtime szcn helper (sz array composition). */
+        usesSzcn: boolean;
+        /** Whether the result imports the runtime _szPart helper (dynamic array elements). */
+        usesSzPart: boolean;
         /** Whether the result imports the runtime color-var helper. */
         usesColorVar: boolean;
         /** Producer identity for cache safety. */

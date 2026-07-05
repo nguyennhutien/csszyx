@@ -38,30 +38,29 @@ describe('sz array syntax', () => {
     });
 
     describe('conditional arrays', () => {
-        it('condition && szObject → _szMerge with compiled string', () => {
+        it('condition && szObject → szcn with compiled string', () => {
             const source =
                 'const A = () => <div sz={[{ display: "flex" }, isActive && { bg: "blue-500" }]} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
-            expect(result.code).toContain('_szMerge');
+            expect(result.code).toContain('szcn');
             expect(result.code).toContain('"flex"');
             expect(result.code).toContain('"bg-blue-500"');
-            expect(result.usesMerge).toBe(true);
-            expect(result.usesRuntime).toBe(true);
+            expect(result.usesSzcn).toBe(true);
         });
 
-        it('multiple conditions → _szMerge with all compiled parts', () => {
+        it('multiple conditions → szcn with all compiled parts', () => {
             const source = `const A = () => <div sz={[
                 { display: "flex", p: 4 },
                 isActive && { bg: "blue-500" },
                 isDisabled && { opacity: 50, cursor: "not-allowed" },
             ]} />`;
             const result = transformSourceCode(source);
-            expect(result.code).toContain('_szMerge');
+            expect(result.code).toContain('szcn');
             expect(result.code).toContain('"flex p-4"');
             expect(result.code).toContain('"bg-blue-500"');
             expect(result.code).toContain('"opacity-50 cursor-not-allowed"');
-            expect(result.usesMerge).toBe(true);
+            expect(result.usesSzcn).toBe(true);
         });
 
         it('classes are collected for Tailwind JIT', () => {
@@ -88,17 +87,18 @@ describe('sz array syntax', () => {
         });
     });
 
-    describe('usesMerge flag in unplugin-compatible return', () => {
-        it('usesMerge false when no array with conditions', () => {
+    describe('usesSzcn flag in unplugin-compatible return', () => {
+        it('usesSzcn false when no array with conditions', () => {
             const source = 'const A = () => <div sz={{ p: 4 }} />';
             const result = transformSourceCode(source);
-            expect(result.usesMerge).toBe(false);
+            expect(result.usesSzcn).toBe(false);
         });
 
-        it('usesMerge true only when conditional array elements present', () => {
+        it('usesSzcn true only when conditional array elements present', () => {
             const source = 'const A = () => <div sz={[{ p: 4 }, isX && { m: 2 }]} />';
             const result = transformSourceCode(source);
-            expect(result.usesMerge).toBe(true);
+            expect(result.usesSzcn).toBe(true);
+            expect(result.usesMerge).toBe(false);
         });
     });
 });

@@ -125,9 +125,9 @@ For prefixes that span several CSS properties (`text`, `bg`, `border`, `font`,
 `flex`, …), `szcn` classifies the token **value**: same property → the later
 class wins (`szcn('text-base', 'text-sm')` → `text-sm`), different properties
 co-exist (`text-red-500` never removes `text-sm`). So merging slot overrides
-with defaults (`szcn(defaultTitleClasses, szsc?.title)`) is the
-recommended pattern — replace semantics are no longer needed for text sizes or
-font weights.
+with defaults (`sz={[{ text: 'base', weight: 'medium' }, szsc?.title]}` — the
+array composes through szcn under the hood) is the recommended pattern —
+replace semantics are no longer needed for text sizes or font weights.
 
 Custom `@theme` tokens join automatically: define `--color-brand` or
 `--text-huge` in a scanned CSS file (`build.scanCss`) and `szcn` dedupes
@@ -195,14 +195,19 @@ type CardProps = { title: string } & SzsProps<'header' | 'icon'>;
 function Card({ title, szsc }: CardProps) {
   // Each szsc slot IS the compiled class string (or undefined when the
   // consumer didn't style that slot / the call site wasn't compiled).
+  // Compose it with slot DEFAULTS right in `sz` — arrays are later-wins,
+  // so the consumer's slot cleanly overrides the default per property:
   return (
     <div>
-      <header className={szsc?.header}>{title}</header>
-      <svg className={szsc?.icon} />
+      <header sz={[{ weight: 'semibold', text: 'base' }, szsc?.header]}>{title}</header>
+      <svg sz={[{ size: 4 }, szsc?.icon]} />
     </div>
   );
 }
 ```
+
+No defaults to merge? Forward the slot alone — `className={szsc?.icon}` and
+`sz={[szsc?.icon]}` are both fine.
 
 Rules to know:
 

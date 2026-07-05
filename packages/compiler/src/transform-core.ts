@@ -29,6 +29,36 @@ export interface SzObject {
 }
 
 /**
+ * Deep-merge two sz objects for array composition (`sz={[a, b]}` = later
+ * wins). Merging is DEEP per key path: a later leaf value replaces an earlier
+ * one at the same path, while sibling keys survive — `[{ hover: { bg: 'red' } },
+ * { hover: { p: 2 } }]` keeps `hover:bg-red` AND gains `hover:p-2`. This is the
+ * build-time mirror of `szcn`'s class-level group merge (same property → later
+ * wins, different properties co-exist), so the static and runtime lanes of
+ * array composition agree. Deliberately NOT `{ ...a, ...b }`: a shallow merge
+ * would drop every earlier declaration under a variant the later object also
+ * touches, which no CSS mental model expects.
+ *
+ * @param target - Earlier element (lower precedence). Not mutated.
+ * @param source - Later element (higher precedence). Not mutated.
+ * @returns A new deep-merged sz object.
+ */
+export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject {
+    const result: SzObject = { ...target };
+    for (const [key, value] of Object.entries(source)) {
+        const existing = result[key];
+        result[key] =
+            existing !== null &&
+            typeof existing === 'object' &&
+            value !== null &&
+            typeof value === 'object'
+                ? deepMergeSzObjects(existing, value)
+                : value;
+    }
+    return result;
+}
+
+/**
  * Readonly variant of SzValue — accepts values from `as const` objects.
  */
 export type ReadonlySzValue = string | number | boolean | ReadonlySzObject;

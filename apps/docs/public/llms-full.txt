@@ -633,7 +633,7 @@ Strategy for static analysis vs runtime generation.
 | **Conditionals**              | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` and `{ scale: shrunk ? 75 : 100 }` → both branches compiled to static Tailwind classes at build time. CSS variable fallback only when a branch is a runtime expression (not a literal). |
 | **Variable reference**        | ❌ Not applicable        | ✅ **Build time**        | `sz={myVar}` — pass variable directly when no override needed. Compiler resolves the binding to its object literal initializer (incl. `as const`, `satisfies`, explicit type annotation).                                  |
 | **Object Spread**             | ❌ Fails spread          | ✅ **Static Analysis**   | `sz={{ ...baseProps, key: val }}` — use spread only when overriding/adding; last key wins. Resolved at build time for local literals. Multiple/nested spreads supported. Imported vars fall back to `_sz()` — no crash.    |
-| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — variable array elements resolved at build time. Static elements merged to single string; conditional elements use `_szMerge` at runtime.                             |
+| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — LATER WINS composition. All-static-object arrays deep-merge at build (later leaf wins per key path, sibling keys survive) into one className; arrays with strings/conditions/dynamic elements emit `szcn(...)` (same later-wins rule per property group at runtime); dynamic elements (e.g. a forwarded `szsc` slot) pass through `_szPart` (string passthrough / sz-object compile). |
 | **Ternary variable branches** | ❌ Not applicable        | ✅ **Build time**        | `sz={cond ? varA : varB}` — both branches compiled to static strings when variables are local literals.                                                                                                                    |
 | **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                  |
 | **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                          |
@@ -3435,17 +3435,27 @@ Works inside `dynamic()` at runtime.
 
 ## sz Array Syntax
 
-Pass an array to the `sz` prop to compose multiple sz objects with conditional items.
-Static items are pre-computed at build time; conditional items use `_szMerge` at runtime:
+Pass an array to the `sz` prop to compose styles with LATER-WINS semantics: on
+the same property, a later element overrides an earlier one. All-static-object
+arrays deep-merge at build time (later leaf wins per key path, sibling keys
+survive) into one className with zero runtime. Arrays containing class strings,
+`cond && …` guards, or dynamic values compose at runtime through `szcn(...)` —
+the same later-wins rule applied per property group, mangle-safe; dynamic
+elements (e.g. a forwarded `szsc` slot) pass through `_szPart`:
 
 ```tsx
+<div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />
+// → className="text-lg p-4"   (text-lg overrode text-base at build)
+
 <div
   sz={[
-    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — compiled at build time
     isActive && { bg: "blue-500" }, // runtime conditional
-    isDisabled && { opacity: 50, cursor: "not-allowed" },
+    szsc?.title, // dynamic — resolved by _szPart, merged by szcn
   ]}
 />
+// slot-default one-liner in a compound component:
+<h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]} />
 ```
 
 ## Reusing Styles

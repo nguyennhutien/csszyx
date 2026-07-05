@@ -216,13 +216,26 @@ pub struct StaticTernaryIr {
     pub alternate_classes: Vec<String>,
 }
 
-/// One precompiled item from an `sz={[...]}` expression.
+/// One item from an `sz={[...]}` later-wins composition.
+///
+/// Static and conditional items carry their pre-lowered classes; a dynamic
+/// item carries only the source span of its expression, which the rewrite
+/// wraps in `_szPart(...)` so a runtime sz object still compiles and a
+/// forwarded class string passes through.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StaticArrayPartIr {
     /// Condition span for `condition && object`; absent for unconditional items.
     pub condition_span: Option<TextSpan>,
-    /// Classes produced by the static object item.
+    /// Classes produced by the static object/string item (empty for dynamic).
     pub classes: Vec<String>,
+    /// Source span of a dynamic item's expression; absent for static items.
+    #[serde(default)]
+    pub dynamic_span: Option<TextSpan>,
+    /// Safelist candidates statically visible inside a dynamic item (ternary
+    /// branches, guarded objects). Kept per part so class discovery order
+    /// stays element order — mangle IDs are assigned in discovery order.
+    #[serde(default)]
+    pub candidates: Vec<String>,
 }
 
 /// Class/className attribute.

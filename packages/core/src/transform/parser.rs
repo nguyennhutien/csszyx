@@ -1211,47 +1211,99 @@ fn static_array_parts_from_expression(
     }
 }
 
+/// Classify an sz array for the szcn (later-wins) composition lane.
+///
+/// Runs AFTER the all-static-object deep-merge lane declined, so at least one
+/// element is a class string, a `cond && obj` guard, or a dynamic expression.
+/// Static parts carry pre-lowered classes; dynamic parts carry only their
+/// source span (the rewrite wraps them in `_szPart`), with statically visible
+/// classes inside them collected as safelist candidates. Returns None only
+/// when the whole array must stay a runtime value (a spread element) —
+/// matching the JS engines' classification exactly.
 fn static_array_parts_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<Vec<StaticArrayPartIr>> {
     let mut parts = Vec::new();
-    let mut has_conditional = false;
 
     for element in &array.elements {
-        let (condition_span, object) = match element {
-            ArrayExpressionElement::ObjectExpression(object) => {
-                (None, static_object_from_object_expression(object, ctx)?)
-            }
-            ArrayExpressionElement::Identifier(identifier) if identifier.name == "undefined" => {
+        if matches!(element, ArrayExpressionElement::Elision(_)) {
+            continue;
+        }
+        // A spread element keeps the whole array a runtime value.
+        let expression = element.as_expression()?;
+        let unwrapped = unwrap_expression(expression);
+        if is_falsy_array_element(unwrapped) {
+            continue;
+        }
+        if let Expression::StringLiteral(value) = unwrapped {
+            parts.push(StaticArrayPartIr {
+                condition_span: None,
+                classes: split_class_tokens(&value.value),
+                dynamic_span: None,
+                candidates: Vec::new(),
+            });
+            continue;
+        }
+        if let Expression::LogicalExpression(logical) = unwrapped {
+            if logical.operator.is_and() {
+                let right = unwrap_expression(&logical.right);
+                let classes = if let Expression::StringLiteral(value) = right {
+                    Some(split_class_tokens(&value.value))
+                } else {
+                    array_element_static_object(right, ctx)
+                        .map(|object| lower_static_sz_object(&object))
+                };
+                if let Some(classes) = classes {
+                    if !classes.is_empty() {
+                        parts.push(StaticArrayPartIr {
+                            condition_span: Some(text_span(logical.left.span())),
+                            classes,
+                            dynamic_span: None,
+                            candidates: Vec::new(),
+                        });
+                    }
+                    continue;
+                }
+                // Dynamic right side: the whole guarded element resolves at
+                // runtime through `_szPart`.
+                parts.push(StaticArrayPartIr {
+                    condition_span: None,
+                    classes: Vec::new(),
+                    dynamic_span: Some(text_span(expression.span())),
+                    candidates: candidate_classes_from_expression(expression, ctx),
+                });
                 continue;
             }
-            ArrayExpressionElement::Identifier(identifier) => {
-                let initializer = ctx.scope.resolve_initializer_before(
-                    &identifier.name,
-                    identifier.span.start,
-                    ctx.program,
-                )?;
-                (None, static_object_from_expression(initializer, ctx)?.0)
-            }
-            ArrayExpressionElement::LogicalExpression(logical) if logical.operator.is_and() => {
-                has_conditional = true;
-                (
-                    Some(text_span(logical.left.span())),
-                    static_object_candidate_from_expression(&logical.right, ctx)?,
-                )
-            }
-            ArrayExpressionElement::BooleanLiteral(value) if !value.value => continue,
-            ArrayExpressionElement::NullLiteral(_) | ArrayExpressionElement::Elision(_) => continue,
-            _ => return None,
-        };
+        }
+        if let Some(object) = array_element_static_object(unwrapped, ctx) {
+            parts.push(StaticArrayPartIr {
+                condition_span: None,
+                classes: lower_static_sz_object(&object),
+                dynamic_span: None,
+                candidates: Vec::new(),
+            });
+            continue;
+        }
+        // Safelist best-effort: static object literals reachable inside the
+        // dynamic expression (ternary branches, etc.) still get their CSS.
         parts.push(StaticArrayPartIr {
-            condition_span,
-            classes: lower_static_sz_object(&object),
+            condition_span: None,
+            classes: Vec::new(),
+            dynamic_span: Some(text_span(expression.span())),
+            candidates: candidate_classes_from_expression(expression, ctx),
         });
     }
 
-    has_conditional.then_some(parts)
+    Some(parts)
+}
+
+/// Split a raw class string into its non-empty tokens.
+fn split_class_tokens(value: &str) -> Vec<String> {
+    value
+        .split_whitespace()
+        .map(std::string::ToString::to_string)
+        .collect()
 }
 
 /// Detect sz expressions whose static lowering cannot succeed but whose
@@ -2324,6 +2376,39 @@ fn merge_static_property(properties: &mut Vec<StaticSzProperty>, incoming: Stati
     }
 }
 
+/// Deep merge for sz ARRAY composition (`sz={[a, b]}` = later wins): a later
+/// leaf value replaces an earlier one at the same key path, while sibling keys
+/// survive — the build-time mirror of `szcn`'s class-level group merge.
+/// Deliberately separate from [`merge_static_property`], which keeps JS
+/// object-spread (shallow) semantics for spreads inside ONE object literal.
+fn merge_static_properties_deep(
+    properties: &mut Vec<StaticSzProperty>,
+    incoming: impl IntoIterator<Item = StaticSzProperty>,
+) {
+    for property in incoming {
+        merge_static_property_deep(properties, property);
+    }
+}
+
+fn merge_static_property_deep(properties: &mut Vec<StaticSzProperty>, incoming: StaticSzProperty) {
+    if let Some(existing) = properties
+        .iter_mut()
+        .find(|property| property.key == incoming.key)
+    {
+        match (&mut existing.value, incoming.value) {
+            (StaticSzValue::Object(existing_object), StaticSzValue::Object(incoming_object)) => {
+                merge_static_properties_deep(
+                    &mut existing_object.properties,
+                    incoming_object.properties,
+                );
+            }
+            (existing_value, incoming_value) => *existing_value = incoming_value,
+        }
+    } else {
+        properties.push(incoming);
+    }
+}
+
 fn static_object_from_spread_argument(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
@@ -2358,6 +2443,43 @@ fn static_object_from_spread_argument(
     }
 }
 
+/// Resolve an sz array ELEMENT to a static object for the deep-merge lane:
+/// an object literal, or an identifier whose initializer unwraps to one.
+/// Object-only on purpose — anything else (strings, conditions, dynamics)
+/// belongs to the szcn parts lane, matching the JS engines' classification.
+fn array_element_static_object(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzObject> {
+    match unwrap_expression(expression) {
+        Expression::ObjectExpression(object) => static_object_from_object_expression(object, ctx),
+        Expression::Identifier(identifier) => {
+            let initializer = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            )?;
+            match unwrap_expression(initializer) {
+                Expression::ObjectExpression(object) => {
+                    static_object_from_object_expression(object, ctx)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Whether an unwrapped array element is a skippable falsy guard.
+fn is_falsy_array_element(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::BooleanLiteral(value) => !value.value,
+        Expression::NullLiteral(_) => true,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        _ => false,
+    }
+}
+
 fn static_object_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -2365,27 +2487,22 @@ fn static_object_from_array_expression(
     let mut properties = Vec::new();
 
     for element in &array.elements {
-        match element {
-            ArrayExpressionElement::ObjectExpression(object) => {
-                properties.extend(static_object_from_object_expression(object, ctx)?.properties);
-            }
-            ArrayExpressionElement::BooleanLiteral(value) if !value.value => {}
-            ArrayExpressionElement::NullLiteral(_) | ArrayExpressionElement::Elision(_) => {}
-            ArrayExpressionElement::Identifier(identifier) if identifier.name == "undefined" => {}
-            ArrayExpressionElement::Identifier(identifier) => {
-                let initializer = ctx.scope.resolve_initializer_before(
-                    &identifier.name,
-                    identifier.span.start,
-                    ctx.program,
-                )?;
-                properties.extend(
-                    static_object_from_expression(initializer, ctx)?
-                        .0
-                        .properties,
-                );
-            }
-            _ => return None,
+        if matches!(element, ArrayExpressionElement::Elision(_)) {
+            continue;
         }
+        // A spread element keeps the whole array a runtime value.
+        let expression = element.as_expression()?;
+        let unwrapped = unwrap_expression(expression);
+        if is_falsy_array_element(unwrapped) {
+            continue;
+        }
+        // Deep merge (later leaf wins per key path, sibling keys survive):
+        // sz array composition is LATER WINS, mirroring szcn's class-level
+        // group merge — not JS spread's shallow replace.
+        merge_static_properties_deep(
+            &mut properties,
+            array_element_static_object(unwrapped, ctx)?.properties,
+        );
     }
 
     Some(StaticSzObject { properties })

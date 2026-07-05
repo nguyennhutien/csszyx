@@ -3384,6 +3384,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 let transformedCode = code;
                 let usesRuntime = false;
                 let usesMerge = false;
+                let usesSzcn = false;
+                let usesSzPart = false;
                 let usesColorVar = false;
                 let transformed = false;
                 let szClasses: Set<string> | undefined;
@@ -3419,6 +3421,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         transformedCode = result.code;
                         usesRuntime = result.usesRuntime;
                         usesMerge = result.usesMerge;
+                        usesSzcn = result.usesSzcn;
+                        usesSzPart = result.usesSzPart;
                         usesColorVar = result.usesColorVar;
                         transformed = result.transformed;
                         szClasses = result.classes;
@@ -3499,6 +3503,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (usesMerge) {
                         imports.push('_szMerge');
                     }
+                    if (usesSzcn) {
+                        imports.push('szcn');
+                    }
+                    if (usesSzPart) {
+                        imports.push('_szPart');
+                    }
                     if (usesColorVar) {
                         imports.push('__szColorVar');
                     }
@@ -3540,7 +3550,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // generated from the theme scan; with no scan it registers
                 // nothing and szcn keeps its keep-both fail-safe.
                 if (
-                    /\bszcn\s*\(/.test(code) &&
+                    (usesSzcn || /\bszcn\s*\(/.test(code)) &&
                     !transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) &&
                     shouldProcessSource(id)
                 ) {

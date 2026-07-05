@@ -372,20 +372,38 @@ Works inside variant blocks too:
 
 ## Array Syntax
 
-Pass an array to `sz` to compose multiple style objects. Fully static arrays are
-merged at compile time — no runtime cost. Arrays with conditional elements
-use `_szMerge` at runtime.
+Pass an array to `sz` to compose styles with **later-wins** semantics: when two
+elements touch the same property, the later element's value overrides the
+earlier one's — like `Object.assign`, and like every class-merge tool you know.
+Elements can be sz objects, class strings, `cond && …` guards, or runtime
+values (a forwarded [`szsc`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
+slot).
 
 ```tsx
-// Fully static — compiled to a single className string
-<div sz={[{ p: 4 }, { bg: 'blue-500' }, { rounded: 'lg' }]} />
+// Fully static — deep-merged at build, compiled to ONE className, zero runtime
+<div sz={[{ text: 'base', p: 4 }, { text: 'lg' }]} />
+// → className="text-lg p-4"           (text-lg overrode text-base)
 
-// Conditional — falsy elements are skipped at runtime
+<div sz={[{ hover: { bg: 'red-500' } }, { hover: { p: 2 } }]} />
+// → className="hover:bg-red-500 hover:p-2"   (deep merge: siblings survive)
+
+// Anything else — composed at runtime by szcn (same later-wins rule,
+// applied per property group, mangle-safe):
 <div sz={[
   { p: 4, color: 'white' },
   isActive && { bg: 'blue-500' },
-  hasError && { ring: 2, ringColor: 'red-500' },
+  szsc?.title,                      // dynamic element via _szPart
 ]} />
+// → className={szcn("p-4 text-white", isActive && "bg-blue-500", _szPart(szsc?.title))}
+```
+
+This makes `sz={[defaults, override]}` the one-liner for slot defaults in a
+compound component — no `className` plumbing, no manual `szcn` call:
+
+```tsx
+function Card({ title, szsc }: SzsProps<'title'> & { title: string }) {
+  return <h3 sz={[{ weight: 'semibold', text: 'base' }, szsc?.title]}>{title}</h3>;
+}
 ```
 
 Array syntax is especially useful with [`szv()`](/docs/szv) variant objects:

@@ -1956,10 +1956,14 @@ export type SzPropsBase = LayoutProps &
 export type SzProps = SzPropsBase & VariantModifiers;
 
 /**
- * Array element type for sz array composition — each element is a style object or a falsy
- * conditional guard (`false | null | undefined` are skipped at runtime by `_szMerge`).
+ * Array element type for sz array composition — a style object, a class string
+ * (e.g. a compiled `szsc` slot forwarded into `sz`), or a falsy conditional
+ * guard (`false | null | undefined` are skipped). Composition is LATER WINS:
+ * on the same property, a later element's value overrides an earlier one's —
+ * statically merged at build when every element is a static object, otherwise
+ * group-merged at runtime with `szcn` semantics.
  */
-export type SzArrayElement = SzProps | false | null | undefined;
+export type SzArrayElement = SzProps | string | false | null | undefined;
 
 /**
  * All accepted forms of the `sz` prop:

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 7;
+const CACHE_SCHEMA_VERSION = 8;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -18,6 +18,8 @@ interface SerializedTransformResult {
     transformed: boolean;
     usesRuntime: boolean;
     usesMerge: boolean;
+    usesSzcn: boolean;
+    usesSzPart: boolean;
     usesColorVar: boolean;
     classes: string[];
     rawClassNames: string[];
@@ -310,6 +312,8 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         transformed: result.transformed,
         usesRuntime: result.usesRuntime,
         usesMerge: result.usesMerge,
+        usesSzcn: result.usesSzcn,
+        usesSzPart: result.usesSzPart,
         usesColorVar: result.usesColorVar,
         classes: [...result.classes],
         rawClassNames: [...result.rawClassNames],
@@ -331,6 +335,8 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         transformed: result.transformed,
         usesRuntime: result.usesRuntime,
         usesMerge: result.usesMerge,
+        usesSzcn: result.usesSzcn,
+        usesSzPart: result.usesSzPart,
         usesColorVar: result.usesColorVar,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),

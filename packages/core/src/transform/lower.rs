@@ -77,12 +77,11 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         .collect::<Vec<_>>();
     classes.extend(lower_static_sz_object(&attribute.object));
     classes.extend(attribute.candidate_classes.iter().cloned());
-    classes.extend(
-        attribute
-            .array_parts
-            .iter()
-            .flat_map(|part| part.classes.iter().cloned()),
-    );
+    classes.extend(attribute.array_parts.iter().flat_map(|part| {
+        // Element order: a static part contributes its classes, a dynamic part
+        // its safelist candidates — mangle IDs follow discovery order.
+        part.classes.iter().chain(part.candidates.iter()).cloned()
+    }));
     classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
         let variant = prop
             .variant_prefix

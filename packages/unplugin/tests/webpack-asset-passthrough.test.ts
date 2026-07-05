@@ -17,6 +17,11 @@ import webpack, { type Configuration, type Stats } from 'webpack';
 
 import { webpackPlugin } from '../src/unplugin.js';
 
+// A full webpack compile is an integration test: under a parallel turbo run
+// (cargo + every package suite at once) it legitimately exceeds vitest's 5 s
+// default and flaked in verify-like-ci. Scoped bump, not a global one.
+const WEBPACK_TEST_TIMEOUT_MS = 30_000;
+
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -34,7 +39,9 @@ const PNG_BYTES = Buffer.from(
 );
 
 describe('webpack binary asset passthrough', () => {
-    it('emits asset/resource modules byte-identical to their source', async () => {
+    it('emits asset/resource modules byte-identical to their source', {
+        timeout: WEBPACK_TEST_TIMEOUT_MS,
+    }, async () => {
         const root = mkdtempSync(join(tmpdir(), 'csszyx-webpack-asset-'));
         tempDirs.push(root);
         const src = join(root, 'src');

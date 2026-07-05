@@ -185,6 +185,8 @@ fn transform_fast_static_ir_with_options(
             transformed,
             uses_runtime: false,
             uses_merge: false,
+            uses_szcn: false,
+            uses_sz_part: false,
             uses_color_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
@@ -277,30 +279,40 @@ fn transform_static_classes_with_options(
         diagnostics.push("oxc parser panicked before csszyx lowering completed".to_string());
     }
 
-    // Any `sz` attribute that fell to the runtime path needs the `_sz`
-    // helper at runtime, which downstream import-injection picks up
-    // through this flag. Mirroring the oxc-JS pipeline so caches built
-    // against one producer stay valid for the other.
+    // Runtime helper flags for downstream import-injection, mirroring the
+    // oxc-JS pipeline so caches built against one producer stay valid for the
+    // other. sz arrays compose through `szcn` (later-wins per property group),
+    // with dynamic elements resolving through `_szPart`; `_szMerge` remains
+    // the className+sz merge helper and `_sz` the whole-value runtime
+    // fallback.
+    let uses_szcn = transformed
+        && parsed
+            .ir
+            .sz_attributes
+            .iter()
+            .any(|attr| !attr.array_parts.is_empty());
+    let uses_sz_part = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.array_parts
+                .iter()
+                .any(|part| part.dynamic_span.is_some())
+        });
     let uses_merge = transformed
         && parsed.ir.jsx_opening_elements.iter().any(|element| {
-            if element
-                .sz_attribute_indices
-                .iter()
-                .any(|index| !parsed.ir.sz_attributes[*index].array_parts.is_empty())
-            {
-                return true;
-            }
             let Some(class_index) = element.class_attribute_index else {
                 return false;
             };
             let class_attribute = &parsed.ir.class_attributes[class_index];
             let has_runtime_like_sz = element.sz_attribute_indices.iter().any(|index| {
                 let attribute = &parsed.ir.sz_attributes[*index];
-                attribute.runtime_fallback
-                    || attribute.ternary.is_some()
-                    || !attribute.array_parts.is_empty()
+                // Arrays merge their className through szcn, not _szMerge.
+                (attribute.runtime_fallback || attribute.ternary.is_some())
+                    && attribute.array_parts.is_empty()
             });
-            let has_static_sz = !element.sz_attribute_indices.is_empty();
+            let has_static_sz = element
+                .sz_attribute_indices
+                .iter()
+                .any(|index| parsed.ir.sz_attributes[*index].array_parts.is_empty());
             has_runtime_like_sz || (class_attribute.expression_span.is_some() && has_static_sz)
         });
     let uses_runtime = transformed
@@ -309,7 +321,7 @@ fn transform_static_classes_with_options(
                 .ir
                 .sz_attributes
                 .iter()
-                .any(|attr| attr.runtime_fallback || !attr.array_parts.is_empty()));
+                .any(|attr| attr.runtime_fallback));
     let uses_color_var = transformed
         && parsed.ir.sz_attributes.iter().any(|attr| {
             attr.dynamic_css_vars
@@ -343,6 +355,8 @@ fn transform_static_classes_with_options(
             transformed,
             uses_runtime,
             uses_merge,
+            uses_szcn,
+            uses_sz_part,
             uses_color_var,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
@@ -502,6 +516,8 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             transformed: false,
             uses_runtime: false,
             uses_merge: false,
+            uses_szcn: false,
+            uses_sz_part: false,
             uses_color_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,

@@ -11,6 +11,7 @@ import {
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
+    deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
     KNOWN_VARIANTS,
@@ -97,6 +98,10 @@ export interface SourceTransformResult {
     usesRuntime: boolean;
     /** Whether the source needs the _szMerge runtime helper. */
     usesMerge: boolean;
+    /** Whether the source needs the szcn runtime helper (sz array composition). */
+    usesSzcn: boolean;
+    /** Whether the source needs the _szPart runtime helper (dynamic array elements). */
+    usesSzPart: boolean;
     /** Whether the source needs the color-var runtime helper. */
     usesColorVar: boolean;
     /** Classes generated from sz syntax. */
@@ -131,6 +136,8 @@ export function transformSourceCode(
     const astBudget = options?.astBudget ?? AST_BUDGET;
     let usesRuntime = false;
     let usesMerge = false;
+    let usesSzcn = false;
+    let usesSzPart = false;
     let usesColorVar = false;
     let transformed = false;
     const collectedClasses = new Set<string>();
@@ -157,6 +164,8 @@ export function transformSourceCode(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
             usesColorVar: false,
             classes: collectedClasses,
             rawClassNames,
@@ -817,111 +826,177 @@ export function transformSourceCode(
                                     }
                                 }
 
-                                // Array expression: sz={[obj1, cond && obj2, ...]}
+                                // Array expression: sz={[obj1, cond && obj2, ...]} —
+                                // later-wins composition. All-static-object arrays
+                                // deep-merge at build; anything else emits szcn()
+                                // so later elements override earlier ones per
+                                // property group at runtime (mirrors the oxc/rust
+                                // classification exactly).
                                 if (t.isArrayExpression(expression)) {
-                                    const parts: t.Expression[] = [];
-                                    let hasRuntime = false;
                                     const getBindingForArray = (
                                         name: string,
                                     ): ReturnType<typeof path.scope.getBinding> =>
                                         path.scope.getBinding(name);
 
+                                    /** One classified array element. */
+                                    type ArrayPart =
+                                        | { kind: 'obj'; sz: SzObject }
+                                        | { kind: 'str'; value: string }
+                                        | {
+                                              kind: 'cond';
+                                              cond: t.Expression;
+                                              classNames: string;
+                                          }
+                                        | { kind: 'dyn'; node: t.Expression };
+                                    const parts: ArrayPart[] = [];
+                                    let hasSpread = false;
+
                                     for (const element of expression.elements) {
-                                        // Sparse hole, false, null → skip
+                                        // Sparse hole, false, null, undefined → skip
                                         if (element === null) {
                                             continue;
                                         }
-                                        if (t.isBooleanLiteral(element) && !element.value) {
+                                        if (t.isSpreadElement(element)) {
+                                            hasSpread = true;
+                                            break;
+                                        }
+                                        const inner = unwrapTsExpression(element) ?? element;
+                                        if (t.isBooleanLiteral(inner) && !inner.value) {
                                             continue;
                                         }
-                                        if (t.isNullLiteral(element)) {
+                                        if (t.isNullLiteral(inner)) {
+                                            continue;
+                                        }
+                                        if (t.isIdentifier(inner) && inner.name === 'undefined') {
+                                            continue;
+                                        }
+                                        if (t.isStringLiteral(inner)) {
+                                            parts.push({ kind: 'str', value: inner.value });
                                             continue;
                                         }
                                         if (
-                                            t.isIdentifier(element) &&
-                                            element.name === 'undefined'
+                                            t.isLogicalExpression(inner) &&
+                                            inner.operator === '&&'
                                         ) {
-                                            continue;
-                                        }
-
-                                        // condition && szObject → keep condition, compile right to string
-                                        if (
-                                            t.isLogicalExpression(element) &&
-                                            element.operator === '&&'
-                                        ) {
-                                            const resolved = tryStaticTransformNode(
-                                                element.right,
-                                                getBindingForArray,
-                                            );
-                                            if (resolved !== null && t.isStringLiteral(resolved)) {
-                                                if (resolved.value) {
-                                                    parts.push(
-                                                        t.logicalExpression(
-                                                            '&&',
-                                                            element.left,
-                                                            resolved,
-                                                        ),
-                                                    );
-                                                    for (const c of resolved.value.split(/\s+/)) {
-                                                        if (c) {
-                                                            collectedClasses.add(c);
-                                                        }
-                                                    }
-                                                    hasRuntime = true;
+                                            const right =
+                                                unwrapTsExpression(inner.right) ?? inner.right;
+                                            let condClasses: string | null = t.isStringLiteral(
+                                                right,
+                                            )
+                                                ? right.value
+                                                : null;
+                                            if (condClasses === null) {
+                                                const rightSz = tryResolveStaticSzObject(
+                                                    right,
+                                                    getBindingForArray,
+                                                );
+                                                if (rightSz !== null) {
+                                                    condClasses = transform(rightSz).className;
                                                 }
-                                                // empty compiled string: skip element
+                                            }
+                                            if (condClasses !== null) {
+                                                if (condClasses !== '') {
+                                                    parts.push({
+                                                        kind: 'cond',
+                                                        cond: inner.left,
+                                                        classNames: condClasses,
+                                                    });
+                                                }
                                                 continue;
                                             }
-                                            // dynamic right side: pass through
-                                            parts.push(element as t.Expression);
-                                            hasRuntime = true;
+                                            parts.push({
+                                                kind: 'dyn',
+                                                node: element as t.Expression,
+                                            });
                                             continue;
                                         }
-
-                                        // Any other node: try static compile
-                                        const resolved = tryStaticTransformNode(
-                                            element as t.Node,
+                                        const sz = tryResolveStaticSzObject(
+                                            inner,
                                             getBindingForArray,
                                         );
-                                        if (resolved !== null) {
-                                            if (t.isStringLiteral(resolved)) {
-                                                if (resolved.value) {
-                                                    parts.push(resolved);
-                                                    for (const c of resolved.value.split(/\s+/)) {
-                                                        if (c) {
-                                                            collectedClasses.add(c);
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                parts.push(resolved);
-                                                collectFromExpr(resolved, collectedClasses);
-                                                hasRuntime = true;
-                                            }
-                                        } else {
-                                            parts.push(element as t.Expression);
-                                            hasRuntime = true;
+                                        if (sz !== null) {
+                                            parts.push({ kind: 'obj', sz });
+                                            continue;
                                         }
+                                        parts.push({
+                                            kind: 'dyn',
+                                            node: element as t.Expression,
+                                        });
                                     }
 
-                                    path.node.name.name = 'className';
-
-                                    if (parts.length === 0) {
-                                        path.node.value = createMergedClassNameValue(
-                                            t.stringLiteral(''),
-                                        );
-                                    } else if (!hasRuntime) {
-                                        // All static → single merged className string, zero runtime
-                                        const merged = (parts as t.StringLiteral[])
-                                            .map(p => p.value)
-                                            .filter(Boolean)
-                                            .join(' ');
-                                        path.node.value = createMergedClassNameValue(
-                                            t.stringLiteral(merged),
-                                        );
-                                    } else {
+                                    if (!hasSpread) {
+                                        if (parts.every(part => part.kind === 'obj')) {
+                                            // All static objects → deep merge (later
+                                            // leaf wins per key path), compile once.
+                                            const merged = (
+                                                parts as Array<{ kind: 'obj'; sz: SzObject }>
+                                            ).reduce<SzObject>(
+                                                (acc, part) => deepMergeSzObjects(acc, part.sz),
+                                                {},
+                                            );
+                                            const compiled = transform(merged).className;
+                                            for (const c of compiled.split(/\s+/)) {
+                                                if (c) {
+                                                    collectedClasses.add(c);
+                                                }
+                                            }
+                                            path.node.name.name = 'className';
+                                            path.node.value = createMergedClassNameValue(
+                                                t.stringLiteral(compiled),
+                                            );
+                                            transformed = true;
+                                            return;
+                                        }
+                                        const args: t.Expression[] = [];
+                                        let anySzPart = false;
+                                        for (const part of parts) {
+                                            if (part.kind === 'obj') {
+                                                const compiled = transform(part.sz).className;
+                                                for (const c of compiled.split(/\s+/)) {
+                                                    if (c) {
+                                                        collectedClasses.add(c);
+                                                    }
+                                                }
+                                                args.push(t.stringLiteral(compiled));
+                                            } else if (part.kind === 'str') {
+                                                for (const c of part.value.split(/\s+/)) {
+                                                    if (c) {
+                                                        collectedClasses.add(c);
+                                                    }
+                                                }
+                                                args.push(t.stringLiteral(part.value));
+                                            } else if (part.kind === 'cond') {
+                                                for (const c of part.classNames.split(/\s+/)) {
+                                                    if (c) {
+                                                        collectedClasses.add(c);
+                                                    }
+                                                }
+                                                args.push(
+                                                    t.logicalExpression(
+                                                        '&&',
+                                                        part.cond,
+                                                        t.stringLiteral(part.classNames),
+                                                    ),
+                                                );
+                                            } else {
+                                                // Safelist best-effort for static
+                                                // object literals inside the dynamic
+                                                // expression (ternary branches, …).
+                                                collectDynamicElementCandidates(
+                                                    part.node,
+                                                    getBindingForArray,
+                                                    collectedClasses,
+                                                );
+                                                args.push(
+                                                    t.callExpression(t.identifier('_szPart'), [
+                                                        part.node,
+                                                    ]),
+                                                );
+                                                anySzPart = true;
+                                            }
+                                        }
                                         if (existingClassExpr) {
-                                            parts.unshift(existingClassExpr);
+                                            args.unshift(existingClassExpr);
                                             if (
                                                 existingClassNameNode &&
                                                 path.parentPath?.isJSXOpeningElement()
@@ -933,18 +1008,18 @@ export function transformSourceCode(
                                                 existingClassNameNode = null;
                                             }
                                         }
-                                        // _szMerge handles falsy + dedup at runtime
-                                        const szCall = t.callExpression(
-                                            t.identifier('_szMerge'),
-                                            parts,
+                                        path.node.name.name = 'className';
+                                        path.node.value = t.jsxExpressionContainer(
+                                            t.callExpression(t.identifier('szcn'), args),
                                         );
-                                        path.node.value = t.jsxExpressionContainer(szCall);
-                                        usesMerge = true;
-                                        usesRuntime = true;
+                                        usesSzcn = true;
+                                        usesSzPart ||= anySzPart;
+                                        transformed = true;
+                                        return;
                                     }
-
-                                    transformed = true;
-                                    return;
+                                    // A spread keeps the whole array a runtime value —
+                                    // fall through to the runtime wrapper below
+                                    // (matches oxc/rust).
                                 }
 
                                 // Fallback: Runtime wrapper
@@ -1235,6 +1310,8 @@ export function transformSourceCode(
             transformed: transformed,
             usesRuntime: usesRuntime,
             usesMerge: usesMerge,
+            usesSzcn: usesSzcn,
+            usesSzPart: usesSzPart,
             usesColorVar: usesColorVar,
             classes: collectedClasses,
             rawClassNames,
@@ -1255,6 +1332,8 @@ export function transformSourceCode(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
             usesColorVar: false,
             classes: collectedClasses,
             rawClassNames,
@@ -1397,6 +1476,95 @@ function emptyClassToUndefined(node: t.Expression): t.Expression {
  * @param node - AST node to attempt static transformation on
  * @param getBinding - Optional scope binding resolver for spread resolution
  * @returns A Babel AST node (StringLiteral or ConditionalExpression of strings), or null if dynamic
+ */
+/**
+ * Safelist best-effort for a DYNAMIC sz array element: walk conditional /
+ * logical branches and add the compiled classes of any static object literal
+ * found, so `sz={[base, x ? { m: 2 } : { m: 8 }]}` still safelists both
+ * branches even though the element itself resolves at runtime via `_szPart`.
+ * Catalog-only — never affects the emitted code.
+ *
+ * @param node - The dynamic element expression.
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @param classes - Class sink for the safelist.
+ */
+function collectDynamicElementCandidates(
+    node: t.Node,
+    getBinding: GetBinding,
+    classes: Set<string>,
+): void {
+    const inner = unwrapTsExpression(node);
+    if (!inner) {
+        return;
+    }
+    if (t.isConditionalExpression(inner)) {
+        collectDynamicElementCandidates(inner.consequent, getBinding, classes);
+        collectDynamicElementCandidates(inner.alternate, getBinding, classes);
+        return;
+    }
+    if (t.isLogicalExpression(inner)) {
+        collectDynamicElementCandidates(inner.right, getBinding, classes);
+        return;
+    }
+    if (t.isStringLiteral(inner)) {
+        for (const c of inner.value.split(/\s+/)) {
+            if (c) {
+                classes.add(c);
+            }
+        }
+        return;
+    }
+    const sz = tryResolveStaticSzObject(inner, getBinding);
+    if (sz !== null) {
+        for (const c of transform(sz).className.split(/\s+/)) {
+            if (c) {
+                classes.add(c);
+            }
+        }
+    }
+}
+
+/**
+ * Resolve a node to a static {@link SzObject} WITHOUT compiling it — the sz
+ * array composition lane needs the object itself so elements can deep-merge
+ * before a single compile. Handles TS wrappers, object literals with resolved
+ * spreads, and identifiers bound to such objects (any binding kind, matching
+ * `tryStaticTransformNode`'s resolution).
+ *
+ * @param node - The candidate array element (already TS-unwrapped or not).
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @returns The static sz object, or null when the element is dynamic.
+ */
+function tryResolveStaticSzObject(node: t.Node, getBinding?: GetBinding): SzObject | null {
+    const inner = unwrapTsExpression(node);
+    if (!inner) {
+        return null;
+    }
+    if (t.isObjectExpression(inner)) {
+        const resolved = getBinding ? (resolveObjectSpreads(inner, getBinding) ?? inner) : inner;
+        return evaluateStaticObject(resolved);
+    }
+    if (t.isIdentifier(inner) && getBinding) {
+        const binding = getBinding(inner.name);
+        if (binding?.path.isVariableDeclarator()) {
+            const init = binding.path.node.init;
+            if (init) {
+                return tryResolveStaticSzObject(init, getBinding);
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Resolve a node to its compiled class-string expression when statically
+ * possible: object literals (spreads resolved), string literals, identifiers
+ * bound to either, and conditionals whose branches all resolve. Returns null
+ * when the node needs the runtime.
+ *
+ * @param node - The candidate sz value node.
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @returns A compiled expression (string literal or conditional of them), or null.
  */
 function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expression | null {
     // Unwrap TypeScript type assertions — `as const` and `satisfies T` wrap the real node

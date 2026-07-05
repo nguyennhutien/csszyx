@@ -15,7 +15,7 @@ import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 // Export SzInput type from concatenate
 export type { SzInput } from './concatenate.js';
 // Export concatenation helpers
-export { _sz, _sz2, _sz3, _szMerge, szr } from './concatenate.js';
+export { _sz, _sz2, _sz3, _szMerge, _szPart, szr } from './concatenate.js';
 // Export hydration functions
 export {
     abortHydration,
