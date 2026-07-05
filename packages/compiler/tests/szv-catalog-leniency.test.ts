@@ -261,3 +261,82 @@ const P = P;`,
         }
     });
 });
+
+describe('szv catalog + a coexisting static sz attribute (fast-path parity)', () => {
+    // Regression: a file with a plain static `sz={{ … }}` AND an szv catalog
+    // used to fast-path in the native engine — the AST-free path handled the
+    // `sz=` attribute and silently DROPPED the whole szv catalog, so `rust`
+    // safelisted fewer classes than `oxc`/`babel` for identical source (a
+    // `build.parser` flip changed the produced CSS). Every case here pairs an
+    // szv catalog with a static `sz={{ p: 4 }}` so the static-sz path is live,
+    // and asserts all three engines agree.
+    const STATIC = 'export const App = () => <div sz={{ p: 4 }} />;';
+
+    it('the reported mx-0 multi-key variant survives on every engine', () => {
+        expectCatalogParity(
+            `${IMPORT}
+const controlSz = szv({ variants: { layout: { x: { grow: 1, mx: 0, my: 4 } } } });
+${STATIC}`,
+            ['p-4', 'grow-1', 'mx-0', 'my-4'],
+        );
+    });
+
+    // Directional spacing shorthands are where a per-key lowering bug would
+    // hide (`mx` mis-lowering to `ml`, logical `ms`/`me` vs physical, etc.).
+    // Each token sits in an szv variant next to the static sz; all engines must
+    // agree on the emitted class.
+    it.each([
+        ['mx: 0', 'mx-0'],
+        ['my: 0', 'my-0'],
+        ['ml: 0', 'ml-0'],
+        ['mr: 0', 'mr-0'],
+        ['mt: 0', 'mt-0'],
+        ['mb: 0', 'mb-0'],
+        ['ms: 0', 'ms-0'],
+        ['me: 0', 'me-0'],
+        ['m: 0', 'm-0'],
+        ['px: 2', 'px-2'],
+        ['py: 2', 'py-2'],
+        ['pl: 2', 'pl-2'],
+        ['pr: 2', 'pr-2'],
+        ['ps: 2', 'ps-2'],
+        ['pe: 2', 'pe-2'],
+        ['p: 2', 'p-2'],
+        ['grow: 1', 'grow-1'],
+        ['w: 4', 'w-4'],
+        ['h: 4', 'h-4'],
+        ['gap: 2', 'gap-2'],
+        ["bg: 'red-500'", 'bg-red-500'],
+        ["color: 'red-500'", 'text-red-500'],
+        ["rounded: 'lg'", 'rounded-lg'],
+        ['inset: 0', 'inset-0'],
+    ])('szv variant key `%s` safelists `%s` on every engine (with static sz present)', (leaf, cls) => {
+        expectCatalogParity(
+            `${IMPORT}
+const s = szv({ variants: { layout: { x: { ${leaf} } } } });
+${STATIC}`,
+            ['p-4', cls],
+        );
+    });
+
+    it('a full multi-key variant keeps every side next to the static sz', () => {
+        expectCatalogParity(
+            `${IMPORT}
+const s = szv({ variants: { layout: {
+    panelSelect: { grow: 1, mx: 0, my: 4 },
+    panel: { grow: 1, m: 4 },
+} } });
+${STATIC}`,
+            ['p-4', 'grow-1', 'mx-0', 'my-4', 'm-4'],
+        );
+    });
+
+    it('szr static args also survive next to a static sz (same fast-path bail)', () => {
+        expectCatalogParity(
+            `import { szr } from '@csszyx/runtime';
+const c = szr({ mx: 0, my: 4 });
+export const App = () => <div sz={{ p: 4 }}>{c}</div>;`,
+            ['p-4', 'mx-0', 'my-4'],
+        );
+    });
+});

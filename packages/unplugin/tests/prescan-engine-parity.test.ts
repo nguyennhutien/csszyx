@@ -83,6 +83,17 @@ export const controlSz = szv({ variants: { layout: {
     panel: { grow: 1, m: 4 },
 } } });
 `,
+    // Regression: an szv catalog AND a plain static \`sz={{ … }}\` in ONE file.
+    // The native fast path handled the \`sz=\` attribute and dropped the whole
+    // szv catalog, so \`rust\` safelisted fewer classes than \`oxc\`/\`babel\` for
+    // identical source (the field-reported \`build.parser\` flip that lost mx-0).
+    // A component leaf that both defines a variant table and renders a static
+    // sz is exactly the vui compileSources shape.
+    'src/video-tag.tsx': `
+import { szv } from '@csszyx/runtime';
+const controlSz = szv({ variants: { size: { sm: { grow: 1, mx: 0, my: 4 }, lg: { m: 8 } } } });
+export const VideoTag = () => <div sz={{ p: 4, rounded: 'md' }} />;
+`,
     // Nested variants + finite conditional (trove 0.10.8 parity class).
     'src/badge.tsx': `
 export const Badge = ({ danger }) => (
@@ -210,6 +221,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "leading-loose",
             "m-4",
             "m-6",
+            "m-8",
             "mb-2",
             "md:gap-4",
             "mx-0",
@@ -217,6 +229,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "p-4",
             "px-2",
             "rounded-lg",
+            "rounded-md",
             "text-green-500",
             "text-red-500",
             "text-sm",

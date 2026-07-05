@@ -31,6 +31,13 @@ pub enum FastPathBailoutReason {
     ContainsSzMarker,
 }
 
+/// Call-expression markers whose classes are collected by the full parser's
+/// `collect_catalog_call_classes` (szv catalog, szr static args, dynamic
+/// runtime injection). A file containing any of these cannot take the AST-free
+/// static path, which only sees JSX `sz=` attributes. Keep in sync with the
+/// callee names matched in `collect_catalog_call_classes`.
+const CATALOG_CALL_MARKERS: [&str; 3] = ["szv(", "szr(", "dynamic("];
+
 /// Triage a source file before invoking a parser.
 ///
 /// This accepts two zero-risk paths:
@@ -47,7 +54,20 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
         return FastPathTriage::Noop(SourceIr::empty(file.filename.clone(), source_len));
     }
 
-    if file.source.contains("dynamic(") {
+    // Calls that contribute classes to the safelist WITHOUT being a JSX `sz=`
+    // attribute force the full parser: the AST-free `try_static_sz_ir` only walks
+    // `sz={{ … }}` attributes, so a file that ALSO defines an `szv` catalog, an
+    // `szr(static-object)`, or a `dynamic(...)` call would keep its static `sz`
+    // classes but silently drop those extras — the exact classes the JS engines
+    // collect via `collect_catalog_call_classes`. A file with both a plain
+    // `sz={{ p: 4 }}` and a `szv({...})` used to fast-path here and lose the whole
+    // szv catalog under `rust` while `oxc`/`babel` kept it (a parser-flip safelist
+    // divergence, field-reported). The substring test is intentionally
+    // conservative — a false positive only costs one file the slower parser path.
+    if CATALOG_CALL_MARKERS
+        .iter()
+        .any(|marker| file.source.contains(marker))
+    {
         return FastPathTriage::NeedsParser(FastPathBailout {
             filename: file.filename.clone(),
             reason: FastPathBailoutReason::ContainsSzMarker,
@@ -337,6 +357,36 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn catalog_call_alongside_static_sz_bails_to_parser() {
+        // The regression: a file with a plain static `sz={{ p: 4 }}` AND a
+        // top-level `szv`/`szr` catalog must NOT fast-path — the AST-free path
+        // only sees the `sz=` attribute and would silently drop the catalog,
+        // diverging from the JS engines that DO collect it (field-reported as a
+        // `build.parser` flip changing the safelist). Every catalog marker in
+        // `collect_catalog_call_classes` is covered here.
+        for source in [
+            "import { szv } from 'csszyx'; const s = szv({ variants: { l: { x: { grow: 1, mx: 0, my: 4 } } } }); const App = () => <div sz={{ p: 4 }} />;",
+            "import { szr } from '@csszyx/runtime'; const c = szr({ mx: 0 }); const App = () => <div sz={{ p: 4 }} />;",
+            "import { dynamic } from '@csszyx/dynamic'; const c = dynamic({ w: 7 }); const App = () => <div sz={{ p: 4 }} />;",
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            assert!(
+                matches!(
+                    triage_source(&file),
+                    FastPathTriage::NeedsParser(super::FastPathBailout {
+                        reason: FastPathBailoutReason::ContainsSzMarker,
+                        ..
+                    })
+                ),
+                "expected NeedsParser for: {source}"
+            );
+        }
     }
 
     #[test]
