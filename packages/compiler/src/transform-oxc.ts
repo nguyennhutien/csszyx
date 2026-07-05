@@ -1952,7 +1952,12 @@ function collectSzvCallClasses(
     // missing CSS. The lenient walk keeps everything it can classify, expands
     // finite conditionals into both branches (the runtime picks one, so both
     // must be safelisted), and skips only what it genuinely cannot read.
-    const budget = { extras: MAX_CATALOG_BRANCH_EXTRAS };
+    const budget: CatalogExtrasBudget = {
+        extras: MAX_CATALOG_BRANCH_EXTRAS,
+        explores: MAX_CATALOG_BRANCH_EXTRAS,
+        objectMemo: new Map(),
+        valueMemo: new Map(),
+    };
     const baseNode = readConfigSubObjectNode(configNode, 'base', bindings);
     const baseCandidates = baseNode
         ? lenientCatalogObjects(baseNode, constInits, new Set(), 0, budget)
@@ -2051,6 +2056,28 @@ const MAX_CATALOG_BRANCH_EXTRAS = 32;
 interface CatalogExtrasBudget {
     /** Remaining alternate-branch objects this call may still emit. */
     extras: number;
+    /**
+     * Remaining alternate branches this call may still EXPLORE. Charged when a
+     * conditional's alternate is recursed into, not when its result is
+     * emitted: a const referenced from both branches (`c ? x : x`) doubles the
+     * walk per level without consuming depth or emitting anything, so an
+     * output-only budget let an n-level chain run 2^n recursive calls (a
+     * measured exponential hang). Exhausted explores degrade to
+     * consequent-only — the same under-safelist-beyond-the-budget contract
+     * `extras` already documents. (Matches the Rust walker.)
+     */
+    explores: number;
+    /**
+     * Candidate memo per resolved const INITIALIZER node. Every exponential
+     * shape is some DAG that re-resolves the same initializer — through
+     * conditionals (`c ? x : x`), spreads (`{...x, ...x}`), or sibling keys
+     * (`{a: x, b: x}`) — and the memo collapses each to one walk plus cache
+     * hits, keeping total work linear in the source. Keyed by node identity;
+     * inline literals cannot exponentiate on their own (each occupies
+     * distinct source text).
+     */
+    objectMemo: Map<OxcNode, SzObject[]>;
+    valueMemo: Map<OxcNode, SzValue[]>;
 }
 
 /**
@@ -2177,10 +2204,21 @@ function lenientCatalogValues(
     }
     if (unwrapped.type === 'ConditionalExpression') {
         const conditional = unwrapped as ConditionalExpressionNode;
-        return [
-            ...lenientCatalogValues(conditional.consequent, constInits, seen, depth, budget),
-            ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
-        ];
+        const values = lenientCatalogValues(
+            conditional.consequent,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+        // Same paid-exploration guard as the object-candidate lane.
+        if (budget.explores > 0) {
+            budget.explores -= 1;
+            values.push(
+                ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
+            );
+        }
+        return truncateCatalogCandidates(values, budget);
     }
     if (unwrapped.type === 'Identifier') {
         const name = String((unwrapped as IdentifierNode).name);
@@ -2191,7 +2229,19 @@ function lenientCatalogValues(
         if (!init || seen.has(name)) {
             return [];
         }
-        return lenientCatalogValues(init, constInits, new Set([...seen, name]), depth, budget);
+        const cached = budget.valueMemo.get(init);
+        if (cached) {
+            return [...cached];
+        }
+        const values = lenientCatalogValues(
+            init,
+            constInits,
+            new Set([...seen, name]),
+            depth,
+            budget,
+        );
+        budget.valueMemo.set(init, values);
+        return [...values];
     }
     return [];
 }
@@ -2230,22 +2280,29 @@ function lenientCatalogObjectCandidates(
     }
     if (unwrapped.type === 'ConditionalExpression') {
         const conditional = unwrapped as ConditionalExpressionNode;
-        return [
-            ...lenientCatalogObjectCandidates(
-                conditional.consequent,
-                constInits,
-                seen,
-                depth,
-                budget,
-            ),
-            ...lenientCatalogObjectCandidates(
-                conditional.alternate,
-                constInits,
-                seen,
-                depth,
-                budget,
-            ),
-        ];
+        const candidates = lenientCatalogObjectCandidates(
+            conditional.consequent,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+        // The alternate is a paid exploration (see `explores`); once the
+        // allowance is spent every further conditional degrades to its
+        // consequent, keeping the recursion tree linear in the source.
+        if (budget.explores > 0) {
+            budget.explores -= 1;
+            candidates.push(
+                ...lenientCatalogObjectCandidates(
+                    conditional.alternate,
+                    constInits,
+                    seen,
+                    depth,
+                    budget,
+                ),
+            );
+        }
+        return truncateCatalogCandidates(candidates, budget);
     }
     if (unwrapped.type === 'Identifier') {
         const name = String((unwrapped as IdentifierNode).name);
@@ -2253,15 +2310,38 @@ function lenientCatalogObjectCandidates(
         if (!init || seen.has(name)) {
             return [];
         }
-        return lenientCatalogObjectCandidates(
+        const cached = budget.objectMemo.get(init);
+        if (cached) {
+            return [...cached];
+        }
+        const candidates = lenientCatalogObjectCandidates(
             init,
             constInits,
             new Set([...seen, name]),
             depth,
             budget,
         );
+        budget.objectMemo.set(init, candidates);
+        return [...candidates];
     }
     return [];
+}
+
+/**
+ * Bound a candidate list to what can still be consumed: one primary plus the
+ * remaining alternate-branch budget — the guard that keeps branch fan-out
+ * linear in the source.
+ *
+ * @param candidates Candidate list to bound (mutated in place).
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns The bounded list.
+ */
+function truncateCatalogCandidates<T>(candidates: T[], budget: CatalogExtrasBudget): T[] {
+    const cap = budget.extras + 1;
+    if (candidates.length > cap) {
+        candidates.length = cap;
+    }
+    return candidates;
 }
 
 /**

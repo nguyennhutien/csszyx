@@ -218,4 +218,46 @@ const P = P;`,
             ['m-1'],
         );
     });
+
+    it('a const-doubling DAG stays linear (exponential-walk guard)', () => {
+        // Each shape re-resolves the SAME const from two positions per level —
+        // through a conditional, a double spread, and sibling keys. Without
+        // the initializer memo + paid alternate exploration, the walk ran 2^n
+        // recursive calls (measured: ~10s at n=22, unfinishable at n=40) from
+        // a ~40-line file. n=40 completing at all is the regression signal; a
+        // wall-clock assertion would be flaky on CI.
+        const lines = ['declare const c: boolean;', "const x0 = c ? 'red-500' : 'blue-500';"];
+        for (let i = 1; i <= 40; i++) {
+            lines.push(`const x${i} = c ? x${i - 1} : x${i - 1};`);
+        }
+        lines.push('const y0 = { p: 4 };');
+        for (let i = 1; i <= 40; i++) {
+            lines.push(`const y${i} = { ...y${i - 1}, ...y${i - 1} };`);
+        }
+        lines.push('const z0 = { m: 2 };');
+        for (let i = 1; i <= 40; i++) {
+            lines.push(`const z${i} = { hover: z${i - 1}, focus: z${i - 1} };`);
+        }
+        lines.push('const s = szv({ variants: { tone: { a: { color: x40 }, b: y40, c: z40 } } });');
+        // Both branch colors of the leaf const survive (scalar hops don't
+        // consume depth); the y/z object chains exceed MAX_CATALOG_DEPTH and
+        // bottom out empty — they are here to prove the walk TERMINATES, and
+        // the parity assertion proves all engines cap identically.
+        const source = `${IMPORT}\n${lines.join('\n')}`;
+        const oxc = [...transformOxc(source, 'catalog.tsx').classes];
+        const babel = [...transformSourceCode(source, 'catalog.tsx').classes];
+        for (const classes of [oxc, babel]) {
+            expect(classes).toContain('text-red-500');
+            expect(classes).toContain('text-blue-500');
+        }
+        expect([...oxc].sort()).toEqual([...babel].sort());
+        try {
+            const rust = [...transformRust(source, 'catalog.tsx').classes];
+            expect(rust).toContain('text-red-500');
+            expect(rust).toContain('text-blue-500');
+            expect([...rust].sort()).toEqual([...oxc].sort());
+        } catch (err) {
+            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
+        }
+    });
 });

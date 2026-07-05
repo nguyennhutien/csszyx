@@ -642,6 +642,25 @@ const MAX_CATALOG_BRANCH_EXTRAS: usize = 32;
 struct CatalogExtrasBudget {
     /// Remaining alternate-branch objects this call may still emit.
     extras: usize,
+    /// Remaining alternate branches this call may still EXPLORE. Charged when
+    /// a conditional's alternate is recursed into, not when its result is
+    /// emitted: a const referenced from both branches (`c ? x : x`) doubles
+    /// the walk per level without consuming depth or emitting anything, so an
+    /// output-only budget let an n-level chain run 2^n recursive calls (a
+    /// measured exponential hang) while every list stayed within bounds.
+    /// Exhausted explores degrade to consequent-only — the same
+    /// under-safelist-beyond-the-budget contract `extras` already documents.
+    explores: usize,
+    /// Candidate memo per resolved const INITIALIZER, keyed by its span start
+    /// (identity of the node — resolution is position-sensitive, so a bare
+    /// name is not a sound key under shadowing). Every exponential shape is
+    /// some DAG that re-resolves the same initializer — through conditionals
+    /// (`c ? x : x`), spreads (`{...x, ...x}`), or sibling keys
+    /// (`{a: x, b: x}`) — and the memo collapses each to one walk plus cache
+    /// hits, making total work linear in the source. Inline literals cannot
+    /// exponentiate on their own: each occupies distinct source text.
+    object_memo: std::collections::HashMap<u32, Vec<StaticSzObject>>,
+    value_memo: std::collections::HashMap<u32, Vec<StaticSzValue>>,
 }
 
 /// Collect every static class reachable from an szv configuration.
@@ -682,6 +701,9 @@ fn collect_szv_catalog_classes(
 
     let mut budget = CatalogExtrasBudget {
         extras: MAX_CATALOG_BRANCH_EXTRAS,
+        explores: MAX_CATALOG_BRANCH_EXTRAS,
+        object_memo: std::collections::HashMap::new(),
+        value_memo: std::collections::HashMap::new(),
     };
     let base_candidates = read_config_sub_object_node(config, "base", ctx).map_or_else(
         || vec![StaticSzObject::empty()],
@@ -907,13 +929,18 @@ fn lenient_catalog_values<'a>(
         Expression::ConditionalExpression(conditional) => {
             let mut values =
                 lenient_catalog_values(&conditional.consequent, ctx, seen, depth, budget);
-            values.extend(lenient_catalog_values(
-                &conditional.alternate,
-                ctx,
-                seen,
-                depth,
-                budget,
-            ));
+            // Same paid-exploration guard as the object-candidate lane.
+            if budget.explores > 0 {
+                budget.explores -= 1;
+                values.extend(lenient_catalog_values(
+                    &conditional.alternate,
+                    ctx,
+                    seen,
+                    depth,
+                    budget,
+                ));
+            }
+            truncate_catalog_candidates(&mut values, budget);
             values
         }
         Expression::Identifier(identifier) => {
@@ -929,9 +956,14 @@ fn lenient_catalog_values<'a>(
             ) else {
                 return Vec::new();
             };
+            let memo_key = init.span().start;
+            if let Some(cached) = budget.value_memo.get(&memo_key) {
+                return cached.clone();
+            }
             seen.push(identifier.name.to_string());
             let values = lenient_catalog_values(init, ctx, seen, depth, budget);
             seen.pop();
+            budget.value_memo.insert(memo_key, values.clone());
             values
         }
         _ => Vec::new(),
@@ -963,13 +995,22 @@ fn lenient_catalog_object_candidates<'a>(
                 depth,
                 budget,
             );
-            candidates.extend(lenient_catalog_object_candidates(
-                &conditional.alternate,
-                ctx,
-                seen,
-                depth,
-                budget,
-            ));
+            // The alternate is a paid exploration (see `explores`); once the
+            // allowance is spent every further conditional degrades to its
+            // consequent, which keeps the recursion tree linear in the source.
+            if budget.explores > 0 {
+                budget.explores -= 1;
+                candidates.extend(lenient_catalog_object_candidates(
+                    &conditional.alternate,
+                    ctx,
+                    seen,
+                    depth,
+                    budget,
+                ));
+            }
+            // Only the first candidate plus `budget.extras` alternates can
+            // ever be consumed downstream — cap the concat to that bound.
+            truncate_catalog_candidates(&mut candidates, budget);
             candidates
         }
         Expression::Identifier(identifier) => {
@@ -983,12 +1024,27 @@ fn lenient_catalog_object_candidates<'a>(
             ) else {
                 return Vec::new();
             };
+            let memo_key = init.span().start;
+            if let Some(cached) = budget.object_memo.get(&memo_key) {
+                return cached.clone();
+            }
             seen.push(identifier.name.to_string());
             let candidates = lenient_catalog_object_candidates(init, ctx, seen, depth, budget);
             seen.pop();
+            budget.object_memo.insert(memo_key, candidates.clone());
             candidates
         }
         _ => Vec::new(),
+    }
+}
+
+/// Bound a candidate list to what can still be consumed: one primary plus the
+/// remaining alternate-branch budget. See the conditional-arm note above —
+/// this is the guard that keeps branch fan-out linear in the source.
+fn truncate_catalog_candidates<T>(candidates: &mut Vec<T>, budget: &CatalogExtrasBudget) {
+    let cap = budget.extras.saturating_add(1);
+    if candidates.len() > cap {
+        candidates.truncate(cap);
     }
 }
 
@@ -2751,6 +2807,56 @@ mod tests {
     }
 
     #[test]
+    fn szv_catalog_const_doubling_chain_stays_linear() {
+        // Exponential guard: `const xN = c ? xN-1 : xN-1` doubles the candidate
+        // list per level without consuming depth (conditionals and identifier
+        // hops keep `depth` unchanged by design). Before the expansion-point
+        // truncation this walk built 2^n intermediate objects — ~10s at n=22,
+        // OOM at n=30 — from a ~30-line source file. With the cap the walk is
+        // linear; a wall-clock bound would be flaky on CI, so the budget bound
+        // plus instant completion at n=40 (2^40 uncapped = unreachable) is the
+        // regression signal.
+        use std::fmt::Write as _;
+        let mut source = String::from(
+            "import { szv } from '@csszyx/runtime'; declare const c: boolean; const x0 = c ? 'red-500' : 'blue-500';",
+        );
+        for i in 1..=40 {
+            // Conditional doubling: both branches re-reference the same const.
+            let _ = write!(source, "const x{i} = c ? x{} : x{};", i - 1, i - 1);
+        }
+        // Spread doubling and sibling-key doubling take the identifier-memo
+        // path with no conditional at all — explores alone cannot gate them.
+        source.push_str("const y0 = { p: 4 };");
+        for i in 1..=40 {
+            let _ = write!(source, "const y{i} = {{ ...y{}, ...y{} }};", i - 1, i - 1);
+        }
+        source.push_str("const z0 = { m: 2 };");
+        for i in 1..=40 {
+            let _ = write!(
+                source,
+                "const z{i} = {{ hover: z{}, focus: z{} }};",
+                i - 1,
+                i - 1
+            );
+        }
+        source.push_str(
+            "const s = szv({ variants: { tone: { a: { color: x40 }, b: y40, c: z40 } } });",
+        );
+
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source,
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        // Both original branch values survive; the capped duplicates dedupe.
+        assert!(lowered.classes.contains(&"text-red-500".to_string()));
+        assert!(lowered.classes.contains(&"text-blue-500".to_string()));
+    }
+
+    #[test]
     fn szv_catalog_resolves_const_scalar_refs_and_skips_null_undefined() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3345,7 +3451,7 @@ mod tests {
         // so a second pass leaves it untouched (idempotent by construction).
         let second = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: rewritten.clone(),
+            source: rewritten,
         });
         assert_eq!(second.ir.szs_attributes.len(), 0);
         assert!(second.ir.szs_diagnostics.is_empty());
