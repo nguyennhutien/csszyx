@@ -34,9 +34,12 @@ import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, Letter
   { sz: "{ text: '--spacing(4)' }", tw: "text-[--spacing(4)]" },
 ]} />
 
-Tailwind build-time functions use the same bracket-free `sz` ergonomics as other
-arbitrary values. Plain `--tokens` remain CSS-variable sugar, while
-`--functions(...)` are emitted as arbitrary values.
+`text: '--spacing(4)'` is a Tailwind **build-time function** (v4.3.2+), not a
+CSS variable — a bare `--token` stays parenthesized var sugar (`text-(--size)`)
+while a `--name(...)` call becomes a bracketed arbitrary value
+(`text-[--spacing(4)]`). This one rule applies to every value position, not just
+font-size; see [sz Props → CSS Variables](/docs/sz-props/#css-variables)
+for the full contrast. You write no brackets or parens either way.
 
 <FontSizeScale />
 

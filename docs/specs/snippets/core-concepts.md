@@ -59,11 +59,26 @@ Composing multiple classes for a single effect.
 
 Mapping precise, non-theme values to JIT syntax (Arbitrary Properties or Values).
 
-| Concept             | CSS Property                  | Tailwind v4 Class              | `sz` Prop (Object Syntax)           | Note                                      |
-| :------------------ | :---------------------------- | :----------------------------- | :---------------------------------- | :---------------------------------------- |
-| **Arbitrary Color** | `background-color: #316ff6`   | `bg-[#316ff6]`                 | `{ bg: '#316ff6' }`                 | Preferred over inline styles for caching. |
-| **Arbitrary Size**  | `width: 333px`                | `w-[333px]`                    | `{ w: '333px' }`                    | Explicit unit required string.            |
-| **Data Prop**       | `content: attr(data-content)` | `content-[attr(data-content)]` | `{ content: 'attr(data-content)' }` | Complex arbitrary strings.                |
+| Concept              | CSS Property                                                | Tailwind v4 Class                  | `sz` Prop (Object Syntax)               | Note                                              |
+| :------------------- | :---------------------------------------------------------- | :--------------------------------- | :-------------------------------------- | :------------------------------------------------ |
+| **Arbitrary Color**  | `background-color: #316ff6`                                 | `bg-[#316ff6]`                     | `{ bg: '#316ff6' }`                     | Preferred over inline styles for caching.         |
+| **Arbitrary Size**   | `width: 333px`                                              | `w-[333px]`                        | `{ w: '333px' }`                        | Explicit unit required string.                    |
+| **Data Prop**        | `content: attr(data-content)`                               | `content-[attr(data-content)]`     | `{ content: 'attr(data-content)' }`     | Complex arbitrary strings.                        |
+| **CSS Variable**     | `padding: var(--gap)`                                       | `p-(--gap)`                        | `{ p: '--gap' }`                        | Bare `--name` → **parenthesized** var sugar.      |
+| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`                       | `text-[--spacing(4)]`              | `{ text: '--spacing(4)' }`              | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
+| **Alpha Fn (color)** | `color: color-mix(in oklab, var(--brand) 50%, transparent)` | `bg-[--alpha(var(--brand)_/_50%)]` | `{ bg: '--alpha(var(--brand) / 50%)' }` | Tailwind color function; same `--fn(...)` rule.   |
+
+**`--` prefix — the one rule that decides parens vs brackets** (applies to EVERY
+value position — `p`, `bg`, `m`, `w`, `text`, …, not just font-size):
+
+- A **bare** `--name` (no call) is a **CSS variable** → `x-(--name)`.
+  `{ bg: '--brand' }` → `bg-(--brand)`. **Never** `bg-[--brand]`.
+- A **`--name(...)`** shaped value (a balanced function call spanning the whole
+  value) is a **Tailwind build-time function** → `x-[--name(...)]` (v4.3.2+).
+  `{ p: '--spacing(2)' }` → `p-[--spacing(2)]`. Works for any function
+  (`--spacing()`, `--alpha()`, …), not a fixed list.
+- Either way you write **no brackets and no parens in `sz`** — the compiler picks
+  the right wrapper from the value's shape.
 
 **Global Parsing Rule**: The compiler **MUST normalize whitespace** in arbitrary variant _keys_ before generation.
 

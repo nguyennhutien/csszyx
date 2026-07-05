@@ -310,6 +310,24 @@ Prefix any CSS custom property with `--` and the compiler wraps it in `(...)`:
 }} />
 ```
 
+:::caution[`--name` vs `--name(...)` — parens vs brackets]
+A **bare** `--name` is a CSS variable → parenthesized `x-(--name)`. A
+**`--name(...)`** with a call is a Tailwind **build-time function** (v4.3.2+)
+→ bracketed arbitrary value `x-[--name(...)]`. The compiler picks the wrapper
+from the value's shape, so you write neither in `sz`:
+
+```tsx
+<div sz={{
+  bg: '--brand',                       // variable  → bg-(--brand)
+  text: '--spacing(4)',                // function  → text-[--spacing(4)]
+  color: '--alpha(var(--brand) / 50%)',// function  → text-[--alpha(var(--brand)_/_50%)]
+}} />
+```
+
+This holds for **every** value position, not just the examples above. Do not add
+your own `()` or `[]` — `{ bg: '--brand' }`, never `'(--brand)'` or `'[--brand]'`.
+:::
+
 ## Arbitrary CSS (`css: {}`)
 
 For CSS properties with no sz prop or Tailwind utility equivalent, use the
