@@ -20,9 +20,9 @@ run() {
 }
 
 run cleanup-credentials.sh
+run healthcheck.sh
 run configure-codex.sh
 run configure-claude.sh
-run healthcheck.sh
 run init-firewall.sh
 run security-envelope-check.sh
 

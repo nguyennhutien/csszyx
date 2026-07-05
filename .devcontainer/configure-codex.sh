@@ -26,7 +26,21 @@ validate_path() {
 HOST_CODEX_HOME="${HOST_CODEX_HOME:-/root/.codex}"
 DEV_CODEX_HOME="${CODEX_HOME:-/root/.codex-devcontainer}"
 CODEX_WRAPPER="/root/.local/bin/codex"
-REAL_CODEX="/root/.local/share/mise/installs/node/22.22.1/bin/codex"
+REAL_CODEX="${REAL_CODEX:-}"
+
+if [ -z "$REAL_CODEX" ]; then
+    shopt -s nullglob
+    for candidate in /root/.local/share/mise/installs/npm-openai-codex/*/bin/codex; do
+        if [ -x "$candidate" ]; then
+            REAL_CODEX="$candidate"
+        fi
+    done
+    shopt -u nullglob
+fi
+
+if [ -z "$REAL_CODEX" ]; then
+    REAL_CODEX="/root/.local/share/mise/installs/npm-openai-codex/missing/bin/codex"
+fi
 
 validate_path "HOST_CODEX_HOME" "$HOST_CODEX_HOME"
 validate_path "DEV_CODEX_HOME" "$DEV_CODEX_HOME"
@@ -64,6 +78,22 @@ sync_entry() {
     link_entry "$src" "$dest"
 }
 
+sync_conversation_dir() {
+    local name="$1"
+    local src="$HOST_CODEX_HOME/$name"
+    local dest="$DEV_CODEX_HOME/$name"
+
+    mkdir -p "$src"
+
+    # Preserve conversations created by an older container-local CODEX_HOME
+    # before replacing it with the shared host directory.
+    if [ -d "$dest" ] && [ ! -L "$dest" ]; then
+        cp -an "$dest/." "$src/" 2>/dev/null || true
+    fi
+
+    link_entry "$src" "$dest"
+}
+
 if [ "$WRAPPER_ONLY" -ne 1 ]; then
     for entry in \
         auth.json \
@@ -75,6 +105,19 @@ if [ "$WRAPPER_ONLY" -ne 1 ]; then
         version.json; do
         sync_entry "$entry"
     done
+
+    # `codex resume` reads rollout files from sessions/ and indexes them in the
+    # versioned state database. Keep both on the host mount so the CLI and IDE
+    # see one conversation store while config.toml remains container-specific.
+    sync_conversation_dir sessions
+    sync_conversation_dir shell_snapshots
+    sync_entry history.jsonl
+
+    shopt -s nullglob
+    for state_file in "$HOST_CODEX_HOME"/state_*.sqlite*; do
+        sync_entry "$(basename "$state_file")"
+    done
+    shopt -u nullglob
 fi
 
 CONFIG="$DEV_CODEX_HOME/config.toml"
