@@ -299,9 +299,11 @@ Pass an array to the `sz` prop to compose styles with LATER-WINS semantics: on
 the same property, a later element overrides an earlier one. All-static-object
 arrays deep-merge at build time (later leaf wins per key path, sibling keys
 survive) into one className with zero runtime. Arrays containing class strings,
-`cond && …` guards, or dynamic values compose at runtime through `szcn(...)` —
-the same later-wins rule applied per property group, mangle-safe; dynamic
-elements (e.g. a forwarded `szsc` slot) pass through `_szPart`:
+`cond && …` guards, or dynamic values compose at runtime through `_szcn(...)`
+— a compiler-injected helper (the `_` prefix marks generated code you never
+hand-author; it is the unmemoized twin of the authorable `szcn`), applying the
+same later-wins rule per property group, mangle-safe; dynamic elements (e.g. a
+forwarded `szsc` slot) pass through `_szPart`:
 
 ```tsx
 <div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />
@@ -311,7 +313,7 @@ elements (e.g. a forwarded `szsc` slot) pass through `_szPart`:
   sz={[
     { display: "flex", items: "center", p: 4 }, // always — compiled at build time
     isActive && { bg: "blue-500" }, // runtime conditional
-    szsc?.title, // dynamic — resolved by _szPart, merged by szcn
+    szsc?.title, // dynamic — resolved by _szPart, merged by _szcn
   ]}
 />
 // slot-default one-liner in a compound component:
