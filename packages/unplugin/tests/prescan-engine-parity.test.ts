@@ -139,6 +139,21 @@ const gridSz = szv({ variants: { layout: {
 export const DataGrid = () => <div className="dg-row-item layout-header" sz={{ p: 4 }} />;
 `;
 
+// The padding analog of the leaf above: `px`/`py` are inline/block shorthands
+// exactly like `mx`/`my`, so the same fast-path-drops-catalog bug (and the
+// shorthand mis-split the report suspected — `px`→`pl`) has to be guarded for
+// padding too. szv catalog with padding shorthands + a static sz, in a
+// compileSources leaf outside the import graph.
+const UNIMPORTED_VUI_PADDING_LEAF_FIXTURE = `
+import { szv } from '@csszyx/runtime';
+const cellSz = szv({ variants: { density: {
+    tight: { px: 0, py: 1 },
+    cozy: { grow: 1, px: 2, py: 4 },
+    roomy: { grow: 1, p: 8 },
+} } });
+export const DataCell = () => <div className="dg-cell-item properties-panel" sz={{ m: 2 }} />;
+`;
+
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -168,6 +183,11 @@ function runPrescan(parser: 'rust' | 'oxc' | 'babel'): {
     writeFileSync(join(root, 'src/broken.tsx'), BROKEN_FIXTURE, 'utf8');
     writeFileSync(join(root, 'design-system/Button.tsx'), UNIMPORTED_DESIGN_SYSTEM_FIXTURE, 'utf8');
     writeFileSync(join(root, 'design-system/DataGrid.tsx'), UNIMPORTED_VUI_LEAF_FIXTURE, 'utf8');
+    writeFileSync(
+        join(root, 'design-system/DataCell.tsx'),
+        UNIMPORTED_VUI_PADDING_LEAF_FIXTURE,
+        'utf8',
+    );
 
     const warnings: string[] = [];
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
@@ -228,6 +248,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "bg-tag-blue-bg",
             "bg-tag-red-bg",
             "datetime",
+            "dg-cell-item",
             "dg-row-item",
             "ds-button",
             "font-semibold",
@@ -238,6 +259,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "indent-8",
             "layout-header",
             "leading-loose",
+            "m-2",
             "m-4",
             "m-6",
             "m-8",
@@ -246,7 +268,12 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "mx-0",
             "my-4",
             "p-4",
+            "p-8",
+            "properties-panel",
+            "px-0",
             "px-2",
+            "py-1",
+            "py-4",
             "rounded-lg",
             "rounded-md",
             "text-green-500",
@@ -307,6 +334,30 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             }
             // Never the shorthand mis-split the report suspected.
             expect(runs[engine].tokens, engine).not.toContain('ml-0');
+        }
+    });
+
+    it('the padding-shorthand compileSources leaf keeps every token beside a static sz', () => {
+        // `px`/`py` are the inline/block padding analogs of `mx`/`my`; the same
+        // fast-path bug and the suspected `px`→`pl` mis-split must be guarded for
+        // padding. Every token the padding leaf contributes survives on all
+        // engines, and the `-l`/`-r` mis-split never appears.
+        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+            for (const token of [
+                'px-0',
+                'py-1',
+                'px-2',
+                'py-4',
+                'p-8',
+                'grow-1',
+                'dg-cell-item',
+                'properties-panel',
+                'm-2',
+            ]) {
+                expect(runs[engine].tokens, `${engine} must keep ${token}`).toContain(token);
+            }
+            expect(runs[engine].tokens, engine).not.toContain('pl-0');
+            expect(runs[engine].tokens, engine).not.toContain('pr-0');
         }
     });
 });
