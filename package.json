@@ -86,7 +86,7 @@
     "@biomejs/biome": "2.4.15",
     "@playwright/test": "^1.42.1",
     "@rollup/rollup-linux-arm64-gnu": "*",
-    "@tailwindcss/oxide-darwin-arm64": "*",
+    "@tailwindcss/oxide-darwin-arm64": "4.3.2",
     "@typescript-eslint/eslint-plugin": "^8.53.0",
     "@typescript-eslint/parser": "^8.53.0",
     "@vitest/coverage-v8": "^4.1.9",

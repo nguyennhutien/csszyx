@@ -325,6 +325,10 @@ describe('flexbox & grid — grid auto flow', () => {
 });
 
 describe('flexbox & grid — grid auto columns', () => {
+    it('{ autoCols: 12 } → auto-cols-12 (Tailwind v4.3.2 spacing)', () => {
+        expect(t({ autoCols: 12 })).toBe('auto-cols-12');
+    });
+
     it('{ autoCols: "auto" } → auto-cols-auto', () => {
         expect(t({ autoCols: 'auto' })).toBe('auto-cols-auto');
     });
@@ -351,6 +355,10 @@ describe('flexbox & grid — grid auto columns', () => {
 });
 
 describe('flexbox & grid — grid auto rows', () => {
+    it('{ autoRows: 16 } → auto-rows-16 (Tailwind v4.3.2 spacing)', () => {
+        expect(t({ autoRows: 16 })).toBe('auto-rows-16');
+    });
+
     it('{ autoRows: "auto" } → auto-rows-auto', () => {
         expect(t({ autoRows: 'auto' })).toBe('auto-rows-auto');
     });

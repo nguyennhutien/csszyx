@@ -92,7 +92,10 @@ font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
 ```tsx
 <div sz={{ color: "--ds-primary", p: "--spacing-4" }} />
 // → className="text-(--ds-primary) p-(--spacing-4)"
-// Sugar: any value starting with -- is auto-wrapped in ()
+// Plain --tokens use CSS-variable (); --functions(...) use arbitrary []
+
+<div sz={{ text: "--spacing(4)" }} />
+// → className="text-[--spacing(4)]"
 ```
 
 ### Color with opacity
@@ -1699,6 +1702,7 @@ Controlling implicit column sizing.
 | **Min**          | `grid-auto-columns: min-content`      | `auto-cols-min`             | `{ autoCols: 'min' }`           |
 | **Max**          | `grid-auto-columns: max-content`      | `auto-cols-max`             | `{ autoCols: 'max' }`           |
 | **Fr**           | `grid-auto-columns: minmax(0, 1fr)`   | `auto-cols-fr`              | `{ autoCols: 'fr' }`            |
+| **Spacing (v4.3.2)** | `grid-auto-columns: calc(var(--spacing) * 12)` | `auto-cols-12` | `{ autoCols: 12 }` |
 | **Arbitrary**    | `grid-auto-columns: minmax(0, 2fr)`   | `auto-cols-[minmax(0,2fr)]` | `{ autoCols: 'minmax(0,2fr)' }` |
 | **CSS Variable** | `grid-auto-columns: var(--auto-cols)` | `auto-cols-(--auto-cols)`   | `{ autoCols: '--auto-cols' }`   |
 
@@ -1712,6 +1716,7 @@ Controlling implicit row sizing.
 | **Min**          | `grid-auto-rows: min-content`      | `auto-rows-min`             | `{ autoRows: 'min' }`           |
 | **Max**          | `grid-auto-rows: max-content`      | `auto-rows-max`             | `{ autoRows: 'max' }`           |
 | **Fr**           | `grid-auto-rows: minmax(0, 1fr)`   | `auto-rows-fr`              | `{ autoRows: 'fr' }`            |
+| **Spacing (v4.3.2)** | `grid-auto-rows: calc(var(--spacing) * 16)` | `auto-rows-16` | `{ autoRows: 16 }` |
 | **Arbitrary**    | `grid-auto-rows: minmax(0, 2fr)`   | `auto-rows-[minmax(0,2fr)]` | `{ autoRows: 'minmax(0,2fr)' }` |
 | **CSS Variable** | `grid-auto-rows: var(--auto-rows)` | `auto-rows-(--auto-rows)`   | `{ autoRows: '--auto-rows' }`   |
 
@@ -3235,6 +3240,7 @@ Controlling the font size.
 | **Number**       | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | `text` is the single canonical key.                               |
 | **Arbitrary**    | `font-size: 1.5rem`                         | `text-[1.5rem]`                                                                                                                                         | `{ text: '1.5rem' }`                    |                                                                   |
 | **CSS Variable** | `font-size: var(--size)`                    | `text-(length:--size)`                                                                                                                                  | `{ text: '--size' }`                    | **Sugar**: Auto-detects `--`. Type hint disambiguates from color. |
+| **Spacing Function** | `font-size: calc(var(--spacing) * 4)` | `text-[--spacing(4)]` | `{ text: '--spacing(4)' }` | v4.3.2: build-time functions are auto-classified as arbitrary values; no brackets in `sz`. |
 
 ## Font Weight
 
@@ -3904,6 +3910,8 @@ Result: `{ bg: 'brand-500' }` gets autocomplete and type-checking.
 - All spacing values are dynamic (any integer, 0.5-step decimals work bare)
 - Arbitrary values: `{ p: '5px' }` → `p-[5px]` (auto-wrapped)
 - CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
+- Build-time functions: `{ text: '--spacing(4)' }` → `text-[--spacing(4)]`
+- Grid auto-track spacing: `{ autoCols: 12, autoRows: 16 }` → `auto-cols-12 auto-rows-16`
 
 ## Migrate CLI
 

@@ -17,7 +17,7 @@
     "dependencies": {
         "@astrojs/react": "^5.0.1",
         "@astrojs/starlight": "^0.38.2",
-        "@tailwindcss/vite": "^4.3.0",
+        "@tailwindcss/vite": "^4.3.2",
         "astro": "^6.4.6",
         "csszyx": "workspace:*",
         "react": "^19.2.4",
@@ -25,7 +25,7 @@
         "expressive-code-twoslash": "^0.6.1",
         "remark-gfm": "^4.0.1",
         "sharp": "^0.34.5",
-        "tailwindcss": "^4.3.0"
+        "tailwindcss": "^4.3.2"
     },
     "devDependencies": {
         "wrangler": "^4.92.0"

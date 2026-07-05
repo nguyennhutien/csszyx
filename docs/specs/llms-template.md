@@ -92,7 +92,10 @@ font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
 ```tsx
 <div sz={{ color: "--ds-primary", p: "--spacing-4" }} />
 // → className="text-(--ds-primary) p-(--spacing-4)"
-// Sugar: any value starting with -- is auto-wrapped in ()
+// Plain --tokens use CSS-variable (); --functions(...) use arbitrary []
+
+<div sz={{ text: "--spacing(4)" }} />
+// → className="text-[--spacing(4)]"
 ```
 
 ### Color with opacity
@@ -761,6 +764,8 @@ Result: `{ bg: 'brand-500' }` gets autocomplete and type-checking.
 - All spacing values are dynamic (any integer, 0.5-step decimals work bare)
 - Arbitrary values: `{ p: '5px' }` → `p-[5px]` (auto-wrapped)
 - CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
+- Build-time functions: `{ text: '--spacing(4)' }` → `text-[--spacing(4)]`
+- Grid auto-track spacing: `{ autoCols: 12, autoRows: 16 }` → `auto-cols-12 auto-rows-16`
 
 ## Migrate CLI
 

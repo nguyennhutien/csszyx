@@ -31,7 +31,12 @@ import { FontFamilies, FontSizeScale, FontWeightScale, TextColorExamples, Letter
   { sz: "{ text: '6xl' }", tw: "text-6xl" },
   { sz: "{ text: '9xl' }", tw: "text-9xl" },
   { sz: "{ text: '1.5rem' }", tw: "text-[1.5rem]" },
+  { sz: "{ text: '--spacing(4)' }", tw: "text-[--spacing(4)]" },
 ]} />
+
+Tailwind build-time functions use the same bracket-free `sz` ergonomics as other
+arbitrary values. Plain `--tokens` remain CSS-variable sugar, while
+`--functions(...)` are emitted as arbitrary values.
 
 <FontSizeScale />
 

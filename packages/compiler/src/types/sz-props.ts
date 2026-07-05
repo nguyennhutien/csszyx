@@ -548,10 +548,10 @@ export interface FlexboxGridProps {
     gridFlow?: 'row' | 'col' | 'dense' | 'row-dense' | 'col-dense';
 
     /** @see https://tailwindcss.com/docs/grid-auto-columns */
-    autoCols?: 'auto' | 'min' | 'max' | 'fr' | (string & {});
+    autoCols?: 'auto' | 'min' | 'max' | 'fr' | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/grid-auto-rows */
-    autoRows?: 'auto' | 'min' | 'max' | 'fr' | (string & {});
+    autoRows?: 'auto' | 'min' | 'max' | 'fr' | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/gap */
     gap?: SpacingValue;

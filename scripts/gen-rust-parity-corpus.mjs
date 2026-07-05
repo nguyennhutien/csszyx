@@ -75,6 +75,8 @@ const corpus = [
     { mx: '--space' },
     { p: '1/2' },
     { gap: '[10px]' },
+    { autoCols: 12 },
+    { autoRows: 16 },
     // sizing
     { w: 4 },
     { w: 'full' },
@@ -85,6 +87,12 @@ const corpus = [
     { size: 10 },
     { w: 'calc(100%-1rem)' },
     { h: '[var(--h)]' },
+    { text: '--spacing(4)' },
+    { text: '--spacing(calc(2 + 2)' },
+    { text: '--9(4)' },
+    { text: '---x(4)' },
+    { text: '--_x(4)' },
+    { color: { color: '--alpha(var(--brand) / 50%)' } },
     // layout — display / position / visibility (KLTN P0-1)
     { display: 'block' },
     { display: 'inline-block' },

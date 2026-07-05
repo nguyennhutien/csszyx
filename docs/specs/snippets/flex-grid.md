@@ -198,27 +198,29 @@ Controlling auto-placement algorithm.
 
 Controlling implicit column sizing.
 
-| Concept          | CSS Rule                              | Tailwind v4 Class           | `sz` Prop (Canonical)           |
-| :--------------- | :------------------------------------ | :-------------------------- | :------------------------------ |
-| **Auto**         | `grid-auto-columns: auto`             | `auto-cols-auto`            | `{ autoCols: 'auto' }`          |
-| **Min**          | `grid-auto-columns: min-content`      | `auto-cols-min`             | `{ autoCols: 'min' }`           |
-| **Max**          | `grid-auto-columns: max-content`      | `auto-cols-max`             | `{ autoCols: 'max' }`           |
-| **Fr**           | `grid-auto-columns: minmax(0, 1fr)`   | `auto-cols-fr`              | `{ autoCols: 'fr' }`            |
-| **Arbitrary**    | `grid-auto-columns: minmax(0, 2fr)`   | `auto-cols-[minmax(0,2fr)]` | `{ autoCols: 'minmax(0,2fr)' }` |
-| **CSS Variable** | `grid-auto-columns: var(--auto-cols)` | `auto-cols-(--auto-cols)`   | `{ autoCols: '--auto-cols' }`   |
+| Concept              | CSS Rule                                       | Tailwind v4 Class           | `sz` Prop (Canonical)           |
+| :------------------- | :--------------------------------------------- | :-------------------------- | :------------------------------ |
+| **Auto**             | `grid-auto-columns: auto`                      | `auto-cols-auto`            | `{ autoCols: 'auto' }`          |
+| **Min**              | `grid-auto-columns: min-content`               | `auto-cols-min`             | `{ autoCols: 'min' }`           |
+| **Max**              | `grid-auto-columns: max-content`               | `auto-cols-max`             | `{ autoCols: 'max' }`           |
+| **Fr**               | `grid-auto-columns: minmax(0, 1fr)`            | `auto-cols-fr`              | `{ autoCols: 'fr' }`            |
+| **Spacing (v4.3.2)** | `grid-auto-columns: calc(var(--spacing) * 12)` | `auto-cols-12`              | `{ autoCols: 12 }`              |
+| **Arbitrary**        | `grid-auto-columns: minmax(0, 2fr)`            | `auto-cols-[minmax(0,2fr)]` | `{ autoCols: 'minmax(0,2fr)' }` |
+| **CSS Variable**     | `grid-auto-columns: var(--auto-cols)`          | `auto-cols-(--auto-cols)`   | `{ autoCols: '--auto-cols' }`   |
 
 ## Grid Auto Rows
 
 Controlling implicit row sizing.
 
-| Concept          | CSS Rule                           | Tailwind v4 Class           | `sz` Prop (Canonical)           |
-| :--------------- | :--------------------------------- | :-------------------------- | :------------------------------ |
-| **Auto**         | `grid-auto-rows: auto`             | `auto-rows-auto`            | `{ autoRows: 'auto' }`          |
-| **Min**          | `grid-auto-rows: min-content`      | `auto-rows-min`             | `{ autoRows: 'min' }`           |
-| **Max**          | `grid-auto-rows: max-content`      | `auto-rows-max`             | `{ autoRows: 'max' }`           |
-| **Fr**           | `grid-auto-rows: minmax(0, 1fr)`   | `auto-rows-fr`              | `{ autoRows: 'fr' }`            |
-| **Arbitrary**    | `grid-auto-rows: minmax(0, 2fr)`   | `auto-rows-[minmax(0,2fr)]` | `{ autoRows: 'minmax(0,2fr)' }` |
-| **CSS Variable** | `grid-auto-rows: var(--auto-rows)` | `auto-rows-(--auto-rows)`   | `{ autoRows: '--auto-rows' }`   |
+| Concept              | CSS Rule                                    | Tailwind v4 Class           | `sz` Prop (Canonical)           |
+| :------------------- | :------------------------------------------ | :-------------------------- | :------------------------------ |
+| **Auto**             | `grid-auto-rows: auto`                      | `auto-rows-auto`            | `{ autoRows: 'auto' }`          |
+| **Min**              | `grid-auto-rows: min-content`               | `auto-rows-min`             | `{ autoRows: 'min' }`           |
+| **Max**              | `grid-auto-rows: max-content`               | `auto-rows-max`             | `{ autoRows: 'max' }`           |
+| **Fr**               | `grid-auto-rows: minmax(0, 1fr)`            | `auto-rows-fr`              | `{ autoRows: 'fr' }`            |
+| **Spacing (v4.3.2)** | `grid-auto-rows: calc(var(--spacing) * 16)` | `auto-rows-16`              | `{ autoRows: 16 }`              |
+| **Arbitrary**        | `grid-auto-rows: minmax(0, 2fr)`            | `auto-rows-[minmax(0,2fr)]` | `{ autoRows: 'minmax(0,2fr)' }` |
+| **CSS Variable**     | `grid-auto-rows: var(--auto-rows)`          | `auto-rows-(--auto-rows)`   | `{ autoRows: '--auto-rows' }`   |
 
 ## Gap
 

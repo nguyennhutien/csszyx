@@ -1270,6 +1270,87 @@ function needsArbitraryBrackets(value: string): boolean {
     );
 }
 
+/**
+ * Returns whether a character can occur in the ASCII identifier used by
+ * Tailwind build-time functions such as `--spacing(4)`.
+ *
+ * @param code - UTF-16 code unit to classify
+ * @returns Whether the code unit is an ASCII identifier character
+ */
+function isAsciiIdentifierCode(code: number): boolean {
+    return (
+        (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        code === 95 ||
+        (code >= 97 && code <= 122) ||
+        code === 45
+    );
+}
+
+/**
+ * @param code - UTF-16 code unit to classify
+ * @returns Whether the code unit can start an ASCII Tailwind function name
+ */
+function isAsciiIdentifierStartCode(code: number): boolean {
+    return (code >= 65 && code <= 90) || code === 95 || (code >= 97 && code <= 122);
+}
+
+/**
+ * Distinguishes Tailwind build-time function calls (`--spacing(4)`) from CSS
+ * custom-property names (`--spacing`). The scanner is deliberately linear and
+ * allocation-free so malformed or adversarial arbitrary values cannot trigger
+ * regex backtracking or input-proportional temporary allocations.
+ *
+ * @param value - Candidate sz string value
+ * @returns Whether the complete value is one balanced build-time function call
+ */
+function isTailwindBuildFunction(value: string): boolean {
+    const length = value.length;
+    if (length < 5 || value.charCodeAt(0) !== 45 || value.charCodeAt(1) !== 45) {
+        return false;
+    }
+
+    if (!isAsciiIdentifierStartCode(value.charCodeAt(2))) return false;
+
+    let index = 3;
+    while (index < length && isAsciiIdentifierCode(value.charCodeAt(index))) {
+        index += 1;
+    }
+    if (index === 2 || index >= length || value.charCodeAt(index) !== 40) {
+        return false;
+    }
+
+    let depth = 0;
+    let quote = 0;
+    let escaped = false;
+    for (; index < length; index += 1) {
+        const code = value.charCodeAt(index);
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (code === 92) {
+            escaped = true;
+            continue;
+        }
+        if (quote !== 0) {
+            if (code === quote) quote = 0;
+            continue;
+        }
+        if (code === 34 || code === 39) {
+            quote = code;
+        } else if (code === 40) {
+            depth += 1;
+        } else if (code === 41) {
+            depth -= 1;
+            if (depth === 0) return index === length - 1;
+            if (depth < 0) return false;
+        }
+    }
+
+    return false;
+}
+
 // Tailwind v4: <number> values are fully dynamic (no static limits)
 // z-index, font-weight, order, grid-span, grid-start/end, line-clamp all accept ANY integer
 const LIST_STYLE_STANDARD = new Set(['none', 'disc', 'decimal']);
@@ -1982,11 +2063,15 @@ function transformImpl(
             const rawColorBase = String(colorObj.color);
             // CSS variables use (--var) syntax; hex/rgb/hsl/units need [bracket] wrapping;
             // named colors (e.g. 'blue-500') pass through as-is.
-            const colorBase = rawColorBase.startsWith('--')
-                ? `(${rawColorBase})`
-                : needsArbitraryBrackets(rawColorBase)
-                  ? `[${normalizeArbitraryValue(rawColorBase)}]`
-                  : normalizeArbitraryValue(rawColorBase);
+            const colorBase =
+                isTailwindBuildFunction(rawColorBase) ||
+                (rawColorBase.startsWith('--') && rawColorBase.includes('('))
+                    ? `[${normalizeArbitraryValue(rawColorBase)}]`
+                    : rawColorBase.startsWith('--')
+                      ? `(${rawColorBase})`
+                      : needsArbitraryBrackets(rawColorBase)
+                        ? `[${normalizeArbitraryValue(rawColorBase)}]`
+                        : normalizeArbitraryValue(rawColorBase);
 
             if (colorObj.op !== undefined) {
                 const opStr = formatOpacity(colorObj.op);
@@ -3124,9 +3209,18 @@ function transformImpl(
             const { value: cleanValue, important } = handleImportant(value);
             let finalValue = cleanValue;
 
-            // v4 Variable Syntax: '--color' → '(--color)'
-            // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'
-            if (finalValue.startsWith('--')) {
+            // Tailwind build-time functions are arbitrary values, not CSS custom
+            // properties. Classify them before the `--var` sugar so
+            // `--spacing(4)` becomes `[--spacing(4)]`, never `(--spacing(4))`.
+            if (isTailwindBuildFunction(finalValue)) {
+                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
+            } else if (finalValue.startsWith('--') && finalValue.includes('(')) {
+                // Function-shaped but malformed/unsupported values remain
+                // arbitrary; they must never be mislabeled as CSS variables.
+                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
+            } else if (finalValue.startsWith('--')) {
+                // v4 Variable Syntax: '--color' → '(--color)'
+                // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'
                 const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
                 if (typeHint) {
                     finalValue = `(${typeHint}:${finalValue})`;

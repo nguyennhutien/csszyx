@@ -13,12 +13,12 @@
     "dependencies": {
         "@csszyx/runtime": "workspace:*",
         "@csszyx/unplugin": "workspace:*",
-        "@tailwindcss/postcss": "^4.3.0",
+        "@tailwindcss/postcss": "^4.3.2",
         "csszyx": "workspace:*",
         "next": "^15.5.18",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "tailwindcss": "^4.3.0"
+        "tailwindcss": "^4.3.2"
     },
     "devDependencies": {
         "@csszyx/compiler": "workspace:*",
