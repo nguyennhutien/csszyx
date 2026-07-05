@@ -444,12 +444,18 @@ compiled") — the string-typed prop the component reads. Consumers WRITE `szs`,
 components READ `szsc`; declare both from one slot union with `SzsProps`.
 
 ```tsx
+// INSIDE the component — declare slots, READ `szsc` (compiled strings):
 type CardProps = { title: string } & SzsProps<"header" | "icon">; // from @csszyx/types
+function Card({ szsc }: CardProps) {
+  return <header className={szsc?.header} />; // plain string — no cast, no szsClass
+}
+
+// OUTSIDE at the call site — consumer WRITES `szs` (sz objects):
 <Card szs={{ header: { bg: "gray-100" }, icon: { color: "red-500" } }} />;
-// → <Card szsc={{ header: "bg-gray-100", icon: "text-red-500" }} />
-// component: <header className={props.szsc?.header} />   // plain string — no cast
-// szsc is undefined when the consumer didn't style the slot or the call site
-// wasn't compiled (build warns) — an object can never reach className.
+// build rewrites the call → <Card szsc={{ header: "bg-gray-100", icon: "text-red-500" }} />
+// szs = write side (consumer). szsc = read side (component). Never swap them;
+// never hand-write szsc. szsc?.slot is undefined when the consumer didn't style
+// that slot or the call wasn't compiled (build warns) — an object never reaches className.
 ```
 
 Rules: custom components only (host element → dev warn, unchanged). Slot values

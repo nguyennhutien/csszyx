@@ -188,9 +188,13 @@ objects, with autocompletion) and another way for the component that reads it
 components **read `szsc`**. Declare both from one slot union with `SzsProps`,
 and each slot forwards straight into a child `className` — no cast, no helper:
 
+The two sides always pair up like this — the consumer **writes `szs`**, the
+component **reads `szsc`**, and you never swap them:
+
 ```tsx
 import type { SzsProps } from '@csszyx/types';
 
+// ── INSIDE the component: declare slots with SzsProps, READ `szsc` ──
 type CardProps = { title: string } & SzsProps<'header' | 'icon'>;
 
 function Card({ title, szsc }: CardProps) {
@@ -205,7 +209,16 @@ function Card({ title, szsc }: CardProps) {
     </div>
   );
 }
+
+// ── OUTSIDE, at the call site: the consumer WRITES `szs` (sz objects) ──
+<Card title="Invoice" szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />;
+// The build rewrites that call to szsc={{ header: "bg-gray-100", icon: "text-red-500" }},
+// which is what `Card` receives. You author `szs`; you never write `szsc` by hand.
 ```
+
+> **Which prop where?** `szs` is the **write** side (consumer, sz objects);
+> `szsc` is the **read** side (component, compiled strings). A consumer never
+> types `szsc`; a component never receives `szs`.
 
 No defaults to merge? Forward the slot alone — `className={szsc?.icon}` and
 `sz={[szsc?.icon]}` are both fine.
