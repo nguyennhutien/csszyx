@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
@@ -2209,6 +2210,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
     let transformMemoryCacheCodeChars = 0;
+    // One-shot handoff of prescan transform results to the transform hook.
+    // The two lanes intentionally never share the transform CACHE (the prescan
+    // runs a larger AST budget, and a cache entry must not be served to a lane
+    // whose budget could not have produced it) — but within ONE process, for
+    // UNCHANGED content, the prescan result IS the hook result, so re-deriving
+    // it made every cold build/dev start transform each sz-file twice.
+    // Entries are keyed by normalized filename, guarded by the full source
+    // sha256, and deleted on first probe (hit or miss) so the map drains as
+    // the module graph loads; buildEnd and the first HMR update clear any
+    // residue for files the bundler never requested.
+    const prescanResultHandoff = new Map<
+        string,
+        { inputSha256: string; result: SourceTransformResult }
+    >();
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -2468,6 +2483,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (cached) {
                 rememberTransformCacheEntry(cacheKey.key, cached);
                 return cached;
+            }
+
+            // Transform-hook lane only (the prescan lanes pass an explicit
+            // budget): reuse the in-process prescan result for unchanged
+            // content instead of transforming the same file a second time.
+            // Deliberately NOT filed into either cache — the caches stay
+            // budget-keyed; this is a same-process, same-content shortcut.
+            if (astBudget === undefined) {
+                const handoff = prescanResultHandoff.get(effectiveFilename);
+                if (handoff) {
+                    prescanResultHandoff.delete(effectiveFilename);
+                    if (handoff.inputSha256 === cacheKey.inputSha256) {
+                        return handoff.result;
+                    }
+                }
             }
         }
 
@@ -2927,7 +2957,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             scanDir(sourceDir);
         }
 
+        const prescanContentByPath = new Map(
+            prescanSources.map(file => [file.filePath, file.content]),
+        );
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            // Hand the result to the transform hook for same-content reuse.
+            // Budget-tripped results are NOT handed off: the hook lane's
+            // documented behaviour for an over-budget file (JS lanes throw,
+            // rust returns the bail) must stay observable there. A file that
+            // PASSED under the larger prescan budget is handed off even if the
+            // hook's smaller budget would have bailed — the work is already
+            // paid for, and reusing it keeps the emitted code consistent with
+            // the classes the prescan just safelisted.
+            if (cacheEnabled && !result.diagnostics.some(d => d.includes('AST budget exceeded'))) {
+                const content = prescanContentByPath.get(filePath);
+                if (content !== undefined) {
+                    prescanResultHandoff.set(normalizeSourceFilename(filePath), {
+                        inputSha256: createHash('sha256').update(content).digest('hex'),
+                        result,
+                    });
+                }
+            }
             // The native engine cannot throw like the JS lanes do, so a
             // budget-tripped file comes back as a normal result carrying the
             // budget diagnostic and zero classes. Same silent-dead-CSS stakes
@@ -3668,6 +3718,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     emitWarning(`[csszyx] ${warning}`);
                 }
                 state.spreadWarnings.clear();
+                // Drop prescan results the bundler never asked to transform
+                // (unimported files) — each retains a full transformed-code
+                // string, and the handoff's job ended with this build.
+                prescanResultHandoff.clear();
                 // Expose the mangle map as a Node.js global so that dynamic() SSR calls
                 // (which run in the same process during Astro/Next.js SSG) can resolve
                 // original class names to their mangled equivalents. Without this, dynamic()
@@ -3745,6 +3799,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * @param ctx - HMR context containing the changed file
                  */
                 handleHotUpdate(ctx) {
+                    // First edit = the initial module-load wave is over; any
+                    // handoff entries left belong to files the dev server
+                    // never imported, and each retains a transformed-code
+                    // string for nothing.
+                    prescanResultHandoff.clear();
                     // Theme scan for @theme CSS blocks
                     const scanCss = options.build?.scanCss;
                     if (scanCss) {
