@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/core",
-  "version": "0.10.12",
+  "version": "0.11.0",
   "description": "WASM core for csszyx",
   "keywords": [
     "csszyx",

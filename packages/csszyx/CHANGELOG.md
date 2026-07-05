@@ -1,5 +1,26 @@
 # csszyx
 
+## [0.11.0](https://github.com/nguyennhutien/csszyx/compare/v0.10.12...v0.11.0) (2026-07-05)
+
+### Features
+
+* sz array later-wins, szs slots on szsc, Tailwind 4.3.2 ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core,runtime:** compiled szs slots land on a dedicated szsc prop ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core,runtime:** sz arrays compose with later-wins semantics ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler:** support Tailwind functions and grid track spacing ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+
+### Bug Fixes
+
+* **unplugin,cli:** replace polynomial regexes with linear scans ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **core,compiler,unplugin:** stop silent safelist loss on AST-budget bails ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core:** make szv catalog extraction per-key lenient in all engines ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core:** keep the szv catalog walk linear on const-doubling DAGs ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+
+### Performance
+
+* **compiler,core,runtime,unplugin:** compiled sz arrays merge through unmemoized _szcn ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **unplugin:** hand prescan results to the transform hook (1x cold transform) ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+
 ## [0.10.12](https://github.com/nguyennhutien/csszyx/compare/v0.10.11...v0.10.12) (2026-07-04)
 
 ### Bug Fixes
