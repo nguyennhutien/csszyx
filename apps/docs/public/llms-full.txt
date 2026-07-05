@@ -335,14 +335,14 @@ Composing multiple classes for a single effect.
 
 Mapping precise, non-theme values to JIT syntax (Arbitrary Properties or Values).
 
-| Concept              | CSS Property                                | Tailwind v4 Class              | `sz` Prop (Object Syntax)             | Note                                          |
-| :------------------- | :------------------------------------------ | :----------------------------- | :------------------------------------ | :-------------------------------------------- |
-| **Arbitrary Color**  | `background-color: #316ff6`                 | `bg-[#316ff6]`                 | `{ bg: '#316ff6' }`                   | Preferred over inline styles for caching.     |
-| **Arbitrary Size**   | `width: 333px`                              | `w-[333px]`                    | `{ w: '333px' }`                      | Explicit unit required string.                |
-| **Data Prop**        | `content: attr(data-content)`               | `content-[attr(data-content)]` | `{ content: 'attr(data-content)' }`   | Complex arbitrary strings.                    |
-| **CSS Variable**     | `padding: var(--gap)`                       | `p-(--gap)`                    | `{ p: '--gap' }`                      | Bare `--name` → **parenthesized** var sugar.  |
-| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`       | `text-[--spacing(4)]`          | `{ text: '--spacing(4)' }`            | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
-| **Alpha Fn (color)** | `color: color-mix(in oklab, var(--brand) 50%, transparent)` | `bg-[--alpha(var(--brand)_/_50%)]` | `{ bg: '--alpha(var(--brand) / 50%)' }` | Tailwind color function; same `--fn(...)` rule. |
+| Concept              | CSS Property                                                | Tailwind v4 Class                  | `sz` Prop (Object Syntax)               | Note                                              |
+| :------------------- | :---------------------------------------------------------- | :--------------------------------- | :-------------------------------------- | :------------------------------------------------ |
+| **Arbitrary Color**  | `background-color: #316ff6`                                 | `bg-[#316ff6]`                     | `{ bg: '#316ff6' }`                     | Preferred over inline styles for caching.         |
+| **Arbitrary Size**   | `width: 333px`                                              | `w-[333px]`                        | `{ w: '333px' }`                        | Explicit unit required string.                    |
+| **Data Prop**        | `content: attr(data-content)`                               | `content-[attr(data-content)]`     | `{ content: 'attr(data-content)' }`     | Complex arbitrary strings.                        |
+| **CSS Variable**     | `padding: var(--gap)`                                       | `p-(--gap)`                        | `{ p: '--gap' }`                        | Bare `--name` → **parenthesized** var sugar.      |
+| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`                       | `text-[--spacing(4)]`              | `{ text: '--spacing(4)' }`              | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
+| **Alpha Fn (color)** | `color: color-mix(in oklab, var(--brand) 50%, transparent)` | `text-[--alpha(var(--brand)_/_50%)]` | `{ color: '--alpha(var(--brand) / 50%)' }` | Tailwind color function; same `--fn(...)` rule.   |
 
 **`--` prefix — the one rule that decides parens vs brackets** (applies to EVERY
 value position — `p`, `bg`, `m`, `w`, `text`, …, not just font-size):
