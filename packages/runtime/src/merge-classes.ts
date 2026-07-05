@@ -244,6 +244,26 @@ export function szcn(...inputs: (string | false | null | undefined)[]): string {
 }
 
 /**
+ * Compiler-injected variant of {@link szcn} for compiled `sz={[...]}` arrays —
+ * identical merge semantics, NO memo. The memo exists for layered components
+ * that pass IDENTICAL constant inputs every render; compiled arrays carry
+ * runtime parts (`_szPart(row.style)`) that vary per element, so routing them
+ * through the shared 500-entry LRU would never hit AND would evict the hot
+ * layered-component entries — a list render could flush the memo several
+ * times over per frame. Skipping the memo keeps each call at the plain
+ * uncached cost and leaves the authored-`szcn` fast path untouched.
+ *
+ * The `_` prefix marks it as generated-code-only (like `_sz`/`_szMerge`/
+ * `_szPart`) — hand-author `szcn` instead.
+ *
+ * @param inputs - Class strings; falsy inputs (`false`/`null`/`undefined`/`''`) are skipped.
+ * @returns The merged className string.
+ */
+export function _szcn(...inputs: (string | false | null | undefined)[]): string {
+    return mergeUncached(inputs);
+}
+
+/**
  * The uncached merge — see {@link szcn} for the contract.
  *
  * @param inputs - Class strings; falsy inputs are skipped.

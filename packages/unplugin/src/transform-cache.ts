@@ -4,7 +4,10 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-const CACHE_SCHEMA_VERSION = 8;
+// 9: the compiled sz-array lane emits `_szcn(` (unmemoized) instead of
+// `szcn(` and injects the matching import — cached code from schema 8 would
+// mix the old call shape into a new build.
+const CACHE_SCHEMA_VERSION = 9;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';

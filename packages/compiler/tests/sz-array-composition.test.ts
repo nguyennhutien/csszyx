@@ -6,7 +6,7 @@
  *   - every element a static object → deep merge at build (later leaf wins
  *     per key path, sibling keys survive) → one compiled className;
  *   - anything else (class strings, `cond && obj` guards, dynamic
- *     expressions like a forwarded `szsc` slot) → `szcn(...)` at runtime,
+ *     expressions like a forwarded `szsc` slot) → `_szcn(...)` at runtime (the unmemoized szcn twin),
  *     which applies the same later-wins rule per property group; dynamic
  *     elements pass through `_szPart` (string passthrough / object compile).
  *
@@ -89,14 +89,14 @@ const FIXTURES: Fixture[] = [
     {
         name: 'class-string element → szcn lane',
         attr: 'sz={[{ text: "base", p: 4 }, "text-lg font-bold"]}',
-        expectDiv: '<div className={szcn("text-base p-4", "text-lg font-bold")} />',
+        expectDiv: '<div className={_szcn("text-base p-4", "text-lg font-bold")} />',
         classes: ['text-base', 'p-4', 'text-lg', 'font-bold'],
         usesSzcn: true,
     },
     {
         name: 'dynamic element (forwarded szsc slot) → _szPart',
         attr: 'sz={[{ text: "base", p: 4 }, szsc?.title]}',
-        expectDiv: '<div className={szcn("text-base p-4", _szPart(szsc?.title))} />',
+        expectDiv: '<div className={_szcn("text-base p-4", _szPart(szsc?.title))} />',
         classes: ['text-base', 'p-4'],
         usesSzcn: true,
         usesSzPart: true,
@@ -104,21 +104,21 @@ const FIXTURES: Fixture[] = [
     {
         name: 'conditional object guard',
         attr: 'sz={[{ p: 4 }, big && { p: 8 }]}',
-        expectDiv: '<div className={szcn("p-4", big && "p-8")} />',
+        expectDiv: '<div className={_szcn("p-4", big && "p-8")} />',
         classes: ['p-4', 'p-8'],
         usesSzcn: true,
     },
     {
         name: 'conditional class-string guard',
         attr: 'sz={[{ p: 4 }, big && "p-8"]}',
-        expectDiv: '<div className={szcn("p-4", big && "p-8")} />',
+        expectDiv: '<div className={_szcn("p-4", big && "p-8")} />',
         classes: ['p-4', 'p-8'],
         usesSzcn: true,
     },
     {
         name: 'existing className joins as the first szcn argument',
         attr: 'className="card" sz={[{ p: 4 }, szsc?.title]}',
-        expectDiv: '<div className={szcn("card", "p-4", _szPart(szsc?.title))} />',
+        expectDiv: '<div className={_szcn("card", "p-4", _szPart(szsc?.title))} />',
         classes: ['p-4'],
         usesSzcn: true,
         usesSzPart: true,
@@ -126,7 +126,7 @@ const FIXTURES: Fixture[] = [
     {
         name: 'ternary element stays runtime but safelists both branches',
         attr: 'sz={[{ p: 4 }, big ? { m: 2 } : { m: 8 }]}',
-        expectDiv: '<div className={szcn("p-4", _szPart(big ? { m: 2 } : { m: 8 }))} />',
+        expectDiv: '<div className={_szcn("p-4", _szPart(big ? { m: 2 } : { m: 8 }))} />',
         classes: ['p-4', 'm-2', 'm-8'],
         usesSzcn: true,
         usesSzPart: true,

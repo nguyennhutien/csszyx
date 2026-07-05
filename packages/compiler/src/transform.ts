@@ -1009,8 +1009,12 @@ export function transformSourceCode(
                                             }
                                         }
                                         path.node.name.name = 'className';
+                                        // `_szcn` = the unmemoized szcn twin:
+                                        // compiled arrays carry per-render
+                                        // runtime parts, which would thrash
+                                        // (and evict) the authored-szcn memo.
                                         path.node.value = t.jsxExpressionContainer(
-                                            t.callExpression(t.identifier('szcn'), args),
+                                            t.callExpression(t.identifier('_szcn'), args),
                                         );
                                         usesSzcn = true;
                                         usesSzPart ||= anySzPart;

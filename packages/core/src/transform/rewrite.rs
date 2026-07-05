@@ -202,7 +202,9 @@ fn rewrite_array_sz_attribute(
             },
         ));
     }
-    let replacement = format!("className={{szcn({})}}", arguments.join(", "));
+    // `_szcn` = the unmemoized szcn twin: compiled arrays carry per-render
+    // runtime parts, which would thrash (and evict) the authored-szcn memo.
+    let replacement = format!("className={{_szcn({})}}", arguments.join(", "));
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
@@ -1130,7 +1132,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const base = { p: 4 }; const App = ({ active }) => <div className={szcn(\"p-4\", active && \"m-2\")} />;"
+            "const base = { p: 4 }; const App = ({ active }) => <div className={_szcn(\"p-4\", active && \"m-2\")} />;"
         );
     }
 

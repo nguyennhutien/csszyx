@@ -565,9 +565,12 @@ export function transformOxc(
                 const existingExpression = classNameAttr
                     ? classNameMergeArgument(classNameAttr, source)
                     : null;
+                // `_szcn` = the unmemoized szcn twin: compiled arrays carry
+                // per-render runtime parts, which would thrash (and evict)
+                // the authored-szcn memo.
                 const call = existingExpression
-                    ? `szcn(${existingExpression}, ${composition.args})`
-                    : `szcn(${composition.args})`;
+                    ? `_szcn(${existingExpression}, ${composition.args})`
+                    : `_szcn(${composition.args})`;
                 if (classNameAttr) {
                     edits.overwrite(classNameAttr.start, classNameAttr.end, `className={${call}}`);
                     edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);

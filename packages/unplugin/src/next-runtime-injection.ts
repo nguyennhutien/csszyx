@@ -5,7 +5,7 @@ const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
 /** Runtime helpers emitted by csszyx compiler transforms. */
-export type NextRuntimeHelper = '_sz' | '_szMerge' | 'szcn' | '_szPart' | '__szColorVar';
+export type NextRuntimeHelper = '_sz' | '_szMerge' | '_szcn' | '_szPart' | '__szColorVar';
 
 /** Runtime helper usage flags from a compiler transform result. */
 export interface NextRuntimeImportUsage {
@@ -68,7 +68,7 @@ function runtimeHelpersFromUsage(usage: NextRuntimeImportUsage): NextRuntimeHelp
         helpers.push('_szMerge');
     }
     if (usage.usesSzcn) {
-        helpers.push('szcn');
+        helpers.push('_szcn');
     }
     if (usage.usesSzPart) {
         helpers.push('_szPart');

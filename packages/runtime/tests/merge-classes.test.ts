@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { szcn } from '../src/merge-classes.js';
+import { _szcn, szcn } from '../src/merge-classes.js';
 
 // szcn is the single resolution point for a layered design-system
 // component (Box < Flex < Row/Col): combine default classes with the forwarded
@@ -379,5 +379,33 @@ describe('szcn — BEM base + modifier are distinct classes (never collapsed)', 
     it('still overrides genuine same-utility value pairs', () => {
         expect(szcn('gap-2 gap-8')).toBe('gap-8');
         expect(szcn('p-2 p-8')).toBe('p-8');
+    });
+});
+
+describe('_szcn — the unmemoized compiler-emitted twin', () => {
+    it('merges identically to szcn on the same inputs', () => {
+        expect(_szcn('gap-2 p-4', 'gap-8')).toBe(szcn('gap-2 p-4', 'gap-8'));
+        expect(_szcn('text-base', false, 'text-sm')).toBe('text-sm');
+        expect(_szcn()).toBe('');
+    });
+
+    it('never serves a stale memoized result (no cache by design)', () => {
+        // Prime szcn's memo AND call _szcn once, then swap the decode bridge.
+        // szcn deliberately invalidates on bridge identity; _szcn must reflect
+        // the new bridge because it holds NO cache at all — compiled arrays
+        // pass per-render values where a shared LRU would only thrash.
+        expect(_szcn('q1', 'q2')).toBe('q1 q2'); // unknown tokens, would be cached
+        const reverse = new Map([
+            ['q1', 'gap-2'],
+            ['q2', 'gap-8'],
+        ]);
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: (token: string) => reverse.get(token),
+        };
+        try {
+            expect(_szcn('q1', 'q2')).toBe('q2'); // mangle-aware: same utility, last wins
+        } finally {
+            (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+        }
     });
 });

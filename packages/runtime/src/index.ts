@@ -48,7 +48,7 @@ export {
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
 export { __szColorVar } from './lite.js';
 // Mangle-aware className merge (last-wins override) for layered components
-export { szcn } from './merge-classes.js';
+export { _szcn, szcn } from './merge-classes.js';
 
 export { registerSzcnGroups, type SzcnThemeGroups } from './merge-groups.js';
 // Box-model class routing + category-aware toolkit

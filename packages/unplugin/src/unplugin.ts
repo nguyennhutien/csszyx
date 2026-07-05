@@ -3504,7 +3504,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         imports.push('_szMerge');
                     }
                     if (usesSzcn) {
-                        imports.push('szcn');
+                        imports.push('_szcn');
                     }
                     if (usesSzPart) {
                         imports.push('_szPart');

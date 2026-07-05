@@ -163,7 +163,7 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":8');
+        expect(content).toContain('"version":9');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
