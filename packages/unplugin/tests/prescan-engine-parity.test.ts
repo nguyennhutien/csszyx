@@ -123,6 +123,22 @@ const UNIMPORTED_DESIGN_SYSTEM_FIXTURE = `
 export const Button = () => <button className="ds-button" sz={{ rounded: 'lg', indent: 8 }} />;
 `;
 
+// The exact 0.11.0 field-report shape: a compileSources (vui-package) leaf that
+// is NOT in the app import graph and carries ALL of — an szv catalog (grow/mx/my),
+// semantic string classes (`dg-row-item`, `layout-header`), AND a static sz. The
+// native fast path used to see the static `sz={{ p: 4 }}`, take the AST-free path,
+// and drop the szv catalog (mx-0/grow-1/my-4) — so `rust`'s safelist was smaller
+// than `oxc`'s for this file while the semantic strings survived, the divergence
+// vui measured. All three engines must now agree.
+const UNIMPORTED_VUI_LEAF_FIXTURE = `
+import { szv } from '@csszyx/runtime';
+const gridSz = szv({ variants: { layout: {
+    panelSelect: { grow: 1, mx: 0, my: 4 },
+    panel: { grow: 1, m: 4 },
+} } });
+export const DataGrid = () => <div className="dg-row-item layout-header" sz={{ p: 4 }} />;
+`;
+
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -151,6 +167,7 @@ function runPrescan(parser: 'rust' | 'oxc' | 'babel'): {
     }
     writeFileSync(join(root, 'src/broken.tsx'), BROKEN_FIXTURE, 'utf8');
     writeFileSync(join(root, 'design-system/Button.tsx'), UNIMPORTED_DESIGN_SYSTEM_FIXTURE, 'utf8');
+    writeFileSync(join(root, 'design-system/DataGrid.tsx'), UNIMPORTED_VUI_LEAF_FIXTURE, 'utf8');
 
     const warnings: string[] = [];
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
@@ -211,6 +228,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "bg-tag-blue-bg",
             "bg-tag-red-bg",
             "datetime",
+            "dg-row-item",
             "ds-button",
             "font-semibold",
             "gap-2",
@@ -218,6 +236,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "grow-1",
             "hover:bg-zinc-100",
             "indent-8",
+            "layout-header",
             "leading-loose",
             "m-4",
             "m-6",
@@ -265,6 +284,29 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         for (const engine of ['rust', 'oxc', 'babel'] as const) {
             expect(runs[engine].tokens, engine).toContain('ds-button');
             expect(runs[engine].tokens, engine).toContain('rounded-lg');
+        }
+    });
+
+    it('a compileSources leaf keeps its szv catalog AND semantic strings beside a static sz (0.11.0 field report)', () => {
+        // The reported divergence: the native fast path saw the static
+        // `sz={{ p: 4 }}` in an unimported vui leaf, took the AST-free path, and
+        // dropped the szv catalog (`mx-0`/`grow-1`/`my-4`) while the semantic
+        // string classes survived — so `rust` safelisted fewer tokens than `oxc`.
+        // Every token this file contributes must appear on all three engines.
+        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+            for (const token of [
+                'grow-1',
+                'mx-0',
+                'my-4',
+                'm-4',
+                'dg-row-item',
+                'layout-header',
+                'p-4',
+            ]) {
+                expect(runs[engine].tokens, `${engine} must keep ${token}`).toContain(token);
+            }
+            // Never the shorthand mis-split the report suspected.
+            expect(runs[engine].tokens, engine).not.toContain('ml-0');
         }
     });
 });
