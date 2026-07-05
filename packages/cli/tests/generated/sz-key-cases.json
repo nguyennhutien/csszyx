@@ -2639,6 +2639,12 @@
                 },
                 {
                     "sz": {
+                        "color": "--alpha(var(--brand) / 50%)"
+                    },
+                    "class": "text-[--alpha(var(--brand)_/_50%)]"
+                },
+                {
+                    "sz": {
                         "color": "#50d71e"
                     },
                     "class": "text-[#50d71e]"
@@ -2690,6 +2696,7 @@
                 "text-(--c)",
                 "text-(--c)/50",
                 "text-[#50d71e]",
+                "text-[--alpha(var(--brand)_/_50%)]",
                 "text-black",
                 "text-blue-500/50",
                 "text-current",
@@ -7085,6 +7092,12 @@
             "forward": [
                 {
                     "sz": {
+                        "p": "--gap"
+                    },
+                    "class": "p-(--gap)"
+                },
+                {
+                    "sz": {
                         "p": "--p"
                     },
                     "class": "p-(--p)"
@@ -7121,6 +7134,7 @@
                 }
             ],
             "reverse": [
+                "p-(--gap)",
                 "p-(--p)",
                 "p-4",
                 "p-6",

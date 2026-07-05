@@ -10597,6 +10597,25 @@
     "oxc": "text-(--c)/50"
   },
   {
+    "sz": "{\"color\":\"--alpha(var(--brand) / 50%)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "color",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--alpha(var(--brand) / 50%)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--alpha(var(--brand)_/_50%)]"
+  },
+  {
     "sz": "{\"color\":\"#50d71e\"}",
     "ir": {
       "properties": [
@@ -19903,6 +19922,25 @@
       ]
     },
     "oxc": "overscroll-y-none"
+  },
+  {
+    "sz": "{\"p\":\"--gap\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "p",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--gap"
+          }
+        }
+      ]
+    },
+    "oxc": "p-(--gap)"
   },
   {
     "sz": "{\"p\":\"--p\"}",
