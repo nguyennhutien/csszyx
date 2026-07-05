@@ -138,6 +138,11 @@ export function transformRustBatch(
                 mangleVarHoistMaxDepth: options?.mangleVarHoistMaxDepth,
                 globalVarAliases: normalizeGlobalVarAliases(options?.globalVarAliases),
                 rootDir: options?.rootDir,
+                // The node cap must reach the native parser too: engines count
+                // AST nodes differently, so an oxc-passing page file can trip
+                // the default cap under rust only — and the user's raised
+                // `build.astBudgetLimit` has to apply to whichever engine trips.
+                astBudget: options?.astBudget,
             },
         ).map(fromNativeResult);
     } catch (err) {
@@ -188,6 +193,8 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         transformed: result.metadata.transformed,
         usesRuntime: result.metadata.usesRuntime,
         usesMerge: result.metadata.usesMerge,
+        usesSzcn: result.metadata.usesSzcn,
+        usesSzPart: result.metadata.usesSzPart,
         usesColorVar: result.metadata.usesColorVar,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),

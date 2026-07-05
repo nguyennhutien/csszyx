@@ -96,23 +96,49 @@ export interface HtmlInjectionOptions {
  * // <html lang="en" data-sz-checksum="a1b2c3d4e5f67890"><head></head></html>
  * ```
  */
+/**
+ * Insert `attr` immediately after the `<html` of the first `<html …>` opening
+ * tag (before any existing attributes), or return the html unchanged when no
+ * such tag exists. Linear indexOf scan replacing `/<html([^>]*)>/i`, whose
+ * `[^>]*` re-scanned from each `<html` position when no `>` followed.
+ *
+ * @param html - Source HTML.
+ * @param attr - Attribute text to insert (must include its own leading space).
+ * @returns The html with the attribute inserted, or unchanged.
+ */
+function injectHtmlOpeningAttr(html: string, attr: string): string {
+    const lower = html.toLowerCase();
+    let from = 0;
+    for (;;) {
+        const start = lower.indexOf('<html', from);
+        if (start === -1) {
+            return html;
+        }
+        const after = html[start + 5];
+        // Only a real `<html` tag: the next char ends the name (`>`, space, /).
+        if (after === undefined || after === '>' || after === '/' || /\s/.test(after)) {
+            const close = html.indexOf('>', start + 5);
+            if (close === -1) {
+                return html;
+            }
+            const nameEnd = start + 5;
+            return `${html.slice(0, nameEnd)}${attr}${html.slice(nameEnd)}`;
+        }
+        from = start + 5;
+    }
+}
+
+/**
+ * Inject the SSR hydration checksum onto the document's `<html>` tag.
+ *
+ * @param html - The HTML document.
+ * @param checksum - The mangle-map checksum to embed.
+ * @param minify - Use the short `data-sz-cs` attribute name instead of `data-sz-checksum`.
+ * @returns The HTML with the checksum attribute on `<html>` (unchanged when absent).
+ */
 export function injectChecksum(html: string, checksum: string, minify = false): string {
     const attrName = minify ? 'data-sz-cs' : 'data-sz-checksum';
-
-    // Find <html> tag and inject checksum
-    const htmlTagPattern = /<html([^>]*)>/i;
-    const match = html.match(htmlTagPattern);
-
-    if (!match) {
-        // No <html> tag found, return unchanged
-        return html;
-    }
-
-    const existingAttrs = match[1];
-    const checksumAttr = ` ${attrName}="${checksum}"`;
-
-    // Replace <html...> with <html data-sz-checksum="..." ...>
-    return html.replace(htmlTagPattern, `<html${checksumAttr}${existingAttrs}>`);
+    return injectHtmlOpeningAttr(html, ` ${attrName}="${checksum}"`);
 }
 
 /**
@@ -193,18 +219,7 @@ export function injectMangleMapAttribute(
 ): string {
     const attrName = minify ? 'data-sz-m' : 'data-sz-map';
     const jsonContent = JSON.stringify(createHydrationMangleMap(mangleMap, varMangleMap));
-
-    const htmlTagPattern = /<html([^>]*)>/i;
-    const match = html.match(htmlTagPattern);
-
-    if (!match) {
-        return html;
-    }
-
-    const existingAttrs = match[1];
-    const mapAttr = ` ${attrName}='${jsonContent}'`;
-
-    return html.replace(htmlTagPattern, `<html${mapAttr}${existingAttrs}>`);
+    return injectHtmlOpeningAttr(html, ` ${attrName}='${jsonContent}'`);
 }
 
 /**

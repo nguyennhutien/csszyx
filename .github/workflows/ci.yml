@@ -128,6 +128,7 @@ jobs:
               - 'turbo.json'
               - 'biome.json'
               - 'eslint.config.*'
+              - 'eslint.redos.config.mjs'
             code_rust:
               - 'Cargo.toml'
               - 'Cargo.lock'
@@ -179,6 +180,7 @@ jobs:
               - 'tsconfig*.json'
               - 'biome.json'
               - 'eslint.config.*'
+              - 'eslint.redos.config.mjs'
               - 'lefthook.yml'
               - 'cog.toml'
               - '.mise.toml'
@@ -351,6 +353,13 @@ jobs:
       # lint work for no extra signal.
       - name: Lint (eslint)
         run: pnpm exec eslint .
+
+      # ReDoS gate — recheck-backed, on its own config. Catches the
+      # polynomial / search-position class that neither eslint-plugin-regexp
+      # rule detects and that previously reached main as CodeQL-only findings.
+      # RECHECK_BACKEND=pure keeps it deterministic (no native binary / JVM).
+      - name: ReDoS gate (recheck)
+        run: pnpm lint:redos
 
       # Build the workspace before type-checking. `tsc -b` resolves
       # workspace deps (`@csszyx/core`, `@csszyx/compiler/browser`,

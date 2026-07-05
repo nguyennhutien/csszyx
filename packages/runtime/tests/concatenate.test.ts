@@ -5,7 +5,7 @@
 import { transform } from '@csszyx/compiler/browser';
 import { describe, expect, it } from 'vitest';
 
-import { _sz, _sz2, _sz3, _szMerge, szr } from '../src/concatenate.js';
+import { _sz, _sz2, _sz3, _szMerge, _szPart, szr } from '../src/concatenate.js';
 
 describe('_sz', () => {
     it('should concatenate multiple classes', () => {
@@ -224,5 +224,28 @@ describe('szr — public alias for _sz (hand-written sz resolver)', () => {
 
     it('skips falsy inputs (clsx-style) and concatenates', () => {
         expect(szr('base', false, null, undefined, { gap: 8 })).toBe('base gap-8');
+    });
+});
+
+describe('_szPart — dynamic sz array element normalizer', () => {
+    it('passes class strings through untouched (the forwarded-szsc-slot case)', () => {
+        expect(_szPart('text-lg font-bold')).toBe('text-lg font-bold');
+        expect(_szPart('')).toBe('');
+    });
+
+    it('compiles a runtime sz object', () => {
+        expect(_szPart({ p: 4, bg: 'blue-500' })).toBe('p-4 bg-blue-500');
+        expect(_szPart({ hover: { bg: 'blue-700' } })).toBe('hover:bg-blue-700');
+    });
+
+    it('resolves falsy guards to an empty string', () => {
+        expect(_szPart(false)).toBe('');
+        expect(_szPart(null)).toBe('');
+        expect(_szPart(undefined)).toBe('');
+        expect(_szPart(0)).toBe('');
+    });
+
+    it('joins a nested array of parts', () => {
+        expect(_szPart([{ p: 4 }, 'card', false])).toBe('p-4 card');
     });
 });

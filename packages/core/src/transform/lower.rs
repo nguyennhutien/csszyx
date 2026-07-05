@@ -77,12 +77,11 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         .collect::<Vec<_>>();
     classes.extend(lower_static_sz_object(&attribute.object));
     classes.extend(attribute.candidate_classes.iter().cloned());
-    classes.extend(
-        attribute
-            .array_parts
-            .iter()
-            .flat_map(|part| part.classes.iter().cloned()),
-    );
+    classes.extend(attribute.array_parts.iter().flat_map(|part| {
+        // Element order: a static part contributes its classes, a dynamic part
+        // its safelist candidates — mangle IDs follow discovery order.
+        part.classes.iter().chain(part.candidates.iter()).cloned()
+    }));
     classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
         let variant = prop
             .variant_prefix
@@ -856,6 +855,20 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
                 return None;
             }
 
+            if is_tailwind_build_function(value) {
+                return Some(format!(
+                    "{prefix}{class_key}-[{}]",
+                    normalize_arbitrary_value(value)
+                ));
+            }
+
+            if value.starts_with("--") && value.contains('(') {
+                return Some(format!(
+                    "{prefix}{class_key}-[{}]",
+                    normalize_arbitrary_value(value)
+                ));
+            }
+
             if value.starts_with("--") {
                 return Some(css_var_type_hint(key).map_or_else(
                     || format!("{prefix}{class_key}-({value})"),
@@ -1030,7 +1043,11 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
     let tw_prefix = property_prefix(key)?;
     let raw_color = object_string_property(object, "color")?;
 
-    let color_base = if raw_color.starts_with("--") {
+    let color_base = if is_tailwind_build_function(raw_color)
+        || (raw_color.starts_with("--") && raw_color.contains('('))
+    {
+        format!("[{}]", normalize_arbitrary_value(raw_color))
+    } else if raw_color.starts_with("--") {
         format!("({raw_color})")
     } else if needs_brackets(raw_color) {
         format!("[{}]", normalize_arbitrary_value(raw_color))
@@ -1324,6 +1341,66 @@ fn needs_brackets(value: &str) -> bool {
     })
 }
 
+#[inline]
+const fn is_ascii_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'
+}
+
+#[inline]
+const fn is_ascii_identifier_start_byte(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
+/// Distinguishes Tailwind build-time function calls (`--spacing(4)`) from CSS
+/// custom-property names (`--spacing`). This byte scanner is O(n), uses no
+/// auxiliary allocation, and rejects incomplete or trailing syntax.
+fn is_tailwind_build_function(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() < 5 || !bytes.starts_with(b"--") {
+        return false;
+    }
+
+    if !is_ascii_identifier_start_byte(bytes[2]) {
+        return false;
+    }
+
+    let mut index = 3;
+    while index < bytes.len() && is_ascii_identifier_byte(bytes[index]) {
+        index += 1;
+    }
+    if index == 2 || index >= bytes.len() || bytes[index] != b'(' {
+        return false;
+    }
+
+    let mut depth = 0_usize;
+    let mut quote = 0_u8;
+    let mut escaped = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if quote != 0 {
+            if byte == quote {
+                quote = 0;
+            }
+        } else if byte == b'\'' || byte == b'"' {
+            quote = byte;
+        } else if byte == b'(' {
+            depth += 1;
+        } else if byte == b')' {
+            depth -= 1;
+            if depth == 0 {
+                return index == bytes.len() - 1;
+            }
+        }
+        index += 1;
+    }
+
+    false
+}
+
 pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
     let stripped = value
         .strip_prefix('[')
@@ -1335,8 +1412,8 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_unknown_sz_keys, has_slash_opacity, is_known_sz_key, lower_source_ir_classes,
-        lower_static_sz_object, needs_brackets,
+        collect_unknown_sz_keys, has_slash_opacity, is_known_sz_key, is_tailwind_build_function,
+        lower_source_ir_classes, lower_static_sz_object, needs_brackets,
     };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
@@ -1452,6 +1529,22 @@ mod tests {
         assert!(!needs_brackets("red-500"));
         assert!(!needs_brackets("[#333]"));
         assert!(!needs_brackets("4"));
+    }
+
+    #[test]
+    fn tailwind_build_function_scanner_handles_nested_and_malformed_input() {
+        assert!(is_tailwind_build_function("--spacing(4)"));
+        assert!(is_tailwind_build_function("--spacing(var(--step, \"(\"))"));
+        assert!(is_tailwind_build_function("--spacing(calc(2\\) + 2))"));
+        assert!(!is_tailwind_build_function("--spacing"));
+        assert!(!is_tailwind_build_function("--spacing(calc(2 + 2)"));
+        assert!(!is_tailwind_build_function("--spacing(4)junk"));
+        assert!(!is_tailwind_build_function("--9(4)"));
+        assert!(!is_tailwind_build_function("---x(4)"));
+        assert!(is_tailwind_build_function("--_x(4)"));
+
+        let long_malformed = format!("--spacing({}", "(".repeat(64 * 1024));
+        assert!(!is_tailwind_build_function(&long_malformed));
     }
 
     #[test]

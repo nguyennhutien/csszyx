@@ -496,30 +496,33 @@ className="p-4 text-white"
     });
 });
 
-describe('mangleCodeClassesSync — Pass 4 (szs slot maps)', () => {
-    it('mangles each quoted value of a bundled szs slot map per-token', () => {
+describe('mangleCodeClassesSync — Pass 4 (compiled szsc slot maps)', () => {
+    it('mangles each quoted value of a bundled szsc slot map per-token', () => {
         expect(
             mangleCodeClassesSync(
-                'jsx(Card,{szs:{header:"flex items-center",icon:"p-4"},x:1})',
+                'jsx(Card,{szsc:{header:"flex items-center",icon:"p-4"},x:1})',
                 TEST_MANGLE,
             ),
-        ).toBe('jsx(Card,{szs:{header:"z h",icon:"c"},x:1})');
+        ).toBe('jsx(Card,{szsc:{header:"z h",icon:"c"},x:1})');
     });
 
     it('keeps unknown tokens and stays idempotent', () => {
-        const once = mangleCodeClassesSync('szs:{a:"flex custom-thing"}', TEST_MANGLE);
-        expect(once).toBe('szs:{a:"z custom-thing"}');
+        const once = mangleCodeClassesSync('szsc:{a:"flex custom-thing"}', TEST_MANGLE);
+        expect(once).toBe('szsc:{a:"z custom-thing"}');
         expect(mangleCodeClassesSync(once, TEST_MANGLE)).toBe(once);
     });
 
     it('handles single-quoted values and spaced maps', () => {
-        expect(mangleCodeClassesSync("szs: { header: 'flex-row p-4' }", TEST_MANGLE)).toBe(
-            "szs: { header: 'a c' }",
+        expect(mangleCodeClassesSync("szsc: { header: 'flex-row p-4' }", TEST_MANGLE)).toBe(
+            "szsc: { header: 'a c' }",
         );
     });
 
-    it('does not touch look-alike keys', () => {
-        const input = 'foo({szsomething:{a:"flex"}})';
-        expect(mangleCodeClassesSync(input, TEST_MANGLE)).toBe(input);
+    it('does not touch look-alike keys, including the raw authoring prop', () => {
+        // `szs:` maps only exist pre-compile (the build rewrites them to
+        // `szsc:`); a bundle-level `szs:` key is user data, never mangled.
+        for (const input of ['foo({szsomething:{a:"flex"}})', 'foo({szs:{a:"flex"}})']) {
+            expect(mangleCodeClassesSync(input, TEST_MANGLE)).toBe(input);
+        }
     });
 });

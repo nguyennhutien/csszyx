@@ -125,9 +125,10 @@ For prefixes that span several CSS properties (`text`, `bg`, `border`, `font`,
 `flex`, …), `szcn` classifies the token **value**: same property → the later
 class wins (`szcn('text-base', 'text-sm')` → `text-sm`), different properties
 co-exist (`text-red-500` never removes `text-sm`). So merging slot overrides
-with defaults (`szcn(defaultTitleClasses, szsClass(szs?.title))`) is the
-recommended pattern — replace semantics are no longer needed for text sizes or
-font weights.
+with defaults (`sz={[{ text: 'base', weight: 'medium' }, szsc?.title]}` — the
+array composes with the same later-wins merge, applied for you at build or
+runtime) is the recommended pattern — replace semantics are no longer needed
+for text sizes or font weights.
 
 Custom `@theme` tokens join automatically: define `--color-brand` or
 `--text-huge` in a scanned CSS file (`build.scanCss`) and `szcn` dedupes
@@ -172,56 +173,152 @@ When a component renders its parts itself (an icon, a divider, a badge) there is
 nothing for the consumer to compose — they just want to style those parts. `szs`
 is a slot map: each key names a part, each value is a normal sz object. The build
 transform compiles **each value** to its class string (keeping the key), safelists
-and mangles the classes exactly like `sz`:
+and mangles the classes exactly like `sz` — and rewrites the whole attribute to
+**`szsc`** ("szs, compiled"), the string-typed prop the component reads:
 
 ```tsx
 <Card szs={{ header: { bg: 'gray-100', font: 'bold' }, icon: { color: 'red-500' } }} />
 // compiles to:
-<Card szs={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
+<Card szsc={{ header: "bg-gray-100 font-bold", icon: "text-red-500" }} />
 ```
 
-The component forwards each slot into the matching child's `className`:
+Why two names? A prop cannot be typed one way for the consumer who writes it (sz
+objects, with autocompletion) and another way for the component that reads it
+(plain strings) — so the build bridges two props: consumers **write `szs`**,
+components **read `szsc`**. Declare both from one slot union with `SzsProps`,
+and each slot forwards straight into a child `className` — no cast, no helper:
+
+The two sides always pair up like this — the consumer **writes `szs`**, the
+component **reads `szsc`**, and you never swap them:
 
 ```tsx
-import type { Szs } from '@csszyx/types';
+import type { SzsProps } from '@csszyx/types';
 
-type CardProps = {
-  title: string;
-  /** Declaring the slot union gives consumers autocompletion + typo checking. */
-  szs?: Szs<'header' | 'icon'>;
-};
+// ── INSIDE the component: declare slots with SzsProps, READ `szsc` ──
+type CardProps = { title: string } & SzsProps<'header' | 'icon'>;
 
-function Card({ title, szs }: CardProps) {
-  // After the transform, each slot is already a class string — but its TYPE is
-  // still an sz value, so `className={szs?.header}` is a strict-TS error.
-  // `szsClass` does the narrowing once, and fail-safe: an uncompiled slot
-  // becomes `undefined` instead of `class="[object Object]"`.
+function Card({ title, szsc }: CardProps) {
+  // Each szsc slot IS the compiled class string (or undefined when the
+  // consumer didn't style that slot / the call site wasn't compiled).
+  // Compose it with slot DEFAULTS right in `sz` — arrays are later-wins,
+  // so the consumer's slot cleanly overrides the default per property:
   return (
     <div>
-      <header className={szsClass(szs?.header)}>{title}</header>
-      <svg className={szsClass(szs?.icon)} />
+      <header sz={[{ weight: 'semibold', text: 'base' }, szsc?.header]}>{title}</header>
+      <svg sz={[{ size: 4 }, szsc?.icon]} />
     </div>
   );
 }
+
+// ── OUTSIDE, at the call site: the consumer WRITES `szs` (sz objects) ──
+<Card title="Invoice" szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />;
+// The build rewrites that call to szsc={{ header: "bg-gray-100", icon: "text-red-500" }},
+// which is what `Card` receives. You author `szs`; you never write `szsc` by hand.
 ```
 
-`szsClass` is exported from `@csszyx/runtime` (same home as `szcn`).
+> **Which prop where?** `szs` is the **write** side (consumer, sz objects);
+> `szsc` is the **read** side (component, compiled strings). A consumer never
+> types `szsc`; a component never receives `szs`.
 
-Rules to know:
+No defaults to merge? Forward the slot alone — `className={szsc?.icon}` and
+`sz={[szsc?.icon]}` are both fine.
 
-- **Custom components only.** On a host element (`<div szs={…}>`) there are no
-  slots — TypeScript already rejects it, and the transform warns in dev and leaves
-  it unchanged.
-- **Values must be static**: a pure object literal (nested variants like
-  `hover:`/`md:` are fine) or a raw class string. Anything dynamic — an identifier,
-  a conditional, a spread — leaves the whole attribute unchanged with a dev
-  warning, because an uncompiled slot can't be safelisted.
+### A complete component
+
+Everything together — a `Callout` with three slots, its own defaults, and a
+consumer that overrides two of them:
+
+```tsx
+import type { SzsProps } from '@csszyx/types';
+import type { ReactNode } from 'react';
+
+type CalloutProps = {
+  title: string;
+  children: ReactNode;
+} & SzsProps<'root' | 'title' | 'body'>;
+
+function Callout({ title, children, szsc }: CalloutProps) {
+  return (
+    // Each part: the component's DEFAULT sz first, the consumer's slot second.
+    // The array is later-wins, so a consumer override beats the default on the
+    // same property while defaults it didn't touch survive.
+    <div sz={[{ p: 4, rounded: 'lg', bg: 'slate-50' }, szsc?.root]}>
+      <p sz={[{ weight: 'semibold', text: 'sm', color: 'slate-900' }, szsc?.title]}>
+        {title}
+      </p>
+      <div sz={[{ text: 'sm', color: 'slate-600' }, szsc?.body]}>{children}</div>
+    </div>
+  );
+}
+
+// Consumer styles only the slots it cares about:
+<Callout
+  title="Heads up"
+  szs={{ title: { color: 'amber-700' }, root: { bg: 'amber-50' } }}
+>
+  Your trial ends in 3 days.
+</Callout>;
+```
+
+The consumer's `title.color` (`text-amber-700`) overrides the default
+`text-slate-900`; `root.bg` swaps the background; the `body` slot is untouched,
+so it keeps the component's defaults. No `className` plumbing, no cast.
+
+### What the compiler accepts and rejects
+
+`szs` is a **build-time** feature: every slot value must be readable statically,
+because its classes have to reach the Tailwind safelist before the browser ever
+runs. The transform compiles what it can and leaves the rest **untouched with a
+dev warning** — a rejected slot silently renders no classes, so it's worth
+knowing the line:
+
+| Slot value | Result |
+| --- | --- |
+| `{ bg: 'gray-100', hover: { bg: 'gray-200' } }` | ✅ compiled (nested variants are fine) |
+| `'px-3 py-2'` (raw class string) | ✅ passed through as-is |
+| `size ? { p: 2 } : { p: 4 }` (conditional) | ❌ whole attribute left unchanged, dev warning |
+| `spreadVar` / `{ ...base }` (identifier / spread) | ❌ left unchanged, dev warning |
+| `{ [key]: 4 }` (computed key) | ❌ left unchanged, dev warning |
+
+Need a slot to vary at runtime? Compute the variants with [`szv`](/docs/szv/)
+and pass the **result** into `sz` on the child — `szs` itself stays static.
+
+Other rules:
+
+- **Custom components only.** A host element (`<div szs={…}>`) has no slots —
+  TypeScript rejects it and the transform leaves it unchanged.
 - **Keys are identifiers** (`header`, not `'header-x'` or `[computed]`).
-- Slot classes are mangled in production like every other csszyx class.
+- Slot classes are **mangled in production** like every other csszyx class, and
+  a slot the consumer omits is simply `undefined` (never `"[object Object]"`).
 
-**`sz` vs `szs`:** `sz` styles THE element it sits on; `szs` styles the parts the
-component renders internally. A component can take both — `sz` for its root,
-`szs` for its slots.
+### Migrating from `szsClass` (pre-0.11)
 
-Prefer compound components when parts carry **content**; prefer `szs` when the
-consumer only needs to **style** internal parts.
+Before 0.11 the slot prop stayed named `szs` and each slot was still typed as an
+sz object, so components needed a `szsClass()` cast to reach a `className`. That
+helper is **removed** — the prop now splits into `szs` (write) / `szsc` (read),
+and `szsc` slots are already strings:
+
+```tsx
+// Before (0.10.x):
+function Card({ szs }: { szs?: Szs<'title'> }) {
+  return <h3 className={szcn('font-medium', szsClass(szs?.title))} />;
+}
+
+// After (0.11+): read szsc, compose in sz, drop szcn + szsClass entirely:
+function Card({ szsc }: SzsProps<'title'>) {
+  return <h3 sz={[{ weight: 'medium' }, szsc?.title]} />;
+}
+```
+
+### `sz` vs `szs` vs compound components
+
+- **`sz`** styles THE element it sits on. `szs` styles the parts a component
+  renders internally. A component can take both — `sz` for its root, `szs` for
+  its slots.
+- Reach for **`szs`** when the consumer only needs to _style_ internal parts
+  they don't own.
+- Reach for a **compound component** (`Card.Header`, above) when the parts carry
+  _content_ the consumer provides.
+- Reach for [`splitBox`](/docs/box-model-splitbox/) when you're routing ONE flat
+  `className` a caller already passed onto nested elements by box-model role,
+  rather than exposing named slots.

@@ -190,6 +190,44 @@
     "oxc": "gap-[10px]"
   },
   {
+    "sz": "{\"autoCols\":12}",
+    "ir": {
+      "properties": [
+        {
+          "key": "autoCols",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 12
+          }
+        }
+      ]
+    },
+    "oxc": "auto-cols-12"
+  },
+  {
+    "sz": "{\"autoRows\":16}",
+    "ir": {
+      "properties": [
+        {
+          "key": "autoRows",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 16
+          }
+        }
+      ]
+    },
+    "oxc": "auto-rows-16"
+  },
+  {
     "sz": "{\"w\":4}",
     "ir": {
       "properties": [
@@ -359,6 +397,134 @@
       ]
     },
     "oxc": "h-[var(--h)]"
+  },
+  {
+    "sz": "{\"text\":\"--spacing(4)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--spacing(4)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--spacing(4)]"
+  },
+  {
+    "sz": "{\"text\":\"--spacing(calc(2 + 2)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--spacing(calc(2 + 2)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--spacing(calc(2_+_2)]"
+  },
+  {
+    "sz": "{\"text\":\"--9(4)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--9(4)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--9(4)]"
+  },
+  {
+    "sz": "{\"text\":\"---x(4)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "---x(4)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[---x(4)]"
+  },
+  {
+    "sz": "{\"text\":\"--_x(4)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--_x(4)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--_x(4)]"
+  },
+  {
+    "sz": "{\"color\":{\"color\":\"--alpha(var(--brand) / 50%)\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "color",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "--alpha(var(--brand) / 50%)"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--alpha(var(--brand)_/_50%)]"
   },
   {
     "sz": "{\"display\":\"block\"}",
@@ -10431,6 +10597,25 @@
     "oxc": "text-(--c)/50"
   },
   {
+    "sz": "{\"color\":\"--alpha(var(--brand) / 50%)\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "color",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--alpha(var(--brand) / 50%)"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[--alpha(var(--brand)_/_50%)]"
+  },
+  {
     "sz": "{\"color\":\"#50d71e\"}",
     "ir": {
       "properties": [
@@ -19737,6 +19922,25 @@
       ]
     },
     "oxc": "overscroll-y-none"
+  },
+  {
+    "sz": "{\"p\":\"--gap\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "p",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--gap"
+          }
+        }
+      ]
+    },
+    "oxc": "p-(--gap)"
   },
   {
     "sz": "{\"p\":\"--p\"}",

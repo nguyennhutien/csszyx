@@ -292,6 +292,32 @@ function szMergeJoin(classes: SzInput[], depth: number): string {
 }
 
 /**
+ * Normalizes one dynamic element of a compiled sz array into a class string
+ * for `szcn`.
+ *
+ * The build rewrites `sz={[...]}` arrays with runtime elements into
+ * `szcn(..., _szPart(<expr>), ...)`: the compiler cannot know whether the
+ * expression yields a class string (a forwarded `szsc` slot), an sz object,
+ * or a falsy guard — this helper resolves whichever arrives so `szcn` only
+ * ever group-merges strings. Strings pass through untouched; everything else
+ * (sz objects, nested arrays, falsy) goes through `_szMerge`'s existing
+ * compile-and-join.
+ *
+ * @param {unknown} value - One runtime array element.
+ * @returns {string} The element as a class string (`''` for falsy).
+ *
+ * @example
+ * ```typescript
+ * _szPart('text-lg')          // "text-lg"  (string passthrough)
+ * _szPart({ p: 4 })           // "p-4"      (compiled)
+ * _szPart(undefined)          // ""
+ * ```
+ */
+export function _szPart(value: unknown): string {
+    return typeof value === 'string' ? value : _szMerge(value as SzInput);
+}
+
+/**
  * Performance-optimized variant of _sz() for exactly 2 arguments.
  *
  * Faster than the variadic version when the number of classes is known

@@ -7,6 +7,11 @@ import webpack, { type Configuration, type Stats } from 'webpack';
 
 import { webpackPlugin } from '../src/unplugin.js';
 
+// A full webpack compile is an integration test: under a parallel turbo run
+// (cargo + every package suite at once) it legitimately exceeds vitest's 5 s
+// default and flaked in verify-like-ci. Scoped bump, not a global one.
+const WEBPACK_TEST_TIMEOUT_MS = 30_000;
+
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -16,7 +21,9 @@ afterEach(() => {
 });
 
 describe('webpack global variable aliases', () => {
-    it('rewrites emitted CSS assets with explicit global variable aliases', async () => {
+    it('rewrites emitted CSS assets with explicit global variable aliases', {
+        timeout: WEBPACK_TEST_TIMEOUT_MS,
+    }, async () => {
         const root = createFixture(':root{--brand-primary:red}.card{color:var(--brand-primary)}');
 
         await runWebpack(root);
@@ -37,7 +44,9 @@ describe('webpack global variable aliases', () => {
         expect(globalVarMap).toEqual({ '--brand-primary': '---gz' });
     });
 
-    it('fails closed when explicit global variable aliases are missing CSS definitions', async () => {
+    it('fails closed when explicit global variable aliases are missing CSS definitions', {
+        timeout: WEBPACK_TEST_TIMEOUT_MS,
+    }, async () => {
         const root = createFixture('.card{color:red}');
 
         await expect(runWebpack(root)).rejects.toThrow(

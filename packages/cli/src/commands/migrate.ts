@@ -256,10 +256,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         // still-unresolved classes get a fresh comment via the injectTodos pass.
         let processSource = source;
         if (resolveTodosPath && !isHtml) {
-            processSource = processSource.replace(
-                /\{\/\*\s*@sz-todo:\s*(\S(?:.*\S)?)\s*\*\/\}\n?/g,
-                '',
-            );
+            processSource = stripSzTodoComments(processSource);
         }
 
         const result = isHtml
@@ -436,5 +433,69 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
         printInfo(`Migration log saved to ${path.relative(cwd, log.filePath)}`);
     } catch {
         // Non-fatal: log flush failure should not crash the process
+    }
+}
+
+/**
+ * Remove every `{/* @sz-todo: … *​/}` comment (with an optional trailing
+ * newline), the linear equivalent of
+ * `/\{\/\*\s*@sz-todo:\s*(\S(?:.*\S)?)\s*\*\/\}\n?/g` used with an empty
+ * replacement. The old `\S(?:.*\S)?` content run was quadratic-by-search; this
+ * finds each `{/*` opener once and scans forward to its `*​/}`. Content is
+ * line-scoped (the regex used `.`), so a comment that has no `*​/}` before the
+ * next newline is left intact, exactly as the regex left it.
+ *
+ * @param source - Source to strip todo comments from.
+ * @returns Source with the todo comments removed.
+ */
+function stripSzTodoComments(source: string): string {
+    const OPEN = '{/*';
+    const MARKER = '@sz-todo:';
+    let out = '';
+    let i = 0;
+    for (;;) {
+        const open = source.indexOf(OPEN, i);
+        if (open === -1) {
+            return out + source.slice(i);
+        }
+        // `\s*@sz-todo:` — whitespace (incl. newlines, matching `\s*`) then marker.
+        let p = open + OPEN.length;
+        while (p < source.length && /\s/.test(source[p] as string)) {
+            p++;
+        }
+        if (!source.startsWith(MARKER, p)) {
+            // Not a todo comment — keep `{/*` and continue after it.
+            out += source.slice(i, open + OPEN.length);
+            i = open + OPEN.length;
+            continue;
+        }
+        // The closing `*/}` must appear before the next newline (content is `.`,
+        // no newline; the surrounding `\s*` also cannot cross into a value that
+        // would let `\S` restart on another line).
+        const close = source.indexOf('*/}', p);
+        const nl = source.indexOf('\n', p);
+        if (close === -1 || (nl !== -1 && nl < close)) {
+            out += source.slice(i, open + OPEN.length);
+            i = open + OPEN.length;
+            continue;
+        }
+        // Require the `\S(?:.*\S)?` content: at least one non-space between the
+        // marker (after `\s*`) and the trailing `\s*` before `*/}`.
+        let contentStart = p;
+        while (contentStart < close && /\s/.test(source[contentStart] as string)) {
+            contentStart++;
+        }
+        if (contentStart >= close) {
+            out += source.slice(i, open + OPEN.length);
+            i = open + OPEN.length;
+            continue;
+        }
+        // Drop the whole `{/* … */}` plus one optional trailing newline.
+        let end = close + '*/}'.length;
+        if (source[end] === '\n') {
+            end++;
+        }
+        out += source.slice(i, open);
+        i = end;
     }
 }

@@ -11,7 +11,8 @@ set -euo pipefail
 
 echo "[setup] Running workspace setup..."
 
-# Install mise-managed tools per .mise.toml (node, pnpm, rust, claude-code).
+# Install mise-managed tools per .mise.toml (node, pnpm, rust, Claude Code,
+# Codex CLI, and cocogitto).
 # Trust the workspace config first: a freshly-created container has an empty
 # mise trust store, and mise refuses to read an untrusted .mise.toml, which
 # would abort this script under `set -e`.

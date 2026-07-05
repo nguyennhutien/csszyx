@@ -310,6 +310,24 @@ Prefix any CSS custom property with `--` and the compiler wraps it in `(...)`:
 }} />
 ```
 
+:::caution[`--name` vs `--name(...)` — parens vs brackets]
+A **bare** `--name` is a CSS variable → parenthesized `x-(--name)`. A
+**`--name(...)`** with a call is a Tailwind **build-time function** (v4.3.2+)
+→ bracketed arbitrary value `x-[--name(...)]`. The compiler picks the wrapper
+from the value's shape, so you write neither in `sz`:
+
+```tsx
+<div sz={{
+  bg: '--brand',                       // variable  → bg-(--brand)
+  text: '--spacing(4)',                // function  → text-[--spacing(4)]
+  color: '--alpha(var(--brand) / 50%)',// function  → text-[--alpha(var(--brand)_/_50%)]
+}} />
+```
+
+This holds for **every** value position, not just the examples above. Do not add
+your own `()` or `[]` — `{ bg: '--brand' }`, never `'(--brand)'` or `'[--brand]'`.
+:::
+
 ## Arbitrary CSS (`css: {}`)
 
 For CSS properties with no sz prop or Tailwind utility equivalent, use the
@@ -372,20 +390,39 @@ Works inside variant blocks too:
 
 ## Array Syntax
 
-Pass an array to `sz` to compose multiple style objects. Fully static arrays are
-merged at compile time — no runtime cost. Arrays with conditional elements
-use `_szMerge` at runtime.
+Pass an array to `sz` to compose styles with **later-wins** semantics: when two
+elements touch the same property, the later element's value overrides the
+earlier one's — like `Object.assign`, and like every class-merge tool you know.
+Elements can be sz objects, class strings, `cond && …` guards, or runtime
+values (a forwarded [`szsc`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
+slot).
 
 ```tsx
-// Fully static — compiled to a single className string
-<div sz={[{ p: 4 }, { bg: 'blue-500' }, { rounded: 'lg' }]} />
+// Fully static — deep-merged at build, compiled to ONE className, zero runtime
+<div sz={[{ text: 'base', p: 4 }, { text: 'lg' }]} />
+// → className="text-lg p-4"           (text-lg overrode text-base)
 
-// Conditional — falsy elements are skipped at runtime
+<div sz={[{ hover: { bg: 'red-500' } }, { hover: { p: 2 } }]} />
+// → className="hover:bg-red-500 hover:p-2"   (deep merge: siblings survive)
+
+// Anything else — composed at runtime (same later-wins rule, applied per
+// property group, mangle-safe). The compiler injects `_szcn`, a generated
+// helper you never write by hand (the `_` marks compiler-injected code):
 <div sz={[
   { p: 4, color: 'white' },
   isActive && { bg: 'blue-500' },
-  hasError && { ring: 2, ringColor: 'red-500' },
+  szsc?.title,                      // dynamic element via _szPart
 ]} />
+// → className={_szcn("p-4 text-white", isActive && "bg-blue-500", _szPart(szsc?.title))}
+```
+
+This makes `sz={[defaults, override]}` the one-liner for slot defaults in a
+compound component — no `className` plumbing, no manual `szcn` call:
+
+```tsx
+function Card({ title, szsc }: SzsProps<'title'> & { title: string }) {
+  return <h3 sz={[{ weight: 'semibold', text: 'base' }, szsc?.title]}>{title}</h3>;
+}
 ```
 
 Array syntax is especially useful with [`szv()`](/docs/szv) variant objects:

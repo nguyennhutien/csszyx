@@ -49,6 +49,7 @@ import type {
 } from './transform.js';
 import {
     transform as compileSzObject,
+    deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
     KNOWN_VARIANTS,
@@ -110,6 +111,8 @@ export function transformOxc(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
             usesColorVar: false,
             classes,
             rawClassNames,
@@ -145,6 +148,10 @@ export function transformOxc(
     // would be unsound), so it uses a const-only map distinct from the general
     // sz-object resolution above which keeps all binding kinds.
     const constObjectBindings = collectObjectBindings(parsed.program as unknown as OxcNode, true);
+    // Any-initializer const map for the szv catalog's per-key leaf resolution
+    // (`mx: GUTTER` where `const GUTTER = 0`); the object-only map above cannot
+    // hold scalar initializers.
+    const constInitializers = collectConstInitializers(parsed.program as unknown as OxcNode);
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     const reservedCSSVariableNames = options?.mangleVars
         ? collectStaticStyleCustomPropertyNames(parsed.program as unknown as OxcNode)
@@ -165,6 +172,8 @@ export function transformOxc(
     let transformed = false;
     let usesRuntime = false;
     let usesMerge = false;
+    let usesSzcn = false;
+    let usesSzPart = false;
     let usesColorVar = false;
 
     walk(parsed.program, node => {
@@ -177,8 +186,8 @@ export function transformOxc(
             );
             collectSzvCallClasses(
                 node as CallExpressionNode,
-                effectiveFilename,
                 constObjectBindings,
+                constInitializers,
                 classes,
             );
             return;
@@ -331,7 +340,6 @@ export function transformOxc(
             // Two phases so a failure never leaves the attribute partially
             // rewritten: compile everything first, then emit.
             const slotEntries: Array<{ keyText: string; classNames: string; text: string }> = [];
-            let anyCompiled = false;
             let slotFailed = false;
             for (const propRaw of slotMap.properties) {
                 const prop = propRaw as PropertyNode;
@@ -369,7 +377,6 @@ export function transformOxc(
                         classNames: compiled,
                         text: JSON.stringify(compiled),
                     });
-                    anyCompiled = true;
                 } catch (err) {
                     if (err instanceof OxcNotImplementedError) {
                         slotFailed = true;
@@ -383,11 +390,19 @@ export function transformOxc(
                 diagnostics.push(szsUnsupportedMessage(effectiveFilename));
                 continue;
             }
-            if (anyCompiled) {
-                const body = slotEntries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
-                edits.overwrite(szsAttr.start, szsAttr.end, `szs={{ ${body} }}`);
-                transformed = true;
-            }
+            // The compiled map lands on `szsc` — the read-side prop typed as
+            // strings — so the authoring prop `szs` never reaches runtime and
+            // the component forwards `szsc?.<slot>` into a child className
+            // with no cast. Renamed even when every slot was already a class
+            // string (the component reads only `szsc`); idempotent because
+            // `szsc` attributes are never matched by this loop.
+            const body = slotEntries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
+            edits.overwrite(
+                szsAttr.start,
+                szsAttr.end,
+                body === '' ? 'szsc={{}}' : `szsc={{ ${body} }}`,
+            );
+            transformed = true;
             for (const entry of slotEntries) {
                 for (const c of entry.classNames.split(/\s+/)) {
                     if (c) {
@@ -515,7 +530,7 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'ArrayExpression') {
-                const arrayMergeExpression = buildArrayMergeExpression(
+                const composition = buildArrayComposition(
                     expression as ArrayExpressionNode,
                     effectiveFilename,
                     objectBindings,
@@ -524,36 +539,8 @@ export function transformOxc(
                     source,
                     classes,
                 );
-                if (arrayMergeExpression) {
-                    const existingExpression = classNameAttr
-                        ? classNameMergeArgument(classNameAttr, source)
-                        : null;
-                    const mergeExpression = existingExpression
-                        ? `_szMerge(${existingExpression}, ${arrayMergeExpression})`
-                        : `_szMerge(${arrayMergeExpression})`;
-                    if (classNameAttr) {
-                        edits.overwrite(
-                            classNameAttr.start,
-                            classNameAttr.end,
-                            `className={${mergeExpression}}`,
-                        );
-                        edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                    } else {
-                        edits.overwrite(szAttr.start, szAttr.end, `className={${mergeExpression}}`);
-                    }
-                    usesRuntime = true;
-                    usesMerge = true;
-                    transformed = true;
-                    return;
-                }
-                const arrayClasses = astArrayToStaticClasses(
-                    expression as ArrayExpressionNode,
-                    effectiveFilename,
-                    objectBindings,
-                    globalVarAliases,
-                    cssVariableMap,
-                );
-                if (arrayClasses === null) {
+                if (composition === null) {
+                    // Spread element etc. — the whole array stays a runtime value.
                     collectArrayCandidateClasses(
                         expression as ArrayExpressionNode,
                         effectiveFilename,
@@ -565,11 +552,35 @@ export function transformOxc(
                     runtimeFallbackAttr = szAttr;
                     break;
                 }
-                for (const c of arrayClasses) {
-                    szDerived.push(c);
-                    classes.add(c);
+                if (composition.kind === 'static') {
+                    for (const c of composition.classes) {
+                        szDerived.push(c);
+                        classes.add(c);
+                    }
+                    continue;
                 }
-                continue;
+                // szcn lane: later element wins per property group at runtime.
+                // An existing className joins as the FIRST argument, so sz
+                // composition (and its overrides) applies after it.
+                const existingExpression = classNameAttr
+                    ? classNameMergeArgument(classNameAttr, source)
+                    : null;
+                // `_szcn` = the unmemoized szcn twin: compiled arrays carry
+                // per-render runtime parts, which would thrash (and evict)
+                // the authored-szcn memo.
+                const call = existingExpression
+                    ? `_szcn(${existingExpression}, ${composition.args})`
+                    : `_szcn(${composition.args})`;
+                if (classNameAttr) {
+                    edits.overwrite(classNameAttr.start, classNameAttr.end, `className={${call}}`);
+                    edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
+                } else {
+                    edits.overwrite(szAttr.start, szAttr.end, `className={${call}}`);
+                }
+                usesSzcn = true;
+                usesSzPart ||= composition.usesSzPart;
+                transformed = true;
+                return;
             }
             if (expression.type !== 'ObjectExpression') {
                 runtimeFallbackExpr = expression;
@@ -876,6 +887,8 @@ export function transformOxc(
         transformed,
         usesRuntime,
         usesMerge,
+        usesSzcn,
+        usesSzPart,
         usesColorVar,
         classes,
         rawClassNames,
@@ -1318,78 +1331,46 @@ function astObjectToSzObject(
     return result as SzObject;
 }
 
-/**
- * Compile a fully-static sz array into class tokens.
- *
- * Mirrors Babel's no-runtime fast path for arrays containing only object
- * literals and falsy literal placeholders. Conditional/logical elements
- * intentionally return null so a later slice can emit `_szMerge(...)`.
- *
- * @param node The oxc ArrayExpression node.
- * @param filename Filename for diagnostic offsets.
- * @param bindings Local object-literal bindings available for identifier/spread resolution.
- * @param globalVarAliases Exact global custom-property alias table.
- * @param cssVariableMap CSS variable metadata map to populate.
- * @returns Static class tokens, or null when runtime handling is required.
- */
-function astArrayToStaticClasses(
-    node: ArrayExpressionNode,
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    globalVarAliases: ReadonlyMap<string, string>,
-    cssVariableMap: Map<string, CssVariableMangleValue>,
-): string[] | null {
-    const out: string[] = [];
-    for (const element of node.elements) {
-        if (!element || isFalsyLiteral(element)) {
-            continue;
-        }
-        let objectNode: ObjectExpressionNode | null = null;
-        if (element.type === 'ObjectExpression') {
-            objectNode = element as ObjectExpressionNode;
-        } else if (element.type === 'Identifier') {
-            objectNode = bindings.get(String((element as IdentifierNode).name)) ?? null;
-        }
-        if (!objectNode) {
-            return null;
-        }
-        let result: ReturnType<typeof compileSzObject>;
-        try {
-            result = compileSzObject(
-                applyGlobalVarAliasesToSzObject(
-                    astObjectToSzObject(objectNode, filename, bindings),
-                    globalVarAliases,
-                    cssVariableMap,
-                ),
-            );
-        } catch (err) {
-            if (err instanceof OxcNotImplementedError) {
-                return null;
-            }
-            throw err;
-        }
-        for (const c of result.className.split(/\s+/)) {
-            if (c) {
-                out.push(c);
-            }
-        }
-    }
-    return out;
-}
+/** Result of classifying an sz array for later-wins composition. */
+type ArrayComposition =
+    | {
+          /** Every element was a static object: deep-merged and compiled at build. */
+          kind: 'static';
+          /** Class tokens of the merged object. */
+          classes: string[];
+      }
+    | {
+          /** Runtime group-merge required: emit `szcn(<args>)`. */
+          kind: 'szcn';
+          /** Comma-joined `szcn` argument source text. */
+          args: string;
+          /** Whether any argument wraps a dynamic element in `_szPart`. */
+          usesSzPart: boolean;
+      };
 
 /**
- * Compile a conditional sz array (`[base, cond && extra]`) to `_szMerge` args.
+ * Classify an sz array (`sz={[a, b, …]}`) for later-wins composition.
+ *
+ * All-static-object arrays deep-merge at build time (later element's leaf
+ * wins per key path, sibling keys survive) and compile to plain classes.
+ * Anything else — class strings, `cond && obj` guards, dynamic expressions —
+ * becomes a `szcn(...)` call: static parts pre-compiled to string literals,
+ * conditional parts kept as `cond && "classes"`, dynamic parts wrapped in
+ * `_szPart(expr)` so a runtime sz object still compiles and a forwarded slot
+ * string passes through. `szcn` then applies the same later-wins semantics
+ * per property group. Element order is preserved in both lanes.
  *
  * @param node Array expression used as the sz value.
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param globalVarAliases Exact global custom-property alias table.
  * @param cssVariableMap Original-to-mangled CSS variable map to populate.
- * @param source Original source for preserving condition expressions.
+ * @param source Original source for preserving condition/dynamic expressions.
  * @param classes Output set collecting every compiled class for the catalog.
- * @returns Comma-joined `_szMerge` arguments, or null when fully static or unresolvable.
+ * @returns The composition, or null when the whole array must stay a runtime
+ *   value (a spread element).
  */
-function buildArrayMergeExpression(
+function buildArrayComposition(
     node: ArrayExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
@@ -1397,59 +1378,162 @@ function buildArrayMergeExpression(
     cssVariableMap: Map<string, CssVariableMangleValue>,
     source: string,
     classes: Set<string>,
-): string | null {
-    const parts: string[] = [];
-    let hasConditional = false;
+): ArrayComposition | null {
+    /** One classified array element. */
+    type Part =
+        | { kind: 'obj'; sz: SzObject }
+        | { kind: 'str'; value: string }
+        | { kind: 'cond'; condSource: string; classNames: string }
+        | { kind: 'dyn'; src: string; node: OxcNode };
+    const parts: Part[] = [];
+
+    /**
+     * Compile one static sz object with the alias table applied.
+     *
+     * @param sz Static sz object.
+     * @returns Space-joined class names.
+     */
+    const compilePart = (sz: SzObject): string =>
+        compileSzObject(applyGlobalVarAliasesToSzObject(sz, globalVarAliases, cssVariableMap))
+            .className;
 
     for (const element of node.elements) {
         if (!element || isFalsyLiteral(element)) {
             continue;
         }
+        if (element.type === 'SpreadElement') {
+            return null;
+        }
         const unwrapped = unwrapExpression(element);
-        let condition: OxcNode | null = null;
-        let candidate = unwrapped;
+        if (
+            isFalsyLiteral(unwrapped) ||
+            (unwrapped.type === 'Identifier' &&
+                String((unwrapped as IdentifierNode).name) === 'undefined')
+        ) {
+            continue;
+        }
+        const literalValue =
+            unwrapped.type === 'Literal'
+                ? (unwrapped as unknown as { value: unknown }).value
+                : undefined;
+        if (typeof literalValue === 'string') {
+            parts.push({ kind: 'str', value: literalValue });
+            continue;
+        }
         if (
             unwrapped.type === 'LogicalExpression' &&
             (unwrapped as LogicalExpressionNode).operator === '&&'
         ) {
             const logical = unwrapped as LogicalExpressionNode;
-            condition = logical.left;
-            candidate = unwrapExpression(logical.right);
-            hasConditional = true;
-        }
-        const objectNode = resolveObjectExpression(candidate, bindings);
-        if (!objectNode) {
-            return null;
-        }
-        let result: ReturnType<typeof compileSzObject>;
-        try {
-            result = compileSzObject(
-                applyGlobalVarAliasesToSzObject(
-                    astObjectToSzObject(objectNode, filename, bindings),
-                    globalVarAliases,
-                    cssVariableMap,
-                ),
-            );
-        } catch (err) {
-            if (err instanceof OxcNotImplementedError) {
-                return null;
+            const right = unwrapExpression(logical.right);
+            const rightLiteral =
+                right.type === 'Literal'
+                    ? (right as unknown as { value: unknown }).value
+                    : undefined;
+            let classNames: string | null = typeof rightLiteral === 'string' ? rightLiteral : null;
+            if (classNames === null) {
+                const objectNode = resolveObjectExpression(right, bindings);
+                if (objectNode) {
+                    try {
+                        classNames = compilePart(
+                            astObjectToSzObject(objectNode, filename, bindings),
+                        );
+                    } catch (err) {
+                        if (!(err instanceof OxcNotImplementedError)) {
+                            throw err;
+                        }
+                    }
+                }
             }
-            throw err;
+            if (classNames !== null) {
+                if (classNames !== '') {
+                    parts.push({
+                        kind: 'cond',
+                        condSource: source.slice(logical.left.start, logical.left.end),
+                        classNames,
+                    });
+                }
+                continue;
+            }
+            // Dynamic right side: the whole guarded element resolves at runtime.
+            parts.push({
+                kind: 'dyn',
+                src: source.slice(element.start, element.end),
+                node: element,
+            });
+            continue;
         }
-        for (const cls of result.className.split(/\s+/)) {
-            if (cls) {
-                classes.add(cls);
+        const objectNode = resolveObjectExpression(unwrapped, bindings);
+        if (objectNode) {
+            try {
+                parts.push({
+                    kind: 'obj',
+                    sz: astObjectToSzObject(objectNode, filename, bindings),
+                });
+                continue;
+            } catch (err) {
+                if (!(err instanceof OxcNotImplementedError)) {
+                    throw err;
+                }
             }
         }
-        const classLiteral = JSON.stringify(result.className);
-        parts.push(
-            condition
-                ? `${source.slice(condition.start, condition.end)} && ${classLiteral}`
-                : classLiteral,
-        );
+        parts.push({
+            kind: 'dyn',
+            src: source.slice(element.start, element.end),
+            node: element,
+        });
     }
 
-    return hasConditional ? parts.join(', ') : null;
+    if (parts.every(part => part.kind === 'obj')) {
+        const merged = (parts as Array<{ kind: 'obj'; sz: SzObject }>).reduce<SzObject>(
+            (acc, part) => deepMergeSzObjects(acc, part.sz),
+            {},
+        );
+        const compiled = compilePart(merged);
+        const staticClasses: string[] = [];
+        for (const c of compiled.split(/\s+/)) {
+            if (c) {
+                staticClasses.push(c);
+                classes.add(c);
+            }
+        }
+        return { kind: 'static', classes: staticClasses };
+    }
+
+    const args: string[] = [];
+    let usesSzPart = false;
+    for (const part of parts) {
+        if (part.kind === 'obj') {
+            const compiled = compilePart(part.sz);
+            for (const c of compiled.split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            args.push(JSON.stringify(compiled));
+        } else if (part.kind === 'str') {
+            for (const c of part.value.split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            args.push(JSON.stringify(part.value));
+        } else if (part.kind === 'cond') {
+            for (const c of part.classNames.split(/\s+/)) {
+                if (c) {
+                    classes.add(c);
+                }
+            }
+            args.push(`${part.condSource} && ${JSON.stringify(part.classNames)}`);
+        } else {
+            // Safelist best-effort: static object literals reachable inside the
+            // dynamic expression (ternary branches, etc.) still get their CSS.
+            collectCandidateClassesFromExpression(part.node, filename, bindings, classes, '');
+            args.push(`_szPart(${part.src})`);
+            usesSzPart = true;
+        }
+    }
+    return { kind: 'szcn', args: args.join(', '), usesSzPart };
 }
 
 /**
@@ -1842,14 +1926,14 @@ function collectDynamicCallClasses(
  * Collect every static class reachable from an szv configuration.
  *
  * @param node Call expression to inspect.
- * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
+ * @param constInits Const-only initializer map for per-key leaf resolution.
  * @param classes Class set to populate.
  */
 function collectSzvCallClasses(
     node: CallExpressionNode,
-    filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
+    constInits: ReadonlyMap<string, OxcNode>,
     classes: Set<string>,
 ): void {
     if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'szv') {
@@ -1859,54 +1943,91 @@ function collectSzvCallClasses(
     if (!firstArg) {
         return;
     }
-    /**
-     *
-     * @param object
-     * @param classes
-     */
     const configNode = resolveObjectExpression(firstArg, bindings);
     if (!configNode) {
         return;
     }
 
-    // Read `base` and `variants` INDEPENDENTLY rather than converting the whole
-    // config. A non-static sibling key (e.g. a `compoundVariants` array) used to
-    // throw OxcNotImplementedError for the entire config and drop every variant
-    // class; now unknown / dynamic keys are simply ignored.
-    const base = readConfigSubObject(configNode, 'base', filename, bindings);
+    // Read `base` and `variants` INDEPENDENTLY, and convert both PER KEY: one
+    // unresolvable leaf (a runtime conditional, a call, a template) used to
+    // drop the ENTIRE catalog — every static sibling key and every other
+    // variant included — which under Tailwind `source(none)` is silently
+    // missing CSS. The lenient walk keeps everything it can classify, expands
+    // finite conditionals into both branches (the runtime picks one, so both
+    // must be safelisted), and skips only what it genuinely cannot read.
+    const budget: CatalogExtrasBudget = {
+        extras: MAX_CATALOG_BRANCH_EXTRAS,
+        explores: MAX_CATALOG_BRANCH_EXTRAS,
+        objectMemo: new Map(),
+        valueMemo: new Map(),
+    };
+    const baseNode = readConfigSubObjectNode(configNode, 'base', bindings);
+    const baseCandidates = baseNode
+        ? lenientCatalogObjects(baseNode, constInits, new Set(), 0, budget)
+        : [{} as SzObject];
+    const base = baseCandidates[0] ?? ({} as SzObject);
     addCompiledClasses(base, classes);
-    const variants = readConfigSubObject(configNode, 'variants', filename, bindings);
-    for (const variantValues of Object.values(variants)) {
-        if (!isSzObject(variantValues)) {
+    for (const extra of baseCandidates.slice(1)) {
+        addCompiledClasses(extra, classes);
+    }
+
+    const variantsNode = readConfigSubObjectNode(configNode, 'variants', bindings);
+    if (!variantsNode) {
+        return;
+    }
+    for (const dimensionRaw of variantsNode.properties) {
+        if (dimensionRaw.type !== 'Property') {
             continue;
         }
-        for (const variantObject of Object.values(variantValues)) {
-            if (!isSzObject(variantObject)) {
+        const dimension = dimensionRaw as PropertyNode;
+        if (dimension.computed) {
+            continue;
+        }
+        const dimensionValue = resolveCatalogObjectExpression(
+            dimension.value,
+            constInits,
+            new Set(),
+        );
+        if (!dimensionValue) {
+            continue;
+        }
+        for (const variantRaw of dimensionValue.properties) {
+            if (variantRaw.type !== 'Property') {
                 continue;
             }
-            addCompiledClasses({ ...base, ...variantObject }, classes);
+            const variant = variantRaw as PropertyNode;
+            if (variant.computed) {
+                continue;
+            }
+            for (const candidate of lenientCatalogObjectCandidates(
+                variant.value,
+                constInits,
+                new Set(),
+                0,
+                budget,
+            )) {
+                addCompiledClasses({ ...base, ...candidate }, classes);
+            }
         }
     }
 }
 
 /**
- * Read a single named property (`base` / `variants`) of an szv config as a
- * static SzObject, converting ONLY that sub-tree. Returns `{}` when the key is
- * absent, non-static, or hits an unimplemented node — so sibling keys
- * (compoundVariants, defaultVariants, unknown keys) never drop the catalog.
+ * Read a single named property (`base` / `variants`) of an szv config as an
+ * OBJECT NODE, without converting it. Returns null when the key is absent or
+ * its value is not an object literal / const-bound object — so sibling keys
+ * (compoundVariants, defaultVariants, unknown keys) never affect the catalog.
  *
  * @param configNode The szv config object node.
  * @param key The property to read.
- * @param filename For diagnostics.
  * @param bindings Local const-binding map for indirection.
- * @returns The converted SzObject, or `{}`.
+ * @returns The sub-object node, or null.
  */
-function readConfigSubObject(
+function readConfigSubObjectNode(
     configNode: ObjectExpressionNode,
     key: string,
-    filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
-): SzObject {
+): ObjectExpressionNode | null {
     for (const propRaw of configNode.properties) {
         if (propRaw.type !== 'Property') {
             continue;
@@ -1919,20 +2040,355 @@ function readConfigSubObject(
         // (`const V = {…}; szv({ variants: V })`). `bindings` is const-only, so a
         // reassigned `let` is never followed — matching Babel's const-guarded
         // resolution.
-        const valueObj = resolveObjectExpression(prop.value, bindings);
-        if (!valueObj) {
-            return {};
-        }
-        try {
-            return astObjectToSzObject(valueObj, filename, bindings);
-        } catch (err) {
-            if (err instanceof OxcNotImplementedError) {
-                return {};
+        return resolveObjectExpression(prop.value, bindings);
+    }
+    return null;
+}
+
+/** Nesting cap for the lenient catalog walk (matches the Rust/Babel walkers). */
+const MAX_CATALOG_DEPTH = 16;
+
+/**
+ * Cap on alternate-branch objects one szv call may add to the catalog, so a
+ * pathological conditional pile-up cannot balloon the safelist walk.
+ * (Matches the Rust/Babel walkers.)
+ */
+const MAX_CATALOG_BRANCH_EXTRAS = 32;
+
+/** Mutable extras budget threaded through one szv call's lenient walk. */
+interface CatalogExtrasBudget {
+    /** Remaining alternate-branch objects this call may still emit. */
+    extras: number;
+    /**
+     * Remaining alternate branches this call may still EXPLORE. Charged when a
+     * conditional's alternate is recursed into, not when its result is
+     * emitted: a const referenced from both branches (`c ? x : x`) doubles the
+     * walk per level without consuming depth or emitting anything, so an
+     * output-only budget let an n-level chain run 2^n recursive calls (a
+     * measured exponential hang). Exhausted explores degrade to
+     * consequent-only — the same under-safelist-beyond-the-budget contract
+     * `extras` already documents. (Matches the Rust walker.)
+     */
+    explores: number;
+    /**
+     * Candidate memo per resolved const INITIALIZER node. Every exponential
+     * shape is some DAG that re-resolves the same initializer — through
+     * conditionals (`c ? x : x`), spreads (`{...x, ...x}`), or sibling keys
+     * (`{a: x, b: x}`) — and the memo collapses each to one walk plus cache
+     * hits, keeping total work linear in the source. Keyed by node identity;
+     * inline literals cannot exponentiate on their own (each occupies
+     * distinct source text).
+     */
+    objectMemo: Map<OxcNode, SzObject[]>;
+    valueMemo: Map<OxcNode, SzValue[]>;
+}
+
+/**
+ * Convert an object node into catalog candidates, PER KEY: index 0 is the
+ * primary object (conditionals resolved to their consequent), the rest are
+ * minimal path-preserving objects carrying alternate branch values (e.g.
+ * `{ hover: { mx: dense ? 0 : 2 } }` → `[{hover:{mx:0}}, {hover:{mx:2}}]`).
+ * Keys whose value cannot be classified are skipped INDIVIDUALLY — sz keys
+ * lower independently, so sibling classes survive. Catalog-only: the strict
+ * sz-attribute conversion keeps its fall-to-runtime contract.
+ *
+ * @param node Object expression to walk.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; `[{}]`-like primary always present.
+ */
+function lenientCatalogObjects(
+    node: ObjectExpressionNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [{} as SzObject];
+    }
+    const primary: Record<string, SzValue> = {};
+    const extras: SzObject[] = [];
+    for (const propRaw of node.properties) {
+        if (propRaw.type === 'SpreadElement') {
+            const spreadCandidates = lenientCatalogObjectCandidates(
+                (propRaw as SpreadElementNode).argument,
+                constInits,
+                seen,
+                depth + 1,
+                budget,
+            );
+            const [first, ...rest] = spreadCandidates;
+            if (first) {
+                Object.assign(primary, first);
             }
-            throw err;
+            for (const extra of rest) {
+                pushCatalogExtra(extras, extra, budget);
+            }
+            continue;
+        }
+        if (propRaw.type !== 'Property') {
+            continue;
+        }
+        const prop = propRaw as PropertyNode;
+        if (prop.computed) {
+            continue;
+        }
+        const key = extractKeyName(prop.key);
+        if (key === null) {
+            continue;
+        }
+        const values = lenientCatalogValues(prop.value, constInits, seen, depth + 1, budget);
+        const [firstValue, ...restValues] = values;
+        if (firstValue === undefined) {
+            continue;
+        }
+        primary[key] = firstValue;
+        for (const value of restValues) {
+            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
         }
     }
-    return {};
+    return [primary as SzObject, ...extras];
+}
+
+/**
+ * Classify one leaf value into catalog candidates. Empty result = skip the
+ * key. Finite conditionals contribute BOTH branches (the runtime resolves one
+ * of them, so both classes must exist); `null`/`undefined` mean "key unset";
+ * const identifiers resolve through their initializer (const-only, cycle
+ * guarded); everything else — calls, members, templates — is skipped.
+ *
+ * @param node Value node to classify.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate values in branch order (consequent first).
+ */
+function lenientCatalogValues(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'Literal') {
+        const value = (unwrapped as unknown as { value: unknown }).value;
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            return [value];
+        }
+        return [];
+    }
+    if (unwrapped.type === 'UnaryExpression') {
+        const operator = (unwrapped as unknown as { operator: string }).operator;
+        const argument = (unwrapped as unknown as { argument: OxcNode }).argument;
+        if ((operator === '-' || operator === '+') && argument.type === 'Literal') {
+            const argValue = (argument as unknown as { value: unknown }).value;
+            if (typeof argValue === 'number') {
+                return [operator === '-' ? -argValue : argValue];
+            }
+        }
+        return [];
+    }
+    if (unwrapped.type === 'ObjectExpression') {
+        return lenientCatalogObjects(
+            unwrapped as ObjectExpressionNode,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+    }
+    if (unwrapped.type === 'ConditionalExpression') {
+        const conditional = unwrapped as ConditionalExpressionNode;
+        const values = lenientCatalogValues(
+            conditional.consequent,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+        // Same paid-exploration guard as the object-candidate lane.
+        if (budget.explores > 0) {
+            budget.explores -= 1;
+            values.push(
+                ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
+            );
+        }
+        return truncateCatalogCandidates(values, budget);
+    }
+    if (unwrapped.type === 'Identifier') {
+        const name = String((unwrapped as IdentifierNode).name);
+        if (name === 'undefined') {
+            return [];
+        }
+        const init = constInits.get(name);
+        if (!init || seen.has(name)) {
+            return [];
+        }
+        const cached = budget.valueMemo.get(init);
+        if (cached) {
+            return [...cached];
+        }
+        const values = lenientCatalogValues(
+            init,
+            constInits,
+            new Set([...seen, name]),
+            depth,
+            budget,
+        );
+        budget.valueMemo.set(init, values);
+        return [...values];
+    }
+    return [];
+}
+
+/**
+ * Resolve a node position that must yield OBJECT candidates (a variant value,
+ * a spread argument): object literals, const-bound identifiers, and finite
+ * conditionals between such objects.
+ *
+ * @param node Node to resolve.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; empty when the position is not object-like.
+ */
+function lenientCatalogObjectCandidates(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'ObjectExpression') {
+        return lenientCatalogObjects(
+            unwrapped as ObjectExpressionNode,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+    }
+    if (unwrapped.type === 'ConditionalExpression') {
+        const conditional = unwrapped as ConditionalExpressionNode;
+        const candidates = lenientCatalogObjectCandidates(
+            conditional.consequent,
+            constInits,
+            seen,
+            depth,
+            budget,
+        );
+        // The alternate is a paid exploration (see `explores`); once the
+        // allowance is spent every further conditional degrades to its
+        // consequent, keeping the recursion tree linear in the source.
+        if (budget.explores > 0) {
+            budget.explores -= 1;
+            candidates.push(
+                ...lenientCatalogObjectCandidates(
+                    conditional.alternate,
+                    constInits,
+                    seen,
+                    depth,
+                    budget,
+                ),
+            );
+        }
+        return truncateCatalogCandidates(candidates, budget);
+    }
+    if (unwrapped.type === 'Identifier') {
+        const name = String((unwrapped as IdentifierNode).name);
+        const init = constInits.get(name);
+        if (!init || seen.has(name)) {
+            return [];
+        }
+        const cached = budget.objectMemo.get(init);
+        if (cached) {
+            return [...cached];
+        }
+        const candidates = lenientCatalogObjectCandidates(
+            init,
+            constInits,
+            new Set([...seen, name]),
+            depth,
+            budget,
+        );
+        budget.objectMemo.set(init, candidates);
+        return [...candidates];
+    }
+    return [];
+}
+
+/**
+ * Bound a candidate list to what can still be consumed: one primary plus the
+ * remaining alternate-branch budget — the guard that keeps branch fan-out
+ * linear in the source.
+ *
+ * @param candidates Candidate list to bound (mutated in place).
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns The bounded list.
+ */
+function truncateCatalogCandidates<T>(candidates: T[], budget: CatalogExtrasBudget): T[] {
+    const cap = budget.extras + 1;
+    if (candidates.length > cap) {
+        candidates.length = cap;
+    }
+    return candidates;
+}
+
+/**
+ * Resolve a node to an object expression through the const-initializer map
+ * (used for variant DIMENSION values, which cannot fork into candidates).
+ *
+ * @param node Node to resolve.
+ * @param constInits Const-only initializer map for identifier resolution.
+ * @param seen Identifier names already followed (cycle guard).
+ * @returns Object expression, or null.
+ */
+function resolveCatalogObjectExpression(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+): ObjectExpressionNode | null {
+    const unwrapped = unwrapExpression(node);
+    if (unwrapped.type === 'ObjectExpression') {
+        return unwrapped as ObjectExpressionNode;
+    }
+    if (unwrapped.type === 'Identifier') {
+        const name = String((unwrapped as IdentifierNode).name);
+        const init = constInits.get(name);
+        if (!init || seen.has(name)) {
+            return null;
+        }
+        return resolveCatalogObjectExpression(init, constInits, new Set([...seen, name]));
+    }
+    return null;
+}
+
+/**
+ * Append an alternate-branch object to the extras list within budget.
+ *
+ * @param extras Extras collected so far.
+ * @param extra Path-preserving alternate object.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ */
+function pushCatalogExtra(extras: SzObject[], extra: SzObject, budget: CatalogExtrasBudget): void {
+    if (budget.extras <= 0) {
+        return;
+    }
+    budget.extras -= 1;
+    extras.push(extra);
 }
 
 /**
@@ -1948,16 +2404,6 @@ function addCompiledClasses(object: SzObject, classes: Set<string>): void {
             classes.add(cls);
         }
     }
-}
-
-/**
- * Narrow an unknown value to a plain (non-array) sz object.
- *
- * @param value Candidate value.
- * @returns True when the value is a plain object usable as an sz config.
- */
-function isSzObject(value: unknown): value is SzObject {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -3547,6 +3993,42 @@ function collectObjectBindings(
         }
     });
     return bindings;
+}
+
+/**
+ * Collect const-declared identifier initializers of ANY expression shape,
+ * unwrapped of TS-only wrappers. The szv catalog's lenient leaf resolution
+ * needs scalar initializers (`const GUTTER = 0`) that the object-only binding
+ * map cannot hold. Const-only, so a reassigned `let` is never followed.
+ *
+ * @param root Program root.
+ * @returns Identifier name to unwrapped initializer node.
+ */
+function collectConstInitializers(root: OxcNode): Map<string, OxcNode> {
+    const inits = new Map<string, OxcNode>();
+    walk(root, node => {
+        if (node.type !== 'VariableDeclaration') {
+            return;
+        }
+        const decl = node as unknown as { kind?: string; declarations?: OxcNode[] };
+        if (decl.kind !== 'const' || !decl.declarations) {
+            return;
+        }
+        for (const declaratorNode of decl.declarations) {
+            const declarator = declaratorNode as unknown as {
+                id?: OxcNode;
+                init?: OxcNode | null;
+            };
+            if (!declarator.id || declarator.id.type !== 'Identifier' || !declarator.init) {
+                continue;
+            }
+            inits.set(
+                String((declarator.id as IdentifierNode).name),
+                unwrapExpression(declarator.init),
+            );
+        }
+    });
+    return inits;
 }
 
 /**

@@ -166,7 +166,7 @@ csszyx({
     strictMode: false, // Treat warnings as errors
   },
   build: {
-    astBudgetLimit: 50_000, // Abort transform past this AST node count
+    astBudgetLimit: 50_000, // Skip transform (warned) past this AST node count
   },
   production: {
     injectChecksum: true, // Inject SSR hydration checksum

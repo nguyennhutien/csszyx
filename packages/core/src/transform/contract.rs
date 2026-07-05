@@ -21,6 +21,11 @@ pub struct TransformOptions {
     /// Project root used only to render diagnostic file paths relative to it.
     #[serde(default)]
     pub root_dir: Option<String>,
+    /// Per-file AST node cap override (`build.astBudgetLimit`). Engines count
+    /// AST nodes differently, so a real page file can trip the default cap
+    /// under one engine only — the override must reach the native parser too.
+    #[serde(default)]
+    pub ast_budget: Option<usize>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -74,6 +79,12 @@ pub struct TransformMetadata {
     pub uses_runtime: bool,
     /// Whether the result imports the runtime _szMerge helper.
     pub uses_merge: bool,
+    /// Whether the result imports the runtime szcn helper (sz array composition).
+    #[serde(default)]
+    pub uses_szcn: bool,
+    /// Whether the result imports the runtime _szPart helper (dynamic array elements).
+    #[serde(default)]
+    pub uses_sz_part: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Producer identity for cache safety.

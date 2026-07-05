@@ -64,7 +64,7 @@ describe('static special-case parser parity', () => {
         expectClasses(source, ['p-4', 'm-2']);
         for (const [name, transform] of engines) {
             const result = transform(source, 'conditional-array.tsx');
-            expect(result.code, name).toContain('_szMerge("p-4", active && "m-2")');
+            expect(result.code, name).toContain('szcn("p-4", active && "m-2")');
             expect(result.code, name).not.toContain('_sz([layout');
         }
     });

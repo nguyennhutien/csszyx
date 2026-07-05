@@ -32,6 +32,8 @@ pub struct NativeTransformOptions {
     pub global_var_aliases: Option<Vec<NativeGlobalVarAliasEntry>>,
     /// Project root used only to render diagnostic file paths relative to it.
     pub root_dir: Option<String>,
+    /// Per-file AST node cap override (`build.astBudgetLimit`).
+    pub ast_budget: Option<u32>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -79,6 +81,10 @@ pub struct NativeTransformMetadata {
     pub uses_runtime: bool,
     /// Whether the result imports the runtime _szMerge helper.
     pub uses_merge: bool,
+    /// Whether the result imports the runtime szcn helper (sz array composition).
+    pub uses_szcn: bool,
+    /// Whether the result imports the runtime _szPart helper (dynamic array elements).
+    pub uses_sz_part: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Producer identity for cache safety.
@@ -174,6 +180,7 @@ pub fn transform_batch_native(
                 })
                 .collect(),
             root_dir: options.root_dir,
+            ast_budget: options.ast_budget.map(|budget| budget as usize),
         },
     )
     .map(|results| {
@@ -215,6 +222,8 @@ impl From<TransformResult> for NativeTransformResult {
                 transformed: result.metadata.transformed,
                 uses_runtime: result.metadata.uses_runtime,
                 uses_merge: result.metadata.uses_merge,
+                uses_szcn: result.metadata.uses_szcn,
+                uses_sz_part: result.metadata.uses_sz_part,
                 uses_color_var: result.metadata.uses_color_var,
                 producer: producer_to_js(result.metadata.producer).to_string(),
                 ast_budget_exceeded: result.metadata.ast_budget_exceeded,

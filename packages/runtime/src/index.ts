@@ -15,7 +15,7 @@ import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 // Export SzInput type from concatenate
 export type { SzInput } from './concatenate.js';
 // Export concatenation helpers
-export { _sz, _sz2, _sz3, _szMerge, szr } from './concatenate.js';
+export { _sz, _sz2, _sz3, _szMerge, _szPart, szr } from './concatenate.js';
 // Export hydration functions
 export {
     abortHydration,
@@ -48,7 +48,7 @@ export {
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
 export { __szColorVar } from './lite.js';
 // Mangle-aware className merge (last-wins override) for layered components
-export { szcn } from './merge-classes.js';
+export { _szcn, szcn } from './merge-classes.js';
 
 export { registerSzcnGroups, type SzcnThemeGroups } from './merge-groups.js';
 // Box-model class routing + category-aware toolkit
@@ -73,7 +73,6 @@ export {
 } from './split-box.js';
 // Strip the sz prop before forwarding props to a host element
 export { stripSzProps } from './strip-sz-props.js';
-export { szsClass } from './szs-class.js';
 // Export variant authoring helper
 export { szv } from './variants.js';
 // Export verification functions

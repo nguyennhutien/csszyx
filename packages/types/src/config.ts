@@ -389,7 +389,14 @@ export interface BuildConfig {
     cache?: boolean;
 
     /**
-     * Maximum AST nodes per file before warning.
+     * Maximum AST nodes per file before the transform gives up on it.
+     *
+     * A file over the cap is left unrewritten and contributes NO classes to
+     * the safelist (warned loudly). Applies to every parser engine, including
+     * the native `rust` one. The safelist prescan runs with a 10× cap by
+     * default because a skipped file means silently missing CSS under
+     * Tailwind `source(none)`; setting this applies the same value to both
+     * lanes. Raise it when a warning names a legitimate large page file.
      *
      * @default 50000
      */

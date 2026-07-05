@@ -92,7 +92,10 @@ font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
 ```tsx
 <div sz={{ color: "--ds-primary", p: "--spacing-4" }} />
 // → className="text-(--ds-primary) p-(--spacing-4)"
-// Sugar: any value starting with -- is auto-wrapped in ()
+// Plain --tokens use CSS-variable (); --functions(...) use arbitrary []
+
+<div sz={{ text: "--spacing(4)" }} />
+// → className="text-[--spacing(4)]"
 ```
 
 ### Color with opacity
@@ -332,11 +335,26 @@ Composing multiple classes for a single effect.
 
 Mapping precise, non-theme values to JIT syntax (Arbitrary Properties or Values).
 
-| Concept             | CSS Property                  | Tailwind v4 Class              | `sz` Prop (Object Syntax)           | Note                                      |
-| :------------------ | :---------------------------- | :----------------------------- | :---------------------------------- | :---------------------------------------- |
-| **Arbitrary Color** | `background-color: #316ff6`   | `bg-[#316ff6]`                 | `{ bg: '#316ff6' }`                 | Preferred over inline styles for caching. |
-| **Arbitrary Size**  | `width: 333px`                | `w-[333px]`                    | `{ w: '333px' }`                    | Explicit unit required string.            |
-| **Data Prop**       | `content: attr(data-content)` | `content-[attr(data-content)]` | `{ content: 'attr(data-content)' }` | Complex arbitrary strings.                |
+| Concept              | CSS Property                                                | Tailwind v4 Class                  | `sz` Prop (Object Syntax)               | Note                                              |
+| :------------------- | :---------------------------------------------------------- | :--------------------------------- | :-------------------------------------- | :------------------------------------------------ |
+| **Arbitrary Color**  | `background-color: #316ff6`                                 | `bg-[#316ff6]`                     | `{ bg: '#316ff6' }`                     | Preferred over inline styles for caching.         |
+| **Arbitrary Size**   | `width: 333px`                                              | `w-[333px]`                        | `{ w: '333px' }`                        | Explicit unit required string.                    |
+| **Data Prop**        | `content: attr(data-content)`                               | `content-[attr(data-content)]`     | `{ content: 'attr(data-content)' }`     | Complex arbitrary strings.                        |
+| **CSS Variable**     | `padding: var(--gap)`                                       | `p-(--gap)`                        | `{ p: '--gap' }`                        | Bare `--name` → **parenthesized** var sugar.      |
+| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`                       | `text-[--spacing(4)]`              | `{ text: '--spacing(4)' }`              | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
+| **Alpha Fn (color)** | `color: color-mix(in oklab, var(--brand) 50%, transparent)` | `text-[--alpha(var(--brand)_/_50%)]` | `{ color: '--alpha(var(--brand) / 50%)' }` | Tailwind color function; same `--fn(...)` rule.   |
+
+**`--` prefix — the one rule that decides parens vs brackets** (applies to EVERY
+value position — `p`, `bg`, `m`, `w`, `text`, …, not just font-size):
+
+- A **bare** `--name` (no call) is a **CSS variable** → `x-(--name)`.
+  `{ bg: '--brand' }` → `bg-(--brand)`. **Never** `bg-[--brand]`.
+- A **`--name(...)`** shaped value (a balanced function call spanning the whole
+  value) is a **Tailwind build-time function** → `x-[--name(...)]` (v4.3.2+).
+  `{ p: '--spacing(2)' }` → `p-[--spacing(2)]`. Works for any function
+  (`--spacing()`, `--alpha()`, …), not a fixed list.
+- Either way you write **no brackets and no parens in `sz`** — the compiler picks
+  the right wrapper from the value's shape.
 
 **Global Parsing Rule**: The compiler **MUST normalize whitespace** in arbitrary variant _keys_ before generation.
 
@@ -408,19 +426,19 @@ Styling based on descendants.
 
 Styling children based on parent `group` class.
 
-| Concept                      | Tailwind v4 Class                     | `sz` Prop (Object Syntax)                                         | Note                                 |
-| :--------------------------- | :------------------------------------ | :---------------------------------------------------------------- | :----------------------------------- |
-| **Group Hover**              | `group-hover:text-white`              | `{ group: { hover: { color: 'white' } } }`                        | **Sugar**: Nested scope.             |
-| **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                        |                                      |
-| **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                       |                                      |
-| **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`              | **Sugar**: Scope name as nested key. |
-| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { display: 'block' } } }`            |                                      |
-| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { display: 'block' } } } }`                 |                                      |
-| **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`              | **Sugar**: Nested `data` key.        |
-| **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
-| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`     | `=` in key → bracket form always.    |
-| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`         | Standard states: bare form.          |
-| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }` | Non-standard: bracket form.          |
+| Concept                      | Tailwind v4 Class                     | `sz` Prop (Object Syntax)                                      | Note                                 |
+| :--------------------------- | :------------------------------------ | :------------------------------------------------------------- | :----------------------------------- |
+| **Group Hover**              | `group-hover:text-white`              | `{ group: { hover: { color: 'white' } } }`                     | **Sugar**: Nested scope.             |
+| **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                     |                                      |
+| **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                    |                                      |
+| **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`           | **Sugar**: Scope name as nested key. |
+| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { display: 'block' } } }`         |                                      |
+| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { display: 'block' } } } }`              |                                      |
+| **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`           | **Sugar**: Nested `data` key.        |
+| **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }` | Name before `data` key.              |
+| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`  | `=` in key → bracket form always.    |
+| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`      | Standard states: bare form.          |
+| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }`  | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 
@@ -627,16 +645,16 @@ Strategy for static analysis vs runtime generation.
 
 **Core Decision**: `CSSzyx` uses **AST Parsing**, not Regex Scanning. This allows for smarter static extraction and shake-tree logic.
 
-| Concept                       | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                                                                                                                                                                       |
-| :---------------------------- | :----------------------- | :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **String Interpolation**      | ❌ Fails `bg-${color}`   | ✅ **Runtime Support**   | Compiler marks as dynamic, handled at runtime via variable injection.                                                                                                                                                      |
-| **Conditionals**              | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` and `{ scale: shrunk ? 75 : 100 }` → both branches compiled to static Tailwind classes at build time. CSS variable fallback only when a branch is a runtime expression (not a literal). |
-| **Variable reference**        | ❌ Not applicable        | ✅ **Build time**        | `sz={myVar}` — pass variable directly when no override needed. Compiler resolves the binding to its object literal initializer (incl. `as const`, `satisfies`, explicit type annotation).                                  |
-| **Object Spread**             | ❌ Fails spread          | ✅ **Static Analysis**   | `sz={{ ...baseProps, key: val }}` — use spread only when overriding/adding; last key wins. Resolved at build time for local literals. Multiple/nested spreads supported. Imported vars fall back to `_sz()` — no crash.    |
-| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — variable array elements resolved at build time. Static elements merged to single string; conditional elements use `_szMerge` at runtime.                             |
-| **Ternary variable branches** | ❌ Not applicable        | ✅ **Build time**        | `sz={cond ? varA : varB}` — both branches compiled to static strings when variables are local literals.                                                                                                                    |
-| **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                  |
-| **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                          |
+| Concept                       | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| :---------------------------- | :----------------------- | :----------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **String Interpolation**      | ❌ Fails `bg-${color}`   | ✅ **Runtime Support**   | Compiler marks as dynamic, handled at runtime via variable injection.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Conditionals**              | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` and `{ scale: shrunk ? 75 : 100 }` → both branches compiled to static Tailwind classes at build time. CSS variable fallback only when a branch is a runtime expression (not a literal).                                                                                                                                                                                                                                                                                                                                      |
+| **Variable reference**        | ❌ Not applicable        | ✅ **Build time**        | `sz={myVar}` — pass variable directly when no override needed. Compiler resolves the binding to its object literal initializer (incl. `as const`, `satisfies`, explicit type annotation).                                                                                                                                                                                                                                                                                                                                                                       |
+| **Object Spread**             | ❌ Fails spread          | ✅ **Static Analysis**   | `sz={{ ...baseProps, key: val }}` — use spread only when overriding/adding; last key wins. Resolved at build time for local literals. Multiple/nested spreads supported. Imported vars fall back to `_sz()` — no crash.                                                                                                                                                                                                                                                                                                                                         |
+| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — LATER WINS composition. All-static-object arrays deep-merge at build (later leaf wins per key path, sibling keys survive) into one className; arrays with strings/conditions/dynamic elements emit `_szcn(...)` — a compiler-injected helper (`_` = generated code, never hand-authored; the unmemoized twin of `szcn`) applying the same later-wins rule per property group at runtime; dynamic elements (e.g. a forwarded `szsc` slot) pass through `_szPart` (string passthrough / sz-object compile). |
+| **Ternary variable branches** | ❌ Not applicable        | ✅ **Build time**        | `sz={cond ? varA : varB}` — both branches compiled to static strings when variables are local literals.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 **Performance Rule**: Prefer **Static Strings** in `sz` objects.
 
@@ -656,17 +674,17 @@ Two independent layers:
   runtime as long as the component forwards `className` down to a host element.
 - **Type** — only auto-typed when the component's props derive from host attributes.
 
-| Component props type                                       | `sz` typed?         |
-| :--------------------------------------------------------- | :------------------ |
-| `{ title: string }` (fresh type)                           | ❌ TS error         |
-| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`      | ✅ inherited        |
-| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>`    | ✅ just `sz`        |
+| Component props type                                    | `sz` typed?  |
+| :------------------------------------------------------ | :----------- |
+| `{ title: string }` (fresh type)                        | ❌ TS error  |
+| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`   | ✅ inherited |
+| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>` | ✅ just `sz` |
 
 Add `sz` to a fresh props type by picking it (no import needed) or declaring it:
 
 ```tsx
-import type { ComponentProps } from 'react';
-type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz'>;
+import type { ComponentProps } from "react";
+type Props = { title: string } & Pick<ComponentProps<"div">, "sz">;
 // equivalent: import type { SzPropValue } from '@csszyx/types'; then `sz?: SzPropValue`
 ```
 
@@ -689,8 +707,8 @@ a normal `sz`. So style a compound component's parts by giving each part its own
 
 ```tsx
 <Card sz={{ p: 4 }}>
-  <Card.Header sz={{ bg: 'gray-100', font: 'bold' }}>Title</Card.Header>
-  <Card.Body sz={{ text: 'sm' }}>Body</Card.Body>
+  <Card.Header sz={{ bg: "gray-100", font: "bold" }}>Title</Card.Header>
+  <Card.Body sz={{ text: "sm" }}>Body</Card.Body>
 </Card>
 // → each part compiled to className at build time; all classes safelisted.
 ```
@@ -712,17 +730,23 @@ is scanned (`build.scanCss`); classes written in plain CSS register via
 
 For parts a component renders ITSELF (no consumer content), `szs` maps slot names
 to sz values. The transform compiles each VALUE to its class string (key kept),
-safelisting + mangling like `sz`; the component forwards `props.szs?.<slot>` into
-the matching child's `className`.
+safelisting + mangling like `sz`, and rewrites the attribute to `szsc` ("szs,
+compiled") — the string-typed prop the component reads. Consumers WRITE `szs`,
+components READ `szsc`; declare both from one slot union with `SzsProps`.
 
 ```tsx
-type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
-<Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
-// → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
-// component: <header className={szsClass(props.szs?.header)} />
-// szsClass (from @csszyx/runtime) narrows the compiled slot to string | undefined —
-// slots TYPE as sz values but ARE class strings after the transform; the helper
-// is also fail-safe (uncompiled slot -> undefined, never "[object Object]").
+// INSIDE the component — declare slots, READ `szsc` (compiled strings):
+type CardProps = { title: string } & SzsProps<"header" | "icon">; // from @csszyx/types
+function Card({ szsc }: CardProps) {
+  return <header className={szsc?.header} />; // plain string — no cast, no szsClass
+}
+
+// OUTSIDE at the call site — consumer WRITES `szs` (sz objects):
+<Card szs={{ header: { bg: "gray-100" }, icon: { color: "red-500" } }} />;
+// build rewrites the call → <Card szsc={{ header: "bg-gray-100", icon: "text-red-500" }} />
+// szs = write side (consumer). szsc = read side (component). Never swap them;
+// never hand-write szsc. szsc?.slot is undefined when the consumer didn't style
+// that slot or the call wasn't compiled (build warns) — an object never reaches className.
 ```
 
 Rules: custom components only (host element → dev warn, unchanged). Slot values
@@ -730,6 +754,25 @@ must be STATIC — a pure object literal (nested variants OK) or a raw class str
 identifiers/conditionals/spreads leave the attribute unchanged with a dev warning.
 Keys are identifiers. `sz` styles the element itself; `szs` styles its internal
 parts — a component can take both.
+
+**AI contract (do exactly this):**
+
+- Type props with `SzsProps<'a' | 'b'>` from `@csszyx/types` (intersect for
+  extra props: `{ title: string } & SzsProps<'a'>`). Read `props.szsc?.<slot>`
+  in the component; the consumer passes `szs={{ … }}`.
+- `szsc?.<slot>` is ALREADY a `string | undefined`. Forward it straight:
+  `className={szsc?.icon}`, or compose defaults with an array `sz={[{…}, szsc?.icon]}`.
+- Compose slot + default with `sz={[default, szsc?.slot]}` (array = later-wins).
+  Do NOT wrap it in `szcn(...)` in `className` — that pattern is obsolete.
+- `szsClass()` was REMOVED — do not emit it. `_szcn`/`_szPart` are
+  compiler-injected (the `_` marks generated code) — never write, import, or
+  suggest them; they appear only in compiler OUTPUT.
+- Never emit `szsc={{…}}` yourself — the compiler produces it from `szs`.
+  Author `szs`, read `szsc`.
+
+Migration from ≤0.10: `className={szcn('font-medium', szsClass(szs?.title))}`
+→ `sz={[{ weight: 'medium' }, szsc?.title]}` (and props `Szs<'title'>` →
+`SzsProps<'title'>`, read `szsc` not `szs`).
 
 
 # Backgrounds
@@ -1693,27 +1736,29 @@ Controlling auto-placement algorithm.
 
 Controlling implicit column sizing.
 
-| Concept          | CSS Rule                              | Tailwind v4 Class           | `sz` Prop (Canonical)           |
-| :--------------- | :------------------------------------ | :-------------------------- | :------------------------------ |
-| **Auto**         | `grid-auto-columns: auto`             | `auto-cols-auto`            | `{ autoCols: 'auto' }`          |
-| **Min**          | `grid-auto-columns: min-content`      | `auto-cols-min`             | `{ autoCols: 'min' }`           |
-| **Max**          | `grid-auto-columns: max-content`      | `auto-cols-max`             | `{ autoCols: 'max' }`           |
-| **Fr**           | `grid-auto-columns: minmax(0, 1fr)`   | `auto-cols-fr`              | `{ autoCols: 'fr' }`            |
-| **Arbitrary**    | `grid-auto-columns: minmax(0, 2fr)`   | `auto-cols-[minmax(0,2fr)]` | `{ autoCols: 'minmax(0,2fr)' }` |
-| **CSS Variable** | `grid-auto-columns: var(--auto-cols)` | `auto-cols-(--auto-cols)`   | `{ autoCols: '--auto-cols' }`   |
+| Concept              | CSS Rule                                       | Tailwind v4 Class           | `sz` Prop (Canonical)           |
+| :------------------- | :--------------------------------------------- | :-------------------------- | :------------------------------ |
+| **Auto**             | `grid-auto-columns: auto`                      | `auto-cols-auto`            | `{ autoCols: 'auto' }`          |
+| **Min**              | `grid-auto-columns: min-content`               | `auto-cols-min`             | `{ autoCols: 'min' }`           |
+| **Max**              | `grid-auto-columns: max-content`               | `auto-cols-max`             | `{ autoCols: 'max' }`           |
+| **Fr**               | `grid-auto-columns: minmax(0, 1fr)`            | `auto-cols-fr`              | `{ autoCols: 'fr' }`            |
+| **Spacing (v4.3.2)** | `grid-auto-columns: calc(var(--spacing) * 12)` | `auto-cols-12`              | `{ autoCols: 12 }`              |
+| **Arbitrary**        | `grid-auto-columns: minmax(0, 2fr)`            | `auto-cols-[minmax(0,2fr)]` | `{ autoCols: 'minmax(0,2fr)' }` |
+| **CSS Variable**     | `grid-auto-columns: var(--auto-cols)`          | `auto-cols-(--auto-cols)`   | `{ autoCols: '--auto-cols' }`   |
 
 ## Grid Auto Rows
 
 Controlling implicit row sizing.
 
-| Concept          | CSS Rule                           | Tailwind v4 Class           | `sz` Prop (Canonical)           |
-| :--------------- | :--------------------------------- | :-------------------------- | :------------------------------ |
-| **Auto**         | `grid-auto-rows: auto`             | `auto-rows-auto`            | `{ autoRows: 'auto' }`          |
-| **Min**          | `grid-auto-rows: min-content`      | `auto-rows-min`             | `{ autoRows: 'min' }`           |
-| **Max**          | `grid-auto-rows: max-content`      | `auto-rows-max`             | `{ autoRows: 'max' }`           |
-| **Fr**           | `grid-auto-rows: minmax(0, 1fr)`   | `auto-rows-fr`              | `{ autoRows: 'fr' }`            |
-| **Arbitrary**    | `grid-auto-rows: minmax(0, 2fr)`   | `auto-rows-[minmax(0,2fr)]` | `{ autoRows: 'minmax(0,2fr)' }` |
-| **CSS Variable** | `grid-auto-rows: var(--auto-rows)` | `auto-rows-(--auto-rows)`   | `{ autoRows: '--auto-rows' }`   |
+| Concept              | CSS Rule                                    | Tailwind v4 Class           | `sz` Prop (Canonical)           |
+| :------------------- | :------------------------------------------ | :-------------------------- | :------------------------------ |
+| **Auto**             | `grid-auto-rows: auto`                      | `auto-rows-auto`            | `{ autoRows: 'auto' }`          |
+| **Min**              | `grid-auto-rows: min-content`               | `auto-rows-min`             | `{ autoRows: 'min' }`           |
+| **Max**              | `grid-auto-rows: max-content`               | `auto-rows-max`             | `{ autoRows: 'max' }`           |
+| **Fr**               | `grid-auto-rows: minmax(0, 1fr)`            | `auto-rows-fr`              | `{ autoRows: 'fr' }`            |
+| **Spacing (v4.3.2)** | `grid-auto-rows: calc(var(--spacing) * 16)` | `auto-rows-16`              | `{ autoRows: 16 }`              |
+| **Arbitrary**        | `grid-auto-rows: minmax(0, 2fr)`            | `auto-rows-[minmax(0,2fr)]` | `{ autoRows: 'minmax(0,2fr)' }` |
+| **CSS Variable**     | `grid-auto-rows: var(--auto-rows)`          | `auto-rows-(--auto-rows)`   | `{ autoRows: '--auto-rows' }`   |
 
 ## Gap
 
@@ -3229,24 +3274,25 @@ Controlling the font family.
 
 Controlling the font size.
 
-| Concept          | CSS Rule                                    | Tailwind v4 Class                                                                                                                                       | `sz` Prop (Object Syntax)               | Note                                                              |
-| :--------------- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------- | :---------------------------------------------------------------- |
-| **Scale**        | `font-size: (size); line-height: (leading)` | `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`, `text-4xl`, `text-5xl`, `text-6xl`, `text-7xl`, `text-8xl`, `text-9xl` | `{ text: 'xs' }`, `{ text: 'sm' }` etc. | Sets size & leading.                                              |
-| **Number**       | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | `text` is the single canonical key.                               |
-| **Arbitrary**    | `font-size: 1.5rem`                         | `text-[1.5rem]`                                                                                                                                         | `{ text: '1.5rem' }`                    |                                                                   |
-| **CSS Variable** | `font-size: var(--size)`                    | `text-(length:--size)`                                                                                                                                  | `{ text: '--size' }`                    | **Sugar**: Auto-detects `--`. Type hint disambiguates from color. |
+| Concept              | CSS Rule                                    | Tailwind v4 Class                                                                                                                                       | `sz` Prop (Object Syntax)               | Note                                                                                       |
+| :------------------- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------- | :----------------------------------------------------------------------------------------- |
+| **Scale**            | `font-size: (size); line-height: (leading)` | `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`, `text-4xl`, `text-5xl`, `text-6xl`, `text-7xl`, `text-8xl`, `text-9xl` | `{ text: 'xs' }`, `{ text: 'sm' }` etc. | Sets size & leading.                                                                       |
+| **Number**           | `font-size: 16px`                           | `text-[16px]`                                                                                                                                           | `{ text: '16px' }`                      | `text` is the single canonical key.                                                        |
+| **Arbitrary**        | `font-size: 1.5rem`                         | `text-[1.5rem]`                                                                                                                                         | `{ text: '1.5rem' }`                    |                                                                                            |
+| **CSS Variable**     | `font-size: var(--size)`                    | `text-(length:--size)`                                                                                                                                  | `{ text: '--size' }`                    | **Sugar**: Auto-detects `--`. Type hint disambiguates from color.                          |
+| **Spacing Function** | `font-size: calc(var(--spacing) * 4)`       | `text-[--spacing(4)]`                                                                                                                                   | `{ text: '--spacing(4)' }`              | v4.3.2: build-time functions are auto-classified as arbitrary values; no brackets in `sz`. |
 
 ## Font Weight
 
 Controlling the font weight.
 
-| Concept          | CSS Rule                | Tailwind v4 Class                                                                                                                        | `sz` Prop (Object Syntax)                                     | Note                                                               |
-| :--------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :----------------------------------------------------------------- |
+| Concept          | CSS Rule                | Tailwind v4 Class                                                                                                                        | `sz` Prop (Object Syntax)                             | Note                                                               |
+| :--------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------- | :----------------------------------------------------------------- |
 | **Keywords**     | `font-weight: 100-900`  | `font-thin`, `font-extralight`, `font-light`, `font-normal`, `font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, `font-black` | `{ weight: 'thin' }`, `{ weight: 'extralight' }` etc. |                                                                    |
 | **Number**       | `font-weight: 100-900`  | `font-100`, `font-200`, `font-300`, `font-400`, `font-500`, `font-600`, `font-700`, `font-800`, `font-900`                               | `{ weight: 100 }`, `{ weight: 200 }` etc.             | v4 shorthand.                                                      |
-| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                          | Sugar for `weight`.                                            |
-| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ weight: 550 }`                                         |                                                                    |
-| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ weight: '--w' }`                                       | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
+| **Alias**        | (Sugar)                 | `font-bold`                                                                                                                              | `{ weight: 'bold' }`                                  | Sugar for `weight`.                                                |
+| **Arbitrary**    | `font-weight: 550`      | `font-[550]`                                                                                                                             | `{ weight: 550 }`                                     |                                                                    |
+| **CSS Variable** | `font-weight: var(--w)` | `font-(weight:--w)`                                                                                                                      | `{ weight: '--w' }`                                   | **Sugar**: Auto-detects `--`. Type hint disambiguates from family. |
 
 ## Font Stretch
 
@@ -3435,17 +3481,29 @@ Works inside `dynamic()` at runtime.
 
 ## sz Array Syntax
 
-Pass an array to the `sz` prop to compose multiple sz objects with conditional items.
-Static items are pre-computed at build time; conditional items use `_szMerge` at runtime:
+Pass an array to the `sz` prop to compose styles with LATER-WINS semantics: on
+the same property, a later element overrides an earlier one. All-static-object
+arrays deep-merge at build time (later leaf wins per key path, sibling keys
+survive) into one className with zero runtime. Arrays containing class strings,
+`cond && …` guards, or dynamic values compose at runtime through `_szcn(...)`
+— a compiler-injected helper (the `_` prefix marks generated code you never
+hand-author; it is the unmemoized twin of the authorable `szcn`), applying the
+same later-wins rule per property group, mangle-safe; dynamic elements (e.g. a
+forwarded `szsc` slot) pass through `_szPart`:
 
 ```tsx
+<div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />
+// → className="text-lg p-4"   (text-lg overrode text-base at build)
+
 <div
   sz={[
-    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — compiled at build time
     isActive && { bg: "blue-500" }, // runtime conditional
-    isDisabled && { opacity: 50, cursor: "not-allowed" },
+    szsc?.title, // dynamic — resolved by _szPart, merged by _szcn
   ]}
 />
+// slot-default one-liner in a compound component:
+<h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]} />
 ```
 
 ## Reusing Styles
@@ -3520,7 +3578,12 @@ buttonSz({ variant: "invalid" }); // ❌ TS error: '"invalid"' not assignable
 ```
 
 All variant class combinations are catalogued at build time (compiler prescan) — Tailwind
-generates CSS for every combination, no runtime injection needed.
+generates CSS for every combination, no runtime injection needed. Cataloguing is
+lenient PER KEY, identically in all three parser engines: an unreadable value (a
+call, a template string, an imported constant) skips only that key while sibling
+keys and other variants still reach the safelist; a finite conditional
+(`p: dense ? 2 : 4`) contributes BOTH branches; `null`/`undefined` mean "key
+unset"; same-file `const` references and `const` object spreads are followed.
 
 ## @csszyx/dynamic — Runtime CSS Injection
 
@@ -3822,9 +3885,13 @@ compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard
 
-Files larger than 50 000 AST nodes throw `ASTBudgetExceededError` at
-build time — pathologically large generated files (json-as-ts fixtures,
-GraphQL schemas) would otherwise hang the build. Raise the cap when you
+Files larger than 50 000 AST nodes are skipped by the transform with a
+build warning — pathologically large generated files (json-as-ts fixtures,
+GraphQL schemas) would otherwise hang the build. A skipped file is left
+unrewritten and contributes no classes to the safelist. The safelist
+prescan runs with a 10× cap by default so legitimate large page files keep
+their CSS; every parser engine (including the native `rust` one) honours
+the cap and the warning. Raise the cap when a warning names a file you
 need:
 
 ```js
@@ -3885,6 +3952,8 @@ Result: `{ bg: 'brand-500' }` gets autocomplete and type-checking.
 - All spacing values are dynamic (any integer, 0.5-step decimals work bare)
 - Arbitrary values: `{ p: '5px' }` → `p-[5px]` (auto-wrapped)
 - CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
+- Build-time functions: `{ text: '--spacing(4)' }` → `text-[--spacing(4)]`
+- Grid auto-track spacing: `{ autoCols: 12, autoRows: 16 }` → `auto-cols-12 auto-rows-16`
 
 ## Migrate CLI
 

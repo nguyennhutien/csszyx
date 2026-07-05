@@ -1,4 +1,13 @@
-@import "tailwindcss";
+/* Disable Tailwind's automatic content detection and scope it explicitly to
+   this playground. Under Tailwind 4.3.x the auto-base resolves up to the
+   monorepo root and scans docs/snippets/tests (which carry `url(...)`/`{value}`
+   and `cursor-[url(h.cur)]` examples as text), generating broken `url()`
+   classes the Next css-loader cannot resolve. source(none) + explicit @source
+   is the only deterministic scope; csszyx also auto-injects the safelist. */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+@source "../csszyx-classes.html";
 
 @theme {
     --color-csszyx-primary: #6366f1;

@@ -11,6 +11,7 @@ import {
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
+    deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
     KNOWN_VARIANTS,
@@ -97,6 +98,10 @@ export interface SourceTransformResult {
     usesRuntime: boolean;
     /** Whether the source needs the _szMerge runtime helper. */
     usesMerge: boolean;
+    /** Whether the source needs the szcn runtime helper (sz array composition). */
+    usesSzcn: boolean;
+    /** Whether the source needs the _szPart runtime helper (dynamic array elements). */
+    usesSzPart: boolean;
     /** Whether the source needs the color-var runtime helper. */
     usesColorVar: boolean;
     /** Classes generated from sz syntax. */
@@ -131,6 +136,8 @@ export function transformSourceCode(
     const astBudget = options?.astBudget ?? AST_BUDGET;
     let usesRuntime = false;
     let usesMerge = false;
+    let usesSzcn = false;
+    let usesSzPart = false;
     let usesColorVar = false;
     let transformed = false;
     const collectedClasses = new Set<string>();
@@ -157,6 +164,8 @@ export function transformSourceCode(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
             usesColorVar: false,
             classes: collectedClasses,
             rawClassNames,
@@ -376,7 +385,6 @@ export function transformSourceCode(
                                 } of compiledSlots) {
                                     if (rewrite) {
                                         slot.value = t.stringLiteral(slotClasses);
-                                        transformed = true;
                                     }
                                     for (const c of slotClasses.split(/\s+/)) {
                                         if (c) {
@@ -384,6 +392,17 @@ export function transformSourceCode(
                                         }
                                     }
                                 }
+                                // The compiled map lands on `szsc` — the read-side
+                                // prop typed as strings — so the authoring prop
+                                // `szs` (typed as sz objects) never reaches runtime
+                                // and the component forwards `szsc?.<slot>` into a
+                                // child className with no cast. The rename also
+                                // keeps the transform idempotent: `szsc` is never
+                                // matched by this branch. Renamed even when every
+                                // slot was already a class string — the component
+                                // reads only `szsc`.
+                                path.node.name = t.jsxIdentifier('szsc');
+                                transformed = true;
                                 return;
                             }
 
@@ -807,111 +826,177 @@ export function transformSourceCode(
                                     }
                                 }
 
-                                // Array expression: sz={[obj1, cond && obj2, ...]}
+                                // Array expression: sz={[obj1, cond && obj2, ...]} —
+                                // later-wins composition. All-static-object arrays
+                                // deep-merge at build; anything else emits szcn()
+                                // so later elements override earlier ones per
+                                // property group at runtime (mirrors the oxc/rust
+                                // classification exactly).
                                 if (t.isArrayExpression(expression)) {
-                                    const parts: t.Expression[] = [];
-                                    let hasRuntime = false;
                                     const getBindingForArray = (
                                         name: string,
                                     ): ReturnType<typeof path.scope.getBinding> =>
                                         path.scope.getBinding(name);
 
+                                    /** One classified array element. */
+                                    type ArrayPart =
+                                        | { kind: 'obj'; sz: SzObject }
+                                        | { kind: 'str'; value: string }
+                                        | {
+                                              kind: 'cond';
+                                              cond: t.Expression;
+                                              classNames: string;
+                                          }
+                                        | { kind: 'dyn'; node: t.Expression };
+                                    const parts: ArrayPart[] = [];
+                                    let hasSpread = false;
+
                                     for (const element of expression.elements) {
-                                        // Sparse hole, false, null → skip
+                                        // Sparse hole, false, null, undefined → skip
                                         if (element === null) {
                                             continue;
                                         }
-                                        if (t.isBooleanLiteral(element) && !element.value) {
+                                        if (t.isSpreadElement(element)) {
+                                            hasSpread = true;
+                                            break;
+                                        }
+                                        const inner = unwrapTsExpression(element) ?? element;
+                                        if (t.isBooleanLiteral(inner) && !inner.value) {
                                             continue;
                                         }
-                                        if (t.isNullLiteral(element)) {
+                                        if (t.isNullLiteral(inner)) {
+                                            continue;
+                                        }
+                                        if (t.isIdentifier(inner) && inner.name === 'undefined') {
+                                            continue;
+                                        }
+                                        if (t.isStringLiteral(inner)) {
+                                            parts.push({ kind: 'str', value: inner.value });
                                             continue;
                                         }
                                         if (
-                                            t.isIdentifier(element) &&
-                                            element.name === 'undefined'
+                                            t.isLogicalExpression(inner) &&
+                                            inner.operator === '&&'
                                         ) {
-                                            continue;
-                                        }
-
-                                        // condition && szObject → keep condition, compile right to string
-                                        if (
-                                            t.isLogicalExpression(element) &&
-                                            element.operator === '&&'
-                                        ) {
-                                            const resolved = tryStaticTransformNode(
-                                                element.right,
-                                                getBindingForArray,
-                                            );
-                                            if (resolved !== null && t.isStringLiteral(resolved)) {
-                                                if (resolved.value) {
-                                                    parts.push(
-                                                        t.logicalExpression(
-                                                            '&&',
-                                                            element.left,
-                                                            resolved,
-                                                        ),
-                                                    );
-                                                    for (const c of resolved.value.split(/\s+/)) {
-                                                        if (c) {
-                                                            collectedClasses.add(c);
-                                                        }
-                                                    }
-                                                    hasRuntime = true;
+                                            const right =
+                                                unwrapTsExpression(inner.right) ?? inner.right;
+                                            let condClasses: string | null = t.isStringLiteral(
+                                                right,
+                                            )
+                                                ? right.value
+                                                : null;
+                                            if (condClasses === null) {
+                                                const rightSz = tryResolveStaticSzObject(
+                                                    right,
+                                                    getBindingForArray,
+                                                );
+                                                if (rightSz !== null) {
+                                                    condClasses = transform(rightSz).className;
                                                 }
-                                                // empty compiled string: skip element
+                                            }
+                                            if (condClasses !== null) {
+                                                if (condClasses !== '') {
+                                                    parts.push({
+                                                        kind: 'cond',
+                                                        cond: inner.left,
+                                                        classNames: condClasses,
+                                                    });
+                                                }
                                                 continue;
                                             }
-                                            // dynamic right side: pass through
-                                            parts.push(element as t.Expression);
-                                            hasRuntime = true;
+                                            parts.push({
+                                                kind: 'dyn',
+                                                node: element as t.Expression,
+                                            });
                                             continue;
                                         }
-
-                                        // Any other node: try static compile
-                                        const resolved = tryStaticTransformNode(
-                                            element as t.Node,
+                                        const sz = tryResolveStaticSzObject(
+                                            inner,
                                             getBindingForArray,
                                         );
-                                        if (resolved !== null) {
-                                            if (t.isStringLiteral(resolved)) {
-                                                if (resolved.value) {
-                                                    parts.push(resolved);
-                                                    for (const c of resolved.value.split(/\s+/)) {
-                                                        if (c) {
-                                                            collectedClasses.add(c);
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                parts.push(resolved);
-                                                collectFromExpr(resolved, collectedClasses);
-                                                hasRuntime = true;
-                                            }
-                                        } else {
-                                            parts.push(element as t.Expression);
-                                            hasRuntime = true;
+                                        if (sz !== null) {
+                                            parts.push({ kind: 'obj', sz });
+                                            continue;
                                         }
+                                        parts.push({
+                                            kind: 'dyn',
+                                            node: element as t.Expression,
+                                        });
                                     }
 
-                                    path.node.name.name = 'className';
-
-                                    if (parts.length === 0) {
-                                        path.node.value = createMergedClassNameValue(
-                                            t.stringLiteral(''),
-                                        );
-                                    } else if (!hasRuntime) {
-                                        // All static → single merged className string, zero runtime
-                                        const merged = (parts as t.StringLiteral[])
-                                            .map(p => p.value)
-                                            .filter(Boolean)
-                                            .join(' ');
-                                        path.node.value = createMergedClassNameValue(
-                                            t.stringLiteral(merged),
-                                        );
-                                    } else {
+                                    if (!hasSpread) {
+                                        if (parts.every(part => part.kind === 'obj')) {
+                                            // All static objects → deep merge (later
+                                            // leaf wins per key path), compile once.
+                                            const merged = (
+                                                parts as Array<{ kind: 'obj'; sz: SzObject }>
+                                            ).reduce<SzObject>(
+                                                (acc, part) => deepMergeSzObjects(acc, part.sz),
+                                                {},
+                                            );
+                                            const compiled = transform(merged).className;
+                                            for (const c of compiled.split(/\s+/)) {
+                                                if (c) {
+                                                    collectedClasses.add(c);
+                                                }
+                                            }
+                                            path.node.name.name = 'className';
+                                            path.node.value = createMergedClassNameValue(
+                                                t.stringLiteral(compiled),
+                                            );
+                                            transformed = true;
+                                            return;
+                                        }
+                                        const args: t.Expression[] = [];
+                                        let anySzPart = false;
+                                        for (const part of parts) {
+                                            if (part.kind === 'obj') {
+                                                const compiled = transform(part.sz).className;
+                                                for (const c of compiled.split(/\s+/)) {
+                                                    if (c) {
+                                                        collectedClasses.add(c);
+                                                    }
+                                                }
+                                                args.push(t.stringLiteral(compiled));
+                                            } else if (part.kind === 'str') {
+                                                for (const c of part.value.split(/\s+/)) {
+                                                    if (c) {
+                                                        collectedClasses.add(c);
+                                                    }
+                                                }
+                                                args.push(t.stringLiteral(part.value));
+                                            } else if (part.kind === 'cond') {
+                                                for (const c of part.classNames.split(/\s+/)) {
+                                                    if (c) {
+                                                        collectedClasses.add(c);
+                                                    }
+                                                }
+                                                args.push(
+                                                    t.logicalExpression(
+                                                        '&&',
+                                                        part.cond,
+                                                        t.stringLiteral(part.classNames),
+                                                    ),
+                                                );
+                                            } else {
+                                                // Safelist best-effort for static
+                                                // object literals inside the dynamic
+                                                // expression (ternary branches, …).
+                                                collectDynamicElementCandidates(
+                                                    part.node,
+                                                    getBindingForArray,
+                                                    collectedClasses,
+                                                );
+                                                args.push(
+                                                    t.callExpression(t.identifier('_szPart'), [
+                                                        part.node,
+                                                    ]),
+                                                );
+                                                anySzPart = true;
+                                            }
+                                        }
                                         if (existingClassExpr) {
-                                            parts.unshift(existingClassExpr);
+                                            args.unshift(existingClassExpr);
                                             if (
                                                 existingClassNameNode &&
                                                 path.parentPath?.isJSXOpeningElement()
@@ -923,18 +1008,22 @@ export function transformSourceCode(
                                                 existingClassNameNode = null;
                                             }
                                         }
-                                        // _szMerge handles falsy + dedup at runtime
-                                        const szCall = t.callExpression(
-                                            t.identifier('_szMerge'),
-                                            parts,
+                                        path.node.name.name = 'className';
+                                        // `_szcn` = the unmemoized szcn twin:
+                                        // compiled arrays carry per-render
+                                        // runtime parts, which would thrash
+                                        // (and evict) the authored-szcn memo.
+                                        path.node.value = t.jsxExpressionContainer(
+                                            t.callExpression(t.identifier('_szcn'), args),
                                         );
-                                        path.node.value = t.jsxExpressionContainer(szCall);
-                                        usesMerge = true;
-                                        usesRuntime = true;
+                                        usesSzcn = true;
+                                        usesSzPart ||= anySzPart;
+                                        transformed = true;
+                                        return;
                                     }
-
-                                    transformed = true;
-                                    return;
+                                    // A spread keeps the whole array a runtime value —
+                                    // fall through to the runtime wrapper below
+                                    // (matches oxc/rust).
                                 }
 
                                 // Fallback: Runtime wrapper
@@ -1032,47 +1121,76 @@ export function transformSourceCode(
                             if (!configArg) {
                                 return;
                             }
-                            // Read `base` and `variants` INDEPENDENTLY rather than
-                            // requiring the whole config to be statically evaluable.
-                            // A single non-static sibling key (e.g. a
-                            // `compoundVariants` array) used to null the entire
-                            // config and drop every variant class; now unknown /
-                            // dynamic keys are simply ignored. A base/variants value
-                            // may itself be a const identifier bound to an object.
-                            const base = (readStaticConfigObject(configArg, 'base', path.scope) ??
-                                {}) as SzObject;
-                            const variants = (readStaticConfigObject(
+                            // Read `base` and `variants` INDEPENDENTLY, and convert
+                            // both PER KEY: one unresolvable leaf (a runtime
+                            // conditional, a call, a template) used to null the
+                            // entire catalog — every static sibling key and every
+                            // other variant included — silently missing CSS under
+                            // Tailwind `source(none)`. The lenient walk keeps
+                            // everything it can classify, expands finite
+                            // conditionals into BOTH branches (the runtime picks
+                            // one, so both must be safelisted), and skips only what
+                            // it genuinely cannot read. A base/variants value may
+                            // itself be a const identifier bound to an object.
+                            const budget: CatalogExtrasBudget = {
+                                extras: MAX_CATALOG_BRANCH_EXTRAS,
+                                explores: MAX_CATALOG_BRANCH_EXTRAS,
+                                objectMemo: new Map(),
+                                valueMemo: new Map(),
+                            };
+                            const baseNode = readConfigSubObjectNode(configArg, 'base', path.scope);
+                            const baseCandidates = baseNode
+                                ? lenientCatalogObjects(baseNode, path.scope, new Set(), 0, budget)
+                                : [{} as SzObject];
+                            const base = baseCandidates[0] ?? ({} as SzObject);
+
+                            const classStrings: string[] = [];
+                            const pushCompiled = (object: SzObject): void => {
+                                const result = transform(object);
+                                const cls = typeof result === 'string' ? result : result.className;
+                                if (cls) {
+                                    classStrings.push(cls);
+                                }
+                            };
+
+                            // Emit the base styles alone (covers defaultVariants case)
+                            pushCompiled(base);
+                            for (const extra of baseCandidates.slice(1)) {
+                                pushCompiled(extra);
+                            }
+
+                            // Emit base merged with each variant candidate — per
+                            // dimension, not cross-product. Covers all unique
+                            // classes in O(total variant values + branches).
+                            const variantsNode = readConfigSubObjectNode(
                                 configArg,
                                 'variants',
                                 path.scope,
-                            ) ?? {}) as Record<string, Record<string, SzObject>>;
-
-                            const classStrings: string[] = [];
-
-                            // Emit the base styles alone (covers defaultVariants case)
-                            const baseResult = transform(base);
-                            const baseCls =
-                                typeof baseResult === 'string' ? baseResult : baseResult.className;
-                            if (baseCls) {
-                                classStrings.push(baseCls);
-                            }
-
-                            // Emit base merged with each variant value — per-dimension, not
-                            // cross-product. Covers all unique classes in O(total variant values).
-                            for (const variantValues of Object.values(variants)) {
-                                for (const variantObj of Object.values(variantValues)) {
-                                    if (!variantObj || typeof variantObj !== 'object') {
+                            );
+                            for (const dimensionRaw of variantsNode?.properties ?? []) {
+                                if (!t.isObjectProperty(dimensionRaw) || dimensionRaw.computed) {
+                                    continue;
+                                }
+                                const dimensionValue = resolveCatalogObjectExpression(
+                                    dimensionRaw.value,
+                                    path.scope,
+                                    new Set(),
+                                );
+                                if (!dimensionValue) {
+                                    continue;
+                                }
+                                for (const variantRaw of dimensionValue.properties) {
+                                    if (!t.isObjectProperty(variantRaw) || variantRaw.computed) {
                                         continue;
                                     }
-                                    const merged: SzObject = {
-                                        ...base,
-                                        ...(variantObj as SzObject),
-                                    };
-                                    const result = transform(merged);
-                                    const cls =
-                                        typeof result === 'string' ? result : result.className;
-                                    if (cls) {
-                                        classStrings.push(cls);
+                                    for (const candidate of lenientCatalogObjectCandidates(
+                                        variantRaw.value,
+                                        path.scope,
+                                        new Set(),
+                                        0,
+                                        budget,
+                                    )) {
+                                        pushCompiled({ ...base, ...candidate });
                                     }
                                 }
                             }
@@ -1199,6 +1317,8 @@ export function transformSourceCode(
             transformed: transformed,
             usesRuntime: usesRuntime,
             usesMerge: usesMerge,
+            usesSzcn: usesSzcn,
+            usesSzPart: usesSzPart,
             usesColorVar: usesColorVar,
             classes: collectedClasses,
             rawClassNames,
@@ -1219,6 +1339,8 @@ export function transformSourceCode(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
             usesColorVar: false,
             classes: collectedClasses,
             rawClassNames,
@@ -1361,6 +1483,95 @@ function emptyClassToUndefined(node: t.Expression): t.Expression {
  * @param node - AST node to attempt static transformation on
  * @param getBinding - Optional scope binding resolver for spread resolution
  * @returns A Babel AST node (StringLiteral or ConditionalExpression of strings), or null if dynamic
+ */
+/**
+ * Safelist best-effort for a DYNAMIC sz array element: walk conditional /
+ * logical branches and add the compiled classes of any static object literal
+ * found, so `sz={[base, x ? { m: 2 } : { m: 8 }]}` still safelists both
+ * branches even though the element itself resolves at runtime via `_szPart`.
+ * Catalog-only — never affects the emitted code.
+ *
+ * @param node - The dynamic element expression.
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @param classes - Class sink for the safelist.
+ */
+function collectDynamicElementCandidates(
+    node: t.Node,
+    getBinding: GetBinding,
+    classes: Set<string>,
+): void {
+    const inner = unwrapTsExpression(node);
+    if (!inner) {
+        return;
+    }
+    if (t.isConditionalExpression(inner)) {
+        collectDynamicElementCandidates(inner.consequent, getBinding, classes);
+        collectDynamicElementCandidates(inner.alternate, getBinding, classes);
+        return;
+    }
+    if (t.isLogicalExpression(inner)) {
+        collectDynamicElementCandidates(inner.right, getBinding, classes);
+        return;
+    }
+    if (t.isStringLiteral(inner)) {
+        for (const c of inner.value.split(/\s+/)) {
+            if (c) {
+                classes.add(c);
+            }
+        }
+        return;
+    }
+    const sz = tryResolveStaticSzObject(inner, getBinding);
+    if (sz !== null) {
+        for (const c of transform(sz).className.split(/\s+/)) {
+            if (c) {
+                classes.add(c);
+            }
+        }
+    }
+}
+
+/**
+ * Resolve a node to a static {@link SzObject} WITHOUT compiling it — the sz
+ * array composition lane needs the object itself so elements can deep-merge
+ * before a single compile. Handles TS wrappers, object literals with resolved
+ * spreads, and identifiers bound to such objects (any binding kind, matching
+ * `tryStaticTransformNode`'s resolution).
+ *
+ * @param node - The candidate array element (already TS-unwrapped or not).
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @returns The static sz object, or null when the element is dynamic.
+ */
+function tryResolveStaticSzObject(node: t.Node, getBinding?: GetBinding): SzObject | null {
+    const inner = unwrapTsExpression(node);
+    if (!inner) {
+        return null;
+    }
+    if (t.isObjectExpression(inner)) {
+        const resolved = getBinding ? (resolveObjectSpreads(inner, getBinding) ?? inner) : inner;
+        return evaluateStaticObject(resolved);
+    }
+    if (t.isIdentifier(inner) && getBinding) {
+        const binding = getBinding(inner.name);
+        if (binding?.path.isVariableDeclarator()) {
+            const init = binding.path.node.init;
+            if (init) {
+                return tryResolveStaticSzObject(init, getBinding);
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Resolve a node to its compiled class-string expression when statically
+ * possible: object literals (spreads resolved), string literals, identifiers
+ * bound to either, and conditionals whose branches all resolve. Returns null
+ * when the node needs the runtime.
+ *
+ * @param node - The candidate sz value node.
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @returns A compiled expression (string literal or conditional of them), or null.
  */
 function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expression | null {
     // Unwrap TypeScript type assertions — `as const` and `satisfies T` wrap the real node
@@ -1696,23 +1907,21 @@ function tryHoistConditionalSpread(
 }
 
 /**
- * Read a single named property of an szv config ObjectExpression as a static
- * SzObject, evaluating ONLY that sub-tree. Returns null when the key is absent
- * or its value is not a statically-evaluable object. Used so szv extraction can
- * pull `base` / `variants` without forcing sibling keys (compoundVariants,
- * defaultVariants, unknown keys) to be static — a single dynamic sibling no
- * longer drops the whole catalog.
+ * Read a single named property (`base` / `variants`) of an szv config as an
+ * OBJECT NODE, without converting it. Returns null when the key is absent or
+ * its value is not an object literal / const-bound object — so sibling keys
+ * (compoundVariants, defaultVariants, unknown keys) never affect the catalog.
  *
  * @param configExpr The szv config object expression.
  * @param key The property to read (e.g. 'base' or 'variants').
  * @param scope The babel scope at the szv call site (for const-binding resolution).
- * @returns The evaluated SzObject, or null if absent/non-static.
+ * @returns The sub-object node, or null.
  */
-function readStaticConfigObject(
+function readConfigSubObjectNode(
     configExpr: t.ObjectExpression,
     key: string,
     scope: babel.NodePath['scope'],
-): SzObject | null {
+): t.ObjectExpression | null {
     for (const prop of configExpr.properties) {
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
@@ -1725,10 +1934,359 @@ function readStaticConfigObject(
         if (k !== key) {
             continue;
         }
-        const obj = resolveToConstObjectExpression(prop.value, scope);
-        return obj ? evaluateStaticObject(obj) : null;
+        return resolveToConstObjectExpression(prop.value, scope);
     }
     return null;
+}
+
+/** Nesting cap for the lenient catalog walk (matches the Rust/oxc walkers). */
+const MAX_CATALOG_DEPTH = 16;
+
+/**
+ * Cap on alternate-branch objects one szv call may add to the catalog, so a
+ * pathological conditional pile-up cannot balloon the safelist walk.
+ * (Matches the Rust/oxc walkers.)
+ */
+const MAX_CATALOG_BRANCH_EXTRAS = 32;
+
+/** Mutable extras budget threaded through one szv call's lenient walk. */
+interface CatalogExtrasBudget {
+    /** Remaining alternate-branch objects this call may still emit. */
+    extras: number;
+    /**
+     * Remaining alternate branches this call may still EXPLORE. Charged when a
+     * conditional's alternate is recursed into, not when its result is
+     * emitted: a const referenced from both branches (`c ? x : x`) doubles the
+     * walk per level without consuming depth or emitting anything, so an
+     * output-only budget let an n-level chain run 2^n recursive calls (a
+     * measured exponential hang). Exhausted explores degrade to
+     * consequent-only — the same under-safelist-beyond-the-budget contract
+     * `extras` already documents. (Matches the Rust/oxc walkers.)
+     */
+    explores: number;
+    /**
+     * Candidate memo per resolved const INITIALIZER node. Every exponential
+     * shape is some DAG that re-resolves the same initializer — through
+     * conditionals (`c ? x : x`), spreads (`{...x, ...x}`), or sibling keys
+     * (`{a: x, b: x}`) — and the memo collapses each to one walk plus cache
+     * hits, keeping total work linear in the source. Keyed by node identity;
+     * inline literals cannot exponentiate on their own (each occupies
+     * distinct source text).
+     */
+    objectMemo: Map<t.Node, SzObject[]>;
+    valueMemo: Map<t.Node, SzValue[]>;
+}
+
+/**
+ * Bound a candidate list to what can still be consumed: one primary plus the
+ * remaining alternate-branch budget — the guard that keeps branch fan-out
+ * linear in the source.
+ *
+ * @param candidates Candidate list to bound (mutated in place).
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns The bounded list.
+ */
+function truncateCatalogCandidates<T>(candidates: T[], budget: CatalogExtrasBudget): T[] {
+    const cap = budget.extras + 1;
+    if (candidates.length > cap) {
+        candidates.length = cap;
+    }
+    return candidates;
+}
+
+/**
+ * Resolve an identifier to its const initializer (const-only, never
+ * reassigned), unwrapped of TS-only wrappers. Used by the szv catalog's
+ * lenient leaf resolution (`mx: GUTTER` where `const GUTTER = 0`).
+ *
+ * @param name Identifier name to resolve.
+ * @param scope The babel scope at the szv call site.
+ * @returns The unwrapped initializer node, or null.
+ */
+function resolveConstInitializer(name: string, scope: babel.NodePath['scope']): t.Node | null {
+    const binding = scope.getBinding(name);
+    if (binding?.kind !== 'const' || !binding.constant) {
+        return null;
+    }
+    const declNode = binding.path.node;
+    if (!t.isVariableDeclarator(declNode)) {
+        return null;
+    }
+    return unwrapTsExpression(declNode.init) ?? null;
+}
+
+/**
+ * Convert an object node into catalog candidates, PER KEY: index 0 is the
+ * primary object (conditionals resolved to their consequent), the rest are
+ * minimal path-preserving objects carrying alternate branch values (e.g.
+ * `{ hover: { mx: dense ? 0 : 2 } }` → `[{hover:{mx:0}}, {hover:{mx:2}}]`).
+ * Keys whose value cannot be classified are skipped INDIVIDUALLY — sz keys
+ * lower independently, so sibling classes survive. Catalog-only: the strict
+ * sz-attribute conversion keeps its fall-to-runtime contract.
+ *
+ * @param node Object expression to walk.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; primary always present at index 0.
+ */
+function lenientCatalogObjects(
+    node: t.ObjectExpression,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [{} as SzObject];
+    }
+    const primary: Record<string, SzValue> = {};
+    const extras: SzObject[] = [];
+    for (const prop of node.properties) {
+        if (t.isSpreadElement(prop)) {
+            const spreadCandidates = lenientCatalogObjectCandidates(
+                prop.argument,
+                scope,
+                seen,
+                depth + 1,
+                budget,
+            );
+            const [first, ...rest] = spreadCandidates;
+            if (first) {
+                Object.assign(primary, first);
+            }
+            for (const extra of rest) {
+                pushCatalogExtra(extras, extra, budget);
+            }
+            continue;
+        }
+        if (!t.isObjectProperty(prop) || prop.computed) {
+            continue;
+        }
+        const key = t.isIdentifier(prop.key)
+            ? prop.key.name
+            : t.isStringLiteral(prop.key)
+              ? prop.key.value
+              : t.isNumericLiteral(prop.key)
+                ? String(prop.key.value)
+                : null;
+        if (key === null) {
+            continue;
+        }
+        const values = lenientCatalogValues(prop.value, scope, seen, depth + 1, budget);
+        const [firstValue, ...restValues] = values;
+        if (firstValue === undefined) {
+            continue;
+        }
+        primary[key] = firstValue;
+        for (const value of restValues) {
+            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
+        }
+    }
+    return [primary as SzObject, ...extras];
+}
+
+/**
+ * Classify one leaf value into catalog candidates. Empty result = skip the
+ * key. Finite conditionals contribute BOTH branches (the runtime resolves one
+ * of them, so both classes must exist); `null`/`undefined` mean "key unset";
+ * const identifiers resolve through their initializer (const-only, cycle
+ * guarded); everything else — calls, members, templates — is skipped.
+ *
+ * @param node Value node to classify.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate values in branch order (consequent first).
+ */
+function lenientCatalogValues(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const value = unwrapTsExpression(node);
+    if (!value) {
+        return [];
+    }
+    if (t.isStringLiteral(value) || t.isNumericLiteral(value) || t.isBooleanLiteral(value)) {
+        return [value.value];
+    }
+    if (t.isNullLiteral(value)) {
+        return [];
+    }
+    if (t.isUnaryExpression(value) && t.isNumericLiteral(value.argument)) {
+        if (value.operator === '-') {
+            return [-value.argument.value];
+        }
+        if (value.operator === '+') {
+            return [value.argument.value];
+        }
+        return [];
+    }
+    if (t.isObjectExpression(value)) {
+        return lenientCatalogObjects(value, scope, seen, depth, budget);
+    }
+    if (t.isConditionalExpression(value)) {
+        const values = lenientCatalogValues(value.consequent, scope, seen, depth, budget);
+        // The alternate is a paid exploration (see `explores`); once the
+        // allowance is spent every further conditional degrades to its
+        // consequent, keeping the recursion tree linear in the source.
+        if (budget.explores > 0) {
+            budget.explores -= 1;
+            values.push(...lenientCatalogValues(value.alternate, scope, seen, depth, budget));
+        }
+        return truncateCatalogCandidates(values, budget);
+    }
+    if (t.isIdentifier(value)) {
+        if (value.name === 'undefined') {
+            return [];
+        }
+        if (seen.has(value.name)) {
+            return [];
+        }
+        const init = resolveConstInitializer(value.name, scope);
+        if (!init) {
+            return [];
+        }
+        const cached = budget.valueMemo.get(init);
+        if (cached) {
+            return [...cached];
+        }
+        const values = lenientCatalogValues(
+            init,
+            scope,
+            new Set([...seen, value.name]),
+            depth,
+            budget,
+        );
+        budget.valueMemo.set(init, values);
+        return [...values];
+    }
+    return [];
+}
+
+/**
+ * Resolve a node position that must yield OBJECT candidates (a variant value,
+ * a spread argument): object literals, const-bound identifiers, and finite
+ * conditionals between such objects.
+ *
+ * @param node Node to resolve.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @param depth Current nesting depth.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ * @returns Candidate objects; empty when the position is not object-like.
+ */
+function lenientCatalogObjectCandidates(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzObject[] {
+    if (depth > MAX_CATALOG_DEPTH) {
+        return [];
+    }
+    const value = unwrapTsExpression(node);
+    if (!value) {
+        return [];
+    }
+    if (t.isObjectExpression(value)) {
+        return lenientCatalogObjects(value, scope, seen, depth, budget);
+    }
+    if (t.isConditionalExpression(value)) {
+        const candidates = lenientCatalogObjectCandidates(
+            value.consequent,
+            scope,
+            seen,
+            depth,
+            budget,
+        );
+        // Same paid-exploration guard as the values lane.
+        if (budget.explores > 0) {
+            budget.explores -= 1;
+            candidates.push(
+                ...lenientCatalogObjectCandidates(value.alternate, scope, seen, depth, budget),
+            );
+        }
+        return truncateCatalogCandidates(candidates, budget);
+    }
+    if (t.isIdentifier(value)) {
+        if (seen.has(value.name)) {
+            return [];
+        }
+        const init = resolveConstInitializer(value.name, scope);
+        if (!init) {
+            return [];
+        }
+        const cached = budget.objectMemo.get(init);
+        if (cached) {
+            return [...cached];
+        }
+        const candidates = lenientCatalogObjectCandidates(
+            init,
+            scope,
+            new Set([...seen, value.name]),
+            depth,
+            budget,
+        );
+        budget.objectMemo.set(init, candidates);
+        return [...candidates];
+    }
+    return [];
+}
+
+/**
+ * Resolve a node to an object expression through const bindings (used for
+ * variant DIMENSION values, which cannot fork into candidates).
+ *
+ * @param node Node to resolve.
+ * @param scope The babel scope at the szv call site.
+ * @param seen Identifier names already followed (cycle guard).
+ * @returns Object expression, or null.
+ */
+function resolveCatalogObjectExpression(
+    node: t.Node | null | undefined,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+): t.ObjectExpression | null {
+    const value = unwrapTsExpression(node);
+    if (!value) {
+        return null;
+    }
+    if (t.isObjectExpression(value)) {
+        return value;
+    }
+    if (t.isIdentifier(value) && !seen.has(value.name)) {
+        const init = resolveConstInitializer(value.name, scope);
+        if (!init) {
+            return null;
+        }
+        return resolveCatalogObjectExpression(init, scope, new Set([...seen, value.name]));
+    }
+    return null;
+}
+
+/**
+ * Append an alternate-branch object to the extras list within budget.
+ *
+ * @param extras Extras collected so far.
+ * @param extra Path-preserving alternate object.
+ * @param budget Remaining alternate-branch allowance for this szv call.
+ */
+function pushCatalogExtra(extras: SzObject[], extra: SzObject, budget: CatalogExtrasBudget): void {
+    if (budget.extras <= 0) {
+        return;
+    }
+    budget.extras -= 1;
+    extras.push(extra);
 }
 
 /**

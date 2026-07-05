@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
+    ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
@@ -61,6 +63,7 @@ import {
     deleteRSCModuleRecord,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
+import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
@@ -217,21 +220,50 @@ const GLOBAL_VAR_ALIAS_MAP_OWNER = '\0csszyx:global-var-aliases';
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
-// Precomputed regexes for the runtime-helper import-injection pass. The
-// previous version called `new RegExp(...)` for every helper on every
-// file, which compiles the same three patterns ~tens of thousands of
-// times during a full project build. The helper set is closed (only
-// these three names ever ship), so we cache the regexes here and reuse
-// them on every transform. The matching string `@csszyx/runtime` only
-// appears in modules that already import a helper, so callers can also
-// skip the regex tests entirely when the runtime package is absent from
-// the transformed source.
-const RUNTIME_HELPER_IMPORT_RE: Record<string, RegExp> = {
-    _sz: /(?:import|export)\s+\{[^{}]*\b_sz\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    _szMerge: /(?:import|export)\s+\{[^{}]*\b_szMerge\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    __szColorVar:
-        /(?:import|export)\s+\{[^{}]*\b__szColorVar\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-};
+// Runtime-helper import detection now lives in runtime-import-scan.ts as a
+// linear forward scan — the previous `\{[^{}]*\bNAME\b[^{}]*\}` regexes were
+// quadratic-by-search (two open runs around the needle).
+
+/** Byte span of an opening tag `<name …>` inside a source string. */
+interface OpeningTagSpan {
+    /** Index of the `<`. */
+    readonly start: number;
+    /** Index of the `>`. */
+    readonly close: number;
+}
+
+/**
+ * Locate the FIRST `<tag …>` opening (case-insensitive), or null when absent.
+ * Linear indexOf scan replacing `/<tag([^>]*)>/i`, whose `[^>]*` re-scanned
+ * from each `<tag` position when no `>` followed.
+ *
+ * @param source - Source to scan.
+ * @param tag - Lowercase tag name.
+ * @returns The `<`…`>` span, or null when the tag is absent.
+ */
+function findOpeningTag(source: string, tag: string): OpeningTagSpan | null {
+    const lower = source.toLowerCase();
+    const marker = `<${tag}`;
+    let from = 0;
+    for (;;) {
+        const start = lower.indexOf(marker, from);
+        if (start === -1) {
+            return null;
+        }
+        // The char after `<tag` must end the tag name so `<body` does not match
+        // `<bodyguard` — the regex `<body[^>]*>` required a `>` or attribute
+        // char (whitespace/`/`) next, never a name character.
+        const after = source[start + marker.length];
+        if (after === undefined || after === '>' || after === '/' || /\s/.test(after)) {
+            const close = source.indexOf('>', start + marker.length);
+            if (close !== -1) {
+                return { start, close };
+            }
+            return null;
+        }
+        from = start + marker.length;
+    }
+}
 
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
@@ -1952,27 +1984,74 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         return `${sep}${ws}"${mangled.join(' ')}"`;
     });
 
-    // Pass 4: `szs` slot maps. The compiled `szs={{ header: "bg-gray-100" }}`
-    // bundles to `szs: { header: "bg-gray-100", ... }` (a flat map of class
-    // strings), which none of the passes above match — the values sit after a
-    // `:`, not a className= prefix or a helper-argument separator. The `szs:`
-    // key makes the context unambiguous, so each quoted value is mangled
-    // per-token like Pass 1 (known classes swapped, unknown left, already-
-    // mangled tokens are not map keys so double-mangling cannot happen).
-    result = result.replace(/\bszs:\s*\{([^{}]*)\}/g, (whole: string, body: string) => {
-        const mangledBody = body
-            .replace(
-                /"((?:[^"\\]|\\.)*)"/g,
-                (_m: string, inner: string) => `"${mangleClassString(inner)}"`,
-            )
-            .replace(
-                /'((?:[^'\\]|\\.)*)'/g,
-                (_m: string, inner: string) => `'${mangleClassString(inner)}'`,
-            );
+    // Pass 4: compiled szs slot maps. The compiler replaces `szs={{...}}` with
+    // `szsc={{ header: "bg-gray-100" }}`, which bundles to
+    // `szsc: { header: "bg-gray-100", ... }` (a flat map of class strings) —
+    // none of the passes above match it: the values sit after a `:`, not a
+    // className= prefix or a helper-argument separator. The `szsc:` key makes
+    // the context unambiguous, so each quoted value is mangled per-token like
+    // Pass 1 (known classes swapped, unknown left, already-mangled tokens are
+    // not map keys so double-mangling cannot happen).
+    result = result.replace(/\bszsc:\s*\{([^{}]*)\}/g, (whole: string, body: string) => {
+        const mangledBody = mangleQuotedStringLiterals(body, mangleClassString);
         return whole.replace(body, mangledBody);
     });
 
     return result;
+}
+
+/**
+ * Mangle the inner text of every `"…"` / `'…'` string literal in `body`,
+ * leaving everything else verbatim. Linear single forward pass replacing the
+ * two `/("|')((?:[^\1\\]|\\.)*)\1/g` replaces — those "unrolled" string regexes
+ * are linear WITHIN a match but quadratic ACROSS search positions (the `/g`
+ * scan retries from every quote when a literal is unterminated), which a ReDoS
+ * checker flags. A backslash escapes the next character inside a literal, as in
+ * the `\\.` alternative it replaces.
+ *
+ * @param body - The `szs` map body (already brace-bounded by the caller).
+ * @param mangle - Per-literal transform applied to each string's inner text.
+ * @returns `body` with every literal's inner text mangled.
+ */
+function mangleQuotedStringLiterals(body: string, mangle: (inner: string) => string): string {
+    let out = '';
+    let i = 0;
+    while (i < body.length) {
+        const quote = body[i];
+        if (quote !== '"' && quote !== "'") {
+            out += quote;
+            i++;
+            continue;
+        }
+        let inner = '';
+        let j = i + 1;
+        let closed = false;
+        while (j < body.length) {
+            const ch = body[j];
+            if (ch === '\\') {
+                // Escape: consume the backslash and the character it escapes.
+                inner += ch + (body[j + 1] ?? '');
+                j += 2;
+                continue;
+            }
+            if (ch === quote) {
+                closed = true;
+                break;
+            }
+            inner += ch;
+            j++;
+        }
+        if (!closed) {
+            // Unterminated — the regex would not have matched here; emit the
+            // opening quote and resume scanning after it.
+            out += quote;
+            i++;
+            continue;
+        }
+        out += `${quote}${mangle(inner)}${quote}`;
+        i = j + 1;
+    }
+    return out;
 }
 
 /**
@@ -2032,6 +2111,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
     const astBudgetOverride = options.build?.astBudgetLimit;
+    // The prescan is the build's ONLY safelist source under Tailwind
+    // `source(none)`: a file the budget bails contributes zero classes and its
+    // CSS silently never exists. Engines also count AST nodes differently, so a
+    // real page file can trip the 50k default under one engine and pass under
+    // another (a parser-flip safelist divergence, field-reported). The prescan
+    // is a one-shot batch over sz-bearing files where correctness outranks the
+    // per-file latency the default cap protects, so it runs with a 10× budget;
+    // an explicit `build.astBudgetLimit` still wins in both lanes.
+    const prescanAstBudget = astBudgetOverride ?? 500_000;
     const cacheRequested = (options.build?.cache ?? DEFAULT_BUILD_CONFIG.cache) !== false;
     const cacheVersionsKnown =
         PLUGIN_VERSION !== UNKNOWN_PACKAGE_VERSION && COMPILER_VERSION !== UNKNOWN_PACKAGE_VERSION;
@@ -2122,6 +2210,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     let evictedCacheRoot: string | null = null;
     const transformMemoryCache = new Map<string, SourceTransformResult>();
     let transformMemoryCacheCodeChars = 0;
+    // One-shot handoff of prescan transform results to the transform hook.
+    // The two lanes intentionally never share the transform CACHE (the prescan
+    // runs a larger AST budget, and a cache entry must not be served to a lane
+    // whose budget could not have produced it) — but within ONE process, for
+    // UNCHANGED content, the prescan result IS the hook result, so re-deriving
+    // it made every cold build/dev start transform each sz-file twice.
+    // Entries are keyed by normalized filename, guarded by the full source
+    // sha256, and deleted on first probe (hit or miss) so the map drains as
+    // the module graph loads; buildEnd and the first HMR update clear any
+    // residue for files the bundler never requested.
+    const prescanResultHandoff = new Map<
+        string,
+        { inputSha256: string; result: SourceTransformResult }
+    >();
 
     const state: PluginState = {
         classes: new Set<string>(),
@@ -2321,7 +2423,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns True when csszyx should process the CSS file.
      */
     function shouldProcessCss(id: string): boolean {
-        return !isHardIgnored(id) && !isUserExcluded(id) && /\.css(\?.*)?$/.test(id);
+        return !isHardIgnored(id) && !isUserExcluded(id) && matchesScriptExtension(id, ['.css']);
     }
 
     /**
@@ -2333,10 +2435,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *
      * @param source Source module contents.
      * @param filename Source filename for parser diagnostics.
+     * @param astBudget Effective AST node cap for this lane; defaults to the
+     *        transform-hook budget (`build.astBudgetLimit` or the compiler's
+     *        50 000 default), while the prescan passes its larger cap.
      * @returns Compiler transform result.
      */
-    function transformConfiguredSource(source: string, filename: string): SourceTransformResult {
-        const compilerOptions = createCompilerOptions();
+    function transformConfiguredSource(
+        source: string,
+        filename: string,
+        astBudget?: number,
+    ): SourceTransformResult {
+        const compilerOptions = createCompilerOptions(astBudget);
         const effectiveFilename = normalizeSourceFilename(filename);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -2374,6 +2483,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (cached) {
                 rememberTransformCacheEntry(cacheKey.key, cached);
                 return cached;
+            }
+
+            // Transform-hook lane only (the prescan lanes pass an explicit
+            // budget): reuse the in-process prescan result for unchanged
+            // content instead of transforming the same file a second time.
+            // Deliberately NOT filed into either cache — the caches stay
+            // budget-keyed; this is a same-process, same-content shortcut.
+            if (astBudget === undefined) {
+                const handoff = prescanResultHandoff.get(effectiveFilename);
+                if (handoff) {
+                    prescanResultHandoff.delete(effectiveFilename);
+                    if (handoff.inputSha256 === cacheKey.inputSha256) {
+                        return handoff.result;
+                    }
+                }
             }
         }
 
@@ -2423,11 +2547,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Builds compiler options shared by single-file and prescan-batch transforms.
      *
+     * @param astBudget Effective AST node cap for this lane (transform hook
+     *        default vs the larger prescan budget).
      * @returns Compiler options.
      */
-    function createCompilerOptions(): TransformSourceCodeOptions {
+    function createCompilerOptions(
+        astBudget: number | undefined = astBudgetOverride,
+    ): TransformSourceCodeOptions {
         return {
-            astBudget: astBudgetOverride,
+            astBudget,
             mangleVars: options.production?.mangleVars === true,
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
             globalVarAliases:
@@ -2456,7 +2584,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             nativeIdentity: parserMode === 'rust' ? resolveNativeCacheIdentity() : undefined,
             parserMode,
             producer: parserMode,
-            astBudget: astBudgetOverride,
+            // The EFFECTIVE budget, not the raw override: prescan-lane results
+            // (larger budget) must not be served to the transform hook, whose
+            // smaller budget could not have produced them (and vice versa).
+            astBudget: compilerOptions.astBudget,
             mangleVars: compilerOptions.mangleVars,
             mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
             globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
@@ -2476,7 +2607,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return transformPrescanSourcesIndividually(files);
         }
 
-        const compilerOptions = createCompilerOptions();
+        const compilerOptions = createCompilerOptions(prescanAstBudget);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
         const results = new Map<string, SourceTransformResult>();
         const misses: Array<{
@@ -2561,7 +2692,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 try {
                     results.set(
                         miss.filePath,
-                        transformConfiguredSource(miss.content, miss.effectiveFilename),
+                        transformConfiguredSource(
+                            miss.content,
+                            miss.effectiveFilename,
+                            prescanAstBudget,
+                        ),
                     );
                 } catch {
                     // Preserve historical prescan behavior: a file that cannot
@@ -2579,6 +2714,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Warns that the prescan dropped a whole file for exceeding the AST node
+     * budget. Under Tailwind `source(none)` every class in that file is
+     * silently dead CSS, so the skip must name the file and the fix.
+     *
+     * @param filePath Source file the prescan skipped.
+     */
+    function warnPrescanBudgetSkip(filePath: string): void {
+        console.warn(
+            `[csszyx] prescan skipped ${filePath}: the file exceeds the AST node budget, so ` +
+                'NONE of its classes reached the safelist and their CSS will not be generated. ' +
+                'Raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.',
+        );
+    }
+
+    /**
      * Transforms prescan files one by one.
      *
      * @param files Source files discovered during prescan.
@@ -2592,12 +2742,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             try {
                 results.push({
                     filePath: file.filePath,
-                    result: transformConfiguredSource(file.content, file.filePath),
+                    result: transformConfiguredSource(
+                        file.content,
+                        file.filePath,
+                        prescanAstBudget,
+                    ),
                 });
             } catch (err) {
                 // Historical prescan behavior keeps the build alive, but the skip
                 // itself must be visible: every class in this file is silently
                 // dead under Tailwind `source(none)`.
+                if (err instanceof ASTBudgetExceededError) {
+                    warnPrescanBudgetSkip(file.filePath);
+                    continue;
+                }
                 console.warn(
                     `[csszyx] prescan skipped ${file.filePath}: transform failed, so none of ` +
                         `its classes reached the safelist. ${err instanceof Error ? err.message : String(err)}`,
@@ -2799,7 +2957,35 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             scanDir(sourceDir);
         }
 
+        const prescanContentByPath = new Map(
+            prescanSources.map(file => [file.filePath, file.content]),
+        );
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+            // Hand the result to the transform hook for same-content reuse.
+            // Budget-tripped results are NOT handed off: the hook lane's
+            // documented behaviour for an over-budget file (JS lanes throw,
+            // rust returns the bail) must stay observable there. A file that
+            // PASSED under the larger prescan budget is handed off even if the
+            // hook's smaller budget would have bailed — the work is already
+            // paid for, and reusing it keeps the emitted code consistent with
+            // the classes the prescan just safelisted.
+            if (cacheEnabled && !result.diagnostics.some(d => d.includes('AST budget exceeded'))) {
+                const content = prescanContentByPath.get(filePath);
+                if (content !== undefined) {
+                    prescanResultHandoff.set(normalizeSourceFilename(filePath), {
+                        inputSha256: createHash('sha256').update(content).digest('hex'),
+                        result,
+                    });
+                }
+            }
+            // The native engine cannot throw like the JS lanes do, so a
+            // budget-tripped file comes back as a normal result carrying the
+            // budget diagnostic and zero classes. Same silent-dead-CSS stakes
+            // as the parse-error skip below — surface it with the fix attached.
+            if (result.diagnostics.some(d => d.includes('AST budget exceeded'))) {
+                warnPrescanBudgetSkip(filePath);
+                continue;
+            }
             // A parse-rejected file contributes nothing to the safelist, and its
             // classes render only while some other usage donates the same class —
             // a silently dead class under Tailwind `source(none)`. Surface the
@@ -3217,7 +3403,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // is not imported anywhere, so it's invisible to Tailwind. Appending an @source
                 // directive to the CSS that imports tailwindcss is the reliable way to ensure
                 // Tailwind generates CSS for the classes that csszyx transforms sz props into.
-                if (/\.css(\?.*)?$/.test(id)) {
+                if (matchesScriptExtension(id, ['.css'])) {
                     // Record that we observed the CSS pipeline at all — the
                     // missing-entry warning is only trustworthy once we have.
                     state.sawAnyCss = true;
@@ -3248,6 +3434,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 let transformedCode = code;
                 let usesRuntime = false;
                 let usesMerge = false;
+                let usesSzcn = false;
+                let usesSzPart = false;
                 let usesColorVar = false;
                 let transformed = false;
                 let szClasses: Set<string> | undefined;
@@ -3283,6 +3471,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         transformedCode = result.code;
                         usesRuntime = result.usesRuntime;
                         usesMerge = result.usesMerge;
+                        usesSzcn = result.usesSzcn;
+                        usesSzPart = result.usesSzPart;
                         usesColorVar = result.usesColorVar;
                         transformed = result.transformed;
                         szClasses = result.classes;
@@ -3296,6 +3486,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         for (const msg of result.diagnostics) {
                             if (msg.includes('unresolvable sz spread')) {
                                 state.spreadWarnings.add(`${id}\n  ${msg}`);
+                            } else if (msg.includes('AST budget exceeded')) {
+                                // Every mode, like the spread warnings: the file's
+                                // sz attributes were NOT rewritten (wrong output),
+                                // and the native lane cannot throw the way the JS
+                                // lanes surface this.
+                                console.warn(`[csszyx] ${id}\n  ${msg}`);
                             }
                         }
                         // Emit remaining dev-mode warnings when the compiler had to fall back to
@@ -3306,7 +3502,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             process.env.NODE_ENV !== 'production'
                         ) {
                             for (const msg of result.diagnostics) {
-                                if (msg.includes('unresolvable sz spread')) continue;
+                                if (
+                                    msg.includes('unresolvable sz spread') ||
+                                    msg.includes('AST budget exceeded')
+                                ) {
+                                    continue;
+                                }
                                 this.warn(`[csszyx] ${id}\n  ${msg}`);
                             }
                         }
@@ -3326,18 +3527,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     /(?:layout|Root|Document|app)\.tsx?$/i.test(id)
                 ) {
                     const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
-                    transformedCode = transformedCode.replace(
-                        /<html([^>]*)>/i,
-                        `<html$1 ${attrName}="${CHECKSUM_PLACEHOLDER}">`,
-                    );
+                    const htmlTag = findOpeningTag(transformedCode, 'html');
+                    if (htmlTag) {
+                        // Insert the attribute just before the `>`, after any
+                        // existing attributes — matching `<html$1 attr>`.
+                        transformedCode = `${transformedCode.slice(0, htmlTag.close)} ${attrName}="${CHECKSUM_PLACEHOLDER}"${transformedCode.slice(htmlTag.close)}`;
+                    }
 
                     // Inject mangle map debug script with placeholders
                     const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
-                    if (transformedCode.includes('<body')) {
-                        transformedCode = transformedCode.replace(
-                            /(<body[^>]*>)/i,
-                            `$1${debugScript}`,
-                        );
+                    const bodyTag = findOpeningTag(transformedCode, 'body');
+                    if (bodyTag) {
+                        // Insert the debug script right after the `<body …>` tag.
+                        transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${debugScript}${transformedCode.slice(bodyTag.close + 1)}`;
                     }
                     transformed = true;
                 }
@@ -3350,6 +3552,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                     if (usesMerge) {
                         imports.push('_szMerge');
+                    }
+                    if (usesSzcn) {
+                        imports.push('_szcn');
+                    }
+                    if (usesSzPart) {
+                        imports.push('_szPart');
                     }
                     if (usesColorVar) {
                         imports.push('__szColorVar');
@@ -3364,19 +3572,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     const hasRuntimeImport =
                         imports.length > 0 && transformedCode.includes('@csszyx/runtime');
                     const needed = hasRuntimeImport
-                        ? imports.filter(
-                              name => !RUNTIME_HELPER_IMPORT_RE[name]?.test(transformedCode),
-                          )
+                        ? imports.filter(name => !importsRuntimeHelper(transformedCode, name))
                         : imports;
                     if (needed.length > 0) {
-                        const existingImport = transformedCode.match(
-                            /^(import\s*\{[^}]*)\}\s*from\s*'@csszyx\/runtime'/m,
-                        );
+                        const existingImport = findRuntimeImportClause(transformedCode);
                         if (existingImport) {
                             // Append to the existing @csszyx/runtime import
                             transformedCode = transformedCode.replace(
-                                existingImport[0],
-                                `${existingImport[1]}, ${needed.join(', ')} } from '@csszyx/runtime'`,
+                                existingImport.statement,
+                                `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
                             );
                         } else {
                             const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
@@ -3396,7 +3600,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // generated from the theme scan; with no scan it registers
                 // nothing and szcn keeps its keep-both fail-safe.
                 if (
-                    /\bszcn\s*\(/.test(code) &&
+                    (usesSzcn || /\bszcn\s*\(/.test(code)) &&
                     !transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) &&
                     shouldProcessSource(id)
                 ) {
@@ -3514,6 +3718,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     emitWarning(`[csszyx] ${warning}`);
                 }
                 state.spreadWarnings.clear();
+                // Drop prescan results the bundler never asked to transform
+                // (unimported files) — each retains a full transformed-code
+                // string, and the handoff's job ended with this build.
+                prescanResultHandoff.clear();
                 // Expose the mangle map as a Node.js global so that dynamic() SSR calls
                 // (which run in the same process during Astro/Next.js SSG) can resolve
                 // original class names to their mangled equivalents. Without this, dynamic()
@@ -3591,6 +3799,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * @param ctx - HMR context containing the changed file
                  */
                 handleHotUpdate(ctx) {
+                    // First edit = the initial module-load wave is over; any
+                    // handoff entries left belong to files the dev server
+                    // never imported, and each retains a transformed-code
+                    // string for nothing.
+                    prescanResultHandoff.clear();
                     // Theme scan for @theme CSS blocks
                     const scanCss = options.build?.scanCss;
                     if (scanCss) {

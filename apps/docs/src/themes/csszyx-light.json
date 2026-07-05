@@ -2,15 +2,15 @@
   "name": "csszyx-light",
   "type": "light",
   "colors": {
-    "editor.background":                  "#ffffff",
-    "editor.foreground":                  "#1f2328",
-    "editor.lineHighlightBackground":     "#f6f8fa",
-    "editor.selectionBackground":         "#0a644222",
-    "editorLineNumber.foreground":        "#8b949e",
-    "editorLineNumber.activeForeground":  "#57606a",
-    "editorCursor.foreground":            "#0a6442",
-    "editorIndentGuide.background1":      "#d0d7de",
-    "editorBracketMatch.background":      "#0a644233"
+    "editor.background": "#ffffff",
+    "editor.foreground": "#1f2328",
+    "editor.lineHighlightBackground": "#f6f8fa",
+    "editor.selectionBackground": "#0a644222",
+    "editorLineNumber.foreground": "#8b949e",
+    "editorLineNumber.activeForeground": "#57606a",
+    "editorCursor.foreground": "#0a6442",
+    "editorIndentGuide.background1": "#d0d7de",
+    "editorBracketMatch.background": "#0a644233"
   },
   "tokenColors": [
     {
@@ -90,10 +90,7 @@
 
     {
       "name": "Function — declaration",
-      "scope": [
-        "entity.name.function",
-        "meta.function entity.name.function"
-      ],
+      "scope": ["entity.name.function", "meta.function entity.name.function"],
       "settings": { "foreground": "#1446b8" }
     },
     {
@@ -258,10 +255,7 @@
 
     {
       "name": "JSON — Key",
-      "scope": [
-        "support.type.property-name.json",
-        "meta.mapping.key string"
-      ],
+      "scope": ["support.type.property-name.json", "meta.mapping.key string"],
       "settings": { "foreground": "#0e6251" }
     },
 

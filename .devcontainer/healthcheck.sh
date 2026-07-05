@@ -42,9 +42,13 @@ ensure_activation() {
 ensure_activation /root/.bashrc bash
 ensure_activation /root/.zshrc zsh
 
-# Layer 2: mise-managed tools (node, pnpm, rust, claude-code per .mise.toml).
+# Layer 2: mise-managed tools (node, pnpm, rust, AI CLIs per .mise.toml).
 # `mise install` is idempotent and fast when everything is already present.
-if ! mise list 2>/dev/null | grep -q 'claude-code'; then
+MISE_LIST_JSON="$(mise list --json 2>/dev/null || printf '{}')"
+if ! jq -e '
+    any(."npm:@anthropic-ai/claude-code"[]?; .installed == true and .active == true)
+    and any(."npm:@openai/codex"[]?; .installed == true and .active == true)
+' <<< "$MISE_LIST_JSON" >/dev/null; then
     echo "[health] WARN: mise tools incomplete — running 'mise install'..."
     if mise install; then
         REPAIRED+=("mise-tools")
@@ -55,7 +59,7 @@ if ! mise list 2>/dev/null | grep -q 'claude-code'; then
 fi
 
 # Layer 3: verify each runtime tool actually resolves on PATH.
-for tool in node pnpm cargo wasm-pack claude; do
+for tool in node pnpm cargo wasm-pack claude codex; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         MISSING+=("$tool")
     fi

@@ -82,6 +82,13 @@ pnpm test:unit
 echo "[verify-like-ci] ESLint full repo..."
 pnpm exec eslint .
 
+# ReDoS gate. Separate from the main ESLint pass because recheck's per-regex
+# analysis is slow and runs on a dedicated config; it catches the polynomial /
+# search-position class that neither eslint-plugin-regexp rule detects and that
+# only CodeQL flagged before. Kept local so it fails here, not first in CI.
+echo "[verify-like-ci] ReDoS gate (recheck)..."
+pnpm lint:redos
+
 echo "[verify-like-ci] Type-check..."
 pnpm type-check
 

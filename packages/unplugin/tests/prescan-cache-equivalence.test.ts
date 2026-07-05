@@ -9,7 +9,7 @@
  * every scan bug in the field reports, but triggered by the second build
  * instead of the first.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -112,3 +112,75 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
         expect(afterEdit).toContain('indent-8');
     });
 });
+
+describe('prescan → transform-hook result handoff (1× cold transform)', () => {
+    // The two lanes never share CACHE entries (budget-keyed), so before the
+    // handoff every sz-file was transformed twice per cold start — once by the
+    // prescan, once by the transform hook — and the hook wrote a SECOND disk
+    // entry per file. The hook only writes an entry after actually
+    // transforming, so the on-disk entry count is the witness: unchanged
+    // content must add zero entries, edited content must still add one.
+    it('the hook adds no disk entry for content the prescan already transformed', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-handoff-'));
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        for (const [file, source] of Object.entries(FIXTURE_FILES)) {
+            writeFileSync(join(root, file), source, 'utf8');
+        }
+
+        const [prePlugin] = vitePlugin({ build: { parser: 'oxc', cache: true } }) as Array<
+            ViteConfigHook & {
+                transform?:
+                    | { handler?: (code: string, id: string) => unknown }
+                    | ((code: string, id: string) => unknown);
+            }
+        >;
+        prePlugin?.configResolved?.({ root });
+
+        const cacheDir = join(root, '.csszyx/cache/transform');
+        const entriesAfterPrescan = countJsonFiles(cacheDir);
+        expect(entriesAfterPrescan).toBeGreaterThan(0);
+
+        const appPath = join(root, 'src/App.tsx');
+        const appSource = readFileSync(appPath, 'utf8');
+        const rawTransform = prePlugin?.transform;
+        const transform = typeof rawTransform === 'function' ? rawTransform : rawTransform?.handler;
+        expect(typeof transform).toBe('function');
+
+        // Unchanged content → handoff serves the prescan result; no re-transform,
+        // no second entry.
+        const reused = (await transform?.(appSource, appPath)) as { code?: string } | null;
+        expect(reused?.code).toContain('className');
+        expect(countJsonFiles(cacheDir)).toBe(entriesAfterPrescan);
+
+        // Edited content → sha mismatch, the hook transforms and caches as before.
+        const edited = appSource.replace('p: 4', 'p: 8');
+        const fresh = (await transform?.(edited, appPath)) as { code?: string } | null;
+        expect(fresh?.code).toContain('p-8');
+        expect(countJsonFiles(cacheDir)).toBe(entriesAfterPrescan + 1);
+    });
+});
+
+/**
+ * Count `.json` cache entries under a transform-cache directory.
+ *
+ * @param dir - transform cache root.
+ * @returns number of entry files.
+ */
+function countJsonFiles(dir: string): number {
+    let count = 0;
+    let entries: import('node:fs').Dirent[];
+    try {
+        entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return 0;
+    }
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            count += countJsonFiles(join(dir, entry.name));
+        } else if (entry.name.endsWith('.json')) {
+            count += 1;
+        }
+    }
+    return count;
+}

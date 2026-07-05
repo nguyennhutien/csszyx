@@ -40,7 +40,6 @@ export {
     startHydration,
     szcn,
     szr,
-    szsClass,
     szv,
     verifyMangleMapIntegrity,
 } from '@csszyx/runtime';

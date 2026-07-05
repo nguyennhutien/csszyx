@@ -59,11 +59,26 @@ Composing multiple classes for a single effect.
 
 Mapping precise, non-theme values to JIT syntax (Arbitrary Properties or Values).
 
-| Concept             | CSS Property                  | Tailwind v4 Class              | `sz` Prop (Object Syntax)           | Note                                      |
-| :------------------ | :---------------------------- | :----------------------------- | :---------------------------------- | :---------------------------------------- |
-| **Arbitrary Color** | `background-color: #316ff6`   | `bg-[#316ff6]`                 | `{ bg: '#316ff6' }`                 | Preferred over inline styles for caching. |
-| **Arbitrary Size**  | `width: 333px`                | `w-[333px]`                    | `{ w: '333px' }`                    | Explicit unit required string.            |
-| **Data Prop**       | `content: attr(data-content)` | `content-[attr(data-content)]` | `{ content: 'attr(data-content)' }` | Complex arbitrary strings.                |
+| Concept              | CSS Property                                                | Tailwind v4 Class                    | `sz` Prop (Object Syntax)                  | Note                                              |
+| :------------------- | :---------------------------------------------------------- | :----------------------------------- | :----------------------------------------- | :------------------------------------------------ |
+| **Arbitrary Color**  | `background-color: #316ff6`                                 | `bg-[#316ff6]`                       | `{ bg: '#316ff6' }`                        | Preferred over inline styles for caching.         |
+| **Arbitrary Size**   | `width: 333px`                                              | `w-[333px]`                          | `{ w: '333px' }`                           | Explicit unit required string.                    |
+| **Data Prop**        | `content: attr(data-content)`                               | `content-[attr(data-content)]`       | `{ content: 'attr(data-content)' }`        | Complex arbitrary strings.                        |
+| **CSS Variable**     | `padding: var(--gap)`                                       | `p-(--gap)`                          | `{ p: '--gap' }`                           | Bare `--name` → **parenthesized** var sugar.      |
+| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`                       | `text-[--spacing(4)]`                | `{ text: '--spacing(4)' }`                 | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
+| **Alpha Fn (color)** | `color: color-mix(in oklab, var(--brand) 50%, transparent)` | `text-[--alpha(var(--brand)_/_50%)]` | `{ color: '--alpha(var(--brand) / 50%)' }` | Tailwind color function; same `--fn(...)` rule.   |
+
+**`--` prefix — the one rule that decides parens vs brackets** (applies to EVERY
+value position — `p`, `bg`, `m`, `w`, `text`, …, not just font-size):
+
+- A **bare** `--name` (no call) is a **CSS variable** → `x-(--name)`.
+  `{ bg: '--brand' }` → `bg-(--brand)`. **Never** `bg-[--brand]`.
+- A **`--name(...)`** shaped value (a balanced function call spanning the whole
+  value) is a **Tailwind build-time function** → `x-[--name(...)]` (v4.3.2+).
+  `{ p: '--spacing(2)' }` → `p-[--spacing(2)]`. Works for any function
+  (`--spacing()`, `--alpha()`, …), not a fixed list.
+- Either way you write **no brackets and no parens in `sz`** — the compiler picks
+  the right wrapper from the value's shape.
 
 **Global Parsing Rule**: The compiler **MUST normalize whitespace** in arbitrary variant _keys_ before generation.
 
@@ -135,19 +150,19 @@ Styling based on descendants.
 
 Styling children based on parent `group` class.
 
-| Concept                      | Tailwind v4 Class                     | `sz` Prop (Object Syntax)                                         | Note                                 |
-| :--------------------------- | :------------------------------------ | :---------------------------------------------------------------- | :----------------------------------- |
-| **Group Hover**              | `group-hover:text-white`              | `{ group: { hover: { color: 'white' } } }`                        | **Sugar**: Nested scope.             |
-| **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                        |                                      |
-| **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                       |                                      |
-| **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`              | **Sugar**: Scope name as nested key. |
-| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { display: 'block' } } }`            |                                      |
-| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { display: 'block' } } } }`                 |                                      |
-| **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`              | **Sugar**: Nested `data` key.        |
-| **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }`    | Name before `data` key.              |
-| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`     | `=` in key → bracket form always.    |
-| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`         | Standard states: bare form.          |
-| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }` | Non-standard: bracket form.          |
+| Concept                      | Tailwind v4 Class                     | `sz` Prop (Object Syntax)                                      | Note                                 |
+| :--------------------------- | :------------------------------------ | :------------------------------------------------------------- | :----------------------------------- |
+| **Group Hover**              | `group-hover:text-white`              | `{ group: { hover: { color: 'white' } } }`                     | **Sugar**: Nested scope.             |
+| **Group Focus**              | `group-focus:text-white`              | `{ group: { focus: { color: 'white' } } }`                     |                                      |
+| **Group Active**             | `group-active:text-white`             | `{ group: { active: { color: 'white' } } }`                    |                                      |
+| **Nested Groups**            | `group-hover/name:text-white`         | `{ group: { name: { hover: { color: 'white' } } } }`           | **Sugar**: Scope name as nested key. |
+| **Arbitrary Groups**         | `group-[.is-published]:block`         | `{ group: { '.is-published': { display: 'block' } } }`         |                                      |
+| **Group Has**                | `group-has-[a]:block`                 | `{ group: { has: { a: { display: 'block' } } } }`              |                                      |
+| **Group Data**               | `group-data-[active]:text-blue`       | `{ group: { data: { active: { color: 'blue' } } } }`           | **Sugar**: Nested `data` key.        |
+| **Group Data (named)**       | `group-data-[active]/card:text-blue`  | `{ group: { card: { data: { active: { color: 'blue' } } } } }` | Name before `data` key.              |
+| **Group Data (value match)** | `group-data-[state=open]:block`       | `{ group: { data: { 'state=open': { display: 'block' } } } }`  | `=` in key → bracket form always.    |
+| **Group ARIA**               | `group-aria-expanded:block`           | `{ group: { aria: { expanded: { display: 'block' } } } }`      | Standard states: bare form.          |
+| **Group ARIA (arbitrary)**   | `group-aria-[current=page]:font-bold` | `{ group: { aria: { 'current=page': { weight: 'bold' } } } }`  | Non-standard: bracket form.          |
 
 ## Styling based on sibling state (Peers)
 
@@ -354,16 +369,16 @@ Strategy for static analysis vs runtime generation.
 
 **Core Decision**: `CSSzyx` uses **AST Parsing**, not Regex Scanning. This allows for smarter static extraction and shake-tree logic.
 
-| Concept                       | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                                                                                                                                                                       |
-| :---------------------------- | :----------------------- | :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **String Interpolation**      | ❌ Fails `bg-${color}`   | ✅ **Runtime Support**   | Compiler marks as dynamic, handled at runtime via variable injection.                                                                                                                                                      |
-| **Conditionals**              | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` and `{ scale: shrunk ? 75 : 100 }` → both branches compiled to static Tailwind classes at build time. CSS variable fallback only when a branch is a runtime expression (not a literal). |
-| **Variable reference**        | ❌ Not applicable        | ✅ **Build time**        | `sz={myVar}` — pass variable directly when no override needed. Compiler resolves the binding to its object literal initializer (incl. `as const`, `satisfies`, explicit type annotation).                                  |
-| **Object Spread**             | ❌ Fails spread          | ✅ **Static Analysis**   | `sz={{ ...baseProps, key: val }}` — use spread only when overriding/adding; last key wins. Resolved at build time for local literals. Multiple/nested spreads supported. Imported vars fall back to `_sz()` — no crash.    |
-| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — variable array elements resolved at build time. Static elements merged to single string; conditional elements use `_szMerge` at runtime.                             |
-| **Ternary variable branches** | ❌ Not applicable        | ✅ **Build time**        | `sz={cond ? varA : varB}` — both branches compiled to static strings when variables are local literals.                                                                                                                    |
-| **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                  |
-| **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                          |
+| Concept                       | Tailwind Scanner (Regex) | `sz` Compiler (AST)      | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| :---------------------------- | :----------------------- | :----------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **String Interpolation**      | ❌ Fails `bg-${color}`   | ✅ **Runtime Support**   | Compiler marks as dynamic, handled at runtime via variable injection.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Conditionals**              | ❌ Fails logic           | ✅ **Static Extraction** | `{ bg: active ? 'blue' : 'gray' }` and `{ scale: shrunk ? 75 : 100 }` → both branches compiled to static Tailwind classes at build time. CSS variable fallback only when a branch is a runtime expression (not a literal).                                                                                                                                                                                                                                                                                                                                      |
+| **Variable reference**        | ❌ Not applicable        | ✅ **Build time**        | `sz={myVar}` — pass variable directly when no override needed. Compiler resolves the binding to its object literal initializer (incl. `as const`, `satisfies`, explicit type annotation).                                                                                                                                                                                                                                                                                                                                                                       |
+| **Object Spread**             | ❌ Fails spread          | ✅ **Static Analysis**   | `sz={{ ...baseProps, key: val }}` — use spread only when overriding/adding; last key wins. Resolved at build time for local literals. Multiple/nested spreads supported. Imported vars fall back to `_sz()` — no crash.                                                                                                                                                                                                                                                                                                                                         |
+| **Array variable items**      | ❌ Not applicable        | ✅ **Build time**        | `sz={[varA, varB]}` and `sz={[varA, cond && varB]}` — LATER WINS composition. All-static-object arrays deep-merge at build (later leaf wins per key path, sibling keys survive) into one className; arrays with strings/conditions/dynamic elements emit `_szcn(...)` — a compiler-injected helper (`_` = generated code, never hand-authored; the unmemoized twin of `szcn`) applying the same later-wins rule per property group at runtime; dynamic elements (e.g. a forwarded `szsc` slot) pass through `_szPart` (string passthrough / sz-object compile). |
+| **Ternary variable branches** | ❌ Not applicable        | ✅ **Build time**        | `sz={cond ? varA : varB}` — both branches compiled to static strings when variables are local literals.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 **Performance Rule**: Prefer **Static Strings** in `sz` objects.
 
@@ -383,17 +398,17 @@ Two independent layers:
   runtime as long as the component forwards `className` down to a host element.
 - **Type** — only auto-typed when the component's props derive from host attributes.
 
-| Component props type                                       | `sz` typed?         |
-| :--------------------------------------------------------- | :------------------ |
-| `{ title: string }` (fresh type)                           | ❌ TS error         |
-| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`      | ✅ inherited        |
-| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>`    | ✅ just `sz`        |
+| Component props type                                    | `sz` typed?  |
+| :------------------------------------------------------ | :----------- |
+| `{ title: string }` (fresh type)                        | ❌ TS error  |
+| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`   | ✅ inherited |
+| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>` | ✅ just `sz` |
 
 Add `sz` to a fresh props type by picking it (no import needed) or declaring it:
 
 ```tsx
-import type { ComponentProps } from 'react';
-type Props = { title: string } & Pick<ComponentProps<'div'>, 'sz'>;
+import type { ComponentProps } from "react";
+type Props = { title: string } & Pick<ComponentProps<"div">, "sz">;
 // equivalent: import type { SzPropValue } from '@csszyx/types'; then `sz?: SzPropValue`
 ```
 
@@ -416,8 +431,8 @@ a normal `sz`. So style a compound component's parts by giving each part its own
 
 ```tsx
 <Card sz={{ p: 4 }}>
-  <Card.Header sz={{ bg: 'gray-100', font: 'bold' }}>Title</Card.Header>
-  <Card.Body sz={{ text: 'sm' }}>Body</Card.Body>
+  <Card.Header sz={{ bg: "gray-100", font: "bold" }}>Title</Card.Header>
+  <Card.Body sz={{ text: "sm" }}>Body</Card.Body>
 </Card>
 // → each part compiled to className at build time; all classes safelisted.
 ```
@@ -439,17 +454,23 @@ is scanned (`build.scanCss`); classes written in plain CSS register via
 
 For parts a component renders ITSELF (no consumer content), `szs` maps slot names
 to sz values. The transform compiles each VALUE to its class string (key kept),
-safelisting + mangling like `sz`; the component forwards `props.szs?.<slot>` into
-the matching child's `className`.
+safelisting + mangling like `sz`, and rewrites the attribute to `szsc` ("szs,
+compiled") — the string-typed prop the component reads. Consumers WRITE `szs`,
+components READ `szsc`; declare both from one slot union with `SzsProps`.
 
 ```tsx
-type CardProps = { szs?: Szs<'header' | 'icon'> };  // Szs from @csszyx/types
-<Card szs={{ header: { bg: 'gray-100' }, icon: { color: 'red-500' } }} />
-// → <Card szs={{ header: "bg-gray-100", icon: "text-red-500" }} />
-// component: <header className={szsClass(props.szs?.header)} />
-// szsClass (from @csszyx/runtime) narrows the compiled slot to string | undefined —
-// slots TYPE as sz values but ARE class strings after the transform; the helper
-// is also fail-safe (uncompiled slot -> undefined, never "[object Object]").
+// INSIDE the component — declare slots, READ `szsc` (compiled strings):
+type CardProps = { title: string } & SzsProps<"header" | "icon">; // from @csszyx/types
+function Card({ szsc }: CardProps) {
+  return <header className={szsc?.header} />; // plain string — no cast, no szsClass
+}
+
+// OUTSIDE at the call site — consumer WRITES `szs` (sz objects):
+<Card szs={{ header: { bg: "gray-100" }, icon: { color: "red-500" } }} />;
+// build rewrites the call → <Card szsc={{ header: "bg-gray-100", icon: "text-red-500" }} />
+// szs = write side (consumer). szsc = read side (component). Never swap them;
+// never hand-write szsc. szsc?.slot is undefined when the consumer didn't style
+// that slot or the call wasn't compiled (build warns) — an object never reaches className.
 ```
 
 Rules: custom components only (host element → dev warn, unchanged). Slot values
@@ -457,3 +478,22 @@ must be STATIC — a pure object literal (nested variants OK) or a raw class str
 identifiers/conditionals/spreads leave the attribute unchanged with a dev warning.
 Keys are identifiers. `sz` styles the element itself; `szs` styles its internal
 parts — a component can take both.
+
+**AI contract (do exactly this):**
+
+- Type props with `SzsProps<'a' | 'b'>` from `@csszyx/types` (intersect for
+  extra props: `{ title: string } & SzsProps<'a'>`). Read `props.szsc?.<slot>`
+  in the component; the consumer passes `szs={{ … }}`.
+- `szsc?.<slot>` is ALREADY a `string | undefined`. Forward it straight:
+  `className={szsc?.icon}`, or compose defaults with an array `sz={[{…}, szsc?.icon]}`.
+- Compose slot + default with `sz={[default, szsc?.slot]}` (array = later-wins).
+  Do NOT wrap it in `szcn(...)` in `className` — that pattern is obsolete.
+- `szsClass()` was REMOVED — do not emit it. `_szcn`/`_szPart` are
+  compiler-injected (the `_` marks generated code) — never write, import, or
+  suggest them; they appear only in compiler OUTPUT.
+- Never emit `szsc={{…}}` yourself — the compiler produces it from `szs`.
+  Author `szs`, read `szsc`.
+
+Migration from ≤0.10: `className={szcn('font-medium', szsClass(szs?.title))}`
+→ `sz={[{ weight: 'medium' }, szsc?.title]}` (and props `Szs<'title'>` →
+`SzsProps<'title'>`, read `szsc` not `szs`).

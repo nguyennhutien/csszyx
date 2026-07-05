@@ -255,6 +255,12 @@
                 },
                 {
                     "sz": {
+                        "autoCols": 12
+                    },
+                    "class": "auto-cols-12"
+                },
+                {
+                    "sz": {
                         "autoCols": "auto"
                     },
                     "class": "auto-cols-auto"
@@ -280,6 +286,7 @@
             ],
             "reverse": [
                 "auto-cols-(--auto-cols)",
+                "auto-cols-12",
                 "auto-cols-auto",
                 "auto-cols-fr",
                 "auto-cols-max",
@@ -293,6 +300,12 @@
                         "autoRows": "--auto-rows"
                     },
                     "class": "auto-rows-(--auto-rows)"
+                },
+                {
+                    "sz": {
+                        "autoRows": 16
+                    },
+                    "class": "auto-rows-16"
                 },
                 {
                     "sz": {
@@ -321,6 +334,7 @@
             ],
             "reverse": [
                 "auto-rows-(--auto-rows)",
+                "auto-rows-16",
                 "auto-rows-auto",
                 "auto-rows-fr",
                 "auto-rows-max",
@@ -2625,6 +2639,12 @@
                 },
                 {
                     "sz": {
+                        "color": "--alpha(var(--brand) / 50%)"
+                    },
+                    "class": "text-[--alpha(var(--brand)_/_50%)]"
+                },
+                {
+                    "sz": {
                         "color": "#50d71e"
                     },
                     "class": "text-[#50d71e]"
@@ -2676,6 +2696,7 @@
                 "text-(--c)",
                 "text-(--c)/50",
                 "text-[#50d71e]",
+                "text-[--alpha(var(--brand)_/_50%)]",
                 "text-black",
                 "text-blue-500/50",
                 "text-current",
@@ -7071,6 +7092,12 @@
             "forward": [
                 {
                     "sz": {
+                        "p": "--gap"
+                    },
+                    "class": "p-(--gap)"
+                },
+                {
+                    "sz": {
                         "p": "--p"
                     },
                     "class": "p-(--p)"
@@ -7107,6 +7134,7 @@
                 }
             ],
             "reverse": [
+                "p-(--gap)",
                 "p-(--p)",
                 "p-4",
                 "p-6",
@@ -9856,6 +9884,12 @@
             "forward": [
                 {
                     "sz": {
+                        "text": "--spacing(4)"
+                    },
+                    "class": "text-[--spacing(4)]"
+                },
+                {
+                    "sz": {
                         "text": "1.5rem"
                     },
                     "class": "text-[1.5rem]"
@@ -9888,6 +9922,7 @@
                 "text-7xl",
                 "text-8xl",
                 "text-9xl",
+                "text-[--spacing(4)]",
                 "text-[1.5rem]",
                 "text-[16px]",
                 "text-base",

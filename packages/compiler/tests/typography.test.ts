@@ -42,6 +42,42 @@ describe('typography — font size', () => {
     it('{ text: "--size" } → text-(length:--size) (css variable)', () => {
         expect(t({ text: '--size' })).toBe('text-(length:--size)');
     });
+
+    it('{ text: "--spacing(4)" } → text-[--spacing(4)] (Tailwind function)', () => {
+        expect(t({ text: '--spacing(4)' })).toBe('text-[--spacing(4)]');
+    });
+
+    it('handles nested calls, quoted parentheses, and escapes in linear time', () => {
+        expect(t({ text: '--spacing(var(--step, "("))' })).toBe(
+            'text-[--spacing(var(--step,_"("))]',
+        );
+        expect(t({ text: '--spacing(calc(2\\) + 2))' })).toBe('text-[--spacing(calc(2\\)_+_2))]');
+    });
+
+    it('does not classify an unbalanced call as a Tailwind function', () => {
+        expect(t({ text: '--spacing(calc(2 + 2)' })).toBe('text-[--spacing(calc(2_+_2)]');
+    });
+
+    it('requires a valid first function-name character', () => {
+        expect(t({ text: '--9(4)' })).toBe('text-[--9(4)]');
+        expect(t({ text: '---x(4)' })).toBe('text-[---x(4)]');
+        expect(t({ text: '--_x(4)' })).toBe('text-[--_x(4)]');
+    });
+
+    it('handles a long malformed function candidate without recursion', () => {
+        const value = `--spacing(${'('.repeat(64 * 1024)}`;
+        const className = t({ text: value });
+        expect(className.startsWith('text-[--spacing(')).toBe(true);
+        expect(className.length).toBe(value.length + 'text-[]'.length);
+    });
+});
+
+describe('typography — Tailwind build-time color functions', () => {
+    it('keeps --alpha() arbitrary in color object syntax', () => {
+        expect(t({ color: { color: '--alpha(var(--brand) / 50%)' } })).toBe(
+            'text-[--alpha(var(--brand)_/_50%)]',
+        );
+    });
 });
 
 describe('typography — font weight', () => {

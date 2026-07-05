@@ -1,21 +1,18 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
+import { importsRuntimeHelper } from './runtime-import-scan.js';
+
 const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
-const RUNTIME_HELPER_IMPORT_RE: Record<NextRuntimeHelper, RegExp> = {
-    _sz: /(?:import|export)\s+\{[^{}]*\b_sz\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    _szMerge: /(?:import|export)\s+\{[^{}]*\b_szMerge\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-    __szColorVar:
-        /(?:import|export)\s+\{[^{}]*\b__szColorVar\b[^{}]*\}\s*from\s*['"]@csszyx\/runtime['"]/,
-};
-
 /** Runtime helpers emitted by csszyx compiler transforms. */
-export type NextRuntimeHelper = '_sz' | '_szMerge' | '__szColorVar';
+export type NextRuntimeHelper = '_sz' | '_szMerge' | '_szcn' | '_szPart' | '__szColorVar';
 
 /** Runtime helper usage flags from a compiler transform result. */
 export interface NextRuntimeImportUsage {
     usesRuntime?: boolean;
     usesMerge?: boolean;
+    usesSzcn?: boolean;
+    usesSzPart?: boolean;
     usesColorVar?: boolean;
 }
 
@@ -43,7 +40,7 @@ export function injectNextRuntimeImports(
 
     const hasRuntimeImport = code.includes('@csszyx/runtime');
     const missing = hasRuntimeImport
-        ? helpers.filter(helper => !RUNTIME_HELPER_IMPORT_RE[helper].test(code))
+        ? helpers.filter(helper => !importsRuntimeHelper(code, helper))
         : helpers;
     if (missing.length === 0) {
         return { code, injected: [] };
@@ -69,6 +66,12 @@ function runtimeHelpersFromUsage(usage: NextRuntimeImportUsage): NextRuntimeHelp
     }
     if (usage.usesMerge) {
         helpers.push('_szMerge');
+    }
+    if (usage.usesSzcn) {
+        helpers.push('_szcn');
+    }
+    if (usage.usesSzPart) {
+        helpers.push('_szPart');
     }
     if (usage.usesColorVar) {
         helpers.push('__szColorVar');

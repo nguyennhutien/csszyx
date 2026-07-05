@@ -92,7 +92,10 @@ font-variant-numeric (`ordinal`, `tabularNums`), default-or-value (`grow`,
 ```tsx
 <div sz={{ color: "--ds-primary", p: "--spacing-4" }} />
 // → className="text-(--ds-primary) p-(--spacing-4)"
-// Sugar: any value starting with -- is auto-wrapped in ()
+// Plain --tokens use CSS-variable (); --functions(...) use arbitrary []
+
+<div sz={{ text: "--spacing(4)" }} />
+// → className="text-[--spacing(4)]"
 ```
 
 ### Color with opacity
@@ -528,17 +531,29 @@ Works inside `dynamic()` at runtime.
 
 ## sz Array Syntax
 
-Pass an array to the `sz` prop to compose multiple sz objects with conditional items.
-Static items are pre-computed at build time; conditional items use `_szMerge` at runtime:
+Pass an array to the `sz` prop to compose styles with LATER-WINS semantics: on
+the same property, a later element overrides an earlier one. All-static-object
+arrays deep-merge at build time (later leaf wins per key path, sibling keys
+survive) into one className with zero runtime. Arrays containing class strings,
+`cond && …` guards, or dynamic values compose at runtime through `_szcn(...)`
+— a compiler-injected helper (the `_` prefix marks generated code you never
+hand-author; it is the unmemoized twin of the authorable `szcn`), applying the
+same later-wins rule per property group, mangle-safe; dynamic elements (e.g. a
+forwarded `szsc` slot) pass through `_szPart`:
 
 ```tsx
+<div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />
+// → className="text-lg p-4"   (text-lg overrode text-base at build)
+
 <div
   sz={[
-    { display: "flex", items: "center", p: 4 }, // always — extracted at build time
+    { display: "flex", items: "center", p: 4 }, // always — compiled at build time
     isActive && { bg: "blue-500" }, // runtime conditional
-    isDisabled && { opacity: 50, cursor: "not-allowed" },
+    szsc?.title, // dynamic — resolved by _szPart, merged by _szcn
   ]}
 />
+// slot-default one-liner in a compound component:
+<h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]} />
 ```
 
 ## Reusing Styles
@@ -613,7 +628,12 @@ buttonSz({ variant: "invalid" }); // ❌ TS error: '"invalid"' not assignable
 ```
 
 All variant class combinations are catalogued at build time (compiler prescan) — Tailwind
-generates CSS for every combination, no runtime injection needed.
+generates CSS for every combination, no runtime injection needed. Cataloguing is
+lenient PER KEY, identically in all three parser engines: an unreadable value (a
+call, a template string, an imported constant) skips only that key while sibling
+keys and other variants still reach the safelist; a finite conditional
+(`p: dense ? 2 : 4`) contributes BOTH branches; `null`/`undefined` mean "key
+unset"; same-file `const` references and `const` object spreads are followed.
 
 ## @csszyx/dynamic — Runtime CSS Injection
 
@@ -915,9 +935,13 @@ compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard
 
-Files larger than 50 000 AST nodes throw `ASTBudgetExceededError` at
-build time — pathologically large generated files (json-as-ts fixtures,
-GraphQL schemas) would otherwise hang the build. Raise the cap when you
+Files larger than 50 000 AST nodes are skipped by the transform with a
+build warning — pathologically large generated files (json-as-ts fixtures,
+GraphQL schemas) would otherwise hang the build. A skipped file is left
+unrewritten and contributes no classes to the safelist. The safelist
+prescan runs with a 10× cap by default so legitimate large page files keep
+their CSS; every parser engine (including the native `rust` one) honours
+the cap and the warning. Raise the cap when a warning names a file you
 need:
 
 ```js
@@ -978,6 +1002,8 @@ Result: `{ bg: 'brand-500' }` gets autocomplete and type-checking.
 - All spacing values are dynamic (any integer, 0.5-step decimals work bare)
 - Arbitrary values: `{ p: '5px' }` → `p-[5px]` (auto-wrapped)
 - CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
+- Build-time functions: `{ text: '--spacing(4)' }` → `text-[--spacing(4)]`
+- Grid auto-track spacing: `{ autoCols: 12, autoRows: 16 }` → `auto-cols-12 auto-rows-16`
 
 ## Migrate CLI
 
