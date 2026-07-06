@@ -1153,6 +1153,20 @@ export function transformSourceCode(
                                 }
                             };
 
+                            // Point unknown/numeric-key warnings emitted while
+                            // compiling the catalog objects at the `szv()` call, so
+                            // `csszyx check` reports `at <file>:<line>` for a bad key
+                            // in a variant table instead of a location-less message.
+                            // transform() reads (never clears) this, so one set
+                            // covers every pushCompiled below; cleared after the walk.
+                            setSzWarnLocation(
+                                formatSzWarnLocation(
+                                    filename ?? 'file.tsx',
+                                    init.loc?.start.line,
+                                    options?.rootDir,
+                                ),
+                            );
+
                             // Emit the base styles alone (covers defaultVariants case)
                             pushCompiled(base);
                             for (const extra of baseCandidates.slice(1)) {
@@ -1194,6 +1208,10 @@ export function transformSourceCode(
                                     }
                                 }
                             }
+
+                            // Done compiling catalog objects — stop attributing later
+                            // warnings to this szv() call.
+                            setSzWarnLocation(undefined);
 
                             if (classStrings.length === 0) {
                                 return;
@@ -1251,13 +1269,29 @@ export function transformSourceCode(
                             // through them before shape-testing the argument.
                             const arg = unwrapTsExpression(path.node.arguments[0]);
 
+                            // Locate unknown/numeric-key warnings from a static
+                            // `szr({...})` argument at the call, so `csszyx check`
+                            // reports `at <file>:<line>`. Only szr — a mangleable,
+                            // build-resolved call; `dynamic()` values are runtime and
+                            // keep the location-less message.
+                            const catalogWarnAt =
+                                callee.name === 'szr'
+                                    ? formatSzWarnLocation(
+                                          filename ?? 'file.tsx',
+                                          path.node.loc?.start.line,
+                                          options?.rootDir,
+                                      )
+                                    : undefined;
+
                             // Case 1: dynamic({ key: value, ... }) — inline literal object
                             if (t.isObjectExpression(arg)) {
                                 const staticObj = evaluateStaticObject(arg);
                                 if (!staticObj) {
                                     return;
                                 }
+                                setSzWarnLocation(catalogWarnAt);
                                 const { className } = transform(staticObj as SzObject);
+                                setSzWarnLocation(undefined);
                                 for (const c of className.split(/\s+/)) {
                                     if (c) {
                                         collectedClasses.add(c);
@@ -1293,7 +1327,9 @@ export function transformSourceCode(
                                 if (!staticObj) {
                                     return;
                                 }
+                                setSzWarnLocation(catalogWarnAt);
                                 const { className } = transform(staticObj as SzObject);
+                                setSzWarnLocation(undefined);
                                 for (const c of className.split(/\s+/)) {
                                     if (c) {
                                         collectedClasses.add(c);

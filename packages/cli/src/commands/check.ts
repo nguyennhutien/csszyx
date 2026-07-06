@@ -114,6 +114,11 @@ export async function check(options: CheckOptions = {}): Promise<void> {
 
     if (issues.length === 0) {
         printSuccess(`No sz issues found across ${files.length} files.`);
+        printInfo(
+            'Scope: static sz props and szv()/szr() catalog definitions. Keys that ' +
+                'only exist at runtime (an array or spread built from runtime data, a ' +
+                'dynamic() value) cannot be checked statically.',
+        );
         return;
     }
 

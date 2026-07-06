@@ -328,3 +328,78 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
         expect(msg).toContain('Check for typos');
     });
 });
+
+/**
+ * `csszyx check` runs the Babel reference lowering and captures `[csszyx]`
+ * warnings. Unknown/numeric keys inside a `szv()` catalog or a static `szr()`
+ * argument already warn (the walk compiles each object through `transform()`),
+ * but used to carry no location, so `check` could only attribute them to a file,
+ * not a line. The catalog walk now points those warnings at the `szv()` / `szr()`
+ * call. `dynamic()` stays location-less — its values are runtime, out of scope.
+ */
+describe('szv/szr catalog warnings carry a source location (for csszyx check)', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        setSzWarnLocation(undefined);
+    });
+
+    const warnsFor = (src: string): string[] => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        transformSourceCode(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+        return calls;
+    };
+
+    it('an unknown key in a szv variant is located at the szv() call', () => {
+        const calls = warnsFor(
+            'import { szv } from "@csszyx/runtime";\n' +
+                'const s = szv({ variants: { c: { x: { xyzzy: 5, p: 4 } } } });',
+        );
+        const msg = calls.find(m => m.includes('Unknown property "xyzzy"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('at src/F.tsx:2');
+    });
+
+    it('a numeric key in a szv variant is located and uses the array/spread message', () => {
+        const calls = warnsFor(
+            'import { szv } from "@csszyx/runtime";\n' +
+                'const s = szv({ variants: { c: { x: { 4: true, p: 4 } } } });',
+        );
+        const msg = calls.find(m => m.includes('numeric key "4"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('at src/F.tsx:2');
+        expect(msg).toContain('an array or a spread');
+    });
+
+    it('an unknown key in a static szr() argument is located at the szr() call', () => {
+        const calls = warnsFor(
+            'import { szr } from "@csszyx/runtime";\n' + 'const c = szr({ nope: 1, m: 2 });',
+        );
+        const msg = calls.find(m => m.includes('Unknown property "nope"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('at src/F.tsx:2');
+    });
+
+    it('dynamic() keeps the location-less message (runtime, out of scope)', () => {
+        const calls = warnsFor(
+            'import { dynamic } from "csszyx";\nconst d = dynamic({ badkey: 1 });',
+        );
+        const msg = calls.find(m => m.includes('Unknown property "badkey"'));
+        expect(msg).toBeDefined();
+        expect(msg).not.toContain(' at ');
+    });
+
+    it('the catalog location does not leak into a later sz prop warning', () => {
+        const calls = warnsFor(
+            'import { szv } from "@csszyx/runtime";\n' +
+                'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });\n' +
+                'export const A = () => <div sz={{ zzz: 1 }} />;',
+        );
+        // The sz prop on line 3 must report its OWN line, not the szv() line 2.
+        const msg = calls.find(m => m.includes('Unknown property "zzz"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('at src/F.tsx:3');
+    });
+});
