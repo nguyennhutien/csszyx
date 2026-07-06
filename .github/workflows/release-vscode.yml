@@ -7,7 +7,10 @@ name: Release VS Code Extension
 #     auto-skips it. Marketplace publish therefore needs its own trigger.
 #
 # Auto-trigger: the release-please job in release.yml dispatches this
-# workflow explicitly after cutting a release. The `v*` tag trigger below
+# workflow explicitly after cutting a release. A `detect` job then diffs the
+# extension against the previous release tag and SKIPS the publish when only
+# the release-please version bump changed, so a release that does not touch the
+# extension does not rebuild or re-request Marketplace approval. The `v*` tag trigger below
 # is kept as a manual belt-and-braces path, but it CANNOT fire for normal
 # releases: release-please creates tags with the workflow's GITHUB_TOKEN,
 # and GitHub never triggers workflows from events made with a workflow's
@@ -39,14 +42,45 @@ on:
         description: 'Build .vsix without publishing'
         required: false
         default: 'false'
+      force:
+        description: 'Publish even if the extension is unchanged since the last release'
+        required: false
+        default: 'false'
 
 concurrency:
   group: release-vscode-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # release.yml dispatches this workflow after EVERY release, but most releases
+  # do not touch the extension (release-please only bumps its version via
+  # extra-files). Detect whether the extension actually changed since the last
+  # release so the publish job below is SKIPPED on a version-only bump — no
+  # wasted build and no dangling `vscode-publish` approval request. A manual
+  # `force` dispatch bypasses the gate.
+  detect:
+    name: Detect extension changes
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          # Full history + tags so the detector can diff against the previous
+          # release tag.
+          fetch-depth: 0
+      - name: Detect VS Code extension changes since the last release
+        id: check
+        run: |
+          changed="$(node scripts/vscode-extension-changed.mjs)"
+          echo "changed=${changed}" >> "$GITHUB_OUTPUT"
+          echo "VS Code extension changed since last release: ${changed}"
+
   publish:
     name: Build and publish to Marketplace
+    needs: detect
+    # Skip a version-only bump; a manual force dispatch always publishes.
+    if: needs.detect.outputs.changed == 'true' || github.event.inputs.force == 'true'
     runs-on: ubuntu-latest
     # Holds the job until a maintainer approves the deployment, the same
     # gate as the npm `npm-publish` environment. Closes the path where a
