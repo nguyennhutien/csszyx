@@ -83,6 +83,17 @@ export const controlSz = szv({ variants: { layout: {
     panel: { grow: 1, m: 4 },
 } } });
 `,
+    // Regression: an szv catalog AND a plain static \`sz={{ … }}\` in ONE file.
+    // The native fast path handled the \`sz=\` attribute and dropped the whole
+    // szv catalog, so \`rust\` safelisted fewer classes than \`oxc\`/\`babel\` for
+    // identical source (the field-reported \`build.parser\` flip that lost mx-0).
+    // A component leaf that both defines a variant table and renders a static
+    // sz is exactly the vui compileSources shape.
+    'src/video-tag.tsx': `
+import { szv } from '@csszyx/runtime';
+const controlSz = szv({ variants: { size: { sm: { grow: 1, mx: 0, my: 4 }, lg: { m: 8 } } } });
+export const VideoTag = () => <div sz={{ p: 4, rounded: 'md' }} />;
+`,
     // Nested variants + finite conditional (trove 0.10.8 parity class).
     'src/badge.tsx': `
 export const Badge = ({ danger }) => (
@@ -110,6 +121,37 @@ export const Broken = () => <div sz={{ p: 4 } ;
 // not the import graph, so it must still be scanned (vui item 2 note).
 const UNIMPORTED_DESIGN_SYSTEM_FIXTURE = `
 export const Button = () => <button className="ds-button" sz={{ rounded: 'lg', indent: 8 }} />;
+`;
+
+// The exact 0.11.0 field-report shape: a compileSources (vui-package) leaf that
+// is NOT in the app import graph and carries ALL of — an szv catalog (grow/mx/my),
+// semantic string classes (`dg-row-item`, `layout-header`), AND a static sz. The
+// native fast path used to see the static `sz={{ p: 4 }}`, take the AST-free path,
+// and drop the szv catalog (mx-0/grow-1/my-4) — so `rust`'s safelist was smaller
+// than `oxc`'s for this file while the semantic strings survived, the divergence
+// vui measured. All three engines must now agree.
+const UNIMPORTED_VUI_LEAF_FIXTURE = `
+import { szv } from '@csszyx/runtime';
+const gridSz = szv({ variants: { layout: {
+    panelSelect: { grow: 1, mx: 0, my: 4 },
+    panel: { grow: 1, m: 4 },
+} } });
+export const DataGrid = () => <div className="dg-row-item layout-header" sz={{ p: 4 }} />;
+`;
+
+// The padding analog of the leaf above: `px`/`py` are inline/block shorthands
+// exactly like `mx`/`my`, so the same fast-path-drops-catalog bug (and the
+// shorthand mis-split the report suspected — `px`→`pl`) has to be guarded for
+// padding too. szv catalog with padding shorthands + a static sz, in a
+// compileSources leaf outside the import graph.
+const UNIMPORTED_VUI_PADDING_LEAF_FIXTURE = `
+import { szv } from '@csszyx/runtime';
+const cellSz = szv({ variants: { density: {
+    tight: { px: 0, py: 1 },
+    cozy: { grow: 1, px: 2, py: 4 },
+    roomy: { grow: 1, p: 8 },
+} } });
+export const DataCell = () => <div className="dg-cell-item properties-panel" sz={{ m: 2 }} />;
 `;
 
 const tempDirs: string[] = [];
@@ -140,6 +182,12 @@ function runPrescan(parser: 'rust' | 'oxc' | 'babel'): {
     }
     writeFileSync(join(root, 'src/broken.tsx'), BROKEN_FIXTURE, 'utf8');
     writeFileSync(join(root, 'design-system/Button.tsx'), UNIMPORTED_DESIGN_SYSTEM_FIXTURE, 'utf8');
+    writeFileSync(join(root, 'design-system/DataGrid.tsx'), UNIMPORTED_VUI_LEAF_FIXTURE, 'utf8');
+    writeFileSync(
+        join(root, 'design-system/DataCell.tsx'),
+        UNIMPORTED_VUI_PADDING_LEAF_FIXTURE,
+        'utf8',
+    );
 
     const warnings: string[] = [];
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
@@ -200,6 +248,8 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "bg-tag-blue-bg",
             "bg-tag-red-bg",
             "datetime",
+            "dg-cell-item",
+            "dg-row-item",
             "ds-button",
             "font-semibold",
             "gap-2",
@@ -207,16 +257,25 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
             "grow-1",
             "hover:bg-zinc-100",
             "indent-8",
+            "layout-header",
             "leading-loose",
+            "m-2",
             "m-4",
             "m-6",
+            "m-8",
             "mb-2",
             "md:gap-4",
             "mx-0",
             "my-4",
             "p-4",
+            "p-8",
+            "properties-panel",
+            "px-0",
             "px-2",
+            "py-1",
+            "py-4",
             "rounded-lg",
+            "rounded-md",
             "text-green-500",
             "text-red-500",
             "text-sm",
@@ -252,6 +311,53 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         for (const engine of ['rust', 'oxc', 'babel'] as const) {
             expect(runs[engine].tokens, engine).toContain('ds-button');
             expect(runs[engine].tokens, engine).toContain('rounded-lg');
+        }
+    });
+
+    it('a compileSources leaf keeps its szv catalog AND semantic strings beside a static sz (0.11.0 field report)', () => {
+        // The reported divergence: the native fast path saw the static
+        // `sz={{ p: 4 }}` in an unimported vui leaf, took the AST-free path, and
+        // dropped the szv catalog (`mx-0`/`grow-1`/`my-4`) while the semantic
+        // string classes survived — so `rust` safelisted fewer tokens than `oxc`.
+        // Every token this file contributes must appear on all three engines.
+        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+            for (const token of [
+                'grow-1',
+                'mx-0',
+                'my-4',
+                'm-4',
+                'dg-row-item',
+                'layout-header',
+                'p-4',
+            ]) {
+                expect(runs[engine].tokens, `${engine} must keep ${token}`).toContain(token);
+            }
+            // Never the shorthand mis-split the report suspected.
+            expect(runs[engine].tokens, engine).not.toContain('ml-0');
+        }
+    });
+
+    it('the padding-shorthand compileSources leaf keeps every token beside a static sz', () => {
+        // `px`/`py` are the inline/block padding analogs of `mx`/`my`; the same
+        // fast-path bug and the suspected `px`→`pl` mis-split must be guarded for
+        // padding. Every token the padding leaf contributes survives on all
+        // engines, and the `-l`/`-r` mis-split never appears.
+        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+            for (const token of [
+                'px-0',
+                'py-1',
+                'px-2',
+                'py-4',
+                'p-8',
+                'grow-1',
+                'dg-cell-item',
+                'properties-panel',
+                'm-2',
+            ]) {
+                expect(runs[engine].tokens, `${engine} must keep ${token}`).toContain(token);
+            }
+            expect(runs[engine].tokens, engine).not.toContain('pl-0');
+            expect(runs[engine].tokens, engine).not.toContain('pr-0');
         }
     });
 });
