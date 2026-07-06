@@ -69,6 +69,24 @@ if (breaking && type !== 'feat' && type !== 'fix' && type !== 'perf') {
     );
 }
 
+// release-please's strict PEG parser (@conventional-commits/parser) treats
+// parentheses structurally and does not understand markdown backticks. An
+// UNBALANCED paren anywhere in the message — e.g. an inline-code fragment like
+// `szv(` or `dynamic(` — makes it fail to parse the whole commit, which
+// release-please then SILENTLY DROPS: a merged fix/feat contributes nothing to
+// the next release and no release PR is cut. Reject unbalanced parens here so
+// the failure surfaces at commit time instead of a missing release later.
+const opens = (message.match(/\(/g) ?? []).length;
+const closes = (message.match(/\)/g) ?? []).length;
+if (opens !== closes) {
+    const side = opens > closes ? `${opens - closes} unclosed '('` : `${closes - opens} extra ')'`;
+    fail(
+        `commit message has unbalanced parentheses (${side}). release-please's parser drops ` +
+            'such commits and skips the release. Balance every paren — write inline code as ' +
+            '`szv()` or `szv`, not `szv(` — even inside backticks.',
+    );
+}
+
 function fail(reason, code = 1) {
     console.error(`commit message policy failed: ${reason}`);
     process.exit(code);
