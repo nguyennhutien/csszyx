@@ -113,6 +113,21 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
 pub(crate) fn is_known_sz_key(key: &str) -> bool {
     property_prefix(key).is_some()
         || boolean_class(key).is_some()
+        // Flag-only utilities (truncate, blur, grayscale, invert, sepia,
+        // backdrop*) carry no value, so they are absent from `boolean_class`'s
+        // emit table (which only lists shorthands whose class name differs from
+        // the key). The `Boolean(true)` emit path falls back to the key itself
+        // for them, so they DO produce a class — the known-key check must agree,
+        // or rust warns "Unknown property … will be ignored" for a class it
+        // actually emits, diverging from the JS engines (whose BOOLEAN_SHORTHANDS
+        // set includes them and never warns).
+        // Fully-qualified rather than imported: this is the ONLY caller, and it
+        // is gated behind `#[cfg(any(feature = "native-engine", test))]`. A plain
+        // `use` would read as unused under the default feature set, and a
+        // `cargo clippy --fix` pass (e.g. the pre-commit hook) would delete the
+        // import, breaking the native build. Referencing it inline keeps the
+        // symbol tied to its single cfg-gated use.
+        || super::generated::tables::is_boolean_shorthand(key)
         || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
@@ -1451,6 +1466,19 @@ mod tests {
             "snapStrictness",
             "grid",
             "flex",
+            // Flag-only utilities: emit a class via the Boolean(true) fallback
+            // but carry no value, so they are absent from boolean_class's table.
+            // is_known_sz_key must still recognize them or rust warns for a class
+            // it emits (field-reported for `truncate`).
+            "truncate",
+            "blur",
+            "grayscale",
+            "invert",
+            "sepia",
+            "backdropBlur",
+            "backdropGrayscale",
+            "backdropInvert",
+            "backdropSepia",
             "--brand",
             "[mask-type]",
             "@container",

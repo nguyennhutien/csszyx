@@ -166,6 +166,17 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             'block',
             'italic',
             'underline',
+            // flag-only utilities: emit a class but carry no value, so they were
+            // absent from rust's boolean_class table and over-warned (field report)
+            'truncate',
+            'blur',
+            'grayscale',
+            'invert',
+            'sepia',
+            'backdropBlur',
+            'backdropGrayscale',
+            'backdropInvert',
+            'backdropSepia',
             // typos
             'xyzzy',
             'pading',
@@ -183,5 +194,71 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             }
         }
         expect(overWarns).toEqual([]);
+    });
+});
+
+/**
+ * The project-scan hint is the only pointer a developer gets for a LOCATION-LESS
+ * runtime warning (sz built from a variable / spread / szv() / dynamic()), which
+ * cannot be traced by eye. It must print the `npx @csszyx/cli check` command for
+ * those warnings — it used to be gated on having a source location and so never
+ * fired for exactly the case that needs it. The hint fires at most once per
+ * process, so each case re-imports the module fresh to reset that latch.
+ */
+describe('project-scan hint — prints the CLI command for location-less warnings', () => {
+    afterEach(() => {
+        vi.resetModules();
+        vi.restoreAllMocks();
+    });
+
+    it('prints the `npx @csszyx/cli check` command for a runtime (no-location) warning', async () => {
+        vi.resetModules();
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        const { transform } = await import('../src/transform-core.js');
+        transform({ '4': true });
+        expect(calls.some(m => m.includes('Unknown property "4"'))).toBe(true);
+        const hint = calls.find(m => m.includes('npx @csszyx/cli check'));
+        expect(
+            hint,
+            'the CLI-scan command must be printed for a location-less warning',
+        ).toBeDefined();
+        // The wording tells the developer why the scan is needed here.
+        expect(hint).toContain('no source location');
+    });
+
+    it('keeps the build-context wording when a location IS present', async () => {
+        vi.resetModules();
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        const { transformOxc } = await import('../src/index.js');
+        transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+            rootDir: '/p',
+        });
+        const hint = calls.find(m => m.includes('npx @csszyx/cli check'));
+        expect(hint).toBeDefined();
+        expect(hint).toContain('as you open them');
+    });
+
+    it('stays silent when CSSZYX_NO_PROJECT_SCAN_HINT is set', async () => {
+        vi.resetModules();
+        const prev = process.env.CSSZYX_NO_PROJECT_SCAN_HINT;
+        process.env.CSSZYX_NO_PROJECT_SCAN_HINT = '1';
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        try {
+            const { transform } = await import('../src/transform-core.js');
+            transform({ '4': true });
+        } finally {
+            if (prev === undefined) delete process.env.CSSZYX_NO_PROJECT_SCAN_HINT;
+            else process.env.CSSZYX_NO_PROJECT_SCAN_HINT = prev;
+        }
+        expect(calls.some(m => m.includes('npx @csszyx/cli check'))).toBe(false);
     });
 });

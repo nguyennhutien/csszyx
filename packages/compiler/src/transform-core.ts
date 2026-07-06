@@ -1796,20 +1796,31 @@ let szHintedProjectScan = false;
 
 /**
  * Emits the project-scan hint at most once per process, alongside the first
- * unknown/aliased sz key warning that carries a source location.
+ * unknown/aliased sz key warning.
+ *
+ * Fires whether or not the warning carries a source location. A location-less
+ * warning comes from the runtime/browser path (an sz built from a variable, a
+ * spread, an `szv()`/`dynamic()` result) — exactly the case a developer cannot
+ * trace by eye, so the "here is the command to find it" tip matters MOST there.
+ * Previously the hint was gated on having a location and so never printed for
+ * those warnings.
  *
  * @param location - the `at <file>:<line>` suffix, present only on the build path.
  */
 function hintProjectScanOnce(location: string | undefined): void {
-    if (szHintedProjectScan || !location || process.env.CSSZYX_NO_PROJECT_SCAN_HINT === '1') {
+    if (szHintedProjectScan || process.env.CSSZYX_NO_PROJECT_SCAN_HINT === '1') {
         return;
     }
     szHintedProjectScan = true;
+    // A located warning already names its file; a location-less one (runtime
+    // path) does not, so it needs the scan command to find which file to fix.
+    const why = location
+        ? 'dev warnings only surface files as you open them'
+        : 'this warning has no source location — the scan reports which file and key triggered it';
     // stderr (console.warn), not stdout: this can fire during a transform run inside
     // a stdio JSON-RPC consumer (@csszyx/mcp-server), where stray stdout corrupts it.
     console.warn(
-        '[csszyx] Tip: run `npx @csszyx/cli check` to scan every file for sz key ' +
-            'issues at once (dev warnings only surface files as you open them).',
+        `[csszyx] Tip: run \`npx @csszyx/cli check\` to scan every file for sz key issues at once (${why}).`,
     );
 }
 
