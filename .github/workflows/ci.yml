@@ -262,6 +262,28 @@ jobs:
       - name: Validate native package metadata
         run: node packages/core/scripts/validate-native-packages.mjs
 
+  # Backstop for the lefthook commit-msg hook. Re-runs the commit-message policy
+  # over every commit a PR adds, so a message release-please cannot parse (e.g.
+  # unbalanced parentheses, which make it silently drop the commit and skip the
+  # release) is caught before merge even if a contributor bypassed the local
+  # hook. Skipped on push (the aggregator counts a skip as success).
+  commit-messages:
+    name: Commit Messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+      - name: Validate PR commit messages
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          bash scripts/verify-commit-messages-range.sh "origin/${{ github.base_ref }}" HEAD
+
   # Fast Biome preflight. Runs the same `pnpm lint:fast` script as
   # local dev (Biome only, no ESLint, no Rust toolchain) so most
   # formatting, import-order, and syntax lint issues surface before
@@ -718,6 +740,7 @@ jobs:
       [
         detect-changes,
         validate-config,
+        commit-messages,
         lint-fast,
         lint,
         test,
