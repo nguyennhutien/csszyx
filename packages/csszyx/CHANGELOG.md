@@ -5,7 +5,7 @@
 ### Bug Fixes
 
 * **core:** fast path must not drop an szv/szr/dynamic catalog beside a static sz ([#129](https://github.com/nguyennhutien/csszyx/issues/129))
-* **core:** keep the szv catalog in the safelist when a static sz shares the file ([#130](https://github.com/nguyennhutien/csszyx/issues/130))
+* **release:** reject commit messages with unbalanced parentheses that silently skip a release ([#130](https://github.com/nguyennhutien/csszyx/issues/130))
 
 ## [0.11.0](https://github.com/nguyennhutien/csszyx/compare/v0.10.12...v0.11.0) (2026-07-05)
 
