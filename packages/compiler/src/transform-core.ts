@@ -1786,6 +1786,24 @@ let szTransformDepth = 0;
 let szWarnLocation: string | undefined;
 
 /**
+ * Whether dev-mode sz diagnostics should be printed. True in development, in a
+ * Node/SSR context only (never the browser client — the warnings would double a
+ * server-side render), and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The
+ * opt-out lets a team that prefers a quiet dev loop rely on `csszyx check`
+ * instead; the default stays ON because an unknown/aliased key is a
+ * dropped-class correctness signal, not a style nudge.
+ *
+ * @returns Whether a dev-mode sz warning should be printed.
+ */
+function szDevWarningsEnabled(): boolean {
+    return (
+        process.env.NODE_ENV !== 'production' &&
+        typeof window === 'undefined' &&
+        process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
+    );
+}
+
+/**
  * Whether the one-time "run a full project scan" hint has been shown. Build-time
  * unknown-key warnings are lazy (a file warns only when its route is requested),
  * so the first one points the developer at `csszyx check` for a complete pass.
@@ -2010,7 +2028,7 @@ function transformImpl(
         if (value === true) {
             const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
             if (removed) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
                             `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
@@ -2168,8 +2186,7 @@ function transformImpl(
                 // advertises an opacity the CSS does not deliver. Standard palette
                 // shades (`red-500`) and alpha-safe named colors are exempt.
                 if (
-                    process.env.NODE_ENV !== 'production' &&
-                    typeof window === 'undefined' &&
+                    szDevWarningsEnabled() &&
                     !rawColorBase.startsWith('--') &&
                     !needsArbitraryBrackets(rawColorBase) &&
                     !/-\d{2,3}$/.test(rawColorBase) &&
@@ -2204,7 +2221,7 @@ function transformImpl(
             const strVal = (value as string).replace(/!$/, '');
 
             if (hasSlashOpacity(strVal)) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     const slashIdx = strVal.indexOf('/');
                     const colorPart = strVal.slice(0, slashIdx);
                     const opPart = strVal.slice(slashIdx + 1);
@@ -2217,7 +2234,7 @@ function transformImpl(
             }
 
             if (!isValidColorString(strVal)) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] "${rawKey}: '${strVal}'" is not a recognized color value and will be ignored. ` +
                             'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
@@ -2599,7 +2616,7 @@ function transformImpl(
                     classes.push(className);
                     continue;
                 }
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
                             `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
@@ -2623,7 +2640,7 @@ function transformImpl(
                     classes.push(className);
                     continue;
                 }
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
                             `'grayscale' or 'subpixel'.`,
@@ -3195,7 +3212,7 @@ function transformImpl(
         // ================================================================
 
         // Dev-mode warning for unknown properties
-        if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+        if (szDevWarningsEnabled()) {
             // Check if key is known
             // We use 'key' (resolved kebab-case) for some checks, 'rawKey' for others
             const isKnown =

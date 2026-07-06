@@ -95,6 +95,17 @@ its `file:line` and exits non-zero so CI can gate on it:
 npx @csszyx/cli check          # scan the whole project; no dev server needed
 ```
 
+These dev-mode warnings print in Node contexts only — the build and SSR, never
+the browser client. To keep the dev loop quiet and rely on `csszyx check` in CI
+instead, mute them with `CSSZYX_QUIET_SZ_WARNINGS=1`:
+
+```bash
+CSSZYX_QUIET_SZ_WARNINGS=1 npm run dev   # no inline sz warnings; use `check` to audit
+```
+
+They stay on by default — an unknown key means a dropped class, a correctness
+signal worth surfacing.
+
 To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt out with
 `@ts-expect-error` — a conscious decision; the runtime still emits the class:
 

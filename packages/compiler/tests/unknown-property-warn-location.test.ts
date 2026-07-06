@@ -461,3 +461,52 @@ describe('runtime sz warnings carry object shape + user stack frame', () => {
         expect(msg).not.toContain('sz object was');
     });
 });
+
+/**
+ * `CSSZYX_QUIET_SZ_WARNINGS=1` mutes every dev-mode sz warning so a team that
+ * prefers a quiet dev loop can rely on `csszyx check` instead. Default stays ON —
+ * an unknown key is a dropped-class correctness signal, not a style nudge.
+ */
+describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        setSzWarnLocation(undefined);
+        delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
+    });
+
+    const warnsFor = (fn: () => void): string[] => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        fn();
+        return calls;
+    };
+
+    it('warns by default (flag unset)', () => {
+        const calls = warnsFor(() => transform({ xyzzy: 1 }));
+        expect(calls.some(m => m.includes('Unknown property "xyzzy"'))).toBe(true);
+    });
+
+    it('is silent on the runtime path when set to 1', () => {
+        process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
+        const calls = warnsFor(() => transform({ xyzzy: 1 }));
+        expect(calls.some(m => m.includes('xyzzy'))).toBe(false);
+    });
+
+    it('is silent on the build path when set to 1', () => {
+        process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
+        const calls = warnsFor(() =>
+            transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+                rootDir: '/p',
+            }),
+        );
+        expect(calls.some(m => m.includes('xyzzy'))).toBe(false);
+    });
+
+    it('only 1 mutes — any other value still warns', () => {
+        process.env.CSSZYX_QUIET_SZ_WARNINGS = 'true';
+        const calls = warnsFor(() => transform({ xyzzy: 1 }));
+        expect(calls.some(m => m.includes('xyzzy'))).toBe(true);
+    });
+});
