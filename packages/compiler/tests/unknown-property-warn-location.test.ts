@@ -50,17 +50,15 @@ describe('unknown-property warning — source location', () => {
         expect(messages.some(m => m.includes('at standalone/Baz.tsx:2.'))).toBe(true);
     });
 
-    it('runtime path (no source file) keeps the location-free message', () => {
-        // The browser/runtime `transform()` never sets a location.
+    it('runtime path (no source file) has no build location but keeps the core message', () => {
+        // The browser/runtime `transform()` never sets a build location.
         transform({ xyzzy: 4 });
-        const messages = warn.mock.calls.map(c => String(c[0]));
-        expect(
-            messages.some(
-                m =>
-                    m ===
-                    '[csszyx] Unknown property "xyzzy" in sz prop. This will be ignored. Check for typos.',
-            ),
-        ).toBe(true);
+        const msg = warn.mock.calls.map(c => String(c[0])).find(m => m.includes('xyzzy'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('Unknown property "xyzzy" in sz prop.');
+        expect(msg).toContain('This will be ignored. Check for typos.');
+        // No `at <file>:<line>` build location on the runtime path.
+        expect(msg).not.toMatch(/ at \S+:\d+/);
     });
 
     it('does not leak a build location into a later runtime transform', () => {
@@ -401,5 +399,65 @@ describe('szv/szr catalog warnings carry a source location (for csszyx check)', 
         const msg = calls.find(m => m.includes('Unknown property "zzz"'));
         expect(msg).toBeDefined();
         expect(msg).toContain('at src/F.tsx:3');
+    });
+});
+
+/**
+ * A location-less runtime warning (sz built from a variable / spread / szv() or
+ * dynamic() result) cannot carry a build `at file:line`, so it attaches what
+ * makes it traceable in the browser/SSR console: the offending object's shallow
+ * shape and the first user stack frame. A located build warning does NOT get
+ * this suffix — its location already names the source.
+ */
+describe('runtime sz warnings carry object shape + user stack frame', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        setSzWarnLocation(undefined);
+    });
+
+    it('attaches the serialized shape and the calling frame on the runtime path', () => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        // A named function stands in for a component; its frame must surface.
+        function DataGridRow(): unknown {
+            return transform({ '4': true, xyzzy: 9 });
+        }
+        DataGridRow();
+        const msg = calls.find(m => m.includes('numeric key "4"')) ?? '';
+        expect(msg).toContain('sz object was {"4":true,"xyzzy":9}');
+        expect(msg).toContain('from DataGridRow');
+    });
+
+    it('caps a large object shape instead of dumping it', () => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        const big: Record<string, unknown> = { badkey: 1 };
+        for (let i = 0; i < 100; i++) {
+            big[`k${i}`] = `value-${i}`;
+        }
+        transform(big);
+        const msg = calls.find(m => m.includes('Unknown property "badkey"')) ?? '';
+        expect(msg).toContain('sz object was ');
+        expect(msg).toContain('...');
+        // The whole suffix stays bounded (cap + framing), never the full object.
+        const suffix = msg.slice(msg.indexOf('sz object was'));
+        expect(suffix.length).toBeLessThan(320);
+    });
+
+    it('does NOT attach shape/frame to a located build warning', () => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+            rootDir: '/p',
+        });
+        const msg = calls.find(m => m.includes('xyzzy')) ?? '';
+        expect(msg).toContain('at F.tsx:1');
+        expect(msg).not.toContain('sz object was');
     });
 });
