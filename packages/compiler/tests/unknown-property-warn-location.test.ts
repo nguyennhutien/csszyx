@@ -218,8 +218,8 @@ describe('project-scan hint — prints the CLI command for location-less warning
             calls.push(String(m));
         });
         const { transform } = await import('../src/transform-core.js');
-        transform({ '4': true });
-        expect(calls.some(m => m.includes('Unknown property "4"'))).toBe(true);
+        transform({ zzznope: true });
+        expect(calls.some(m => m.includes('Unknown property "zzznope"'))).toBe(true);
         const hint = calls.find(m => m.includes('npx @csszyx/cli check'));
         expect(
             hint,
@@ -260,5 +260,71 @@ describe('project-scan hint — prints the CLI command for location-less warning
             else process.env.CSSZYX_NO_PROJECT_SCAN_HINT = prev;
         }
         expect(calls.some(m => m.includes('npx @csszyx/cli check'))).toBe(false);
+    });
+});
+
+/**
+ * A numeric (or sequential 0,1,2…) key in an sz object almost always means an
+ * array or a spread reached `sz`, not a typo. The warning must name that cause
+ * instead of "Check for typos", on the build engines and the runtime path alike.
+ */
+describe('numeric sz key — array/spread message, not "Check for typos"', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        setSzWarnLocation(undefined);
+    });
+
+    const collectWarn = (fn: () => void): string[] => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        fn();
+        return calls;
+    };
+
+    it('oxc names the array/spread cause and keeps the location', () => {
+        const calls = collectWarn(() =>
+            transformOxc('export const A = () => <div sz={{ 4: true }} />;', '/p/F.tsx', {
+                rootDir: '/p',
+            }),
+        );
+        const msg = calls.find(m => m.includes('numeric key "4"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('an array or a spread');
+        expect(msg).toContain('at F.tsx:1');
+        expect(msg).not.toContain('Check for typos');
+    });
+
+    it('the runtime path (no location) uses the same message', () => {
+        const calls = collectWarn(() => transform({ '4': true }));
+        const msg = calls.find(m => m.includes('numeric key "4"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('an array or a spread');
+        expect(msg).not.toContain('Check for typos');
+    });
+
+    it('the rust engine emits the same numeric message', () => {
+        if (!isRustTransformAvailable()) return;
+        const diagnostics = transformRust(
+            'export const A = () => <div sz={{ 4: true }} />;',
+            '/p/F.tsx',
+            { rootDir: '/p' },
+        ).diagnostics;
+        const msg = diagnostics.find(m => m.includes('numeric key "4"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('an array or a spread');
+        expect(msg).not.toContain('Check for typos');
+    });
+
+    it('a real word typo still says "Check for typos"', () => {
+        const calls = collectWarn(() =>
+            transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+                rootDir: '/p',
+            }),
+        );
+        const msg = calls.find(m => m.includes('Unknown property "xyzzy"'));
+        expect(msg).toBeDefined();
+        expect(msg).toContain('Check for typos');
     });
 });

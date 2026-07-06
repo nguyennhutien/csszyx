@@ -3150,6 +3150,17 @@ function transformImpl(
                     console.warn(
                         `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}"${at}.`,
                     );
+                } else if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
+                    // A numeric (or sequential 0,1,2…) key is almost never a typo:
+                    // it means an array or a spread reached `sz` where an object of
+                    // sz keys was expected (`sz={{ ...someArray }}`, or a value that
+                    // leaked into key position). "Check for typos" points the wrong
+                    // way, so name the actual cause.
+                    console.warn(
+                        `[csszyx] sz received a numeric key "${rawKey}"${at}. This usually ` +
+                            'means an array or a spread was passed where an object of sz ' +
+                            'keys was expected. The value is ignored.',
+                    );
                 } else {
                     // Object.entries guarantees unique keys, so each rawKey is visited once per call.
                     console.warn(
