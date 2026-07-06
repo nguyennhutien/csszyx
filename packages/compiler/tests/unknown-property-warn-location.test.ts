@@ -443,9 +443,14 @@ describe('runtime sz warnings carry object shape + user stack frame', () => {
         const msg = calls.find(m => m.includes('Unknown property "badkey"')) ?? '';
         expect(msg).toContain('sz object was ');
         expect(msg).toContain('...');
-        // The whole suffix stays bounded (cap + framing), never the full object.
-        const suffix = msg.slice(msg.indexOf('sz object was'));
-        expect(suffix.length).toBeLessThan(320);
+        // The SHAPE segment is capped (the frame that follows is a source path
+        // whose length varies by environment, so it is not bounded here). The
+        // serialized shape is capped at 200 chars incl. the trailing ellipsis.
+        const start = msg.indexOf('sz object was ') + 'sz object was '.length;
+        const sep = msg.indexOf('  ·  ', start);
+        const shape = sep >= 0 ? msg.slice(start, sep) : msg.slice(start);
+        expect(shape.length).toBeLessThanOrEqual(200);
+        expect(shape.endsWith('...')).toBe(true);
     });
 
     it('does NOT attach shape/frame to a located build warning', () => {
@@ -508,5 +513,31 @@ describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = 'true';
         const calls = warnsFor(() => transform({ xyzzy: 1 }));
         expect(calls.some(m => m.includes('xyzzy'))).toBe(true);
+    });
+});
+
+/**
+ * Defensive edges of the runtime warning context — a cyclic object must not
+ * throw or dump; the warning still fires, just without a serialized shape.
+ */
+describe('runtime warning context — defensive edges', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        setSzWarnLocation(undefined);
+    });
+
+    it('an unserializable value warns without crashing and omits the shape', () => {
+        const calls: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation(m => {
+            calls.push(String(m));
+        });
+        // A BigInt value makes JSON.stringify throw, without the nested-object
+        // recursion a cyclic object would hit (which trips the depth guard first).
+        const bad = { badkey: 1n } as unknown as Parameters<typeof transform>[0];
+        expect(() => transform(bad)).not.toThrow();
+        const msg = calls.find(m => m.includes('Unknown property "badkey"')) ?? '';
+        expect(msg).toBeTruthy();
+        // JSON.stringify throws → the shape is omitted, but the warning still fires.
+        expect(msg).not.toContain('sz object was ');
     });
 });
