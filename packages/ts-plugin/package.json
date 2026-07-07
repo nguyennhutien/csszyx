@@ -1,0 +1,33 @@
+{
+  "name": "@csszyx/ts-plugin",
+  "version": "0.11.3",
+  "description": "TypeScript language-service plugin — sz/szv/szs autocomplete in any tsserver editor, no extension",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/ts-plugin"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@csszyx/compiler": "workspace:*"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "keywords": [
+    "csszyx",
+    "typescript-plugin",
+    "language-service",
+    "autocomplete",
+    "intellisense"
+  ],
+  "license": "MIT"
+}
