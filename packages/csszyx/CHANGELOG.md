@@ -1,5 +1,19 @@
 # csszyx
 
+## [0.11.2](https://github.com/nguyennhutien/csszyx/compare/v0.11.1...v0.11.2) (2026-07-07)
+
+### Features
+
+* **compiler:** add CSSZYX_QUIET_SZ_WARNINGS to mute dev sz warnings ([#133](https://github.com/nguyennhutien/csszyx/issues/133))
+
+### Bug Fixes
+
+* sz key diagnostics — flag utilities, traceable runtime warnings, check coverage ([#133](https://github.com/nguyennhutien/csszyx/issues/133))
+* **core,compiler:** stop the rust engine warning on flag-only sz utilities ([#133](https://github.com/nguyennhutien/csszyx/issues/133))
+* **core,compiler:** tell users a numeric sz key means an array or spread, not a typo ([#133](https://github.com/nguyennhutien/csszyx/issues/133))
+* **compiler,cli:** locate szv and szr catalog key warnings for csszyx check ([#133](https://github.com/nguyennhutien/csszyx/issues/133))
+* **compiler:** give runtime sz warnings the object shape and the calling frame ([#133](https://github.com/nguyennhutien/csszyx/issues/133))
+
 ## [0.11.1](https://github.com/nguyennhutien/csszyx/compare/v0.11.0...v0.11.1) (2026-07-06)
 
 ### Bug Fixes
