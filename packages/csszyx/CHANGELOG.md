@@ -2,10 +2,9 @@
 
 ## [0.11.3](https://github.com/nguyennhutien/csszyx/compare/v0.11.2...v0.11.3) (2026-07-07)
 
-
 ### Bug Fixes
 
-* **deps:** bump crossbeam-epoch to 0.9.20 for RUSTSEC-2026-0204 ([#135](https://github.com/nguyennhutien/csszyx/issues/135)) ([97e0e8f](https://github.com/nguyennhutien/csszyx/commit/97e0e8f9da0976c98f73b1e3cd4bcf04b1eb1181))
+* **deps:** bump crossbeam-epoch to 0.9.20 for RUSTSEC-2026-0204 ([#135](https://github.com/nguyennhutien/csszyx/issues/135))
 
 ## [0.11.2](https://github.com/nguyennhutien/csszyx/compare/v0.11.1...v0.11.2) (2026-07-07)
 
