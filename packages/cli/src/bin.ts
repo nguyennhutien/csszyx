@@ -142,7 +142,10 @@ cli.command('doctor', 'Diagnose mangling issues')
     });
 
 // check command
-cli.command('check', 'Scan the whole project for unknown/aliased sz keys (CI-friendly)')
+cli.command(
+    'check',
+    'Scan static sz props and szv()/szr() catalogs for unknown/aliased sz keys (CI-friendly)',
+)
     .option('--pattern <glob>', 'Glob of source files to scan')
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
     .option('--cwd <dir>', 'Current working directory')

@@ -453,6 +453,17 @@ fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceI
 /// parity with the oxc/Babel engines, which previously were the only ones to
 /// warn. The bundler plugin gates these to dev (and suppresses source paths in
 /// production), the same as the other soft diagnostics here.
+/// Matches the JS engines' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
+/// shape of an array index or a spread's numeric key that reached `sz`.
+fn is_numeric_key(key: &str) -> bool {
+    let (int, frac) = key
+        .split_once('.')
+        .map_or((key, None), |(i, f)| (i, Some(f)));
+    !int.is_empty()
+        && int.bytes().all(|b| b.is_ascii_digit())
+        && frac.is_none_or(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()))
+}
+
 fn unknown_property_diagnostics(
     file: &TransformFile,
     ir: &super::SourceIr,
@@ -466,9 +477,18 @@ fn unknown_property_diagnostics(
         collect_unknown_sz_keys(&attr.object, &mut unknown);
         for (key, offset) in &unknown {
             let (line, _) = offset_to_line_column(&file.source, *offset);
-            out.push(format!(
-                "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
-            ));
+            // A numeric key is almost never a typo — it means an array or a spread
+            // reached `sz`. Match the JS engines' wording so a `build.parser` flip
+            // does not change the diagnostic text.
+            if is_numeric_key(key) {
+                out.push(format!(
+                    "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
+                ));
+            } else {
+                out.push(format!(
+                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
+                ));
+            }
         }
     }
     out

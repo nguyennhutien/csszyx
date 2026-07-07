@@ -1786,6 +1786,24 @@ let szTransformDepth = 0;
 let szWarnLocation: string | undefined;
 
 /**
+ * Whether dev-mode sz diagnostics should be printed. True in development, in a
+ * Node/SSR context only (never the browser client — the warnings would double a
+ * server-side render), and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The
+ * opt-out lets a team that prefers a quiet dev loop rely on `csszyx check`
+ * instead; the default stays ON because an unknown/aliased key is a
+ * dropped-class correctness signal, not a style nudge.
+ *
+ * @returns Whether a dev-mode sz warning should be printed.
+ */
+function szDevWarningsEnabled(): boolean {
+    return (
+        process.env.NODE_ENV !== 'production' &&
+        typeof window === 'undefined' &&
+        process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
+    );
+}
+
+/**
  * Whether the one-time "run a full project scan" hint has been shown. Build-time
  * unknown-key warnings are lazy (a file warns only when its route is requested),
  * so the first one points the developer at `csszyx check` for a complete pass.
@@ -1796,21 +1814,106 @@ let szHintedProjectScan = false;
 
 /**
  * Emits the project-scan hint at most once per process, alongside the first
- * unknown/aliased sz key warning that carries a source location.
+ * unknown/aliased sz key warning.
+ *
+ * Fires whether or not the warning carries a source location. A location-less
+ * warning comes from the runtime/browser path (an sz built from a variable, a
+ * spread, an `szv()`/`dynamic()` result) — exactly the case a developer cannot
+ * trace by eye, so the "here is the command to find it" tip matters MOST there.
+ * Previously the hint was gated on having a location and so never printed for
+ * those warnings.
  *
  * @param location - the `at <file>:<line>` suffix, present only on the build path.
  */
 function hintProjectScanOnce(location: string | undefined): void {
-    if (szHintedProjectScan || !location || process.env.CSSZYX_NO_PROJECT_SCAN_HINT === '1') {
+    if (szHintedProjectScan || process.env.CSSZYX_NO_PROJECT_SCAN_HINT === '1') {
         return;
     }
     szHintedProjectScan = true;
+    // A located warning already names its file; a location-less one (runtime
+    // path) does not, so it needs the scan command to find which file to fix.
+    const why = location
+        ? 'dev warnings only surface files as you open them'
+        : 'this warning has no source location — the scan reports which file and key triggered it';
     // stderr (console.warn), not stdout: this can fire during a transform run inside
     // a stdio JSON-RPC consumer (@csszyx/mcp-server), where stray stdout corrupts it.
     console.warn(
-        '[csszyx] Tip: run `npx @csszyx/cli check` to scan every file for sz key ' +
-            'issues at once (dev warnings only surface files as you open them).',
+        `[csszyx] Tip: run \`npx @csszyx/cli check\` to scan every file for sz key issues at once (${why}).`,
     );
+}
+
+/**
+ * Frames belonging to csszyx/runtime/host internals, never the user's code.
+ * Matches by PATH and by internal function NAME so it catches every internal
+ * frame whether csszyx is loaded from a package (`node_modules/@csszyx`, or this
+ * monorepo's `packages/<pkg>/dist`) or from source (a test/dev run resolves
+ * `packages/<pkg>/src`, where a path filter alone would miss `transformImpl`).
+ * `@csszyx` (scoped) rather than bare `csszyx` so a user app whose own path
+ * contains "csszyx" is not filtered; internal names are lowerCamel, so a
+ * PascalCase component (`Transform`) is never matched.
+ */
+const INTERNAL_STACK_FRAME =
+    /node_modules|node:internal|@csszyx|packages\/(?:compiler|runtime|dynamic|core|vars)\/(?:dist|src)|\btransform|\bszJoin\b|\b_sz\w*|\bdynamic\b|runtimeSzWarnContext|firstUserStackFrame/;
+
+/**
+ * The first stack frame outside csszyx/runtime/node internals — the user's
+ * component or module that passed the offending sz object. Derived from a
+ * captured stack (dev-only, called only when a warning fires) rather than React
+ * internals, so it works in the browser and SSR without a framework coupling.
+ * Returns the `Component (file:line)` text a console renders click-to-source, or
+ * undefined when the stack is unavailable or every frame is internal.
+ *
+ * @returns The first user frame, or undefined.
+ */
+function firstUserStackFrame(): string | undefined {
+    const stack = new Error().stack;
+    if (!stack) {
+        return undefined;
+    }
+    // Line 0 is "Error"; frames follow as "    at <fn> (<loc>)".
+    for (const line of stack.split('\n').slice(1)) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('at ') || INTERNAL_STACK_FRAME.test(trimmed)) {
+            continue;
+        }
+        return trimmed.slice(3).trim();
+    }
+    return undefined;
+}
+
+/**
+ * Traceability suffix for a location-less (runtime) unknown-key warning: the
+ * offending object's shallow shape plus the first user stack frame. Best-effort
+ * — never throws, caps the serialized shape, and omits either part it cannot
+ * produce.
+ *
+ * @param szProp - The sz object being transformed.
+ * @returns A leading-space suffix, or empty string when nothing is available.
+ */
+function runtimeSzWarnContext(szProp: SzObject): string {
+    let shape = '';
+    try {
+        // Shallow top-level keys only, capped — never dump a large or cyclic
+        // object into the console.
+        const serialized = JSON.stringify(szProp);
+        if (serialized) {
+            shape = serialized.length > 200 ? `${serialized.slice(0, 197)}...` : serialized;
+        }
+    } catch {
+        shape = '';
+    }
+    const frame = firstUserStackFrame();
+    if (!shape && !frame) {
+        return '';
+    }
+    const parts: string[] = [];
+    if (shape) {
+        parts.push(`sz object was ${shape}`);
+    }
+    if (frame) {
+        parts.push(`from ${frame}`);
+    }
+    return `\n  ${parts.join('  ·  ')}`;
 }
 
 /**
@@ -1925,7 +2028,7 @@ function transformImpl(
         if (value === true) {
             const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
             if (removed) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
                             `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
@@ -2083,8 +2186,7 @@ function transformImpl(
                 // advertises an opacity the CSS does not deliver. Standard palette
                 // shades (`red-500`) and alpha-safe named colors are exempt.
                 if (
-                    process.env.NODE_ENV !== 'production' &&
-                    typeof window === 'undefined' &&
+                    szDevWarningsEnabled() &&
                     !rawColorBase.startsWith('--') &&
                     !needsArbitraryBrackets(rawColorBase) &&
                     !/-\d{2,3}$/.test(rawColorBase) &&
@@ -2119,7 +2221,7 @@ function transformImpl(
             const strVal = (value as string).replace(/!$/, '');
 
             if (hasSlashOpacity(strVal)) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     const slashIdx = strVal.indexOf('/');
                     const colorPart = strVal.slice(0, slashIdx);
                     const opPart = strVal.slice(slashIdx + 1);
@@ -2132,7 +2234,7 @@ function transformImpl(
             }
 
             if (!isValidColorString(strVal)) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] "${rawKey}: '${strVal}'" is not a recognized color value and will be ignored. ` +
                             'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
@@ -2514,7 +2616,7 @@ function transformImpl(
                     classes.push(className);
                     continue;
                 }
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
                             `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
@@ -2538,7 +2640,7 @@ function transformImpl(
                     classes.push(className);
                     continue;
                 }
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+                if (szDevWarningsEnabled()) {
                     console.warn(
                         `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
                             `'grayscale' or 'subpixel'.`,
@@ -3110,7 +3212,7 @@ function transformImpl(
         // ================================================================
 
         // Dev-mode warning for unknown properties
-        if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+        if (szDevWarningsEnabled()) {
             // Check if key is known
             // We use 'key' (resolved kebab-case) for some checks, 'rawKey' for others
             const isKnown =
@@ -3135,17 +3237,33 @@ function transformImpl(
                 // empty on the runtime/browser path (no source file to point at).
                 const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
                 const suggestion = SUGGESTION_MAP[rawKey];
+                let message: string;
                 if (suggestion) {
-                    console.warn(
-                        `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}"${at}.`,
-                    );
+                    message = `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}"${at}.`;
+                } else if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
+                    // A numeric (or sequential 0,1,2…) key is almost never a typo:
+                    // it means an array or a spread reached `sz` where an object of
+                    // sz keys was expected (`sz={{ ...someArray }}`, or a value that
+                    // leaked into key position). "Check for typos" points the wrong
+                    // way, so name the actual cause.
+                    message =
+                        `[csszyx] sz received a numeric key "${rawKey}"${at}. This usually ` +
+                        'means an array or a spread was passed where an object of sz ' +
+                        'keys was expected. The value is ignored.';
                 } else {
-                    // Object.entries guarantees unique keys, so each rawKey is visited once per call.
-                    console.warn(
+                    message =
                         `[csszyx] Unknown property "${rawKey}" in sz prop${at}. ` +
-                            'This will be ignored. Check for typos.',
-                    );
+                        'This will be ignored. Check for typos.';
                 }
+                // A build warning already carries `at file:line`. A runtime one
+                // (an sz built from a variable / spread / szv()/dynamic() result)
+                // has no static span, so attach what makes it traceable in the
+                // browser/SSR console: the offending object's shape and the first
+                // user stack frame (which the console renders click-to-source).
+                if (!szWarnLocation) {
+                    message += runtimeSzWarnContext(szProp);
+                }
+                console.warn(message);
                 hintProjectScanOnce(szWarnLocation);
             }
         }
