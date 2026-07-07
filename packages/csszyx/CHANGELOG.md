@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.11.2](https://github.com/nguyennhutien/csszyx/compare/v0.11.1...v0.11.2) (2026-07-07)
+
+
+### Bug Fixes
+
+* sz key diagnostics — flag utilities, traceable runtime warnings, check coverage ([#133](https://github.com/nguyennhutien/csszyx/issues/133)) ([4312466](https://github.com/nguyennhutien/csszyx/commit/43124668c25962918e2000a60f5b61f56c7e470e))
+
 ## [0.11.1](https://github.com/nguyennhutien/csszyx/compare/v0.11.0...v0.11.1) (2026-07-06)
 
 ### Bug Fixes
