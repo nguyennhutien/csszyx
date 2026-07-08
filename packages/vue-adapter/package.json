@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
-    "oxc-parser": "0.131.0"
+    "oxc-parser": "0.138.0"
   },
   "peerDependencies": {
     "vue": "^3.0.0"
