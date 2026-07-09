@@ -1,36 +1,48 @@
 /**
- * Completion-ownership arbitration between this extension and
- * `@csszyx/ts-plugin` (the tsserver language-service plugin).
+ * Completion-ownership planning for the CSSzyx extension.
  *
- * Exactly one provider should own sz/szv/szs completions for a workspace,
- * otherwise VS Code shows every key twice (the editor merges completion
- * providers without deduplication). This module is pure — no `vscode`
- * imports — so the decision table stays unit-testable.
+ * The extension ships `@csszyx/ts-plugin` and injects it into tsserver (via the
+ * `typescriptServerPlugins` contribution), so the plugin handles sz/szv/szs
+ * completions in TypeScript/JavaScript files. The extension's own regex-based
+ * completion provider is only needed for HTML, which tsserver does not process.
+ *
+ * This module is pure — no `vscode` imports — so the decision table stays
+ * unit-testable.
  */
 
-/** How the user asked completion ownership to be resolved. */
+/** How the user asked completion ownership to be resolved (`csszyx.completions`). */
 export type CompletionMode = 'auto' | 'extension' | 'off';
 
-/** Which provider ends up owning sz completions. */
-export type CompletionOwner = 'extension' | 'ts-plugin' | 'none';
+/** Which languages the extension's own regex provider should serve. */
+export type ExtensionLanguages = 'none' | 'html-only' | 'all';
+
+/** The resolved completion plan for a mode. */
+export interface CompletionPlan {
+    /** Whether the bundled tsserver plugin stays enabled. */
+    readonly pluginEnabled: boolean;
+    /** Which languages the extension's regex provider registers for. */
+    readonly extensionLanguages: ExtensionLanguages;
+}
 
 /**
- * Decide who provides sz completions.
+ * Plan who provides sz completions for a mode.
+ *
+ * - `auto`: the plugin owns TypeScript/JavaScript; the extension covers only
+ *   HTML (tsserver never sees HTML, so the plugin cannot).
+ * - `extension`: the plugin is disabled and the extension serves every
+ *   language — a fallback for when the plugin is unwanted.
+ * - `off`: no sz completions from either provider.
  * @param mode - The `csszyx.completions` setting value.
- * @param pluginConfigured - Whether a workspace tsconfig loads `@csszyx/ts-plugin`.
- * @returns The completion owner for this workspace.
+ * @returns Whether the plugin stays enabled and which languages the extension serves.
  */
-export function resolveCompletionOwner(
-    mode: CompletionMode,
-    pluginConfigured: boolean,
-): CompletionOwner {
+export function planCompletions(mode: CompletionMode): CompletionPlan {
     if (mode === 'off') {
-        return 'none';
+        return { pluginEnabled: false, extensionLanguages: 'none' };
     }
     if (mode === 'extension') {
-        return 'extension';
+        return { pluginEnabled: false, extensionLanguages: 'all' };
     }
-    return pluginConfigured ? 'ts-plugin' : 'extension';
+    return { pluginEnabled: true, extensionLanguages: 'html-only' };
 }
 
 /**
@@ -41,19 +53,4 @@ export function resolveCompletionOwner(
  */
 export function parseCompletionMode(value: unknown): CompletionMode {
     return value === 'extension' || value === 'off' ? value : 'auto';
-}
-
-/**
- * Check whether tsconfig content enables the csszyx tsserver plugin.
- *
- * A plain substring test is deliberate: tsconfig files are JSONC (comments,
- * trailing commas), and `extends` chains make structural resolution
- * expensive. A commented-out plugin entry may match, which errs on the safe
- * side — the user can force the extension back with
- * `csszyx.completions: "extension"`.
- * @param content - Raw tsconfig file content.
- * @returns True when the file references `@csszyx/ts-plugin`.
- */
-export function tsconfigMentionsTsPlugin(content: string): boolean {
-    return content.includes('@csszyx/ts-plugin');
 }

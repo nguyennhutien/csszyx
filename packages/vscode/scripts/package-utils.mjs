@@ -24,13 +24,12 @@ export function resolveVsceArguments(args) {
         throw new Error('Publish mode only accepts an optional major, minor, or patch bump.');
     }
 
+    // Dependency detection stays ON: vsce must pack the bundled @csszyx/ts-plugin
+    // (the extension's one production dependency) into the vsix so the
+    // typescriptServerPlugins contribution can resolve it. Every other
+    // dependency is inlined into dist/extension.js by esbuild.
     return {
         isPublish,
-        commandArgs: [
-            '@vscode/vsce',
-            isPublish ? 'publish' : 'package',
-            '--no-dependencies',
-            ...remaining,
-        ],
+        commandArgs: ['@vscode/vsce', isPublish ? 'publish' : 'package', ...remaining],
     };
 }

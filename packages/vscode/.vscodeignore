@@ -2,6 +2,7 @@
 src/**
 scripts/**
 node_modules/**
+!node_modules/@csszyx/ts-plugin/**
 .turbo/**
 tsconfig.json
 esbuild.mjs

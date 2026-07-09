@@ -6,11 +6,11 @@ describe('VS Code package argument policy', () => {
     it('builds fixed package and publish argv', () => {
         expect(resolveVsceArguments([])).toEqual({
             isPublish: false,
-            commandArgs: ['@vscode/vsce', 'package', '--no-dependencies'],
+            commandArgs: ['@vscode/vsce', 'package'],
         });
         expect(resolveVsceArguments(['--publish', 'patch'])).toEqual({
             isPublish: true,
-            commandArgs: ['@vscode/vsce', 'publish', '--no-dependencies', 'patch'],
+            commandArgs: ['@vscode/vsce', 'publish', 'patch'],
         });
     });
 

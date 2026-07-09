@@ -6,12 +6,14 @@ description: IntelliSense, hover, and diagnostics for sz props in VS Code.
 `@csszyx/vscode` adds first-class editor support for `sz` props: autocompletion,
 hover previews, and inline diagnostics — with zero configuration required.
 
-For completion through compatible TypeScript hosts outside VS Code, see the
-[TypeScript Autocomplete Plugin](/docs/typescript-plugin/). The two providers
-coexist automatically: when a workspace `tsconfig.json` loads the plugin, the
-extension yields `sz` completions to it so you never see duplicate suggestions —
-no manual `tsconfig` edits required. Hover and diagnostics stay on either way.
-Override with the [`csszyx.completions`](#settings) setting.
+Completions are powered by the bundled
+[`@csszyx/ts-plugin`](/docs/typescript-plugin/): the extension ships it and
+registers it with VS Code's TypeScript service automatically, so you get
+LSP-quality `sz`/`szv`/`szs` suggestions with no `tsconfig` edits and no
+TypeScript-version switching. The extension handles HTML itself (the TypeScript
+service never sees HTML). Hover and diagnostics are always on. Tune this with the
+[`csszyx.completions`](#settings) setting; outside VS Code, install the plugin
+directly per its own guide.
 
 ## Features
 
@@ -80,12 +82,12 @@ pnpm build
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `csszyx.completions` | `"auto"` | Who provides `sz` completions. `auto` yields to `@csszyx/ts-plugin` when a workspace `tsconfig.json` loads it; `extension` always provides them (may duplicate); `off` never provides them |
+| `csszyx.completions` | `"auto"` | Who provides `sz` completions. `auto`: the bundled `@csszyx/ts-plugin` handles TypeScript/JavaScript, the extension handles HTML. `extension`: disable the plugin, extension provides all languages. `off`: no `sz` completions |
 | `csszyx.enableDiagnostics` | `true` | Show unknown-prop warnings |
 | `csszyx.enableHover` | `true` | Show hover preview |
 
 Changing `csszyx.completions` takes effect immediately — the extension
-registers or removes its completion provider without a window reload.
+reconfigures the plugin and its own provider without a window reload.
 
 ## Supported Languages
 

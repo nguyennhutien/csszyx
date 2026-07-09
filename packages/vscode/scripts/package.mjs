@@ -18,7 +18,16 @@
 //   node scripts/package.mjs --publish    # publish to Marketplace (requires `vsce login` first)
 //   node scripts/package.mjs --publish patch   # bump + publish
 
-import { rmSync, mkdtempSync, cpSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+    rmSync,
+    mkdirSync,
+    mkdtempSync,
+    cpSync,
+    existsSync,
+    readdirSync,
+    readFileSync,
+    writeFileSync,
+} from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,11 +64,41 @@ for (const item of SHIP_FILES) {
 //     manifest minimal and unambiguous).
 // Only touches the temp copy under os.tmpdir(); the checked-in package.json
 // stays on `@csszyx/vscode` + `private: true`.
+// Ship @csszyx/ts-plugin inside the extension so the `typescriptServerPlugins`
+// contribution resolves it by name from the extension's own node_modules. vsce
+// only packs a node_modules folder when the package is a *production*
+// dependency AND `.vscodeignore` un-ignores its path — the plugin is that lone
+// runtime dependency; every other dependency is bundled into dist/extension.js.
+// The `vsix` script builds the plugin first, so its bundle must exist here.
+const pluginBundle = path.resolve(pkgDir, '../ts-plugin/dist/index.js');
+if (!existsSync(pluginBundle)) {
+    throw new Error(
+        'ts-plugin bundle missing: run `pnpm --filter @csszyx/ts-plugin build` before packaging.',
+    );
+}
+const pluginManifest = JSON.parse(
+    readFileSync(path.resolve(pkgDir, '../ts-plugin/package.json'), 'utf8'),
+);
+
 const stagedPkgPath = path.join(outDir, 'package.json');
 const stagedPkg = JSON.parse(readFileSync(stagedPkgPath, 'utf8'));
 stagedPkg.name = 'csszyx';
 delete stagedPkg.private;
+// devDependencies are build-time only and carry `workspace:*` specifiers that
+// vsce's production-dependency walk cannot resolve; the runtime bundle needs
+// none of them. Declare the plugin as the sole production dependency instead.
+delete stagedPkg.devDependencies;
+stagedPkg.dependencies = { '@csszyx/ts-plugin': pluginManifest.version };
 writeFileSync(stagedPkgPath, `${JSON.stringify(stagedPkg, null, 4)}\n`);
+
+// A minimal manifest (no `workspace:*` devDeps) beside the self-contained bundle.
+const stagedPluginDir = path.join(outDir, 'node_modules/@csszyx/ts-plugin');
+mkdirSync(path.join(stagedPluginDir, 'dist'), { recursive: true });
+writeFileSync(
+    path.join(stagedPluginDir, 'package.json'),
+    `${JSON.stringify({ name: pluginManifest.name, version: pluginManifest.version, main: 'dist/index.js' }, null, 2)}\n`,
+);
+cpSync(pluginBundle, path.join(stagedPluginDir, 'dist/index.js'));
 
 const { isPublish, commandArgs } = resolveVsceArguments(process.argv.slice(2));
 

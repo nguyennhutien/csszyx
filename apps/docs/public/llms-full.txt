@@ -2987,8 +2987,16 @@ Utilities for controlling the alignment of table captions.
 
 ### TypeScript Language-Service Plugin (`@csszyx/ts-plugin`)
 
-Portable static completion for TypeScript hosts that load project plugins. A
-TypeScript plugin is not a universal LSP; host support must be verified.
+Static completion for TypeScript hosts that load project plugins. Not a
+universal LSP; host support must be verified. Two install channels:
+
+- **VS Code:** install the `@csszyx/vscode` extension — it bundles the plugin
+  and loads it via `contributes.typescriptServerPlugins`
+  (`enableForWorkspaceTypeScriptVersions: true`). Zero config: no `tsconfig`
+  entry, no TypeScript-version selection, works under bundled and workspace
+  TypeScript, unaffected by pnpm hoisting. Do not tell users to edit `tsconfig`.
+- **Other hosts** (Neovim `ts_ls`, WebStorm, Zed, or VS Code without the
+  extension): install and add to the leaf `tsconfig`.
 
 ```bash
 pnpm add -D @csszyx/ts-plugin typescript
@@ -3001,6 +3009,11 @@ pnpm add -D @csszyx/ts-plugin typescript
   },
 }
 ```
+
+TypeScript resolves plugins next to the TypeScript install, not the `tsconfig`.
+Under pnpm the manual path needs `public-hoist-pattern[]=@csszyx/ts-plugin` in
+`.npmrc` (npm/Yarn flat layout does not). VS Code without the extension also
+needs "Use Workspace Version".
 
 **AIX capability contract:**
 
@@ -3021,11 +3034,12 @@ telemetry. Those capabilities must not be inferred. The plugin is
 self-contained: its metadata is bundled at build time, so it installs with no
 runtime dependencies and there is no separate metadata package to install.
 
-Coexistence with `@csszyx/vscode` is automatic: when a workspace `tsconfig.json`
-loads this plugin, the extension yields `sz` completions to it, so both can be
-installed without duplicate suggestions. The extension's `csszyx.completions`
-setting (`auto` | `extension` | `off`) overrides this; `auto` is the yielding
-default. The extension's hover and diagnostics are unaffected.
+Inside `@csszyx/vscode` there is no duplication to reconcile: the extension
+ships and injects this plugin for TypeScript/JavaScript and serves HTML itself
+(tsserver does not process HTML). `csszyx.completions` (via the TypeScript
+`configurePlugin` API): `auto` (default — plugin for TS/JS, extension for HTML) |
+`extension` (plugin disabled, extension serves all languages) | `off` (no sz
+completions). Hover and diagnostics are unaffected.
 
 ### VS Code Extension (`@csszyx/vscode`)
 
@@ -3040,10 +3054,11 @@ IntelliSense, hover, and diagnostics for `sz` props. Supports JSX, TSX, JS, TS, 
 
 **Settings:**
 
+- `csszyx.completions` (default: `auto`) — `auto` | `extension` | `off` (see plugin section)
 - `csszyx.enableDiagnostics` (default: `true`) — toggle unknown-prop warnings
 - `csszyx.enableHover` (default: `true`) — toggle hover preview
 
-**Build:** esbuild → `dist/extension.js` (85KB CJS, zero Babel, uses `@csszyx/compiler/browser`)
+**Build:** esbuild → `dist/extension.js` (CJS, bundles `@csszyx/tooling-metadata` + `@csszyx/compiler/browser`); ships `@csszyx/ts-plugin` as a packed dependency for the tsserver-plugin contribution.
 
 ### MCP Server (`@csszyx/mcp-server`)
 

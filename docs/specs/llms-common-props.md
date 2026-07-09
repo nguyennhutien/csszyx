@@ -238,12 +238,18 @@
 
 ## TypeScript authoring plugin
 
-Install `@csszyx/ts-plugin` as a dev dependency and add it under
+In VS Code, install the `@csszyx/vscode` extension — it bundles and auto-loads
+the plugin (no `tsconfig` edit, no TypeScript-version selection, works under
+pnpm). For other TypeScript hosts (Neovim, WebStorm, Zed), install
+`@csszyx/ts-plugin` as a dev dependency and add it under
 `compilerOptions.plugins`:
 
 ```jsonc
 { "compilerOptions": { "plugins": [{ "name": "@csszyx/ts-plugin" }] } }
 ```
+
+The manual path resolves plugins next to the TypeScript install, so pnpm needs
+`public-hoist-pattern[]=@csszyx/ts-plugin` in `.npmrc`.
 
 It adds static key/value completions in JSX `sz`, nested variants,
 `szv({ base, variants.*.* })`, imported `szr()`, and each component `szs` slot
