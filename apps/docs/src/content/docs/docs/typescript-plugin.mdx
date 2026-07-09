@@ -268,6 +268,27 @@ from a real failure. Run **TypeScript: Open TS Server Log** (enable it first wit
 `"typescript.tsserver.log": "verbose"`). Then check `csszyx.completions` is not
 `"off"` or `"extension"`.
 
+#### Suggestions only appear after `.` or a quote, never while typing letters
+
+If the plugin is activated but typing a letter inside an sz object never opens
+the suggestion list — while `Math.` or typing `'` does — the suggestion widget
+itself is being suppressed, usually by AI inline suggestions (Copilot ghost
+text). This is a known VS Code issue
+([microsoft/vscode#315373](https://github.com/microsoft/vscode/issues/315373))
+that affects **all** completions, including TypeScript's own, not just CSSzyx.
+Quick test: on an empty line, type `Ma` — if no dropdown appears there either,
+the plugin is not the problem.
+
+Workarounds until the upstream fix:
+
+- Press **Trigger Suggest** (`Ctrl+Space`) to open the list on demand. On macOS
+  that chord is often taken by the input-source switcher — rebind either the
+  system shortcut or VS Code's `editor.action.triggerSuggest`.
+- Typing a quote at a value slot (`bg: '`) opens the list naturally — `'` and
+  `"` are TypeScript trigger characters.
+- To confirm the cause, temporarily set `"editor.inlineSuggest.enabled": false`
+  and type inside an sz object again.
+
 ### Manual `tsconfig` setup
 
 If completions do not appear:

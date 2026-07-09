@@ -161,6 +161,21 @@ check('a typed value prefix stays a value slot, never keys', () => {
     );
 });
 
+// A freshly typed quote at a value slot must offer bare-text values: `'` and
+// `"` are tsserver trigger characters, so in editors where letter-typing does
+// not auto-open suggestions (e.g. Copilot inline-suggest suppression,
+// microsoft/vscode#315373) this is the natural entry point for value completion.
+check('a fresh quote at a value slot offers unquoted value text', () => {
+    for (const source of [
+        "const A = () => <div sz={{ bg: '/*|*/", // unterminated, end of file
+        "const A = () => <div sz={{ bg: '/*|*/' }} />;", // auto-paired quotes
+        "const X = () => <Card szs={{ header: { color: '/*|*/' } }} />;", // szs slot value
+    ]) {
+        const red = entriesAtMarker(source).find(entry => entry.name === 'red-500');
+        assert.strictEqual(red?.insertText, 'red-500', `bare insert for: ${source}`);
+    }
+});
+
 // Regression: a mid-word key prefix must offer keys and replace the typed text.
 check('a mid-word key prefix offers keys covering the prefix', () => {
     const entries = entriesAtMarker('const A = () => <div sz={{ b/*|*/ }} />;');
