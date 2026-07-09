@@ -115,6 +115,7 @@ export default defineConfig({
                         { label: 'Runtime Injection', slug: 'docs/dynamic' },
                         { label: 'CDN — Vanilla HTML', slug: 'docs/cdn-html' },
                         { label: 'MCP Server', slug: 'docs/mcp-server' },
+                        { label: 'TypeScript Autocomplete', slug: 'docs/typescript-plugin' },
                         { label: 'VS Code Extension', slug: 'docs/vscode' },
                     ],
                 },

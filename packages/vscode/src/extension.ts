@@ -12,6 +12,11 @@
 
 import * as vscode from 'vscode';
 
+import {
+    parseCompletionMode,
+    resolveCompletionOwner,
+    tsconfigMentionsTsPlugin,
+} from './completion-arbitration.js';
 import { SzCompletionProvider } from './completion-provider.js';
 import { createDebouncedValidator, validateDocument } from './diagnostic-provider.js';
 import { SzHoverProvider } from './hover-provider.js';
@@ -30,25 +35,65 @@ const SZ_LANGUAGES = [
  * @param context - Extension context for managing disposables
  */
 export function activate(context: vscode.ExtensionContext): void {
+    const output = vscode.window.createOutputChannel('CSSzyx');
+    context.subscriptions.push(output);
+
     // ── Completions ─────────────────────────────────────────────────────────
-    // Trigger characters fire completions automatically as the user types
-    // inside a sz expression. `{`, `"`, `'` cover the opening of the object in
-    // HTML attribute form; `:`, `,`, ` ` cover typing a key/value/separator
-    // in both JSX and HTML forms. Without these, VS Code only invokes the
-    // provider on Ctrl+Space inside HTML attribute strings.
-    const completionProvider = new SzCompletionProvider();
+    // Ownership is arbitrated with @csszyx/ts-plugin: when a workspace
+    // tsconfig loads the tsserver plugin, the extension yields completions so
+    // the user never sees duplicate entries (VS Code merges completion
+    // providers without deduplication). `csszyx.completions` overrides.
+    let completionRegistration: vscode.Disposable | undefined;
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider(
-            SZ_LANGUAGES,
-            completionProvider,
-            '{',
-            '"',
-            "'",
-            ':',
-            ',',
-            ' ',
-        ),
+        new vscode.Disposable(() => completionRegistration?.dispose()),
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration('csszyx.completions')) {
+                void syncCompletionOwnership();
+            }
+        }),
     );
+    void syncCompletionOwnership();
+
+    /**
+     * Register or dispose the completion provider to match the resolved owner.
+     * Runs at activation and again whenever `csszyx.completions` changes.
+     */
+    async function syncCompletionOwnership(): Promise<void> {
+        const mode = parseCompletionMode(
+            vscode.workspace.getConfiguration('csszyx').get('completions'),
+        );
+        const pluginConfigured = mode === 'auto' && (await workspaceLoadsTsPlugin());
+        const owner = resolveCompletionOwner(mode, pluginConfigured);
+        if (owner !== 'extension') {
+            completionRegistration?.dispose();
+            completionRegistration = undefined;
+            output.appendLine(
+                owner === 'ts-plugin'
+                    ? "completions: yielding to @csszyx/ts-plugin (set csszyx.completions to 'extension' to override)"
+                    : "completions: disabled by csszyx.completions = 'off'",
+            );
+            return;
+        }
+        if (!completionRegistration) {
+            // Trigger characters fire completions automatically as the user
+            // types inside a sz expression. `{`, `"`, `'` cover the opening of
+            // the object in HTML attribute form; `:`, `,`, ` ` cover typing a
+            // key/value/separator in both JSX and HTML forms. Without these,
+            // VS Code only invokes the provider on Ctrl+Space inside HTML
+            // attribute strings.
+            completionRegistration = vscode.languages.registerCompletionItemProvider(
+                SZ_LANGUAGES,
+                new SzCompletionProvider(),
+                '{',
+                '"',
+                "'",
+                ':',
+                ',',
+                ' ',
+            );
+            output.appendLine('completions: provided by the CSSzyx extension');
+        }
+    }
 
     // ── Hover ────────────────────────────────────────────────────────────────
     const hoverProvider = new SzHoverProvider();
@@ -98,6 +143,33 @@ export function activate(context: vscode.ExtensionContext): void {
  */
 export function deactivate(): void {
     // VS Code disposes subscriptions registered via context.subscriptions automatically.
+}
+
+/**
+ * Detect whether any workspace tsconfig loads `@csszyx/ts-plugin`.
+ *
+ * Bounded scan (25 files, node_modules excluded); unreadable files are
+ * skipped so a broken tsconfig can never break activation.
+ * @returns True when the tsserver plugin is configured somewhere in the workspace
+ */
+async function workspaceLoadsTsPlugin(): Promise<boolean> {
+    let tsconfigs: readonly vscode.Uri[];
+    try {
+        tsconfigs = await vscode.workspace.findFiles('**/tsconfig*.json', '**/node_modules/**', 25);
+    } catch {
+        return false;
+    }
+    for (const uri of tsconfigs) {
+        try {
+            const content = await vscode.workspace.fs.readFile(uri);
+            if (tsconfigMentionsTsPlugin(new TextDecoder().decode(content))) {
+                return true;
+            }
+        } catch {
+            // Unreadable tsconfig: keep checking the rest.
+        }
+    }
+    return false;
 }
 
 /**

@@ -1,146 +1,403 @@
-/**
- * Classifies a cursor position: is it inside a csszyx sz object at a KEY
- * position, where offering sz-key completions helps? Covers the surfaces where
- * the editor's own type-driven completion is weak or absent:
- *   - `sz={{ … }}` / `szs={{ … }}` JSX attribute objects
- *   - `szv({ variants: { dim: { name: { … } } } })` config objects (the loose
- *     `SzObject` index-signature type gives no key completion today)
- *   - nested variant objects (`hover: { … }`, `md: { … }`) inside the above
- *
- * Conservative by construction: anything it is unsure about returns `null`, so
- * the plugin falls back to the untouched base completions and never over-offers.
- */
 import type ts from 'typescript/lib/tsserverlibrary';
 
-/** Attribute / call names whose object argument is an sz object. */
 const SZ_JSX_ATTRS = new Set(['sz', 'szs']);
-const SZ_CALLS = new Set(['szv', 'szr']);
+const CSSZYX_MODULES = new Set(['csszyx', '@csszyx/runtime']);
+const MAX_ANCESTOR_DEPTH = 64;
 
-/**
- * Deepest node whose span contains `position`.
- *
- * @param tsMod - TypeScript module.
- * @param sourceFile - the parsed file.
- * @param position - absolute offset.
- * @returns the node, or the source file when nothing narrower matches.
+/** Proven cursor context and syntax-safe replacement range. */
+export type SzContext =
+    | { readonly kind: 'key'; readonly replacementSpan: ts.TextSpan }
+    | {
+          readonly kind: 'value';
+          readonly property: string;
+          readonly quoted: boolean;
+          readonly replacementSpan: ts.TextSpan;
+      };
+
+/** Scan a bounded completion prefix around the cursor.
+ * @param text - Source text.
+ * @param position - UTF-16 cursor offset.
+ * @param allowHyphen - Whether Tailwind-style hyphens are accepted.
+ * @returns A replacement span capped to 256 code units in either direction.
  */
-function nodeAtPosition(tsMod: typeof ts, sourceFile: ts.SourceFile, position: number): ts.Node {
-    let match: ts.Node = sourceFile;
-    const visit = (node: ts.Node): void => {
-        if (position >= node.getStart(sourceFile) && position <= node.getEnd()) {
-            match = node;
-            node.forEachChild(visit);
-        }
-    };
-    sourceFile.forEachChild(visit);
-    return match;
+function replacementSpan(text: string, position: number, allowHyphen: boolean): ts.TextSpan {
+    const isPart = (character: string): boolean =>
+        /[\w$]/.test(character) || (allowHyphen && character === '-');
+    let start = position;
+    let end = position;
+    for (let count = 0; start > 0 && count < 256 && isPart(text[start - 1] ?? ''); count += 1)
+        start -= 1;
+    for (let count = 0; end < text.length && count < 256 && isPart(text[end] ?? ''); count += 1)
+        end += 1;
+    return { start, length: end - start };
 }
 
 /**
- * Whether `object` is the object argument of a csszyx sz surface (a `sz=`/`szs=`
- * JSX attribute, or an `szv(...)`/`szr(...)` call), possibly nested inside
- * variant objects within it.
- *
- * @param tsMod - TypeScript module.
- * @param object - the object literal to classify.
- * @returns true when the object belongs to an sz surface.
+ * Isolated compatibility adapter: public typings do not expose this stable scanner helper.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param sourceFile - Parsed source file.
+ * @param position - UTF-16 cursor offset.
+ * @returns The containing token, or undefined when the host lacks the helper.
  */
-function isSzObject(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolean {
-    let node: ts.Node = object;
-    // Walk outward through enclosing object literals / property assignments /
-    // arrays until we reach a JSX attribute or a call that anchors it as sz.
-    while (node.parent) {
-        const parent = node.parent;
+function tokenAtPosition(
+    tsMod: typeof ts,
+    sourceFile: ts.SourceFile,
+    position: number,
+): ts.Node | undefined {
+    const compat = tsMod as typeof ts & {
+        getTokenAtPosition?: (file: ts.SourceFile, position: number) => ts.Node;
+        findPrecedingToken?: (position: number, file: ts.SourceFile) => ts.Node | undefined;
+    };
+    if (!compat.getTokenAtPosition) {
+        // No whole-file fallback: an unsupported host loses csszyx completions but
+        // retains the untouched TypeScript service.
+        return undefined;
+    }
+    const token = compat.getTokenAtPosition(sourceFile, Math.max(0, position));
+    if (token.kind === tsMod.SyntaxKind.EndOfFileToken) {
+        // Unclosed syntax at end of file parks the cursor on the EOF token, whose
+        // ancestry skips the recovered object literal the user is typing in.
+        return compat.findPrecedingToken?.(position, sourceFile) ?? token;
+    }
+    return token;
+}
 
-        // sz={{ … }} / szs={{ … }} — object is inside a JsxExpression whose
-        // parent is a JsxAttribute with an sz name.
-        if (tsMod.isJsxExpression(parent) && parent.parent && tsMod.isJsxAttribute(parent.parent)) {
-            const name = parent.parent.name;
-            const attr = tsMod.isIdentifier(name) ? name.text : name.getText();
-            return SZ_JSX_ATTRS.has(attr);
+/** Read a static property name without evaluating computed syntax.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param property - Property assignment to inspect.
+ * @returns The static name, or undefined for computed syntax.
+ */
+function propertyName(tsMod: typeof ts, property: ts.PropertyAssignment): string | undefined {
+    const name = property.name;
+    if (tsMod.isIdentifier(name) || tsMod.isStringLiteral(name) || tsMod.isNumericLiteral(name)) {
+        return name.text;
+    }
+    return undefined;
+}
+
+/** Resolve a call to a proven csszyx import, with an incomplete-code fallback.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param sourceFile - Source containing the call.
+ * @param call - Candidate call expression.
+ * @param checker - Current program type checker.
+ * @param shouldStop - Cooperative deadline and cancellation check.
+ * @returns The csszyx API name, or undefined for local/unrelated symbols.
+ */
+function csszyxCallName(
+    tsMod: typeof ts,
+    sourceFile: ts.SourceFile,
+    call: ts.CallExpression,
+    checker: ts.TypeChecker,
+    shouldStop: () => boolean,
+): 'szv' | 'szr' | undefined {
+    if (tsMod.isPropertyAccessExpression(call.expression)) {
+        const receiver = checker.getSymbolAtLocation(call.expression.expression);
+        if (receiver) {
+            for (const declaration of (receiver.declarations ?? []).slice(0, 64)) {
+                if (shouldStop()) return undefined;
+                if (!tsMod.isNamespaceImport(declaration)) continue;
+                let current: ts.Node | undefined = declaration;
+                while (current && !tsMod.isImportDeclaration(current)) current = current.parent;
+                if (
+                    current &&
+                    tsMod.isStringLiteral(current.moduleSpecifier) &&
+                    CSSZYX_MODULES.has(current.moduleSpecifier.text)
+                ) {
+                    const name = call.expression.name.text;
+                    return name === 'szv' || name === 'szr' ? name : undefined;
+                }
+            }
+            return undefined;
         }
-
-        // szv({ … }) / szr({ … }) — object is (transitively) the first argument.
-        if (tsMod.isCallExpression(parent)) {
-            const callee = parent.expression;
-            const name = tsMod.isIdentifier(callee) ? callee.text : '';
-            if (SZ_CALLS.has(name)) {
-                return true;
+    }
+    const calledName = tsMod.isPropertyAccessExpression(call.expression)
+        ? call.expression.name
+        : call.expression;
+    const symbol = checker.getSymbolAtLocation(calledName);
+    if (symbol) {
+        for (const declaration of (symbol.declarations ?? []).slice(0, 64)) {
+            if (shouldStop()) return undefined;
+            let current: ts.Node | undefined = declaration;
+            while (current && !tsMod.isImportDeclaration(current)) current = current.parent;
+            if (
+                current &&
+                tsMod.isStringLiteral(current.moduleSpecifier) &&
+                CSSZYX_MODULES.has(current.moduleSpecifier.text)
+            ) {
+                if (tsMod.isIdentifier(call.expression)) {
+                    const imported = tsMod.isImportSpecifier(declaration)
+                        ? (declaration.propertyName?.text ?? declaration.name.text)
+                        : undefined;
+                    return imported === 'szv' || imported === 'szr' ? imported : undefined;
+                }
+                const name = calledName.getText(sourceFile);
+                return name === 'szv' || name === 'szr' ? name : undefined;
             }
         }
+        // A resolved local symbol is authoritative: never fall back to spelling.
+        return undefined;
+    }
 
-        // Keep climbing through object literals, property assignments, and
-        // arrays (variant tables, sz arrays) — anything else means we left the
-        // sz surface.
+    // Degraded-checker fallback for incomplete imports while the user is typing.
+    const named = new Map<string, string>();
+    const namespaces = new Set<string>();
+    let statementCount = 0;
+    for (const statement of sourceFile.statements) {
+        if (statementCount >= 2_048 || shouldStop()) return undefined;
+        statementCount += 1;
+        if (
+            !tsMod.isImportDeclaration(statement) ||
+            !tsMod.isStringLiteral(statement.moduleSpecifier)
+        )
+            continue;
+        if (!CSSZYX_MODULES.has(statement.moduleSpecifier.text)) continue;
+        const clause = statement.importClause;
+        if (!clause?.namedBindings) continue;
+        if (tsMod.isNamespaceImport(clause.namedBindings))
+            namespaces.add(clause.namedBindings.name.text);
+        else {
+            for (const specifier of clause.namedBindings.elements.slice(0, 256)) {
+                if (shouldStop()) return undefined;
+                named.set(specifier.name.text, specifier.propertyName?.text ?? specifier.name.text);
+            }
+        }
+    }
+    const expression = call.expression;
+    if (tsMod.isIdentifier(expression)) {
+        const imported = named.get(expression.text);
+        return imported === 'szv' || imported === 'szr' ? imported : undefined;
+    }
+    if (
+        tsMod.isPropertyAccessExpression(expression) &&
+        tsMod.isIdentifier(expression.expression) &&
+        namespaces.has(expression.expression.text) &&
+        (expression.name.text === 'szv' || expression.name.text === 'szr')
+    ) {
+        return expression.name.text;
+    }
+    return undefined;
+}
+
+/** Check JSX sz and slot-level szs ancestry.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param object - Candidate object literal.
+ * @returns Whether the object is a CSS-bearing JSX surface.
+ */
+function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolean {
+    let node: ts.Node = object;
+    let nested = false;
+    for (let depth = 0; node.parent && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
+        const parent = node.parent;
+        if (tsMod.isJsxExpression(parent) && tsMod.isJsxAttribute(parent.parent)) {
+            const name = parent.parent.name;
+            if (!tsMod.isIdentifier(name) || !SZ_JSX_ATTRS.has(name.text)) return false;
+            if (name.text === 'sz') return true;
+            if (!nested) return false;
+            const opening = parent.parent.parent.parent;
+            if (!tsMod.isJsxOpeningElement(opening) && !tsMod.isJsxSelfClosingElement(opening)) {
+                return false;
+            }
+            return !/^[a-z]/.test(opening.tagName.getText());
+        }
         if (
             tsMod.isObjectLiteralExpression(parent) ||
             tsMod.isPropertyAssignment(parent) ||
             tsMod.isArrayLiteralExpression(parent)
         ) {
+            if (tsMod.isPropertyAssignment(parent) || tsMod.isArrayLiteralExpression(parent)) {
+                nested = true;
+            }
             node = parent;
             continue;
+        }
+        if (tsMod.isParenthesizedExpression(parent) || tsMod.isConditionalExpression(parent)) {
+            node = parent;
+            continue;
+        }
+        break;
+    }
+    return false;
+}
+
+/** Check schema-aware szv/szr ancestry.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param sourceFile - Source containing the candidate.
+ * @param object - Candidate object literal.
+ * @param getChecker - Lazy current-program type checker factory.
+ * @param shouldStop - Cooperative deadline and cancellation check.
+ * @returns Whether the object is a CSS-bearing call surface.
+ */
+function callAnchor(
+    tsMod: typeof ts,
+    sourceFile: ts.SourceFile,
+    object: ts.ObjectLiteralExpression,
+    getChecker: () => ts.TypeChecker,
+    shouldStop: () => boolean,
+): boolean {
+    const path: string[] = [];
+    let node: ts.Node = object;
+    for (let depth = 0; node.parent && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
+        if (shouldStop()) return false;
+        const parent = node.parent;
+        if (tsMod.isPropertyAssignment(parent)) {
+            const name = propertyName(tsMod, parent);
+            if (!name) return false;
+            path.push(name);
+            node = parent;
+            continue;
+        }
+        if (tsMod.isObjectLiteralExpression(parent)) {
+            node = parent;
+            continue;
+        }
+        if (tsMod.isArrayLiteralExpression(parent)) {
+            node = parent;
+            continue;
+        }
+        if (
+            tsMod.isParenthesizedExpression(parent) ||
+            tsMod.isAsExpression(parent) ||
+            tsMod.isSatisfiesExpression(parent) ||
+            tsMod.isConditionalExpression(parent)
+        ) {
+            node = parent;
+            continue;
+        }
+        if (tsMod.isCallExpression(parent) && parent.arguments[0] === node) {
+            if (
+                tsMod.isPropertyAccessExpression(parent.expression) &&
+                parent.expression.name.text !== 'szv' &&
+                parent.expression.name.text !== 'szr'
+            ) {
+                return false;
+            }
+            const callName = csszyxCallName(tsMod, sourceFile, parent, getChecker(), shouldStop);
+            if (callName === 'szr') return true;
+            if (callName === 'szv') {
+                const rootToLeaf = path.reverse();
+                return (
+                    rootToLeaf[0] === 'base' ||
+                    (rootToLeaf[0] === 'variants' && rootToLeaf.length >= 3) ||
+                    (rootToLeaf[0] === 'compoundVariants' && rootToLeaf.includes('sz'))
+                );
+            }
+            return false;
         }
         return false;
     }
     return false;
 }
 
-/**
- * Returns `'key'` when the position sits at a key slot of an sz object, else
- * `null`.
- *
- * @param tsMod - TypeScript module.
- * @param sourceFile - the parsed file.
- * @param position - absolute offset.
- * @returns `'key'` or `null`.
+/** Classify a cursor without recursively traversing the source file.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param sourceFile - Current parsed source.
+ * @param position - UTF-16 cursor offset.
+ * @param getChecker - Lazy current-program type checker factory.
+ * @param shouldStop - Cooperative deadline and cancellation check.
+ * @returns A proven key/value context, otherwise null.
  */
-export function getSzKeyContext(
+export function getSzContext(
     tsMod: typeof ts,
     sourceFile: ts.SourceFile,
     position: number,
-): 'key' | null {
-    const node = nodeAtPosition(tsMod, sourceFile, position);
-
-    // Find the nearest enclosing object literal.
+    getChecker: () => ts.TypeChecker,
+    shouldStop: () => boolean = () => false,
+): SzContext | null {
+    if (sourceFile.isDeclarationFile || position < 0 || position > sourceFile.getFullText().length)
+        return null;
+    const token = tokenAtPosition(tsMod, sourceFile, position);
+    if (!token) return null;
     let object: ts.ObjectLiteralExpression | undefined;
-    for (let cur: ts.Node | undefined = node; cur; cur = cur.parent) {
-        if (tsMod.isObjectLiteralExpression(cur)) {
-            object = cur;
+    let valueProperty: ts.PropertyAssignment | undefined;
+    for (
+        let current: ts.Node | undefined = token, depth = 0;
+        current && depth < MAX_ANCESTOR_DEPTH;
+        current = current.parent, depth += 1
+    ) {
+        if (shouldStop()) return null;
+        if (
+            tsMod.isPropertyAssignment(current) &&
+            position >= current.initializer.getFullStart() &&
+            position <= current.initializer.getEnd()
+        ) {
+            valueProperty = current;
+        }
+        if (tsMod.isObjectLiteralExpression(current)) {
+            object = current;
             break;
         }
-        // A value expression (string, number, etc.) that is a property's
-        // initializer means we are at a VALUE position, not a key.
-        if (tsMod.isPropertyAssignment(cur) && cur.initializer.getStart(sourceFile) <= position) {
-            return null;
-        }
     }
-    if (!object || !isSzObject(tsMod, object)) {
+    if (
+        !object ||
+        (!jsxAnchor(tsMod, object) &&
+            !callAnchor(tsMod, sourceFile, object, getChecker, shouldStop))
+    )
         return null;
-    }
 
-    // An empty value slot (`{ bg: | }`) has no initializer node to span-test, so
-    // check the text: the nearest non-whitespace character before the cursor is a
-    // colon → value position, not a key.
     const text = sourceFile.getFullText();
-    let scan = position - 1;
+    if (valueProperty?.parent === object) {
+        const name = propertyName(tsMod, valueProperty);
+        return name
+            ? {
+                  kind: 'value',
+                  property: name,
+                  quoted: tsMod.isStringLiteralLike(valueProperty.initializer),
+                  replacementSpan: replacementSpan(text, position, true),
+              }
+            : null;
+    }
     const objectStart = object.getStart(sourceFile);
-    while (scan > objectStart && /\s/.test(text[scan] ?? '')) {
+    // Classify by what precedes the TYPED PREFIX, not the last typed character:
+    // `bg: re|` must read the `:` behind `re` and stay a value slot, and a key
+    // slot must sit right after `{` or `,`. Anything else is an unproven cursor.
+    let prefixStart = position;
+    for (
+        let count = 0;
+        prefixStart > objectStart && count < 256 && /[\w$-]/.test(text[prefixStart - 1] ?? '');
+        count += 1
+    ) {
+        prefixStart -= 1;
+    }
+    if (prefixStart > objectStart && /[\w$-]/.test(text[prefixStart - 1] ?? '')) return null;
+    let scan = prefixStart - 1;
+    let whitespaceCount = 0;
+    while (scan > objectStart && whitespaceCount < 256 && /\s/.test(text[scan] ?? '')) {
         scan -= 1;
+        whitespaceCount += 1;
     }
+    if (whitespaceCount === 256) return null;
     if (text[scan] === ':') {
-        return null;
-    }
-
-    // Inside the object: value position when the cursor is within a property's
-    // initializer span; key position otherwise.
-    for (const prop of object.properties) {
-        if (
-            tsMod.isPropertyAssignment(prop) &&
-            position > prop.initializer.getStart(sourceFile) - 1 &&
-            position <= prop.initializer.getEnd()
+        let nameEnd = scan;
+        let nameWhitespace = 0;
+        while (
+            nameEnd > objectStart &&
+            nameWhitespace < 256 &&
+            /\s/.test(text[nameEnd - 1] ?? '')
         ) {
-            return null;
+            nameEnd -= 1;
+            nameWhitespace += 1;
         }
+        if (nameWhitespace === 256) return null;
+        let nameStart = nameEnd;
+        for (
+            let count = 0;
+            nameStart > objectStart && count < 256 && /[\w$]/.test(text[nameStart - 1] ?? '');
+            count += 1
+        ) {
+            nameStart -= 1;
+        }
+        const name = text.slice(nameStart, nameEnd);
+        return name && /[A-Z_$]/i.test(name[0] ?? '')
+            ? {
+                  kind: 'value',
+                  property: name,
+                  quoted: false,
+                  replacementSpan: replacementSpan(text, position, true),
+              }
+            : null;
     }
-    return 'key';
+    if (text[scan] === '{' || text[scan] === ',') {
+        return { kind: 'key', replacementSpan: replacementSpan(text, position, false) };
+    }
+    return null;
 }

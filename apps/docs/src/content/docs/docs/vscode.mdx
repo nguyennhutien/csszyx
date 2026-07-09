@@ -6,6 +6,13 @@ description: IntelliSense, hover, and diagnostics for sz props in VS Code.
 `@csszyx/vscode` adds first-class editor support for `sz` props: autocompletion,
 hover previews, and inline diagnostics — with zero configuration required.
 
+For completion through compatible TypeScript hosts outside VS Code, see the
+[TypeScript Autocomplete Plugin](/docs/typescript-plugin/). The two providers
+coexist automatically: when a workspace `tsconfig.json` loads the plugin, the
+extension yields `sz` completions to it so you never see duplicate suggestions —
+no manual `tsconfig` edits required. Hover and diagnostics stay on either way.
+Override with the [`csszyx.completions`](#settings) setting.
+
 ## Features
 
 ### Autocompletion
@@ -73,8 +80,12 @@ pnpm build
 
 | Setting | Default | Description |
 |---------|---------|-------------|
+| `csszyx.completions` | `"auto"` | Who provides `sz` completions. `auto` yields to `@csszyx/ts-plugin` when a workspace `tsconfig.json` loads it; `extension` always provides them (may duplicate); `off` never provides them |
 | `csszyx.enableDiagnostics` | `true` | Show unknown-prop warnings |
 | `csszyx.enableHover` | `true` | Show hover preview |
+
+Changing `csszyx.completions` takes effect immediately — the extension
+registers or removes its completion provider without a window reload.
 
 ## Supported Languages
 

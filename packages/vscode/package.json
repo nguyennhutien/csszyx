@@ -55,6 +55,21 @@
     "configuration": {
       "title": "CSSzyx",
       "properties": {
+        "csszyx.completions": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "extension",
+            "off"
+          ],
+          "markdownEnumDescriptions": [
+            "**Recommended.** Yield `sz`/`szv`/`szs` completions to `@csszyx/ts-plugin` when a workspace `tsconfig.json` loads it; otherwise the extension provides them. This is what prevents duplicate suggestions.",
+            "Always provide completions from the extension, even when `@csszyx/ts-plugin` is configured. May show duplicate entries if the plugin is also active.",
+            "Never provide `sz` completions from the extension. Hover and diagnostics are unaffected."
+          ],
+          "default": "auto",
+          "markdownDescription": "Who provides `sz`/`szv`/`szs` completions. In `auto`, the extension yields to `@csszyx/ts-plugin` when a workspace `tsconfig.json` loads it, so you never see duplicate suggestions."
+        },
         "csszyx.enableDiagnostics": {
           "type": "boolean",
           "default": true,
@@ -80,6 +95,7 @@
   "devDependencies": {
     "@babel/parser": "^7.23.0",
     "@csszyx/compiler": "workspace:*",
+    "@csszyx/tooling-metadata": "workspace:*",
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.0.0",

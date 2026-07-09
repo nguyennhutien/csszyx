@@ -235,3 +235,27 @@
   transform: "cpu";
 } // transform-cpu (disable GPU compositing)
 ```
+
+## TypeScript authoring plugin
+
+Install `@csszyx/ts-plugin` as a dev dependency and add it under
+`compilerOptions.plugins`:
+
+```jsonc
+{ "compilerOptions": { "plugins": [{ "name": "@csszyx/ts-plugin" }] } }
+```
+
+It adds static key/value completions in JSX `sz`, nested variants,
+`szv({ base, variants.*.* })`, imported `szr()`, and each component `szs` slot
+object. It does not suggest CSS keys at the outer `szs` slot-name level.
+Function-call completion requires a direct, aliased, or namespace import from
+`csszyx` / `@csszyx/runtime`; never infer CSSzyx behavior from a local function
+merely named `szv` or `szr`.
+
+Value suggestions are curated, not a validity allowlist. Tailwind 4 numeric
+values remain open-ended (`{ p: 13, w: 137 }` is valid even when not listed).
+Current plugin scope excludes theme-token loading, hover, diagnostics, syntax
+highlighting, network access, telemetry, and Tailwind config/plugin execution.
+The plugin is self-contained: its metadata is bundled at build time, so it
+installs with no runtime dependencies and there is no separate metadata package
+to install.

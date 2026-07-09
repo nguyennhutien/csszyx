@@ -1,0 +1,212 @@
+---
+title: TypeScript Autocomplete Plugin
+description: Portable sz key and value completions through the TypeScript language service.
+---
+
+`@csszyx/ts-plugin` adds CSSzyx autocomplete to editors that load TypeScript
+project plugins. It understands where an `sz` object is being authored and adds
+bounded key and value suggestions without replacing TypeScript's own results.
+
+:::caution[Preview availability]
+The package is implemented and tested against TypeScript 5.9 and 6.x, but its
+first npm publication and the wider editor/OS certification matrix are still
+release gates. A TypeScript plugin is not a universal LSP: each editor decides
+whether project plugins are loaded.
+:::
+
+## Install
+
+```bash
+pnpm add -D @csszyx/ts-plugin typescript
+```
+
+Add the plugin under `compilerOptions` in the `tsconfig.json` that owns the files
+you edit:
+
+```jsonc
+{
+  "compilerOptions": {
+    "plugins": [{ "name": "@csszyx/ts-plugin" }],
+  },
+}
+```
+
+Then select your workspace TypeScript version and restart the editor's
+TypeScript service. In a monorepo, put the entry in the leaf `tsconfig`, not only
+the repository root.
+
+## What you get while coding
+
+### `sz` keys, values, and nested variants
+
+At a key position, the plugin suggests CSSzyx props and variants such as `bg`,
+`p`, `rounded`, `hover`, `dark`, and `md`:
+
+```tsx
+<div
+  sz={{
+    bg: "blue-500",
+    p: 4,
+    hover: {
+      bg: "blue-600",
+    },
+  }}
+/>
+```
+
+At a value position it offers a curated, useful subset rather than an enormous
+list. String values are inserted with quotes; numbers are inserted as numbers:
+
+```tsx
+sz={{ bg: 'red-500', p: 4 }}
+//       string       number
+```
+
+Tailwind 4 accepts open-ended numeric values, so autocomplete does not define
+the allowed range. You can type a number that is not shown in the dropdown:
+
+```tsx
+<div sz={{ p: 13, w: 137 }} />
+```
+
+If you already opened a string, accepting a completion replaces only the typed
+prefix and does not add a second pair of quotes:
+
+```tsx
+// Before accepting red-500
+<div sz={{ bg: 'red-' }} />
+
+// After
+<div sz={{ bg: 'red-500' }} />
+```
+
+### `szv()` and `szr()` authoring
+
+Call-site completion requires a proven import from `csszyx` or
+`@csszyx/runtime`. Direct, aliased, and namespace imports work; an unrelated
+local function named `szv` does not activate the plugin.
+
+```tsx
+import { szv } from "csszyx";
+
+const buttonSz = szv({
+  base: {
+    px: 4,
+    rounded: "md",
+  },
+  variants: {
+    tone: {
+      primary: { bg: "blue-600", color: "white" },
+      danger: { bg: "red-600", color: "white" },
+    },
+  },
+});
+```
+
+```tsx
+import { szv as variants } from "csszyx";
+import * as csszyx from "@csszyx/runtime";
+
+variants({ base: { p: 4 } });
+csszyx.szr({ hover: { opacity: 80 } });
+```
+
+### `szs` slot styles
+
+The outer keys of `szs` are component slot names, so the plugin deliberately
+does not suggest CSS props there. CSSzyx completions begin inside each slot's
+style object:
+
+```tsx
+<Card
+  szs={{
+    // Slot-name level: write header/body/icon yourself.
+    header: {
+      // Style level: bg, p, hover, md, ... are suggested here.
+      bg: "gray-100",
+      p: 4,
+    },
+    body: { color: "slate-900" },
+  }}
+/>
+```
+
+`szs` completion is limited to component tags such as `Card` or `Card.Header`;
+it is not offered on intrinsic tags such as `<div>`.
+
+## Configuration
+
+Most projects should specify only the plugin name. These are the effective
+defaults:
+
+```jsonc
+{
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@csszyx/ts-plugin",
+        "enabled": true,
+        "values": true,
+        "maxEntries": 512,
+        "deadlineMs": 20,
+        "failureThreshold": 3,
+      },
+    ],
+  },
+}
+```
+
+| Option             | Default | Plain-language meaning                                                                                                                 |
+| ------------------ | ------: | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`          |  `true` | Master switch. Set `false` to disable CSSzyx additions without uninstalling.                                                           |
+| `values`           |  `true` | Suggest values after `:`. Key and variant suggestions remain when disabled.                                                            |
+| `maxEntries`       |   `512` | Maximum CSSzyx suggestions added to one request. Prevents noisy, unbounded lists.                                                      |
+| `deadlineMs`       |    `20` | Time budget for CSSzyx work. An over-budget result is discarded, so the editor keeps TypeScript's original completion result.          |
+| `failureThreshold` |     `3` | Consecutive errors/timeouts before the project circuit breaker pauses CSSzyx work. Changing config or restarting TypeScript resets it. |
+
+Invalid option values are replaced with bounded defaults. A plugin failure never
+replaces the base TypeScript completion result.
+
+## Plugin or VS Code extension?
+
+| Capability                                      | TypeScript plugin | VS Code extension |
+| ----------------------------------------------- | ----------------- | ----------------- |
+| `sz`/`szv`/`szr`/`szs` key and value completion | Yes               | Yes, VS Code only |
+| TypeScript-host portability                     | Host-dependent    | No                |
+| Hover preview                                   | Not yet           | Yes               |
+| Diagnostics and syntax highlighting             | No                | Yes               |
+| Generated `.csszyx/theme.d.ts` types            | Continue to apply | Continue to apply |
+
+The two providers coexist automatically inside VS Code. When a workspace
+`tsconfig.json` loads this plugin, the extension detects it and yields `sz`
+completions to the plugin, so you never see duplicate suggestions — keep both
+installed and edit nothing. The extension's hover and diagnostics stay active
+regardless. To force the extension to provide completions anyway, set
+`csszyx.completions` to `"extension"`. Editors other than VS Code that load the
+plugin are served by the plugin alone.
+
+## Troubleshooting
+
+If completions do not appear:
+
+1. Confirm the plugin entry is inside `compilerOptions`.
+2. Confirm the edited file belongs to that `tsconfig.json`.
+3. Select the workspace TypeScript version.
+4. Restart the TypeScript service or reload the editor window.
+5. Check whether the editor supports TypeScript project plugins.
+
+### Health check
+
+To confirm the plugin actually loaded, open the TypeScript Server log and search
+for `csszyx-ts-plugin`. On activation the plugin writes one line, e.g.
+`[csszyx-ts-plugin] activated (completions on, values on)`. If that line is
+absent, the plugin did not load — this distinguishes a healthy install that is
+merely quiet from an unsupported host. In VS Code, run **TypeScript: Open TS
+Server Log** (enable logging first via `"typescript.tsserver.log": "verbose"`).
+
+To roll back, remove the plugin entry and restart TypeScript. Plain CSSzyx types
+and the VS Code extension continue to work.
+
+The plugin is self-contained: its completion metadata is bundled in at build
+time, so it installs with no runtime dependencies. That shared metadata is an
+internal csszyx package and is not published or installed separately.

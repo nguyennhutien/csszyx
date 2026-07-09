@@ -335,13 +335,13 @@ Composing multiple classes for a single effect.
 
 Mapping precise, non-theme values to JIT syntax (Arbitrary Properties or Values).
 
-| Concept              | CSS Property                                                | Tailwind v4 Class                  | `sz` Prop (Object Syntax)               | Note                                              |
-| :------------------- | :---------------------------------------------------------- | :--------------------------------- | :-------------------------------------- | :------------------------------------------------ |
-| **Arbitrary Color**  | `background-color: #316ff6`                                 | `bg-[#316ff6]`                     | `{ bg: '#316ff6' }`                     | Preferred over inline styles for caching.         |
-| **Arbitrary Size**   | `width: 333px`                                              | `w-[333px]`                        | `{ w: '333px' }`                        | Explicit unit required string.                    |
-| **Data Prop**        | `content: attr(data-content)`                               | `content-[attr(data-content)]`     | `{ content: 'attr(data-content)' }`     | Complex arbitrary strings.                        |
-| **CSS Variable**     | `padding: var(--gap)`                                       | `p-(--gap)`                        | `{ p: '--gap' }`                        | Bare `--name` → **parenthesized** var sugar.      |
-| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`                       | `text-[--spacing(4)]`              | `{ text: '--spacing(4)' }`              | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
+| Concept              | CSS Property                                                | Tailwind v4 Class                    | `sz` Prop (Object Syntax)                  | Note                                              |
+| :------------------- | :---------------------------------------------------------- | :----------------------------------- | :----------------------------------------- | :------------------------------------------------ |
+| **Arbitrary Color**  | `background-color: #316ff6`                                 | `bg-[#316ff6]`                       | `{ bg: '#316ff6' }`                        | Preferred over inline styles for caching.         |
+| **Arbitrary Size**   | `width: 333px`                                              | `w-[333px]`                          | `{ w: '333px' }`                           | Explicit unit required string.                    |
+| **Data Prop**        | `content: attr(data-content)`                               | `content-[attr(data-content)]`       | `{ content: 'attr(data-content)' }`        | Complex arbitrary strings.                        |
+| **CSS Variable**     | `padding: var(--gap)`                                       | `p-(--gap)`                          | `{ p: '--gap' }`                           | Bare `--name` → **parenthesized** var sugar.      |
+| **Build-Time Fn**    | `font-size: calc(var(--spacing) * 4)`                       | `text-[--spacing(4)]`                | `{ text: '--spacing(4)' }`                 | `--name(...)` → **bracketed** arbitrary (v4.3.2). |
 | **Alpha Fn (color)** | `color: color-mix(in oklab, var(--brand) 50%, transparent)` | `text-[--alpha(var(--brand)_/_50%)]` | `{ color: '--alpha(var(--brand) / 50%)' }` | Tailwind color function; same `--fn(...)` rule.   |
 
 **`--` prefix — the one rule that decides parens vs brackets** (applies to EVERY
@@ -2984,6 +2984,48 @@ Utilities for controlling the alignment of table captions.
 
 
 ## Tooling
+
+### TypeScript Language-Service Plugin (`@csszyx/ts-plugin`)
+
+Portable static completion for TypeScript hosts that load project plugins. A
+TypeScript plugin is not a universal LSP; host support must be verified.
+
+```bash
+pnpm add -D @csszyx/ts-plugin typescript
+```
+
+```jsonc
+{
+  "compilerOptions": {
+    "plugins": [{ "name": "@csszyx/ts-plugin" }],
+  },
+}
+```
+
+**AIX capability contract:**
+
+- Complete keys and curated values in JSX `sz`, including nested variants and conditional object branches.
+- Complete CSS keys inside each component `szs` slot object; do not offer CSS keys at the outer slot-name level or on intrinsic-element `szs`.
+- Complete `szv` styles in `base` and `variants.<axis>.<option>`; complete imported `szr` objects.
+- Accept direct, aliased, and namespace imports from `csszyx` / `@csszyx/runtime`; reject local/shadowed/unrelated same-spelled functions.
+- Insert numeric suggestions without quotes and string suggestions with quotes. Suggestions are not validation: Tailwind 4 numeric values are open-ended.
+- Preserve TypeScript's base completions. On cancellation, timeout, or internal failure, return the untouched base result.
+
+Defaults: `enabled: true`, `values: true`, `maxEntries: 512`,
+`deadlineMs: 20`, `failureThreshold: 3`. Usually emit only `{ "name":
+"@csszyx/ts-plugin" }`; do not add tuning options without a demonstrated need.
+
+**Not provided by this plugin:** theme-aware values, hover previews,
+diagnostics, syntax highlighting, Tailwind config/plugin execution, network, or
+telemetry. Those capabilities must not be inferred. The plugin is
+self-contained: its metadata is bundled at build time, so it installs with no
+runtime dependencies and there is no separate metadata package to install.
+
+Coexistence with `@csszyx/vscode` is automatic: when a workspace `tsconfig.json`
+loads this plugin, the extension yields `sz` completions to it, so both can be
+installed without duplicate suggestions. The extension's `csszyx.completions`
+setting (`auto` | `extension` | `off`) overrides this; `auto` is the yielding
+default. The extension's hover and diagnostics are unaffected.
 
 ### VS Code Extension (`@csszyx/vscode`)
 

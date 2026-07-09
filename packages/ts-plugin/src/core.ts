@@ -1,35 +1,52 @@
-/**
- * The testable core of the plugin: given a language service, a file, and a
- * position, return the csszyx completion entries to merge (empty when the
- * position is not an sz key slot). Kept separate from `index.ts` so it can be
- * unit-tested — `index.ts` is a CommonJS `export =` plugin entry and cannot carry
- * named exports.
- */
 import type ts from 'typescript/lib/tsserverlibrary';
 
-import { buildSzKeyEntries } from './completions';
-import { getSzKeyContext } from './context';
+import { buildSzKeyEntries, buildSzValueEntries } from './completions';
+import type { PluginConfig } from './config';
+import { getSzContext } from './context';
 
-/**
- * @param tsMod - the tsserver TypeScript module.
- * @param languageService - the underlying language service.
- * @param fileName - file under the cursor.
- * @param position - absolute offset.
- * @returns entries to append (possibly empty).
+/** Compute csszyx entries without mutating the base language service.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param languageService - Project language service.
+ * @param fileName - Requested source file.
+ * @param position - UTF-16 source offset.
+ * @param config - Immutable project configuration.
+ * @param deadline - Monotonic request deadline.
+ * @param isCancellationRequested - Host cancellation check.
+ * @returns Bounded csszyx entries, or an empty list outside proven contexts.
  */
 export function computeSzEntries(
     tsMod: typeof ts,
     languageService: ts.LanguageService,
     fileName: string,
     position: number,
+    config: PluginConfig,
+    deadline: number,
+    isCancellationRequested: () => boolean = () => false,
 ): ts.CompletionEntry[] {
+    const shouldStop = (): boolean => isCancellationRequested() || performance.now() > deadline;
+    if (!config.enabled || shouldStop()) return [];
     const program = languageService.getProgram();
     const sourceFile = program?.getSourceFile(fileName);
-    if (!sourceFile) {
-        return [];
+    if (!program || !sourceFile || shouldStop()) return [];
+    const context = getSzContext(
+        tsMod,
+        sourceFile,
+        position,
+        () => program.getTypeChecker(),
+        shouldStop,
+    );
+    if (!context || shouldStop()) return [];
+    if (context.kind === 'value') {
+        return config.values
+            ? buildSzValueEntries(
+                  tsMod,
+                  context.property,
+                  config.maxEntries,
+                  context.replacementSpan,
+                  context.quoted,
+                  shouldStop,
+              )
+            : [];
     }
-    if (getSzKeyContext(tsMod, sourceFile, position) !== 'key') {
-        return [];
-    }
-    return buildSzKeyEntries(tsMod);
+    return buildSzKeyEntries(tsMod, config.maxEntries, context.replacementSpan, shouldStop);
 }
