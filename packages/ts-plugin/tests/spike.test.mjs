@@ -263,4 +263,47 @@ check('the first value suggestion is marked recommended', () => {
     );
 });
 
+// Sibling exclusion: a key already assigned in the object is never useful to
+// suggest again (a duplicate silently overrides), while the key being typed or
+// edited must never exclude itself, and invisible spreads change nothing.
+check('assigned sibling keys disappear from key suggestions', () => {
+    const names = namesAtMarker("const A = () => <div sz={{ color: 'red-500', c/*|*/ }} />;");
+    assert.ok(!names.includes('color'), 'assigned sibling is excluded');
+    assert.ok(names.includes('caption'), 'other keys stay');
+});
+
+check('the key being typed or edited never excludes itself', () => {
+    assert.ok(namesAtMarker('const A = () => <div sz={{ c/*|*/ }} />;').includes('color'));
+    assert.ok(
+        namesAtMarker("const A = () => <div sz={{ col/*|*/or: 'red-500' }} />;").includes('color'),
+    );
+});
+
+check('spreads exclude nothing and shorthands exclude themselves', () => {
+    assert.ok(namesAtMarker('const A = () => <div sz={{ ...base, /*|*/ }} />;').includes('p'));
+    const names = namesAtMarker('const A = () => <div sz={{ truncate, /*|*/ }} />;');
+    assert.ok(!names.includes('truncate'));
+    assert.ok(names.includes('p'));
+});
+
+check('sibling exclusion applies inside szv option objects', () => {
+    const names = namesAtMarker(
+        "import { szv } from 'csszyx'; szv({ variants: { size: { sm: { color: 'red-500', /*|*/ } } } });",
+    );
+    assert.ok(!names.includes('color'));
+    assert.ok(names.includes('bg'));
+});
+
+// The szv value slot behind a fresh/auto-paired quote — the field report said
+// this stayed dark; lock that values flow inside variant option objects.
+check('szv option values complete behind a quote', () => {
+    const entries = entriesAtMarker(
+        "import { szv } from 'csszyx'; szv({ variants: { size: { sm: { bg: '/*|*/' } } } });",
+    );
+    assert.strictEqual(
+        entries.find(entry => entry.name === 'red-500')?.insertText,
+        'red-500',
+    );
+});
+
 console.log(`\n${pass} spike checks passed`);

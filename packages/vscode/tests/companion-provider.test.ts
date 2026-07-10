@@ -147,4 +147,73 @@ describe('SzCompanionProvider', () => {
         expect(itemsAt('const config = { retries:| }', trigger(':'))).toBeUndefined();
         expect(itemsAt('const x:| number = 1', trigger(':'))).toBeUndefined();
     });
+
+    // R1 — property-parent gate parity with the tsserver plugin.
+    it('stays silent inside a nested object under a utility property', () => {
+        expect(itemsAt('const A = () => <div sz={{ bg: {|', trigger('{'))).toBeUndefined();
+        expect(itemsAt('const A = () => <div sz={{ hover: { p: {|', trigger('{'))).toBeUndefined();
+        expect(itemsAt("const A = () => <div sz={{ 'bg': {|", trigger('{'))).toBeUndefined();
+    });
+
+    it('keeps variant and unknown parents suggesting', () => {
+        expect(
+            itemsAt('const A = () => <div sz={{ hover: {|', trigger('{'))?.length,
+        ).toBeGreaterThan(300);
+        expect(
+            itemsAt('const A = () => <div sz={{ fooVariant: {|', trigger('{'))?.length,
+        ).toBeGreaterThan(300);
+    });
+
+    // R2 — sibling keys already assigned disappear from key lists.
+    it('excludes assigned siblings but keeps everything else', () => {
+        const items = itemsAt("const A = () => <div sz={{ color: 'red', |", trigger(','));
+        const labels = items?.map(item => (typeof item.label === 'string' ? item.label : ''));
+        expect(labels).not.toContain('color');
+        expect(labels).toContain('caption');
+    });
+
+    it('scopes sibling exclusion to the cursor object only', () => {
+        const items = itemsAt('const A = () => <div sz={{ hover: { p: 4 }, |', trigger(','));
+        const labels = items?.map(item => (typeof item.label === 'string' ? item.label : ''));
+        expect(labels).not.toContain('hover');
+        expect(labels).toContain('p');
+    });
+
+    // C — szv/szr call sites and the szs attribute.
+    const szvDoc = (tail: string) => `import { szv } from 'csszyx';\nconst s = szv(${tail}`;
+
+    it("opens per-key values on ':' inside a szv option object — the field report", () => {
+        const items = itemsAt(szvDoc('{ variants: { size: { sm: { bg:| } } } })'), trigger(':'));
+        expect(items?.some(item => item.label === 'red-500')).toBe(true);
+    });
+
+    it('opens key items inside szv style objects but not at schema levels', () => {
+        expect(
+            itemsAt(szvDoc('{ variants: { size: { sm: {|'), trigger('{'))?.length,
+        ).toBeGreaterThan(300);
+        expect(itemsAt(szvDoc('{ variants: {|'), trigger('{'))).toBeUndefined();
+        expect(itemsAt(szvDoc('{|'), trigger('{'))).toBeUndefined();
+        expect(itemsAt(szvDoc('{ base: {|'), trigger('{'))?.length).toBeGreaterThan(300);
+    });
+
+    it('requires a csszyx import for call forms', () => {
+        expect(
+            itemsAt('const szv = (x) => x; szv({ variants: { size: { sm: {|', trigger('{')),
+        ).toBeUndefined();
+    });
+
+    it('serves szr and the szs slot styles, but never szs slot names', () => {
+        expect(
+            itemsAt("import { szr } from 'csszyx';\nszr({|", trigger('{'))?.length,
+        ).toBeGreaterThan(300);
+        expect(itemsAt('const A = () => <Card szs={{|', trigger('{'))).toBeUndefined();
+        expect(
+            itemsAt('const A = () => <Card szs={{ header: {|', trigger('{'))?.length,
+        ).toBeGreaterThan(300);
+        expect(
+            itemsAt('const A = () => <Card szs={{ header: { bg:| }', trigger(':'))?.some(
+                item => item.label === 'red-500',
+            ),
+        ).toBe(true);
+    });
 });

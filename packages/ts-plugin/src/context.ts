@@ -1,38 +1,55 @@
-import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from '@csszyx/tooling-metadata';
+import { chainAllowsNesting, szvStyleChain } from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
 
 const SZ_JSX_ATTRS = new Set(['sz', 'szs']);
 const CSSZYX_MODULES = new Set(['csszyx', '@csszyx/runtime']);
 const MAX_ANCESTOR_DEPTH = 64;
-
-/** Utility property keys. Their values are strings/numbers, never objects, so a
- * nested object under one of them (`borderColor: { … }`) is not sz syntax and
- * must get no suggestions. Variant keys and unknown (arbitrary/custom-variant)
- * keys are absent from this set — classification stays syntax-first and gives
- * unknown parents the benefit of the doubt. PROPERTY_MAP and KNOWN_VARIANTS are
- * disjoint, so a variant name can never be blocked by this set. */
-const PROPERTY_KEYS = new Set<string>([...Object.keys(PROPERTY_MAP), ...BOOLEAN_SHORTHANDS]);
-
-/** Check that no key owning a nested object along the chain is a utility property.
- * @param names - Intermediate property-name chain to validate.
- * @returns Whether every name may legally own a nested style object.
- */
-function chainAllowsNesting(names: readonly string[]): boolean {
-    for (const name of names) {
-        if (PROPERTY_KEYS.has(name)) return false;
-    }
-    return true;
-}
+/** Sibling-collection cap: past it, exclusion is partial, never a rejection. */
+const MAX_SIBLINGS = 256;
 
 /** Proven cursor context and syntax-safe replacement range. */
 export type SzContext =
-    | { readonly kind: 'key'; readonly replacementSpan: ts.TextSpan }
+    | {
+          readonly kind: 'key';
+          readonly replacementSpan: ts.TextSpan;
+          /** Keys already assigned in the enclosing object (bounded, may be partial). */
+          readonly siblings: readonly string[];
+      }
     | {
           readonly kind: 'value';
           readonly property: string;
           readonly quoted: boolean;
           readonly replacementSpan: ts.TextSpan;
       };
+
+/** Collect the completed sibling keys of an object literal.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param object - Enclosing object literal.
+ * @param position - Cursor offset; the property whose NAME contains it is the
+ * key being typed/edited and must never exclude itself.
+ * @returns Statically named keys, capped at MAX_SIBLINGS (partial past the cap).
+ */
+function siblingKeys(
+    tsMod: typeof ts,
+    object: ts.ObjectLiteralExpression,
+    position: number,
+): string[] {
+    const names: string[] = [];
+    for (const property of object.properties.slice(0, MAX_SIBLINGS)) {
+        const nameNode = property.name;
+        if (nameNode && position >= nameNode.getStart() && position <= nameNode.getEnd()) {
+            continue;
+        }
+        if (tsMod.isPropertyAssignment(property)) {
+            const name = propertyName(tsMod, property);
+            if (name !== undefined) names.push(name);
+        } else if (tsMod.isShorthandPropertyAssignment(property)) {
+            names.push(property.name.text);
+        }
+        // Spreads and computed names are invisible statically: fail open.
+    }
+    return names;
+}
 
 /** Scan a bounded completion prefix around the cursor.
  * @param text - Source text.
@@ -311,16 +328,8 @@ function callAnchor(
             // names are schema, not style keys, and are exempt.
             if (callName === 'szr') return chainAllowsNesting(path);
             if (callName === 'szv') {
-                const rootToLeaf = path.reverse();
-                if (rootToLeaf[0] === 'base') return chainAllowsNesting(rootToLeaf.slice(1));
-                if (rootToLeaf[0] === 'variants' && rootToLeaf.length >= 3) {
-                    return chainAllowsNesting(rootToLeaf.slice(3));
-                }
-                if (rootToLeaf[0] === 'compoundVariants') {
-                    const szIndex = rootToLeaf.indexOf('sz');
-                    return szIndex >= 0 && chainAllowsNesting(rootToLeaf.slice(szIndex + 1));
-                }
-                return false;
+                const styleChain = szvStyleChain(path.reverse());
+                return styleChain !== null && chainAllowsNesting(styleChain);
             }
             return false;
         }
@@ -438,7 +447,11 @@ export function getSzContext(
             : null;
     }
     if (text[scan] === '{' || text[scan] === ',') {
-        return { kind: 'key', replacementSpan: replacementSpan(text, position, false) };
+        return {
+            kind: 'key',
+            replacementSpan: replacementSpan(text, position, false),
+            siblings: siblingKeys(tsMod, object, position),
+        };
     }
     return null;
 }

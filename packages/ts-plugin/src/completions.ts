@@ -80,6 +80,8 @@ function entry(
  * @param limit - Maximum entries to return.
  * @param replacementSpan - Source span replaced on acceptance.
  * @param shouldStop - Cooperative deadline and cancellation check.
+ * @param exclude - Sibling keys already assigned in the object; suggesting a
+ * key twice in one object is never useful (duplicates override silently).
  * @returns Key completion entries, or an empty list for an unsupported schema.
  */
 export function buildSzKeyEntries(
@@ -87,12 +89,14 @@ export function buildSzKeyEntries(
     limit: number,
     replacementSpan: ts.TextSpan,
     shouldStop: () => boolean = () => false,
+    exclude?: ReadonlySet<string>,
 ): ts.CompletionEntry[] {
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     const result: ts.CompletionEntry[] = [];
     for (const name of KEY_NAMES) {
         if (result.length % 32 === 0 && shouldStop()) break;
         if (result.length >= limit) break;
+        if (exclude?.has(name)) continue;
         result.push(entry(tsMod, name, 'key', result.length, replacementSpan));
     }
     return result;

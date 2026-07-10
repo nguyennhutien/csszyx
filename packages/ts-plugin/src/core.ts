@@ -48,5 +48,11 @@ export function computeSzEntries(
               )
             : [];
     }
-    return buildSzKeyEntries(tsMod, config.maxEntries, context.replacementSpan, shouldStop);
+    return buildSzKeyEntries(
+        tsMod,
+        config.maxEntries,
+        context.replacementSpan,
+        shouldStop,
+        new Set(context.siblings),
+    );
 }

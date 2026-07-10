@@ -4,6 +4,13 @@
  * This is an implementation package; application developers should install
  * `@csszyx/ts-plugin` rather than depending on this package directly.
  */
+
+export {
+    chainAllowsNesting,
+    isUtilityPropertyKey,
+    PROPERTY_KEYS,
+    szvStyleChain,
+} from './relations';
 export {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,

@@ -21,6 +21,7 @@
  * plugin's `'`/`"` trigger moment.
  */
 
+import { chainAllowsNesting, szvStyleChain } from '@csszyx/tooling-metadata';
 import * as vscode from 'vscode';
 
 import {
@@ -28,8 +29,8 @@ import {
     KEY_COMPLETIONS,
     KNOWN_VARIANTS,
     TOP_LEVEL_VARIANT_COMPLETIONS,
-    VARIANT_KEY_COMPLETIONS,
 } from './data.js';
+import type { SzContext } from './parser.js';
 import { getSzContext } from './sz-context.js';
 
 /** Trigger characters this companion registers for. */
@@ -62,7 +63,58 @@ function toChainingItem(item: vscode.CompletionItem): vscode.CompletionItem {
 const CHAINING_KEY_ITEMS = [...KEY_COMPLETIONS, ...TOP_LEVEL_VARIANT_COMPLETIONS].map(
     toChainingItem,
 );
-const CHAINING_VARIANT_KEY_ITEMS = VARIANT_KEY_COMPLETIONS.map(toChainingItem);
+
+/** How many leading characters to scan for a csszyx import (imports sit at the top). */
+const IMPORT_SCAN_CHARS = 4_000;
+const CSSZYX_IMPORT = /from\s+['"](?:csszyx|@csszyx\/runtime)['"]/;
+
+/** Read a completion item's plain label.
+ * @param item - Completion item.
+ * @returns The label text.
+ */
+function labelOf(item: vscode.CompletionItem): string {
+    return typeof item.label === 'string' ? item.label : item.label.label;
+}
+
+/** Drop keys already assigned in the cursor's object.
+ * @param items - Candidate key items.
+ * @param siblings - Keys the parser saw assigned at the cursor's depth.
+ * @returns The filtered list (a new array when anything was dropped).
+ */
+function withoutSiblings(
+    items: vscode.CompletionItem[],
+    siblings: readonly string[],
+): vscode.CompletionItem[] {
+    if (siblings.length === 0) return items;
+    const taken = new Set(siblings);
+    return items.filter(item => !taken.has(labelOf(item)));
+}
+
+/**
+ * Resolve which style-object chain (if any) encloses the cursor for a form.
+ *
+ * - `sz`: every parent is a style key.
+ * - `szs`: depth 1 is the slot-name level (no suggestions); the first parent is
+ *   the user-defined slot name and is exempt from the property gate.
+ * - `szv`: structural levels (config root, axis, option names) get no
+ *   suggestions; only the chain below them is style keys.
+ * - `szr`: like `sz`, the whole config object is a style object.
+ * @param context - Parsed cursor context.
+ * @returns The style-key chain to gate on, or null when not a style position.
+ */
+function styleChainFor(context: SzContext): readonly string[] | null {
+    switch (context.form) {
+        case 'sz':
+        case 'szr':
+            return context.parents;
+        case 'szs':
+            return context.depth >= 2 ? context.parents.slice(1) : null;
+        case 'szv':
+            return szvStyleChain(context.parents);
+        default:
+            return null;
+    }
+}
 
 /** Companion provider serving only trigger-character sessions in sz contexts. */
 export class SzCompanionProvider implements vscode.CompletionItemProvider {
@@ -94,11 +146,30 @@ export class SzCompanionProvider implements vscode.CompletionItemProvider {
         }
 
         const ctx = getSzContext(document, position);
+        if (ctx.type === 'none') {
+            return undefined;
+        }
+        // Call forms are recognized by spelling; require a csszyx import in the
+        // document head so a local function named szv cannot trigger styling
+        // suggestions. (The tsserver plugin proves provenance via symbols.)
+        if (ctx.form === 'szv' || ctx.form === 'szr') {
+            const head = document.getText(
+                new vscode.Range(new vscode.Position(0, 0), document.positionAt(IMPORT_SCAN_CHARS)),
+            );
+            if (!CSSZYX_IMPORT.test(head)) return undefined;
+        }
+        // Structural positions (szs slot names, szv schema levels) and nesting
+        // under a utility property (`bg: { … }`) get no suggestions.
+        const styleChain = styleChainFor(ctx);
+        if (styleChain === null || !chainAllowsNesting(styleChain)) {
+            return undefined;
+        }
         switch (ctx.type) {
             case 'key':
-                return [...CHAINING_KEY_ITEMS];
             case 'variant-key':
-                return [...CHAINING_VARIANT_KEY_ITEMS];
+                // Full key set at every style level — nested variants are valid
+                // (`hover: { focus: { … } }`), matching the tsserver plugin.
+                return withoutSiblings([...CHAINING_KEY_ITEMS], ctx.siblings);
             case 'value':
             case 'variant-value':
                 // The parser resolves the key owning this value slot; a ternary
