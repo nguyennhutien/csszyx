@@ -133,6 +133,10 @@ export function buildSzValueEntries(
             ),
         );
     }
+    // Preselect the curated top value: an unquoted value slot is an expression
+    // position, so the surrounding list may contain in-scope identifiers — the
+    // recommended flag keeps Tab/Enter landing on the sz value.
+    if (result[0]) result[0].isRecommended = true;
     return result;
 }
 

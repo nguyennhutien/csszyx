@@ -187,4 +187,80 @@ check('a mid-word key prefix offers keys covering the prefix', () => {
     );
 });
 
+// A nested object under a utility PROPERTY key is not sz syntax (only variant
+// keys take objects; the compiler lowers `p: { bg }` to a garbage class), so
+// the plugin must stay silent instead of teaching the structure.
+check('a nested object under a property key gets no suggestions', () => {
+    const cases = [
+        'const A = () => <div sz={{ borderColor: { /*|*/ } }} />;',
+        'const A = () => <div sz={{ hover: { p: { /*|*/ } } }} />;',
+        "import { szv } from 'csszyx'; szv({ variants: { size: { sm: { p: { /*|*/ } } } } });",
+        "import { szr } from 'csszyx'; szr({ p: { /*|*/ } });",
+        'const A = () => <Card szs={{ header: { p: { /*|*/ } } }} />;',
+        // value inside the invalid subtree is equally silent
+        "const A = () => <div sz={{ borderColor: { color: 're/*|*/' } }} />;",
+    ];
+    for (const source of cases) {
+        assert.strictEqual(namesAtMarker(source).length, 0, `expected silence: ${source}`);
+    }
+    // Variant and unknown (arbitrary/custom) parents keep the benefit of the doubt.
+    assert.ok(namesAtMarker('const A = () => <div sz={{ hover: { /*|*/ } }} />;').includes('bg'));
+    assert.ok(
+        namesAtMarker('const A = () => <div sz={{ customVariant: { /*|*/ } }} />;').includes('bg'),
+    );
+});
+
+// Tier-1 decoration: a base entry colliding with a csszyx key gains the
+// Tailwind hint on a CLONE — base semantics (kind, sortText) stay authoritative
+// and the original objects are never mutated.
+check('merge decorates colliding base entries without mutating them', () => {
+    const { mergeCompletions } = require('../dist/merge.js');
+    const { buildSzKeyEntries } = require('../dist/completions.js');
+    const baseEntry = Object.freeze({
+        name: 'bg',
+        kind: 'property',
+        kindModifiers: 'optional',
+        sortText: '12',
+    });
+    const prior = Object.freeze({
+        isGlobalCompletion: false,
+        isMemberCompletion: true,
+        isNewIdentifierLocation: false,
+        entries: Object.freeze([baseEntry]),
+    });
+    const additions = buildSzKeyEntries(ts, 512, { start: 0, length: 0 });
+    const merged = mergeCompletions(prior, additions, 2048);
+    const bg = merged.entries.find(entry => entry.name === 'bg' && entry.sortText === '12');
+    assert.ok(bg, 'base entry survives with its own sortText');
+    assert.strictEqual(bg.labelDetails?.description, '→ bg-*', 'clone gains the hint');
+    assert.strictEqual(bg.kind, 'property');
+    assert.strictEqual(bg.data, undefined, 'no csszyx data — details stay base-resolved');
+    assert.strictEqual(baseEntry.labelDetails, undefined, 'original entry untouched');
+    assert.strictEqual(
+        merged.entries.filter(entry => entry.name === 'bg').length,
+        1,
+        'no duplicate bg',
+    );
+    // An existing base description is never overwritten.
+    const described = {
+        ...prior,
+        entries: [{ ...baseEntry, labelDetails: { description: 'from types' } }],
+    };
+    const merged2 = mergeCompletions(described, additions, 2048);
+    const bg2 = merged2.entries.find(entry => entry.name === 'bg' && entry.sortText === '12');
+    assert.strictEqual(bg2.labelDetails.description, 'from types');
+});
+
+// Preselection: the curated top value carries isRecommended so Tab lands on an
+// sz value even when the unquoted expression position mixes in identifiers.
+check('the first value suggestion is marked recommended', () => {
+    const entries = entriesAtMarker('const A = () => <div sz={{ bg: /*|*/ }} />;');
+    assert.strictEqual(entries[0]?.isRecommended, true);
+    assert.strictEqual(
+        entries.filter(entry => entry.isRecommended).length,
+        1,
+        'exactly one recommended entry',
+    );
+});
+
 console.log(`\n${pass} spike checks passed`);

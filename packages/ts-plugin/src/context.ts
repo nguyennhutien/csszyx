@@ -1,8 +1,28 @@
+import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
 
 const SZ_JSX_ATTRS = new Set(['sz', 'szs']);
 const CSSZYX_MODULES = new Set(['csszyx', '@csszyx/runtime']);
 const MAX_ANCESTOR_DEPTH = 64;
+
+/** Utility property keys. Their values are strings/numbers, never objects, so a
+ * nested object under one of them (`borderColor: { … }`) is not sz syntax and
+ * must get no suggestions. Variant keys and unknown (arbitrary/custom-variant)
+ * keys are absent from this set — classification stays syntax-first and gives
+ * unknown parents the benefit of the doubt. PROPERTY_MAP and KNOWN_VARIANTS are
+ * disjoint, so a variant name can never be blocked by this set. */
+const PROPERTY_KEYS = new Set<string>([...Object.keys(PROPERTY_MAP), ...BOOLEAN_SHORTHANDS]);
+
+/** Check that no key owning a nested object along the chain is a utility property.
+ * @param names - Intermediate property-name chain to validate.
+ * @returns Whether every name may legally own a nested style object.
+ */
+function chainAllowsNesting(names: readonly string[]): boolean {
+    for (const name of names) {
+        if (PROPERTY_KEYS.has(name)) return false;
+    }
+    return true;
+}
 
 /** Proven cursor context and syntax-safe replacement range. */
 export type SzContext =
@@ -184,6 +204,10 @@ function csszyxCallName(
  * @returns Whether the object is a CSS-bearing JSX surface.
  */
 function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolean {
+    // Inner-to-outer property names between the candidate object and the
+    // attribute, so nesting under a utility property (`borderColor: { | }`)
+    // can be rejected instead of suggesting keys inside invalid structure.
+    const chain: string[] = [];
     let node: ts.Node = object;
     let nested = false;
     for (let depth = 0; node.parent && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
@@ -191,20 +215,29 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolea
         if (tsMod.isJsxExpression(parent) && tsMod.isJsxAttribute(parent.parent)) {
             const name = parent.parent.name;
             if (!tsMod.isIdentifier(name) || !SZ_JSX_ATTRS.has(name.text)) return false;
-            if (name.text === 'sz') return true;
+            // In `sz` every chain name lives inside the style object; in `szs`
+            // the outermost name is the user-defined slot name and is exempt.
+            if (name.text === 'sz') return chainAllowsNesting(chain);
             if (!nested) return false;
             const opening = parent.parent.parent.parent;
             if (!tsMod.isJsxOpeningElement(opening) && !tsMod.isJsxSelfClosingElement(opening)) {
                 return false;
             }
-            return !/^[a-z]/.test(opening.tagName.getText());
+            if (/^[a-z]/.test(opening.tagName.getText())) return false;
+            return chainAllowsNesting(chain.slice(0, -1));
         }
         if (
             tsMod.isObjectLiteralExpression(parent) ||
             tsMod.isPropertyAssignment(parent) ||
             tsMod.isArrayLiteralExpression(parent)
         ) {
-            if (tsMod.isPropertyAssignment(parent) || tsMod.isArrayLiteralExpression(parent)) {
+            if (tsMod.isPropertyAssignment(parent)) {
+                nested = true;
+                const name = propertyName(tsMod, parent);
+                // Computed names cannot be validated; stay permissive.
+                if (name !== undefined) chain.push(name);
+            }
+            if (tsMod.isArrayLiteralExpression(parent)) {
                 nested = true;
             }
             node = parent;
@@ -272,14 +305,22 @@ function callAnchor(
                 return false;
             }
             const callName = csszyxCallName(tsMod, sourceFile, parent, getChecker(), shouldStop);
-            if (callName === 'szr') return true;
+            // Names INSIDE a style object may only nest under variant-ish keys,
+            // never under a utility property (`p: { | }` is not sz syntax); the
+            // structural szv names (base / variants.axis.option / …sz) and slot
+            // names are schema, not style keys, and are exempt.
+            if (callName === 'szr') return chainAllowsNesting(path);
             if (callName === 'szv') {
                 const rootToLeaf = path.reverse();
-                return (
-                    rootToLeaf[0] === 'base' ||
-                    (rootToLeaf[0] === 'variants' && rootToLeaf.length >= 3) ||
-                    (rootToLeaf[0] === 'compoundVariants' && rootToLeaf.includes('sz'))
-                );
+                if (rootToLeaf[0] === 'base') return chainAllowsNesting(rootToLeaf.slice(1));
+                if (rootToLeaf[0] === 'variants' && rootToLeaf.length >= 3) {
+                    return chainAllowsNesting(rootToLeaf.slice(3));
+                }
+                if (rootToLeaf[0] === 'compoundVariants') {
+                    const szIndex = rootToLeaf.indexOf('sz');
+                    return szIndex >= 0 && chainAllowsNesting(rootToLeaf.slice(szIndex + 1));
+                }
+                return false;
             }
             return false;
         }
