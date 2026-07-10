@@ -1,5 +1,22 @@
 # csszyx
 
+## [0.11.4](https://github.com/nguyennhutien/csszyx/compare/v0.11.3...v0.11.4) (2026-07-10)
+
+### Features
+
+* sz/szv/szs editor autocomplete via a TypeScript language-service plugin ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **ts-plugin:** sz/szv/szs autocomplete via a TypeScript language-service plugin ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **ts-plugin:** bounded sz completions, bundled metadata, extension coexistence ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **vscode:** bundle @csszyx/ts-plugin for zero-config sz completions ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **ts-plugin:** decorate typed-position collisions, gate property nesting, preselect values ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **vscode:** trigger-character companion for the moments tsserver cannot open ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **completions:** token-relationship awareness shared by both providers ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+* **completions:** assist structured object values instead of silencing them ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+
+### Bug Fixes
+
+* **ts-plugin:** escape backslashes before quotes in value insertion text ([#138](https://github.com/nguyennhutien/csszyx/issues/138))
+
 ## [0.11.3](https://github.com/nguyennhutien/csszyx/compare/v0.11.2...v0.11.3) (2026-07-07)
 
 ### Bug Fixes
