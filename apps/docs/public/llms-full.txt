@@ -3037,11 +3037,12 @@ runtime dependencies and there is no separate metadata package to install.
 Diagnosis note: if the activation line `[csszyx-ts-plugin] activated` is present
 but typing letters never opens suggestions while `.`/`'` do, the suggest widget
 is being suppressed editor-side (TypeScript's own completions are equally
-affected) — not a plugin fault. Two known causes, in likelihood order: an IME in
-composition mode (Vietnamese Telex/VNI, CJK — its underline appears beneath
-typed letters and an open list stops filtering; switching to plain English input
-fixes it) and AI inline suggestions (microsoft/vscode#315373). Verify by typing
-`Ma` on an empty line.
+affected) — not a plugin fault. Two known causes, in likelihood order: a
+composing input method — any IME that assembles characters before committing
+them, such as Vietnamese Telex/VNI, CJK IMEs, or dead-key layouts; its underline
+appears beneath typed letters and an open list stops filtering, and switching to
+a plain non-composing layout fixes it — and AI inline suggestions
+(microsoft/vscode#315373). Verify by typing `Ma` on an empty line.
 
 Inside `@csszyx/vscode` there is no duplication to reconcile: the extension
 ships and injects this plugin for TypeScript/JavaScript and serves HTML itself

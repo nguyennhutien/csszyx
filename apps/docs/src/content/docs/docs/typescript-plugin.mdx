@@ -277,13 +277,16 @@ is being suppressed **before any request reaches TypeScript**. This affects
 an empty line, type `Ma` — if no dropdown appears there either, the plugin is
 not the problem. Two known causes:
 
-1. **An IME in composition mode** (Vietnamese Telex/VNI, CJK input methods).
-   While the input method is composing — you'll see its underline under the
-   letters you type — the editor receives no direct keystrokes, so
-   type-to-suggest never fires and an open list stops filtering. Switch the
-   input source to plain English/ABC while coding (this is also why
+1. **A composing input method (IME)** — any input source that assembles
+   characters before committing them to the editor, such as Vietnamese
+   Telex/VNI, Chinese, Japanese, and Korean IMEs, or keyboard layouts with
+   dead keys. While the input method
+   is composing — you'll see its underline beneath the letters you type — the
+   editor receives no direct keystrokes, so type-to-suggest never fires and an
+   already-open list stops filtering until the composition is committed. Switch
+   to a plain non-composing layout (English/ABC) while coding (this is also why
    `Ctrl+Space` may be taken: it is the macOS input-source switcher), or use an
-   IME with an editor-compatibility mode.
+   input method that offers an editor-compatibility mode.
 2. **AI inline suggestions** (Copilot ghost text) — a known VS Code issue
    ([microsoft/vscode#315373](https://github.com/microsoft/vscode/issues/315373)).
    Confirm by temporarily setting `"editor.inlineSuggest.enabled": false`.
