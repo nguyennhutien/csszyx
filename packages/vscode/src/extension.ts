@@ -12,6 +12,7 @@
 
 import * as vscode from 'vscode';
 
+import { COMPANION_TRIGGERS, SzCompanionProvider } from './companion-provider.js';
 import { parseCompletionMode, planCompletions } from './completion-arbitration.js';
 import { SzCompletionProvider } from './completion-provider.js';
 import { createDebouncedValidator, validateDocument } from './diagnostic-provider.js';
@@ -28,6 +29,14 @@ const SZ_LANGUAGES = [
 
 /** HTML alone — tsserver never sees it, so the plugin cannot cover it. */
 const HTML_LANGUAGES = [{ language: 'html' }];
+
+/** TypeScript/JavaScript — the companion provider's territory in auto mode. */
+const TS_LANGUAGES = [
+    { language: 'typescriptreact' },
+    { language: 'javascriptreact' },
+    { language: 'typescript' },
+    { language: 'javascript' },
+];
 
 /** Plugin id as declared in `contributes.typescriptServerPlugins`. */
 const TS_PLUGIN_ID = '@csszyx/ts-plugin';
@@ -47,8 +56,12 @@ export function activate(context: vscode.ExtensionContext): void {
     // covers HTML, which tsserver never sees. `csszyx.completions` re-plans both
     // sides and toggles the plugin so the two never duplicate each other.
     let completionRegistration: vscode.Disposable | undefined;
+    let companionRegistration: vscode.Disposable | undefined;
     context.subscriptions.push(
-        new vscode.Disposable(() => completionRegistration?.dispose()),
+        new vscode.Disposable(() => {
+            completionRegistration?.dispose();
+            companionRegistration?.dispose();
+        }),
         vscode.workspace.onDidChangeConfiguration(event => {
             if (event.affectsConfiguration('csszyx.completions')) {
                 void syncCompletions();
@@ -71,6 +84,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
         completionRegistration?.dispose();
         completionRegistration = undefined;
+        companionRegistration?.dispose();
+        companionRegistration = undefined;
         if (plan.extensionLanguages === 'none') {
             output.appendLine("completions: off (csszyx.completions = 'off')");
             return;
@@ -88,10 +103,20 @@ export function activate(context: vscode.ExtensionContext): void {
             ',',
             ' ',
         );
+        if (plan.companion) {
+            // TS/JS trigger-character moments tsserver can never auto-open:
+            // `{`/`,` open key items that chain into plugin-served values, `:`
+            // (no space needed) and space open per-key value items.
+            companionRegistration = vscode.languages.registerCompletionItemProvider(
+                TS_LANGUAGES,
+                new SzCompanionProvider(),
+                ...COMPANION_TRIGGERS,
+            );
+        }
         output.appendLine(
             plan.extensionLanguages === 'all'
                 ? "completions: extension provides all languages (csszyx.completions = 'extension')"
-                : 'completions: @csszyx/ts-plugin handles TS/JS, extension covers HTML',
+                : 'completions: @csszyx/ts-plugin handles TS/JS (+ trigger companion), extension covers HTML',
         );
     }
 

@@ -22,27 +22,33 @@ export interface CompletionPlan {
     readonly pluginEnabled: boolean;
     /** Which languages the extension's regex provider registers for. */
     readonly extensionLanguages: ExtensionLanguages;
+    /** Whether the TS/JS trigger-character companion provider registers.
+     * It fills the moments tsserver can never auto-open (`{` `,` `:` space)
+     * and only answers TriggerCharacter sessions, so it never overlaps the
+     * plugin's letter/Invoke sessions. */
+    readonly companion: boolean;
 }
 
 /**
  * Plan who provides sz completions for a mode.
  *
- * - `auto`: the plugin owns TypeScript/JavaScript; the extension covers only
- *   HTML (tsserver never sees HTML, so the plugin cannot).
+ * - `auto`: the plugin owns TypeScript/JavaScript letter/Invoke sessions, the
+ *   trigger-character companion covers `{`/`,`/`:`/space moments, and the
+ *   extension's regex provider covers only HTML (tsserver never sees HTML).
  * - `extension`: the plugin is disabled and the extension serves every
  *   language — a fallback for when the plugin is unwanted.
- * - `off`: no sz completions from either provider.
+ * - `off`: no sz completions from any provider.
  * @param mode - The `csszyx.completions` setting value.
- * @returns Whether the plugin stays enabled and which languages the extension serves.
+ * @returns Whether the plugin stays enabled and what the extension registers.
  */
 export function planCompletions(mode: CompletionMode): CompletionPlan {
     if (mode === 'off') {
-        return { pluginEnabled: false, extensionLanguages: 'none' };
+        return { pluginEnabled: false, extensionLanguages: 'none', companion: false };
     }
     if (mode === 'extension') {
-        return { pluginEnabled: false, extensionLanguages: 'all' };
+        return { pluginEnabled: false, extensionLanguages: 'all', companion: false };
     }
-    return { pluginEnabled: true, extensionLanguages: 'html-only' };
+    return { pluginEnabled: true, extensionLanguages: 'html-only', companion: true };
 }
 
 /**

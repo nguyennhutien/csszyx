@@ -7,24 +7,27 @@ import {
 } from '../src/completion-arbitration';
 
 describe('planCompletions', () => {
-    it('auto: plugin owns TS/JS, extension covers HTML only', () => {
+    it('auto: plugin owns TS/JS, companion fills trigger chars, extension covers HTML', () => {
         expect(planCompletions('auto')).toEqual({
             pluginEnabled: true,
             extensionLanguages: 'html-only',
+            companion: true,
         });
     });
 
-    it('extension: plugin disabled, extension serves every language', () => {
+    it('extension: plugin and companion disabled, extension serves every language', () => {
         expect(planCompletions('extension')).toEqual({
             pluginEnabled: false,
             extensionLanguages: 'all',
+            companion: false,
         });
     });
 
-    it('off: neither provider serves completions', () => {
+    it('off: no provider serves completions', () => {
         expect(planCompletions('off')).toEqual({
             pluginEnabled: false,
             extensionLanguages: 'none',
+            companion: false,
         });
     });
 
@@ -32,6 +35,8 @@ describe('planCompletions', () => {
         for (const mode of ['auto', 'extension', 'off'] as CompletionMode[]) {
             const plan = planCompletions(mode);
             expect(plan.pluginEnabled && plan.extensionLanguages === 'all').toBe(false);
+            // The companion exists only alongside the plugin it complements.
+            expect(plan.companion && !plan.pluginEnabled).toBe(false);
         }
     });
 });

@@ -69,7 +69,7 @@
             "off"
           ],
           "markdownEnumDescriptions": [
-            "**Recommended.** The bundled `@csszyx/ts-plugin` provides `sz`/`szv`/`szs` completions in TypeScript/JavaScript; the extension covers HTML. No duplicate suggestions.",
+            "**Recommended.** The bundled `@csszyx/ts-plugin` provides `sz`/`szv`/`szs` completions in TypeScript/JavaScript, a trigger companion opens the list on `{`, `,`, `:` and space, and the extension covers HTML. No duplicate suggestions.",
             "Disable the plugin and let the extension provide completions in every language (a fallback if you prefer the extension's provider).",
             "Never provide `sz` completions. Hover and diagnostics are unaffected."
           ],
