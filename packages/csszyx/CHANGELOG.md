@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.11.4](https://github.com/nguyennhutien/csszyx/compare/v0.11.3...v0.11.4) (2026-07-10)
+
+
+### Features
+
+* sz/szv/szs editor autocomplete via a TypeScript language-service plugin ([#138](https://github.com/nguyennhutien/csszyx/issues/138)) ([9e915a6](https://github.com/nguyennhutien/csszyx/commit/9e915a684b11207a176577b76ef81b466eaf725d))
+
 ## [0.11.3](https://github.com/nguyennhutien/csszyx/compare/v0.11.2...v0.11.3) (2026-07-07)
 
 ### Bug Fixes
