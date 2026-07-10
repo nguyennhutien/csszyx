@@ -62,7 +62,7 @@ interface FakePosition {
 function documentAt(source: string): { document: never; position: never } {
     const cursor = source.indexOf('|');
     if (cursor < 0) throw new Error('source must contain a | cursor marker');
-    const text = source.replace('|', '');
+    const text = source.slice(0, cursor) + source.slice(cursor + 1);
     const lines = text.split('\n');
     const offsetOf = (position: FakePosition): number =>
         lines.slice(0, position.line).reduce((sum, line) => sum + line.length + 1, 0) +

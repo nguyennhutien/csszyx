@@ -202,7 +202,7 @@ describe('relationship verdicts stay identical across both classifiers', () => {
     for (const { source, serves, note } of VERDICTS) {
         it(`${note}: ${serves ? 'serves' : 'silent'}`, () => {
             const cursor = source.indexOf('|');
-            const text = source.replace('|', '');
+            const text = source.slice(0, cursor) + source.slice(cursor + 1);
             expect(companionServes(text, cursor), 'companion').toBe(serves);
             expect(pluginServes(text, cursor), 'plugin').toBe(serves);
         });
