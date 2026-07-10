@@ -38,11 +38,16 @@ TypeScript service through the `typescriptServerPlugins` contribution point, wit
   package managers that hoist TypeScript away from your project cannot break it.
 
 The extension also fills the moments TypeScript never auto-opens a list for:
-typing `{`, `,`, or `:` inside an sz object pops the suggestions immediately —
-`bg:` offers colors and `p:` offers the spacing scale with **no space needed**
-(this is the only way numeric values can ever get a list, since editors never
-auto-suggest on digits). Accepting a key inserts `key: ` and chains straight
-into its value suggestions.
+typing `{`, `,`, or `:` inside an `sz`, `szs`, `szv`, or `szr` object pops the
+suggestions immediately — `bg:` offers colors and `p:` offers the spacing scale
+with **no space needed** (this is the only way numeric values can ever get a
+list, since editors never auto-suggest on digits). Accepting a key inserts
+`key: ` and chains straight into its value suggestions.
+
+Suggestions are relationship-aware: a key already assigned in the object stops
+being suggested at the next slot (a duplicate would silently override), and a
+nested object under a utility property (`bg: { … }` — only variant keys take
+objects) gets no suggestions instead of teaching invalid structure.
 
 Control completions with the `csszyx.completions` setting:
 

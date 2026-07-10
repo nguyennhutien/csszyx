@@ -3023,6 +3023,7 @@ needs "Use Workspace Version".
 - Complete keys and curated values in JSX `sz`, including nested variants and conditional object branches.
 - Complete CSS keys inside each component `szs` slot object; do not offer CSS keys at the outer slot-name level or on intrinsic-element `szs`.
 - Complete `szv` styles in `base` and `variants.<axis>.<option>`; complete imported `szr` objects.
+- Token relationships: a key already assigned in the same object is not suggested again; a nested object under a utility property (`bg: { … }`) gets NO suggestions — only variant keys take object values. Both the plugin and the extension companion enforce identical verdicts (drift-guarded by tests).
 - Accept direct, aliased, and namespace imports from `csszyx` / `@csszyx/runtime`; reject local/shadowed/unrelated same-spelled functions.
 - Insert numeric suggestions without quotes and string suggestions with quotes. Suggestions are not validation: Tailwind 4 numeric values are open-ended.
 - Preserve TypeScript's base completions. On cancellation, timeout, or internal failure, return the untouched base result.
@@ -3051,7 +3052,7 @@ Inside `@csszyx/vscode` there is no duplication to reconcile: the extension
 ships and injects this plugin for TypeScript/JavaScript and serves HTML itself
 (tsserver does not process HTML). In `auto` mode a trigger-character companion
 also covers the moments tsserver never auto-opens — `{`/`,` open key items that
-insert `key: ` and chain into value suggestions; `:` (no space required) and
+insert `key:` and chain into value suggestions; `:` (no space required) and
 space open per-key values, the only path by which numeric values (`p: 4`) get a
 list. Sessions are partitioned by trigger ownership, so companion and plugin
 never duplicate. `csszyx.completions` (via the TypeScript `configurePlugin`

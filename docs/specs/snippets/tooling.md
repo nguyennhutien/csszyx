@@ -38,6 +38,7 @@ needs "Use Workspace Version".
 - Complete keys and curated values in JSX `sz`, including nested variants and conditional object branches.
 - Complete CSS keys inside each component `szs` slot object; do not offer CSS keys at the outer slot-name level or on intrinsic-element `szs`.
 - Complete `szv` styles in `base` and `variants.<axis>.<option>`; complete imported `szr` objects.
+- Token relationships: a key already assigned in the same object is not suggested again; a nested object under a utility property (`bg: { … }`) gets NO suggestions — only variant keys take object values. Both the plugin and the extension companion enforce identical verdicts (drift-guarded by tests).
 - Accept direct, aliased, and namespace imports from `csszyx` / `@csszyx/runtime`; reject local/shadowed/unrelated same-spelled functions.
 - Insert numeric suggestions without quotes and string suggestions with quotes. Suggestions are not validation: Tailwind 4 numeric values are open-ended.
 - Preserve TypeScript's base completions. On cancellation, timeout, or internal failure, return the untouched base result.
