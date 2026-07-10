@@ -1,6 +1,11 @@
 import type ts from 'typescript/lib/tsserverlibrary';
 
-import { buildSzKeyEntries, buildSzValueEntries } from './completions';
+import {
+    buildFormKeyEntries,
+    buildMemberValueEntries,
+    buildSzKeyEntries,
+    buildSzValueEntries,
+} from './completions';
 import type { PluginConfig } from './config';
 import { getSzContext } from './context';
 
@@ -37,16 +42,35 @@ export function computeSzEntries(
     );
     if (!context || shouldStop()) return [];
     if (context.kind === 'value') {
-        return config.values
-            ? buildSzValueEntries(
-                  tsMod,
-                  context.property,
-                  config.maxEntries,
-                  context.replacementSpan,
-                  context.quoted,
-                  shouldStop,
-              )
-            : [];
+        if (!config.values) return [];
+        // A structured-form member (bg's { color, op }, bgImg's gradient
+        // members) carries its own curated values.
+        if (context.member) {
+            return buildMemberValueEntries(
+                tsMod,
+                context.member,
+                config.maxEntries,
+                context.replacementSpan,
+                context.quoted,
+                shouldStop,
+            );
+        }
+        return buildSzValueEntries(
+            tsMod,
+            context.property,
+            config.maxEntries,
+            context.replacementSpan,
+            context.quoted,
+            shouldStop,
+        );
+    }
+    if (context.form) {
+        return buildFormKeyEntries(
+            tsMod,
+            context.form,
+            context.replacementSpan,
+            new Set(context.siblings),
+        );
     }
     return buildSzKeyEntries(
         tsMod,

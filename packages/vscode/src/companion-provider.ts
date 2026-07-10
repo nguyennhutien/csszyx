@@ -21,7 +21,13 @@
  * plugin's `'`/`"` trigger moment.
  */
 
-import { chainAllowsNesting, szvStyleChain } from '@csszyx/tooling-metadata';
+import {
+    classifyStyleChain,
+    type ObjectFormMember,
+    type ObjectValueForm,
+    objectValueForm,
+    szvStyleChain,
+} from '@csszyx/tooling-metadata';
 import * as vscode from 'vscode';
 
 import {
@@ -88,6 +94,39 @@ function withoutSiblings(
     if (siblings.length === 0) return items;
     const taken = new Set(siblings);
     return items.filter(item => !taken.has(labelOf(item)));
+}
+
+/** Build the chaining key items for a structured object-value form.
+ * @param form - The form whose members are the only valid keys.
+ * @returns Member key items inserting `name: $1` and reopening suggestions.
+ */
+function formKeyItems(form: ObjectValueForm): vscode.CompletionItem[] {
+    return form.members.map(member => {
+        const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Property);
+        item.detail = member.detail;
+        item.filterText = member.name;
+        item.insertText = new vscode.SnippetString(`${member.name}: $1`);
+        item.command = CHAIN_COMMAND;
+        return item;
+    });
+}
+
+/** Build value items from a structured-form member's curated list.
+ * @param member - The form member owning the value slot.
+ * @returns Value items — numbers bare, strings quoted.
+ */
+function memberValueItems(member: ObjectFormMember): vscode.CompletionItem[] {
+    return member.values.map(value => {
+        const numeric = value !== '' && !Number.isNaN(Number(value));
+        const item = new vscode.CompletionItem(
+            value,
+            numeric ? vscode.CompletionItemKind.Value : vscode.CompletionItemKind.EnumMember,
+        );
+        item.insertText = numeric ? value : `'${value}'`;
+        item.filterText = value;
+        item.detail = `${member.name}: ${numeric ? value : `'${value}'`}`;
+        return item;
+    });
 }
 
 /**
@@ -158,23 +197,38 @@ export class SzCompanionProvider implements vscode.CompletionItemProvider {
             );
             if (!CSSZYX_IMPORT.test(head)) return undefined;
         }
-        // Structural positions (szs slot names, szv schema levels) and nesting
-        // under a utility property (`bg: { … }`) get no suggestions.
+        // Structural positions (szs slot names, szv schema levels), the opaque
+        // `css` object, and invalid nesting under a utility property get no
+        // suggestions. A structured object value (`bg: { color, op }`,
+        // `bgImg: { gradient, … }`) is limited to exactly its members.
         const styleChain = styleChainFor(ctx);
-        if (styleChain === null || !chainAllowsNesting(styleChain)) {
-            return undefined;
-        }
+        if (styleChain === null) return undefined;
+        const innerFirst = [...styleChain].reverse();
+        const kind = classifyStyleChain(innerFirst);
+        if (kind !== 'style' && kind !== 'object-form') return undefined;
+        const form = kind === 'object-form' ? objectValueForm(innerFirst[0] ?? '') : null;
         switch (ctx.type) {
             case 'key':
             case 'variant-key':
                 // Full key set at every style level — nested variants are valid
                 // (`hover: { focus: { … } }`), matching the tsserver plugin.
-                return withoutSiblings([...CHAINING_KEY_ITEMS], ctx.siblings);
+                return withoutSiblings(
+                    form ? formKeyItems(form) : [...CHAINING_KEY_ITEMS],
+                    ctx.siblings,
+                );
             case 'value':
-            case 'variant-value':
+            case 'variant-value': {
                 // The parser resolves the key owning this value slot; a ternary
                 // or annotation colon yields no key and stays silent.
-                return ctx.currentKey ? getValueCompletions(ctx.currentKey) : undefined;
+                if (!ctx.currentKey) return undefined;
+                if (form) {
+                    const member = form.members.find(
+                        candidate => candidate.name === ctx.currentKey,
+                    );
+                    return member ? memberValueItems(member) : undefined;
+                }
+                return getValueCompletions(ctx.currentKey);
+            }
             default:
                 return undefined;
         }

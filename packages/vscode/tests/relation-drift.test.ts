@@ -54,9 +54,24 @@ const { computeSzEntries } = await import('../../ts-plugin/src/core.js');
 /** Shared verdict table: does a key list open at `{ |`? */
 const VERDICTS: ReadonlyArray<{ source: string; serves: boolean; note: string }> = [
     {
-        source: 'const A = () => <div sz={{ bg: { | } }} />;',
+        source: 'const A = () => <div sz={{ p: { | } }} />;',
         serves: false,
-        note: 'property parent gates nesting',
+        note: 'non-form property parent gates nesting',
+    },
+    {
+        source: 'const A = () => <div sz={{ bg: { | } }} />;',
+        serves: true,
+        note: 'color property serves its { color, op } form',
+    },
+    {
+        source: 'const A = () => <div sz={{ bgImg: { | } }} />;',
+        serves: true,
+        note: 'bgImg serves its gradient form',
+    },
+    {
+        source: 'const A = () => <div sz={{ css: { | } }} />;',
+        serves: false,
+        note: 'css object is opaque (arbitrary CSS properties)',
     },
     {
         source: 'const A = () => <div sz={{ hover: { | } }} />;',

@@ -148,11 +148,32 @@ describe('SzCompanionProvider', () => {
         expect(itemsAt('const x:| number = 1', trigger(':'))).toBeUndefined();
     });
 
-    // R1 — property-parent gate parity with the tsserver plugin.
-    it('stays silent inside a nested object under a utility property', () => {
-        expect(itemsAt('const A = () => <div sz={{ bg: {|', trigger('{'))).toBeUndefined();
+    // R1 — property-parent gate parity with the tsserver plugin: non-form
+    // properties and the opaque css object are silent; a color property's
+    // object serves exactly its { color, op } members.
+    it('stays silent inside a nested object under a non-form property', () => {
+        expect(itemsAt('const A = () => <div sz={{ p: {|', trigger('{'))).toBeUndefined();
         expect(itemsAt('const A = () => <div sz={{ hover: { p: {|', trigger('{'))).toBeUndefined();
-        expect(itemsAt("const A = () => <div sz={{ 'bg': {|", trigger('{'))).toBeUndefined();
+        expect(itemsAt('const A = () => <div sz={{ css: {|', trigger('{'))).toBeUndefined();
+    });
+
+    it('serves the structured members inside a color-property object', () => {
+        const items = itemsAt('const A = () => <div sz={{ bg: {|', trigger('{'));
+        expect(items?.map(item => item.label).sort()).toEqual(['color', 'op']);
+        const quoted = itemsAt("const A = () => <div sz={{ 'bg': {|", trigger('{'));
+        expect(quoted?.length).toBe(2);
+        const colorValues = itemsAt('const A = () => <div sz={{ bg: { color:|', trigger(':'));
+        expect(colorValues?.some(item => item.label === 'red-500')).toBe(true);
+        const opValues = itemsAt('const A = () => <div sz={{ bg: { op:|', trigger(':'));
+        expect(opValues?.find(item => item.label === '50')?.insertText).toBe('50');
+    });
+
+    it('serves the bgImg gradient form members and values', () => {
+        const items = itemsAt('const A = () => <div sz={{ bgImg: {|', trigger('{'));
+        expect(items?.map(item => item.label).sort()).toEqual(['dir', 'gradient', 'in']);
+        const gradient = itemsAt('const A = () => <div sz={{ bgImg: { gradient:|', trigger(':'));
+        expect(gradient?.map(item => item.label).sort()).toEqual(['conic', 'linear', 'radial']);
+        expect(gradient?.find(item => item.label === 'linear')?.insertText).toBe("'linear'");
     });
 
     it('keeps variant and unknown parents suggesting', () => {

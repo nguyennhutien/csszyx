@@ -46,8 +46,12 @@ list, since editors never auto-suggest on digits). Accepting a key inserts
 
 Suggestions are relationship-aware: a key already assigned in the object stops
 being suggested at the next slot (a duplicate would silently override), and a
-nested object under a utility property (`bg: { … }` — only variant keys take
-objects) gets no suggestions instead of teaching invalid structure.
+nested object under a plain utility property (`p: { … }` — only variant keys
+take style objects) gets no suggestions instead of teaching invalid structure.
+Structured object values are understood too: inside `bg: { … }` (or any color
+property) the list offers exactly `color` and `op` — the documented way to
+express opacity — and inside `bgImg: { … }` it offers `gradient`, `dir`, and
+`in` with their curated values.
 
 Control completions with the `csszyx.completions` setting:
 

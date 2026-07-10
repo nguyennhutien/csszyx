@@ -496,4 +496,15 @@ export const VALUE_SUGGESTIONS: Record<string, string[]> = {
     breakAfter: ['auto', 'avoid', 'all', 'avoid-page', 'avoid-column'],
 };
 
+/**
+ * Props whose values are color tokens — exactly the entries curated with the
+ * shared COLOR_VALUES list above (array identity keeps this drift-free). These
+ * are the props where the `{ color: token, op: number }` object value form is
+ * meaningful (the documented way to express opacity; string slashes are not
+ * supported).
+ */
+export const COLOR_VALUE_PROPS: readonly string[] = Object.entries(VALUE_SUGGESTIONS)
+    .filter(([, values]) => values === COLOR_VALUES)
+    .map(([key]) => key);
+
 // ============================================================================

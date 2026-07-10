@@ -6,9 +6,15 @@
  */
 
 export {
+    COLOR_OBJECT_PROPS,
     chainAllowsNesting,
+    classifyStyleChain,
     isUtilityPropertyKey,
+    type ObjectFormMember,
+    type ObjectValueForm,
+    objectValueForm,
     PROPERTY_KEYS,
+    type StyleChainKind,
     szvStyleChain,
 } from './relations';
 export {

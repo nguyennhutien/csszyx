@@ -1,4 +1,10 @@
-import { chainAllowsNesting, szvStyleChain } from '@csszyx/tooling-metadata';
+import {
+    classifyStyleChain,
+    type ObjectFormMember,
+    type ObjectValueForm,
+    objectValueForm,
+    szvStyleChain,
+} from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
 
 const SZ_JSX_ATTRS = new Set(['sz', 'szs']);
@@ -7,6 +13,12 @@ const MAX_ANCESTOR_DEPTH = 64;
 /** Sibling-collection cap: past it, exclusion is partial, never a rejection. */
 const MAX_SIBLINGS = 256;
 
+/** How an anchored object should be assisted: a plain style object, or a
+ * structured object-value form limited to its members. */
+interface StyleResolution {
+    readonly form: ObjectValueForm | null;
+}
+
 /** Proven cursor context and syntax-safe replacement range. */
 export type SzContext =
     | {
@@ -14,12 +26,18 @@ export type SzContext =
           readonly replacementSpan: ts.TextSpan;
           /** Keys already assigned in the enclosing object (bounded, may be partial). */
           readonly siblings: readonly string[];
+          /** When set, the object accepts ONLY this form's members (e.g. the
+           * `{ color, op }` value of a color property). */
+          readonly form?: ObjectValueForm;
       }
     | {
           readonly kind: 'value';
           readonly property: string;
           readonly quoted: boolean;
           readonly replacementSpan: ts.TextSpan;
+          /** When set, the property is a structured-form member and these are
+           * its curated values. */
+          readonly member?: ObjectFormMember;
       };
 
 /** Collect the completed sibling keys of an object literal.
@@ -215,15 +233,15 @@ function csszyxCallName(
     return undefined;
 }
 
-/** Check JSX sz and slot-level szs ancestry.
+/** Classify JSX sz and slot-level szs ancestry.
  * @param tsMod - TypeScript instance injected by the host.
  * @param object - Candidate object literal.
- * @returns Whether the object is a CSS-bearing JSX surface.
+ * @returns The style resolution, or null when not an assistable JSX surface.
  */
-function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolean {
+function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): StyleResolution | null {
     // Inner-to-outer property names between the candidate object and the
-    // attribute, so nesting under a utility property (`borderColor: { | }`)
-    // can be rejected instead of suggesting keys inside invalid structure.
+    // attribute: nesting under a utility property is invalid — except a COLOR
+    // property owning its `{ color, op }` value object.
     const chain: string[] = [];
     let node: ts.Node = object;
     let nested = false;
@@ -231,17 +249,17 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolea
         const parent = node.parent;
         if (tsMod.isJsxExpression(parent) && tsMod.isJsxAttribute(parent.parent)) {
             const name = parent.parent.name;
-            if (!tsMod.isIdentifier(name) || !SZ_JSX_ATTRS.has(name.text)) return false;
+            if (!tsMod.isIdentifier(name) || !SZ_JSX_ATTRS.has(name.text)) return null;
             // In `sz` every chain name lives inside the style object; in `szs`
             // the outermost name is the user-defined slot name and is exempt.
-            if (name.text === 'sz') return chainAllowsNesting(chain);
-            if (!nested) return false;
+            if (name.text === 'sz') return resolveChain(chain);
+            if (!nested) return null;
             const opening = parent.parent.parent.parent;
             if (!tsMod.isJsxOpeningElement(opening) && !tsMod.isJsxSelfClosingElement(opening)) {
-                return false;
+                return null;
             }
-            if (/^[a-z]/.test(opening.tagName.getText())) return false;
-            return chainAllowsNesting(chain.slice(0, -1));
+            if (/^[a-z]/.test(opening.tagName.getText())) return null;
+            return resolveChain(chain.slice(0, -1));
         }
         if (
             tsMod.isObjectLiteralExpression(parent) ||
@@ -266,16 +284,27 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): boolea
         }
         break;
     }
-    return false;
+    return null;
 }
 
-/** Check schema-aware szv/szr ancestry.
+/** Resolve a chain into an assistable anchor (invalid/opaque = no suggestions).
+ * @param chainInnerFirst - Owner-name chain from the cursor's object outward.
+ * @returns The resolution, or null when the structure gets no suggestions.
+ */
+function resolveChain(chainInnerFirst: readonly string[]): StyleResolution | null {
+    const kind = classifyStyleChain(chainInnerFirst);
+    if (kind === 'style') return { form: null };
+    if (kind === 'object-form') return { form: objectValueForm(chainInnerFirst[0] ?? '') };
+    return null;
+}
+
+/** Classify schema-aware szv/szr ancestry.
  * @param tsMod - TypeScript instance injected by the host.
  * @param sourceFile - Source containing the candidate.
  * @param object - Candidate object literal.
  * @param getChecker - Lazy current-program type checker factory.
  * @param shouldStop - Cooperative deadline and cancellation check.
- * @returns Whether the object is a CSS-bearing call surface.
+ * @returns The style resolution, or null when not an assistable call surface.
  */
 function callAnchor(
     tsMod: typeof ts,
@@ -283,15 +312,15 @@ function callAnchor(
     object: ts.ObjectLiteralExpression,
     getChecker: () => ts.TypeChecker,
     shouldStop: () => boolean,
-): boolean {
+): StyleResolution | null {
     const path: string[] = [];
     let node: ts.Node = object;
     for (let depth = 0; node.parent && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
-        if (shouldStop()) return false;
+        if (shouldStop()) return null;
         const parent = node.parent;
         if (tsMod.isPropertyAssignment(parent)) {
             const name = propertyName(tsMod, parent);
-            if (!name) return false;
+            if (!name) return null;
             path.push(name);
             node = parent;
             continue;
@@ -319,23 +348,24 @@ function callAnchor(
                 parent.expression.name.text !== 'szv' &&
                 parent.expression.name.text !== 'szr'
             ) {
-                return false;
+                return null;
             }
             const callName = csszyxCallName(tsMod, sourceFile, parent, getChecker(), shouldStop);
-            // Names INSIDE a style object may only nest under variant-ish keys,
-            // never under a utility property (`p: { | }` is not sz syntax); the
-            // structural szv names (base / variants.axis.option / …sz) and slot
-            // names are schema, not style keys, and are exempt.
-            if (callName === 'szr') return chainAllowsNesting(path);
+            // Names INSIDE a style object may only nest under variant-ish keys —
+            // with the one exception of a COLOR property owning its `{ color,
+            // op }` value object. The structural szv names (base /
+            // variants.axis.option / …sz) are schema, not style keys.
+            if (callName === 'szr') return resolveChain(path);
             if (callName === 'szv') {
                 const styleChain = szvStyleChain(path.reverse());
-                return styleChain !== null && chainAllowsNesting(styleChain);
+                if (styleChain === null) return null;
+                return resolveChain([...styleChain].reverse());
             }
-            return false;
+            return null;
         }
-        return false;
+        return null;
     }
-    return false;
+    return null;
 }
 
 /** Classify a cursor without recursively traversing the source file.
@@ -377,24 +407,35 @@ export function getSzContext(
             break;
         }
     }
-    if (
-        !object ||
-        (!jsxAnchor(tsMod, object) &&
-            !callAnchor(tsMod, sourceFile, object, getChecker, shouldStop))
-    )
-        return null;
+    if (!object) return null;
+    const resolution =
+        jsxAnchor(tsMod, object) ?? callAnchor(tsMod, sourceFile, object, getChecker, shouldStop);
+    if (resolution === null) return null;
+    const { form } = resolution;
+
+    /** Look up a structured-form member; a non-member key inside a form object
+     * is not assistable.
+     * @param name - Property name at the cursor's slot.
+     * @returns The member, undefined for plain style objects, or null to bail.
+     */
+    const memberFor = (name: string): ObjectFormMember | null | undefined => {
+        if (form === null) return undefined;
+        return form.members.find(candidate => candidate.name === name) ?? null;
+    };
 
     const text = sourceFile.getFullText();
     if (valueProperty?.parent === object) {
         const name = propertyName(tsMod, valueProperty);
-        return name
-            ? {
-                  kind: 'value',
-                  property: name,
-                  quoted: tsMod.isStringLiteralLike(valueProperty.initializer),
-                  replacementSpan: replacementSpan(text, position, true),
-              }
-            : null;
+        if (!name) return null;
+        const member = memberFor(name);
+        if (member === null) return null;
+        return {
+            kind: 'value',
+            property: name,
+            quoted: tsMod.isStringLiteralLike(valueProperty.initializer),
+            replacementSpan: replacementSpan(text, position, true),
+            member,
+        };
     }
     const objectStart = object.getStart(sourceFile);
     // Classify by what precedes the TYPED PREFIX, not the last typed character:
@@ -437,20 +478,23 @@ export function getSzContext(
             nameStart -= 1;
         }
         const name = text.slice(nameStart, nameEnd);
-        return name && /[A-Z_$]/i.test(name[0] ?? '')
-            ? {
-                  kind: 'value',
-                  property: name,
-                  quoted: false,
-                  replacementSpan: replacementSpan(text, position, true),
-              }
-            : null;
+        if (!name || !/[A-Z_$]/i.test(name[0] ?? '')) return null;
+        const member = memberFor(name);
+        if (member === null) return null;
+        return {
+            kind: 'value',
+            property: name,
+            quoted: false,
+            replacementSpan: replacementSpan(text, position, true),
+            member,
+        };
     }
     if (text[scan] === '{' || text[scan] === ',') {
         return {
             kind: 'key',
             replacementSpan: replacementSpan(text, position, false),
             siblings: siblingKeys(tsMod, object, position),
+            form: form ?? undefined,
         };
     }
     return null;

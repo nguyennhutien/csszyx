@@ -9,6 +9,7 @@
  */
 
 import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from './tooling.generated';
+import { COLOR_VALUE_PROPS, VALUE_SUGGESTIONS } from './value-suggestions';
 
 /**
  * Utility property keys. Their values are strings/numbers, never objects, so a
@@ -42,6 +43,107 @@ export function chainAllowsNesting(names: readonly string[]): boolean {
         if (name && PROPERTY_KEYS.has(name)) return false;
     }
     return true;
+}
+
+/** One member of a structured object-value form. */
+export interface ObjectFormMember {
+    readonly name: string;
+    /** Short human hint shown beside the member key. */
+    readonly detail: string;
+    /** Curated value suggestions for the member. */
+    readonly values: readonly string[];
+}
+
+/** A structured object value a property accepts instead of a style object. */
+export interface ObjectValueForm {
+    readonly members: readonly ObjectFormMember[];
+}
+
+/** Props that accept the `{ color: token, op: number }` object value form —
+ * the documented (and only) way to express color opacity. */
+export const COLOR_OBJECT_PROPS: ReadonlySet<string> = new Set(COLOR_VALUE_PROPS);
+
+const COLOR_FORM: ObjectValueForm = {
+    members: [
+        { name: 'color', detail: 'color token', values: VALUE_SUGGESTIONS.color ?? [] },
+        { name: 'op', detail: 'opacity', values: VALUE_SUGGESTIONS.opacity ?? [] },
+    ],
+};
+
+/** `bgImg: { gradient, dir, in }` → `bg-linear-to-r/hsl` (spec: BgImgGradient). */
+const BG_IMG_FORM: ObjectValueForm = {
+    members: [
+        { name: 'gradient', detail: 'gradient type', values: ['linear', 'radial', 'conic'] },
+        {
+            name: 'dir',
+            detail: 'direction / angle',
+            values: ['to-r', 'to-l', 'to-t', 'to-b', 'to-tr', 'to-tl', 'to-br', 'to-bl'],
+        },
+        {
+            name: 'in',
+            detail: 'color interpolation',
+            values: [
+                'srgb',
+                'hsl',
+                'oklab',
+                'oklch',
+                'longer',
+                'shorter',
+                'increasing',
+                'decreasing',
+            ],
+        },
+    ],
+};
+
+/** Resolve the structured object form a property's value accepts, if any.
+ * @param name - Property key owning a nested object.
+ * @returns The form, or null when the property takes no object value.
+ */
+export function objectValueForm(name: string): ObjectValueForm | null {
+    if (name === 'bgImg') return BG_IMG_FORM;
+    if (COLOR_OBJECT_PROPS.has(name)) return COLOR_FORM;
+    return null;
+}
+
+/** Keys whose object value has OPEN membership (arbitrary CSS properties) —
+ * valid syntax, but no finite key list exists to suggest inside it. */
+const OPAQUE_OBJECT_KEYS: ReadonlySet<string> = new Set(['css']);
+
+/** What a nested-object chain inside a style region means. */
+export type StyleChainKind = 'style' | 'object-form' | 'opaque' | 'invalid';
+
+/**
+ * Classify a nested-object chain inside a style region.
+ *
+ * Variant and unknown keys may own nested style objects freely. A utility
+ * property may own a nested object only as its documented structured value
+ * (`bg: { color, op }`, `bgImg: { gradient, … }`) and only as the INNERMOST
+ * owner. `css` owns an open object (arbitrary CSS properties) that cannot be
+ * assisted. Any other property owner along the chain is invalid sz structure.
+ * @param namesInnerFirst - Owner-name chain from the cursor's object outward
+ * ('' = unknown owner, always permitted).
+ * @returns The chain kind; consumers serve suggestions only for 'style' and
+ * 'object-form'.
+ */
+export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleChainKind {
+    let kind: StyleChainKind = 'style';
+    for (let index = 0; index < namesInnerFirst.length; index += 1) {
+        const name = namesInnerFirst[index] ?? '';
+        if (!name) continue;
+        if (OPAQUE_OBJECT_KEYS.has(name)) {
+            if (index !== 0) return 'invalid';
+            kind = 'opaque';
+            continue;
+        }
+        if (!PROPERTY_KEYS.has(name)) continue;
+        if (index === 0 && objectValueForm(name) !== null) {
+            kind = 'object-form';
+            continue;
+        }
+        return 'invalid';
+    }
+    return kind;
 }
 
 /**

@@ -2,6 +2,8 @@ import {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
     METADATA_SCHEMA_VERSION,
+    type ObjectFormMember,
+    type ObjectValueForm,
     PROPERTY_MAP,
     VALUE_SUGGESTIONS,
 } from '@csszyx/tooling-metadata';
@@ -99,6 +101,66 @@ export function buildSzKeyEntries(
         if (exclude?.has(name)) continue;
         result.push(entry(tsMod, name, 'key', result.length, replacementSpan));
     }
+    return result;
+}
+
+/** Build key entries for a structured object-value form (e.g. `{ color, op }`).
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param form - The form whose members are the only valid keys.
+ * @param replacementSpan - Source span replaced on acceptance.
+ * @param exclude - Members already assigned in the object.
+ * @returns Member key entries with per-member hints.
+ */
+export function buildFormKeyEntries(
+    tsMod: typeof ts,
+    form: ObjectValueForm,
+    replacementSpan: ts.TextSpan,
+    exclude?: ReadonlySet<string>,
+): ts.CompletionEntry[] {
+    if (METADATA_SCHEMA_VERSION !== 1) return [];
+    const result: ts.CompletionEntry[] = [];
+    for (const member of form.members) {
+        if (exclude?.has(member.name)) continue;
+        const item = entry(tsMod, member.name, 'key', result.length, replacementSpan);
+        result.push({ ...item, labelDetails: { description: member.detail } });
+    }
+    return result;
+}
+
+/** Build value entries from a structured-form member's curated list.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param member - The form member owning the value slot.
+ * @param limit - Maximum entries to return.
+ * @param replacementSpan - Source span replaced on acceptance.
+ * @param quoted - Whether the cursor is already inside a string literal.
+ * @param shouldStop - Cooperative deadline and cancellation check.
+ * @returns Value completion entries (numbers bare, strings quoted).
+ */
+export function buildMemberValueEntries(
+    tsMod: typeof ts,
+    member: ObjectFormMember,
+    limit: number,
+    replacementSpan: ts.TextSpan,
+    quoted: boolean,
+    shouldStop: () => boolean = () => false,
+): ts.CompletionEntry[] {
+    if (METADATA_SCHEMA_VERSION !== 1) return [];
+    const result: ts.CompletionEntry[] = [];
+    for (const name of member.values.slice(0, limit)) {
+        if (result.length % 32 === 0 && shouldStop()) break;
+        const numeric = name !== '' && Number.isFinite(Number(name));
+        result.push(
+            entry(
+                tsMod,
+                name,
+                'value',
+                result.length,
+                replacementSpan,
+                quoted || numeric ? name : `'${name.replace(/'/g, "\\'")}'`,
+            ),
+        );
+    }
+    if (result[0]) result[0].isRecommended = true;
     return result;
 }
 

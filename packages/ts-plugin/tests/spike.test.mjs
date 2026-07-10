@@ -187,18 +187,19 @@ check('a mid-word key prefix offers keys covering the prefix', () => {
     );
 });
 
-// A nested object under a utility PROPERTY key is not sz syntax (only variant
-// keys take objects; the compiler lowers `p: { bg }` to a garbage class), so
-// the plugin must stay silent instead of teaching the structure.
-check('a nested object under a property key gets no suggestions', () => {
+// A nested object under a NON-color utility property is not sz syntax (the
+// compiler lowers `p: { bg }` to a garbage class), and the `css` escape hatch
+// takes arbitrary CSS properties no finite list can assist — silence for both.
+check('nested objects under non-form properties and css get no suggestions', () => {
     const cases = [
-        'const A = () => <div sz={{ borderColor: { /*|*/ } }} />;',
+        'const A = () => <div sz={{ p: { /*|*/ } }} />;',
         'const A = () => <div sz={{ hover: { p: { /*|*/ } } }} />;',
         "import { szv } from 'csszyx'; szv({ variants: { size: { sm: { p: { /*|*/ } } } } });",
         "import { szr } from 'csszyx'; szr({ p: { /*|*/ } });",
         'const A = () => <Card szs={{ header: { p: { /*|*/ } } }} />;',
-        // value inside the invalid subtree is equally silent
-        "const A = () => <div sz={{ borderColor: { color: 're/*|*/' } }} />;",
+        'const A = () => <div sz={{ css: { /*|*/ } }} />;',
+        // deeper nesting inside a structured form is equally invalid
+        'const A = () => <div sz={{ bg: { color: { /*|*/ } } }} />;',
     ];
     for (const source of cases) {
         assert.strictEqual(namesAtMarker(source).length, 0, `expected silence: ${source}`);
@@ -208,6 +209,42 @@ check('a nested object under a property key gets no suggestions', () => {
     assert.ok(
         namesAtMarker('const A = () => <div sz={{ customVariant: { /*|*/ } }} />;').includes('bg'),
     );
+});
+
+// A COLOR property's object value is the documented `{ color, op }` form — the
+// only way to express opacity — so suggestions are limited to exactly those
+// members, chain into their curated values, and respect sibling exclusion.
+check('a color property object offers exactly its { color, op } members', () => {
+    const names = namesAtMarker('const A = () => <div sz={{ bg: { /*|*/ } }} />;');
+    assert.deepStrictEqual([...names].sort(), ['color', 'op']);
+    const afterColor = namesAtMarker(
+        "const A = () => <div sz={{ borderColor: { color: 'red-500', /*|*/ } }} />;",
+    );
+    assert.deepStrictEqual(afterColor, ['op'], 'assigned member drops, op remains');
+    const colorValues = entriesAtMarker(
+        "const A = () => <div sz={{ bg: { color: 're/*|*/' } }} />;",
+    );
+    assert.ok(colorValues.some(entry => entry.name === 'red-500'));
+    const opValues = entriesAtMarker('const A = () => <div sz={{ bg: { op: /*|*/ } }} />;');
+    assert.strictEqual(opValues.find(entry => entry.name === '50')?.insertText, '50');
+});
+
+// bgImg's gradient object form (spec BgImgGradient): gradient/dir/in members.
+check('bgImg offers its gradient form members and values', () => {
+    const names = namesAtMarker('const A = () => <div sz={{ bgImg: { /*|*/ } }} />;');
+    assert.deepStrictEqual([...names].sort(), ['dir', 'gradient', 'in']);
+    const gradient = namesAtMarker(
+        'const A = () => <div sz={{ bgImg: { gradient: /*|*/ } }} />;',
+    );
+    assert.deepStrictEqual([...gradient].sort(), ['conic', 'linear', 'radial']);
+    const names2 = namesAtMarker(
+        "const A = () => <div sz={{ bgImg: { gradient: 'linear', dir: /*|*/ } }} />;",
+    );
+    assert.ok(names2.includes('to-r'));
+    const interpolation = namesAtMarker(
+        "const A = () => <div sz={{ bgImg: { gradient: 'linear', in: /*|*/ } }} />;",
+    );
+    assert.ok(interpolation.includes('oklch'));
 });
 
 // Tier-1 decoration: a base entry colliding with a csszyx key gains the
