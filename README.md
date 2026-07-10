@@ -63,6 +63,7 @@ Full walkthrough: <https://csszyx.com>
 - **Runtime injection (`@csszyx/dynamic`)** — inject styles from API/CMS data at runtime; SSR-safe
 - **Migration CLI (`@csszyx/cli`)** — convert existing Tailwind `className="..."` to `sz={...}` props
 - **MCP server (`@csszyx/mcp-server`)** — expose sz spec + compiler to AI agents (Cursor, Claude Code, etc.)
+- **TypeScript plugin (`@csszyx/ts-plugin`)** — portable, bounded `sz`/`szv`/`szs` key and value completion in compatible TypeScript hosts
 - **VS Code extension** — IntelliSense, hover previews, and diagnostics inside `sz={{...}}` (in the Marketplace)
 
 **Tailwind CSS v4 only.** v3 support is not implemented yet.
@@ -85,21 +86,23 @@ Full walkthrough: <https://csszyx.com>
 
 ## Packages
 
-| Package                  | Description                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------- |
-| `csszyx`                 | Umbrella — re-exports all; provides `csszyx/vite`, `csszyx/webpack`, `csszyx/lite`  |
-| `@csszyx/compiler`       | `sz` object → Tailwind className transform (TypeScript)                             |
-| `@csszyx/runtime`        | `szr`/`szcn`/`szv` composition + `splitBox` class toolkit + SSR hydration validator |
-| `@csszyx/core`           | Rust/WASM core: encoder, SHA-256 checksum, collision detection                      |
-| `@csszyx/unplugin`       | Build plugin — Vite + Webpack + esbuild + Rollup + Next.js                          |
-| `@csszyx/dynamic`        | Runtime CSS injection for API/CMS-driven styling                                    |
-| `@csszyx/cli`            | Migration CLI (Tailwind → `sz`) + type generator                                    |
-| `@csszyx/vars`           | CSS custom-property helpers (`applySzVars`, React `useSzVars`)                      |
-| `@csszyx/mcp-server`     | Model Context Protocol server for AI agents                                         |
-| `@csszyx/vscode`         | VS Code extension — IntelliSense, hover, diagnostics                                |
-| `@csszyx/types`          | Shared TypeScript types + `CsszyxConfig`                                            |
-| `@csszyx/vue-adapter`    | Vue SFC support (experimental)                                                      |
-| `@csszyx/svelte-adapter` | Svelte support (experimental)                                                       |
+| Package                    | Description                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| `csszyx`                   | Umbrella — re-exports all; provides `csszyx/vite`, `csszyx/webpack`, `csszyx/lite`  |
+| `@csszyx/compiler`         | `sz` object → Tailwind className transform (TypeScript)                             |
+| `@csszyx/runtime`          | `szr`/`szcn`/`szv` composition + `splitBox` class toolkit + SSR hydration validator |
+| `@csszyx/core`             | Rust/WASM core: encoder, SHA-256 checksum, collision detection                      |
+| `@csszyx/unplugin`         | Build plugin — Vite + Webpack + esbuild + Rollup + Next.js                          |
+| `@csszyx/dynamic`          | Runtime CSS injection for API/CMS-driven styling                                    |
+| `@csszyx/cli`              | Migration CLI (Tailwind → `sz`) + type generator                                    |
+| `@csszyx/vars`             | CSS custom-property helpers (`applySzVars`, React `useSzVars`)                      |
+| `@csszyx/mcp-server`       | Model Context Protocol server for AI agents                                         |
+| `@csszyx/ts-plugin`        | TypeScript project plugin for bounded `sz` key and value completion                 |
+| `@csszyx/tooling-metadata` | Internal metadata shared by editor tooling; bundled at build time, not published    |
+| `@csszyx/vscode`           | VS Code extension — IntelliSense, hover, diagnostics                                |
+| `@csszyx/types`            | Shared TypeScript types + `CsszyxConfig`                                            |
+| `@csszyx/vue-adapter`      | Vue SFC support (experimental)                                                      |
+| `@csszyx/svelte-adapter`   | Svelte support (experimental)                                                       |
 
 ## Examples
 

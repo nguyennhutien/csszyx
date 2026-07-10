@@ -1,0 +1,4 @@
+# Generated files: collapse diffs on GitHub and exclude from language stats.
+packages/tooling-metadata/src/tooling.generated.ts linguist-generated=true
+apps/docs/public/llms.txt linguist-generated=true
+apps/docs/public/llms-full.txt linguist-generated=true

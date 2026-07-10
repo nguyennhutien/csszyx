@@ -1,0 +1,42 @@
+{
+  "name": "@csszyx/ts-plugin",
+  "version": "0.11.3",
+  "description": "Bounded sz/szv/szs completions for compatible TypeScript language-service hosts",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/ts-plugin"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node esbuild.mjs",
+    "test": "pnpm run build && node tests/spike.test.mjs && node tests/contract.test.mjs && node tests/proxy.test.mjs && node tests/performance.test.mjs && node tests/pack.test.mjs && node tests/tsserver.test.mjs"
+  },
+  "devDependencies": {
+    "@csszyx/tooling-metadata": "workspace:*",
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.28.1",
+    "typescript": "~5.9.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.9.0 <7"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "csszyx",
+    "typescript-plugin",
+    "language-service",
+    "autocomplete",
+    "intellisense"
+  ],
+  "license": "MIT"
+}

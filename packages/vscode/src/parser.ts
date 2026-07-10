@@ -21,6 +21,9 @@
  */
 export type ContextType = 'none' | 'key' | 'value' | 'variant-key' | 'variant-value';
 
+/** Which csszyx surface the expression belongs to. */
+export type SzForm = 'sz' | 'szs' | 'szv' | 'szr';
+
 /**
  *
  */
@@ -30,9 +33,35 @@ export interface SzContext {
     currentKey: string | undefined;
     /** Object brace depth: 1 = top-level, 2 = inside a variant object. */
     depth: number;
+    /** Surface the expression belongs to (`sz` for `none`). */
+    form: SzForm;
+    /** Keys owning each nested brace, outer→inner, from depth 2 down to the
+     * cursor's object ('' = unknown owner). Depth-1 has no owner. */
+    parents: readonly string[];
+    /** Keys already assigned at the cursor's depth since its `{` opened. */
+    siblings: readonly string[];
 }
 
-const NONE: SzContext = { type: 'none', currentKey: undefined, depth: 0 };
+const NONE: SzContext = {
+    type: 'none',
+    currentKey: undefined,
+    depth: 0,
+    form: 'sz',
+    parents: [],
+    siblings: [],
+};
+
+/** Strip one pair of matching quotes so `'color':` reads as `color`.
+ * @param segment - Raw text between the segment start and a colon.
+ * @returns The key name, or '' when the segment is not a static key.
+ */
+function normalizeKeySegment(segment: string): string {
+    let seg = segment.trim();
+    if (seg.length >= 2 && (seg[0] === "'" || seg[0] === '"') && seg[seg.length - 1] === seg[0]) {
+        seg = seg.slice(1, -1);
+    }
+    return /^[a-z_$][\w$]*$/i.test(seg) ? seg : '';
+}
 
 /**
  * Description of a sz expression's opening.
@@ -52,6 +81,45 @@ interface SzStart {
     bodyStart: number;
     explicit: boolean;
     terminator: string | null;
+    form: SzForm;
+}
+
+/** Locate the rightmost `szv(`/`szr(`/`szs={{` opening in `text`, if any.
+ * @param text - Source text to scan.
+ * @returns Marker index + start description, or null.
+ */
+function findCsszyxCallStart(text: string): { idx: number; start: SzStart } | null {
+    let best: { idx: number; start: SzStart } | null = null;
+    for (const form of ['szv', 'szr'] as const) {
+        const marker = `${form}(`;
+        let from = text.length;
+        while (from >= 0) {
+            const idx = text.lastIndexOf(marker, from);
+            if (idx === -1) break;
+            from = idx - 1;
+            // Word boundary: `myszv(` is not a csszyx call; `csszyx.szv(` is.
+            const before = idx > 0 ? (text[idx - 1] ?? '') : '';
+            if (/[\w$]/.test(before)) continue;
+            let j = idx + marker.length;
+            while (j < text.length && /\s/.test(text[j] ?? '')) j++;
+            if (text[j] !== '{') continue;
+            if (best === null || idx > best.idx) {
+                best = {
+                    idx,
+                    start: { bodyStart: j, explicit: true, terminator: null, form },
+                };
+            }
+            break;
+        }
+    }
+    const szs = text.lastIndexOf('szs={{');
+    if (szs !== -1 && (best === null || szs > best.idx)) {
+        best = {
+            idx: szs,
+            start: { bodyStart: szs + 5, explicit: true, terminator: null, form: 'szs' },
+        };
+    }
+    return best;
 }
 
 /**
@@ -69,7 +137,10 @@ function findSzStart(text: string): SzStart | null {
 
     const jsx = text.lastIndexOf('sz={{');
     if (jsx !== -1 && beat(jsx)) {
-        best = { idx: jsx, start: { bodyStart: jsx + 4, explicit: true, terminator: null } };
+        best = {
+            idx: jsx,
+            start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
+        };
     }
 
     const dq = text.lastIndexOf('sz="');
@@ -80,8 +151,8 @@ function findSzStart(text: string): SzStart | null {
         }
         const start: SzStart =
             text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null }
-                : { bodyStart: dq + 4, explicit: false, terminator: '"' };
+                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
+                : { bodyStart: dq + 4, explicit: false, terminator: '"', form: 'sz' };
         best = { idx: dq, start };
     }
 
@@ -93,9 +164,14 @@ function findSzStart(text: string): SzStart | null {
         }
         const start: SzStart =
             text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null }
-                : { bodyStart: sq + 4, explicit: false, terminator: "'" };
+                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
+                : { bodyStart: sq + 4, explicit: false, terminator: "'", form: 'sz' };
         best = { idx: sq, start };
+    }
+
+    const call = findCsszyxCallStart(text);
+    if (call !== null && beat(call.idx)) {
+        best = call;
     }
 
     return best === null ? null : best.start;
@@ -117,10 +193,16 @@ export function parseSzContext(text: string): SzContext {
     // Implicit forms start "inside" the virtual object at depth 1.
     let depth = start.explicit ? 0 : 1;
     const segStart: number[] = [];
+    // keyStack[d] = key owning the `{` that opened depth d ('' = unknown);
+    // siblingsAt[d] = keys assigned at depth d since its `{` opened.
+    const keyStack: string[] = [];
+    const siblingsAt: Array<Set<string>> = [];
     if (start.explicit) {
         segStart[0] = 0;
     } else {
         segStart[1] = 0;
+        keyStack[1] = '';
+        siblingsAt[1] = new Set();
     }
 
     let lastColon = -1;
@@ -136,7 +218,10 @@ export function parseSzContext(text: string): SzContext {
         }
 
         if (c === '{') {
+            const owner = lastColon >= (segStart[depth] ?? 0) ? keyAtColon : '';
             depth++;
+            keyStack[depth] = owner;
+            siblingsAt[depth] = new Set();
             segStart[depth] = i + 1;
             lastColon = -1;
             keyAtColon = '';
@@ -145,6 +230,8 @@ export function parseSzContext(text: string): SzContext {
                 return NONE;
             }
             segStart.length = depth;
+            keyStack.length = depth;
+            siblingsAt.length = depth;
             depth--;
             lastColon = -1;
             keyAtColon = '';
@@ -153,10 +240,11 @@ export function parseSzContext(text: string): SzContext {
             lastColon = -1;
             keyAtColon = '';
         } else if (c === ':' && depth >= 1) {
-            const seg = afterOpen.slice(segStart[depth] ?? 0, i).trim();
-            if (/^[a-z_$][\w$]*$/i.test(seg)) {
+            const seg = normalizeKeySegment(afterOpen.slice(segStart[depth] ?? 0, i));
+            if (seg !== '') {
                 lastColon = i;
                 keyAtColon = seg;
+                siblingsAt[depth]?.add(seg);
             }
         } else if ((c === '"' || c === "'") && depth >= 1) {
             const q = c;
@@ -186,17 +274,27 @@ export function parseSzContext(text: string): SzContext {
         return NONE;
     }
 
+    // Owners of depth 2..current, outer→inner (depth 1 — the root — has none).
+    const parents = keyStack.slice(2, depth + 1);
+    const siblings = [...(siblingsAt[depth] ?? [])];
+
     if (lastColon >= (segStart[depth] ?? 0)) {
         return {
             type: depth === 1 ? 'value' : 'variant-value',
             currentKey: keyAtColon || undefined,
             depth,
+            form: start.form,
+            parents,
+            siblings,
         };
     }
     return {
         type: depth === 1 ? 'key' : 'variant-key',
         currentKey: undefined,
         depth,
+        form: start.form,
+        parents,
+        siblings,
     };
 }
 
@@ -234,7 +332,10 @@ function findNextSz(text: string, from: number): MarkerHit | null {
 
     const jsx = text.indexOf('sz={{', from);
     if (jsx !== -1 && beat(jsx)) {
-        earliest = { idx: jsx, start: { bodyStart: jsx + 4, explicit: true, terminator: null } };
+        earliest = {
+            idx: jsx,
+            start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
+        };
     }
 
     const dq = text.indexOf('sz="', from);
@@ -245,8 +346,8 @@ function findNextSz(text: string, from: number): MarkerHit | null {
         }
         const start: SzStart =
             text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null }
-                : { bodyStart: dq + 4, explicit: false, terminator: '"' };
+                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
+                : { bodyStart: dq + 4, explicit: false, terminator: '"', form: 'sz' };
         earliest = { idx: dq, start };
     }
 
@@ -258,8 +359,8 @@ function findNextSz(text: string, from: number): MarkerHit | null {
         }
         const start: SzStart =
             text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null }
-                : { bodyStart: sq + 4, explicit: false, terminator: "'" };
+                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
+                : { bodyStart: sq + 4, explicit: false, terminator: "'", form: 'sz' };
         earliest = { idx: sq, start };
     }
 

@@ -1,0 +1,33 @@
+{
+  "name": "@csszyx/tooling-metadata",
+  "version": "0.11.3",
+  "description": "Shared implementation metadata for csszyx editor and language tooling",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/tooling-metadata"
+  },
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "generate": "node --import tsx/esm scripts/generate.mjs",
+    "generate:check": "node --import tsx/esm scripts/generate.mjs --check",
+    "build": "pnpm clean && pnpm generate && tsc -p tsconfig.build.json",
+    "test": "pnpm generate:check && pnpm type-check",
+    "type-check": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "devDependencies": {
+    "@csszyx/compiler": "workspace:*",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

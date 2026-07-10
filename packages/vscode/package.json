@@ -38,6 +38,12 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "typescriptServerPlugins": [
+      {
+        "name": "@csszyx/ts-plugin",
+        "enableForWorkspaceTypeScriptVersions": true
+      }
+    ],
     "grammars": [
       {
         "scopeName": "source.sz.injection",
@@ -55,6 +61,21 @@
     "configuration": {
       "title": "CSSzyx",
       "properties": {
+        "csszyx.completions": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "extension",
+            "off"
+          ],
+          "markdownEnumDescriptions": [
+            "**Recommended.** The bundled `@csszyx/ts-plugin` provides `sz`/`szv`/`szs` completions in TypeScript/JavaScript, a trigger companion opens the list on `{`, `,`, `:` and space, and the extension covers HTML. No duplicate suggestions.",
+            "Disable the plugin and let the extension provide completions in every language (a fallback if you prefer the extension's provider).",
+            "Never provide `sz` completions. Hover and diagnostics are unaffected."
+          ],
+          "default": "auto",
+          "markdownDescription": "Who provides `sz`/`szv`/`szs` completions. In `auto`, the bundled `@csszyx/ts-plugin` handles TypeScript/JavaScript and the extension handles HTML, so you never see duplicate suggestions."
+        },
         "csszyx.enableDiagnostics": {
           "type": "boolean",
           "default": true,
@@ -74,12 +95,14 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "vsix": "pnpm build && node scripts/package.mjs",
-    "vsix:publish": "pnpm build && node scripts/package.mjs --publish"
+    "vsix": "pnpm --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs",
+    "vsix:publish": "pnpm --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs --publish"
   },
   "devDependencies": {
     "@babel/parser": "^7.23.0",
     "@csszyx/compiler": "workspace:*",
+    "@csszyx/tooling-metadata": "workspace:*",
+    "@csszyx/ts-plugin": "workspace:*",
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.0.0",

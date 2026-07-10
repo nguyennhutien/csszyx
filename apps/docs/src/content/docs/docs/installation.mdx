@@ -30,6 +30,11 @@ build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
 or install with `pnpm add -D @csszyx/cli`.
 
+For portable `sz` autocomplete through compatible TypeScript editor hosts,
+install the preview `@csszyx/ts-plugin` separately and follow the
+[TypeScript Autocomplete Plugin guide](/docs/typescript-plugin/). It is an
+authoring tool, not a build dependency.
+
 :::caution[`@csszyx/runtime` must be a direct dependency]
 The build injects runtime helpers as `import { _szMerge } from '@csszyx/runtime'`
 into components that merge or compute classes. Under strict node-linking package

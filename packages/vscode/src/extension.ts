@@ -12,6 +12,8 @@
 
 import * as vscode from 'vscode';
 
+import { COMPANION_TRIGGERS, SzCompanionProvider } from './companion-provider.js';
+import { parseCompletionMode, planCompletions } from './completion-arbitration.js';
 import { SzCompletionProvider } from './completion-provider.js';
 import { createDebouncedValidator, validateDocument } from './diagnostic-provider.js';
 import { SzHoverProvider } from './hover-provider.js';
@@ -25,30 +27,98 @@ const SZ_LANGUAGES = [
     { language: 'html' },
 ];
 
+/** HTML alone — tsserver never sees it, so the plugin cannot cover it. */
+const HTML_LANGUAGES = [{ language: 'html' }];
+
+/** TypeScript/JavaScript — the companion provider's territory in auto mode. */
+const TS_LANGUAGES = [
+    { language: 'typescriptreact' },
+    { language: 'javascriptreact' },
+    { language: 'typescript' },
+    { language: 'javascript' },
+];
+
+/** Plugin id as declared in `contributes.typescriptServerPlugins`. */
+const TS_PLUGIN_ID = '@csszyx/ts-plugin';
+
 /**
  * Called by VS Code when the extension activates. Registers all providers.
  * @param context - Extension context for managing disposables
  */
 export function activate(context: vscode.ExtensionContext): void {
+    const output = vscode.window.createOutputChannel('CSSzyx');
+    context.subscriptions.push(output);
+
     // ── Completions ─────────────────────────────────────────────────────────
-    // Trigger characters fire completions automatically as the user types
-    // inside a sz expression. `{`, `"`, `'` cover the opening of the object in
-    // HTML attribute form; `:`, `,`, ` ` cover typing a key/value/separator
-    // in both JSX and HTML forms. Without these, VS Code only invokes the
-    // provider on Ctrl+Space inside HTML attribute strings.
-    const completionProvider = new SzCompletionProvider();
+    // The extension injects @csszyx/ts-plugin into tsserver (see
+    // `contributes.typescriptServerPlugins`), so the plugin serves sz
+    // completions in TypeScript/JavaScript. The extension's own provider only
+    // covers HTML, which tsserver never sees. `csszyx.completions` re-plans both
+    // sides and toggles the plugin so the two never duplicate each other.
+    let completionRegistration: vscode.Disposable | undefined;
+    let companionRegistration: vscode.Disposable | undefined;
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider(
-            SZ_LANGUAGES,
-            completionProvider,
+        new vscode.Disposable(() => {
+            completionRegistration?.dispose();
+            companionRegistration?.dispose();
+        }),
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration('csszyx.completions')) {
+                void syncCompletions();
+            }
+        }),
+    );
+    void syncCompletions();
+
+    /**
+     * Re-plan completion ownership from `csszyx.completions`: toggle the
+     * tsserver plugin and register the extension's provider for the planned
+     * languages. Runs at activation and whenever the setting changes.
+     */
+    async function syncCompletions(): Promise<void> {
+        const mode = parseCompletionMode(
+            vscode.workspace.getConfiguration('csszyx').get('completions'),
+        );
+        const plan = planCompletions(mode);
+        await configureTsPlugin(plan.pluginEnabled);
+
+        completionRegistration?.dispose();
+        completionRegistration = undefined;
+        companionRegistration?.dispose();
+        companionRegistration = undefined;
+        if (plan.extensionLanguages === 'none') {
+            output.appendLine("completions: off (csszyx.completions = 'off')");
+            return;
+        }
+        // Trigger characters fire completions as the user types inside a sz
+        // expression: `{`, `"`, `'` open the object (HTML attribute form); `:`,
+        // `,`, ` ` cover typing a key/value/separator.
+        completionRegistration = vscode.languages.registerCompletionItemProvider(
+            plan.extensionLanguages === 'all' ? SZ_LANGUAGES : HTML_LANGUAGES,
+            new SzCompletionProvider(),
             '{',
             '"',
             "'",
             ':',
             ',',
             ' ',
-        ),
-    );
+        );
+        if (plan.companion) {
+            // TS/JS trigger-character moments tsserver can never auto-open:
+            // `{`/`,` open key items that chain into plugin-served values, `:`
+            // (no space needed) and space open per-key value items.
+            companionRegistration = vscode.languages.registerCompletionItemProvider(
+                TS_LANGUAGES,
+                new SzCompanionProvider(),
+                ...COMPANION_TRIGGERS,
+            );
+        }
+        output.appendLine(
+            plan.extensionLanguages === 'all'
+                ? "completions: extension provides all languages (csszyx.completions = 'extension')"
+                : 'completions: @csszyx/ts-plugin handles TS/JS (+ trigger companion), extension covers HTML',
+        );
+    }
 
     // ── Hover ────────────────────────────────────────────────────────────────
     const hoverProvider = new SzHoverProvider();
@@ -98,6 +168,35 @@ export function activate(context: vscode.ExtensionContext): void {
  */
 export function deactivate(): void {
     // VS Code disposes subscriptions registered via context.subscriptions automatically.
+}
+
+/** Minimal shape of the built-in TypeScript extension's plugin-config API. */
+interface TypeScriptServerApi {
+    configurePlugin(pluginId: string, configuration: unknown): void;
+}
+
+/**
+ * Enable or disable the bundled tsserver plugin through the built-in
+ * TypeScript extension's API, so `csszyx.completions` controls it at runtime.
+ *
+ * The plugin defaults to enabled, so an unavailable API (or a host that is not
+ * VS Code) simply leaves it on — never a hard failure.
+ * @param enabled - Whether the plugin should serve completions.
+ */
+async function configureTsPlugin(enabled: boolean): Promise<void> {
+    try {
+        const tsExtension = vscode.extensions.getExtension('vscode.typescript-language-features');
+        if (!tsExtension) {
+            return;
+        }
+        if (!tsExtension.isActive) {
+            await tsExtension.activate();
+        }
+        const api = tsExtension.exports?.getAPI?.(0) as TypeScriptServerApi | undefined;
+        api?.configurePlugin?.(TS_PLUGIN_ID, { enabled });
+    } catch {
+        // Reaching the API is best-effort; the plugin's own default stands.
+    }
 }
 
 /**
