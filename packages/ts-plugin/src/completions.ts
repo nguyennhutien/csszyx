@@ -18,6 +18,15 @@ const IDENTIFIER_START = /[A-Z_$]/i;
 const IDENTIFIER_PART = /[\w$]/;
 export const DATA_OWNER = '@csszyx/ts-plugin';
 
+/** Quote a value as a single-quoted string literal, escaping backslashes before
+ * quotes so a value containing either cannot break out of the literal.
+ * @param value - Raw value text.
+ * @returns The safely quoted insertion text.
+ */
+function singleQuoted(value: string): string {
+    return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
 /** Describe an sz key by the Tailwind utility family it emits.
  * @param name - Canonical sz key.
  * @returns A greyed label hint, e.g. "→ bg-*", or a generic csszyx tag.
@@ -156,7 +165,7 @@ export function buildMemberValueEntries(
                 'value',
                 result.length,
                 replacementSpan,
-                quoted || numeric ? name : `'${name.replace(/'/g, "\\'")}'`,
+                quoted || numeric ? name : singleQuoted(name),
             ),
         );
     }
@@ -195,7 +204,7 @@ export function buildSzValueEntries(
                 'value',
                 result.length,
                 replacementSpan,
-                quoted || numeric ? name : `'${name.replace(/'/g, "\\'")}'`,
+                quoted || numeric ? name : singleQuoted(name),
             ),
         );
     }
