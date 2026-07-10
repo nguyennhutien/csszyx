@@ -37,11 +37,18 @@ TypeScript service through the `typescriptServerPlugins` contribution point, wit
 - **pnpm-proof.** The plugin is resolved from the extension itself, so strict
   package managers that hoist TypeScript away from your project cannot break it.
 
+The extension also fills the moments TypeScript never auto-opens a list for:
+typing `{`, `,`, or `:` inside an sz object pops the suggestions immediately —
+`bg:` offers colors and `p:` offers the spacing scale with **no space needed**
+(this is the only way numeric values can ever get a list, since editors never
+auto-suggest on digits). Accepting a key inserts `key: ` and chains straight
+into its value suggestions.
+
 Control completions with the `csszyx.completions` setting:
 
 | Value                  | Behavior                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------- |
-| `"auto"` _(default)_   | The plugin handles TypeScript/JavaScript; the extension handles HTML. No duplicates. |
+| `"auto"` _(default)_   | The plugin handles typed characters in TypeScript/JavaScript, the extension covers the `{`/`,`/`:` trigger moments and HTML. No duplicates. |
 | `"extension"`          | Disable the plugin and let the extension provide completions in every language. |
 | `"off"`                | No `sz` completions. Hover and diagnostics stay active.                         |
 
@@ -146,6 +153,18 @@ prefix and does not add a second pair of quotes:
 // After
 <div sz={{ bg: 'red-500' }} />
 ```
+
+:::tip[Recommended editor setting]
+By default, VS Code does not reopen the suggestion list while you type **inside
+a string** — you would have to press Trigger Suggest after dismissing it. Enable
+string suggestions once and quoted values behave like normal code (the same
+setting Tailwind CSS IntelliSense recommends):
+
+```jsonc
+// settings.json
+"editor.quickSuggestions": { "strings": "on" }
+```
+:::
 
 :::tip[Where the plugin shines]
 For a plain `<div sz={{}}>`, TypeScript's own types may already list the keys.

@@ -25,6 +25,9 @@ pnpm add -D @csszyx/ts-plugin typescript
 }
 ```
 
+Recommend `"editor.quickSuggestions": { "strings": "on" }` (VS Code) so quoted
+sz values keep suggesting while typing — same guidance as Tailwind IntelliSense.
+
 TypeScript resolves plugins next to the TypeScript install, not the `tsconfig`.
 Under pnpm the manual path needs `public-hoist-pattern[]=@csszyx/ts-plugin` in
 `.npmrc` (npm/Yarn flat layout does not). VS Code without the extension also
@@ -61,10 +64,17 @@ a plain non-composing layout fixes it — and AI inline suggestions
 
 Inside `@csszyx/vscode` there is no duplication to reconcile: the extension
 ships and injects this plugin for TypeScript/JavaScript and serves HTML itself
-(tsserver does not process HTML). `csszyx.completions` (via the TypeScript
-`configurePlugin` API): `auto` (default — plugin for TS/JS, extension for HTML) |
-`extension` (plugin disabled, extension serves all languages) | `off` (no sz
-completions). Hover and diagnostics are unaffected.
+(tsserver does not process HTML). In `auto` mode a trigger-character companion
+also covers the moments tsserver never auto-opens — `{`/`,` open key items that
+insert `key:` and chain into value suggestions; `:` (no space required) and
+space open per-key values, the only path by which numeric values (`p: 4`) get a
+list. Sessions are partitioned by trigger ownership, so companion and plugin
+never duplicate. `csszyx.completions` (via the TypeScript `configurePlugin`
+API): `auto` (default) | `extension` (plugin+companion disabled, extension
+serves all languages) | `off` (no sz completions). Hover and diagnostics are
+unaffected. In a value ternary (`p: ok ? 4 : …`) both branches are values of
+the owning key — a finite conditional is valid sz — so value suggestions
+continue there by design.
 
 ### VS Code Extension (`@csszyx/vscode`)
 
