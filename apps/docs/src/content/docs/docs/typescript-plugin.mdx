@@ -272,22 +272,25 @@ from a real failure. Run **TypeScript: Open TS Server Log** (enable it first wit
 
 If the plugin is activated but typing a letter inside an sz object never opens
 the suggestion list — while `Math.` or typing `'` does — the suggestion widget
-itself is being suppressed, usually by AI inline suggestions (Copilot ghost
-text). This is a known VS Code issue
-([microsoft/vscode#315373](https://github.com/microsoft/vscode/issues/315373))
-that affects **all** completions, including TypeScript's own, not just CSSzyx.
-Quick test: on an empty line, type `Ma` — if no dropdown appears there either,
-the plugin is not the problem.
+is being suppressed **before any request reaches TypeScript**. This affects
+**all** completions, including TypeScript's own, not just CSSzyx. Quick test: on
+an empty line, type `Ma` — if no dropdown appears there either, the plugin is
+not the problem. Two known causes:
 
-Workarounds until the upstream fix:
+1. **An IME in composition mode** (Vietnamese Telex/VNI, CJK input methods).
+   While the input method is composing — you'll see its underline under the
+   letters you type — the editor receives no direct keystrokes, so
+   type-to-suggest never fires and an open list stops filtering. Switch the
+   input source to plain English/ABC while coding (this is also why
+   `Ctrl+Space` may be taken: it is the macOS input-source switcher), or use an
+   IME with an editor-compatibility mode.
+2. **AI inline suggestions** (Copilot ghost text) — a known VS Code issue
+   ([microsoft/vscode#315373](https://github.com/microsoft/vscode/issues/315373)).
+   Confirm by temporarily setting `"editor.inlineSuggest.enabled": false`.
 
-- Press **Trigger Suggest** (`Ctrl+Space`) to open the list on demand. On macOS
-  that chord is often taken by the input-source switcher — rebind either the
-  system shortcut or VS Code's `editor.action.triggerSuggest`.
-- Typing a quote at a value slot (`bg: '`) opens the list naturally — `'` and
-  `"` are TypeScript trigger characters.
-- To confirm the cause, temporarily set `"editor.inlineSuggest.enabled": false`
-  and type inside an sz object again.
+Regardless of cause, typing a quote at a value slot (`bg: '`) opens the list
+naturally — `'` and `"` are TypeScript trigger characters — and **Trigger
+Suggest** (rebind it if `Ctrl+Space` is taken) opens it on demand.
 
 ### Manual `tsconfig` setup
 
