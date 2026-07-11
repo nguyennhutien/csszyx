@@ -104,10 +104,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build extension
-        # `...` includes workspace dependencies: the extension bundles
-        # @csszyx/tooling-metadata, whose dist/ is gitignored, so on a fresh
-        # checkout esbuild can only resolve it if the dep is built first.
-        run: pnpm --filter @csszyx/vscode... build
+        # Build only the JavaScript dependencies the extension bundles —
+        # @csszyx/tooling-metadata (whose dist/ is gitignored, so esbuild can
+        # only resolve it once built) and @csszyx/ts-plugin (packed into the
+        # vsix). NOT `@csszyx/vscode...`: the full dependency graph pulls in
+        # @csszyx/core, whose build runs wasm-pack, and this runner has no Rust
+        # toolchain. pnpm builds the three in dependency order.
+        run: >-
+          pnpm --filter @csszyx/tooling-metadata --filter @csszyx/ts-plugin
+          --filter @csszyx/vscode build
 
       - name: Package .vsix (dry-run check)
         run: pnpm --filter @csszyx/vscode vsix
