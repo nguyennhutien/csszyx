@@ -125,3 +125,20 @@ describe('csszyx/browser standalone runtime', () => {
         expect(document.getElementById('late')?.className).toContain('p-4');
     });
 });
+
+describe('parser character edges', () => {
+    it('handles escaped characters inside quoted strings and quoted keys', async () => {
+        document.body.innerHTML = `<div id="esc" sz="{'bg': 'red-500', title: 'it\\\\'s'}"></div>`;
+        await loadRuntime();
+        const esc = document.getElementById('esc');
+        expect(esc?.hasAttribute('sz')).toBe(false);
+        expect(esc?.className).toContain('bg-red-500');
+    });
+
+    it('skips an element already marked as processed', async () => {
+        document.body.innerHTML = '<div id="done" sz="{p: 4}" data-sz-processed></div>';
+        await loadRuntime();
+        // The guard leaves the marked element untouched.
+        expect(document.getElementById('done')?.className).toBe('');
+    });
+});
