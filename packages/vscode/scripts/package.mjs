@@ -102,6 +102,13 @@ cpSync(pluginBundle, path.join(stagedPluginDir, 'dist/index.js'));
 
 const { isPublish, commandArgs } = resolveVsceArguments(process.argv.slice(2));
 
+// Publish with a Microsoft Entra ID token (from the CI azure/login session)
+// instead of a PAT when VSCE_AZURE_CREDENTIAL is set. vsce reads the token via
+// its Azure identity chain; nothing else about packaging changes.
+if (isPublish && process.env.VSCE_AZURE_CREDENTIAL === 'true') {
+    commandArgs.push('--azure-credential');
+}
+
 try {
     execFileSync('npx', commandArgs, { cwd: outDir, stdio: 'inherit' });
     if (!isPublish) {

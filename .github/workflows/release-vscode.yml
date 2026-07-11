@@ -25,10 +25,33 @@ name: Release VS Code Extension
 # without publishing) for verification. A real publish via dispatch is
 # possible but, like the tag path, waits for environment approval.
 #
-# The VSCE_PAT secret must be set in repo settings (Azure DevOps PAT with
-# Marketplace publish scope). The `vscode-publish` environment must exist
-# in repo Settings → Environments with a required reviewer — the YAML
-# reference alone does not gate anything without it.
+# Authentication (two paths; the workflow prefers Entra ID when configured):
+#
+#   1. Microsoft Entra ID (OIDC, recommended — global PATs retire 2026-12-01).
+#      One-time setup:
+#        a. Entra ID → App registrations → new app; note Application (client) ID
+#           and Directory (tenant) ID.
+#        b. That app → Certificates & secrets → Federated credentials → Add →
+#           GitHub Actions: org `nguyennhutien`, repo `csszyx`, entity
+#           Environment, name `vscode-publish`. (Subject resolves to
+#           `repo:nguyennhutien/csszyx:environment:vscode-publish`.)
+#        c. https://marketplace.visualstudio.com/manage → publisher `csszyx` →
+#           add the app as a member (role Contributor). This is the step that,
+#           if skipped, yields vsce "not allowed"/"corporate credentials" errors.
+#           Verify with `vsce verify-pat csszyx --azure-credential`.
+#        d. Repo → Settings → Secrets and variables → Actions → Variables:
+#           add AZURE_CLIENT_ID and AZURE_TENANT_ID. Their presence switches
+#           this workflow to `vsce publish --azure-credential`; no subscription
+#           is required.
+#
+#   2. Personal Access Token (fallback, used only while AZURE_CLIENT_ID is
+#      unset). VSCE_PAT secret = an Azure DevOps PAT scoped to "All accessible
+#      organizations" + Marketplace: Manage.
+#
+# Either way the `vscode-publish` environment must exist in repo Settings →
+# Environments with a required reviewer — the YAML reference alone gates
+# nothing without it — and its deployment-branch policy must allow the ref the
+# publish runs on (main for a workflow_dispatch on main).
 
 on:
   push:
@@ -88,6 +111,9 @@ jobs:
     environment: vscode-publish
     permissions:
       contents: read
+      # Fetch the GitHub OIDC token so azure/login can exchange it for a
+      # short-lived Entra ID token — used only when AZURE_CLIENT_ID is set.
+      id-token: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
@@ -121,10 +147,28 @@ jobs:
           # bundle is well-formed before any Marketplace API call.
           NODE_ENV: production
 
+      # Entra ID (OpenID Connect) auth — the path forward as Azure DevOps
+      # retires global PATs (Dec 1 2026). Runs only once the AZURE_CLIENT_ID /
+      # AZURE_TENANT_ID repository variables exist and the Entra app is a member
+      # of the `csszyx` Marketplace publisher; until then the PAT path below
+      # still runs, so this migration does not need a flag day. No subscription
+      # is needed — the publish wants only a Marketplace-scoped Entra token.
+      - name: Azure login (Entra ID, OIDC)
+        if: github.event.inputs.dry_run != 'true' && vars.AZURE_CLIENT_ID != ''
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
       - name: Publish to Marketplace
         if: github.event.inputs.dry_run != 'true'
         run: pnpm --filter @csszyx/vscode vsix:publish
         env:
+          # When the Entra variables are configured, publish with
+          # `vsce publish --azure-credential` (it reads the az CLI session the
+          # login step established); otherwise fall back to the PAT secret.
+          VSCE_AZURE_CREDENTIAL: ${{ vars.AZURE_CLIENT_ID != '' && 'true' || '' }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Read extension version
