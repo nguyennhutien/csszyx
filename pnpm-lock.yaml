@@ -573,10 +573,19 @@ importers:
         version: 5.105.4(esbuild@0.28.1)
 
   packages/vars:
-    dependencies:
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.16
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.16)
       react:
-        specifier: '>=17.0.0'
+        specifier: ^19.0.0
         version: 19.2.4
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.4(react@19.2.4)
 
   packages/vscode:
     devDependencies:
