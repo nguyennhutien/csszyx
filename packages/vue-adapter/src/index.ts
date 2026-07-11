@@ -335,12 +335,16 @@ export function mergeClassAttributes(template: string): string {
         const tag = result.slice(start, end + 1);
         i = end + 1;
         if (!/^<[a-z]/i.test(tag)) continue;
-        const staticMatch = /\bclass="([^"]*)"/.exec(tag);
-        const dynamicMatch = /\b(?::class|v-bind:class)="([^"]*)"/.exec(tag);
+        // Attribute names must be anchored on whitespace: `\b` can never sit
+        // before `:` (both sides non-word), so `\b:class` matched nothing and
+        // the shorthand form silently skipped merging — while `\bclass` DID
+        // match inside `:class`, stealing the dynamic attribute as static.
+        const staticMatch = /(?:^|\s)class="([^"]*)"/.exec(tag);
+        const dynamicMatch = /(?:^|\s)(?::class|v-bind:class)="([^"]*)"/.exec(tag);
         if (!staticMatch || !dynamicMatch) continue;
         const cleaned = tag
-            .replace(/\bclass="[^"]*"/, '')
-            .replace(/\b(?::class|v-bind:class)="[^"]*"/, '');
+            .replace(/(^|\s)class="[^"]*"/, '$1')
+            .replace(/(^|\s)(?::class|v-bind:class)="[^"]*"/, '$1');
         const insertIdx = cleaned.indexOf(' ') + 1;
         const newTag = `${cleaned.slice(0, insertIdx)}:class="['${staticMatch[1]}', ${dynamicMatch[1]}]" ${cleaned.slice(insertIdx)}`;
         result = result.slice(0, start) + newTag + result.slice(end + 1);
