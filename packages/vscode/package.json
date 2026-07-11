@@ -95,8 +95,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "vsix": "pnpm --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs",
-    "vsix:publish": "pnpm --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs --publish"
+    "vsix": "pnpm --filter @csszyx/tooling-metadata --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs",
+    "vsix:publish": "pnpm --filter @csszyx/tooling-metadata --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs --publish"
   },
   "devDependencies": {
     "@babel/parser": "^7.23.0",
