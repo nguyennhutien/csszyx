@@ -47,6 +47,19 @@ describe('isSafeCssValue', () => {
             expect(isSafeCssValue(v), v).toBe(false);
         }
     });
+
+    it('skips an escaped quote inside a quoted string instead of ending the string', () => {
+        // content: "a\"b" — the backslash must consume the escaped quote so the
+        // scanner doesn't treat it as the string terminator.
+        expect(isSafeCssValue('"a\\"b"')).toBe(true);
+    });
+
+    it('does not go negative on a stray closing paren (no injection risk either way)', () => {
+        // A lone trailing ")" with no matching "(" can't break out of the
+        // declaration (it isn't {, }, <, > or a bare ;), so it's left alone —
+        // this exercises the paren-depth guard that keeps depth clamped at 0.
+        expect(isSafeCssValue('red)')).toBe(true);
+    });
 });
 
 describe('isSafeCssPropertyName', () => {
@@ -87,6 +100,13 @@ describe('isUtilityArbitrarySafe', () => {
         ]) {
             expect(isUtilityArbitrarySafe(u), u).toBe(false);
         }
+    });
+
+    it('treats a malformed bracket pair (close before open) as safe — downstream emits nothing', () => {
+        // lastIndexOf(']') < indexOf('['): there's no well-formed [...] segment
+        // to validate, and the generator's own bracket checks won't match this
+        // shape either, so it's passed through rather than rejected outright.
+        expect(isUtilityArbitrarySafe('a]b[c')).toBe(true);
     });
 });
 

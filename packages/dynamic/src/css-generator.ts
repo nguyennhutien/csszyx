@@ -1154,11 +1154,13 @@ export function generateDeclarations(utility: string): string {
     const spacingPrefixes = Object.keys(SPACING_PROPS).sort((a, b) => b.length - a.length);
     for (const prefix of spacingPrefixes) {
         const dashPrefix = `${prefix}-`;
-        if (utility.startsWith(dashPrefix)) {
-            const val = utility.slice(dashPrefix.length);
-            // Handle negative: -m-4 → the class name would be "-m-4"
-            const negative = val.startsWith('-');
-            const rawVal = negative ? val.slice(1) : val;
+        // Negative: -m-4 → the class name is "-m-4" (leading dash on the whole
+        // utility, per the compiler's own output — NOT "m--4"). Match that form
+        // first so a negative utility isn't silently skipped by the loop below.
+        const negative = utility.startsWith(`-${dashPrefix}`);
+        const matchPrefix = negative ? `-${dashPrefix}` : dashPrefix;
+        if (utility.startsWith(matchPrefix)) {
+            const rawVal = utility.slice(matchPrefix.length);
             const props = SPACING_PROPS[prefix];
 
             const resolved = resolveSpacingValue(negative ? `-${rawVal}` : rawVal, props[0]);
