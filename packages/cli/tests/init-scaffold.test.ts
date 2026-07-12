@@ -132,3 +132,32 @@ describe('init interactive path with mocked prompts', () => {
         vi.doUnmock('prompts');
     });
 });
+
+describe('init CSS entry handling', () => {
+    it('creates src/index.css when no entry exists, and prepends the import when missing', async () => {
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        // No CSS at all → created.
+        const bare = tempRoot();
+        writeFileSync(
+            join(bare, 'package.json'),
+            JSON.stringify({ dependencies: { react: '^19' }, devDependencies: { vite: '^7' } }),
+        );
+        writeFileSync(join(bare, 'vite.config.ts'), 'export default {};');
+        await init({ yes: true, cwd: bare });
+        expect(readFileSync(join(bare, 'src/index.css'), 'utf8')).toContain('tailwindcss');
+
+        // Entry exists but lacks the import → prepended, content kept.
+        const partial = tempRoot();
+        writeFileSync(
+            join(partial, 'package.json'),
+            JSON.stringify({ dependencies: { react: '^19' }, devDependencies: { vite: '^7' } }),
+        );
+        writeFileSync(join(partial, 'vite.config.ts'), 'export default {};');
+        mkdirSync(join(partial, 'src'));
+        writeFileSync(join(partial, 'src/index.css'), '.custom { color: red }\n');
+        await init({ yes: true, cwd: partial });
+        const css = readFileSync(join(partial, 'src/index.css'), 'utf8');
+        expect(css).toContain('tailwindcss');
+        expect(css).toContain('.custom');
+    });
+});

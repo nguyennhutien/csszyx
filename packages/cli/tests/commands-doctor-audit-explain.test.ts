@@ -236,3 +236,36 @@ describe('generateTypes happy path', () => {
         expect(logs.join('\n')).toContain('generated successfully');
     });
 });
+
+describe('parseClass residual edges', () => {
+    it('covers boolean prefixes, negatives, importants, and inset-ring shapes', async () => {
+        const { parseClass, disambiguateFont } = await import('../src/migrate/class-parser.js');
+        // Boolean-prefix exact match (e.g. ring) → boolean true with important.
+        expect(parseClass('ring')).toMatchObject({ value: true });
+        // A lone negative boolean-ish prefix is skipped, not parsed.
+        expect(parseClass('-z')).toBeNull();
+        // prefix + "-" with empty tail is skipped.
+        expect(parseClass('p-')).toBeNull();
+        // Numeric value with important becomes a string!-suffixed value.
+        expect(parseClass('p-4!')).toMatchObject({ value: '4!' });
+        // snap disambiguation routes through its helper.
+        expect(parseClass('snap-start')).not.toBeNull();
+        // inset-ring: arbitrary dimension vs color.
+        expect(parseClass('inset-ring-[3px]')).toMatchObject({ prop: 'insetRing' });
+        expect(parseClass('inset-ring-red-500')).toMatchObject({ prop: 'insetRingColor' });
+        expect(disambiguateFont('sans')).toMatchObject({ prop: 'fontFamily' });
+    });
+});
+
+describe('sz-codegen value shapes', () => {
+    it('renders html values with and without braces, empties, and booleans', async () => {
+        const { generateSzExpression, generateSzHtmlValue, generateSzObjectLiteral } = await import(
+            '../src/migrate/sz-codegen.js'
+        );
+        expect(generateSzHtmlValue({ p: 4 }, true)).toContain('{');
+        expect(generateSzHtmlValue({ p: 4 })).toBe('p: 4');
+        expect(generateSzHtmlValue({})).toBe('');
+        expect(generateSzObjectLiteral({ on: false, off: true })).toContain('false');
+        expect(generateSzExpression({})).toBe('{{}}');
+    });
+});
