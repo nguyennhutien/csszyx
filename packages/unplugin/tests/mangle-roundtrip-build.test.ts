@@ -17,7 +17,15 @@
  *   5. szcn dedupes mangled tokens through the real `__csszyx.decode` bridge
  *      built from the extracted map (the field acceptance for merge parity).
  */
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -71,7 +79,12 @@ const tempDirs: string[] = [];
  * @returns normalized JS + CSS output and the mangle map from the built HTML.
  */
 async function buildWithMangle(parser: 'rust' | 'oxc'): Promise<MangleArtifacts> {
-    const root = mkdtempSync(join(tmpdir(), `csszyx-mangle-rt-${parser}-`));
+    // realpath the temp root so the path handed to vite matches the realpath
+    // vite's build-html plugin resolves internally. On macOS os.tmpdir() is a
+    // /var -> /private/var symlink; without this the emitted index.html name is
+    // computed relative to the un-realpath'd root and escapes the bundle dir
+    // (same guard as vite-global-var.test.ts).
+    const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-mangle-rt-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
     for (const [file, source] of Object.entries(FIXTURE_FILES)) {
