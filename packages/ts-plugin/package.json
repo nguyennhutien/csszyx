@@ -18,7 +18,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node esbuild.mjs",
     "test": "pnpm run build && node tests/spike.test.mjs && node tests/contract.test.mjs && node tests/proxy.test.mjs && node tests/performance.test.mjs && node tests/pack.test.mjs && node tests/tsserver.test.mjs",
-    "test:coverage": "pnpm run build && c8 --reporter=lcovonly --reporter=text-summary --report-dir=coverage --src=src --include='dist/**/*.js' --exclude='dist/plugin.js' node tests/coverage-runner.mjs"
+    "test:coverage": "pnpm run build && c8 --reporter=lcovonly --reporter=text-summary --report-dir=coverage --src=src --include='dist/**/*.js' --exclude='dist/plugin.js' node tests/coverage-runner.mjs && node scripts/repo-relative-lcov.mjs"
   },
   "devDependencies": {
     "@csszyx/tooling-metadata": "workspace:*",
