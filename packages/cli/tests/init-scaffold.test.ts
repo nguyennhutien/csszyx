@@ -106,3 +106,29 @@ describe('init --yes on a Next.js App Router project', () => {
         expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).toContain('.csszyx');
     });
 });
+
+describe('init interactive path with mocked prompts', () => {
+    it('honours the answers instead of the defaults', async () => {
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.doMock('prompts', () => ({
+            default: vi.fn(async () => ({
+                installTailwind: false,
+                enableSSR: false,
+                enableRecovery: false,
+                setupGitignore: false,
+                setupTsconfig: false,
+            })),
+        }));
+        vi.resetModules();
+        const { init: interactiveInit } = await import('../src/commands/init.js');
+        const cwd = viteReactFixture();
+        await interactiveInit({ cwd });
+
+        // Config written with the answered (disabled) flags.
+        const config = (readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8') as string) ?? '';
+        expect(config).toContain('injectChecksum: false');
+        // gitignore was declined — .csszyx not appended.
+        expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).not.toContain('.csszyx');
+        vi.doUnmock('prompts');
+    });
+});

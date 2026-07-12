@@ -3,7 +3,7 @@
  * Tailwind config scanner — command modules that only ran through the binary,
  * which subprocess tests can't measure.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -198,5 +198,41 @@ describe('scanTailwindConfig', () => {
         const broken = join(cwd, 'tailwind.config.mjs');
         writeFileSync(broken, 'export default {{{');
         await expect(scanTailwindConfig(broken)).rejects.toThrow(/Failed to load/);
+    });
+});
+
+describe('explainSz literal space', () => {
+    it('resolves nested objects, arrays, negatives, booleans and template strings', () => {
+        expect(
+            explainSz("{ hover: { m: -2 }, list: [1, 'a'], on: true, t: `x`, 'q k': 1 }"),
+        ).toBeTypeOf('string');
+    });
+
+    it('names each dynamic construct it refuses', () => {
+        expect(() => explainSz('{ p: x }')).toThrow(/dynamic/);
+        expect(() => explainSz('{ p: `a${x}` }')).toThrow(/interpolation/);
+        expect(() => explainSz('{ p: [1, , 2] }')).toThrow(/array holes/);
+        expect(() => explainSz('{ p: [...xs] }')).toThrow(/spreads/);
+        expect(() => explainSz('{ ...rest }')).toThrow(/methods\/spreads/);
+        expect(() => explainSz('{ [k]: 1 }')).toThrow(/computed/);
+        expect(() => explainSz('{ p: !x }')).toThrow(/unary|dynamic/);
+        expect(() => explainSz('{ 4: 1 }')).toThrow(/unsupported key/);
+    });
+});
+
+describe('generateTypes happy path', () => {
+    it('scans a config and writes the declaration file', async () => {
+        const { logs } = captureLogs();
+        const cwd = tempRoot();
+        const configPath = join(cwd, 'tailwind.config.mjs');
+        writeFileSync(
+            configPath,
+            'export default { theme: { extend: { colors: { brand: "#123456" }, spacing: { huge: "99rem" } } } };',
+        );
+        const output = join(cwd, 'csszyx-theme.d.ts');
+        await generateTypes({ cwd, config: configPath, output });
+        const written = readFileSync(output, 'utf8');
+        expect(written).toContain('brand');
+        expect(logs.join('\n')).toContain('generated successfully');
     });
 });
