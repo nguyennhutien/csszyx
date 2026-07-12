@@ -21,6 +21,8 @@ describe('loadManifestFromDOM', () => {
     it('parses the manifest JSON from the embedded script', () => {
         const script = document.createElement('script');
         script.id = '__SZ_RECOVERY_MANIFEST__';
+        // application/json keeps jsdom from executing the payload as JS.
+        script.type = 'application/json';
         script.textContent = JSON.stringify(manifest);
         document.body.appendChild(script);
         expect(loadManifestFromDOM()).toEqual(manifest);
@@ -29,6 +31,7 @@ describe('loadManifestFromDOM', () => {
     it('returns null and logs when the manifest JSON is malformed', () => {
         const script = document.createElement('script');
         script.id = '__SZ_RECOVERY_MANIFEST__';
+        script.type = 'application/json';
         script.textContent = '{ not json';
         document.body.appendChild(script);
         const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
