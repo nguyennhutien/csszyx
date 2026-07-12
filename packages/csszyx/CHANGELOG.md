@@ -2,10 +2,11 @@
 
 ## [0.11.5](https://github.com/nguyennhutien/csszyx/compare/v0.11.4...v0.11.5) (2026-07-12)
 
-
 ### Bug Fixes
 
-* hoist CSS vars on parsed ASTs, merge Vue :class shorthand, raise all packages to 90%+ coverage ([#144](https://github.com/nguyennhutien/csszyx/issues/144)) ([9086a97](https://github.com/nguyennhutien/csszyx/commit/9086a973f964c8414ee61ce147b35e33f90c8a36))
+* hoist CSS vars on parsed ASTs, merge Vue :class shorthand, raise all packages to 90%+ coverage ([#144](https://github.com/nguyennhutien/csszyx/issues/144))
+* **compiler:** find hoisting ancestors in parsed ASTs ([#144](https://github.com/nguyennhutien/csszyx/issues/144))
+* **vue-adapter:** merge the :class shorthand — \b can never precede a colon ([#144](https://github.com/nguyennhutien/csszyx/issues/144))
 
 ## [0.11.4](https://github.com/nguyennhutien/csszyx/compare/v0.11.3...v0.11.4) (2026-07-10)
 
