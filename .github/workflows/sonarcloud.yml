@@ -58,8 +58,12 @@ jobs:
 
       # Generate lcov for SonarCloud. The one flaky watcher test is tolerated
       # (reportOnFailure still writes the report); ci.yml is the real test gate.
+      # ts-plugin adds its own c8 lcov (node-script suites vitest never runs);
+      # sonar-project.properties lists both report paths.
       - name: Coverage
-        run: pnpm test:coverage
+        run: |
+          pnpm test:coverage
+          pnpm --filter @csszyx/ts-plugin test:coverage
         continue-on-error: true
 
       - name: SonarQube Cloud scan

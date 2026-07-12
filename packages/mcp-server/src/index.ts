@@ -13,6 +13,7 @@
  * @module
  */
 
+import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +49,7 @@ import { handleValidate, validateSchema } from './tools/validate.js';
 // SERVER INIT
 // ============================================================================
 
-const server = new Server(
+export const server = new Server(
     {
         name: 'csszyx-mcp-server',
         version: VERSION,
@@ -66,7 +67,7 @@ const server = new Server(
 // TOOL DEFINITIONS
 // ============================================================================
 
-const TOOLS = [
+export const TOOLS = [
     {
         name: 'csszyx_expand',
         description:
@@ -292,7 +293,7 @@ server.setRequestHandler(GetPromptRequestSchema, async request => {
  * @param argv - process arguments (`process.argv.slice(2)`).
  * @returns whether a flag was handled.
  */
-function handleCliFlags(argv: string[]): boolean {
+export function handleCliFlags(argv: string[]): boolean {
     if (argv.includes('--version') || argv.includes('-v')) {
         console.log(VERSION);
         return true;
@@ -334,7 +335,25 @@ async function main(): Promise<void> {
     );
 }
 
-main().catch(error => {
-    console.error('Server error:', error);
-    process.exit(1);
-});
+/**
+ * Only start the stdio server when this module is the process entry point, not
+ * when a test imports it to exercise the handlers in-process. realpath so the
+ * bin symlink (node_modules/.bin/csszyx-mcp) still resolves to this module.
+ * @returns Whether this module was run directly.
+ */
+export function isEntrypoint(): boolean {
+    const invoked = process.argv[1];
+    if (!invoked) return false;
+    try {
+        return realpathSync(invoked) === fileURLToPath(import.meta.url);
+    } catch {
+        return false;
+    }
+}
+
+if (isEntrypoint()) {
+    main().catch(error => {
+        console.error('Server error:', error);
+        process.exit(1);
+    });
+}

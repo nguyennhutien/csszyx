@@ -70,7 +70,9 @@ for (const item of SHIP_FILES) {
 // dependency AND `.vscodeignore` un-ignores its path — the plugin is that lone
 // runtime dependency; every other dependency is bundled into dist/extension.js.
 // The `vsix` script builds the plugin first, so its bundle must exist here.
-const pluginBundle = path.resolve(pkgDir, '../ts-plugin/dist/index.js');
+// `dist/plugin.js` is the self-contained esbuild bundle (package.json `main`);
+// tsc's per-file `dist/index.js` is for the plugin's own tests, not for shipping.
+const pluginBundle = path.resolve(pkgDir, '../ts-plugin/dist/plugin.js');
 if (!existsSync(pluginBundle)) {
     throw new Error(
         'ts-plugin bundle missing: run `pnpm --filter @csszyx/ts-plugin build` before packaging.',

@@ -56,14 +56,20 @@ jobs:
       # coverage instrumentation; `reportOnFailure` still writes the lcov, and
       # ci.yml is the real gate, so this step does not fail the job.
       - name: TypeScript coverage
-        run: pnpm test:coverage
+        # Two lcov sources under one flag: vitest for the vitest-run packages,
+        # and c8 for @csszyx/ts-plugin whose suites are standalone node scripts
+        # (real tsserver, packed tarball) that vitest never runs — c8 maps their
+        # dist execution back to src via source maps. Codecov unions the two.
+        run: |
+          pnpm test:coverage
+          pnpm --filter @csszyx/ts-plugin test:coverage
         continue-on-error: true
 
       - name: Upload TypeScript coverage
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
+          files: ./coverage/lcov.info,packages/ts-plugin/coverage/lcov.info
           flags: typescript
           name: typescript
           fail_ci_if_error: false

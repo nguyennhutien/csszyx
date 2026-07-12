@@ -192,3 +192,44 @@ describe('Next safelist watcher controller', () => {
         expect(() => watcher.start()).toThrow('Cannot start a closed Next safelist watcher');
     });
 });
+
+describe('NextSafelistWatcher accessors and flush', () => {
+    it('exposes pending, lastResult and lastError through the loop', () => {
+        const watcher = new NextSafelistWatcher({
+            context: createNextStateContext({
+                explicitRoot: '/repo/apps/web',
+                config: { mangleVars: false },
+                nextVersion: '16.2.7',
+                csszyxVersion: '0.9.0',
+                nativeVersion: '0.9.0-linux-arm64-gnu',
+                mode: 'development',
+            }),
+            runCycle: () => {
+                return {
+                    materialize: {
+                        classCount: 1,
+                        sourceCount: 1,
+                        tombstonedSourceCount: 0,
+                        shardCount: 1,
+                    },
+                    manifestPath: '/repo/x.json',
+                    lockPath: '/repo/x.lock',
+                };
+            },
+        });
+        expect(watcher.lastResult).toBeUndefined();
+        expect(watcher.lastError).toBeUndefined();
+
+        watcher.start();
+        expect(watcher.lastResult?.materialize.classCount).toBe(1);
+        expect(watcher.flush()).toBeUndefined(); // nothing pending
+
+        // A shard event queues work; flush drains it through another cycle.
+        expect(
+            watcher.notify('change', '/repo/apps/web/.csszyx/cache/safelist-shards/a.json'),
+        ).toBe(true);
+        expect(watcher.pending).toBe(true);
+        expect(watcher.flush()?.materialize.classCount).toBe(1);
+        expect(watcher.lastError).toBeUndefined();
+    });
+});

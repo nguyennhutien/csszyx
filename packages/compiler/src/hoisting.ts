@@ -48,13 +48,19 @@ function findLCA(
 
     current = nodeB;
     while (current) {
-        if (
-            ancestorsA.has(current) &&
-            t.isJSXOpeningElement(current) &&
-            current !== nodeA &&
-            current !== nodeB
-        ) {
-            return current;
+        if (ancestorsA.has(current)) {
+            // A parsed AST's parent chain holds JSXElement wrappers — the
+            // ancestor's JSXOpeningElement sits on a sibling branch, so accept
+            // the wrapper and hoist onto its opening element. A direct
+            // JSXOpeningElement in the chain (hand-built maps) still matches.
+            const opening = t.isJSXOpeningElement(current)
+                ? current
+                : t.isJSXElement(current)
+                  ? current.openingElement
+                  : null;
+            if (opening && opening !== nodeA && opening !== nodeB) {
+                return opening;
+            }
         }
         current = parentMap.get(current);
     }
