@@ -89,7 +89,15 @@ function extractCorpusSnippets(): ExtractedSnippet[] {
     const snippets: ExtractedSnippet[] = [];
 
     for (const file of fs.readdirSync(testsDir).sort()) {
-        if (!file.endsWith('.test.ts') || file.startsWith('oxc-')) {
+        // `*-branch-coverage.test.ts` files exist to drive per-file branch
+        // coverage with edge-case inputs; they are not curated parity-corpus
+        // entries. Excluding them keeps this signal a stable, hand-picked set
+        // instead of drifting with every coverage-oriented snippet added.
+        if (
+            !file.endsWith('.test.ts') ||
+            file.startsWith('oxc-') ||
+            file.includes('branch-coverage')
+        ) {
             continue;
         }
         const content = fs.readFileSync(path.join(testsDir, file), 'utf-8');

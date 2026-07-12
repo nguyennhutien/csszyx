@@ -56,4 +56,27 @@ describe('csszyx_migrate tool', () => {
         expect(data.code).toContain('@sz-todo');
         expect(data.stats.unrecognized).toContain('unknown-class');
     });
+
+    it('should surface a warning when a clsx() call cannot be migrated (spread argument)', async () => {
+        const code = '<div className={clsx(...classes)} />';
+        const result = handleMigrate({ code });
+        const data = JSON.parse(result.content[0].text);
+
+        expect(data.warnings).toBeDefined();
+        expect(data.warnings[0]).toContain('Cannot migrate spread argument');
+    });
+
+    it('should flag the clsx import as potentially unused once every call site is migrated', async () => {
+        const code = [
+            "import clsx from 'clsx';",
+            'function Comp({ isActive }) {',
+            '  return <div className={clsx("p-4", isActive && "bg-blue-500")} />;',
+            '}',
+        ].join('\n');
+        const result = handleMigrate({ code });
+        const data = JSON.parse(result.content[0].text);
+
+        expect(data.changed).toBe(true);
+        expect(data.potentiallyUnusedImports).toContain('clsx');
+    });
 });

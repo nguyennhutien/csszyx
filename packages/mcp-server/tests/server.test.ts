@@ -105,6 +105,13 @@ describe('MCP request handlers over an in-memory transport', () => {
             /Prompt error/,
         );
     });
+
+    it('fills a prompt in with its fallback text when the client omits arguments entirely', async () => {
+        const got = await client.getPrompt({ name: 'migrate_component' });
+        expect(got.messages[0]?.content).toMatchObject({
+            text: expect.stringContaining('// paste your component here'),
+        });
+    });
 });
 
 describe('isEntrypoint', () => {

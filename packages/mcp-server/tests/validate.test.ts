@@ -73,4 +73,19 @@ describe('csszyx_validate', () => {
         expect(data.valid).toBe(true);
         expect(data.transformResult.className).toBe('flex');
     });
+
+    it('reports a transformError (and omits transformResult) when transform() itself throws', () => {
+        // Keys all pass the key-level checks (hover is a known variant), but
+        // nesting past the compiler's MAX_SZ_DEPTH guard makes the real
+        // transform() call throw a genuine SzDepthError.
+        let deep: Record<string, unknown> = { p: 4 };
+        for (let i = 0; i < 40; i++) {
+            deep = { hover: deep };
+        }
+        const data = JSON.parse(handleValidate({ sz: deep }).content[0].text);
+
+        expect(data.valid).toBe(false);
+        expect(data.transformError).toContain('maximum depth');
+        expect(data.transformResult).toBeUndefined();
+    });
 });

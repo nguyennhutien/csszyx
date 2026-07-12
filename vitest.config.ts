@@ -41,15 +41,17 @@ export default defineConfig({
                 'packages/types/**', // type declarations only — erased at runtime
                 'packages/vscode/**', // editor extension: VS Code host + static completion data
             ],
-            // Ratchet floor — keeps coverage from regressing. Below the OpenSSF
-            // gold target of 80% (statements 76% / branches 71% today); the gap
-            // is concentrated in the interactive CLI package. Raise toward 80%
-            // as CLI coverage grows, but never lower without a recorded reason.
+            // Ratchet floor — keeps coverage from regressing. Now clears the
+            // OpenSSF gold target (statements >=90 AND branches >=80): actuals
+            // are ~94% statements / ~90% branches / ~96% functions / ~95% lines
+            // across the TS/JS packages. These floors sit a few points under
+            // those actuals to absorb normal cross-environment variance; raise
+            // them as coverage grows, but never lower without a recorded reason.
             thresholds: {
-                statements: 80,
-                branches: 74,
-                functions: 85,
-                lines: 80,
+                statements: 90,
+                branches: 85,
+                functions: 92,
+                lines: 90,
             },
         },
     },

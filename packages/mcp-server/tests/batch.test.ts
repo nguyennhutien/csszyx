@@ -36,4 +36,23 @@ describe('csszyx_batch', () => {
         );
         expect(data.results.map((r: { index: number }) => r.index)).toEqual([0, 1, 2]);
     });
+
+    it('catches a real transform() throw (nesting past MAX_SZ_DEPTH) and keeps other items', () => {
+        // transform() throws a real SzDepthError (an Error subclass) once sz
+        // nesting exceeds the compiler's depth guard — this is the only throw
+        // site reachable from a batch item, so it is what exercises the
+        // per-item catch block with a genuine error (not a mocked one).
+        let deep: Record<string, unknown> = { p: 4 };
+        for (let i = 0; i < 40; i++) {
+            deep = { hover: deep };
+        }
+        const items = [{ m: 1 }, deep, { m: 2 }];
+        const data = JSON.parse(handleBatch({ items }).content[0].text);
+
+        expect(data.results[0].className).toBe('m-1');
+        expect(data.results[1].error).toContain('maximum depth');
+        expect(data.results[1].className).toBeUndefined();
+        expect(data.results[2].className).toBe('m-2');
+        expect(data.successful).toBe(2);
+    });
 });
