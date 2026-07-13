@@ -24,6 +24,23 @@ describe('csszyx_validate', () => {
         expect(data.errors[0].message).toContain("Unknown prop 'unknownProp'");
     });
 
+    it('surfaces compiler console warnings as warnings', () => {
+        // A custom theme token with an /op modifier is only alpha-capable if
+        // the token itself is — the compiler flags that via console.warn,
+        // which the tool captures instead of letting it vanish into the MCP
+        // server's stderr. (Unique token name: the compiler dedupes this
+        // warning per token per process.)
+        const before = console.warn;
+        const data = JSON.parse(
+            handleValidate({ sz: { bg: { color: 'validatetesttoken', op: 50 } } }).content[0].text,
+        );
+        expect(data.valid).toBe(true);
+        expect(data.warnings).toHaveLength(1);
+        expect(data.warnings[0]).toContain('alpha-capable');
+        // The interceptor must not leak past the call.
+        expect(console.warn).toBe(before);
+    });
+
     // flex's boolean sugar was removed, but flex stays a valid PROPERTY_MAP key
     // for shorthand values (flex:'auto' → flex-auto, flex:1 → flex-1). Those
     // non-boolean values must NOT trigger a warning.
@@ -72,5 +89,20 @@ describe('csszyx_validate', () => {
         const data = JSON.parse(handleValidate({ sz: { display: 'flex' } }).content[0].text);
         expect(data.valid).toBe(true);
         expect(data.transformResult.className).toBe('flex');
+    });
+
+    it('reports a transformError (and omits transformResult) when transform() itself throws', () => {
+        // Keys all pass the key-level checks (hover is a known variant), but
+        // nesting past the compiler's MAX_SZ_DEPTH guard makes the real
+        // transform() call throw a genuine SzDepthError.
+        let deep: Record<string, unknown> = { p: 4 };
+        for (let i = 0; i < 40; i++) {
+            deep = { hover: deep };
+        }
+        const data = JSON.parse(handleValidate({ sz: deep }).content[0].text);
+
+        expect(data.valid).toBe(false);
+        expect(data.transformError).toContain('maximum depth');
+        expect(data.transformResult).toBeUndefined();
     });
 });

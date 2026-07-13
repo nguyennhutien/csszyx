@@ -79,6 +79,17 @@ describe('manifest loading', () => {
         expect(mockFetch).toHaveBeenCalledWith('/custom/path/manifest.json');
     });
 
+    it('short-circuits ensureManifest once already loaded (no re-fetch)', async () => {
+        setupFetchSuccess(makeMockManifest());
+        await ensureManifest();
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+
+        // Manifest is already loaded — this must resolve immediately without
+        // hitting fetch again.
+        await ensureManifest();
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('coalesces concurrent ensureManifest calls', async () => {
         setupFetchSuccess(makeMockManifest());
 

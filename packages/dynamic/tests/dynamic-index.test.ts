@@ -28,6 +28,14 @@ describe('dynamic() on the server', () => {
         expect(dynamic({ p: 4 })).toBe('q0');
     });
 
+    it('falls back to the original class when the mangle map has no entry for it', () => {
+        // The map exists (so the branch is taken) but doesn't cover this
+        // particular class — e.g. it was added to the build after the map
+        // was generated, or mangling was scoped to a subset of classes.
+        globals.__csszyx_ssr_mangle_map = { 'unrelated-class': 'z9' };
+        expect(dynamic({ p: 4 })).toBe('p-4');
+    });
+
     it('preload and cleanup run without throwing', async () => {
         await preloadManifest().catch(() => undefined);
         expect(() => cleanup()).not.toThrow();

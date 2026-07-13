@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Tier } from '../src/css-generator.js';
 import { cleanup, injectRule, isInjected, resolveTier, TIER_ORDER } from '../src/injector.js';
 
 // ── Mock constructable stylesheets ────────────────────────────────────────────
@@ -190,6 +191,50 @@ describe('injectRule', () => {
     it('marks class as injected even when cssRule is empty (unknown class)', () => {
         injectRule('unknown-class', '', 'base');
         expect(isInjected('unknown-class')).toBe(true);
+    });
+});
+
+// ── container query tiers ────────────────────────────────────────────────────
+
+describe('injectRule — container query tiers', () => {
+    it('wraps a @sm container tier in a min-width @container query', () => {
+        injectRule('@sm:flex', '.\\@sm\\:flex { display: flex }', '@sm');
+
+        const idx = TIER_ORDER.indexOf('@sm');
+        const sheet = mockAdoptedSheets[idx] as unknown as MockCSSStyleSheet;
+        expect(sheet.cssRules[0].cssText).toContain('@container');
+        expect(sheet.cssRules[0].cssText).toContain('width >= 40rem');
+    });
+
+    it('wraps a @max-sm container tier in a max-width @container query', () => {
+        injectRule('@max-sm:flex', '.\\@max-sm\\:flex { display: flex }', '@max-sm');
+
+        const idx = TIER_ORDER.indexOf('@max-sm');
+        const sheet = mockAdoptedSheets[idx] as unknown as MockCSSStyleSheet;
+        expect(sheet.cssRules[0].cssText).toContain('@container');
+        expect(sheet.cssRules[0].cssText).toContain('width <= 40rem');
+    });
+});
+
+// ── malformed / unknown tier fallback ───────────────────────────────────────
+
+describe('injectRule — defensive fallback for an unrecognized tier', () => {
+    // These simulate a corrupted or future-format tier value reaching the
+    // injector (e.g. a stale manifest built against a newer css-generator
+    // that added a tier this version doesn't know). The rule must still land
+    // somewhere (the base sheet) rather than being silently dropped.
+    it('falls back to the base sheet, unwrapped, for an unknown container tier', () => {
+        injectRule('x', '.x { color: red }', '@bogus' as Tier);
+
+        const baseSheet = mockAdoptedSheets[0] as unknown as MockCSSStyleSheet;
+        expect(baseSheet.cssRules[0].cssText).toBe('.x { color: red }');
+    });
+
+    it('falls back to the base sheet, unwrapped, for an unknown viewport tier', () => {
+        injectRule('y', '.y { color: blue }', 'zzz' as Tier);
+
+        const baseSheet = mockAdoptedSheets[0] as unknown as MockCSSStyleSheet;
+        expect(baseSheet.cssRules[0].cssText).toBe('.y { color: blue }');
     });
 });
 

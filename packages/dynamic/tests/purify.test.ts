@@ -67,6 +67,52 @@ describe('purifySz', () => {
         expect(() => purifySz(deep)).toThrow(SzDepthError);
     });
 
+    it('recognizes SPECIAL_VARIANTS keys directly (data/aria grouping keys)', () => {
+        const out = purifySz({ data: { active: { bg: 'red' } } } as SzObject);
+        expect(out).toEqual({ data: { active: { bg: 'red' } } });
+    });
+
+    it('recognizes @-prefixed container/supports-style variant keys', () => {
+        const out = purifySz({ '@container': { bg: 'red' } } as SzObject);
+        expect(out).toEqual({ '@container': { bg: 'red' } });
+    });
+
+    it('recognizes a bracket-wrapped arbitrary selector key', () => {
+        const out = purifySz({ '[&:hover]': { bg: 'red' } } as SzObject);
+        expect(out).toEqual({ '[&:hover]': { bg: 'red' } });
+    });
+
+    it('recognizes group-/peer- compound variant keys', () => {
+        const out = purifySz({ 'peer-checked': { bg: 'red' } } as SzObject);
+        expect(out).toEqual({ 'peer-checked': { bg: 'red' } });
+    });
+
+    it('recognizes a bracketed arbitrary functional variant key (min-[…])', () => {
+        const out = purifySz({ 'min-[500px]': { display: 'flex' } } as SzObject);
+        expect(out).toEqual({ 'min-[500px]': { display: 'flex' } });
+    });
+
+    it('drops a key that looks nothing like a known key or a variant', () => {
+        const drops: string[] = [];
+        const out = purifySz({ totallyMadeUp: { bg: 'red' } } as SzObject, {
+            onDrop: path => drops.push(path),
+        });
+        expect(out).toEqual({});
+        expect(drops).toContain('totallyMadeUp');
+    });
+
+    it('throws SzDepthError on hostile deep nesting reached through a property sub-object', () => {
+        // The existing "hostile deep nesting" test above nests entirely through
+        // variant keys (hover -> hover -> ...), which recurses via
+        // sanitizeObject's own depth counter. Deep nesting reached through a
+        // plain property's sub-object value (not a variant) recurses through
+        // purifyValue's independent depth guard instead — a different code path
+        // that needs its own coverage.
+        let deep: SzObject = { x: 'red' } as SzObject;
+        for (let i = 0; i < 40; i++) deep = { nested: deep } as unknown as SzObject;
+        expect(() => purifySz({ bg: deep } as SzObject)).toThrow(SzDepthError);
+    });
+
     it('returns {} for non-object input', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         // @ts-expect-error — defensive runtime path

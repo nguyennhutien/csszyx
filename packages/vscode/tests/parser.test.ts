@@ -70,6 +70,12 @@ describe('parseSzContext — JSX form', () => {
         const ctx = parseSzContext('<div sz={{ p: [calc(100%-2px)], ');
         expect(ctx.type).toBe('key');
     });
+
+    it('balances nested brackets inside an arbitrary value', () => {
+        const ctx = parseSzContext('<div sz={{ w: [minmax(0,arr[i]):x], ');
+        expect(ctx.type).toBe('key');
+        expect(ctx.depth).toBe(1);
+    });
 });
 
 describe('parseSzContext — HTML attribute form (double quote)', () => {
@@ -290,6 +296,77 @@ describe('findSzExpressionAt', () => {
         const cursor = text.indexOf('bg');
         const hit = findSzExpressionAt(text, cursor);
         expect(hit?.needsWrap).toBe(false);
+    });
+});
+
+describe('parseSzContext — string escapes and call forms', () => {
+    it('skips escaped quotes inside string values', () => {
+        const ctx = parseSzContext("<div sz={{ content: 'a\\'b', ");
+        expect(ctx.type).toBe('key');
+        expect(ctx.depth).toBe(1);
+    });
+
+    it('recognizes szv through a member access (csszyx.szv)', () => {
+        const ctx = parseSzContext('csszyx.szv({ base: { bg: ');
+        expect(ctx.form).toBe('szv');
+        expect(ctx.type).toBe('variant-value');
+    });
+
+    it('rejects szv-lookalike identifiers (myszv is not a csszyx call)', () => {
+        expect(parseSzContext('myszv({ p: ').type).toBe('none');
+    });
+
+    it('rejects szv( not followed by an object literal', () => {
+        expect(parseSzContext('szv(options, ').type).toBe('none');
+    });
+
+    it('treats whitespace-then-{ as explicit in both attribute quote styles', () => {
+        const dq = parseSzContext('<div sz="  { bg: ');
+        expect(dq.type).toBe('value');
+        expect(dq.currentKey).toBe('bg');
+        const sq = parseSzContext("<div sz='  { bg: ");
+        expect(sq.type).toBe('value');
+        expect(sq.currentKey).toBe('bg');
+    });
+});
+
+describe('findSzExpressions — unterminated and escaped input', () => {
+    it('returns nothing for an unterminated explicit object', () => {
+        expect(findSzExpressions('<div sz={{ p: 4')).toEqual([]);
+    });
+
+    it('returns nothing for an unterminated implicit attribute', () => {
+        expect(findSzExpressions('<div sz="p: 4')).toEqual([]);
+    });
+
+    it('continues past an unterminated expression to a later complete one', () => {
+        const res = findSzExpressions('<div sz={{ p: 4 <div sz={{ m: 2 }} />');
+        expect(res).toHaveLength(1);
+        expect(res[0].objText).toBe('{ m: 2 }');
+    });
+
+    it('treats whitespace-then-{ as explicit in a single-quoted attribute', () => {
+        const res = findSzExpressions("<div sz=' { p: 4 }'>");
+        expect(res).toHaveLength(1);
+        expect(res[0].objText).toBe('{ p: 4 }');
+        expect(res[0].needsWrap).toBe(false);
+    });
+
+    it('skips escaped quotes inside strings of an explicit object', () => {
+        // The escaped quote must not end the string early — the following
+        // `}` sits inside the string and must not close the object.
+        const text = "<div sz={{ content: 'a\\'}b' }} />";
+        const res = findSzExpressions(text);
+        expect(res).toHaveLength(1);
+        expect(res[0].objText).toBe("{ content: 'a\\'}b' }");
+    });
+
+    it('skips escaped quotes inside nested strings of an implicit attribute', () => {
+        const text = "<div sz=\"content: 'a\\'b', p: 4\">";
+        const res = findSzExpressions(text);
+        expect(res).toHaveLength(1);
+        expect(res[0].objText).toBe("content: 'a\\'b', p: 4");
+        expect(res[0].needsWrap).toBe(true);
     });
 });
 

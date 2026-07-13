@@ -34,7 +34,6 @@ export function handleExpand(input: ExpandInput): {
                 text: JSON.stringify(
                     {
                         className: result.className,
-                        attributes: result.attributes,
                         classCount: result.className.split(/\s+/).filter(Boolean).length,
                     },
                     null,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listResources, RESOURCE_URIS, readResource } from '../src/resources/index.js';
 
@@ -29,5 +29,38 @@ describe('mcp resources', () => {
         expect(text).not.toContain('llms-full.txt not found');
         expect(text).toContain('CSSzyx');
         expect(text.length).toBeGreaterThan(1000);
+    });
+
+    describe('llms-full.txt resolution when the file truly cannot be found', () => {
+        afterEach(() => {
+            vi.doUnmock('node:fs');
+            vi.resetModules();
+        });
+
+        it('walks up to the filesystem root, gives up, and returns the fallback message', async () => {
+            // resolveLlmsFullPath() runs once at module import time. Force
+            // existsSync to always report "missing" so the upward directory walk
+            // exhausts every candidate all the way to the filesystem root — the
+            // `parent === dir` loop-termination branch — instead of finding the
+            // file at some ancestor (which is what happens in the real repo/build
+            // layout and is why this path is otherwise unreachable).
+            vi.resetModules();
+            vi.doMock('node:fs', async importOriginal => {
+                const actual = await importOriginal<typeof import('node:fs')>();
+                const patched = {
+                    ...actual,
+                    existsSync: () => false,
+                    readFileSync: () => {
+                        throw new Error('ENOENT: mocked — no llms-full.txt anywhere');
+                    },
+                };
+                return { ...patched, default: patched };
+            });
+
+            const fresh = await import('../src/resources/index.js');
+            const text = fresh.readResource('csszyx://reference').contents[0].text;
+            expect(text).toContain('llms-full.txt not found');
+            expect(text).toContain('Use csszyx_lookup tool instead');
+        });
     });
 });
