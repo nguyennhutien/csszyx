@@ -2908,6 +2908,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const prescanSources: PrescanSourceFile[] = [];
 
         /**
+         * Read one processable source into the prescan queue.
+         *
+         * @param filePath Source file path.
+         */
+        function collectPrescanSource(filePath: string): void {
+            if (!shouldProcessSource(filePath)) {
+                recordPackagesSkipIfSz(filePath);
+                return;
+            }
+            let content: string;
+            try {
+                content = fs.readFileSync(filePath, 'utf-8');
+            } catch {
+                return;
+            }
+            if (fileMayContainSafelistableSz(content)) {
+                prescanSources.push({ filePath, content });
+            }
+        }
+
+        /**
          * Recursively walks directories to discover source files containing sz prop usage.
          * @param dir - the directory path to scan recursively
          */
@@ -2923,22 +2944,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
                         scanDir(path.join(dir, entry.name));
                     }
-                } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
-                    const filePath = path.join(dir, entry.name);
-                    if (!shouldProcessSource(filePath)) {
-                        recordPackagesSkipIfSz(filePath);
-                        continue;
-                    }
-                    let content: string;
-                    try {
-                        content = fs.readFileSync(filePath, 'utf-8');
-                    } catch {
-                        continue;
-                    }
-                    if (!fileMayContainSafelistableSz(content)) {
-                        continue;
-                    }
-                    prescanSources.push({ filePath, content });
+                    continue;
+                }
+                if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
+                    collectPrescanSource(path.join(dir, entry.name));
                 }
             }
         }
