@@ -123,6 +123,11 @@ fi
 CONFIG="$DEV_CODEX_HOME/config.toml"
 
 if [ "$WRAPPER_ONLY" -ne 1 ]; then
+    CONTAINER_RTK_HOOK_READY=0
+    if [ -e "$HOST_CODEX_HOME/hooks/rtk-pretooluse.py" ]; then
+        CONTAINER_RTK_HOOK_READY=1
+    fi
+
     cat > "$CONFIG" <<'EOF'
 # Devcontainer-only Codex permissions. The devcontainer firewall provides the
 # network boundary, so local Codex can run without its own filesystem sandbox.
@@ -131,8 +136,13 @@ approval_policy = "never"
 EOF
 
     if [ -f "$HOST_CODEX_HOME/config.toml" ]; then
-        awk '
+        awk \
+            -v host_codex_home="$HOST_CODEX_HOME" \
+            -v rewrite_rtk_hook="$CONTAINER_RTK_HOOK_READY" '
             /^[[:space:]]*(approval_policy|approvals_reviewer|sandbox_mode)[[:space:]]*=/ { next }
+            rewrite_rtk_hook == 1 && /^[[:space:]]*command[[:space:]]*=.*\/Users\/[^/]+\/\.codex\/hooks\/rtk-pretooluse\.py/ {
+                sub(/\/Users\/[^/]+\/\.codex\/hooks/, host_codex_home "/hooks")
+            }
             { print }
         ' "$HOST_CODEX_HOME/config.toml" >> "$CONFIG"
     fi

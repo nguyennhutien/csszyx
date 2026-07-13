@@ -1,0 +1,26 @@
+{
+  "name": "CSSzyx Public",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  },
+  "containerEnv": {
+    "MISE_TRUSTED_CONFIG_PATHS": "/workspaces/csszyx"
+  },
+  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "remoteUser": "root",
+  "workspaceFolder": "/workspaces/csszyx",
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/poststart.sh"
+}
