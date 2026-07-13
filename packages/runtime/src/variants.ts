@@ -251,67 +251,101 @@ export function szv<V extends VariantSchema>(
 
     return function szVariantFn(selection?: VariantSelection<V>): SzObject {
         if (!configValid) {
-            return attachStringCoercionGuard(
-                isPlainObject(config?.base) ? { ...(config.base as SzObject) } : {},
+            return invalidConfigFallback(config);
+        }
+        warnInvalidSelection(selection, config.variants);
+        const resolved = resolveVariantSelection(selection, config.defaultVariants);
+        return attachStringCoercionGuard(applySelectedVariants(config, resolved));
+    };
+}
+
+/**
+ * Builds the safe base-only result used for a structurally invalid config.
+ * @param config - The rejected variant config.
+ * @returns A guarded copy of its valid base, or an empty object.
+ */
+function invalidConfigFallback<V extends VariantSchema>(config: SzvConfig<V>): SzObject {
+    const base = isPlainObject(config?.base) ? { ...(config.base as SzObject) } : {};
+    return attachStringCoercionGuard(base);
+}
+
+/**
+ * Warns in development when a selection names an unknown dimension or value.
+ * @param selection - The caller's requested variant values.
+ * @param variants - The configured variant dimensions.
+ */
+function warnInvalidSelection<V extends VariantSchema>(
+    selection: VariantSelection<V> | undefined,
+    variants: V | undefined,
+): void {
+    if (process.env.NODE_ENV === 'production' || !selection) {
+        return;
+    }
+
+    for (const key of Object.keys(selection)) {
+        if (!(key in (variants ?? {}))) {
+            devWarn(
+                `szv()(selection): unknown variant "${key}" — not declared in config.variants.`,
+            );
+            continue;
+        }
+        const value = (selection as Record<string, unknown>)[key];
+        if (value !== null && value !== undefined && !(String(value) in (variants?.[key] ?? {}))) {
+            devWarn(
+                `szv()(selection): "${String(value)}" is not a value of variant "${key}" — it has no styles.`,
             );
         }
-        // Validate the selection tokens (dev only): an unknown variant dimension
-        // or an unknown value silently produced no styles before.
-        if (process.env.NODE_ENV !== 'production' && selection) {
-            for (const key of Object.keys(selection)) {
-                if (!(key in (config.variants ?? {}))) {
-                    devWarn(
-                        `szv()(selection): unknown variant "${key}" — not declared in config.variants.`,
-                    );
-                    continue;
-                }
-                const val = (selection as Record<string, unknown>)[key];
-                if (
-                    val !== null &&
-                    val !== undefined &&
-                    !(String(val) in (config.variants?.[key] ?? {}))
-                ) {
-                    devWarn(
-                        `szv()(selection): "${String(val)}" is not a value of variant "${key}" — it has no styles.`,
-                    );
-                }
-            }
+    }
+}
+
+/**
+ * Overlays non-null selections onto defaults while dropping forbidden keys.
+ * @param selection - The caller's requested variant values.
+ * @param defaults - The configured default variant values.
+ * @returns The effective selection table.
+ */
+function resolveVariantSelection<V extends VariantSchema>(
+    selection: VariantSelection<V> | undefined,
+    defaults: Partial<VariantSelection<V>> | undefined,
+): Record<string, unknown> {
+    const resolved: Record<string, unknown> = { ...defaults };
+    if (!selection) {
+        return resolved;
+    }
+
+    for (const key of Object.keys(selection)) {
+        const value = (selection as Record<string, unknown>)[key];
+        if (!isForbiddenSzKey(key) && value !== null && value !== undefined) {
+            resolved[key] = value;
+        }
+    }
+    return resolved;
+}
+
+/**
+ * Merges each selected plain sz object over the configured base.
+ * @param config - The validated variant config.
+ * @param resolved - The effective variant selections.
+ * @returns The merged sz object.
+ */
+function applySelectedVariants<V extends VariantSchema>(
+    config: SzvConfig<V>,
+    resolved: Record<string, unknown>,
+): SzObject {
+    let result: SzObject = config.base ? { ...config.base } : {};
+    for (const variantKey of Object.keys(config.variants ?? {})) {
+        const selectedValue = resolved[variantKey];
+        if (selectedValue === null || selectedValue === undefined) {
+            continue;
         }
 
-        let result: SzObject = config.base ? { ...config.base } : {};
-
-        // defaultVariants applied first; null/undefined in selection means
-        // "not specified" — falls back to default rather than clearing it.
-        const resolved: Record<string, unknown> = { ...config.defaultVariants };
-        if (selection) {
-            for (const key of Object.keys(selection)) {
-                if (isForbiddenSzKey(key)) {
-                    continue;
-                }
-                const val = (selection as Record<string, unknown>)[key];
-                if (val !== null && val !== undefined) {
-                    resolved[key] = val;
-                }
-            }
+        const variantObject = config.variants?.[variantKey]?.[selectedValue as string];
+        // A primitive/array here is a mis-shaped config already reported during validation.
+        if (isPlainObject(variantObject)) {
+            result = deepMerge(result, variantObject as SzObject);
         }
-
-        for (const variantKey of Object.keys(config.variants ?? {})) {
-            const selectedValue = resolved[variantKey];
-            if (selectedValue === null || selectedValue === undefined) {
-                continue;
-            }
-
-            const variantObj = config.variants?.[variantKey]?.[selectedValue as string];
-            // Only merge a plain sz object — a primitive/array at this slot is a
-            // mis-shaped config (already warned by validateSzvConfig) and would
-            // otherwise spread into char-indexed keys.
-            if (isPlainObject(variantObj)) {
-                result = deepMerge(result, variantObj as SzObject);
-            }
-        }
-
-        return attachStringCoercionGuard(result);
-    };
+    }
+    return result;
 }
 
 /**
