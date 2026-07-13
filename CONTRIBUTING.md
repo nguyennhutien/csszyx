@@ -48,22 +48,24 @@ recommended for consistency, not enforced.
 
 #### Workspace packages
 
-| Scope            | Maps to                       |
-| ---------------- | ----------------------------- |
-| `csszyx`         | `packages/csszyx/` (umbrella) |
-| `compiler`       | `packages/compiler/`          |
-| `runtime`        | `packages/runtime/`           |
-| `core`           | `packages/core/` (Rust/WASM)  |
-| `types`          | `packages/types/`             |
-| `unplugin`       | `packages/unplugin/`          |
-| `cli`            | `packages/cli/`               |
-| `vars`           | `packages/vars/`              |
-| `dynamic`        | `packages/dynamic/`           |
-| `mcp-server`     | `packages/mcp-server/`        |
-| `vscode`         | `packages/vscode/`            |
-| `vue-adapter`    | `packages/vue-adapter/`       |
-| `svelte-adapter` | `packages/svelte-adapter/`    |
-| `e2e`            | `packages/e2e/` (Playwright)  |
+| Scope              | Maps to                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| `csszyx`           | `packages/csszyx/` (umbrella)                                       |
+| `compiler`         | `packages/compiler/`                                                |
+| `runtime`          | `packages/runtime/`                                                 |
+| `core`             | `packages/core/` + `packages/core-*/` (Rust/WASM + native packages) |
+| `types`            | `packages/types/`                                                   |
+| `unplugin`         | `packages/unplugin/`                                                |
+| `cli`              | `packages/cli/`                                                     |
+| `vars`             | `packages/vars/`                                                    |
+| `dynamic`          | `packages/dynamic/`                                                 |
+| `mcp-server`       | `packages/mcp-server/`                                              |
+| `ts-plugin`        | `packages/ts-plugin/`                                               |
+| `tooling-metadata` | `packages/tooling-metadata/`                                        |
+| `vscode`           | `packages/vscode/`                                                  |
+| `vue-adapter`      | `packages/vue-adapter/`                                             |
+| `svelte-adapter`   | `packages/svelte-adapter/`                                          |
+| `e2e`              | `packages/e2e/` (Playwright)                                        |
 
 #### Cross-cutting
 

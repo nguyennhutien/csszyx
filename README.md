@@ -8,6 +8,7 @@ CSS-in-JS framework for the AI era — Tailwind-v4 object syntax, build-time cla
 [![npm downloads](https://img.shields.io/npm/dm/csszyx.svg)](https://www.npmjs.com/package/csszyx)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://img.shields.io/github/actions/workflow/status/nguyennhutien/csszyx/ci.yml?branch=main)](https://github.com/nguyennhutien/csszyx/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=nguyennhutien_csszyx&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=nguyennhutien_csszyx)
 
 ## Quick Start
 
@@ -170,8 +171,9 @@ window.__csszyx.checksum; // SHA-256 hex
 ## Project Status
 
 Pre-1.0 — the API may still change before a 1.0 release. The badges above
-track the current published version and CI; run `pnpm test` for the live test
-count. The package list is in [Packages](#packages).
+track the current published version, CI, and SonarCloud quality gate; run
+`pnpm test` for the live test count. The package list is in
+[Packages](#packages).
 
 - **Tailwind:** v4 only (v3 planned)
 - **Release cadence:** automated via [release-please](https://github.com/googleapis/release-please-action); see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
