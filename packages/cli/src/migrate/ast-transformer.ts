@@ -282,6 +282,45 @@ export interface TransformOptions {
 }
 
 /**
+ * Build the unchanged result used by source-scan fast paths.
+ *
+ * @param source Original source text.
+ * @returns A no-change migration result.
+ */
+function unchangedTransformResult(source: string): TransformResult {
+    return {
+        code: source,
+        changed: false,
+        warnings: [],
+        stats: {
+            classNamesTransformed: 0,
+            classNamesSkipped: 0,
+            classNamesSkippedComponent: 0,
+            classesUnrecognized: [],
+        },
+        potentiallyUnusedImports: [],
+    };
+}
+
+/**
+ * Return an unchanged result when the source cannot contain a migration target.
+ *
+ * @param source Original source text.
+ * @param keysOnly Whether only legacy sz keys are eligible.
+ * @returns A no-change result, or null when parsing is required.
+ */
+function fastPathResult(source: string, keysOnly: boolean): TransformResult | null {
+    const hasSz = source.indexOf('sz=') !== -1;
+    if (
+        (keysOnly && !hasSz) ||
+        (!hasSz && !source.includes('className') && !source.includes('cva'))
+    ) {
+        return unchangedTransformResult(source);
+    }
+    return null;
+}
+
+/**
  * Transform a JSX/TSX source file, replacing className with sz props.
  * Uses Babel AST for accurate, context-aware transformation.
  *
@@ -318,37 +357,9 @@ export function transformSource(
     // Must catch both className references (migration target) and cva
     // imports (warning surface) — anything else is invisible to migrate.
     // In keys-only mode only `sz=` matters (className is left untouched).
-    if (options.keysOnly && source.indexOf('sz=') === -1) {
-        return {
-            code: source,
-            changed: false,
-            warnings: [],
-            stats: {
-                classNamesTransformed: 0,
-                classNamesSkipped: 0,
-                classNamesSkippedComponent: 0,
-                classesUnrecognized: [],
-            },
-            potentiallyUnusedImports: [],
-        };
-    }
-    if (
-        source.indexOf('className') === -1 &&
-        source.indexOf('cva') === -1 &&
-        source.indexOf('sz=') === -1
-    ) {
-        return {
-            code: source,
-            changed: false,
-            warnings: [],
-            stats: {
-                classNamesTransformed: 0,
-                classNamesSkipped: 0,
-                classNamesSkippedComponent: 0,
-                classesUnrecognized: [],
-            },
-            potentiallyUnusedImports: [],
-        };
+    const fastPath = fastPathResult(source, options.keysOnly === true);
+    if (fastPath) {
+        return fastPath;
     }
 
     // ── Step 1: Parse ────────────────────────────────────────────────────

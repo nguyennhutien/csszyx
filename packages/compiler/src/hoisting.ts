@@ -176,6 +176,48 @@ function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t
 }
 
 /**
+ * Group static CSS-variable usages by variable name and serialized value.
+ *
+ * @param usages All CSS variable usages collected during transform.
+ * @returns Static usages grouped by variable identity and value.
+ */
+function groupStaticUsages(usages: CSSVarUsage[]): Map<string, CSSVarUsage[]> {
+    const groups = new Map<string, CSSVarUsage[]>();
+    for (const usage of usages) {
+        if (usage.serializedValue === null) {
+            continue;
+        } // Can't hoist dynamic values
+        const groupKey = `${usage.varName}::${usage.serializedValue}`;
+        const group = groups.get(groupKey) || [];
+        group.push(usage);
+        groups.set(groupKey, group);
+    }
+    return groups;
+}
+
+/**
+ * Find a non-fragment common ancestor for every usage in one static group.
+ *
+ * @param group Static usages that share an identity and value.
+ * @param parentMap Child-to-parent AST relationships.
+ * @returns Common JSX ancestor or null when no safe target exists.
+ */
+function findGroupLca(
+    group: CSSVarUsage[],
+    parentMap: Map<t.Node, t.Node>,
+): t.JSXOpeningElement | null {
+    let lca: t.JSXOpeningElement | null = group[0].element;
+    for (let i = 1; i < group.length; i++) {
+        const next = findLCA(lca, group[i].element, parentMap);
+        if (next === null || isFragment(next)) {
+            return null;
+        }
+        lca = next;
+    }
+    return lca;
+}
+
+/**
  * Hoists CSS variables to common ancestor elements when multiple siblings
  * share the same variable name and value.
  *
@@ -187,35 +229,13 @@ export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, 
         return;
     }
 
-    // Group by varName + serializedValue (identical pairs)
-    const groups = new Map<string, CSSVarUsage[]>();
-    for (const usage of usages) {
-        if (usage.serializedValue === null) {
-            continue;
-        } // Can't hoist dynamic values
-        const groupKey = `${usage.varName}::${usage.serializedValue}`;
-        const group = groups.get(groupKey) || [];
-        group.push(usage);
-        groups.set(groupKey, group);
-    }
-
     // For each group with 2+ elements, find LCA and hoist
-    for (const [, group] of groups) {
+    for (const [, group] of groupStaticUsages(usages)) {
         if (group.length < 2) {
             continue;
         }
 
-        // Find LCA of all elements in the group
-        let lca = group[0].element;
-        for (let i = 1; i < group.length; i++) {
-            const newLca = findLCA(lca, group[i].element, parentMap);
-            if (newLca === null || isFragment(newLca)) {
-                lca = null as unknown as t.JSXOpeningElement;
-                break;
-            }
-            lca = newLca;
-        }
-
+        const lca = findGroupLca(group, parentMap);
         if (!lca) {
             continue;
         } // No valid LCA (Fragment or no common ancestor)

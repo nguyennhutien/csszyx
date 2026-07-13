@@ -2519,9 +2519,34 @@ function resolveToConstObjectExpression(
 }
 
 /**
+ * Evaluate one AST value when it is representable in a static SzObject.
+ *
+ * @param value AST value to evaluate.
+ * @returns Static sz value, or undefined when dynamic.
+ */
+function evaluateStaticValue(value: t.Node | null | undefined): SzValue | undefined {
+    const unwrapped = unwrapTsExpression(value);
+    if (t.isStringLiteral(unwrapped) || t.isNumericLiteral(unwrapped)) {
+        return unwrapped.value;
+    }
+    if (t.isBooleanLiteral(unwrapped)) {
+        return unwrapped.value;
+    }
+    if (
+        t.isUnaryExpression(unwrapped) &&
+        unwrapped.operator === '-' &&
+        t.isNumericLiteral(unwrapped.argument)
+    ) {
+        return -unwrapped.argument.value;
+    }
+    return t.isObjectExpression(unwrapped)
+        ? (evaluateStaticObject(unwrapped) ?? undefined)
+        : undefined;
+}
+
+/**
  * Evaluate an ObjectExpression to a plain SzObject when every property (and
- * nested object) is a static literal. Returns null on the first dynamic value —
- * spread, computed key, identifier, call, etc.
+ * nested object) is a static literal. Returns null on the first dynamic value.
  *
  * @param node The object expression to evaluate.
  * @returns The static SzObject, or null if any part is dynamic.
@@ -2534,32 +2559,11 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
             return null;
         }
         const key = getObjectPropertyKey(prop);
-        if (key === null) {
+        const value = evaluateStaticValue(prop.value);
+        if (key === null || value === undefined) {
             return null;
         }
-
-        const value = unwrapTsExpression(prop.value);
-        if (t.isStringLiteral(value)) {
-            result[key] = value.value;
-        } else if (t.isNumericLiteral(value)) {
-            result[key] = value.value;
-        } else if (t.isBooleanLiteral(value)) {
-            result[key] = value.value;
-        } else if (
-            t.isUnaryExpression(value) &&
-            value.operator === '-' &&
-            t.isNumericLiteral(value.argument)
-        ) {
-            result[key] = -value.argument.value;
-        } else if (t.isObjectExpression(value)) {
-            const nested = evaluateStaticObject(value);
-            if (nested === null) {
-                return null;
-            }
-            result[key] = nested;
-        } else {
-            return null; // Dynamic value
-        }
+        result[key] = value;
     }
 
     return result;

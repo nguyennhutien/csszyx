@@ -1307,6 +1307,31 @@ interface OxcComponentHoistCandidate {
 }
 
 /**
+ * Resolve one supported identifier spread to its static sz object.
+ *
+ * @param spread Oxc spread node.
+ * @param filename Filename used in unsupported-shape diagnostics.
+ * @param bindings Static object bindings available at the call site.
+ * @returns Resolved static sz object.
+ */
+function resolveSzObjectSpread(
+    spread: SpreadElementNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): SzObject {
+    if (spread.argument.type === 'Identifier') {
+        const bound = bindings.get(String((spread.argument as IdentifierNode).name));
+        if (bound) {
+            return astObjectToSzObject(bound, filename, bindings);
+        }
+    }
+    throw new OxcNotImplementedError(
+        'D5',
+        `unsupported object spread in sz object at ${filename}:${spread.start}`,
+    );
+}
+
+/**
  * Convert an oxc `ObjectExpression` AST node into a plain {@link SzObject}
  * the browser-pure `transform()` helper can consume. Throws
  * {@link OxcNotImplementedError} on any pattern D2.1 does not handle
@@ -1327,18 +1352,11 @@ function astObjectToSzObject(
     const result: Record<string, SzValue> = {};
     for (const propRaw of node.properties) {
         if (propRaw.type === 'SpreadElement') {
-            const spread = propRaw as SpreadElementNode;
-            if (spread.argument.type === 'Identifier') {
-                const bound = bindings.get(String((spread.argument as IdentifierNode).name));
-                if (bound) {
-                    Object.assign(result, astObjectToSzObject(bound, filename, bindings));
-                    continue;
-                }
-            }
-            throw new OxcNotImplementedError(
-                'D5',
-                `unsupported object spread in sz object at ${filename}:${propRaw.start}`,
+            Object.assign(
+                result,
+                resolveSzObjectSpread(propRaw as SpreadElementNode, filename, bindings),
             );
+            continue;
         }
         if (propRaw.type !== 'Property') {
             throw new OxcNotImplementedError(

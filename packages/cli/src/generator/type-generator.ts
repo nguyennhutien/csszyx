@@ -576,6 +576,20 @@ function generateUnionType(values: string[]): string {
 }
 
 /**
+ * Resolve configured theme keys or retain the built-in fallback set.
+ *
+ * @param configured Optional resolved theme section.
+ * @param fallback Built-in keys used when the section is absent.
+ * @returns Configured keys or the fallback set.
+ */
+function themeKeysOrFallback(
+    configured: Record<string, unknown> | undefined,
+    fallback: string[],
+): string[] {
+    return configured ? Object.keys(configured) : fallback;
+}
+
+/**
  * Generate TypeScript declarations from resolved Tailwind theme.
  *
  * @param {ResolvedTheme} theme - Resolved Tailwind theme
@@ -627,52 +641,59 @@ export function generateTypeDeclarations(
         screens,
         ...STATIC_VALUE_TYPES,
         // Extract from theme if available
-        zIndex: theme.zIndex
-            ? Object.keys(theme.zIndex)
-            : ['0', '10', '20', '30', '40', '50', 'auto'],
-        borderRadius: theme.borderRadius
-            ? Object.keys(theme.borderRadius)
-            : ['none', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', 'full'],
-        boxShadow: theme.boxShadow
-            ? Object.keys(theme.boxShadow)
-            : ['sm', 'md', 'lg', 'xl', '2xl', 'inner', 'none'],
-        opacity: theme.opacity
-            ? Object.keys(theme.opacity)
-            : [
-                  '0',
-                  '5',
-                  '10',
-                  '20',
-                  '25',
-                  '30',
-                  '40',
-                  '50',
-                  '60',
-                  '70',
-                  '75',
-                  '80',
-                  '90',
-                  '95',
-                  '100',
-              ],
-        fontSize: theme.fontSize
-            ? Object.keys(theme.fontSize)
-            : [
-                  'xs',
-                  'sm',
-                  'base',
-                  'lg',
-                  'xl',
-                  '2xl',
-                  '3xl',
-                  '4xl',
-                  '5xl',
-                  '6xl',
-                  '7xl',
-                  '8xl',
-                  '9xl',
-              ],
-        fontFamily: theme.fontFamily ? Object.keys(theme.fontFamily) : ['sans', 'serif', 'mono'],
+        zIndex: themeKeysOrFallback(theme.zIndex, ['0', '10', '20', '30', '40', '50', 'auto']),
+        borderRadius: themeKeysOrFallback(theme.borderRadius, [
+            'none',
+            'sm',
+            'md',
+            'lg',
+            'xl',
+            '2xl',
+            '3xl',
+            'full',
+        ]),
+        boxShadow: themeKeysOrFallback(theme.boxShadow, [
+            'sm',
+            'md',
+            'lg',
+            'xl',
+            '2xl',
+            'inner',
+            'none',
+        ]),
+        opacity: themeKeysOrFallback(theme.opacity, [
+            '0',
+            '5',
+            '10',
+            '20',
+            '25',
+            '30',
+            '40',
+            '50',
+            '60',
+            '70',
+            '75',
+            '80',
+            '90',
+            '95',
+            '100',
+        ]),
+        fontSize: themeKeysOrFallback(theme.fontSize, [
+            'xs',
+            'sm',
+            'base',
+            'lg',
+            'xl',
+            '2xl',
+            '3xl',
+            '4xl',
+            '5xl',
+            '6xl',
+            '7xl',
+            '8xl',
+            '9xl',
+        ]),
+        fontFamily: themeKeysOrFallback(theme.fontFamily, ['sans', 'serif', 'mono']),
         lineHeight: [
             'none',
             'tight',
