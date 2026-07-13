@@ -102,6 +102,61 @@ describe('transform hook branch edges', () => {
         expect(result?.code).toContain("from '@csszyx/runtime'");
     });
 
+    // The spacing/unit-var cases pin the oxc parser: the default rust lane
+    // resolves to whatever engine binary is installed, which may predate the
+    // __szSpacingVar/__szUnitVar emission these cases exercise.
+    it('injects the spacing-var runtime helper when a dynamic spacing value is used', async () => {
+        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const result = (await transform(
+            'export const A = ({w}) => <div sz={{ w }} />;',
+            path.join(root, 'src/DynSpacing.tsx'),
+        )) as { code: string } | null;
+        expect(result).not.toBeNull();
+        expect(result?.code).toContain('__szSpacingVar');
+        expect(result?.code).toContain("from '@csszyx/runtime'");
+        // The other dynamic-value helpers are not used, so not imported.
+        expect(result?.code).not.toContain('__szColorVar');
+        expect(result?.code).not.toContain('__szUnitVar');
+    });
+
+    it('injects the unit-var runtime helper when a dynamic angle value is used', async () => {
+        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const result = (await transform(
+            'export const B = ({angle}) => <div sz={{ rotate: angle }} />;',
+            path.join(root, 'src/DynUnit.tsx'),
+        )) as { code: string } | null;
+        expect(result).not.toBeNull();
+        expect(result?.code).toContain('__szUnitVar');
+        expect(result?.code).toContain("from '@csszyx/runtime'");
+        expect(result?.code).not.toContain('__szSpacingVar');
+    });
+
+    it('appends the spacing-var helper to an existing @csszyx/runtime import', async () => {
+        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const result = (await transform(
+            "import { _sz } from '@csszyx/runtime';\nconst A = ({w}) => <div sz={{ w }} />;",
+            path.join(root, 'src/DynSpacing2.tsx'),
+        )) as { code: string } | null;
+        expect(result).not.toBeNull();
+        // The helper is merged into the existing import clause, not a new line.
+        expect(result?.code).toMatch(
+            /import\s*\{[^}]*_sz[^}]*__szSpacingVar[^}]*\}\s*from\s*'@csszyx\/runtime'/,
+        );
+    });
+
+    it('does not re-import an already-imported unit-var helper', async () => {
+        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const result = (await transform(
+            "import { __szUnitVar } from '@csszyx/runtime';\nconst B = ({ms}) => <div sz={{ duration: ms }} />;",
+            path.join(root, 'src/DynUnit2.tsx'),
+        )) as { code: string } | null;
+        expect(result).not.toBeNull();
+        // The compiled call site remains, but no second import is added:
+        // exactly one import clause names the helper (the pre-existing one).
+        expect(result?.code).toContain('__szUnitVar(');
+        expect(result?.code.match(/import\s*\{[^}]*__szUnitVar[^}]*\}/g)).toHaveLength(1);
+    });
+
     it('injects the szcn and szPart helpers for an array/szv sz prop', async () => {
         const { root, transform } = await boot();
         const result = (await transform(

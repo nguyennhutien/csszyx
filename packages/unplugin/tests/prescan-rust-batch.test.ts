@@ -56,6 +56,8 @@ describe('rust prescan batching', () => {
                 usesRuntime: boolean;
                 usesMerge: boolean;
                 usesColorVar: boolean;
+                usesSpacingVar: boolean;
+                usesUnitVar: boolean;
                 classes: Set<string>;
                 rawClassNames: Set<string>;
                 diagnostics: string[];
@@ -70,6 +72,8 @@ describe('rust prescan batching', () => {
                     usesRuntime: false,
                     usesMerge: false,
                     usesColorVar: false,
+                    usesSpacingVar: false,
+                    usesUnitVar: false,
                     classes: new Set([file.source.includes('p: 4') ? 'p-4' : 'm-2']),
                     rawClassNames: new Set(),
                     diagnostics: [],

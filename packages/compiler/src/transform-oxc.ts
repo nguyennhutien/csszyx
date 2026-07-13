@@ -114,6 +114,8 @@ export function transformOxc(
             usesSzcn: false,
             usesSzPart: false,
             usesColorVar: false,
+            usesSpacingVar: false,
+            usesUnitVar: false,
             classes,
             rawClassNames,
             diagnostics,
@@ -175,6 +177,8 @@ export function transformOxc(
     let usesSzcn = false;
     let usesSzPart = false;
     let usesColorVar = false;
+    let usesSpacingVar = false;
+    let usesUnitVar = false;
 
     walk(parsed.program, node => {
         if (node.type === 'CallExpression') {
@@ -530,15 +534,15 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'ArrayExpression') {
-                const composition = buildArrayComposition(
-                    expression as ArrayExpressionNode,
-                    effectiveFilename,
-                    objectBindings,
+                const composition = buildArrayComposition(expression as ArrayExpressionNode, {
+                    filename: effectiveFilename,
+                    bindings: objectBindings,
                     globalVarAliases,
                     cssVariableMap,
                     source,
                     classes,
-                );
+                    diagnostics,
+                });
                 if (composition === null) {
                     // Spread element etc. — the whole array stays a runtime value.
                     collectArrayCandidateClasses(
@@ -696,6 +700,8 @@ export function transformOxc(
                             usesRuntime = true;
                             usesMerge = true;
                             usesColorVar ||= partial.usesColorVar;
+                            usesSpacingVar ||= partial.usesSpacingVar;
+                            usesUnitVar ||= partial.usesUnitVar;
                             transformed = true;
                             return;
                         }
@@ -726,6 +732,8 @@ export function transformOxc(
                             }
                         }
                         usesColorVar ||= partial.usesColorVar;
+                        usesSpacingVar ||= partial.usesSpacingVar;
+                        usesUnitVar ||= partial.usesUnitVar;
                         transformed = true;
                         return;
                     }
@@ -890,6 +898,8 @@ export function transformOxc(
         usesSzcn,
         usesSzPart,
         usesColorVar,
+        usesSpacingVar,
+        usesUnitVar,
         classes,
         rawClassNames,
         diagnostics,
@@ -957,6 +967,24 @@ function offsetToLineColumn(source: string, offset: number): { line: number; col
         }
     }
     return { line, column };
+}
+
+/**
+ * Diagnostic for an array element that is a visible object literal but still
+ * degrades to `_szPart` because one of its values is a runtime expression.
+ *
+ * @param node The degraded array element.
+ * @param source Original source for position computation.
+ * @returns The formatted diagnostic string.
+ */
+function buildSzPartElementDiagnostic(node: OxcNode, source: string): string {
+    const { line, column } = offsetToLineColumn(source, node.start);
+    return (
+        `sz array element at ${line}:${column + 1}: this object literal contains a runtime ` +
+        'value, so the whole element is deferred to _szPart at runtime (its classes are ' +
+        'still safelisted best-effort).\n  Suggestion: lift the condition to the element ' +
+        'level (cond ? { a } : { b }) or move runtime values to dynamic().'
+    );
 }
 
 /**
@@ -1223,6 +1251,8 @@ interface SpreadElementNode extends OxcNode {
 interface OxcDynamicPropInfo {
     expression: OxcNode;
     category: PropertyCategory;
+    /** The sz key the value sits on — the runtime helper needs it for axis tokens. */
+    szKey: string;
     varName: string;
     twPrefix: string;
     variantChain: string;
@@ -1241,6 +1271,8 @@ interface OxcPartialObjectResult {
     dynamicProps: Map<string, OxcDynamicPropInfo>;
     conditionalClasses: OxcConditionalClassEntry[];
     usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
 }
 
 /** Ready-to-emit partial object transform fragments. */
@@ -1249,6 +1281,8 @@ interface OxcPartialTransform {
     classNameAttr: string;
     styleProps: string[];
     usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
     /** True when the emitted attribute embeds a runtime conditional branch. */
     hasConditional: boolean;
 }
@@ -1348,6 +1382,17 @@ type ArrayComposition =
           usesSzPart: boolean;
       };
 
+/** Shared inputs used while classifying one sz array expression. */
+interface ArrayCompositionContext {
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
+    source: string;
+    classes: Set<string>;
+    diagnostics: string[];
+}
+
 /**
  * Classify an sz array (`sz={[a, b, …]}`) for later-wins composition.
  *
@@ -1361,24 +1406,16 @@ type ArrayComposition =
  * per property group. Element order is preserved in both lanes.
  *
  * @param node Array expression used as the sz value.
- * @param filename Filename for diagnostics.
- * @param bindings Local object-literal bindings.
- * @param globalVarAliases Exact global custom-property alias table.
- * @param cssVariableMap Original-to-mangled CSS variable map to populate.
- * @param source Original source for preserving condition/dynamic expressions.
- * @param classes Output set collecting every compiled class for the catalog.
+ * @param context Shared bindings, aliases, source, and output sinks.
  * @returns The composition, or null when the whole array must stay a runtime
  *   value (a spread element).
  */
 function buildArrayComposition(
     node: ArrayExpressionNode,
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    globalVarAliases: ReadonlyMap<string, string>,
-    cssVariableMap: Map<string, CssVariableMangleValue>,
-    source: string,
-    classes: Set<string>,
+    context: ArrayCompositionContext,
 ): ArrayComposition | null {
+    const { filename, bindings, globalVarAliases, cssVariableMap, source, classes, diagnostics } =
+        context;
     /** One classified array element. */
     type Part =
         | { kind: 'obj'; sz: SzObject }
@@ -1529,6 +1566,12 @@ function buildArrayComposition(
             // Safelist best-effort: static object literals reachable inside the
             // dynamic expression (ternary branches, etc.) still get their CSS.
             collectCandidateClassesFromExpression(part.node, filename, bindings, classes, '');
+            // An OBJECT LITERAL landing here means one runtime value dragged an
+            // otherwise-visible element to _szPart — say so. Identifiers/calls
+            // are legitimate forwarded slots and stay silent.
+            if (unwrapExpression(part.node).type === 'ObjectExpression') {
+                diagnostics.push(buildSzPartElementDiagnostic(part.node, source));
+            }
             args.push(`_szPart(${part.src})`);
             usesSzPart = true;
         }
@@ -2785,6 +2828,8 @@ function buildPartialObjectTransform(
         classNameAttr,
         styleProps,
         usesColorVar: partial.usesColorVar,
+        usesSpacingVar: partial.usesSpacingVar,
+        usesUnitVar: partial.usesUnitVar,
         hasConditional: partial.conditionalClasses.length > 0,
     };
 }
@@ -3375,6 +3420,8 @@ function evaluatePartialObject(
     const dynamicProps = new Map<string, OxcDynamicPropInfo>();
     const conditionalClasses: OxcConditionalClassEntry[] = [];
     let usesColorVar = false;
+    let usesSpacingVar = false;
+    let usesUnitVar = false;
 
     for (const propRaw of node.properties) {
         if (propRaw.type === 'SpreadElement') {
@@ -3445,6 +3492,8 @@ function evaluatePartialObject(
             }
             conditionalClasses.push(...nested.conditionalClasses);
             usesColorVar ||= nested.usesColorVar;
+            usesSpacingVar ||= nested.usesSpacingVar;
+            usesUnitVar ||= nested.usesUnitVar;
             continue;
         }
 
@@ -3487,17 +3536,29 @@ function evaluatePartialObject(
         const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
         if (COLOR_PROPERTIES.has(key)) {
             usesColorVar = true;
+        } else if (category === PropertyCategory.SPACING) {
+            usesSpacingVar = true;
+        } else if (category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION) {
+            usesUnitVar = true;
         }
         dynamicProps.set(uniqueKey, {
             expression: value,
             category,
+            szKey: key,
             varName,
             twPrefix,
             variantChain,
         });
     }
 
-    return { staticProps, dynamicProps, conditionalClasses, usesColorVar };
+    return {
+        staticProps,
+        dynamicProps,
+        conditionalClasses,
+        usesColorVar,
+        usesSpacingVar,
+        usesUnitVar,
+    };
 }
 
 /**
@@ -3548,13 +3609,13 @@ function generateStyleValueSource(info: OxcDynamicPropInfo, source: string): str
     const expressionSource = source.slice(info.expression.start, info.expression.end);
     switch (info.category) {
         case PropertyCategory.SPACING:
-            return `\`calc(\${${expressionSource}} * var(--spacing))\``;
+            return `__szSpacingVar(${expressionSource}, ${JSON.stringify(info.szKey)})`;
         case PropertyCategory.COLOR:
             return `__szColorVar(${expressionSource})`;
         case PropertyCategory.ANGLE:
-            return `\`\${${expressionSource}}deg\``;
+            return `__szUnitVar(${expressionSource}, "deg", ${JSON.stringify(info.szKey)})`;
         case PropertyCategory.DURATION:
-            return `\`\${${expressionSource}}ms\``;
+            return `__szUnitVar(${expressionSource}, "ms", ${JSON.stringify(info.szKey)})`;
         default:
             return `\`\${${expressionSource}}\``;
     }
@@ -3573,7 +3634,9 @@ function buildDynamicValueKey(info: OxcDynamicPropInfo, source: string): string 
     );
     switch (info.category) {
         case PropertyCategory.SPACING:
-            return `spacing:${expressionSource}`;
+            // The helper's output depends on the key (screen -> 100vw vs 100vh),
+            // so identical expressions on different keys must not share a var.
+            return `spacing:${info.szKey}:${expressionSource}`;
         case PropertyCategory.COLOR:
             return `color:${expressionSource}`;
         case PropertyCategory.ANGLE:

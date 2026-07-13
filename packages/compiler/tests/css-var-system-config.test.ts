@@ -70,9 +70,7 @@ describe('CSS variable system config contract', () => {
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
         const result = transformOxc(source, 'mangle-vars-hoist.tsx', { mangleVars: true });
 
-        expect(result.code).toContain(
-            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
-        );
+        expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
         expect(result.code).not.toContain('"--sz"');
@@ -118,10 +116,10 @@ describe('CSS variable system config contract', () => {
 
         expect(result.code).toContain('<Card>');
         expect(result.code).toContain(
-            '<div className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+            '<div className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
         expect(result.code).toContain(
-            '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+            '<span className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
         expect(result.code).not.toContain('--cz');
         expect(result.classes).toEqual(new Set(['p-(--sz)']));
@@ -138,7 +136,7 @@ describe('CSS variable system config contract', () => {
         });
 
         expect(result.code).toContain(
-            '<section style={{...rootStyle, "--cz": `calc(${pad} * var(--spacing))`}}>',
+            '<section style={{...rootStyle, "--cz": __szSpacingVar(pad, "p")}}>',
         );
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
@@ -160,9 +158,7 @@ describe('CSS variable system config contract', () => {
         expect(defaultDepth.diagnostics).toContain(
             '[csszyx] mangleVars skipped component CSS variable hoist for --cz across 2 usages: max-depth (maxDepth 5)',
         );
-        expect(deeper.code).toContain(
-            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
-        );
+        expect(deeper.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(deeper.code).toContain('<span className="p-(--cz)" />');
         expect(deeper.code).toContain('<button className="p-(--cz)" />');
         expect(deeper.diagnostics).not.toContain(
@@ -197,9 +193,7 @@ describe('CSS variable system config contract', () => {
             mangleVars: true,
         });
 
-        expect(result.code).toContain(
-            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
-        );
+        expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
         expect(result.code).not.toContain('--sz');
@@ -214,10 +208,10 @@ describe('CSS variable system config contract', () => {
         });
 
         expect(result.code).toContain(
-            '<div className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+            '<div className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
         expect(result.code).toContain(
-            '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+            '<span className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
         expect(result.code).not.toContain('--cz');
         expect(result.diagnostics).toContain(
@@ -230,9 +224,7 @@ describe('CSS variable system config contract', () => {
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
         const result = transformRust(source, 'rust-vars.tsx', { mangleVars: true });
 
-        expect(result.code).toContain(
-            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
-        );
+        expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
         expect(result.classes).toEqual(new Set(['p-(--cz)']));

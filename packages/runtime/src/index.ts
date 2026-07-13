@@ -46,7 +46,7 @@ export {
     verifyMangleMapIntegrity,
 } from './hydration.js';
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
-export { __szColorVar } from './lite.js';
+export { __szColorVar, __szSpacingVar, __szUnitVar } from './lite.js';
 // Mangle-aware className merge (last-wins override) for layered components
 export { _szcn, szcn } from './merge-classes.js';
 

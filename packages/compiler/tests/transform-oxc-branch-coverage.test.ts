@@ -317,9 +317,9 @@ describe('transform-oxc: partial (static + dynamic) objects', () => {
         expect(out).toMatch(/className="base m-\(--/);
     });
 
-    it('emits a spacing calc() style value', () => {
+    it('emits a spacing helper style value', () => {
         expect(code('export const A = ({ v }) => <div sz={{ p: v }} />;')).toContain(
-            'calc(${v} * var(--spacing))',
+            '__szSpacingVar(v, "p")',
         );
     });
 
@@ -329,15 +329,15 @@ describe('transform-oxc: partial (static + dynamic) objects', () => {
         expect(result.usesColorVar).toBe(true);
     });
 
-    it('emits a deg suffix for a dynamic angle prop', () => {
+    it('emits a deg unit helper for a dynamic angle prop', () => {
         expect(code('export const A = ({ a }) => <div sz={{ rotate: a }} />;')).toContain(
-            '${a}deg',
+            '__szUnitVar(a, "deg", "rotate")',
         );
     });
 
-    it('emits an ms suffix for a dynamic duration prop', () => {
+    it('emits an ms unit helper for a dynamic duration prop', () => {
         expect(code('export const A = ({ d }) => <div sz={{ duration: d }} />;')).toContain(
-            '${d}ms',
+            '__szUnitVar(d, "ms", "duration")',
         );
     });
 
@@ -357,7 +357,7 @@ describe('transform-oxc: partial (static + dynamic) objects', () => {
 
     it('treats a conditional with a dynamic branch as a dynamic var', () => {
         const result = run('export const A = ({ on, v }) => <div sz={{ p: on ? v : 2 }} />;');
-        expect(result.code).toContain('calc(');
+        expect(result.code).toContain('__szSpacingVar(on ? v : 2, "p")');
     });
 
     it('falls back to runtime for a conditional + dynamic mix', () => {
@@ -586,7 +586,7 @@ describe('transform-oxc: value & key shapes', () => {
         // Exercises astValueToSzValue's logical/conditional throw before the
         // property is reclassified as a dynamic CSS variable.
         const out = code('export const A = ({ a, b }) => <div sz={{ p: a && b }} />;');
-        expect(out).toContain('calc(${a && b} * var(--spacing))');
+        expect(out).toContain('__szSpacingVar(a && b, "p")');
     });
 });
 
@@ -753,7 +753,7 @@ describe('transform-oxc: nested & conditional class-source edge cases', () => {
 
     it('treats a null-literal conditional branch as dynamic', () => {
         const out = code('export const A = ({ on }) => <div sz={{ p: on ? null : 2 }} />;');
-        expect(out).toContain('calc(');
+        expect(out).toContain('__szSpacingVar(on ? null : 2, "p")');
     });
 
     it('returns null (fallback) when a static-conditional branch is an unbound identifier', () => {

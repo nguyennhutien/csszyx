@@ -80,6 +80,10 @@ export interface NativeTransformResult {
         usesSzPart: boolean;
         /** Whether the result imports the runtime color-var helper. */
         usesColorVar: boolean;
+        /** Whether the emitted code calls the __szSpacingVar runtime helper. */
+        usesSpacingVar?: boolean;
+        /** Whether the emitted code calls the __szUnitVar runtime helper. */
+        usesUnitVar?: boolean;
         /** Producer identity for cache safety. */
         producer: 'rust';
         /** Whether native AST budget protection fired. */

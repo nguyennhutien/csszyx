@@ -1298,6 +1298,7 @@ fn static_array_parts_from_array_expression(
                 classes: split_class_tokens(&value.value),
                 dynamic_span: None,
                 candidates: Vec::new(),
+                dynamic_object_literal: false,
             });
             continue;
         }
@@ -1317,6 +1318,7 @@ fn static_array_parts_from_array_expression(
                             classes,
                             dynamic_span: None,
                             candidates: Vec::new(),
+                            dynamic_object_literal: false,
                         });
                     }
                     continue;
@@ -1328,6 +1330,7 @@ fn static_array_parts_from_array_expression(
                     classes: Vec::new(),
                     dynamic_span: Some(text_span(expression.span())),
                     candidates: candidate_classes_from_expression(expression, ctx),
+                    dynamic_object_literal: false,
                 });
                 continue;
             }
@@ -1338,16 +1341,20 @@ fn static_array_parts_from_array_expression(
                 classes: lower_static_sz_object(&object),
                 dynamic_span: None,
                 candidates: Vec::new(),
+                dynamic_object_literal: false,
             });
             continue;
         }
         // Safelist best-effort: static object literals reachable inside the
         // dynamic expression (ternary branches, etc.) still get their CSS.
+        // An object literal that lands here carried a runtime value, so the
+        // whole element defers to `_szPart` — flagged for a build diagnostic.
         parts.push(StaticArrayPartIr {
             condition_span: None,
             classes: Vec::new(),
             dynamic_span: Some(text_span(expression.span())),
             candidates: candidate_classes_from_expression(expression, ctx),
+            dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
         });
     }
 

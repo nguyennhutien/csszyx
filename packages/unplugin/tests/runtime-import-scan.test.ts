@@ -28,6 +28,14 @@ describe('importsRuntimeHelper', () => {
         expect(importsRuntimeHelper(code, '_sz')).toBe(false);
     });
 
+    it('detects the spacing-var and unit-var helpers without substring confusion', () => {
+        const code = "import { __szSpacingVar, __szUnitVar } from '@csszyx/runtime';";
+        expect(importsRuntimeHelper(code, '__szSpacingVar')).toBe(true);
+        expect(importsRuntimeHelper(code, '__szUnitVar')).toBe(true);
+        expect(importsRuntimeHelper(code, '_sz')).toBe(false);
+        expect(importsRuntimeHelper(code, '__szColorVar')).toBe(false);
+    });
+
     it('handles aliased imports (the bound name is the outer name)', () => {
         expect(importsRuntimeHelper("import { _sz as sz } from '@csszyx/runtime';", '_sz')).toBe(
             true,

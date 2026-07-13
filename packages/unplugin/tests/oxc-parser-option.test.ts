@@ -463,9 +463,7 @@ describe('csszyx parser selection', () => {
             '/repo/src/App.tsx',
         ) as { code: string };
 
-        expect(result.code).toContain(
-            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
-        );
+        expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
@@ -483,10 +481,10 @@ describe('csszyx parser selection', () => {
 
         expect(result.code).not.toContain('<section style={{"--cz"');
         expect(result.code).toContain(
-            '<span className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+            '<span className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
         expect(result.code).toContain(
-            '<button className="p-(--sz)" style={{"--sz": `calc(${pad} * var(--spacing))`}} />',
+            '<button className="p-(--sz)" style={{"--sz": __szSpacingVar(pad, "p")}} />',
         );
     });
 
@@ -569,9 +567,7 @@ describe('csszyx parser selection', () => {
             '/repo/src/App.tsx',
         ) as { code: string };
 
-        expect(result.code).toContain(
-            '<section style={{"--cz": `calc(${pad} * var(--spacing))`}}>',
-        );
+        expect(result.code).toContain('<section style={{"--cz": __szSpacingVar(pad, "p")}}>');
         expect(result.code).toContain('<div className="p-(--cz)" />');
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });

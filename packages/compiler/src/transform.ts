@@ -104,6 +104,8 @@ export interface SourceTransformResult {
     usesSzPart: boolean;
     /** Whether the source needs the color-var runtime helper. */
     usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
     /** Classes generated from sz syntax. */
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */
@@ -139,6 +141,8 @@ export function transformSourceCode(
     let usesSzcn = false;
     let usesSzPart = false;
     let usesColorVar = false;
+    let usesSpacingVar = false;
+    let usesUnitVar = false;
     let transformed = false;
     const collectedClasses = new Set<string>();
     // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
@@ -167,6 +171,8 @@ export function transformSourceCode(
             usesSzcn: false,
             usesSzPart: false,
             usesColorVar: false,
+            usesSpacingVar: false,
+            usesUnitVar: false,
             classes: collectedClasses,
             rawClassNames,
             diagnostics,
@@ -732,9 +738,15 @@ export function transformSourceCode(
                                         // Inject style attribute (only when CSS variables are needed)
                                         mergeAndInjectStyle(styleProps);
 
-                                        // Track __szColorVar usage
+                                        // Track runtime style-var helper usage
                                         if (partial.usesColorVar) {
                                             usesColorVar = true;
+                                        }
+                                        if (partial.usesSpacingVar) {
+                                            usesSpacingVar = true;
+                                        }
+                                        if (partial.usesUnitVar) {
+                                            usesUnitVar = true;
                                         }
 
                                         transformed = true;
@@ -965,6 +977,20 @@ export function transformSourceCode(
                                                     getBindingForArray,
                                                     collectedClasses,
                                                 );
+                                                // An OBJECT LITERAL landing here means
+                                                // one runtime value dragged an otherwise
+                                                // visible element to _szPart — say so.
+                                                // Identifiers/calls are legitimate
+                                                // forwarded slots and stay silent.
+                                                const unwrappedPart = unwrapTsExpression(part.node);
+                                                if (
+                                                    unwrappedPart &&
+                                                    t.isObjectExpression(unwrappedPart)
+                                                ) {
+                                                    diagnostics.push(
+                                                        buildSzPartElementDiagnostic(part.node),
+                                                    );
+                                                }
                                                 args.push(
                                                     t.callExpression(t.identifier('_szPart'), [
                                                         part.node,
@@ -1334,6 +1360,8 @@ export function transformSourceCode(
             usesSzcn: usesSzcn,
             usesSzPart: usesSzPart,
             usesColorVar: usesColorVar,
+            usesSpacingVar: usesSpacingVar,
+            usesUnitVar: usesUnitVar,
             classes: collectedClasses,
             rawClassNames,
             diagnostics,
@@ -1356,6 +1384,8 @@ export function transformSourceCode(
             usesSzcn: false,
             usesSzPart: false,
             usesColorVar: false,
+            usesSpacingVar: false,
+            usesUnitVar: false,
             classes: collectedClasses,
             rawClassNames,
             diagnostics,
@@ -1490,14 +1520,19 @@ function emptyClassToUndefined(node: t.Expression): t.Expression {
 }
 
 /**
- * Recursively attempts to pre-compile an AST node to a static className expression.
- * Handles ObjectExpression (single static object), ConditionalExpression (ternary with static branches),
- * and StringLiteral (already resolved).
+ * Adds every non-empty class token from a compiled class string to a sink.
  *
- * @param node - AST node to attempt static transformation on
- * @param getBinding - Optional scope binding resolver for spread resolution
- * @returns A Babel AST node (StringLiteral or ConditionalExpression of strings), or null if dynamic
+ * @param className - Space-separated compiled class string.
+ * @param classes - Class sink for the safelist.
  */
+function addClassTokens(className: string, classes: Set<string>): void {
+    for (const token of className.split(/\s+/)) {
+        if (token) {
+            classes.add(token);
+        }
+    }
+}
+
 /**
  * Safelist best-effort for a DYNAMIC sz array element: walk conditional /
  * logical branches and add the compiled classes of any static object literal
@@ -1528,21 +1563,149 @@ function collectDynamicElementCandidates(
         return;
     }
     if (t.isStringLiteral(inner)) {
-        for (const c of inner.value.split(/\s+/)) {
-            if (c) {
-                classes.add(c);
-            }
-        }
+        addClassTokens(inner.value, classes);
         return;
     }
     const sz = tryResolveStaticSzObject(inner, getBinding);
     if (sz !== null) {
-        for (const c of transform(sz).className.split(/\s+/)) {
+        addClassTokens(transform(sz).className, classes);
+        return;
+    }
+    // Partially-static object literal (a runtime value blocked the full
+    // resolve): walk it per property so the static siblings and both branches
+    // of value-level conditionals still reach the safelist — matching the
+    // oxc/rust engines, which already catalogue these.
+    if (t.isObjectExpression(inner)) {
+        collectPartialObjectCandidates(inner, getBinding, classes, []);
+    }
+}
+
+/**
+ * Wrap a leaf sz value back into nested objects along a key path:
+ * (['hover','m'], 2) → { hover: { m: 2 } }.
+ * @param path - Key path from the element root down to the leaf.
+ * @param value - The leaf sz value.
+ * @returns The nested single-leaf sz object.
+ */
+function wrapSzPath(path: readonly string[], value: SzValue): SzObject {
+    let wrapped: SzValue = value;
+    for (let i = path.length - 1; i >= 0; i--) {
+        wrapped = { [path[i]]: wrapped } as unknown as SzValue;
+    }
+    return wrapped as unknown as SzObject;
+}
+
+/**
+ * Compile a single leaf value at a key path and add its classes to the
+ * safelist, ignoring values the transform rejects.
+ * @param path - Key path from the element root down to the leaf.
+ * @param value - The leaf sz value.
+ * @param classes - Safelist accumulator.
+ */
+function addPartialLeafClasses(
+    path: readonly string[],
+    value: SzValue,
+    classes: Set<string>,
+): void {
+    try {
+        for (const c of transform(wrapSzPath(path, value)).className.split(/\s+/)) {
             if (c) {
                 classes.add(c);
             }
         }
+    } catch {
+        // Pathological value (depth guard etc.) — safelist is best-effort.
     }
+}
+
+/**
+ * Best-effort safelist walk of a partially-static object literal: static
+ * values compile at their key path, conditional values compile both branches,
+ * nested objects recurse, spreads re-enter the element collector.
+ * @param node - The object literal to walk.
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @param classes - Safelist accumulator.
+ * @param path - Key path accumulated from the element root.
+ */
+function collectPartialObjectCandidates(
+    node: t.ObjectExpression,
+    getBinding: GetBinding,
+    classes: Set<string>,
+    path: readonly string[],
+): void {
+    for (const prop of node.properties) {
+        if (t.isSpreadElement(prop)) {
+            collectDynamicElementCandidates(prop.argument, getBinding, classes);
+            continue;
+        }
+        if (!t.isObjectProperty(prop) || prop.computed) {
+            continue;
+        }
+        const key = t.isIdentifier(prop.key)
+            ? prop.key.name
+            : t.isStringLiteral(prop.key)
+              ? prop.key.value
+              : null;
+        if (key === null || !t.isExpression(prop.value)) {
+            continue;
+        }
+        collectPartialValueCandidates(prop.value, [...path, key], getBinding, classes);
+    }
+}
+
+/**
+ * Resolve one property value in the partial-object walk: literals compile,
+ * conditionals recurse into both branches, objects resolve fully or recurse.
+ * @param valueNode - The property value expression.
+ * @param path - Key path from the element root to this property.
+ * @param getBinding - Scope lookup for identifier/spread resolution.
+ * @param classes - Safelist accumulator.
+ */
+function collectPartialValueCandidates(
+    valueNode: t.Expression,
+    path: readonly string[],
+    getBinding: GetBinding,
+    classes: Set<string>,
+): void {
+    const value = unwrapTsExpression(valueNode);
+    if (!value || !t.isExpression(value)) {
+        return;
+    }
+    if (t.isConditionalExpression(value)) {
+        collectPartialValueCandidates(value.consequent, path, getBinding, classes);
+        collectPartialValueCandidates(value.alternate, path, getBinding, classes);
+        return;
+    }
+    if (t.isObjectExpression(value)) {
+        const nested = tryResolveStaticSzObject(value, getBinding);
+        if (nested !== null) {
+            addPartialLeafClasses(path, nested as unknown as SzValue, classes);
+        } else {
+            collectPartialObjectCandidates(value, getBinding, classes, path);
+        }
+        return;
+    }
+    const literal = extractStaticLiteralValue(value);
+    if (literal !== null) {
+        addPartialLeafClasses(path, literal, classes);
+    }
+}
+
+/**
+ * Diagnostic for an array element that is a visible object literal but still
+ * degrades to `_szPart` because one of its values is a runtime expression.
+ * @param node - The degraded array element.
+ * @returns The formatted diagnostic string.
+ */
+function buildSzPartElementDiagnostic(node: t.Node): string {
+    const loc = node.loc;
+    const lineCol = loc ? `${loc.start.line}:${loc.start.column + 1}` : '?';
+    return (
+        `sz array element at ${lineCol}: this object literal contains a runtime ` +
+        'value, so the whole element is deferred to _szPart at runtime (its classes are ' +
+        'still safelisted best-effort).\n  Suggestion: lift the condition to the element ' +
+        'level (cond ? { a } : { b }) or move runtime values to dynamic().'
+    );
 }
 
 /**
@@ -2078,13 +2241,7 @@ function lenientCatalogObjects(
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
         }
-        const key = t.isIdentifier(prop.key)
-            ? prop.key.name
-            : t.isStringLiteral(prop.key)
-              ? prop.key.value
-              : t.isNumericLiteral(prop.key)
-                ? String(prop.key.value)
-                : null;
+        const key = getObjectPropertyKey(prop);
         if (key === null) {
             continue;
         }
@@ -2373,21 +2530,11 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
     const result: SzObject = {};
 
     for (const prop of node.properties) {
-        if (!t.isObjectProperty(prop)) {
+        if (!t.isObjectProperty(prop) || prop.computed) {
             return null;
-        } // Spread elements are dynamic
-        if (prop.computed) {
-            return null;
-        } // Computed keys are dynamic
-
-        let key: string;
-        if (t.isIdentifier(prop.key)) {
-            key = prop.key.name;
-        } else if (t.isStringLiteral(prop.key)) {
-            key = prop.key.value;
-        } else if (t.isNumericLiteral(prop.key)) {
-            key = String(prop.key.value);
-        } else {
+        }
+        const key = getObjectPropertyKey(prop);
+        if (key === null) {
             return null;
         }
 
@@ -2496,6 +2643,8 @@ function resolveObjectSpreads(
 interface DynamicPropInfo {
     expression: t.Expression;
     category: PropertyCategory;
+    /** The sz key the value sits on — the runtime helper needs it for axis tokens. */
+    szKey: string;
     varName: string;
     twPrefix: string;
     variantChain: string;
@@ -2517,6 +2666,59 @@ interface PartialObjectResult {
     conditionalClasses: ConditionalClassEntry[];
     hasSpread: boolean;
     usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
+}
+
+/** A dynamic property plus the map key used for per-variant deduplication. */
+interface DynamicPropRegistration {
+    uniqueKey: string;
+    info: DynamicPropInfo;
+}
+
+/**
+ * Normalizes a Babel object-property key accepted by the sz object grammar.
+ *
+ * @param prop - Object property whose key should be read.
+ * @returns The normalized string key, or null for unsupported key shapes.
+ */
+function getObjectPropertyKey(prop: t.ObjectProperty): string | null {
+    if (t.isIdentifier(prop.key)) {
+        return prop.key.name;
+    }
+    if (t.isStringLiteral(prop.key)) {
+        return prop.key.value;
+    }
+    if (t.isNumericLiteral(prop.key)) {
+        return String(prop.key.value);
+    }
+    return null;
+}
+
+/**
+ * Builds the shared metadata for a runtime-valued sz property.
+ *
+ * @param key - Canonical sz key.
+ * @param expression - Runtime value expression.
+ * @param variantChain - Active nested variant path.
+ * @returns The deduplication key and dynamic-property metadata.
+ */
+function createDynamicPropRegistration(
+    key: string,
+    expression: t.Expression,
+    variantChain: string,
+): DynamicPropRegistration {
+    return {
+        uniqueKey: variantChain ? `${variantChain}-${key}` : key,
+        info: {
+            expression,
+            category: getPropertyCategory(key),
+            szKey: key,
+            varName: getCSSVariableName(key, variantChain || undefined),
+            twPrefix: PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(),
+            variantChain,
+        },
+    };
 }
 
 /**
@@ -2606,26 +2808,25 @@ function evaluatePartialObject(
     const rawClasses: string[] = [];
     const conditionalClasses: ConditionalClassEntry[] = [];
     let usesColorVar = false;
+    let usesSpacingVar = false;
+    let usesUnitVar = false;
+
+    const registerDynamicProp = (key: string, expression: t.Expression): void => {
+        const registration = createDynamicPropRegistration(key, expression, variantChain);
+        const { category } = registration.info;
+        usesColorVar ||= COLOR_PROPERTIES.has(key);
+        usesSpacingVar ||= category === PropertyCategory.SPACING;
+        usesUnitVar ||=
+            category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION;
+        dynamicProps.set(registration.uniqueKey, registration.info);
+    };
 
     for (const prop of node.properties) {
-        if (t.isSpreadElement(prop)) {
-            return null; // Spread → fallback to _sz()
-        }
-        if (!t.isObjectProperty(prop)) {
+        if (!t.isObjectProperty(prop) || prop.computed) {
             return null;
         }
-        if (prop.computed) {
-            return null;
-        }
-
-        let key: string;
-        if (t.isIdentifier(prop.key)) {
-            key = prop.key.name;
-        } else if (t.isStringLiteral(prop.key)) {
-            key = prop.key.value;
-        } else if (t.isNumericLiteral(prop.key)) {
-            key = String(prop.key.value);
-        } else {
+        const key = getObjectPropertyKey(prop);
+        if (key === null) {
             return null;
         }
 
@@ -2695,6 +2896,7 @@ function evaluatePartialObject(
                             dynamicProps.set(uniqueKey, {
                                 expression: opProp.value,
                                 category: PropertyCategory.UNITLESS,
+                                szKey: key,
                                 varName: opVarName,
                                 twPrefix: `${twPrefix}-op`,
                                 variantChain: variantChain || '',
@@ -2711,6 +2913,7 @@ function evaluatePartialObject(
                                 ? colorProp.value
                                 : t.stringLiteral(''),
                             category: PropertyCategory.COLOR,
+                            szKey: key,
                             varName,
                             twPrefix,
                             variantChain: variantChain || '',
@@ -2746,6 +2949,12 @@ function evaluatePartialObject(
                         if (nestedResult.usesColorVar) {
                             usesColorVar = true;
                         }
+                        if (nestedResult.usesSpacingVar) {
+                            usesSpacingVar = true;
+                        }
+                        if (nestedResult.usesUnitVar) {
+                            usesUnitVar = true;
+                        }
                     } else {
                         return null; // Unknown nested dynamic object
                     }
@@ -2777,41 +2986,11 @@ function evaluatePartialObject(
                 });
             } else {
                 // At least one branch is dynamic — fall back to CSS variable
-                const twPrefix =
-                    PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-                const category = getPropertyCategory(key);
-                const varName = getCSSVariableName(key, variantChain || undefined);
-                const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
-                if (COLOR_PROPERTIES.has(key)) {
-                    usesColorVar = true;
-                }
-                dynamicProps.set(uniqueKey, {
-                    expression: value,
-                    category,
-                    varName,
-                    twPrefix,
-                    variantChain: variantChain || '',
-                });
+                registerDynamicProp(key, value);
             }
         } else if (t.isExpression(value)) {
             // Fully dynamic expression → CSS variable
-            const twPrefix =
-                PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-            const category = getPropertyCategory(key);
-            const varName = getCSSVariableName(key, variantChain || undefined);
-            const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
-
-            if (COLOR_PROPERTIES.has(key)) {
-                usesColorVar = true;
-            }
-
-            dynamicProps.set(uniqueKey, {
-                expression: value,
-                category,
-                varName,
-                twPrefix,
-                variantChain: variantChain || '',
-            });
+            registerDynamicProp(key, value);
         } else {
             return null;
         }
@@ -2824,6 +3003,8 @@ function evaluatePartialObject(
         conditionalClasses,
         hasSpread: false,
         usesColorVar,
+        usesSpacingVar,
+        usesUnitVar,
     };
 }
 
@@ -2838,37 +3019,27 @@ function generateStyleValueExpression(info: DynamicPropInfo): t.Expression {
 
     switch (category) {
         case PropertyCategory.SPACING:
-            return t.templateLiteral(
-                [
-                    t.templateElement({ raw: 'calc(', cooked: 'calc(' }, false),
-                    t.templateElement(
-                        { raw: ' * var(--spacing))', cooked: ' * var(--spacing))' },
-                        true,
-                    ),
-                ],
-                [expression],
-            );
+            return t.callExpression(t.identifier('__szSpacingVar'), [
+                expression,
+                t.stringLiteral(info.szKey),
+            ]);
 
         case PropertyCategory.COLOR:
             return t.callExpression(t.identifier('__szColorVar'), [expression]);
 
         case PropertyCategory.ANGLE:
-            return t.templateLiteral(
-                [
-                    t.templateElement({ raw: '', cooked: '' }, false),
-                    t.templateElement({ raw: 'deg', cooked: 'deg' }, true),
-                ],
-                [expression],
-            );
+            return t.callExpression(t.identifier('__szUnitVar'), [
+                expression,
+                t.stringLiteral('deg'),
+                t.stringLiteral(info.szKey),
+            ]);
 
         case PropertyCategory.DURATION:
-            return t.templateLiteral(
-                [
-                    t.templateElement({ raw: '', cooked: '' }, false),
-                    t.templateElement({ raw: 'ms', cooked: 'ms' }, true),
-                ],
-                [expression],
-            );
+            return t.callExpression(t.identifier('__szUnitVar'), [
+                expression,
+                t.stringLiteral('ms'),
+                t.stringLiteral(info.szKey),
+            ]);
         default:
             return t.templateLiteral(
                 [

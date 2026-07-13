@@ -54,6 +54,16 @@
         "types": "./dist/color-var.d.cts",
         "default": "./dist/color-var.cjs"
       }
+    },
+    "./spacing-var": {
+      "import": {
+        "types": "./dist/spacing-var.d.mts",
+        "default": "./dist/spacing-var.mjs"
+      },
+      "require": {
+        "types": "./dist/spacing-var.d.cts",
+        "default": "./dist/spacing-var.cjs"
+      }
     }
   },
   "files": [

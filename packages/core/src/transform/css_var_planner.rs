@@ -433,7 +433,10 @@ fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {
         &source[prop.expression_span.start as usize..prop.expression_span.end as usize],
     );
     match prop.category {
-        DynamicCssVarCategory::Spacing => format!("spacing:{expression}"),
+        // The spacing helper's output depends on the sz key (`screen` ->
+        // 100vw on `w`, 100vh on `h`), so identical expressions on different
+        // keys must not share a hoisted var.
+        DynamicCssVarCategory::Spacing => format!("spacing:{}:{expression}", prop.key),
         DynamicCssVarCategory::Color => format!("color:{expression}"),
         DynamicCssVarCategory::Angle => format!("angle:{expression}"),
         DynamicCssVarCategory::Duration => format!("duration:{expression}"),

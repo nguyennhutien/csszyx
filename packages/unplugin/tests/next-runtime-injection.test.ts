@@ -50,4 +50,28 @@ describe('Next runtime import injection', () => {
             "import { _szMerge, __szColorVar } from '@csszyx/runtime';\nimport { _sz } from '@csszyx/runtime';\nexport const App = () => _szMerge('p-4');",
         );
     });
+
+    it('injects the spacing-var and unit-var helpers when their flags are set', () => {
+        const result = injectNextRuntimeImports('export const App = ({ w, angle }) => null;', {
+            usesSpacingVar: true,
+            usesUnitVar: true,
+        });
+
+        expect(result.injected).toEqual(['__szSpacingVar', '__szUnitVar']);
+        expect(result.code).toBe(
+            "import { __szSpacingVar, __szUnitVar } from '@csszyx/runtime';\nexport const App = ({ w, angle }) => null;",
+        );
+    });
+
+    it('skips spacing-var and unit-var helpers that are already imported', () => {
+        const code =
+            "import { __szSpacingVar, __szUnitVar } from '@csszyx/runtime';\nexport const x = 1;";
+        const result = injectNextRuntimeImports(code, {
+            usesSpacingVar: true,
+            usesUnitVar: true,
+        });
+
+        expect(result.injected).toEqual([]);
+        expect(result.code).toBe(code);
+    });
 });

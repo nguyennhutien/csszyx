@@ -3437,6 +3437,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 let usesSzcn = false;
                 let usesSzPart = false;
                 let usesColorVar = false;
+                let usesSpacingVar = false;
+                let usesUnitVar = false;
                 let transformed = false;
                 let szClasses: Set<string> | undefined;
 
@@ -3474,6 +3476,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         usesSzcn = result.usesSzcn;
                         usesSzPart = result.usesSzPart;
                         usesColorVar = result.usesColorVar;
+                        usesSpacingVar = result.usesSpacingVar;
+                        usesUnitVar = result.usesUnitVar;
                         transformed = result.transformed;
                         szClasses = result.classes;
                         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
@@ -3561,6 +3565,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                     if (usesColorVar) {
                         imports.push('__szColorVar');
+                    }
+                    if (usesSpacingVar) {
+                        imports.push('__szSpacingVar');
+                    }
+                    if (usesUnitVar) {
+                        imports.push('__szUnitVar');
                     }
                     // Filter out helpers already imported from @csszyx/runtime.
                     // The literal package name only appears in modules that

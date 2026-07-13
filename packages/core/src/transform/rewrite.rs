@@ -529,11 +529,24 @@ fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
         &source[prop.expression_span.start as usize..prop.expression_span.end as usize];
     match prop.category {
         DynamicCssVarCategory::Spacing => {
-            format!("`calc(${{{expression}}} * var(--spacing))`")
+            format!(
+                "__szSpacingVar({expression}, {})",
+                js_string_literal(&prop.key)
+            )
         }
         DynamicCssVarCategory::Color => format!("__szColorVar({expression})"),
-        DynamicCssVarCategory::Angle => format!("`${{{expression}}}deg`"),
-        DynamicCssVarCategory::Duration => format!("`${{{expression}}}ms`"),
+        DynamicCssVarCategory::Angle => {
+            format!(
+                "__szUnitVar({expression}, \"deg\", {})",
+                js_string_literal(&prop.key)
+            )
+        }
+        DynamicCssVarCategory::Duration => {
+            format!(
+                "__szUnitVar({expression}, \"ms\", {})",
+                js_string_literal(&prop.key)
+            )
+        }
         DynamicCssVarCategory::Passthrough => format!("`${{{expression}}}`"),
     }
 }
@@ -726,7 +739,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const App = () => <div className=\"p-(--_sz-p)\" style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+            "const App = () => <div className=\"p-(--_sz-p)\" style={{\"--_sz-p\": __szSpacingVar(padVal, \"p\")}} />;"
         );
     }
 
@@ -743,7 +756,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const App = () => <div className=\"p-(--sz)\" style={{\"--sz\": `calc(${padVal} * var(--spacing))`}} />;"
+            "const App = () => <div className=\"p-(--sz)\" style={{\"--sz\": __szSpacingVar(padVal, \"p\")}} />;"
         );
     }
 
@@ -761,7 +774,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const App = () => <section style={{\"--cz\": `calc(${pad} * var(--spacing))`}}><div className=\"p-(--cz)\" /><span className=\"p-(--cz)\" /></section>;"
+            "const App = () => <section style={{\"--cz\": __szSpacingVar(pad, \"p\")}}><div className=\"p-(--cz)\" /><span className=\"p-(--cz)\" /></section>;"
         );
     }
 
@@ -772,7 +785,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const App = () => <div className=\"base p-(--_sz-p)\" style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+            "const App = () => <div className=\"base p-(--_sz-p)\" style={{\"--_sz-p\": __szSpacingVar(padVal, \"p\")}} />;"
         );
     }
 
@@ -783,7 +796,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const App = () => <div className={_szMerge(getClasses(), \"p-(--_sz-p)\")} style={{\"--_sz-p\": `calc(${padVal} * var(--spacing))`}} />;"
+            "const App = () => <div className={_szMerge(getClasses(), \"p-(--_sz-p)\")} style={{\"--_sz-p\": __szSpacingVar(padVal, \"p\")}} />;"
         );
     }
 
@@ -794,7 +807,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            "const App = () => <div style={{...{ color: \"red\" }, \"--_sz-p\": `calc(${padVal} * var(--spacing))`}} className=\"p-(--_sz-p)\" />;"
+            "const App = () => <div style={{...{ color: \"red\" }, \"--_sz-p\": __szSpacingVar(padVal, \"p\")}} className=\"p-(--_sz-p)\" />;"
         );
     }
 

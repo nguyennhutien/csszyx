@@ -336,7 +336,7 @@ function assertNativeEngineMangleVars(binding) {
   }
   if (
     result.code !==
-    'const Vars = ({ pad }) => <section style={{"--cz": `calc(${pad} * var(--spacing))`}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section>;'
+    'const Vars = ({ pad }) => <section style={{"--cz": __szSpacingVar(pad, "p")}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section>;'
   ) {
     fail(`Unexpected mangleVars code: ${result.code}`);
   }
@@ -355,14 +355,15 @@ function assertNativeEngineMangleVars(binding) {
   }
   if (
     result.metadata?.transformed !== true ||
-    result.metadata?.producer !== "rust"
+    result.metadata?.producer !== "rust" ||
+    result.metadata?.usesSpacingVar !== true
   ) {
     fail(`Unexpected mangleVars metadata: ${JSON.stringify(result.metadata)}`);
   }
 
   if (
     fanoutResult.code !==
-    'const Vars = ({ pad, gap }) => <main><section style={{"--cz": `calc(${pad} * var(--spacing))`}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section><aside className="p-(--sz)" style={{"--sz": `calc(${gap} * var(--spacing))`}} /></main>;'
+    'const Vars = ({ pad, gap }) => <main><section style={{"--cz": __szSpacingVar(pad, "p")}}><div className="p-(--cz)" /><button className="p-(--cz)" /></section><aside className="p-(--sz)" style={{"--sz": __szSpacingVar(gap, "p")}} /></main>;'
   ) {
     fail(`Unexpected mangleVars fanout code: ${fanoutResult.code}`);
   }

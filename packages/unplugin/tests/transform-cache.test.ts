@@ -63,6 +63,8 @@ describe('transform cache', () => {
             usesRuntime: false,
             usesMerge: false,
             usesColorVar: false,
+            usesSpacingVar: true,
+            usesUnitVar: true,
             classes: new Set(['p-4']),
             rawClassNames: new Set(['custom']),
             diagnostics: ['diagnostic'],
@@ -94,6 +96,9 @@ describe('transform cache', () => {
         const cached = readTransformCache(cacheRoot, input());
 
         expect(cached?.code).toBe('const App=()=> <div className="p-4" />;');
+        expect(cached?.usesColorVar).toBe(false);
+        expect(cached?.usesSpacingVar).toBe(true);
+        expect(cached?.usesUnitVar).toBe(true);
         expect(cached?.classes).toEqual(new Set(['p-4']));
         expect(cached?.rawClassNames).toEqual(new Set(['custom']));
         expect(cached?.diagnostics).toEqual(['diagnostic']);
@@ -163,8 +168,24 @@ describe('transform cache', () => {
         const shardDir = join(cacheRoot, key.slice(0, 2));
         const content = readFileSync(join(shardDir, `${key.slice(2)}.json`), 'utf8');
 
-        expect(content).toContain('"version":9');
+        expect(content).toContain('"version":10');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
+    });
+
+    it('rejects an entry written under an older cache schema', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        writeTransformCache(cacheRoot, input(), result());
+
+        const { key } = createTransformCacheKey(input());
+        const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+        const entry = JSON.parse(readFileSync(file, 'utf8')) as { version: number };
+        // Simulate a schema-9 entry surviving at the current key: its result
+        // predates usesSpacingVar/usesUnitVar, so serving it would resurrect
+        // those flags as undefined and skip helper import injection.
+        entry.version = 9;
+        writeFileSync(file, JSON.stringify(entry), 'utf8');
+
+        expect(readTransformCache(cacheRoot, input())).toBeNull();
     });
 
     it('keys and validates entries on the native engine identity', () => {

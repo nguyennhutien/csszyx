@@ -196,6 +196,8 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         usesSzcn: result.metadata.usesSzcn,
         usesSzPart: result.metadata.usesSzPart,
         usesColorVar: result.metadata.usesColorVar,
+        usesSpacingVar: result.metadata.usesSpacingVar ?? false,
+        usesUnitVar: result.metadata.usesUnitVar ?? false,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         diagnostics: result.diagnostics,
