@@ -240,54 +240,75 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
         ['fontWeights', groups.fontWeights],
     ];
     for (const [category, names] of entries) {
-        for (const name of names ?? []) {
-            if (!name || typeof name !== 'string') {
-                continue;
-            }
-            if (COLLISION_BLOCKLIST[category].has(name)) {
-                warnOnce(
-                    `theme token "${name}" shadows a built-in ${category === 'colors' ? 'utility keyword' : 'value'} — ` +
-                        'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
-                        'Rename the token to enable precise merging.',
-                );
-                continue;
-            }
-            const ambiguityPair = AMBIGUITY_PAIR_BY_CATEGORY[category];
-            if (ambiguityPair.dropped.has(name)) {
-                // warnOnce de-dupes: the drop that recorded the name already
-                // warned with the same message, so replays stay quiet.
-                warnOnce(ambiguityPair.message(name));
-                continue;
-            }
-            if (!customTokens[category].has(name)) {
-                customTokens[category].add(name);
-                changed = true;
-            }
-        }
+        if (registerThemeCategory(category, names)) changed = true;
     }
     // Cross-category ambiguity: `--color-huge` + `--text-huge` makes `text-huge`
     // mean two different properties. Drop from both — keep-both over guessing.
-    for (const name of [...customTokens.colors]) {
-        if (customTokens.textSizes.has(name)) {
-            customTokens.colors.delete(name);
-            customTokens.textSizes.delete(name);
-            AMBIGUITY_PAIRS.colorTextSize.dropped.add(name);
-            changed = true;
-            warnOnce(AMBIGUITY_PAIRS.colorTextSize.message(name));
-        }
-    }
-    for (const name of [...customTokens.fontFamilies]) {
-        if (customTokens.fontWeights.has(name)) {
-            customTokens.fontFamilies.delete(name);
-            customTokens.fontWeights.delete(name);
-            AMBIGUITY_PAIRS.fontFamilyWeight.dropped.add(name);
-            changed = true;
-            warnOnce(AMBIGUITY_PAIRS.fontFamilyWeight.message(name));
-        }
-    }
+    if (dropAmbiguousThemeTokens('colors', 'textSizes', AMBIGUITY_PAIRS.colorTextSize))
+        changed = true;
+    if (dropAmbiguousThemeTokens('fontFamilies', 'fontWeights', AMBIGUITY_PAIRS.fontFamilyWeight))
+        changed = true;
     if (changed) {
         _generation++;
     }
+}
+
+/**
+ * Register one theme category, rejecting collisions and prior ambiguities.
+ * @param category - Theme token category.
+ * @param names - Candidate token names.
+ * @returns Whether the registry changed.
+ */
+function registerThemeCategory(
+    category: keyof typeof customTokens,
+    names: readonly string[] | undefined,
+): boolean {
+    let changed = false;
+    for (const name of names ?? []) {
+        if (!name || typeof name !== 'string') continue;
+        if (COLLISION_BLOCKLIST[category].has(name)) {
+            warnOnce(
+                `theme token "${name}" shadows a built-in ${category === 'colors' ? 'utility keyword' : 'value'} — ` +
+                    'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
+                    'Rename the token to enable precise merging.',
+            );
+            continue;
+        }
+        const pair = AMBIGUITY_PAIR_BY_CATEGORY[category];
+        if (pair.dropped.has(name)) {
+            warnOnce(pair.message(name));
+            continue;
+        }
+        if (!customTokens[category].has(name)) {
+            customTokens[category].add(name);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/**
+ * Drop names registered into two categories that share class syntax.
+ * @param first - First conflicting category.
+ * @param second - Second conflicting category.
+ * @param pair - Ambiguity state shared by the categories.
+ * @returns Whether any token was dropped.
+ */
+function dropAmbiguousThemeTokens(
+    first: keyof typeof customTokens,
+    second: keyof typeof customTokens,
+    pair: (typeof AMBIGUITY_PAIRS)[keyof typeof AMBIGUITY_PAIRS],
+): boolean {
+    let changed = false;
+    for (const name of [...customTokens[first]]) {
+        if (!customTokens[second].has(name)) continue;
+        customTokens[first].delete(name);
+        customTokens[second].delete(name);
+        pair.dropped.add(name);
+        warnOnce(pair.message(name));
+        changed = true;
+    }
+    return changed;
 }
 
 /**

@@ -290,28 +290,28 @@ function mergeUncached(inputs: readonly (string | false | null | undefined)[]): 
             continue;
         }
         for (const token of input.split(/\s+/)) {
-            if (!token) {
-                continue;
-            }
-            const original = decodeToken(token);
-            const info = mergeClassify(original);
-            // An ungroupable token keys by itself (never merged away); a single
-            // class has no space so it can't collide with a `variant prefix` key.
-            const key = info ? info.key : original;
-            // A later token removes the earlier survivors it covers — its own key
-            // plus, for a spacing shorthand, the longhand keys it subsumes.
-            for (const covered of info ? info.covers : [key]) {
-                if (byKey.delete(covered)) {
-                    const at = order.indexOf(covered);
-                    if (at !== -1) {
-                        order.splice(at, 1);
-                    }
-                }
-            }
-            byKey.set(key, token);
-            order.push(key);
+            if (token) mergeClassToken(token, order, byKey);
         }
     }
 
     return order.map(key => byKey.get(key) as string).join(' ');
+}
+
+/**
+ * Merge one class token into the ordered survivor map.
+ * @param token - Encoded class token.
+ * @param order - Ordered survivor keys.
+ * @param byKey - Survivor token lookup.
+ */
+function mergeClassToken(token: string, order: string[], byKey: Map<string, string>): void {
+    const original = decodeToken(token);
+    const info = mergeClassify(original);
+    const key = info ? info.key : original;
+    for (const covered of info ? info.covers : [key]) {
+        if (!byKey.delete(covered)) continue;
+        const index = order.indexOf(covered);
+        if (index !== -1) order.splice(index, 1);
+    }
+    byKey.set(key, token);
+    order.push(key);
 }

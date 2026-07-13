@@ -2251,24 +2251,8 @@ function lenientCatalogValues(
         return [];
     }
     const unwrapped = unwrapExpression(node);
-    if (unwrapped.type === 'Literal') {
-        const value = (unwrapped as unknown as { value: unknown }).value;
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-            return [value];
-        }
-        return [];
-    }
-    if (unwrapped.type === 'UnaryExpression') {
-        const operator = (unwrapped as unknown as { operator: string }).operator;
-        const argument = (unwrapped as unknown as { argument: OxcNode }).argument;
-        if ((operator === '-' || operator === '+') && argument.type === 'Literal') {
-            const argValue = (argument as unknown as { value: unknown }).value;
-            if (typeof argValue === 'number') {
-                return [operator === '-' ? -argValue : argValue];
-            }
-        }
-        return [];
-    }
+    const literal = oxcCatalogLiteralValues(unwrapped);
+    if (literal !== null) return literal;
     if (unwrapped.type === 'ObjectExpression') {
         return lenientCatalogObjects(
             unwrapped as ObjectExpressionNode,
@@ -2279,47 +2263,94 @@ function lenientCatalogValues(
         );
     }
     if (unwrapped.type === 'ConditionalExpression') {
-        const conditional = unwrapped as ConditionalExpressionNode;
-        const values = lenientCatalogValues(
-            conditional.consequent,
-            constInits,
-            seen,
-            depth,
-            budget,
-        );
-        // Same paid-exploration guard as the object-candidate lane.
-        if (budget.explores > 0) {
-            budget.explores -= 1;
-            values.push(
-                ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
-            );
-        }
-        return truncateCatalogCandidates(values, budget);
+        return oxcCatalogConditionalValues(unwrapped, constInits, seen, depth, budget);
     }
     if (unwrapped.type === 'Identifier') {
-        const name = String((unwrapped as IdentifierNode).name);
-        if (name === 'undefined') {
-            return [];
-        }
-        const init = constInits.get(name);
-        if (!init || seen.has(name)) {
-            return [];
-        }
-        const cached = budget.valueMemo.get(init);
-        if (cached) {
-            return [...cached];
-        }
-        const values = lenientCatalogValues(
-            init,
-            constInits,
-            new Set([...seen, name]),
-            depth,
-            budget,
-        );
-        budget.valueMemo.set(init, values);
-        return [...values];
+        return oxcCatalogIdentifierValues(unwrapped, constInits, seen, depth, budget);
     }
     return [];
+}
+
+/**
+ * Classify OXC primitive and signed numeric catalog values.
+ * @param node - OXC node to classify.
+ * @returns Candidate values, or null when this helper does not own the shape.
+ */
+function oxcCatalogLiteralValues(node: OxcNode): SzValue[] | null {
+    if (node.type === 'Literal') {
+        const value = (node as unknown as { value: unknown }).value;
+        return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+            ? [value]
+            : [];
+    }
+    if (node.type !== 'UnaryExpression') return null;
+    const unary = node as unknown as { operator: string; argument: OxcNode };
+    if ((unary.operator !== '-' && unary.operator !== '+') || unary.argument.type !== 'Literal') {
+        return [];
+    }
+    const value = (unary.argument as unknown as { value: unknown }).value;
+    if (typeof value !== 'number') return [];
+    return [unary.operator === '-' ? -value : value];
+}
+
+/**
+ * Explore the bounded branches of one OXC catalog conditional.
+ * @param node - Conditional node to explore.
+ * @param constInits - Const initializer lookup.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Bounded branch values in source order.
+ */
+function oxcCatalogConditionalValues(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    const conditional = node as ConditionalExpressionNode;
+    const values = lenientCatalogValues(conditional.consequent, constInits, seen, depth, budget);
+    if (budget.explores > 0) {
+        budget.explores -= 1;
+        values.push(
+            ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
+        );
+    }
+    return truncateCatalogCandidates(values, budget);
+}
+
+/**
+ * Resolve one OXC const identifier through the bounded catalog memo.
+ * @param node - Identifier node to resolve.
+ * @param constInits - Const initializer lookup.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Memoized candidate values.
+ */
+function oxcCatalogIdentifierValues(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    const name = String((node as IdentifierNode).name);
+    if (name === 'undefined' || seen.has(name)) return [];
+    const initializer = constInits.get(name);
+    if (!initializer) return [];
+    const cached = budget.valueMemo.get(initializer);
+    if (cached) return [...cached];
+    const values = lenientCatalogValues(
+        initializer,
+        constInits,
+        new Set([...seen, name]),
+        depth,
+        budget,
+    );
+    budget.valueMemo.set(initializer, values);
+    return [...values];
 }
 
 /**

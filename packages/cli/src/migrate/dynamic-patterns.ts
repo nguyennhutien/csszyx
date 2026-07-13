@@ -289,79 +289,29 @@ export function handleTemplateLiteral(
     const staticText = node.quasis.map(q => q.value.cooked ?? q.value.raw).join(' ');
     const trimmedStatic = staticText.replace(/\s+/g, ' ').trim();
 
-    let baseObject: Record<string, unknown> = {};
+    const state: TemplateMigrationState = {
+        baseObject: {},
+        dynamicElements: [],
+        unrecognized: allUnrecognized,
+        converted: 0,
+    };
     if (trimmedStatic) {
         const { szObject, unrecognized } = classNameToSzObject(trimmedStatic, customMap);
-        baseObject = szObject;
+        state.baseObject = szObject;
         allUnrecognized.push(...unrecognized);
     }
 
-    // Step 2: Process expressions
-    const dynamicElements: string[] = [];
-    let converted = 0;
-
     for (const expr of node.expressions) {
-        // Expression must be an Expression (not TSType)
-        if (!isExpression(expr, t)) {
-            const exprSrc = safeSlice(
-                source,
-                (expr as BabelTypes.Node).start,
-                (expr as BabelTypes.Node).end,
-            );
-            warnings.push(`Cannot migrate template expression: ${exprSrc}`);
+        const warning = migrateTemplateExpression(expr, source, t, customMap, state);
+        if (warning) {
+            warnings.push(warning);
             return skip(allUnrecognized, warnings);
         }
-
-        // String literal inside template: `${'px-4 py-2'}`
-        if (t.isStringLiteral(expr)) {
-            const result = migrateString(expr.value, customMap);
-            if (result) {
-                // Merge static string expressions into the base object
-                const { szObject } = classNameToSzObject(expr.value, customMap);
-                baseObject = { ...baseObject, ...szObject };
-                allUnrecognized.push(...result.unrecognized);
-                converted++;
-            }
-            continue;
-        }
-
-        // Ternary: `${cond ? 'bg-blue' : 'bg-red'}`
-        if (t.isConditionalExpression(expr)) {
-            const result = handleTernaryInner(expr, source, t, customMap);
-            if (!result) {
-                const exprSrc = safeSlice(source, expr.start, expr.end);
-                warnings.push(`Cannot migrate template ternary: ${exprSrc}`);
-                return skip(allUnrecognized, warnings);
-            }
-            dynamicElements.push(result.exprStr);
-            allUnrecognized.push(...result.unrecognized);
-            converted++;
-            continue;
-        }
-
-        // Logical AND: `${isActive && 'bg-blue-500'}`
-        if (t.isLogicalExpression(expr) && expr.operator === '&&') {
-            const result = handleLogicalAndInner(expr, source, t, customMap);
-            if (!result) {
-                const exprSrc = safeSlice(source, expr.start, expr.end);
-                warnings.push(`Cannot migrate template logical expr: ${exprSrc}`);
-                return skip(allUnrecognized, warnings);
-            }
-            dynamicElements.push(result.exprStr);
-            allUnrecognized.push(...result.unrecognized);
-            converted++;
-            continue;
-        }
-
-        // Unhandled expression type → bail
-        const exprSrc = safeSlice(source, expr.start, expr.end);
-        warnings.push(`Cannot migrate template expression: ${exprSrc}`);
-        return skip(allUnrecognized, warnings);
     }
 
     // Step 3: Build the output
-    const hasBase = Object.keys(baseObject).length > 0;
-    const hasDynamic = dynamicElements.length > 0;
+    const hasBase = Object.keys(state.baseObject).length > 0;
+    const hasDynamic = state.dynamicElements.length > 0;
 
     if (!hasBase && !hasDynamic) {
         return skip(allUnrecognized, warnings);
@@ -370,10 +320,10 @@ export function handleTemplateLiteral(
     // Static only → simple object
     if (hasBase && !hasDynamic) {
         return {
-            replacement: `sz=${generateSzExpression(baseObject)}`,
+            replacement: `sz=${generateSzExpression(state.baseObject)}`,
             unrecognized: allUnrecognized,
             warnings,
-            converted: converted + 1,
+            converted: state.converted + 1,
             migrated: true,
         };
     }
@@ -381,17 +331,73 @@ export function handleTemplateLiteral(
     // Build array: [base, ...dynamics]
     const parts: string[] = [];
     if (hasBase) {
-        parts.push(generateSzObjectLiteral(baseObject));
+        parts.push(generateSzObjectLiteral(state.baseObject));
     }
-    parts.push(...dynamicElements);
+    parts.push(...state.dynamicElements);
 
     return {
         replacement: `sz={[${parts.join(', ')}]}`,
         unrecognized: allUnrecognized,
         warnings,
-        converted: converted + (hasBase ? 1 : 0),
+        converted: state.converted + (hasBase ? 1 : 0),
         migrated: true,
     };
+}
+
+/** Mutable output accumulated while migrating template expressions. */
+interface TemplateMigrationState {
+    baseObject: Record<string, unknown>;
+    dynamicElements: string[];
+    unrecognized: string[];
+    converted: number;
+}
+
+/**
+ * Migrate one template expression into static or dynamic output.
+ * @param expression - Template expression to migrate.
+ * @param source - Original source text.
+ * @param t - Babel type guards.
+ * @param customMap - Optional custom migration map.
+ * @param state - Mutable template migration output.
+ * @returns Warning message when migration must stop, otherwise null.
+ */
+function migrateTemplateExpression(
+    expression: BabelTypes.Expression | BabelTypes.TSType,
+    source: string,
+    t: typeof BabelTypes,
+    customMap: CsszyxTodoMap | undefined,
+    state: TemplateMigrationState,
+): string | null {
+    if (!isExpression(expression, t)) {
+        const node = expression as BabelTypes.Node;
+        return `Cannot migrate template expression: ${safeSlice(source, node.start, node.end)}`;
+    }
+    if (t.isStringLiteral(expression)) {
+        const result = migrateString(expression.value, customMap);
+        if (!result) return null;
+        const { szObject } = classNameToSzObject(expression.value, customMap);
+        state.baseObject = { ...state.baseObject, ...szObject };
+        state.unrecognized.push(...result.unrecognized);
+        state.converted++;
+        return null;
+    }
+    const result = t.isConditionalExpression(expression)
+        ? handleTernaryInner(expression, source, t, customMap)
+        : t.isLogicalExpression(expression) && expression.operator === '&&'
+          ? handleLogicalAndInner(expression, source, t, customMap)
+          : null;
+    if (!result) {
+        const kind = t.isConditionalExpression(expression)
+            ? 'template ternary'
+            : t.isLogicalExpression(expression)
+              ? 'template logical expr'
+              : 'template expression';
+        return `Cannot migrate ${kind}: ${safeSlice(source, expression.start, expression.end)}`;
+    }
+    state.dynamicElements.push(result.exprStr);
+    state.unrecognized.push(...result.unrecognized);
+    state.converted++;
+    return null;
 }
 
 // ============================================================================
