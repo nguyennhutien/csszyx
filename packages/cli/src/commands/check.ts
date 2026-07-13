@@ -44,6 +44,54 @@ const DEFAULT_IGNORE = [
 ];
 
 /**
+ * Read one source file, returning null when it cannot contribute diagnostics.
+ *
+ * @param file Absolute source path.
+ * @returns Source text containing sz syntax, or null when irrelevant/unreadable.
+ */
+async function readSzSource(file: string): Promise<string | null> {
+    try {
+        const source = await readFile(file, 'utf8');
+        return source.includes('sz') ? source : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Group captured diagnostics by project-relative file.
+ *
+ * @param issues Captured compiler diagnostics.
+ * @returns Diagnostics keyed by project-relative file.
+ */
+function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
+    const byFile = new Map<string, string[]>();
+    for (const { file, message } of issues) {
+        const messages = byFile.get(file) ?? [];
+        messages.push(message);
+        byFile.set(file, messages);
+    }
+    return byFile;
+}
+
+/**
+ * Print captured diagnostics and mark the process as failed.
+ *
+ * @param issues Captured compiler diagnostics.
+ */
+function reportIssues(issues: SzIssue[]): void {
+    const byFile = groupIssuesByFile(issues);
+    for (const [file, messages] of byFile) {
+        printWarn(file);
+        for (const message of messages) {
+            printInfo(`  ${message}`);
+        }
+    }
+    printWarn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
+    process.exitCode = 1;
+}
+
+/**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Sets `process.exitCode` to 1 when any issue is found so the command can gate
@@ -90,14 +138,8 @@ export async function check(options: CheckOptions = {}): Promise<void> {
 
     try {
         for (const file of files) {
-            let source: string;
-            try {
-                source = await readFile(file, 'utf8');
-            } catch {
-                continue;
-            }
-            // Cheap pre-filter: only files that mention `sz` can carry sz props.
-            if (!source.includes('sz')) {
+            const source = await readSzSource(file);
+            if (source === null) {
                 continue;
             }
             currentFile = path.relative(cwd, file);
@@ -122,20 +164,5 @@ export async function check(options: CheckOptions = {}): Promise<void> {
         return;
     }
 
-    const byFile = new Map<string, string[]>();
-    for (const { file, message } of issues) {
-        const list = byFile.get(file) ?? [];
-        list.push(message);
-        byFile.set(file, list);
-    }
-
-    for (const [file, messages] of byFile) {
-        printWarn(file);
-        for (const message of messages) {
-            printInfo(`  ${message}`);
-        }
-    }
-
-    printWarn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
-    process.exitCode = 1;
+    reportIssues(issues);
 }
