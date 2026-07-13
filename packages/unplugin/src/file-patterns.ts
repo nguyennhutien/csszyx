@@ -144,6 +144,49 @@ export function matchesAnyPattern(
 }
 
 /**
+ * Collect every non-hidden file below a directory.
+ *
+ * @param dir Directory to walk.
+ * @param files Destination file set.
+ */
+function collectDirectoryFiles(dir: string, files: Set<string>): void {
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            if (!DEFAULT_IGNORED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+                collectDirectoryFiles(full, files);
+            }
+        } else {
+            files.add(path.resolve(full));
+        }
+    }
+}
+
+/**
+ * Test whether a collected file is retained by any literal or glob pattern.
+ *
+ * @param file Absolute collected file path.
+ * @param patterns Requested file patterns.
+ * @param rootDir Project root directory.
+ * @returns Whether the file matches at least one pattern.
+ */
+function isExpandedPatternMatch(file: string, patterns: string[], rootDir: string): boolean {
+    return patterns.some(pattern => {
+        if (hasGlobMagic(pattern)) {
+            return matchesPattern(file, pattern, rootDir);
+        }
+        const resolved = path.isAbsolute(pattern) ? pattern : path.join(rootDir, pattern);
+        return normalizeFileId(path.resolve(resolved)) === normalizeFileId(file);
+    });
+}
+
+/**
  * Expands literal paths and simple globs to existing files under rootDir.
  *
  * @param rootDir - Project root directory.
@@ -153,25 +196,6 @@ export function matchesAnyPattern(
 export function expandFilePatterns(rootDir: string, patterns: string | string[]): string[] {
     const list = Array.isArray(patterns) ? patterns : [patterns];
     const files = new Set<string>();
-
-    const walk = (dir: string): void => {
-        let entries: fs.Dirent[];
-        try {
-            entries = fs.readdirSync(dir, { withFileTypes: true });
-        } catch {
-            return;
-        }
-        for (const entry of entries) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                if (!DEFAULT_IGNORED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                    walk(full);
-                }
-            } else {
-                files.add(path.resolve(full));
-            }
-        }
-    };
 
     let needsWalk = false;
     for (const pattern of list) {
@@ -186,25 +210,10 @@ export function expandFilePatterns(rootDir: string, patterns: string | string[])
     }
 
     if (needsWalk) {
-        walk(rootDir);
+        collectDirectoryFiles(rootDir, files);
         for (const file of Array.from(files)) {
-            if (
-                !list.some(
-                    pattern => hasGlobMagic(pattern) && matchesPattern(file, pattern, rootDir),
-                )
-            ) {
-                const isLiteralMatch = list.some(pattern => {
-                    if (hasGlobMagic(pattern)) {
-                        return false;
-                    }
-                    const resolved = path.isAbsolute(pattern)
-                        ? pattern
-                        : path.join(rootDir, pattern);
-                    return normalizeFileId(path.resolve(resolved)) === normalizeFileId(file);
-                });
-                if (!isLiteralMatch) {
-                    files.delete(file);
-                }
+            if (!isExpandedPatternMatch(file, list, rootDir)) {
+                files.delete(file);
             }
         }
     }

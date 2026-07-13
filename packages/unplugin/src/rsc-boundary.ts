@@ -955,53 +955,74 @@ function pruneRSCModulePathCaches(moduleIds: Set<string>): void {
 }
 
 /**
- * Extracts source symbol names from an import clause.
+ * Extract runtime source names from a named import block.
  *
- * @param clause static import clause
- * @returns imported source symbols
+ * @param clause Static import clause.
+ * @returns Imported source symbols.
  */
-function readImportedSymbols(clause: string): string[] {
-    const symbols: string[] = [];
-    // indexOf-based brace extraction avoids the polynomial backtracking
-    // that /\{([\s\S]*?)\}/ would suffer on inputs with repeated `{{`.
+function readNamedImportedSymbols(clause: string): string[] {
     const openBrace = clause.indexOf('{');
     const closeBrace = openBrace === -1 ? -1 : clause.indexOf('}', openBrace);
-    if (openBrace !== -1 && closeBrace !== -1) {
-        const namedPart = clause.slice(openBrace + 1, closeBrace);
-        for (const part of namedPart.split(',')) {
-            const trimmed = part.trim();
-            if (!trimmed || trimmed.startsWith('type ')) {
-                continue;
-            }
-            const sourceName = trimmed
+    if (openBrace === -1 || closeBrace === -1) {
+        return [];
+    }
+    return clause
+        .slice(openBrace + 1, closeBrace)
+        .split(',')
+        .map(part => part.trim())
+        .filter(part => part !== '' && !part.startsWith('type '))
+        .map(part =>
+            part
                 .replace(/^type[ \t]+/, '')
                 .split(/(?<![ \t])[ \t]+as[ \t]+/)[0]
-                ?.trim();
-            if (sourceName) {
-                symbols.push(sourceName);
-            }
-        }
-    }
+                ?.trim(),
+        )
+        .filter((symbol): symbol is string => Boolean(symbol));
+}
 
-    const namespaceParts = splitAsciiWhitespace(clause);
-    if (
-        namespaceParts.length >= 3 &&
-        namespaceParts[0] === '*' &&
-        namespaceParts[1] === 'as' &&
-        isIdentifier(namespaceParts[2] ?? '')
-    ) {
-        symbols.push(...FORBIDDEN_SYMBOLS);
-    }
-
+/**
+ * Extract a forbidden default import symbol from a clause.
+ *
+ * @param clause Static import clause.
+ * @returns Forbidden default symbol or null.
+ */
+function readForbiddenDefaultSymbol(clause: string): string | null {
     const braceStart = clause.indexOf('{');
     const braceEnd = clause.indexOf('}', braceStart);
     const stripped =
         braceStart !== -1 && braceEnd !== -1
             ? clause.slice(0, braceStart) + clause.slice(braceEnd + 1)
             : clause;
-    const defaultCandidate = stripped.trimStart().split(',', 1)[0]?.trim() ?? '';
-    const defaultSymbol = isIdentifier(defaultCandidate) ? defaultCandidate : undefined;
-    if (defaultSymbol && FORBIDDEN_SYMBOLS.has(defaultSymbol)) {
+    const candidate = stripped.trimStart().split(',', 1)[0]?.trim() ?? '';
+    return isIdentifier(candidate) && FORBIDDEN_SYMBOLS.has(candidate) ? candidate : null;
+}
+
+/**
+ * Test whether a clause contains a valid namespace import.
+ *
+ * @param clause Static import clause.
+ * @returns Whether the clause imports a namespace.
+ */
+function hasNamespaceImport(clause: string): boolean {
+    const parts = splitAsciiWhitespace(clause);
+    return (
+        parts.length >= 3 && parts[0] === '*' && parts[1] === 'as' && isIdentifier(parts[2] ?? '')
+    );
+}
+
+/**
+ * Extracts source symbol names from an import clause.
+ *
+ * @param clause static import clause
+ * @returns imported source symbols
+ */
+function readImportedSymbols(clause: string): string[] {
+    const symbols = readNamedImportedSymbols(clause);
+    if (hasNamespaceImport(clause)) {
+        symbols.push(...FORBIDDEN_SYMBOLS);
+    }
+    const defaultSymbol = readForbiddenDefaultSymbol(clause);
+    if (defaultSymbol) {
         symbols.push(defaultSymbol);
     }
 
