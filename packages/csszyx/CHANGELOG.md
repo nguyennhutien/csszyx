@@ -1,5 +1,14 @@
 # csszyx
 
+## [0.11.6](https://github.com/nguyennhutien/csszyx/compare/v0.11.5...v0.11.6) (2026-07-13)
+
+### Bug Fixes
+
+* emit negative spacing CSS at runtime, drop the dead attributes field, surface MCP validate warnings ([#148](https://github.com/nguyennhutien/csszyx/issues/148))
+* **dynamic:** emit CSS for negative spacing utilities at runtime ([#148](https://github.com/nguyennhutien/csszyx/issues/148))
+* drop the never-populated attributes field from transform results ([#148](https://github.com/nguyennhutien/csszyx/issues/148))
+* **mcp-server:** surface compiler warnings from the validate tool ([#148](https://github.com/nguyennhutien/csszyx/issues/148))
+
 ## [0.11.5](https://github.com/nguyennhutien/csszyx/compare/v0.11.4...v0.11.5) (2026-07-12)
 
 ### Bug Fixes
