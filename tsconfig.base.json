@@ -49,10 +49,6 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    // TS 6 deprecates baseUrl. tsup 8.5.1 still injects it during DTS
-    // generation, so silence the deprecation warning here until tsup
-    // ships a TS 6-clean release. Revisit when tsup 8.6+ lands.
-    "ignoreDeprecations": "6.0",
     // TS 6 default is types:[] (was: auto-include all @types). csszyx
     // packages need node globals (process, Buffer) in many places,
     // plus vitest globals in tests. Per-package overrides can add
