@@ -85,13 +85,25 @@ export function handleValidate(input: ValidateInput): {
         }
     }
 
-    // Run the real compiler transform to catch any remaining issues.
+    // Run the real compiler transform to catch any remaining issues. The
+    // compiler reports value-level problems (invalid color strings, dropped
+    // values, …) through console.warn rather than throwing — capture those
+    // for the duration of the call so they surface as `warnings` instead of
+    // vanishing into the MCP server's stderr.
     let transformResult: { className: string } | null = null;
     let transformError: string | null = null;
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+        warnings.push(
+            args.map(arg => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '),
+        );
+    };
     try {
         transformResult = transform(input.sz);
     } catch (err) {
         transformError = err instanceof Error ? err.message : String(err);
+    } finally {
+        console.warn = originalWarn;
     }
 
     return {
