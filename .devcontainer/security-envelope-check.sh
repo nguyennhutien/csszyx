@@ -27,11 +27,16 @@ if [ $(( 0x${caps_hex} >> 12 & 1 )) -ne 1 ]; then
 fi
 
 # 3. Egress actually blocked. example.com is never on the allowlist, so a
-# successful fetch means the firewall is not enforcing. (If the container
-# has no network at all, this check passes vacuously — acceptable, the
-# other checks still flag the missing primitives.)
+# successful fetch means the firewall is not enforcing.
 if curl -m 5 -s -o /dev/null https://example.com 2>/dev/null; then
     DEGRADED+=("egress NOT filtered (https://example.com reachable — firewall inactive)")
+fi
+
+# 4. An allowlisted endpoint must still resolve and connect. Without this
+# positive control, broken DNS or fully blocked networking looks identical to
+# a working deny-by-default firewall in the negative check above.
+if ! curl -m 5 -s -o /dev/null https://api.github.com/zen 2>/dev/null; then
+    DEGRADED+=("allowlisted egress unavailable (GitHub API cannot be reached)")
 fi
 
 if [ ${#DEGRADED[@]} -gt 0 ]; then
