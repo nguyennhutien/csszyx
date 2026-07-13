@@ -155,6 +155,68 @@ function styleChainFor(context: SzContext): readonly string[] | null {
     }
 }
 
+/**
+ * Whether a trigger-character completion belongs to the companion provider.
+ * @param document - Active text document.
+ * @param position - Cursor position.
+ * @param context - VS Code completion context.
+ * @returns Whether the companion owns this trigger.
+ */
+function isCompanionTrigger(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    context: vscode.CompletionContext,
+): boolean {
+    if (context.triggerKind !== vscode.CompletionTriggerKind.TriggerCharacter) return false;
+    const line = document.lineAt(position.line).text;
+    let scan = position.character - 1;
+    while (scan >= 0 && line[scan] === ' ') scan -= 1;
+    const before = line[scan];
+    return before !== "'" && before !== '"' && before !== '`';
+}
+
+/**
+ * Whether call-form suggestions have a csszyx import proving provenance.
+ * @param document - Active text document.
+ * @param context - Parsed sz cursor context.
+ * @returns Whether provenance is sufficient for suggestions.
+ */
+function hasRequiredImport(document: vscode.TextDocument, context: SzContext): boolean {
+    if (context.form !== 'szv' && context.form !== 'szr') return true;
+    const head = document.getText(
+        new vscode.Range(new vscode.Position(0, 0), document.positionAt(IMPORT_SCAN_CHARS)),
+    );
+    return CSSZYX_IMPORT.test(head);
+}
+
+/**
+ * Build completion items after structural style-chain validation.
+ * @param context - Parsed non-empty sz cursor context.
+ * @returns Completion items, or undefined outside style positions.
+ */
+function completionsForContext(
+    context: Exclude<SzContext, { type: 'none' }>,
+): vscode.CompletionItem[] | undefined {
+    const styleChain = styleChainFor(context);
+    if (styleChain === null) return undefined;
+    const innerFirst = [...styleChain].reverse();
+    const kind = classifyStyleChain(innerFirst);
+    if (kind !== 'style' && kind !== 'object-form') return undefined;
+    const form = kind === 'object-form' ? objectValueForm(innerFirst[0] ?? '') : null;
+
+    if (context.type === 'key' || context.type === 'variant-key') {
+        return withoutSiblings(
+            form ? formKeyItems(form) : [...CHAINING_KEY_ITEMS],
+            context.siblings,
+        );
+    }
+    if (context.type !== 'value' && context.type !== 'variant-value') return undefined;
+    if (!context.currentKey) return undefined;
+    if (!form) return getValueCompletions(context.currentKey);
+    const member = form.members.find(candidate => candidate.name === context.currentKey);
+    return member ? memberValueItems(member) : undefined;
+}
+
 /** Companion provider serving only trigger-character sessions in sz contexts. */
 export class SzCompanionProvider implements vscode.CompletionItemProvider {
     /**
@@ -172,17 +234,7 @@ export class SzCompanionProvider implements vscode.CompletionItemProvider {
         context: vscode.CompletionContext,
     ): vscode.CompletionItem[] | undefined {
         // Invoke/letter sessions belong to the tsserver plugin.
-        if (context.triggerKind !== vscode.CompletionTriggerKind.TriggerCharacter) {
-            return undefined;
-        }
-        // Quoted moments belong to the tsserver plugin's `'`/`"` triggers.
-        const line = document.lineAt(position.line).text;
-        let scan = position.character - 1;
-        while (scan >= 0 && line[scan] === ' ') scan -= 1;
-        const before = line[scan];
-        if (before === "'" || before === '"' || before === '`') {
-            return undefined;
-        }
+        if (!isCompanionTrigger(document, position, context)) return undefined;
 
         const ctx = getSzContext(document, position);
         if (ctx.type === 'none') {
@@ -191,46 +243,11 @@ export class SzCompanionProvider implements vscode.CompletionItemProvider {
         // Call forms are recognized by spelling; require a csszyx import in the
         // document head so a local function named szv cannot trigger styling
         // suggestions. (The tsserver plugin proves provenance via symbols.)
-        if (ctx.form === 'szv' || ctx.form === 'szr') {
-            const head = document.getText(
-                new vscode.Range(new vscode.Position(0, 0), document.positionAt(IMPORT_SCAN_CHARS)),
-            );
-            if (!CSSZYX_IMPORT.test(head)) return undefined;
-        }
+        if (!hasRequiredImport(document, ctx)) return undefined;
         // Structural positions (szs slot names, szv schema levels), the opaque
         // `css` object, and invalid nesting under a utility property get no
         // suggestions. A structured object value (`bg: { color, op }`,
         // `bgImg: { gradient, … }`) is limited to exactly its members.
-        const styleChain = styleChainFor(ctx);
-        if (styleChain === null) return undefined;
-        const innerFirst = [...styleChain].reverse();
-        const kind = classifyStyleChain(innerFirst);
-        if (kind !== 'style' && kind !== 'object-form') return undefined;
-        const form = kind === 'object-form' ? objectValueForm(innerFirst[0] ?? '') : null;
-        switch (ctx.type) {
-            case 'key':
-            case 'variant-key':
-                // Full key set at every style level — nested variants are valid
-                // (`hover: { focus: { … } }`), matching the tsserver plugin.
-                return withoutSiblings(
-                    form ? formKeyItems(form) : [...CHAINING_KEY_ITEMS],
-                    ctx.siblings,
-                );
-            case 'value':
-            case 'variant-value': {
-                // The parser resolves the key owning this value slot; a ternary
-                // or annotation colon yields no key and stays silent.
-                if (!ctx.currentKey) return undefined;
-                if (form) {
-                    const member = form.members.find(
-                        candidate => candidate.name === ctx.currentKey,
-                    );
-                    return member ? memberValueItems(member) : undefined;
-                }
-                return getValueCompletions(ctx.currentKey);
-            }
-            default:
-                return undefined;
-        }
+        return completionsForContext(ctx);
     }
 }

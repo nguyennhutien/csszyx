@@ -2173,45 +2173,55 @@ function lenientCatalogObjects(
     const primary: Record<string, SzValue> = {};
     const extras: SzObject[] = [];
     for (const propRaw of node.properties) {
-        if (propRaw.type === 'SpreadElement') {
-            const spreadCandidates = lenientCatalogObjectCandidates(
-                (propRaw as SpreadElementNode).argument,
-                constInits,
-                seen,
-                depth + 1,
-                budget,
-            );
-            const [first, ...rest] = spreadCandidates;
-            if (first) {
-                Object.assign(primary, first);
-            }
-            for (const extra of rest) {
-                pushCatalogExtra(extras, extra, budget);
-            }
-            continue;
-        }
-        if (propRaw.type !== 'Property') {
-            continue;
-        }
-        const prop = propRaw as PropertyNode;
-        if (prop.computed) {
-            continue;
-        }
-        const key = extractKeyName(prop.key);
-        if (key === null) {
-            continue;
-        }
-        const values = lenientCatalogValues(prop.value, constInits, seen, depth + 1, budget);
-        const [firstValue, ...restValues] = values;
-        if (firstValue === undefined) {
-            continue;
-        }
-        primary[key] = firstValue;
-        for (const value of restValues) {
-            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
-        }
+        collectLenientCatalogProperty(propRaw, primary, extras, constInits, seen, depth, budget);
     }
     return [primary as SzObject, ...extras];
+}
+
+/**
+ * Add one object property or spread to the lenient catalog candidates.
+ * @param propRaw - Property or spread to collect.
+ * @param primary - Primary catalog object being built.
+ * @param extras - Alternate catalog objects being built.
+ * @param constInits - Const initializer lookup.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget.
+ */
+function collectLenientCatalogProperty(
+    propRaw: ObjectExpressionNode['properties'][number],
+    primary: Record<string, SzValue>,
+    extras: SzObject[],
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): void {
+    if (propRaw.type === 'SpreadElement') {
+        const candidates = lenientCatalogObjectCandidates(
+            (propRaw as SpreadElementNode).argument,
+            constInits,
+            seen,
+            depth + 1,
+            budget,
+        );
+        const [first, ...rest] = candidates;
+        if (first) Object.assign(primary, first);
+        for (const extra of rest) pushCatalogExtra(extras, extra, budget);
+        return;
+    }
+    if (propRaw.type !== 'Property') return;
+    const prop = propRaw as PropertyNode;
+    if (prop.computed) return;
+    const key = extractKeyName(prop.key);
+    if (key === null) return;
+    const values = lenientCatalogValues(prop.value, constInits, seen, depth + 1, budget);
+    const [firstValue, ...restValues] = values;
+    if (firstValue === undefined) return;
+    primary[key] = firstValue;
+    for (const value of restValues) {
+        pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
+    }
 }
 
 /**
@@ -3683,38 +3693,49 @@ function hasRedundantOuterParens(expressionSource: string): boolean {
     if (!expressionSource.startsWith('(') || !expressionSource.endsWith(')')) {
         return false;
     }
-    let depth = 0;
-    let quote: string | null = null;
-    let escaped = false;
+    const state: ParenthesisScanState = { depth: 0, quote: null, escaped: false };
     for (let index = 0; index < expressionSource.length; index++) {
-        const char = expressionSource[index];
-        if (quote) {
-            if (escaped) {
-                escaped = false;
-            } else if (char === '\\') {
-                escaped = true;
-            } else if (char === quote) {
-                quote = null;
-            }
-            continue;
-        }
-        if (char === '"' || char === "'" || char === '`') {
-            quote = char;
-            continue;
-        }
-        if (char === '(') {
-            depth++;
-        } else if (char === ')') {
-            depth--;
-            if (depth === 0 && index !== expressionSource.length - 1) {
-                return false;
-            }
-        }
-        if (depth < 0) {
+        if (!scanParenthesisCharacter(expressionSource[index], index, expressionSource, state)) {
             return false;
         }
     }
-    return depth === 0;
+    return state.depth === 0;
+}
+
+/** Mutable state for redundant-parenthesis validation. */
+interface ParenthesisScanState {
+    depth: number;
+    quote: string | null;
+    escaped: boolean;
+}
+
+/**
+ * Consume one character while checking whether the outer pair spans the input.
+ * @param char - Current source character.
+ * @param index - Current source offset.
+ * @param source - Full expression source.
+ * @param state - Mutable scanner state.
+ * @returns Whether the outer pair can still span the full input.
+ */
+function scanParenthesisCharacter(
+    char: string,
+    index: number,
+    source: string,
+    state: ParenthesisScanState,
+): boolean {
+    if (state.quote) {
+        if (state.escaped) state.escaped = false;
+        else if (char === '\\') state.escaped = true;
+        else if (char === state.quote) state.quote = null;
+        return true;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+        state.quote = char;
+        return true;
+    }
+    if (char === '(') state.depth++;
+    if (char === ')') state.depth--;
+    return state.depth >= 0 && (state.depth !== 0 || index === source.length - 1);
 }
 
 /**

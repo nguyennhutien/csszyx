@@ -19,6 +19,7 @@ import {
     MAX_SZ_DEPTH,
     SzDepthError,
     type SzObject,
+    type SzValue,
 } from '@csszyx/compiler/browser';
 import {
     BOX_ROLE_BY_KEY,
@@ -392,7 +393,7 @@ function matchesKey(
 function anyMatchKey(
     key: string,
     entry: Classification | undefined,
-    selectors: BoxSelector[],
+    selectors: readonly BoxSelector[],
 ): boolean {
     return selectors.some(s => matchesKey(key, entry, s));
 }
@@ -475,26 +476,67 @@ function partitionSz(
     const fallback: BoxRole = options.fallback ?? 'outer';
 
     for (const key of Object.keys(obj)) {
-        if (isForbiddenSzKey(key)) continue;
-        const value = obj[key];
-        const entry = BOX_ROLE_BY_KEY.get(key);
-
-        if (anyMatchKey(key, entry, forceInner)) {
-            inner[key] = value;
-        } else if (anyMatchKey(key, entry, forceOuter)) {
-            outer[key] = value;
-        } else if (entry) {
-            (entry.role === 'inner' ? inner : outer)[key] = value;
-        } else if (isPlainObject(value)) {
-            const subOuter: SzObject = {};
-            const subInner: SzObject = {};
-            partitionSz(value, options, subOuter, subInner, depth + 1);
-            if (Object.keys(subOuter).length > 0) outer[key] = subOuter;
-            if (Object.keys(subInner).length > 0) inner[key] = subInner;
-        } else {
-            (fallback === 'inner' ? inner : outer)[key] = value;
+        if (!isForbiddenSzKey(key)) {
+            partitionSzEntry(
+                key,
+                obj[key],
+                options,
+                outer,
+                inner,
+                depth,
+                forceInner,
+                forceOuter,
+                fallback,
+            );
         }
     }
+}
+
+/**
+ * Route one sz entry to its box bucket, recursing for variant containers.
+ * @param key - Sz key to route.
+ * @param value - Sz value associated with the key.
+ * @param options - Partition configuration.
+ * @param outer - Outer bucket accumulator.
+ * @param inner - Inner bucket accumulator.
+ * @param depth - Current recursion depth.
+ * @param forceInner - Inner override selectors.
+ * @param forceOuter - Outer override selectors.
+ * @param fallback - Bucket for unclassified values.
+ */
+function partitionSzEntry(
+    key: string,
+    value: SzValue,
+    options: SplitBoxSzOptions,
+    outer: SzObject,
+    inner: SzObject,
+    depth: number,
+    forceInner: readonly BoxSelector[],
+    forceOuter: readonly BoxSelector[],
+    fallback: BoxRole,
+): void {
+    const entry = BOX_ROLE_BY_KEY.get(key);
+    if (anyMatchKey(key, entry, forceInner)) {
+        inner[key] = value;
+        return;
+    }
+    if (anyMatchKey(key, entry, forceOuter)) {
+        outer[key] = value;
+        return;
+    }
+    if (entry) {
+        (entry.role === 'inner' ? inner : outer)[key] = value;
+        return;
+    }
+    if (!isPlainObject(value)) {
+        (fallback === 'inner' ? inner : outer)[key] = value;
+        return;
+    }
+    const subOuter: SzObject = {};
+    const subInner: SzObject = {};
+    partitionSz(value, options, subOuter, subInner, depth + 1);
+    if (Object.keys(subOuter).length > 0) outer[key] = subOuter;
+    if (Object.keys(subInner).length > 0) inner[key] = subInner;
 }
 
 /**

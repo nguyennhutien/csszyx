@@ -86,57 +86,14 @@ export function handleClsxCall(
     let converted = 0;
 
     for (const arg of node.arguments) {
-        // Skip SpreadElement — definitely can't migrate
-        if (t.isSpreadElement(arg)) {
-            const argSrc = safeSlice(source, arg.start, arg.end);
-            warnings.push(`Cannot migrate spread argument: ${argSrc}`);
+        const result = convertClsxArgument(arg, source, t, customMap);
+        if (!result) {
+            warnings.push(cannotMigrateClsxArgument(arg, source, t));
             return skip(allUnrecognized, warnings);
         }
-
-        // 1. StringLiteral: clsx('px-4 py-2')
-        if (t.isStringLiteral(arg)) {
-            const result = migrateString(arg.value, customMap);
-            if (!result) {
-                return skip(allUnrecognized, warnings);
-            }
-            elements.push(result.objectStr);
-            allUnrecognized.push(...result.unrecognized);
-            converted++;
-            continue;
-        }
-
-        // 2. Logical AND: clsx(isActive && 'bg-blue-500')
-        if (t.isLogicalExpression(arg) && arg.operator === '&&') {
-            const result = handleLogicalAndInner(arg, source, t, customMap);
-            if (!result) {
-                const argSrc = safeSlice(source, arg.start, arg.end);
-                warnings.push(`Cannot migrate logical expression: ${argSrc}`);
-                return skip(allUnrecognized, warnings);
-            }
-            elements.push(result.exprStr);
-            allUnrecognized.push(...result.unrecognized);
-            converted++;
-            continue;
-        }
-
-        // 3. Ternary: clsx(isLarge ? 'text-2xl' : 'text-sm')
-        if (t.isConditionalExpression(arg)) {
-            const result = handleTernaryInner(arg, source, t, customMap);
-            if (!result) {
-                const argSrc = safeSlice(source, arg.start, arg.end);
-                warnings.push(`Cannot migrate ternary: ${argSrc}`);
-                return skip(allUnrecognized, warnings);
-            }
-            elements.push(result.exprStr);
-            allUnrecognized.push(...result.unrecognized);
-            converted++;
-            continue;
-        }
-
-        // Unhandled argument → bail out of entire call
-        const argSrc = safeSlice(source, arg.start, arg.end);
-        warnings.push(`Cannot migrate argument: ${argSrc}`);
-        return skip(allUnrecognized, warnings);
+        elements.push(result.exprStr);
+        allUnrecognized.push(...result.unrecognized);
+        converted++;
     }
 
     if (elements.length === 0) {
@@ -162,6 +119,49 @@ export function handleClsxCall(
         converted,
         migrated: true,
     };
+}
+
+/**
+ * Convert one supported clsx argument to its sz expression.
+ * @param arg - Call argument to classify.
+ * @param source - Original source text.
+ * @param t - Babel type guards.
+ * @param customMap - Optional custom migration map.
+ * @returns Converted expression metadata, or null when unsupported.
+ */
+function convertClsxArgument(
+    arg: BabelTypes.CallExpression['arguments'][number],
+    source: string,
+    t: typeof BabelTypes,
+    customMap?: CsszyxTodoMap,
+): { exprStr: string; unrecognized: string[] } | null {
+    if (t.isStringLiteral(arg)) {
+        const result = migrateString(arg.value, customMap);
+        return result ? { exprStr: result.objectStr, unrecognized: result.unrecognized } : null;
+    }
+    if (t.isLogicalExpression(arg) && arg.operator === '&&') {
+        return handleLogicalAndInner(arg, source, t, customMap);
+    }
+    return t.isConditionalExpression(arg) ? handleTernaryInner(arg, source, t, customMap) : null;
+}
+
+/**
+ * Explain why one unsupported clsx argument could not be migrated.
+ * @param arg - Unsupported call argument.
+ * @param source - Original source text.
+ * @param t - Babel type guards.
+ * @returns Diagnostic message for the unsupported shape.
+ */
+function cannotMigrateClsxArgument(
+    arg: BabelTypes.CallExpression['arguments'][number],
+    source: string,
+    t: typeof BabelTypes,
+): string {
+    const argSrc = safeSlice(source, arg.start, arg.end);
+    if (t.isSpreadElement(arg)) return `Cannot migrate spread argument: ${argSrc}`;
+    if (t.isLogicalExpression(arg)) return `Cannot migrate logical expression: ${argSrc}`;
+    if (t.isConditionalExpression(arg)) return `Cannot migrate ternary: ${argSrc}`;
+    return `Cannot migrate argument: ${argSrc}`;
 }
 
 // ============================================================================

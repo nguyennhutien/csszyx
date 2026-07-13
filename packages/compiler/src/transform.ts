@@ -2658,49 +2658,35 @@ function resolveObjectSpreads(
 ): t.ObjectExpression | null {
     const newProps: t.ObjectExpression['properties'] = [];
     for (const prop of node.properties) {
-        if (!t.isSpreadElement(prop)) {
-            // For regular properties whose value is a nested ObjectExpression, recurse
-            // so that spreads inside variant/pseudo-element values are also resolved.
-            // e.g. { before: { ...BASE, content: '' } } — spread is inside 'before' value.
-            if (t.isObjectProperty(prop) && t.isObjectExpression(prop.value)) {
-                const resolvedValue = resolveObjectSpreads(prop.value, getBinding);
-                if (resolvedValue === null) {
-                    return null;
-                }
-                newProps.push(
-                    t.objectProperty(prop.key, resolvedValue, prop.computed, prop.shorthand),
-                );
-            } else {
-                newProps.push(prop);
-            }
-            continue;
-        }
-        // Only identifier spreads are resolvable: { ...localVar }
-        const arg = prop.argument;
-        if (!t.isIdentifier(arg)) {
-            return null;
-        }
-        const binding = getBinding(arg.name);
-        if (!binding?.path.isVariableDeclarator()) {
-            return null;
-        }
-        let init = binding.path.node.init;
-        // Unwrap `as const` / `satisfies T` — both are TSAsExpression / TSSatisfiesExpression
-        // wrapping the actual ObjectExpression.
-        if (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
-            init = init.expression;
-        }
-        if (!t.isObjectExpression(init)) {
-            return null;
-        }
-        // Recurse so spreads-of-spreads also resolve
-        const inner = resolveObjectSpreads(init, getBinding);
-        if (inner === null) {
-            return null;
-        }
-        newProps.push(...inner.properties);
+        const resolved = resolveObjectSpreadProperty(prop, getBinding);
+        if (resolved === null) return null;
+        newProps.push(...resolved);
     }
     return t.objectExpression(newProps);
+}
+
+/**
+ * Resolve one regular property or local identifier spread.
+ * @param prop - Property or spread to resolve.
+ * @param getBinding - Scope binding lookup.
+ * @returns Resolved properties, or null when resolution is unsafe.
+ */
+function resolveObjectSpreadProperty(
+    prop: t.ObjectExpression['properties'][number],
+    getBinding: (name: string) => { path: babel.NodePath } | null | undefined,
+): t.ObjectExpression['properties'] | null {
+    if (!t.isSpreadElement(prop)) {
+        if (!t.isObjectProperty(prop) || !t.isObjectExpression(prop.value)) return [prop];
+        const value = resolveObjectSpreads(prop.value, getBinding);
+        return value ? [t.objectProperty(prop.key, value, prop.computed, prop.shorthand)] : null;
+    }
+    if (!t.isIdentifier(prop.argument)) return null;
+    const binding = getBinding(prop.argument.name);
+    if (!binding?.path.isVariableDeclarator()) return null;
+    let init = binding.path.node.init;
+    if (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) init = init.expression;
+    if (!t.isObjectExpression(init)) return null;
+    return resolveObjectSpreads(init, getBinding)?.properties ?? null;
 }
 
 // ============================================================================
@@ -3128,28 +3114,39 @@ function generateStyleValueExpression(info: DynamicPropInfo): t.Expression {
  */
 function collectFromExpr(node: t.Expression, classes: Set<string>): void {
     if (t.isStringLiteral(node)) {
-        for (const c of node.value.split(/\s+/)) {
-            if (c) {
-                classes.add(c);
-            }
-        }
-    } else if (t.isConditionalExpression(node)) {
+        collectClassWords(node.value, classes);
+        return;
+    }
+    if (t.isConditionalExpression(node)) {
         collectFromExpr(node.consequent as t.Expression, classes);
         collectFromExpr(node.alternate as t.Expression, classes);
-    } else if (t.isTemplateLiteral(node)) {
-        // A hoisted nested conditional emits `${static} ${cond ? a : b}`. Walk
-        // quasis and interpolated expressions INTERLEAVED in source order so the
-        // discovery order stays [static, consequent, alternate] — matching Rust.
-        for (let i = 0; i < node.quasis.length; i++) {
-            for (const c of (node.quasis[i].value.cooked ?? '').split(/\s+/)) {
-                if (c) {
-                    classes.add(c);
-                }
-            }
-            const expr = node.expressions[i];
-            if (expr && t.isExpression(expr)) {
-                collectFromExpr(expr, classes);
-            }
+        return;
+    }
+    if (t.isTemplateLiteral(node)) collectFromTemplateExpr(node, classes);
+}
+
+/**
+ * Add whitespace-separated class candidates in source order.
+ * @param value - Whitespace-separated class text.
+ * @param classes - Candidate set to update.
+ */
+function collectClassWords(value: string, classes: Set<string>): void {
+    for (const className of value.split(/\s+/)) {
+        if (className) classes.add(className);
+    }
+}
+
+/**
+ * Collect interleaved static and conditional pieces from a template.
+ * @param node - Template expression to traverse.
+ * @param classes - Candidate set to update.
+ */
+function collectFromTemplateExpr(node: t.TemplateLiteral, classes: Set<string>): void {
+    for (let index = 0; index < node.quasis.length; index++) {
+        collectClassWords(node.quasis[index].value.cooked ?? '', classes);
+        const expression = node.expressions[index];
+        if (expression && t.isExpression(expression)) {
+            collectFromExpr(expression, classes);
         }
     }
 }
