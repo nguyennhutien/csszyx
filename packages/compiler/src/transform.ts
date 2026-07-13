@@ -1773,21 +1773,7 @@ function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expres
 
     // Static object: { p: 4, bg: 'blue-500' } → "p-4 bg-blue-500"
     if (t.isObjectExpression(node)) {
-        const resolved = getBinding ? (resolveObjectSpreads(node, getBinding) ?? node) : node;
-        const staticObj = evaluateStaticObject(resolved);
-        if (staticObj !== null) {
-            const { className } = transform(staticObj);
-            return t.stringLiteral(className);
-        }
-        // Hoist conditional spread: { ...(cond ? varA : varB), key: 'val' }
-        // → cond ? "classes-a key-val" : "classes-b key-val"
-        if (getBinding) {
-            const hoisted = tryHoistConditionalSpread(node, getBinding);
-            if (hoisted !== null) {
-                return hoisted;
-            }
-        }
-        return null;
+        return tryStaticObjectTransform(node, getBinding);
     }
 
     // Already a string literal: pass through
@@ -1798,33 +1784,70 @@ function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expres
     // Identifier: resolve the binding and recurse — handles sz={var}, array elements,
     // and ternary branches that are variable references rather than inline objects.
     if (t.isIdentifier(node) && getBinding) {
-        const binding = getBinding(node.name);
-        if (binding?.path.isVariableDeclarator()) {
-            const init = binding.path.node.init;
-            if (init) {
-                return tryStaticTransformNode(init, getBinding);
-            }
-        }
-        return null;
+        return tryStaticIdentifierTransform(node, getBinding);
     }
 
     // Conditional expression: cond ? {...} : {...}
     // Recursively resolve both branches
     if (t.isConditionalExpression(node)) {
-        const consequent = tryStaticTransformNode(node.consequent, getBinding);
-        const alternate = tryStaticTransformNode(node.alternate, getBinding);
-        if (consequent !== null && alternate !== null) {
-            return t.conditionalExpression(
-                node.test,
-                emptyClassToUndefined(consequent),
-                emptyClassToUndefined(alternate),
-            );
-        }
-        return null;
+        return tryStaticConditionalTransform(node, getBinding);
     }
 
     // Unary expression for negative numbers: not applicable here, skip
     return null;
+}
+
+/**
+ * Compile an object literal or its hoistable conditional spread.
+ * @param node - Object literal to compile.
+ * @param getBinding - Optional scope binding lookup.
+ * @returns Static class expression, or null.
+ */
+function tryStaticObjectTransform(
+    node: t.ObjectExpression,
+    getBinding?: GetBinding,
+): t.Expression | null {
+    const resolved = getBinding ? (resolveObjectSpreads(node, getBinding) ?? node) : node;
+    const staticObject = evaluateStaticObject(resolved);
+    if (staticObject !== null) return t.stringLiteral(transform(staticObject).className);
+    return getBinding ? tryHoistConditionalSpread(node, getBinding) : null;
+}
+
+/**
+ * Resolve and statically transform one bound identifier.
+ * @param node - Identifier to resolve.
+ * @param getBinding - Scope binding lookup.
+ * @returns Static class expression, or null.
+ */
+function tryStaticIdentifierTransform(
+    node: t.Identifier,
+    getBinding: GetBinding,
+): t.Expression | null {
+    const binding = getBinding(node.name);
+    if (!binding?.path.isVariableDeclarator()) return null;
+    const initializer = binding.path.node.init;
+    return initializer ? tryStaticTransformNode(initializer, getBinding) : null;
+}
+
+/**
+ * Statically transform both branches of a conditional expression.
+ * @param node - Conditional expression to compile.
+ * @param getBinding - Optional scope binding lookup.
+ * @returns Compiled conditional, or null when either branch is dynamic.
+ */
+function tryStaticConditionalTransform(
+    node: t.ConditionalExpression,
+    getBinding?: GetBinding,
+): t.Expression | null {
+    const consequent = tryStaticTransformNode(node.consequent, getBinding);
+    const alternate = tryStaticTransformNode(node.alternate, getBinding);
+    return consequent !== null && alternate !== null
+        ? t.conditionalExpression(
+              node.test,
+              emptyClassToUndefined(consequent),
+              emptyClassToUndefined(alternate),
+          )
+        : null;
 }
 
 /**
@@ -2350,61 +2373,89 @@ function lenientCatalogValues(
     if (!value) {
         return [];
     }
-    if (t.isStringLiteral(value) || t.isNumericLiteral(value) || t.isBooleanLiteral(value)) {
-        return [value.value];
-    }
-    if (t.isNullLiteral(value)) {
-        return [];
-    }
-    if (t.isUnaryExpression(value) && t.isNumericLiteral(value.argument)) {
-        if (value.operator === '-') {
-            return [-value.argument.value];
-        }
-        if (value.operator === '+') {
-            return [value.argument.value];
-        }
-        return [];
-    }
+    const literal = catalogLiteralValues(value);
+    if (literal !== null) return literal;
     if (t.isObjectExpression(value)) {
         return lenientCatalogObjects(value, scope, seen, depth, budget);
     }
     if (t.isConditionalExpression(value)) {
-        const values = lenientCatalogValues(value.consequent, scope, seen, depth, budget);
-        // The alternate is a paid exploration (see `explores`); once the
-        // allowance is spent every further conditional degrades to its
-        // consequent, keeping the recursion tree linear in the source.
-        if (budget.explores > 0) {
-            budget.explores -= 1;
-            values.push(...lenientCatalogValues(value.alternate, scope, seen, depth, budget));
-        }
-        return truncateCatalogCandidates(values, budget);
+        return catalogConditionalValues(value, scope, seen, depth, budget);
     }
     if (t.isIdentifier(value)) {
-        if (value.name === 'undefined') {
-            return [];
-        }
-        if (seen.has(value.name)) {
-            return [];
-        }
-        const init = resolveConstInitializer(value.name, scope);
-        if (!init) {
-            return [];
-        }
-        const cached = budget.valueMemo.get(init);
-        if (cached) {
-            return [...cached];
-        }
-        const values = lenientCatalogValues(
-            init,
-            scope,
-            new Set([...seen, value.name]),
-            depth,
-            budget,
-        );
-        budget.valueMemo.set(init, values);
-        return [...values];
+        return catalogIdentifierValues(value, scope, seen, depth, budget);
     }
     return [];
+}
+
+/**
+ * Classify primitive and signed numeric catalog values.
+ * @param value - Babel node to classify.
+ * @returns Candidate values, or null when this helper does not own the shape.
+ */
+function catalogLiteralValues(value: t.Node): SzValue[] | null {
+    if (t.isStringLiteral(value) || t.isNumericLiteral(value) || t.isBooleanLiteral(value)) {
+        return [value.value];
+    }
+    if (t.isNullLiteral(value)) return [];
+    if (!t.isUnaryExpression(value) || !t.isNumericLiteral(value.argument)) return null;
+    if (value.operator === '-') return [-value.argument.value];
+    return value.operator === '+' ? [value.argument.value] : [];
+}
+
+/**
+ * Explore the bounded branches of one catalog conditional.
+ * @param value - Conditional value to explore.
+ * @param scope - Babel scope for identifier resolution.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Bounded branch values in source order.
+ */
+function catalogConditionalValues(
+    value: t.ConditionalExpression,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    const values = lenientCatalogValues(value.consequent, scope, seen, depth, budget);
+    if (budget.explores > 0) {
+        budget.explores -= 1;
+        values.push(...lenientCatalogValues(value.alternate, scope, seen, depth, budget));
+    }
+    return truncateCatalogCandidates(values, budget);
+}
+
+/**
+ * Resolve one const identifier through the bounded catalog memo.
+ * @param value - Const identifier to resolve.
+ * @param scope - Babel scope for identifier resolution.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Memoized candidate values.
+ */
+function catalogIdentifierValues(
+    value: t.Identifier,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    if (value.name === 'undefined' || seen.has(value.name)) return [];
+    const initializer = resolveConstInitializer(value.name, scope);
+    if (!initializer) return [];
+    const cached = budget.valueMemo.get(initializer);
+    if (cached) return [...cached];
+    const values = lenientCatalogValues(
+        initializer,
+        scope,
+        new Set([...seen, value.name]),
+        depth,
+        budget,
+    );
+    budget.valueMemo.set(initializer, values);
+    return [...values];
 }
 
 /**

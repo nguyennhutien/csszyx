@@ -2033,42 +2033,44 @@ function collectSzvCallClasses(
     }
 
     const variantsNode = readConfigSubObjectNode(configNode, 'variants', bindings);
-    if (!variantsNode) {
-        return;
-    }
+    if (!variantsNode) return;
     for (const dimensionRaw of variantsNode.properties) {
-        if (dimensionRaw.type !== 'Property') {
-            continue;
-        }
-        const dimension = dimensionRaw as PropertyNode;
-        if (dimension.computed) {
-            continue;
-        }
-        const dimensionValue = resolveCatalogObjectExpression(
-            dimension.value,
+        collectSzvDimensionClasses(dimensionRaw, base, constInits, budget, classes);
+    }
+}
+
+/**
+ * Collect all statically reachable classes from one szv variant dimension.
+ * @param dimensionRaw - Dimension property to inspect.
+ * @param base - Base style merged into each candidate.
+ * @param constInits - Const initializer lookup.
+ * @param budget - Alternate-branch budget and memo.
+ * @param classes - Class catalog to populate.
+ */
+function collectSzvDimensionClasses(
+    dimensionRaw: ObjectExpressionNode['properties'][number],
+    base: SzObject,
+    constInits: ReadonlyMap<string, OxcNode>,
+    budget: CatalogExtrasBudget,
+    classes: Set<string>,
+): void {
+    if (dimensionRaw.type !== 'Property') return;
+    const dimension = dimensionRaw as PropertyNode;
+    if (dimension.computed) return;
+    const value = resolveCatalogObjectExpression(dimension.value, constInits, new Set());
+    if (!value) return;
+    for (const variantRaw of value.properties) {
+        if (variantRaw.type !== 'Property') continue;
+        const variant = variantRaw as PropertyNode;
+        if (variant.computed) continue;
+        for (const candidate of lenientCatalogObjectCandidates(
+            variant.value,
             constInits,
             new Set(),
-        );
-        if (!dimensionValue) {
-            continue;
-        }
-        for (const variantRaw of dimensionValue.properties) {
-            if (variantRaw.type !== 'Property') {
-                continue;
-            }
-            const variant = variantRaw as PropertyNode;
-            if (variant.computed) {
-                continue;
-            }
-            for (const candidate of lenientCatalogObjectCandidates(
-                variant.value,
-                constInits,
-                new Set(),
-                0,
-                budget,
-            )) {
-                addCompiledClasses({ ...base, ...candidate }, classes);
-            }
+            0,
+            budget,
+        )) {
+            addCompiledClasses({ ...base, ...candidate }, classes);
         }
     }
 }
