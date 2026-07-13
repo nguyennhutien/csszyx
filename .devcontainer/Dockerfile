@@ -15,7 +15,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         iptables \
         jq \
         libssl-dev \
-        pkg-config
+        pkg-config \
+        ripgrep
 
 # mise — manages node, pnpm, and other tools via .mise.toml
 RUN curl https://mise.run | sh

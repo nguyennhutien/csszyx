@@ -60,12 +60,14 @@ prime_domain() {
 }
 
 write_dnsmasq_config() {
+    local upstream_dns="$1"
+    shift
     local domains=("$@")
 
     mkdir -p "$(dirname "$DNSMASQ_CONF")"
     {
         echo "no-resolv"
-        echo "server=127.0.0.11"
+        echo "server=$upstream_dns"
         echo "listen-address=127.0.0.1"
         echo "bind-interfaces"
         echo "cache-size=1000"
@@ -98,26 +100,23 @@ require_cmd iptables
 require_cmd iptables-save
 require_cmd jq
 
-echo "[firewall] Capturing Docker DNS NAT rules..."
-DOCKER_DNS_RULES="$(iptables-save -t nat | grep '127\.0\.0\.11' || true)"
+# Docker Desktop and Linux Docker do not necessarily expose the same resolver.
+# Capture Docker's resolver before replacing resolv.conf with local dnsmasq.
+UPSTREAM_DNS="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf)"
+if [[ ! "$UPSTREAM_DNS" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || [ "$UPSTREAM_DNS" = "127.0.0.1" ]; then
+    echo "ERROR: unable to identify Docker's upstream DNS resolver"
+    exit 1
+fi
+echo "[firewall] Using Docker DNS resolver: $UPSTREAM_DNS"
 
-echo "[firewall] Flushing existing filter/NAT/mangle rules..."
+# Docker owns its network plumbing. This script owns only the filter table.
+echo "[firewall] Resetting and flushing existing filter rules..."
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
 iptables -F
 iptables -X
-iptables -t nat -F
-iptables -t nat -X
-iptables -t mangle -F
-iptables -t mangle -X
 ipset destroy "$IPSET_NAME" 2>/dev/null || true
-
-if [ -n "$DOCKER_DNS_RULES" ]; then
-    echo "[firewall] Restoring Docker internal DNS NAT rules..."
-    iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
-    iptables -t nat -N DOCKER_POSTROUTING 2>/dev/null || true
-    echo "$DOCKER_DNS_RULES" | xargs -L 1 iptables -t nat
-else
-    echo "[firewall] No Docker DNS NAT rules found."
-fi
 
 echo "[firewall] Creating allowlist ipset..."
 ipset create "$IPSET_NAME" hash:net
@@ -193,7 +192,7 @@ fi
 mapfile -t CORE_WILDCARD_DOMAINS < <(printf '%s\n' "${CORE_WILDCARD_DOMAINS[@]}" | sed 's/^\*\.//' | sort -u)
 
 echo "[firewall] Starting DNS wildcard allowlist resolver..."
-write_dnsmasq_config "${CORE_WILDCARD_DOMAINS[@]}"
+write_dnsmasq_config "$UPSTREAM_DNS" "${CORE_WILDCARD_DOMAINS[@]}"
 start_dnsmasq
 
 for domain in "${CORE_WILDCARD_DOMAINS[@]}"; do
@@ -212,10 +211,10 @@ echo "[firewall] Allowing Docker host network: $HOST_NETWORK"
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
-iptables -A OUTPUT -d 127.0.0.11 -p udp --dport 53 -j ACCEPT
-iptables -A INPUT -s 127.0.0.11 -p udp --sport 53 -j ACCEPT
-iptables -A OUTPUT -d 127.0.0.11 -p tcp --dport 53 -j ACCEPT
-iptables -A INPUT -s 127.0.0.11 -p tcp --sport 53 -j ACCEPT
+iptables -A OUTPUT -d "$UPSTREAM_DNS" -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -s "$UPSTREAM_DNS" -p udp --sport 53 -j ACCEPT
+iptables -A OUTPUT -d "$UPSTREAM_DNS" -p tcp --dport 53 -j ACCEPT
+iptables -A INPUT -s "$UPSTREAM_DNS" -p tcp --sport 53 -j ACCEPT
 
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
 iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT

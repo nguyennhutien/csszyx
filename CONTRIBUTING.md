@@ -139,11 +139,13 @@ rules.
 
 ## Devcontainer security envelope
 
-The repository ships a public `CSSzyx Public` devcontainer profile containing
-only the project toolchain. It does not mount host AI configuration, credential
-stores, SSH agents, or private dotfiles. Maintainers may generate a separate
-gitignored `.devcontainer/personal/` profile from their private machine setup;
-that profile is intentionally not part of the public repository.
+The repository ships a public `CSSzyx Public` profile at the standard
+`.devcontainer/devcontainer.json` entrypoint so compatible IDEs can discover it
+automatically. It contains only the project toolchain and does not mount host AI
+configuration, credential stores, SSH agents, or private dotfiles. Maintainers
+may generate a separate gitignored `.devcontainer/personal/` profile from their
+private machine setup; that profile is intentionally not part of the public
+repository and must be selected explicitly with Dev Container tooling.
 
 The devcontainer risk model assumes a **standard
 devcontainer runtime** (VS Code Dev Containers, GitHub Codespaces, Docker
