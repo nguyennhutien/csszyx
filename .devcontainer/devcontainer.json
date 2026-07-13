@@ -1,7 +1,7 @@
 {
   "name": "CSSzyx Public",
   "build": {
-    "dockerfile": "../Dockerfile"
+    "dockerfile": "Dockerfile"
   },
   "containerEnv": {
     "MISE_TRUSTED_CONFIG_PATHS": "/workspaces/csszyx"
