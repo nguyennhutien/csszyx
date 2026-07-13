@@ -128,6 +128,39 @@ export function unescapeTailwindClass(escapedName: string): string {
 }
 
 /**
+ * Escape a leading character when CSS identifier grammar requires it.
+ *
+ * @param className Complete class name.
+ * @param char Leading character.
+ * @returns Escaped prefix or null when ordinary escaping should continue.
+ */
+function escapeLeadingClassCharacter(className: string, char: string): string | null {
+    if (/\d/.test(char)) {
+        return `\\3${char} `;
+    }
+    if (char === '-' && className.length > 1) {
+        const next = className[1] as string;
+        if (/\d/.test(next) || next === '-') {
+            return '\\-';
+        }
+    }
+    return null;
+}
+
+/**
+ * Escape one non-leading CSS identifier character.
+ *
+ * @param char Character to escape when required.
+ * @returns CSS-safe character representation.
+ */
+function escapeClassCharacter(char: string): string {
+    if (/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/.test(char)) {
+        return `\\${char}`;
+    }
+    return char;
+}
+
+/**
  * Escape a class name for use in CSS selector.
  *
  * This is the inverse of unescapeTailwindClass.
@@ -139,36 +172,15 @@ export function escapeCSSClassName(className: string): string {
     let result = '';
 
     for (let i = 0; i < className.length; i++) {
-        const char = className[i];
-        const code = char.charCodeAt(0);
-
-        // First character rules
+        const char = className[i] as string;
         if (i === 0) {
-            // If starts with digit, escape it
-            if (/\d/.test(char)) {
-                result += `\\3${char} `;
+            const escapedLeading = escapeLeadingClassCharacter(className, char);
+            if (escapedLeading !== null) {
+                result += escapedLeading;
                 continue;
             }
-            // If starts with hyphen followed by digit or another hyphen
-            if (char === '-' && i + 1 < className.length) {
-                const next = className[i + 1];
-                if (/\d/.test(next) || next === '-') {
-                    result += '\\-';
-                    continue;
-                }
-            }
         }
-
-        // Characters that need escaping in CSS identifiers
-        if (/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/.test(char)) {
-            result += `\\${char}`;
-        } else if (code >= 0x80) {
-            // Non-ASCII characters don't need escaping in modern CSS
-            result += char;
-        } else {
-            // Safe characters
-            result += char;
-        }
+        result += escapeClassCharacter(char);
     }
 
     return result;

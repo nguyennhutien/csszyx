@@ -88,6 +88,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Validate every value within one szv variant dimension.
+ *
+ * @param dimension Variant dimension name.
+ * @param values Candidate variant-value table.
+ */
+function validateVariantDimension(dimension: string, values: unknown): void {
+    if (!isPlainObject(values)) {
+        devWarn(
+            `szv(config): variants.${dimension} must be an object of values, got ${describe(values)}.`,
+        );
+        return;
+    }
+    for (const [token, value] of Object.entries(values)) {
+        if (value !== null && value !== undefined && !isPlainObject(value)) {
+            devWarn(
+                `szv(config): variants.${dimension}.${token} must be an sz object, got ${describe(value)}. It will be skipped.`,
+            );
+        } else if (isPlainObject(value)) {
+            assertBoundedDepth(value, `variants.${dimension}.${token}`);
+        }
+    }
+}
+
+/**
  * Validate a szv config's structure in development and warn (once) on each
  * problem — strong types catch this at compile time, but a config built from
  * runtime/JSON data, an `as any`, or a JS caller bypasses them, and the failure
@@ -121,26 +145,8 @@ function validateSzvConfig(config: unknown): boolean {
         );
         return false;
     }
-    for (const dim of Object.keys(config.variants)) {
-        const values = (config.variants as Record<string, unknown>)[dim];
-        if (!isPlainObject(values)) {
-            devWarn(
-                `szv(config): variants.${dim} must be an object of values, got ${describe(values)}.`,
-            );
-            continue;
-        }
-        for (const token of Object.keys(values)) {
-            const v = values[token];
-            // A variant value may be a plain sz object; null/undefined means "no
-            // styles for this token" and is allowed.
-            if (v !== null && v !== undefined && !isPlainObject(v)) {
-                devWarn(
-                    `szv(config): variants.${dim}.${token} must be an sz object, got ${describe(v)}. It will be skipped.`,
-                );
-            } else if (isPlainObject(v)) {
-                assertBoundedDepth(v, `variants.${dim}.${token}`);
-            }
-        }
+    for (const [dimension, values] of Object.entries(config.variants)) {
+        validateVariantDimension(dimension, values);
     }
     if (config.defaultVariants !== undefined && !isPlainObject(config.defaultVariants)) {
         devWarn(

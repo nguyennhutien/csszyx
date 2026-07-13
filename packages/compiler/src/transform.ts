@@ -2193,6 +2193,81 @@ function resolveConstInitializer(name: string, scope: babel.NodePath['scope']): 
 }
 
 /**
+ * Merge catalog candidates produced by one object spread.
+ *
+ * @param argument Spread argument to resolve.
+ * @param primary Primary catalog object under construction.
+ * @param extras Alternate catalog objects under construction.
+ * @param scope Babel scope at the szv call site.
+ * @param seen Identifier cycle guard.
+ * @param depth Current catalog depth.
+ * @param budget Remaining alternate-branch allowance.
+ */
+function mergeCatalogSpread(
+    argument: t.Expression,
+    primary: Record<string, SzValue>,
+    extras: SzObject[],
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): void {
+    const [first, ...rest] = lenientCatalogObjectCandidates(
+        argument,
+        scope,
+        seen,
+        depth + 1,
+        budget,
+    );
+    if (first) {
+        Object.assign(primary, first);
+    }
+    for (const extra of rest) {
+        pushCatalogExtra(extras, extra, budget);
+    }
+}
+
+/**
+ * Merge catalog candidates produced by one static object property.
+ *
+ * @param prop Object property to classify.
+ * @param primary Primary catalog object under construction.
+ * @param extras Alternate catalog objects under construction.
+ * @param scope Babel scope at the szv call site.
+ * @param seen Identifier cycle guard.
+ * @param depth Current catalog depth.
+ * @param budget Remaining alternate-branch allowance.
+ */
+function mergeCatalogProperty(
+    prop: t.ObjectProperty,
+    primary: Record<string, SzValue>,
+    extras: SzObject[],
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): void {
+    const key = getObjectPropertyKey(prop);
+    if (key === null) {
+        return;
+    }
+    const [firstValue, ...restValues] = lenientCatalogValues(
+        prop.value,
+        scope,
+        seen,
+        depth + 1,
+        budget,
+    );
+    if (firstValue === undefined) {
+        return;
+    }
+    primary[key] = firstValue;
+    for (const value of restValues) {
+        pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
+    }
+}
+
+/**
  * Convert an object node into catalog candidates, PER KEY: index 0 is the
  * primary object (conditionals resolved to their consequent), the rest are
  * minimal path-preserving objects carrying alternate branch values (e.g.
@@ -2222,38 +2297,13 @@ function lenientCatalogObjects(
     const extras: SzObject[] = [];
     for (const prop of node.properties) {
         if (t.isSpreadElement(prop)) {
-            const spreadCandidates = lenientCatalogObjectCandidates(
-                prop.argument,
-                scope,
-                seen,
-                depth + 1,
-                budget,
-            );
-            const [first, ...rest] = spreadCandidates;
-            if (first) {
-                Object.assign(primary, first);
-            }
-            for (const extra of rest) {
-                pushCatalogExtra(extras, extra, budget);
-            }
+            mergeCatalogSpread(prop.argument, primary, extras, scope, seen, depth, budget);
             continue;
         }
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
         }
-        const key = getObjectPropertyKey(prop);
-        if (key === null) {
-            continue;
-        }
-        const values = lenientCatalogValues(prop.value, scope, seen, depth + 1, budget);
-        const [firstValue, ...restValues] = values;
-        if (firstValue === undefined) {
-            continue;
-        }
-        primary[key] = firstValue;
-        for (const value of restValues) {
-            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
-        }
+        mergeCatalogProperty(prop, primary, extras, scope, seen, depth, budget);
     }
     return [primary as SzObject, ...extras];
 }

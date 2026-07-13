@@ -243,6 +243,50 @@ function tryBooleanMatch(cls: string): ParsedClass | null {
 // ============================================================================
 
 /**
+ * Split a gradient utility into its type and remaining suffix.
+ *
+ * @param className Candidate background-gradient class.
+ * @returns Gradient type and suffix, or null when not a gradient.
+ */
+function parseGradientType(
+    className: string,
+): { type: 'linear' | 'radial' | 'conic'; suffix: string } | null {
+    const types = ['linear', 'radial', 'conic'] as const;
+    for (const type of types) {
+        const prefix = `bg-${type}`;
+        if (className.startsWith(prefix)) {
+            return { type, suffix: className.slice(prefix.length) };
+        }
+    }
+    return null;
+}
+
+/**
+ * Parse the optional gradient direction suffix.
+ *
+ * @param input Gradient suffix before interpolation mode.
+ * @param negative Whether numeric angles are negative.
+ * @returns Parsed direction, or undefined when absent.
+ */
+function parseGradientDirection(input: string, negative: boolean): string | number | undefined {
+    if (!input.startsWith('-')) {
+        return undefined;
+    }
+    const direction = input.slice(1);
+    if (direction.startsWith('[') && direction.endsWith(']')) {
+        return direction.slice(1, -1).replace(/_/g, ' ');
+    }
+    if (direction.startsWith('(') && direction.endsWith(')')) {
+        return direction.slice(1, -1);
+    }
+    if (/^\d+$/.test(direction)) {
+        const angle = parseInt(direction, 10);
+        return negative ? -angle : angle;
+    }
+    return direction;
+}
+
+/**
  * Attempts to parse a gradient class (linear, radial, conic).
  * @param cls - The class string to parse
  * @param negative - Whether the class has a negative prefix
@@ -253,23 +297,11 @@ function tryGradient(cls: string, negative: boolean): ParsedClass | null {
     // bg-radial, bg-radial-[at_50%_75%], bg-radial/oklab
     // bg-conic, bg-conic-90, bg-conic-90/oklch
 
-    let input = cls;
-    let type: 'linear' | 'radial' | 'conic' | null = null;
-
-    if (input.startsWith('bg-linear')) {
-        type = 'linear';
-        input = input.slice('bg-linear'.length);
-    } else if (input.startsWith('bg-radial')) {
-        type = 'radial';
-        input = input.slice('bg-radial'.length);
-    } else if (input.startsWith('bg-conic')) {
-        type = 'conic';
-        input = input.slice('bg-conic'.length);
-    }
-
-    if (!type) {
+    const parsedType = parseGradientType(cls);
+    if (!parsedType) {
         return null;
     }
+    let { suffix: input } = parsedType;
 
     // Parse color interpolation (after /)
     let colorInterp: string | undefined;
@@ -281,26 +313,10 @@ function tryGradient(cls: string, negative: boolean): ParsedClass | null {
     }
 
     // Parse direction
-    const grad: Record<string, unknown> = { gradient: type };
-
-    if (input === '' || input === undefined) {
-        // No direction: bg-radial, bg-conic
-    } else if (input.startsWith('-')) {
-        // Has direction: -to-r, -45, -[at_50%_75%]
-        const dir = input.slice(1);
-        if (dir.startsWith('[') && dir.endsWith(']')) {
-            // Arbitrary: [at_50%_75%] → "at 50% 75%"
-            grad.dir = dir.slice(1, -1).replace(/_/g, ' ');
-        } else if (dir.startsWith('(') && dir.endsWith(')')) {
-            // CSS variable: (--dir)
-            grad.dir = dir.slice(1, -1);
-        } else if (/^\d+$/.test(dir)) {
-            // Numeric angle
-            grad.dir = negative ? -parseInt(dir, 10) : parseInt(dir, 10);
-        } else {
-            // Keyword: to-r, to-br, etc.
-            grad.dir = dir;
-        }
+    const grad: Record<string, unknown> = { gradient: parsedType.type };
+    const direction = parseGradientDirection(input, negative);
+    if (direction !== undefined) {
+        grad.dir = direction;
     }
 
     if (colorInterp) {
