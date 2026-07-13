@@ -1319,34 +1319,60 @@ function isTailwindBuildFunction(value: string): boolean {
         return false;
     }
 
-    let depth = 0;
-    let quote = 0;
-    let escaped = false;
-    for (; index < length; index += 1) {
+    return scanTailwindFunctionBody(value, index);
+}
+
+/**
+ * Scan a Tailwind build-function body from its opening parenthesis.
+ * @param value - Complete candidate value.
+ * @param start - Opening-parenthesis offset.
+ * @returns Whether the parentheses and quotes close at the end of the value.
+ */
+function scanTailwindFunctionBody(value: string, start: number): boolean {
+    const state = { depth: 0, quote: 0, escaped: false };
+    for (let index = start; index < value.length; index++) {
         const code = value.charCodeAt(index);
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
-        if (code === 92) {
-            escaped = true;
-            continue;
-        }
-        if (quote !== 0) {
-            if (code === quote) quote = 0;
-            continue;
-        }
-        if (code === 34 || code === 39) {
-            quote = code;
-        } else if (code === 40) {
-            depth += 1;
-        } else if (code === 41) {
-            depth -= 1;
-            if (depth === 0) return index === length - 1;
-            if (depth < 0) return false;
+        if (consumeTailwindQuotedCode(code, state)) continue;
+        if (code === 40) state.depth += 1;
+        if (code === 41) {
+            state.depth -= 1;
+            if (state.depth === 0) return index === value.length - 1;
+            if (state.depth < 0) return false;
         }
     }
+    return false;
+}
 
+/** Mutable quote state for the build-function scanner. */
+interface TailwindFunctionScanState {
+    depth: number;
+    quote: number;
+    escaped: boolean;
+}
+
+/**
+ * Consume escape and quote codes before parenthesis handling.
+ * @param code - Current character code.
+ * @param state - Mutable scanner state.
+ * @returns Whether parenthesis handling should skip this code.
+ */
+function consumeTailwindQuotedCode(code: number, state: TailwindFunctionScanState): boolean {
+    if (state.escaped) {
+        state.escaped = false;
+        return true;
+    }
+    if (code === 92) {
+        state.escaped = true;
+        return true;
+    }
+    if (state.quote !== 0) {
+        if (code === state.quote) state.quote = 0;
+        return true;
+    }
+    if (code === 34 || code === 39) {
+        state.quote = code;
+        return true;
+    }
     return false;
 }
 

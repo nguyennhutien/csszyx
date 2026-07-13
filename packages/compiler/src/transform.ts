@@ -3221,36 +3221,62 @@ function collectCandidatesFromBabelExpr(
         t.isTSInstantiationExpression(node)
     ) {
         collectCandidatesFromBabelExpr(node.expression as t.Expression, path, classes);
-    } else if (t.isArrayExpression(node)) {
-        for (const element of node.elements) {
-            if (element === null || t.isSpreadElement(element)) {
-                continue;
-            }
-            const cand =
-                t.isLogicalExpression(element) && element.operator === '&&'
-                    ? (element.right as t.Expression)
-                    : (element as t.Expression);
-            collectCandidatesFromBabelExpr(cand, path, classes);
-        }
+        return;
+    }
+    if (t.isArrayExpression(node)) {
+        collectCandidatesFromBabelArray(node, path, classes);
     } else if (t.isObjectExpression(node)) {
         collectCandidatesFromBabelObj(node, path, classes, '');
     } else if (t.isIdentifier(node)) {
-        const binding = path.scope.getBinding(node.name);
-        if (binding?.path.isVariableDeclarator()) {
-            let init = binding.path.node.init;
-            if (init) {
-                while (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
-                    init = init.expression;
-                }
-                collectCandidatesFromBabelExpr(init as t.Expression, path, classes);
-            }
-        }
+        collectCandidatesFromBabelIdentifier(node, path, classes);
     } else if (t.isConditionalExpression(node)) {
         collectCandidatesFromBabelExpr(node.consequent as t.Expression, path, classes);
         collectCandidatesFromBabelExpr(node.alternate as t.Expression, path, classes);
     } else if (t.isLogicalExpression(node) && node.operator === '&&') {
         collectCandidatesFromBabelExpr(node.right as t.Expression, path, classes);
     }
+}
+
+/**
+ * Collect candidates from each non-spread array element.
+ * @param node - Array expression to traverse.
+ * @param path - Babel path used for binding lookup.
+ * @param classes - Candidate set to populate.
+ */
+function collectCandidatesFromBabelArray(
+    node: t.ArrayExpression,
+    path: babel.NodePath,
+    classes: Set<string>,
+): void {
+    for (const element of node.elements) {
+        if (element === null || t.isSpreadElement(element)) continue;
+        const candidate =
+            t.isLogicalExpression(element) && element.operator === '&&'
+                ? (element.right as t.Expression)
+                : (element as t.Expression);
+        collectCandidatesFromBabelExpr(candidate, path, classes);
+    }
+}
+
+/**
+ * Resolve a bound identifier and collect from its initializer.
+ * @param node - Identifier to resolve.
+ * @param path - Babel path used for binding lookup.
+ * @param classes - Candidate set to populate.
+ */
+function collectCandidatesFromBabelIdentifier(
+    node: t.Identifier,
+    path: babel.NodePath,
+    classes: Set<string>,
+): void {
+    const binding = path.scope.getBinding(node.name);
+    if (!binding?.path.isVariableDeclarator()) return;
+    let initializer = binding.path.node.init;
+    if (!initializer) return;
+    while (t.isTSAsExpression(initializer) || t.isTSSatisfiesExpression(initializer)) {
+        initializer = initializer.expression;
+    }
+    collectCandidatesFromBabelExpr(initializer as t.Expression, path, classes);
 }
 
 /**
