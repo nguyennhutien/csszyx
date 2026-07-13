@@ -3,8 +3,8 @@
 # every message at authoring time, but a contributor can bypass it with
 # --no-verify or a missing hook install. This re-runs the same policy validator
 # over every non-merge commit a PR adds, so a message that release-please cannot
-# parse (e.g. unbalanced parentheses) is caught before merge instead of silently
-# dropping the next release.
+# parse (e.g. unbalanced or nested parentheses) is caught before merge instead
+# of silently dropping the next release.
 set -euo pipefail
 
 BASE_REF="${1:?usage: verify-commit-messages-range.sh <base-ref> <head-ref>}"

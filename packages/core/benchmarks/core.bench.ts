@@ -19,16 +19,7 @@ function transformJS(szProp: Record<string, unknown>, prefix = ''): string {
             continue;
         }
 
-        let className = '';
-        if (prefix) {
-            className += prefix;
-        }
-
-        if (value === true) {
-            className += key;
-        } else if (typeof value === 'number' || typeof value === 'string') {
-            className += `${key}-${value}`;
-        }
+        const className = appendClassName(prefix, key, value);
 
         if (className) {
             classes.push(className);
@@ -36,6 +27,16 @@ function transformJS(szProp: Record<string, unknown>, prefix = ''): string {
     }
 
     return classes.filter(Boolean).join(' ');
+}
+
+function appendClassName(prefix: string, key: string, value: unknown): string {
+    if (value === true) {
+        return `${prefix}${key}`;
+    }
+    if (typeof value === 'number' || typeof value === 'string') {
+        return `${prefix}${key}-${value}`;
+    }
+    return '';
 }
 
 /**
@@ -52,8 +53,8 @@ class JSCollisionDetector {
     }
 }
 
-describe('Core Performance Analysis', async () => {
-    await init();
+describe('Core Performance Analysis', () => {
+    init();
 
     const complexObject = {
         p: 4,

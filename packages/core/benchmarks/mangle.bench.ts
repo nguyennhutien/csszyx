@@ -7,17 +7,20 @@ import { compute_mangle_checksum, init } from '../pkg-node/csszyx_core.js';
  * This simulates the sorting, string joining, and hashing overhead.
  */
 function computeChecksumPureJS(map: Record<string, string>): string {
-    const sortedKeys = Object.keys(map).sort();
-    let result = '';
-    for (const key of sortedKeys) {
-        result += `${key}:${map[key]}|`;
-    }
+    const sortedKeys = Object.keys(map).sort((a, b) => a.localeCompare(b));
+    const result = sortedKeys.map(key => `${key}:${map[key]}|`).join('');
 
+    return hashString(result);
+}
+
+function hashString(value: string): string {
     // Simulate complex hashing logic (like SHA-256) in pure JS
     // without using native C++ modules like node:crypto.
     let h = 0;
-    for (let i = 0; i < result.length; i++) {
-        h = (Math.imul(31, h) + result.charCodeAt(i)) | 0;
+    for (const character of value) {
+        const codePoint = character.codePointAt(0) ?? 0;
+        // The outer imul coerces the accumulated sum back to signed int32.
+        h = Math.imul(Math.imul(31, h) + codePoint, 1);
     }
     return h.toString(16).padStart(16, '0');
 }
@@ -33,8 +36,8 @@ function createTestMap(count: number): Record<string, string> {
     return map;
 }
 
-describe('Mangle Checksum Performance: WASM vs Pure JS', async () => {
-    await init();
+describe('Mangle Checksum Performance: WASM vs Pure JS', () => {
+    init();
 
     const sizes = [1000, 5000];
 

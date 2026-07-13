@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { createRequire } from 'node:module';
+import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -7,6 +8,7 @@ const { completionDetails, DATA_OWNER } = require('../dist/completions.js');
 const { DEFAULT_CONFIG, parseConfig } = require('../dist/config.js');
 const { mergeCompletions } = require('../dist/merge.js');
 
+test('configuration, merging, and completion details contracts', () => {
 assert.strictEqual(parseConfig(null).maxEntries, DEFAULT_CONFIG.maxEntries);
 assert.deepStrictEqual(parseConfig({ maxEntries: Number.POSITIVE_INFINITY }), DEFAULT_CONFIG);
 assert.strictEqual(parseConfig({ maxEntries: 99_999 }).maxEntries, 2_000);
@@ -41,3 +43,4 @@ assert.strictEqual(
 );
 
 console.log('contract checks passed');
+});

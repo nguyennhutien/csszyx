@@ -2884,9 +2884,7 @@ function evaluatePartialObject(
 
                         if (t.isStringLiteral(opProp.value) || t.isNumericLiteral(opProp.value)) {
                             // Both static — should have been caught above, but handle anyway
-                            const opVal = t.isStringLiteral(opProp.value)
-                                ? opProp.value.value
-                                : opProp.value.value;
+                            const opVal = opProp.value.value;
                             staticProps[key] = { color: colorStr, op: opVal } as unknown as SzValue;
                         } else if (t.isExpression(opProp.value)) {
                             // Static color + dynamic op — Tailwind v4 CSS variable shorthand

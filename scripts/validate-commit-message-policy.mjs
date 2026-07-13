@@ -71,11 +71,11 @@ if (breaking && type !== 'feat' && type !== 'fix' && type !== 'perf') {
 
 // release-please's strict PEG parser (@conventional-commits/parser) treats
 // parentheses structurally and does not understand markdown backticks. An
-// UNBALANCED paren anywhere in the message — e.g. an inline-code fragment like
-// `szv(` or `dynamic(` — makes it fail to parse the whole commit, which
-// release-please then SILENTLY DROPS: a merged fix/feat contributes nothing to
-// the next release and no release PR is cut. Reject unbalanced parens here so
-// the failure surfaces at commit time instead of a missing release later.
+// UNBALANCED or NESTED parens anywhere in the message — e.g. an inline-code
+// fragment like `szv(` or an expression such as `calc(var(--x))` — make it fail
+// to parse the whole commit, which release-please then SILENTLY DROPS: a merged
+// fix/feat contributes nothing to the next release and no release PR is cut.
+// Reject both shapes here so the failure surfaces before merge.
 const opens = (message.match(/\(/g) ?? []).length;
 const closes = (message.match(/\)/g) ?? []).length;
 if (opens !== closes) {
@@ -85,6 +85,22 @@ if (opens !== closes) {
             'such commits and skips the release. Balance every paren — write inline code as ' +
             '`szv()` or `szv`, not `szv(` — even inside backticks.',
     );
+}
+
+let depth = 0;
+for (const character of message) {
+    if (character === '(') {
+        depth += 1;
+        if (depth > 1) {
+            fail(
+                "commit message has nested parentheses. release-please's parser drops " +
+                    'such commits and skips the release. Rewrite nested expressions such as ' +
+                    '`calc(value * var(--spacing))` without the inner parentheses',
+            );
+        }
+    } else if (character === ')') {
+        depth -= 1;
+    }
 }
 
 function fail(reason, code = 1) {
