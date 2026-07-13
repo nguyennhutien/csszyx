@@ -123,58 +123,58 @@ function findCsszyxCallStart(text: string): { idx: number; start: SzStart } | nu
 }
 
 /**
+ * Find the rightmost quoted sz attribute.
+ *
+ * @param text Source text to scan.
+ * @param quote Attribute quote style.
+ * @returns Marker index and opening description, or null.
+ */
+function findLastQuotedSz(text: string, quote: '"' | "'"): { idx: number; start: SzStart } | null {
+    const marker = `sz=${quote}`;
+    const idx = text.lastIndexOf(marker);
+    if (idx === -1) {
+        return null;
+    }
+    let bodyStart = idx + marker.length;
+    while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) {
+        bodyStart++;
+    }
+    const start: SzStart =
+        text[bodyStart] === '{'
+            ? { bodyStart, explicit: true, terminator: null, form: 'sz' }
+            : {
+                  bodyStart: idx + marker.length,
+                  explicit: false,
+                  terminator: quote,
+                  form: 'sz',
+              };
+    return { idx, start };
+}
+
+/**
  * Return the rightmost sz-expression opening in `text`, or null.
  * @param text - Source text to scan.
  * @returns Description of the opening, or null if no sz expression is present.
  */
 function findSzStart(text: string): SzStart | null {
-    /**
-     *
-     */
-    type Best = { idx: number; start: SzStart } | null;
-    let best: Best = null;
-    const beat = (idx: number): boolean => best === null || idx > best.idx;
-
     const jsx = text.lastIndexOf('sz={{');
-    if (jsx !== -1 && beat(jsx)) {
-        best = {
-            idx: jsx,
-            start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
-        };
-    }
-
-    const dq = text.lastIndexOf('sz="');
-    if (dq !== -1 && beat(dq)) {
-        let j = dq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) {
-            j++;
-        }
-        const start: SzStart =
-            text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
-                : { bodyStart: dq + 4, explicit: false, terminator: '"', form: 'sz' };
-        best = { idx: dq, start };
-    }
-
-    const sq = text.lastIndexOf("sz='");
-    if (sq !== -1 && beat(sq)) {
-        let j = sq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) {
-            j++;
-        }
-        const start: SzStart =
-            text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
-                : { bodyStart: sq + 4, explicit: false, terminator: "'", form: 'sz' };
-        best = { idx: sq, start };
-    }
-
-    const call = findCsszyxCallStart(text);
-    if (call !== null && beat(call.idx)) {
-        best = call;
-    }
-
-    return best === null ? null : best.start;
+    const candidates = [
+        jsx === -1
+            ? null
+            : {
+                  idx: jsx,
+                  start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
+              },
+        findLastQuotedSz(text, '"'),
+        findLastQuotedSz(text, "'"),
+        findCsszyxCallStart(text),
+    ].filter((candidate): candidate is { idx: number; start: SzStart } => candidate !== null);
+    return (
+        candidates.reduce<{ idx: number; start: SzStart } | null>(
+            (best, candidate) => (best === null || candidate.idx > best.idx ? candidate : best),
+            null,
+        )?.start ?? null
+    );
 }
 
 /**

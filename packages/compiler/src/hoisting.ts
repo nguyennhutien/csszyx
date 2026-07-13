@@ -249,6 +249,31 @@ export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, 
 }
 
 /**
+ * Add one AST node and all of its child nodes to a parent map.
+ *
+ * @param node Current AST node.
+ * @param parent Parent AST node, when present.
+ * @param map Destination child-to-parent map.
+ */
+function mapNodeParents(node: t.Node, parent: t.Node | undefined, map: Map<t.Node, t.Node>): void {
+    if (parent) {
+        map.set(node, parent);
+    }
+    for (const key of Object.keys(node) as (keyof t.Node)[]) {
+        const value = (node as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                if (item && typeof item === 'object' && 'type' in item) {
+                    mapNodeParents(item as t.Node, node, map);
+                }
+            }
+        } else if (value && typeof value === 'object' && 'type' in value) {
+            mapNodeParents(value as t.Node, node, map);
+        }
+    }
+}
+
+/**
  * Builds a parent map for AST nodes (child-to-parent relationship).
  * Used by hoistCSSVariables to find LCA.
  *
@@ -257,29 +282,6 @@ export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, 
  */
 export function buildParentMap(ast: t.Node): Map<t.Node, t.Node> {
     const map = new Map<t.Node, t.Node>();
-
-    /** @param node - The current AST node being visited
-     *  @param parent - The parent of the current node */
-    function traverse(node: t.Node, parent?: t.Node): void {
-        if (parent) {
-            map.set(node, parent);
-        }
-        for (const key of Object.keys(node) as (keyof t.Node)[]) {
-            const value = (node as unknown as Record<string, unknown>)[key];
-            if (value && typeof value === 'object') {
-                if (Array.isArray(value)) {
-                    for (const item of value) {
-                        if (item && typeof item === 'object' && 'type' in item) {
-                            traverse(item as t.Node, node);
-                        }
-                    }
-                } else if ('type' in (value as Record<string, unknown>)) {
-                    traverse(value as t.Node, node);
-                }
-            }
-        }
-    }
-
-    traverse(ast);
+    mapNodeParents(ast, undefined, map);
     return map;
 }

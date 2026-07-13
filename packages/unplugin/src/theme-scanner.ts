@@ -46,6 +46,28 @@ const EMPTY_THEME: ParsedTheme = {
 };
 
 /**
+ * Find the closing brace paired with one opening brace.
+ *
+ * @param source Source text containing the block.
+ * @param openBrace Opening-brace offset.
+ * @returns Matching closing-brace offset, or -1 when unmatched.
+ */
+function findMatchingBrace(source: string, openBrace: number): number {
+    let depth = 0;
+    for (let index = openBrace; index < source.length; index++) {
+        if (source[index] === '{') {
+            depth++;
+        } else if (source[index] === '}') {
+            depth--;
+            if (depth === 0) {
+                return index;
+            }
+        }
+    }
+    return -1;
+}
+
+/**
  * Strip @layer { ... } wrappers so @theme blocks inside layers are still found.
  * Only strips one level — @theme cannot be nested inside nested @layer.
  *
@@ -72,29 +94,14 @@ function stripLayerWrappers(css: string): string {
             result += css.slice(layerIdx);
             break;
         }
-        // Track brace depth to find matching closing brace
-        let depth = 0;
-        let j = openBrace;
-        while (j < css.length) {
-            if (css[j] === '{') {
-                depth++;
-            }
-            if (css[j] === '}') {
-                depth--;
-                if (depth === 0) {
-                    // Append inner content (between braces), skip @layer wrapper
-                    result += css.slice(openBrace + 1, j);
-                    i = j + 1;
-                    break;
-                }
-            }
-            j++;
-        }
-        if (depth !== 0) {
+        const closeBrace = findMatchingBrace(css, openBrace);
+        if (closeBrace === -1) {
             // Unmatched brace — give up stripping, append rest as-is
             result += css.slice(openBrace);
             break;
         }
+        result += css.slice(openBrace + 1, closeBrace);
+        i = closeBrace + 1;
     }
     return result;
 }
@@ -112,20 +119,9 @@ function extractThemeBlocks(css: string): string[] {
     const themeStart = /@theme\s+(?:inline\s+)?\{|@theme\{/g;
     for (const match of css.matchAll(themeStart)) {
         const openPos = css.indexOf('{', match.index);
-        let depth = 0;
-        let j = openPos;
-        while (j < css.length) {
-            if (css[j] === '{') {
-                depth++;
-            }
-            if (css[j] === '}') {
-                depth--;
-                if (depth === 0) {
-                    blocks.push(css.slice(openPos + 1, j));
-                    break;
-                }
-            }
-            j++;
+        const closePos = findMatchingBrace(css, openPos);
+        if (closePos !== -1) {
+            blocks.push(css.slice(openPos + 1, closePos));
         }
     }
     return blocks;
