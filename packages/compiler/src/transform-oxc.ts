@@ -534,16 +534,15 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'ArrayExpression') {
-                const composition = buildArrayComposition(
-                    expression as ArrayExpressionNode,
-                    effectiveFilename,
-                    objectBindings,
+                const composition = buildArrayComposition(expression as ArrayExpressionNode, {
+                    filename: effectiveFilename,
+                    bindings: objectBindings,
                     globalVarAliases,
                     cssVariableMap,
                     source,
                     classes,
                     diagnostics,
-                );
+                });
                 if (composition === null) {
                     // Spread element etc. — the whole array stays a runtime value.
                     collectArrayCandidateClasses(
@@ -1383,6 +1382,17 @@ type ArrayComposition =
           usesSzPart: boolean;
       };
 
+/** Shared inputs used while classifying one sz array expression. */
+interface ArrayCompositionContext {
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
+    source: string;
+    classes: Set<string>;
+    diagnostics: string[];
+}
+
 /**
  * Classify an sz array (`sz={[a, b, …]}`) for later-wins composition.
  *
@@ -1396,26 +1406,16 @@ type ArrayComposition =
  * per property group. Element order is preserved in both lanes.
  *
  * @param node Array expression used as the sz value.
- * @param filename Filename for diagnostics.
- * @param bindings Local object-literal bindings.
- * @param globalVarAliases Exact global custom-property alias table.
- * @param cssVariableMap Original-to-mangled CSS variable map to populate.
- * @param source Original source for preserving condition/dynamic expressions.
- * @param classes Output set collecting every compiled class for the catalog.
- * @param diagnostics Output list for compile-time diagnostics.
+ * @param context Shared bindings, aliases, source, and output sinks.
  * @returns The composition, or null when the whole array must stay a runtime
  *   value (a spread element).
  */
 function buildArrayComposition(
     node: ArrayExpressionNode,
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    globalVarAliases: ReadonlyMap<string, string>,
-    cssVariableMap: Map<string, CssVariableMangleValue>,
-    source: string,
-    classes: Set<string>,
-    diagnostics: string[],
+    context: ArrayCompositionContext,
 ): ArrayComposition | null {
+    const { filename, bindings, globalVarAliases, cssVariableMap, source, classes, diagnostics } =
+        context;
     /** One classified array element. */
     type Part =
         | { kind: 'obj'; sz: SzObject }

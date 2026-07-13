@@ -1520,14 +1520,19 @@ function emptyClassToUndefined(node: t.Expression): t.Expression {
 }
 
 /**
- * Recursively attempts to pre-compile an AST node to a static className expression.
- * Handles ObjectExpression (single static object), ConditionalExpression (ternary with static branches),
- * and StringLiteral (already resolved).
+ * Adds every non-empty class token from a compiled class string to a sink.
  *
- * @param node - AST node to attempt static transformation on
- * @param getBinding - Optional scope binding resolver for spread resolution
- * @returns A Babel AST node (StringLiteral or ConditionalExpression of strings), or null if dynamic
+ * @param className - Space-separated compiled class string.
+ * @param classes - Class sink for the safelist.
  */
+function addClassTokens(className: string, classes: Set<string>): void {
+    for (const token of className.split(/\s+/)) {
+        if (token) {
+            classes.add(token);
+        }
+    }
+}
+
 /**
  * Safelist best-effort for a DYNAMIC sz array element: walk conditional /
  * logical branches and add the compiled classes of any static object literal
@@ -1558,20 +1563,12 @@ function collectDynamicElementCandidates(
         return;
     }
     if (t.isStringLiteral(inner)) {
-        for (const c of inner.value.split(/\s+/)) {
-            if (c) {
-                classes.add(c);
-            }
-        }
+        addClassTokens(inner.value, classes);
         return;
     }
     const sz = tryResolveStaticSzObject(inner, getBinding);
     if (sz !== null) {
-        for (const c of transform(sz).className.split(/\s+/)) {
-            if (c) {
-                classes.add(c);
-            }
-        }
+        addClassTokens(transform(sz).className, classes);
         return;
     }
     // Partially-static object literal (a runtime value blocked the full
@@ -2244,13 +2241,7 @@ function lenientCatalogObjects(
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
         }
-        const key = t.isIdentifier(prop.key)
-            ? prop.key.name
-            : t.isStringLiteral(prop.key)
-              ? prop.key.value
-              : t.isNumericLiteral(prop.key)
-                ? String(prop.key.value)
-                : null;
+        const key = getObjectPropertyKey(prop);
         if (key === null) {
             continue;
         }
@@ -2539,21 +2530,11 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
     const result: SzObject = {};
 
     for (const prop of node.properties) {
-        if (!t.isObjectProperty(prop)) {
+        if (!t.isObjectProperty(prop) || prop.computed) {
             return null;
-        } // Spread elements are dynamic
-        if (prop.computed) {
-            return null;
-        } // Computed keys are dynamic
-
-        let key: string;
-        if (t.isIdentifier(prop.key)) {
-            key = prop.key.name;
-        } else if (t.isStringLiteral(prop.key)) {
-            key = prop.key.value;
-        } else if (t.isNumericLiteral(prop.key)) {
-            key = String(prop.key.value);
-        } else {
+        }
+        const key = getObjectPropertyKey(prop);
+        if (key === null) {
             return null;
         }
 
@@ -2689,6 +2670,57 @@ interface PartialObjectResult {
     usesUnitVar: boolean;
 }
 
+/** A dynamic property plus the map key used for per-variant deduplication. */
+interface DynamicPropRegistration {
+    uniqueKey: string;
+    info: DynamicPropInfo;
+}
+
+/**
+ * Normalizes a Babel object-property key accepted by the sz object grammar.
+ *
+ * @param prop - Object property whose key should be read.
+ * @returns The normalized string key, or null for unsupported key shapes.
+ */
+function getObjectPropertyKey(prop: t.ObjectProperty): string | null {
+    if (t.isIdentifier(prop.key)) {
+        return prop.key.name;
+    }
+    if (t.isStringLiteral(prop.key)) {
+        return prop.key.value;
+    }
+    if (t.isNumericLiteral(prop.key)) {
+        return String(prop.key.value);
+    }
+    return null;
+}
+
+/**
+ * Builds the shared metadata for a runtime-valued sz property.
+ *
+ * @param key - Canonical sz key.
+ * @param expression - Runtime value expression.
+ * @param variantChain - Active nested variant path.
+ * @returns The deduplication key and dynamic-property metadata.
+ */
+function createDynamicPropRegistration(
+    key: string,
+    expression: t.Expression,
+    variantChain: string,
+): DynamicPropRegistration {
+    return {
+        uniqueKey: variantChain ? `${variantChain}-${key}` : key,
+        info: {
+            expression,
+            category: getPropertyCategory(key),
+            szKey: key,
+            varName: getCSSVariableName(key, variantChain || undefined),
+            twPrefix: PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(),
+            variantChain,
+        },
+    };
+}
+
 /**
  * Extracts a primitive literal value from an AST expression, or returns null if dynamic.
  * @param node - AST expression to extract from
@@ -2779,25 +2811,22 @@ function evaluatePartialObject(
     let usesSpacingVar = false;
     let usesUnitVar = false;
 
-    for (const prop of node.properties) {
-        if (t.isSpreadElement(prop)) {
-            return null; // Spread → fallback to _sz()
-        }
-        if (!t.isObjectProperty(prop)) {
-            return null;
-        }
-        if (prop.computed) {
-            return null;
-        }
+    const registerDynamicProp = (key: string, expression: t.Expression): void => {
+        const registration = createDynamicPropRegistration(key, expression, variantChain);
+        const { category } = registration.info;
+        usesColorVar ||= COLOR_PROPERTIES.has(key);
+        usesSpacingVar ||= category === PropertyCategory.SPACING;
+        usesUnitVar ||=
+            category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION;
+        dynamicProps.set(registration.uniqueKey, registration.info);
+    };
 
-        let key: string;
-        if (t.isIdentifier(prop.key)) {
-            key = prop.key.name;
-        } else if (t.isStringLiteral(prop.key)) {
-            key = prop.key.value;
-        } else if (t.isNumericLiteral(prop.key)) {
-            key = String(prop.key.value);
-        } else {
+    for (const prop of node.properties) {
+        if (!t.isObjectProperty(prop) || prop.computed) {
+            return null;
+        }
+        const key = getObjectPropertyKey(prop);
+        if (key === null) {
             return null;
         }
 
@@ -2957,57 +2986,11 @@ function evaluatePartialObject(
                 });
             } else {
                 // At least one branch is dynamic — fall back to CSS variable
-                const twPrefix =
-                    PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-                const category = getPropertyCategory(key);
-                const varName = getCSSVariableName(key, variantChain || undefined);
-                const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
-                if (COLOR_PROPERTIES.has(key)) {
-                    usesColorVar = true;
-                } else if (category === PropertyCategory.SPACING) {
-                    usesSpacingVar = true;
-                } else if (
-                    category === PropertyCategory.ANGLE ||
-                    category === PropertyCategory.DURATION
-                ) {
-                    usesUnitVar = true;
-                }
-                dynamicProps.set(uniqueKey, {
-                    expression: value,
-                    category,
-                    szKey: key,
-                    varName,
-                    twPrefix,
-                    variantChain: variantChain || '',
-                });
+                registerDynamicProp(key, value);
             }
         } else if (t.isExpression(value)) {
             // Fully dynamic expression → CSS variable
-            const twPrefix =
-                PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-            const category = getPropertyCategory(key);
-            const varName = getCSSVariableName(key, variantChain || undefined);
-            const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
-
-            if (COLOR_PROPERTIES.has(key)) {
-                usesColorVar = true;
-            } else if (category === PropertyCategory.SPACING) {
-                usesSpacingVar = true;
-            } else if (
-                category === PropertyCategory.ANGLE ||
-                category === PropertyCategory.DURATION
-            ) {
-                usesUnitVar = true;
-            }
-
-            dynamicProps.set(uniqueKey, {
-                expression: value,
-                category,
-                szKey: key,
-                varName,
-                twPrefix,
-                variantChain: variantChain || '',
-            });
+            registerDynamicProp(key, value);
         } else {
             return null;
         }
