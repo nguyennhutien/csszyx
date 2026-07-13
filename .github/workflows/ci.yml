@@ -253,6 +253,8 @@ jobs:
           node-version: "22"
       - name: Validate release-please config + manifest
         run: node .github/scripts/validate-release-please-config.mjs
+      - name: Test commit-message policy
+        run: node --test scripts/validate-commit-message-policy.test.mjs
       - name: Test resumable npm publisher
         run: node --test .github/scripts/publish-workspace.test.mjs
       - name: Test package.json content gate
@@ -264,9 +266,9 @@ jobs:
 
   # Backstop for the lefthook commit-msg hook. Re-runs the commit-message policy
   # over every commit a PR adds, so a message release-please cannot parse (e.g.
-  # unbalanced parentheses, which make it silently drop the commit and skip the
-  # release) is caught before merge even if a contributor bypassed the local
-  # hook. Skipped on push (the aggregator counts a skip as success).
+  # unbalanced or nested parentheses, which make it silently drop the commit and
+  # skip the release) is caught before merge even if a contributor bypassed the
+  # local hook. Skipped on push (the aggregator counts a skip as success).
   commit-messages:
     name: Commit Messages
     if: github.event_name == 'pull_request'

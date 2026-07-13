@@ -1,3 +1,13 @@
 # gitleaks baseline. To suppress a confirmed false positive, paste the finding
 # fingerprint that gitleaks prints (format: <commit>:<path>:<rule-id>:<line>)
 # on its own line below. Keep this list small and reviewed.
+
+# Historical native platform identifiers; these are package routing keys, not credentials.
+f6b596c0a2a0e9848a207d93088b2c5bc638341d:packages/core/native/platforms.js:generic-api-key:55
+f6b596c0a2a0e9848a207d93088b2c5bc638341d:packages/core/native/platforms.js:generic-api-key:63
+
+# Historical SSR documentation examples; the repeated value is a sample recovery token.
+8e1bdfd0b8cffcb130eede480446bffc2bbb9759:ARCHITECTURE.md:generic-api-key:70
+8e1bdfd0b8cffcb130eede480446bffc2bbb9759:ARCHITECTURE.md:generic-api-key:295
+8e1bdfd0b8cffcb130eede480446bffc2bbb9759:csszyx-guide.md:generic-api-key:206
+8e1bdfd0b8cffcb130eede480446bffc2bbb9759:csszyx-spec.json:generic-api-key:345
