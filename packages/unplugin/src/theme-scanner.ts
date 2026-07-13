@@ -262,6 +262,48 @@ export function hasTokens(theme: ParsedTheme): boolean {
 }
 
 /**
+ * Read a valid custom-property name after a `--` marker.
+ *
+ * @param block Theme block source.
+ * @param dashes Offset of the `--` marker.
+ * @returns Name and exclusive name end, or null.
+ */
+function readCustomPropertyName(
+    block: string,
+    dashes: number,
+): { name: string; end: number } | null {
+    let end = dashes + 2;
+    if (end >= block.length || !/[a-z]/.test(block[end] as string)) {
+        return null;
+    }
+    end++;
+    while (end < block.length && /[a-z0-9-]/.test(block[end] as string)) {
+        end++;
+    }
+    return { name: block.slice(dashes + 2, end), end };
+}
+
+/**
+ * Find the exclusive declaration end after a custom-property name.
+ *
+ * @param block Theme block source.
+ * @param nameEnd Exclusive property-name end.
+ * @returns Exclusive declaration end, or -1 when invalid.
+ */
+function findCustomPropertyDeclarationEnd(block: string, nameEnd: number): number {
+    let cursor = nameEnd;
+    while (cursor < block.length && /\s/.test(block[cursor] as string)) {
+        cursor++;
+    }
+    if (block[cursor] === ':') {
+        const valueStart = cursor + 1;
+        const semicolon = block.indexOf(';', valueStart);
+        return semicolon > valueStart ? semicolon + 1 : -1;
+    }
+    return block[nameEnd] === ';' ? nameEnd + 1 : -1;
+}
+
+/**
  * Yield the NAME of every `--name: value;` / `--name;` custom-property
  * declaration in `block`, exactly as `/--([a-z][a-z0-9-]*)(?:\s*:[^;]+)?;/g`
  * captured group 1 — including its terminator rules (a value, when present,
@@ -283,44 +325,19 @@ export function scanCustomPropertyNames(block: string): string[] {
         if (dashes === -1) {
             break;
         }
-        // Name: `[a-z][a-z0-9-]*` right after `--`.
-        let end = dashes + 2;
-        if (end >= block.length || !/[a-z]/.test(block[end] as string)) {
+        const property = readCustomPropertyName(block, dashes);
+        if (!property) {
             // No valid name here — the /g scan would retry one char over,
             // which matters for overlapping runs like `---name;`.
             i = dashes + 1;
             continue;
         }
-        end++;
-        while (end < block.length && /[a-z0-9-]/.test(block[end] as string)) {
-            end++;
-        }
-        const name = block.slice(dashes + 2, end);
-
-        // `(?:\s*:[^;]+)?;` — try the optional `\s*:<value>` branch, else a `;`
-        // directly after the name.
-        let matchEnd = -1;
-        let cursor = end;
-        while (cursor < block.length && /\s/.test(block[cursor] as string)) {
-            cursor++;
-        }
-        if (block[cursor] === ':') {
-            const valueStart = cursor + 1;
-            const semi = block.indexOf(';', valueStart);
-            // `[^;]+` needs at least one non-`;` character before the `;`.
-            if (semi > valueStart) {
-                matchEnd = semi + 1;
-            }
-        }
-        if (matchEnd === -1 && block[end] === ';') {
-            matchEnd = end + 1;
-        }
-
+        const matchEnd = findCustomPropertyDeclarationEnd(block, property.end);
         if (matchEnd === -1) {
             i = dashes + 1;
             continue;
         }
-        names.push(name);
+        names.push(property.name);
         i = matchEnd;
     }
     return names;

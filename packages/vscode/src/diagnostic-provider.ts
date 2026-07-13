@@ -40,6 +40,46 @@ function isValidKey(key: string): boolean {
 }
 
 /**
+ * Build one unknown-key diagnostic within an sz expression.
+ *
+ * @param document Document being validated.
+ * @param expressionSource Original sz expression source.
+ * @param startOffset Expression start offset.
+ * @param key Unknown key.
+ * @returns Diagnostic or null when the key location cannot be found.
+ */
+function createUnknownKeyDiagnostic(
+    document: vscode.TextDocument,
+    expressionSource: string,
+    startOffset: number,
+    key: string,
+): vscode.Diagnostic | null {
+    const keyPattern = new RegExp(`\\b${escapeRegex(key)}\\s*:`);
+    const localMatch = keyPattern.exec(expressionSource);
+    if (!localMatch) {
+        return null;
+    }
+    const absOffset = startOffset + localMatch.index;
+    const range = new vscode.Range(
+        document.positionAt(absOffset),
+        document.positionAt(absOffset + key.length),
+    );
+    const suggestion = SUGGESTION_MAP[key];
+    const message = suggestion
+        ? `Unknown sz prop '${key}'. Did you mean '${suggestion}'?`
+        : `Unknown sz prop '${key}'. See https://csszyx.com/docs/sz-props for valid props.`;
+    const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
+    diagnostic.source = DIAGNOSTIC_SOURCE;
+    if (suggestion) {
+        diagnostic.code = {
+            value: 'unknown-prop',
+            target: vscode.Uri.parse('https://csszyx.com/docs/migrate'),
+        };
+    }
+    return diagnostic;
+}
+
+/**
  * Validate all sz props in the document and populate the diagnostic collection.
  * @param document - The document to validate
  * @param collection - The diagnostic collection to write results into
@@ -66,37 +106,15 @@ export function validateDocument(
             if (isValidKey(key)) {
                 continue;
             }
-
-            // Find the key's position in the original source text
-            // Search within the sz expression only to avoid false matches
-            const keyPattern = new RegExp(`\\b${escapeRegex(key)}\\s*:`);
-            const localMatch = keyPattern.exec(
+            const diagnostic = createUnknownKeyDiagnostic(
+                document,
                 text.slice(startOffset, startOffset + objText.length),
+                startOffset,
+                key,
             );
-            if (!localMatch) {
-                continue;
+            if (diagnostic) {
+                diagnostics.push(diagnostic);
             }
-
-            const absOffset = startOffset + localMatch.index;
-            const startPos = document.positionAt(absOffset);
-            const endPos = document.positionAt(absOffset + key.length);
-            const range = new vscode.Range(startPos, endPos);
-
-            const suggestion = SUGGESTION_MAP[key];
-            const message = suggestion
-                ? `Unknown sz prop '${key}'. Did you mean '${suggestion}'?`
-                : `Unknown sz prop '${key}'. See https://csszyx.com/docs/sz-props for valid props.`;
-
-            const diag = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
-            diag.source = DIAGNOSTIC_SOURCE;
-            if (suggestion) {
-                // Attach a code + data so a future CodeAction can auto-fix it
-                diag.code = {
-                    value: 'unknown-prop',
-                    target: vscode.Uri.parse('https://csszyx.com/docs/migrate'),
-                };
-            }
-            diagnostics.push(diag);
         }
     }
 
