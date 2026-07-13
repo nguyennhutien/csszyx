@@ -3046,7 +3046,13 @@ function planOxcComponentVariableHoists(
     const nodes: CSSVariableHoistNode[] = [];
     const candidates: OxcComponentHoistCandidate[] = [];
 
-    collectOxcHoistCandidates(root, null, nodes, candidates, filename, bindings, source);
+    collectOxcHoistCandidates(root, null, {
+        nodes,
+        candidates,
+        filename,
+        bindings,
+        source,
+    });
     if (candidates.length < 2) {
         return {
             stylePropsByTarget: new Map(),
@@ -3124,46 +3130,72 @@ function formatHoistSkipDiagnostic(diagnostic: CSSVariableHoistDiagnostic): stri
     return `[csszyx] mangleVars skipped component CSS variable hoist for ${diagnostic.name} across ${diagnostic.usageCount} usages: ${diagnostic.reason}${suffix}`;
 }
 
+/** Shared traversal state for component-tier OXC hoist collection. */
+interface OxcHoistCollectionContext {
+    nodes: CSSVariableHoistNode[];
+    candidates: OxcComponentHoistCandidate[];
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    source: string;
+}
+
+/**
+ * Visit ordinary AST children that are outside JSX host nodes.
+ *
+ * @param node Current AST node.
+ * @param parentElementId Current JSX parent id.
+ * @param context Shared hoist collection state.
+ */
+function collectOxcChildNodes(
+    node: OxcNode,
+    parentElementId: string | null,
+    context: OxcHoistCollectionContext,
+): void {
+    for (const key of Object.keys(node)) {
+        if (isAstMetadataKey(key)) {
+            continue;
+        }
+        const child = (node as Record<string, unknown>)[key];
+        const children = Array.isArray(child) ? child : [child];
+        for (const item of children) {
+            if (isOxcNode(item)) {
+                collectOxcHoistCandidates(item, parentElementId, context);
+            }
+        }
+    }
+}
+
 /**
  * Collects JSX host nodes and dynamic CSS-var candidates for component hoisting.
  *
  * @param node Current AST node.
  * @param parentElementId Current JSX parent id.
- * @param nodes Hoist tree nodes to populate.
- * @param candidates Dynamic var candidates to populate.
- * @param filename Filename for diagnostics.
- * @param bindings Local object-literal bindings.
- * @param source Original source for expression slicing.
+ * @param context Shared hoist collection state.
  */
 function collectOxcHoistCandidates(
     node: OxcNode,
     parentElementId: string | null,
-    nodes: CSSVariableHoistNode[],
-    candidates: OxcComponentHoistCandidate[],
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    source: string,
+    context: OxcHoistCollectionContext,
 ): void {
     if (node.type === 'JSXElement') {
         const element = node as JsxElementNode;
         const opening = element.openingElement;
         const elementId = elementIdForOpening(opening);
-        nodes.push({
+        context.nodes.push({
             id: elementId,
             parentId: parentElementId,
             canHost: canHostHoistedStyleProps(opening),
         });
-        collectOpeningHoistCandidates(opening, elementId, candidates, filename, bindings, source);
+        collectOpeningHoistCandidates(
+            opening,
+            elementId,
+            context.candidates,
+            context.filename,
+            context.bindings,
+            context.source,
+        );
         for (const child of element.children) {
-            collectOxcHoistCandidates(
-                child,
-                elementId,
-                nodes,
-                candidates,
-                filename,
-                bindings,
-                source,
-            );
+            collectOxcHoistCandidates(child, elementId, context);
         }
         return;
     }
@@ -3171,52 +3203,13 @@ function collectOxcHoistCandidates(
     if (node.type === 'JSXFragment') {
         const fragment = node as JsxFragmentNode;
         const elementId = `f${node.start}`;
-        nodes.push({ id: elementId, parentId: parentElementId, canHost: false });
+        context.nodes.push({ id: elementId, parentId: parentElementId, canHost: false });
         for (const child of fragment.children) {
-            collectOxcHoistCandidates(
-                child,
-                elementId,
-                nodes,
-                candidates,
-                filename,
-                bindings,
-                source,
-            );
+            collectOxcHoistCandidates(child, elementId, context);
         }
         return;
     }
-
-    for (const key of Object.keys(node)) {
-        if (isAstMetadataKey(key)) {
-            continue;
-        }
-        const child = (node as Record<string, unknown>)[key];
-        if (Array.isArray(child)) {
-            for (const item of child) {
-                if (isOxcNode(item)) {
-                    collectOxcHoistCandidates(
-                        item,
-                        parentElementId,
-                        nodes,
-                        candidates,
-                        filename,
-                        bindings,
-                        source,
-                    );
-                }
-            }
-        } else if (isOxcNode(child)) {
-            collectOxcHoistCandidates(
-                child,
-                parentElementId,
-                nodes,
-                candidates,
-                filename,
-                bindings,
-                source,
-            );
-        }
-    }
+    collectOxcChildNodes(node, parentElementId, context);
 }
 
 /**

@@ -2894,6 +2894,52 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Process one compiler result produced by the prescan batch.
+     *
+     * @param filePath Source file path.
+     * @param content Original source content.
+     * @param result Compiler result.
+     * @param discoveredClasses sz-generated class sink.
+     * @param rawDiscoveredClasses Raw class-name sink.
+     */
+    function processPrescanTransform(
+        filePath: string,
+        content: string | undefined,
+        result: SourceTransformResult,
+        discoveredClasses: Set<string>,
+        rawDiscoveredClasses: Set<string>,
+    ): void {
+        const budgetExceeded = result.diagnostics.some(diagnostic =>
+            diagnostic.includes('AST budget exceeded'),
+        );
+        if (cacheEnabled && !budgetExceeded && content !== undefined) {
+            prescanResultHandoff.set(normalizeSourceFilename(filePath), {
+                inputSha256: createHash('sha256').update(content).digest('hex'),
+                result,
+            });
+        }
+        if (budgetExceeded) {
+            warnPrescanBudgetSkip(filePath);
+            return;
+        }
+        const parseFailed = result.diagnostics.some(diagnostic =>
+            diagnostic.includes('[csszyx] parse error in '),
+        );
+        if (result.classes.size === 0 && result.rawClassNames.size === 0 && parseFailed) {
+            console.warn(
+                `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
+                    'none of its classes reached the safelist. Fix the syntax error ' +
+                    '(or check the file extension matches its contents).',
+            );
+            return;
+        }
+        if (!result.transformed && result.classes.size === 0) {
+            return;
+        }
+        collectPrescanResult(result, filePath, discoveredClasses, rawDiscoveredClasses);
+    }
+
+    /**
      * Pre-scans source files to discover class names before Tailwind CSS runs.
      * Tailwind v4 reads source files from disk and can't detect classes generated
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
@@ -2970,56 +3016,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             prescanSources.map(file => [file.filePath, file.content]),
         );
         for (const { filePath, result } of transformPrescanSources(prescanSources)) {
-            // Hand the result to the transform hook for same-content reuse.
-            // Budget-tripped results are NOT handed off: the hook lane's
-            // documented behaviour for an over-budget file (JS lanes throw,
-            // rust returns the bail) must stay observable there. A file that
-            // PASSED under the larger prescan budget is handed off even if the
-            // hook's smaller budget would have bailed — the work is already
-            // paid for, and reusing it keeps the emitted code consistent with
-            // the classes the prescan just safelisted.
-            if (cacheEnabled && !result.diagnostics.some(d => d.includes('AST budget exceeded'))) {
-                const content = prescanContentByPath.get(filePath);
-                if (content !== undefined) {
-                    prescanResultHandoff.set(normalizeSourceFilename(filePath), {
-                        inputSha256: createHash('sha256').update(content).digest('hex'),
-                        result,
-                    });
-                }
-            }
-            // The native engine cannot throw like the JS lanes do, so a
-            // budget-tripped file comes back as a normal result carrying the
-            // budget diagnostic and zero classes. Same silent-dead-CSS stakes
-            // as the parse-error skip below — surface it with the fix attached.
-            if (result.diagnostics.some(d => d.includes('AST budget exceeded'))) {
-                warnPrescanBudgetSkip(filePath);
-                continue;
-            }
-            // A parse-rejected file contributes nothing to the safelist, and its
-            // classes render only while some other usage donates the same class —
-            // a silently dead class under Tailwind `source(none)`. Surface the
-            // skip as a build warning (correctness of extracted output, so it is
-            // not a dev-only nudge).
-            if (
-                result.classes.size === 0 &&
-                result.rawClassNames.size === 0 &&
-                result.diagnostics.some(d => d.includes('[csszyx] parse error in '))
-            ) {
-                console.warn(
-                    `[csszyx] prescan skipped ${filePath}: the file failed to parse, so ` +
-                        'none of its classes reached the safelist. Fix the syntax error ' +
-                        '(or check the file extension matches its contents).',
-                );
-                continue;
-            }
-            // A szv-only file (no `sz=` to rewrite) reports transformed=false but
-            // still extracts a catalog of classes — collect those, otherwise its
-            // variants are silently dropped from the safelist (the file is
-            // discovered by the `szv(` prescan token but its classes never land).
-            if (!result.transformed && result.classes.size === 0) {
-                continue;
-            }
-            collectPrescanResult(result, filePath, discoveredClasses, rawDiscoveredClasses);
+            processPrescanTransform(
+                filePath,
+                prescanContentByPath.get(filePath),
+                result,
+                discoveredClasses,
+                rawDiscoveredClasses,
+            );
         }
 
         // sz-generated classes are csszyx-owned: safe to both safelist and mangle.
@@ -3176,6 +3179,70 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Add every whitespace-delimited class from one string to the safelist.
+     *
+     * @param value Class string.
+     */
+    function addSafelistClasses(value: string): void {
+        for (const className of value.split(/\s+/).filter(Boolean)) {
+            addSafelistClass(className);
+        }
+    }
+
+    /**
+     * Collect direct quoted class and sz attributes.
+     *
+     * @param code Source code.
+     */
+    function collectQuotedAttributeClasses(code: string): void {
+        const patterns = [
+            /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g,
+            /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g,
+        ];
+        for (const pattern of patterns) {
+            for (const match of code.matchAll(pattern)) {
+                addSafelistClasses(match[1] ?? '');
+            }
+        }
+    }
+
+    /**
+     * Find the exclusive end of one JSX expression container.
+     *
+     * @param code Source code.
+     * @param bodyStart Offset after the opening brace.
+     * @returns Exclusive expression-body end offset.
+     */
+    function findJsxExpressionEnd(code: string, bodyStart: number): number {
+        let depth = 1;
+        let index = bodyStart;
+        while (index < code.length && depth > 0) {
+            if (code[index] === '{') {
+                depth++;
+            } else if (code[index] === '}') {
+                depth--;
+            }
+            index++;
+        }
+        return index - 1;
+    }
+
+    /**
+     * Collect quoted class strings inside className expression containers.
+     *
+     * @param code Source code.
+     */
+    function collectExpressionClasses(code: string): void {
+        for (const match of code.matchAll(/className=\{/g)) {
+            const bodyStart = (match.index ?? 0) + match[0].length;
+            const expression = code.slice(bodyStart, findJsxExpressionEnd(code, bodyStart));
+            for (const stringMatch of expression.matchAll(/"([^"]+)"|'([^']+)'/g)) {
+                addSafelistClasses(stringMatch[1] ?? stringMatch[2] ?? '');
+            }
+        }
+    }
+
+    /**
      * Extracts classes from source code into the safelist (state.classes) so
      * Tailwind generates their CSS. This is the regex fallback for files the
      * Babel sz pass did not handle (non-sz files, Vue/Svelte adapter output),
@@ -3186,47 +3253,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param code source code
      */
     function extractClasses(code: string): void {
-        // Pass 1: Direct className="..." / class="..." patterns.
-        // Use separate patterns for double-quoted and single-quoted strings so that
-        // class names containing single quotes (e.g. before:content-['']) are captured
-        // fully from double-quoted strings, and vice versa.
-        const dqPattern = /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g;
-        const sqPattern = /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g;
-        for (const classPattern of [dqPattern, sqPattern]) {
-            for (const match of code.matchAll(classPattern)) {
-                const classes = match[1].split(/\s+/).filter(Boolean);
-                for (const cls of classes) {
-                    addSafelistClass(cls);
-                }
-            }
-        }
-
-        // Pass 2: Extract from className={...} JSX expression containers
-        // This handles pre-compiled ternary expressions like:
-        // className={cond ? "text-6xl font-bold" : "text-6xl text-sm"}
-        const exprStart = /className=\{/g;
-        for (const match of code.matchAll(exprStart)) {
-            let depth = 1;
-            let i = (match.index ?? 0) + match[0].length;
-            while (i < code.length && depth > 0) {
-                if (code[i] === '{') {
-                    depth++;
-                } else if (code[i] === '}') {
-                    depth--;
-                }
-                i++;
-            }
-            const expr = code.slice((match.index ?? 0) + match[0].length, i - 1);
-            // Extract all quoted strings within the expression
-            const strPattern = /"([^"]+)"|'([^']+)'/g;
-            for (const strMatch of expr.matchAll(strPattern)) {
-                const str = strMatch[1] || strMatch[2];
-                const classes = str.split(/\s+/).filter(Boolean);
-                for (const cls of classes) {
-                    addSafelistClass(cls);
-                }
-            }
-        }
+        collectQuotedAttributeClasses(code);
+        collectExpressionClasses(code);
     }
 
     /**

@@ -331,6 +331,44 @@ function walkRSCGraph(
 }
 
 /**
+ * Find the closing quote for one directive literal.
+ *
+ * @param code Module source.
+ * @param start Opening-quote offset.
+ * @param quote Directive quote style.
+ * @returns Closing-quote offset, or -1 when unterminated.
+ */
+function findDirectiveQuoteEnd(code: string, start: number, quote: string): number {
+    let escaped = false;
+    for (let index = start + 1; index < code.length; index++) {
+        const char = code[index];
+        if (escaped) {
+            escaped = false;
+        } else if (char === '\\') {
+            escaped = true;
+        } else if (char === quote) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Consume whitespace and an optional semicolon after a directive literal.
+ *
+ * @param code Module source.
+ * @param start Offset immediately after the closing quote.
+ * @returns Offset immediately after the directive statement.
+ */
+function findDirectiveStatementEnd(code: string, start: number): number {
+    let end = start;
+    while (end < code.length && /[ \t\r\n]/.test(code[end])) {
+        end++;
+    }
+    return code[end] === ';' ? end + 1 : end;
+}
+
+/**
  * Reads the top-level directive prologue without requiring a full parser.
  *
  * @param code module source
@@ -347,31 +385,11 @@ function readDirectivePrologue(code: string): string[] {
             break;
         }
 
-        let j = i + 1;
-        let escaped = false;
-        while (j < code.length) {
-            const ch = code[j];
-            if (escaped) {
-                escaped = false;
-            } else if (ch === '\\') {
-                escaped = true;
-            } else if (ch === quote) {
-                break;
-            }
-            j++;
-        }
-        if (j >= code.length) {
+        const quoteEnd = findDirectiveQuoteEnd(code, i, quote);
+        if (quoteEnd === -1) {
             break;
         }
-
-        let end = j + 1;
-        while (end < code.length && /[ \t\r\n]/.test(code[end])) {
-            end++;
-        }
-        if (code[end] === ';') {
-            end++;
-        }
-
+        const end = findDirectiveStatementEnd(code, quoteEnd + 1);
         out.push(code.slice(i, end).trim());
         i = end;
     }
