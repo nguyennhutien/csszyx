@@ -147,66 +147,61 @@ export const szr: (...classes: SzInput[]) => string = _sz;
  * @returns the joined className string.
  */
 function szJoin(classes: SzInput[], depth: number): string {
-    if (depth >= MAX_SZ_DEPTH) {
-        throw new SzDepthError();
-    }
+    assertSzDepth(depth);
 
     // Fast path: single string argument (most common case after compilation)
     if (classes.length === 1) {
-        const cls = classes[0];
-        if (typeof cls === 'string') {
-            return cls;
-        }
-        if (!cls) {
-            return '';
-        }
-        if (Array.isArray(cls)) {
-            return szJoin(cls as SzInput[], depth + 1);
-        }
-        const res = transform(cls);
-        return typeof res === 'string' ? res : res.className;
+        return resolveJoinedInput(classes[0], depth);
     }
 
     let result = '';
-    let needsSpace = false;
-
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
-
-        // Skip falsy values
-        if (!cls) {
-            continue;
-        }
-
-        if (Array.isArray(cls)) {
-            const str = szJoin(cls as SzInput[], depth + 1);
-            if (!str) {
-                continue;
-            }
-            if (needsSpace) {
-                result += ' ';
-            }
-            result += str;
-            needsSpace = true;
-            continue;
-        }
-
-        // Transform SzObject to string if needed
-        const res = typeof cls === 'string' ? cls : transform(cls);
-        const str = typeof res === 'string' ? res : res.className;
-        if (!str) {
-            continue;
-        }
-
-        // Add space separator if needed
-        if (needsSpace) {
-            result += ' ';
-        }
-        result += str;
-        needsSpace = true;
+    for (const cls of classes) {
+        result = appendClassName(result, resolveJoinedInput(cls, depth));
     }
 
     return result;
+}
+
+/**
+ * Rejects nested sz input before it can exhaust the JavaScript call stack.
+ * @param depth - The current recursion depth.
+ */
+function assertSzDepth(depth: number): void {
+    if (depth >= MAX_SZ_DEPTH) {
+        throw new SzDepthError();
+    }
+}
+
+/**
+ * Resolves one input using the concatenating semantics of {@link szJoin}.
+ * @param input - The class input to resolve.
+ * @param depth - The current recursion depth.
+ * @returns The resolved class string, or an empty string for a falsy input.
+ */
+function resolveJoinedInput(input: SzInput, depth: number): string {
+    if (!input) {
+        return '';
+    }
+    if (typeof input === 'string') {
+        return input;
+    }
+    if (Array.isArray(input)) {
+        return szJoin(input, depth + 1);
+    }
+    return transform(input).className;
+}
+
+/**
+ * Appends a non-empty class string with exactly one separating space.
+ * @param current - The class string accumulated so far.
+ * @param next - The next resolved class string.
+ * @returns The combined class string.
+ */
+function appendClassName(current: string, next: string): string {
+    if (!next) {
+        return current;
+    }
+    return current ? `${current} ${next}` : next;
 }
 
 /**
@@ -239,52 +234,50 @@ export function _szMerge(...classes: SzInput[]): string {
  * @returns the joined className string.
  */
 function szMergeJoin(classes: SzInput[], depth: number): string {
-    if (depth >= MAX_SZ_DEPTH) {
-        throw new SzDepthError();
-    }
+    assertSzDepth(depth);
 
     const seen = new Set<string>();
     const result: string[] = [];
 
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
-        if (!cls) {
-            continue;
-        }
-
-        if (Array.isArray(cls)) {
-            const str = szMergeJoin(cls as SzInput[], depth + 1);
-            if (!str) {
-                continue;
-            }
-            const parts = str.split(/\s+/);
-            for (let j = 0; j < parts.length; j++) {
-                const part = parts[j];
-                if (part && !seen.has(part)) {
-                    seen.add(part);
-                    result.push(part);
-                }
-            }
-            continue;
-        }
-
-        const res = typeof cls === 'string' ? cls : transform(cls);
-        const str = typeof res === 'string' ? res : res.className;
-        if (!str) {
-            continue;
-        }
-
-        const parts = str.split(/\s+/);
-        for (let j = 0; j < parts.length; j++) {
-            const part = parts[j];
-            if (part && !seen.has(part)) {
-                seen.add(part);
-                result.push(part);
-            }
-        }
+    for (const cls of classes) {
+        appendUniqueClasses(resolveMergedInput(cls, depth), seen, result);
     }
 
     return result.join(' ');
+}
+
+/**
+ * Resolves one input using the duplicate-removing semantics of {@link szMergeJoin}.
+ * @param input - The class input to resolve.
+ * @param depth - The current recursion depth.
+ * @returns The resolved class string, or an empty string for a falsy input.
+ */
+function resolveMergedInput(input: SzInput, depth: number): string {
+    if (!input) {
+        return '';
+    }
+    if (typeof input === 'string') {
+        return input;
+    }
+    if (Array.isArray(input)) {
+        return szMergeJoin(input, depth + 1);
+    }
+    return transform(input).className;
+}
+
+/**
+ * Adds the unseen whitespace-delimited classes from one resolved input.
+ * @param value - The resolved class string to tokenize.
+ * @param seen - Class names already added to the result.
+ * @param result - The ordered output class list.
+ */
+function appendUniqueClasses(value: string, seen: Set<string>, result: string[]): void {
+    for (const className of value.split(/\s+/)) {
+        if (className && !seen.has(className)) {
+            seen.add(className);
+            result.push(className);
+        }
+    }
 }
 
 /**
