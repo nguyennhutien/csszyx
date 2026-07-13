@@ -11,19 +11,24 @@ set -euo pipefail
 
 echo "[setup] Running workspace setup..."
 
-# Install mise-managed tools per .mise.toml (node, pnpm, rust, Claude Code,
-# Codex CLI, and cocogitto).
+# Install project tools for every contributor. The private personal profile sets
+# CSSZYX_PERSONAL_DEVCONTAINER=1 and additionally installs the AI CLIs declared
+# in .mise.toml; the public profile must not provision user-specific tooling.
 # Trust the workspace config first: a freshly-created container has an empty
 # mise trust store, and mise refuses to read an untrusted .mise.toml, which
 # would abort this script under `set -e`.
 mise trust /workspaces/csszyx/.mise.toml
-mise install
+if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
+    mise install
+else
+    mise install node pnpm rust cargo:cocogitto
+fi
 
-# Wire the claude native binary (mise's npm backend uses --ignore-scripts, so the
-# launcher placeholder is never replaced) and establish the host<->container
-# memory sync. Both live in one idempotent, race-safe helper — also called from
-# postStart and the rc self-heal guard — so there is a single source of truth.
-bash /workspaces/csszyx/.devcontainer/ensure-claude-sync.sh || true
+if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
+    # Wire the Claude native binary and establish host/container memory sync
+    # only when the private profile has explicitly mounted that host state.
+    bash /workspaces/csszyx/.devcontainer/ensure-claude-sync.sh || true
+fi
 
 # Cocogitto validates Conventional Commit messages. It is baked into new
 # devcontainer images, but install it here as a recovery path for existing
@@ -31,20 +36,6 @@ bash /workspaces/csszyx/.devcontainer/ensure-claude-sync.sh || true
 if ! command -v cog >/dev/null 2>&1; then
     cargo install cocogitto --locked --version 7.0.0
 fi
-
-# Symlink the Claude project dir so its history works under both
-# /Users/.../csszyx (host paths) and /workspaces/csszyx (container paths).
-# A pre-existing REAL dir (left over from before this aliasing) must be
-# folded into the host-keyed dir and removed first, otherwise `ln -sfn`
-# nests the link inside it instead of replacing it.
-host_proj=/root/.claude/projects/-Users-tiennguyen-Projects-csszyx
-cont_proj=/root/.claude/projects/-workspaces-csszyx
-mkdir -p "$host_proj"
-if [ -d "$cont_proj" ] && [ ! -L "$cont_proj" ]; then
-    cp -an "$cont_proj/." "$host_proj/" 2>/dev/null || true
-    rm -rf "$cont_proj"
-fi
-ln -sfn "$host_proj" "$cont_proj"
 
 # Workspace deps. CI=true to skip pnpm's interactive prompts in the
 # post-create environment (no TTY).

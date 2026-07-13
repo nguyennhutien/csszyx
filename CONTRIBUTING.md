@@ -139,11 +139,17 @@ rules.
 
 ## Devcontainer security envelope
 
-The repo ships a devcontainer whose risk model assumes a **standard
+The repository ships a public `CSSzyx Public` devcontainer profile containing
+only the project toolchain. It does not mount host AI configuration, credential
+stores, SSH agents, or private dotfiles. Maintainers may generate a separate
+gitignored `.devcontainer/personal/` profile from their private machine setup;
+that profile is intentionally not part of the public repository.
+
+The devcontainer risk model assumes a **standard
 devcontainer runtime** (VS Code Dev Containers, GitHub Codespaces, Docker
 Desktop): `runArgs` capabilities are honored, the Dockerfile's firewall
 tooling is present, and `init-firewall.sh` enforces an outbound network
-allowlist for AI tool sessions.
+allowlist for development processes.
 
 Some runtimes silently strip those primitives. A post-start check
 (`.devcontainer/security-envelope-check.sh`) probes the live container and

@@ -42,15 +42,28 @@ ensure_activation() {
 ensure_activation /root/.bashrc bash
 ensure_activation /root/.zshrc zsh
 
-# Layer 2: mise-managed tools (node, pnpm, rust, AI CLIs per .mise.toml).
+# Layer 2: mise-managed tools. Public containers repair project tools only;
+# private personal containers opt into the AI CLI entries from .mise.toml.
 # `mise install` is idempotent and fast when everything is already present.
+REQUIRED_MISE_TOOLS=(node pnpm rust cargo:cocogitto)
+if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
+    REQUIRED_MISE_TOOLS+=(npm:@anthropic-ai/claude-code npm:@openai/codex)
+fi
+
 MISE_LIST_JSON="$(mise list --json 2>/dev/null || printf '{}')"
-if ! jq -e '
-    any(."npm:@anthropic-ai/claude-code"[]?; .installed == true and .active == true)
-    and any(."npm:@openai/codex"[]?; .installed == true and .active == true)
-' <<< "$MISE_LIST_JSON" >/dev/null; then
+MISE_TOOLS_COMPLETE=1
+for tool in "${REQUIRED_MISE_TOOLS[@]}"; do
+    if ! jq -e --arg tool "$tool" \
+        'any(.[$tool][]?; .installed == true and .active == true)' \
+        <<< "$MISE_LIST_JSON" >/dev/null; then
+        MISE_TOOLS_COMPLETE=0
+        break
+    fi
+done
+
+if [ "$MISE_TOOLS_COMPLETE" -ne 1 ]; then
     echo "[health] WARN: mise tools incomplete — running 'mise install'..."
-    if mise install; then
+    if mise install "${REQUIRED_MISE_TOOLS[@]}"; then
         REPAIRED+=("mise-tools")
     else
         echo "[health] ERROR: 'mise install' failed."
@@ -59,7 +72,11 @@ if ! jq -e '
 fi
 
 # Layer 3: verify each runtime tool actually resolves on PATH.
-for tool in node pnpm cargo wasm-pack claude codex; do
+RUNTIME_TOOLS=(node pnpm cargo wasm-pack cog)
+if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
+    RUNTIME_TOOLS+=(claude codex)
+fi
+for tool in "${RUNTIME_TOOLS[@]}"; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         MISSING+=("$tool")
     fi
