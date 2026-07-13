@@ -27,6 +27,20 @@ export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export * from './transform-core.js';
 
 /**
+ * Return JSX attributes without one previously captured attribute node.
+ *
+ * @param attributes Opening-element attributes.
+ * @param target Attribute node to remove.
+ * @returns Attributes excluding the target node.
+ */
+function withoutJSXAttribute(
+    attributes: Array<t.JSXAttribute | t.JSXSpreadAttribute>,
+    target: t.JSXAttribute,
+): Array<t.JSXAttribute | t.JSXSpreadAttribute> {
+    return attributes.filter(attribute => attribute !== target);
+}
+
+/**
  * Options for {@link transformSourceCode}.
  */
 export interface TransformSourceCodeOptions {
@@ -485,10 +499,10 @@ export function transformSourceCode(
                                     existingClassNameNode &&
                                     path.parentPath?.isJSXOpeningElement()
                                 ) {
-                                    path.parentPath.node.attributes =
-                                        path.parentPath.node.attributes.filter(
-                                            a => a !== existingClassNameNode,
-                                        );
+                                    path.parentPath.node.attributes = withoutJSXAttribute(
+                                        path.parentPath.node.attributes,
+                                        existingClassNameNode,
+                                    );
                                     existingClassNameNode = null;
                                 }
 
@@ -524,10 +538,10 @@ export function transformSourceCode(
                                 }
 
                                 if (existingStyleNode && existingStyleExpr) {
-                                    path.parentPath.node.attributes =
-                                        path.parentPath.node.attributes.filter(
-                                            a => a !== existingStyleNode,
-                                        );
+                                    path.parentPath.node.attributes = withoutJSXAttribute(
+                                        path.parentPath.node.attributes,
+                                        existingStyleNode,
+                                    );
                                     existingStyleNode = null; // Prevent re-filtering
 
                                     if (t.isObjectExpression(existingStyleExpr)) {
