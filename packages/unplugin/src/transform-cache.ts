@@ -4,10 +4,11 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-// 9: the compiled sz-array lane emits `_szcn(` (unmemoized) instead of
-// `szcn(` and injects the matching import — cached code from schema 8 would
-// mix the old call shape into a new build.
-const CACHE_SCHEMA_VERSION = 9;
+// 10: transform results carry `usesSpacingVar`/`usesUnitVar` — a schema-9
+// entry deserialized into the new shape would resurrect those flags as
+// `undefined`, silently skipping `__szSpacingVar`/`__szUnitVar` import
+// injection for code that calls them.
+const CACHE_SCHEMA_VERSION = 10;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -24,6 +25,8 @@ interface SerializedTransformResult {
     usesSzcn: boolean;
     usesSzPart: boolean;
     usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
     classes: string[];
     rawClassNames: string[];
     diagnostics: string[];
@@ -318,6 +321,8 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
         usesColorVar: result.usesColorVar,
+        usesSpacingVar: result.usesSpacingVar,
+        usesUnitVar: result.usesUnitVar,
         classes: [...result.classes],
         rawClassNames: [...result.rawClassNames],
         diagnostics: [...result.diagnostics],
@@ -341,6 +346,8 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
         usesColorVar: result.usesColorVar,
+        usesSpacingVar: result.usesSpacingVar,
+        usesUnitVar: result.usesUnitVar,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         diagnostics: [...result.diagnostics],

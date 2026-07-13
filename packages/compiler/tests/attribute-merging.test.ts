@@ -57,10 +57,11 @@ describe('Attribute Merging (transformSourceCode)', () => {
             const source = 'const App = () => <div sz={{ p: padVal }} />';
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
-            // Spacing values are wrapped in calc() for Tailwind v4 spacing scale
+            // Spacing values resolve through the runtime helper (numbers get the
+            // Tailwind v4 spacing scale, strings resolve as the static path would).
             expect(result.code).toContain('style={{');
             expect(result.code).toContain('"--_sz-p"');
-            expect(result.code).toContain('var(--spacing)');
+            expect(result.code).toContain('__szSpacingVar(padVal, "p")');
         });
 
         it('should merge CSS variables into existing style object natively', () => {

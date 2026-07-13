@@ -260,7 +260,7 @@ describe('sz partial (CSS variable) path', () => {
         const jsx = 'const A = ({ v }) => <div sz={{ p: v }} />;';
         const r = run(jsx);
         expect(r.code).toContain('p-(--_sz-p)');
-        expect(r.code).toContain('var(--spacing)');
+        expect(r.code).toContain('__szSpacingVar(v, "p")');
     });
 
     it('compiles a static+dynamic-branch ternary prop with no style props', () => {
@@ -697,13 +697,13 @@ describe('partial color-object and style-value categories', () => {
     it('emits ANGLE-category style value (deg) for a dynamic rotate', () => {
         const jsx = 'const A = ({ v }) => <div sz={{ rotate: v }} />;';
         const r = run(jsx);
-        expect(r.code).toContain('`${v}deg`');
+        expect(r.code).toContain('__szUnitVar(v, "deg", "rotate")');
     });
 
     it('emits DURATION-category style value (ms) for a dynamic duration', () => {
         const jsx = 'const A = ({ v }) => <div sz={{ duration: v }} />;';
         const r = run(jsx);
-        expect(r.code).toContain('`${v}ms`');
+        expect(r.code).toContain('__szUnitVar(v, "ms", "duration")');
     });
 
     it('emits a bare unitless style value for a dynamic opacity', () => {

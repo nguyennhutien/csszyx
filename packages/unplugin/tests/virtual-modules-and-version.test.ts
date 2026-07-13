@@ -77,9 +77,18 @@ describe('injectNextRuntimeImports remaining helpers', () => {
             usesRuntime: true,
             usesSzPart: true,
             usesColorVar: true,
+            usesSpacingVar: true,
+            usesUnitVar: true,
         });
-        expect(result.injected).toEqual(['_szPart', '__szColorVar']);
-        expect(result.code).toContain("import { _szPart, __szColorVar } from '@csszyx/runtime';");
+        expect(result.injected).toEqual([
+            '_szPart',
+            '__szColorVar',
+            '__szSpacingVar',
+            '__szUnitVar',
+        ]);
+        expect(result.code).toContain(
+            "import { _szPart, __szColorVar, __szSpacingVar, __szUnitVar } from '@csszyx/runtime';",
+        );
     });
 
     it('returns the code untouched when every helper is already imported', async () => {

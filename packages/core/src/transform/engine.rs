@@ -188,6 +188,8 @@ fn transform_fast_static_ir_with_options(
             uses_szcn: false,
             uses_sz_part: false,
             uses_color_var: false,
+            uses_spacing_var: false,
+            uses_unit_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings {
@@ -247,6 +249,7 @@ fn transform_static_classes_with_options(
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
+    diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     diagnostics.extend(unknown_property_diagnostics(
         file,
@@ -328,6 +331,21 @@ fn transform_static_classes_with_options(
                 .iter()
                 .any(|prop| prop.category == DynamicCssVarCategory::Color)
         });
+    let uses_spacing_var = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.dynamic_css_vars
+                .iter()
+                .any(|prop| prop.category == DynamicCssVarCategory::Spacing)
+        });
+    let uses_unit_var = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.dynamic_css_vars.iter().any(|prop| {
+                matches!(
+                    prop.category,
+                    DynamicCssVarCategory::Angle | DynamicCssVarCategory::Duration
+                )
+            })
+        });
 
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
@@ -358,6 +376,8 @@ fn transform_static_classes_with_options(
             uses_szcn,
             uses_sz_part,
             uses_color_var,
+            uses_spacing_var,
+            uses_unit_var,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
             timings: TransformTimings {
@@ -511,6 +531,27 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
     filename.to_string()
 }
 
+/// Dev diagnostic for an sz ARRAY element that is an object literal carrying a
+/// runtime value: the whole element degrades to `_szPart` at runtime instead
+/// of compiling statically. Only object literals warn — identifiers, calls,
+/// and member expressions are legitimate forwarded slots. The wording and the
+/// 1-based line:column position match the oxc/Babel engines byte-for-byte.
+fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.sz_attributes
+        .iter()
+        .flat_map(|attr| &attr.array_parts)
+        .filter(|part| part.dynamic_object_literal)
+        .filter_map(|part| {
+            let span = part.dynamic_span?;
+            let (line, column) = offset_to_line_column(&file.source, span.start);
+            Some(format!(
+                "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: lift the condition to the element level (cond ? {{ a }} : {{ b }}) or move runtime values to dynamic().",
+                column + 1
+            ))
+        })
+        .collect()
+}
+
 fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.unsupported_recovery_attribute_spans
         .iter()
@@ -539,6 +580,8 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_szcn: false,
             uses_sz_part: false,
             uses_color_var: false,
+            uses_spacing_var: false,
+            uses_unit_var: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings::default(),

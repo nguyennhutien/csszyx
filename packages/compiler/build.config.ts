@@ -5,6 +5,7 @@ export default defineBuildConfig({
     entries: [
         './src/index',
         './src/color-var',
+        './src/spacing-var',
         // Browser-pure transform (no Babel deps). Tree-shakes cleanly
         // for browser bundles via @csszyx/dynamic + @csszyx/runtime.
         './src/transform-core',

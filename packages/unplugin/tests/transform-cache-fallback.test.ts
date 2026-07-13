@@ -120,6 +120,8 @@ describe('transform cache fallback safety', () => {
                 usesRuntime: false,
                 usesMerge: false,
                 usesColorVar: false,
+                usesSpacingVar: false,
+                usesUnitVar: false,
                 classes: new Set(['p-4']),
                 rawClassNames: new Set(),
                 diagnostics: [],

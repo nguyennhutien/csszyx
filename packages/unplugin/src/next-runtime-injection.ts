@@ -5,7 +5,14 @@ const DIRECTIVE_PROLOGUE_PREFIX_RE =
     /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
 
 /** Runtime helpers emitted by csszyx compiler transforms. */
-export type NextRuntimeHelper = '_sz' | '_szMerge' | '_szcn' | '_szPart' | '__szColorVar';
+export type NextRuntimeHelper =
+    | '_sz'
+    | '_szMerge'
+    | '_szcn'
+    | '_szPart'
+    | '__szColorVar'
+    | '__szSpacingVar'
+    | '__szUnitVar';
 
 /** Runtime helper usage flags from a compiler transform result. */
 export interface NextRuntimeImportUsage {
@@ -14,6 +21,8 @@ export interface NextRuntimeImportUsage {
     usesSzcn?: boolean;
     usesSzPart?: boolean;
     usesColorVar?: boolean;
+    usesSpacingVar?: boolean;
+    usesUnitVar?: boolean;
 }
 
 /** Result of runtime helper import injection. */
@@ -75,6 +84,12 @@ function runtimeHelpersFromUsage(usage: NextRuntimeImportUsage): NextRuntimeHelp
     }
     if (usage.usesColorVar) {
         helpers.push('__szColorVar');
+    }
+    if (usage.usesSpacingVar) {
+        helpers.push('__szSpacingVar');
+    }
+    if (usage.usesUnitVar) {
+        helpers.push('__szUnitVar');
     }
     return helpers;
 }

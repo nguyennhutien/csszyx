@@ -236,6 +236,12 @@ pub struct StaticArrayPartIr {
     /// stays element order — mangle IDs are assigned in discovery order.
     #[serde(default)]
     pub candidates: Vec<String>,
+    /// Whether the dynamic item is an object literal that could not compile
+    /// statically and degraded to the runtime `_szPart` lane. Drives a build
+    /// diagnostic — unlike identifiers/calls/member expressions, which are
+    /// legitimate forwarded slots and stay silent. Defaults false for older IR.
+    #[serde(default)]
+    pub dynamic_object_literal: bool,
 }
 
 /// Class/className attribute.
@@ -283,13 +289,15 @@ pub struct DynamicCssVarIr {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DynamicCssVarCategory {
-    /// `calc(value * var(--spacing))`.
+    /// `__szSpacingVar(value, key)` — the runtime helper resolves strings
+    /// (`'full'`, `'100%'`, `'3/12'`, `'screen'`) as well as numbers, and the
+    /// output is axis-dependent, so the original sz key rides along.
     Spacing,
     /// `__szColorVar(value)`.
     Color,
-    /// `${value}deg`.
+    /// `__szUnitVar(value, "deg", key)`.
     Angle,
-    /// `${value}ms`.
+    /// `__szUnitVar(value, "ms", key)`.
     Duration,
     /// Direct stringification.
     Passthrough,

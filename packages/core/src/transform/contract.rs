@@ -87,6 +87,12 @@ pub struct TransformMetadata {
     pub uses_sz_part: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
+    /// Whether the result imports the runtime spacing-var helper.
+    #[serde(default)]
+    pub uses_spacing_var: bool,
+    /// Whether the result imports the runtime unit-var helper (angle/duration).
+    #[serde(default)]
+    pub uses_unit_var: bool,
     /// Producer identity for cache safety.
     pub producer: TransformProducer,
     /// Whether native AST budget protection fired.

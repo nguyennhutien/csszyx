@@ -46,6 +46,8 @@ function emptyBatchResult(): {
     usesRuntime: boolean;
     usesMerge: boolean;
     usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
     classes: Set<string>;
     rawClassNames: Set<string>;
     diagnostics: string[];
@@ -58,6 +60,8 @@ function emptyBatchResult(): {
         usesRuntime: false,
         usesMerge: false,
         usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
         classes: new Set(),
         rawClassNames: new Set(),
         diagnostics: [],
