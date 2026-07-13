@@ -17,8 +17,10 @@ function hashString(value: string): string {
     // Simulate complex hashing logic (like SHA-256) in pure JS
     // without using native C++ modules like node:crypto.
     let h = 0;
-    for (let i = 0; i < value.length; i++) {
-        h = (Math.imul(31, h) + value.charCodeAt(i)) | 0;
+    for (const character of value) {
+        const codePoint = character.codePointAt(0) ?? 0;
+        // The outer imul coerces the accumulated sum back to signed int32.
+        h = Math.imul(Math.imul(31, h) + codePoint, 1);
     }
     return h.toString(16).padStart(16, '0');
 }
