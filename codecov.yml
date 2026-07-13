@@ -40,6 +40,69 @@ flags:
       - packages/core/src/
     carryforward: true
 
+# Per-package components. Codecov merges every uploaded report server-side
+# (vitest lcov + the ts-plugin c8 lcov + cargo-llvm-cov), THEN filters by
+# these paths — so each package is scored on the union of all reports. This
+# is the per-package gate the local vitest ratchet cannot be: vitest never
+# runs ts-plugin's node-script suites, so its view of that package is ~0%,
+# while the component below sees the real c8 number.
+#
+# default_rules gives every component a no-regression ratchet against its
+# own base-commit value (target auto). A fixed target would gate on
+# Codecov's line metric — which counts branch-partial lines as uncovered
+# and so sits a few points below the vitest statement numbers — making any
+# hand-picked constant either slack or flaky; the ratchet is exact instead.
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        threshold: 1%
+        informational: true
+  individual_components:
+    - component_id: pkg_cli
+      name: cli
+      paths: [packages/cli/src/**]
+    - component_id: pkg_compiler
+      name: compiler
+      paths: [packages/compiler/src/**]
+    - component_id: pkg_core_rust
+      name: core (rust)
+      paths: [packages/core/src/**]
+    - component_id: pkg_csszyx
+      name: csszyx
+      paths: [packages/csszyx/src/**]
+    - component_id: pkg_dynamic
+      name: dynamic
+      paths: [packages/dynamic/src/**]
+    - component_id: pkg_mcp_server
+      name: mcp-server
+      paths: [packages/mcp-server/src/**]
+    - component_id: pkg_runtime
+      name: runtime
+      paths: [packages/runtime/src/**]
+    - component_id: pkg_svelte_adapter
+      name: svelte-adapter
+      paths: [packages/svelte-adapter/src/**]
+    - component_id: pkg_tooling_metadata
+      name: tooling-metadata
+      paths: [packages/tooling-metadata/src/**]
+    - component_id: pkg_ts_plugin
+      name: ts-plugin
+      paths: [packages/ts-plugin/src/**]
+    - component_id: pkg_unplugin
+      name: unplugin
+      paths: [packages/unplugin/src/**]
+    - component_id: pkg_vars
+      name: vars
+      paths: [packages/vars/src/**]
+    - component_id: pkg_vscode
+      name: vscode
+      paths: [packages/vscode/src/**]
+    - component_id: pkg_vue_adapter
+      name: vue-adapter
+      paths: [packages/vue-adapter/src/**]
+
 comment:
-  layout: "header, flags, files"
+  layout: "header, flags, components, files"
   require_changes: false
