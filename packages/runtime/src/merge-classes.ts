@@ -124,6 +124,36 @@ const SHORTHAND_COVERAGE: Record<string, readonly string[]> = {
 };
 
 /**
+ * Classify a normalized token after its utility prefix has matched.
+ *
+ * @param norm Normalized utility token.
+ * @param variant Variant prefix removed from the token.
+ * @param prefix Matched utility prefix.
+ * @returns Conflict classification or null when the value is ambiguous.
+ */
+function classifyMatchedPrefix(
+    norm: string,
+    variant: string,
+    prefix: string,
+): { key: string; covers: string[] } | null {
+    if (AMBIGUOUS_PREFIXES.has(prefix)) {
+        const value = norm === prefix ? '' : norm.slice(prefix.length + 1);
+        const group = classifyAmbiguousValue(prefix, value);
+        if (group === null) {
+            return null;
+        }
+        const key = `${variant} ${group}`;
+        return { key, covers: [key] };
+    }
+
+    const coveredPrefixes = SHORTHAND_COVERAGE[prefix] ?? [prefix];
+    return {
+        key: `${variant} ${prefix}`,
+        covers: coveredPrefixes.map(covered => `${variant} ${covered}`),
+    };
+}
+
+/**
  * Classify a token for merging: its conflict `key` plus the `covers` keys it
  * removes when it appears (the key itself, and — for a spacing shorthand — the
  * longhand keys it subsumes). Returns `null` when the token can't be confidently
@@ -157,25 +187,7 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
     for (const [prefix] of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
-            if (AMBIGUOUS_PREFIXES.has(prefix)) {
-                // Value-set classification: same property group → last wins
-                // (`text-base` + `text-sm` → `text-sm`); different property →
-                // co-exist; unclassifiable value → keep-both as before.
-                const value = norm === prefix ? '' : norm.slice(prefix.length + 1);
-                const group = classifyAmbiguousValue(prefix, value);
-                if (group === null) {
-                    return null;
-                }
-                const key = `${variant} ${group}`;
-                return { key, covers: [key] };
-            }
-            // Key = variant + utility prefix. The space separator can't appear in
-            // a class token, so distinct (variant, prefix) pairs never collide.
-            const coveredPrefixes = SHORTHAND_COVERAGE[prefix] ?? [prefix];
-            return {
-                key: `${variant} ${prefix}`,
-                covers: coveredPrefixes.map(p => `${variant} ${p}`),
-            };
+            return classifyMatchedPrefix(norm, variant, prefix);
         }
     }
     return null;

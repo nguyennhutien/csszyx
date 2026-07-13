@@ -208,6 +208,55 @@ export interface GlobalVarMangleConfig {
 }
 
 /**
+ * Validate the optional automatic custom-property prefix.
+ *
+ * @param config User-provided alias configuration.
+ * @returns Validation message or null when valid.
+ */
+function validateAutoPrefix(config: GlobalVarMangleConfig): string | null {
+    const { autoPrefix } = config;
+    if (autoPrefix === undefined) {
+        return null;
+    }
+    if (!isValidCustomPropertyPrefix(autoPrefix)) {
+        return 'production.mangleGlobalVars.autoPrefix must be empty or start with "--".';
+    }
+    if (autoPrefix !== '' && isTailwindReservedCustomProperty(autoPrefix)) {
+        return `production.mangleGlobalVars.autoPrefix cannot target Tailwind reserved namespace "${autoPrefix}".`;
+    }
+    if (
+        autoPrefix !== '' &&
+        isCsszyxGlobalAliasCustomProperty(autoPrefix, resolveGlobalVarAliasPrefix(config))
+    ) {
+        return `production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "${resolveGlobalVarAliasPrefix(config)}*".`;
+    }
+    return null;
+}
+
+/**
+ * Validate the optional generated-alias prefix.
+ *
+ * @param config User-provided alias configuration.
+ * @returns Validation message or null when valid.
+ */
+function validateAliasPrefix(config: GlobalVarMangleConfig): string | null {
+    const { aliasPrefix, autoPrefix } = config;
+    if (aliasPrefix === undefined) {
+        return null;
+    }
+    if (aliasPrefix === '' || !isValidCustomPropertyPrefix(aliasPrefix)) {
+        return 'production.mangleGlobalVars.aliasPrefix must be non-empty and start with "--".';
+    }
+    if (isTailwindReservedCustomProperty(aliasPrefix)) {
+        return `production.mangleGlobalVars.aliasPrefix cannot target Tailwind reserved namespace "${aliasPrefix}".`;
+    }
+    if (autoPrefix !== undefined && autoPrefix !== '' && prefixesOverlap(autoPrefix, aliasPrefix)) {
+        return `production.mangleGlobalVars.aliasPrefix "${aliasPrefix}" must not overlap autoPrefix "${autoPrefix}".`;
+    }
+    return null;
+}
+
+/**
  * Validates the Phase H global variable alias config shape.
  *
  * @param config User-provided global variable alias config.
@@ -227,48 +276,11 @@ export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | un
             "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
         );
     }
-    if (config.autoPrefix !== undefined && !isValidCustomPropertyPrefix(config.autoPrefix)) {
-        errors.push('production.mangleGlobalVars.autoPrefix must be empty or start with "--".');
-    } else if (
-        config.autoPrefix !== undefined &&
-        config.autoPrefix !== '' &&
-        isTailwindReservedCustomProperty(config.autoPrefix)
-    ) {
-        errors.push(
-            `production.mangleGlobalVars.autoPrefix cannot target Tailwind reserved namespace "${config.autoPrefix}".`,
-        );
-    } else if (
-        config.autoPrefix !== undefined &&
-        config.autoPrefix !== '' &&
-        isCsszyxGlobalAliasCustomProperty(config.autoPrefix, resolveGlobalVarAliasPrefix(config))
-    ) {
-        errors.push(
-            `production.mangleGlobalVars.autoPrefix cannot target csszyx reserved namespace "${resolveGlobalVarAliasPrefix(config)}*".`,
-        );
-    }
-    if (
-        config.aliasPrefix !== undefined &&
-        (config.aliasPrefix === '' || !isValidCustomPropertyPrefix(config.aliasPrefix))
-    ) {
-        errors.push(
-            'production.mangleGlobalVars.aliasPrefix must be non-empty and start with "--".',
-        );
-    } else if (
-        config.aliasPrefix !== undefined &&
-        isTailwindReservedCustomProperty(config.aliasPrefix)
-    ) {
-        errors.push(
-            `production.mangleGlobalVars.aliasPrefix cannot target Tailwind reserved namespace "${config.aliasPrefix}".`,
-        );
-    } else if (
-        config.autoPrefix !== undefined &&
-        config.autoPrefix !== '' &&
-        config.aliasPrefix !== undefined &&
-        prefixesOverlap(config.autoPrefix, config.aliasPrefix)
-    ) {
-        errors.push(
-            `production.mangleGlobalVars.aliasPrefix "${config.aliasPrefix}" must not overlap autoPrefix "${config.autoPrefix}".`,
-        );
+    const prefixErrors = [validateAutoPrefix(config), validateAliasPrefix(config)];
+    for (const error of prefixErrors) {
+        if (error) {
+            errors.push(error);
+        }
     }
 
     validateCustomPropertyList(

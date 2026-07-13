@@ -1632,6 +1632,29 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
 }
 
 /**
+ * Transform one supported `not` variant entry.
+ *
+ * @param key Variant or nested condition name.
+ * @param value Variant body.
+ * @param prefix Current class-name prefix.
+ * @returns Generated class names for the entry.
+ */
+function transformNotEntry(key: string, value: SzValue, prefix: string): string[] {
+    if (key === 'supports' && typeof value === 'object') {
+        return Object.entries(value as SzObject).flatMap(([condition, condValue]) => {
+            const result = transform(
+                condValue as SzObject,
+                `${prefix}not-supports-[${condition}]:`,
+            );
+            return result.className ? [result.className] : [];
+        });
+    }
+
+    const result = transform(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
+    return result.className ? [result.className] : [];
+}
+
+/**
  * Handles not variant with special syntax
  * { not: { hover: { opacity: 75 }}} → not-hover:opacity-75
  * { not: { supports: { "display:grid": { block: true }}}} → not-supports-[display:grid]:block
@@ -1646,25 +1669,7 @@ function handleNot(notObj: SzObject, prefix: string): string[] {
         if (value === null || value === undefined || value === false) {
             continue;
         }
-
-        // Handle nested supports/has
-        if (key === 'supports' && typeof value === 'object') {
-            for (const [condition, condValue] of Object.entries(value as SzObject)) {
-                const variantPrefix = `${prefix}not-supports-[${condition}]:`;
-                const result = transform(condValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-        } else {
-            // Simple not variant
-            const mappedVariant = getVariantPrefix(key);
-            const variantPrefix = `${prefix}not-${mappedVariant}:`;
-            const result = transform(value as SzObject, variantPrefix);
-            if (result.className) {
-                classes.push(result.className);
-            }
-        }
+        classes.push(...transformNotEntry(key, value, prefix));
     }
 
     return classes;
