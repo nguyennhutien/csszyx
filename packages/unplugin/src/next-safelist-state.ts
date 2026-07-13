@@ -1,5 +1,5 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -331,9 +331,7 @@ export function atomicWriteFileSync(
     const dir = path.dirname(file);
     const tmp = path.join(
         dir,
-        `.tmp-${path.basename(file)}-${process.pid}-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2)}`,
+        `.tmp-${path.basename(file)}-${process.pid}-${Date.now()}-${randomUUID()}`,
     );
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(tmp, content, 'utf8');
@@ -509,11 +507,7 @@ function createLockMetadata(options: NextSafelistStateLockOptions): NextSafelist
     return {
         version: 1,
         pid,
-        token:
-            options.token ??
-            createHash('sha256')
-                .update(`${pid}\0${now}\0${Math.random().toString(36)}`)
-                .digest('hex'),
+        token: options.token ?? randomUUID(),
         hostname: hostname(),
         root: path.resolve(options.root ?? process.cwd()),
         mode: options.mode ?? 'development',

@@ -1067,7 +1067,7 @@ export interface TypographyProps {
     content?: 'none' | (string & {});
 
     /** @see https://tailwindcss.com/docs/font-feature-settings */
-    fontFeatures?: string & {};
+    fontFeatures?: string;
 
     /** @see https://tailwindcss.com/docs/forced-color-adjust */
     forcedColorAdjust?: 'auto' | 'none';
@@ -1479,7 +1479,7 @@ export interface TransformProps {
 
     /** @see https://tailwindcss.com/docs/perspective */
     perspective?: 'none' | (string & {});
-    perspectiveOrigin?: string & {};
+    perspectiveOrigin?: string;
 
     /** @see https://tailwindcss.com/docs/backface-visibility */
     backface?: 'visible' | 'hidden';
@@ -1726,7 +1726,7 @@ export interface MaskProps {
     /** CSS mask-size */
     maskSize?: 'auto' | 'cover' | 'contain' | (string & {});
     /** CSS mask-position */
-    maskPos?: string & {};
+    maskPos?: string;
     /** CSS mask-repeat */
     maskRepeat?: 'repeat' | 'no-repeat' | 'repeat-x' | 'repeat-y' | 'round' | 'space';
     /** CSS mask-type (shape-rendering) */

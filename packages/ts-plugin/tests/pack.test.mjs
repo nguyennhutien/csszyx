@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'n
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -17,6 +18,7 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const version = JSON.parse(readFileSync(join(packageDirectory, 'package.json'), 'utf8')).version;
 const typescriptPackage = resolve(packageDirectory, 'node_modules/typescript');
 
+test('packed plugin remains self-contained and loads in tsserver', async () => {
 // tooling-metadata is the bundle INPUT (a private workspace package); build it,
 // then build the plugin so esbuild inlines its data into dist/index.js.
 execFileSync(pnpm, ['--filter', '@csszyx/tooling-metadata', 'build'], {
@@ -135,3 +137,4 @@ try {
 }
 
 console.log('packed self-contained plugin (inlined metadata, no runtime deps) check passed');
+});

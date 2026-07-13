@@ -1,10 +1,12 @@
 import assert from 'node:assert';
 import { createRequire } from 'node:module';
+import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 const init = require('../dist/index.js');
 
+test('proxy fails open, rate limits failures, and recovers its circuit', () => {
 let programAttempts = 0;
 let disposeCalls = 0;
 let cancelled = false;
@@ -126,3 +128,4 @@ try {
 } finally {
     performance.now = realNow;
 }
+});

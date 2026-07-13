@@ -78,7 +78,14 @@ testCases.forEach(tc => {
     }
     const pass =
         actual === tc.expected ||
-        actual.split(' ').sort().join(' ') === tc.expected.split(' ').sort().join(' ');
+        actual
+            .split(' ')
+            .sort((a, b) => a.localeCompare(b))
+            .join(' ') ===
+            tc.expected
+                .split(' ')
+                .sort((a, b) => a.localeCompare(b))
+                .join(' ');
 
     if (pass) {
         console.log(`✅ ${tc.name}: Passed`);

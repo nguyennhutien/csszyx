@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
+import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -72,6 +73,7 @@ function measure(source) {
     };
 }
 
+test('completion latency remains bounded and cancellation-aware', () => {
 const small = measure(makeSource(1_000));
 const large = measure(makeSource(10_000));
 
@@ -124,3 +126,4 @@ assert.strictEqual(abortedEntries.length, 32, 'entry construction must stop at i
 console.log(
     `performance checks passed (sz p50 1k=${small.szP50.toFixed(3)}ms 10k=${large.szP50.toFixed(3)}ms, p99=${large.szP99.toFixed(3)}ms)`,
 );
+});

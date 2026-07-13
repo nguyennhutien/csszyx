@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
+import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const packageRequire = createRequire(import.meta.url);
@@ -81,4 +82,6 @@ const runServer = async (label, serverPath) => {
     }
 };
 
-for (const [label, serverPath] of servers) await runServer(label, serverPath);
+for (const [label, serverPath] of servers) {
+    test(`${label} tsserver loads the csszyx plugin`, () => runServer(label, serverPath));
+}

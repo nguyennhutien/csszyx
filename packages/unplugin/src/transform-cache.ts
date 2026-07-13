@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -217,10 +217,7 @@ export function writeTransformCache(
     const globalVarAliases = normalizeGlobalVarAliasEntries(input.globalVarAliases);
     const file = cacheEntryPath(cacheRoot, key);
     const dir = path.dirname(file);
-    const tmp = path.join(
-        dir,
-        `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
-    );
+    const tmp = path.join(dir, `.tmp-${process.pid}-${Date.now()}-${randomUUID()}.json`);
     const entry: TransformCacheEntry = {
         version: CACHE_SCHEMA_VERSION,
         pluginVersion: input.pluginVersion,
