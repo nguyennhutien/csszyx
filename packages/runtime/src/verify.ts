@@ -77,7 +77,7 @@ export function verifyRecoveryToken(
     manifest: RecoveryManifest,
 ): VerificationResult {
     // Get token from element
-    const token = element.getAttribute('data-sz-recovery-token');
+    const token = element.dataset.szRecoveryToken;
 
     if (!token) {
         return {
@@ -221,7 +221,7 @@ export function verifyAllTokens(
  * ```
  */
 export function hasRecoveryToken(element: HTMLElement): boolean {
-    return element.hasAttribute('data-sz-recovery-token');
+    return element.dataset.szRecoveryToken !== undefined;
 }
 
 /**

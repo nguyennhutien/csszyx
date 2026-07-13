@@ -195,10 +195,11 @@ function processElement(el: Element): void {
         return;
     }
 
-    if (el.hasAttribute('data-sz-processed')) {
+    const dataset = (el as HTMLElement).dataset;
+    if (dataset.szProcessed !== undefined) {
         return;
     }
-    el.setAttribute('data-sz-processed', '');
+    dataset.szProcessed = '';
 
     try {
         const parsed = parseSzAttribute(rawValue) as SzObject;
@@ -226,7 +227,7 @@ function processElement(el: Element): void {
     }
 
     el.removeAttribute('sz');
-    el.removeAttribute('data-sz-processed');
+    delete dataset.szProcessed;
 }
 
 /**
