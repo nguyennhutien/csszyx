@@ -282,47 +282,43 @@ function parseGroupPeerVariant(variant: string): string[] {
         keys.push(name);
     }
 
-    // Parse the state/selector part
-    if (rest.startsWith('[') && rest.endsWith(']')) {
-        // Arbitrary selector: group-[.is-published]
-        keys.push(rest.slice(1, -1));
-    } else if (rest.startsWith('has-')) {
-        // has inside group: group-has-[a]
-        const hasRest = rest.slice(4);
-        if (hasRest.startsWith('[') && hasRest.endsWith(']')) {
-            keys.push('has');
-            keys.push(hasRest.slice(1, -1));
-        } else {
-            keys.push('has');
-            keys.push(hasRest);
-        }
-    } else if (rest.startsWith('data-')) {
-        // data attribute inside group: group-data-[active], group-data-active,
-        // group-data-[active='true'], group-data-(--state)
-        const dataRest = rest.slice(5);
-        keys.push('data');
-        if (dataRest.startsWith('[') && dataRest.endsWith(']')) {
-            keys.push(dataRest.slice(1, -1)); // strip brackets
-        } else if (dataRest.startsWith('(') && dataRest.endsWith(')')) {
-            keys.push(dataRest.slice(1, -1)); // strip parens → CSS var sugar
-        } else {
-            keys.push(dataRest); // bare shorthand: data-active
-        }
-    } else if (rest.startsWith('aria-')) {
-        // aria state inside group: group-aria-checked, group-aria-[current=page]
-        const ariaRest = rest.slice(5);
-        keys.push('aria');
-        if (ariaRest.startsWith('[') && ariaRest.endsWith(']')) {
-            keys.push(ariaRest.slice(1, -1));
-        } else {
-            keys.push(ariaRest);
-        }
-    } else {
-        // Simple state: hover, checked, etc.
-        keys.push(normalizeVariantKey(rest));
-    }
+    keys.push(...parseGroupPeerState(rest));
 
     return keys;
+}
+
+/**
+ * Parse the state suffix of a group or peer variant.
+ * @param state - Variant state suffix.
+ * @returns Nested sz keys for the state.
+ */
+function parseGroupPeerState(state: string): string[] {
+    if (isWrappedVariantState(state)) return [state.slice(1, -1)];
+    if (state.startsWith('has-')) return ['has', unwrapVariantState(state.slice(4))];
+    if (state.startsWith('data-')) return ['data', unwrapVariantState(state.slice(5))];
+    if (state.startsWith('aria-')) return ['aria', unwrapVariantState(state.slice(5))];
+    return [normalizeVariantKey(state)];
+}
+
+/**
+ * Whether a variant state uses arbitrary brackets or CSS-variable parentheses.
+ * @param state - Variant state to inspect.
+ * @returns Whether the state has a supported wrapper.
+ */
+function isWrappedVariantState(state: string): boolean {
+    return (
+        (state.startsWith('[') && state.endsWith(']')) ||
+        (state.startsWith('(') && state.endsWith(')'))
+    );
+}
+
+/**
+ * Remove supported state wrappers while preserving bare shorthand names.
+ * @param state - Variant state to unwrap.
+ * @returns Unwrapped or original state.
+ */
+function unwrapVariantState(state: string): string {
+    return isWrappedVariantState(state) ? state.slice(1, -1) : state;
 }
 
 /**

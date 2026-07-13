@@ -33,74 +33,10 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 
     printHeader('csszyx Doctor');
 
-    let issueCount = 0;
-
-    // Check 1: Configuration Health
-    printSection('📋 Configuration Health');
-    const hasConfig =
-        fs.existsSync(path.join(cwd, 'csszyx.config.ts')) ||
-        fs.existsSync(path.join(cwd, 'csszyx.config.js'));
-
-    if (hasConfig) {
-        printSuccess('csszyx configuration found');
-    } else {
-        printWarn('No csszyx.config found - using defaults');
-    }
-
-    // Check 2: Tailwind Installation
-    if (projectInfo.hasTailwind) {
-        printSuccess('Tailwind CSS installed');
-    } else {
-        printError('Tailwind CSS not found');
-        issueCount++;
-        if (options.verbose) {
-            console.log('  → Run: npm install -D tailwindcss');
-        }
-    }
-
-    // Check 3: Package Installation
-    printSection('📦 Package Versions');
-    try {
-        const pkgPath = path.join(cwd, 'package.json');
-        const pkg = fs.readJSONSync(pkgPath);
-        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-
-        if (deps.csszyx) {
-            printSuccess(`csszyx: ${deps.csszyx}`);
-        } else {
-            printError('csszyx package not installed');
-            issueCount++;
-        }
-    } catch {
-        printError('Failed to read package.json');
-        issueCount++;
-    }
-
-    // Check 4: Build Output (if dist exists)
-    printSection('🔨 Build Output');
-    const distDir = path.join(cwd, 'dist');
-    if (fs.existsSync(distDir)) {
-        const htmlFiles = fs
-            .readdirSync(distDir, { recursive: true })
-            .filter(f => String(f).endsWith('.html'));
-
-        if (htmlFiles.length > 0) {
-            printSuccess(`Found ${htmlFiles.length} HTML file(s)`);
-
-            // Check for checksum attribute
-            const htmlContent = fs.readFileSync(path.join(distDir, String(htmlFiles[0])), 'utf-8');
-            if (htmlContent.includes('data-sz-checksum')) {
-                printSuccess('Checksum injection working');
-            } else {
-                printWarn('Checksum not found in HTML');
-                if (options.verbose) {
-                    console.log('  → Enable injectChecksum in production config');
-                }
-            }
-        }
-    } else {
-        printWarn('No build output found - run build first');
-    }
+    checkConfiguration(cwd);
+    let issueCount = checkTailwind(projectInfo.hasTailwind, options.verbose);
+    issueCount += checkPackageInstallation(cwd);
+    checkBuildOutput(cwd, options.verbose);
 
     // Summary
     console.log();
@@ -109,4 +45,80 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
     } else {
         printWarn(`Found ${issueCount} issue(s)`);
     }
+}
+
+/**
+ * Report whether a csszyx configuration exists.
+ * @param cwd - Project directory.
+ */
+function checkConfiguration(cwd: string): void {
+    printSection('📋 Configuration Health');
+    const found = ['csszyx.config.ts', 'csszyx.config.js'].some(file =>
+        fs.existsSync(path.join(cwd, file)),
+    );
+    if (found) printSuccess('csszyx configuration found');
+    else printWarn('No csszyx.config found - using defaults');
+}
+
+/**
+ * Report Tailwind availability and return its issue contribution.
+ * @param hasTailwind - Whether Tailwind was detected.
+ * @param verbose - Whether to print remediation guidance.
+ * @returns Zero when available, otherwise one.
+ */
+function checkTailwind(hasTailwind: boolean, verbose = false): number {
+    if (hasTailwind) {
+        printSuccess('Tailwind CSS installed');
+        return 0;
+    }
+    printError('Tailwind CSS not found');
+    if (verbose) console.log('  → Run: npm install -D tailwindcss');
+    return 1;
+}
+
+/**
+ * Report the installed csszyx version and return its issue contribution.
+ * @param cwd - Project directory.
+ * @returns Zero when installed, otherwise one.
+ */
+function checkPackageInstallation(cwd: string): number {
+    printSection('📦 Package Versions');
+    try {
+        const pkg = fs.readJSONSync(path.join(cwd, 'package.json'));
+        const version = { ...pkg.dependencies, ...pkg.devDependencies }.csszyx;
+        if (version) {
+            printSuccess(`csszyx: ${version}`);
+            return 0;
+        }
+        printError('csszyx package not installed');
+    } catch {
+        printError('Failed to read package.json');
+    }
+    return 1;
+}
+
+/**
+ * Report build output and checksum injection when output is present.
+ * @param cwd - Project directory.
+ * @param verbose - Whether to print remediation guidance.
+ */
+function checkBuildOutput(cwd: string, verbose = false): void {
+    printSection('🔨 Build Output');
+    const distDir = path.join(cwd, 'dist');
+    if (!fs.existsSync(distDir)) {
+        printWarn('No build output found - run build first');
+        return;
+    }
+    const htmlFiles = fs
+        .readdirSync(distDir, { recursive: true })
+        .filter(file => String(file).endsWith('.html'));
+    if (htmlFiles.length === 0) return;
+    printSuccess(`Found ${htmlFiles.length} HTML file(s)`);
+    const html = fs.readFileSync(path.join(distDir, String(htmlFiles[0])), 'utf-8');
+    if (html.includes('data-sz-checksum')) {
+        printSuccess('Checksum injection working');
+        return;
+    }
+    printWarn('Checksum not found in HTML');
+    if (verbose) console.log('  → Enable injectChecksum in production config');
 }

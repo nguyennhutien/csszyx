@@ -81,50 +81,38 @@ export function unescapeTailwindClass(escapedName: string): string {
     let i = 0;
 
     while (i < escapedName.length) {
-        if (escapedName[i] === '\\') {
-            i++;
-            if (i >= escapedName.length) {
-                break;
-            }
-
-            const char = escapedName[i];
-
-            // Check for hex escape sequences (e.g., \31, \32 for digits)
-            if (/[0-9a-f]/i.test(char)) {
-                // Collect up to 6 hex digits
-                let hexStr = '';
-                while (
-                    i < escapedName.length &&
-                    /[0-9a-f]/i.test(escapedName[i]) &&
-                    hexStr.length < 6
-                ) {
-                    hexStr += escapedName[i];
-                    i++;
-                }
-
-                // If followed by a space, consume it (CSS escape terminator)
-                if (i < escapedName.length && escapedName[i] === ' ') {
-                    i++;
-                }
-
-                // Convert hex to character
-                const codePoint = parseInt(hexStr, 16);
-                if (codePoint > 0) {
-                    result += String.fromCodePoint(codePoint);
-                }
-                continue;
-            }
-
-            // Simple escape: \. \/ \: \! \[ \] \# \@ etc.
-            result += char;
-            i++;
-        } else {
+        if (escapedName[i] !== '\\') {
             result += escapedName[i];
             i++;
+            continue;
         }
+        const decoded = readCssEscape(escapedName, i + 1);
+        if (!decoded) break;
+        result += decoded.value;
+        i = decoded.next;
     }
 
     return result;
+}
+
+/**
+ * Decode one CSS escape beginning after its backslash.
+ * @param source - Escaped CSS identifier.
+ * @param start - Offset immediately after the backslash.
+ * @returns Decoded value and next offset, or null for a trailing backslash.
+ */
+function readCssEscape(source: string, start: number): { value: string; next: number } | null {
+    if (start >= source.length) return null;
+    if (!/[0-9a-f]/i.test(source[start])) return { value: source[start], next: start + 1 };
+    let next = start;
+    let hex = '';
+    while (next < source.length && /[0-9a-f]/i.test(source[next]) && hex.length < 6) {
+        hex += source[next];
+        next++;
+    }
+    if (source[next] === ' ') next++;
+    const codePoint = parseInt(hex, 16);
+    return { value: codePoint > 0 ? String.fromCodePoint(codePoint) : '', next };
 }
 
 /**

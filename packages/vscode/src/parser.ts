@@ -91,26 +91,8 @@ interface SzStart {
 function findCsszyxCallStart(text: string): { idx: number; start: SzStart } | null {
     let best: { idx: number; start: SzStart } | null = null;
     for (const form of ['szv', 'szr'] as const) {
-        const marker = `${form}(`;
-        let from = text.length;
-        while (from >= 0) {
-            const idx = text.lastIndexOf(marker, from);
-            if (idx === -1) break;
-            from = idx - 1;
-            // Word boundary: `myszv(` is not a csszyx call; `csszyx.szv(` is.
-            const before = idx > 0 ? (text[idx - 1] ?? '') : '';
-            if (/[\w$]/.test(before)) continue;
-            let j = idx + marker.length;
-            while (j < text.length && /\s/.test(text[j] ?? '')) j++;
-            if (text[j] !== '{') continue;
-            if (best === null || idx > best.idx) {
-                best = {
-                    idx,
-                    start: { bodyStart: j, explicit: true, terminator: null, form },
-                };
-            }
-            break;
-        }
+        const candidate = findCallFormStart(text, form);
+        if (candidate && (best === null || candidate.idx > best.idx)) best = candidate;
     }
     const szs = text.lastIndexOf('szs={{');
     if (szs !== -1 && (best === null || szs > best.idx)) {
@@ -120,6 +102,36 @@ function findCsszyxCallStart(text: string): { idx: number; start: SzStart } | nu
         };
     }
     return best;
+}
+
+/**
+ * Locate the rightmost valid object argument for one csszyx call form.
+ * @param text - Source text to scan.
+ * @param form - Call form to locate.
+ * @returns Marker index and opening description, or null.
+ */
+function findCallFormStart(
+    text: string,
+    form: 'szv' | 'szr',
+): { idx: number; start: SzStart } | null {
+    const marker = `${form}(`;
+    let from = text.length;
+    while (from >= 0) {
+        const idx = text.lastIndexOf(marker, from);
+        if (idx === -1) return null;
+        from = idx - 1;
+        const before = idx > 0 ? (text[idx - 1] ?? '') : '';
+        if (/[\w$]/.test(before)) continue;
+        let bodyStart = idx + marker.length;
+        while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) bodyStart++;
+        if (text[bodyStart] === '{') {
+            return {
+                idx,
+                start: { bodyStart, explicit: true, terminator: null, form },
+            };
+        }
+    }
+    return null;
 }
 
 /**
