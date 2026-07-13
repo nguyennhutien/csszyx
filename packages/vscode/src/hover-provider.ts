@@ -5,7 +5,7 @@
  *   1. Extract the object text that contains the cursor (brace-balanced)
  *   2. Evaluate it safely with `new Function()` (read-only display)
  *   3. Call `transform()` from @csszyx/compiler
- *   4. Display the resulting className + any inline style attributes
+ *   4. Display the resulting className
  *
  * Falls back silently if the expression cannot be evaluated (dynamic values,
  * syntax errors, etc.) — hover simply doesn't appear.
@@ -94,14 +94,6 @@ export class SzHoverProvider implements vscode.HoverProvider {
         md.isTrusted = true;
         md.appendMarkdown('**CSSzyx** → generated classes:\n\n');
         md.appendCodeblock(result.className || '(empty)', 'plaintext');
-
-        if (Object.keys(result.attributes).length > 0) {
-            md.appendMarkdown('\n**Inline styles** (CSS variables):\n\n');
-            const styleStr = Object.entries(result.attributes)
-                .map(([k, v]) => `${k}: ${v}`)
-                .join(';\n');
-            md.appendCodeblock(styleStr, 'css');
-        }
 
         return new vscode.Hover(md);
     }

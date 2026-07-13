@@ -16,10 +16,9 @@ import {
     type SzObject,
 } from '@csszyx/compiler/browser';
 
-/** Result of a runtime sz transform: the className plus any style attributes. */
+/** Result of a runtime sz transform. */
 interface TransformResult {
     className: string;
-    attributes: Record<string, string>;
 }
 
 /** A frozen map of original class names to their mangled SSR equivalents. */
@@ -65,10 +64,7 @@ function transform(szProp: object): TransformResult {
             .filter(Boolean)
             .map((c: string) => activeMangleMap[c] || c)
             .join(' ');
-        return {
-            className: mangled,
-            attributes: res.attributes,
-        };
+        return { className: mangled };
     }
     return res;
 }

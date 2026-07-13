@@ -2,15 +2,14 @@
  * SzHoverProvider tests — hovering a sz expression shows the classes the
  * compiler would generate. The main path runs the REAL browser transform
  * (`@csszyx/compiler/browser`), so these assertions lock actual sz→Tailwind
- * output. Two paths cannot be reached through the real transform — it never
- * populates `attributes` today and never throws on literal input — so those
- * are exercised through a scoped transform override: the provider's contract
- * is the transform's TYPE, and it must render/recover for any legal result.
+ * output. The transform never throws on literal input, so the throw-recovery
+ * path is exercised through a scoped transform override: the provider's
+ * contract is the transform's TYPE, and it must recover for any legal result.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const transformOverride = vi.hoisted(() => ({
-    fn: null as null | ((obj: object) => { className: string; attributes: Record<string, string> }),
+    fn: null as null | ((obj: object) => { className: string }),
 }));
 
 vi.mock('@csszyx/compiler/browser', async importOriginal => {
@@ -169,16 +168,6 @@ describe('SzHoverProvider — silent fallbacks', () => {
 });
 
 describe('SzHoverProvider — transform result contract', () => {
-    it('renders inline-style attributes when the transform emits them', () => {
-        transformOverride.fn = () => ({
-            className: 'bg-red-500',
-            attributes: { '--sz-a': '1px', '--sz-b': '2rem' },
-        });
-        const md = markdownOf(hoverAt('const A = () => <div sz={{ p|: 4 }} />'));
-        expect(md).toContain('**Inline styles** (CSS variables):');
-        expect(md).toContain('--sz-a: 1px;\n--sz-b: 2rem');
-    });
-
     it('returns undefined when the transform throws', () => {
         transformOverride.fn = () => {
             throw new Error('boom');

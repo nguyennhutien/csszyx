@@ -1113,7 +1113,6 @@ const COLOR_SCALE_PATTERN = /^(slate|gray|zinc|neutral|stone|red|orange|amber|ye
  */
 export interface TransformResult {
     className: string;
-    attributes: Record<string, string>;
 }
 
 // ============================================================================
@@ -1760,7 +1759,7 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
 // ============================================================================
 
 /**
- * Transforms a csszyx sz object into a Tailwind CSS className string and extracted attributes.
+ * Transforms a csszyx sz object into a Tailwind CSS className string.
  *
  * @param {SzObject} szProp - The sz object from JSX
  * @param {string} prefix - Variant prefix for nested properties
@@ -1965,13 +1964,13 @@ export function formatSzWarnLocation(
 }
 
 /**
- * Transform an sz object into a className string plus any attributes, bounding
- * recursion depth via {@link szTransformDepth}.
+ * Transform an sz object into a className string, bounding recursion depth
+ * via {@link szTransformDepth}.
  *
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
  * @param mangleMap - optional original→mangled class-name map.
- * @returns the emitted className and attributes.
+ * @returns the emitted className.
  */
 export function transform(
     szProp: SzObject,
@@ -1980,7 +1979,7 @@ export function transform(
 ): TransformResult {
     // Input validation
     if (!szProp || typeof szProp !== 'object') {
-        return { className: '', attributes: {} };
+        return { className: '' };
     }
     if (szTransformDepth >= MAX_SZ_DEPTH) {
         throw new SzDepthError();
@@ -2000,7 +1999,7 @@ export function transform(
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
  * @param mangleMap - optional original→mangled class-name map.
- * @returns the emitted className and attributes.
+ * @returns the emitted className.
  */
 function transformImpl(
     szProp: SzObject,
@@ -2008,7 +2007,6 @@ function transformImpl(
     mangleMap?: Record<string, string>,
 ): TransformResult {
     const classes: string[] = [];
-    const attributes: Record<string, string> = {};
 
     for (const [rawKey, value] of Object.entries(szProp)) {
         // Skip false/null/undefined values (a false toggle emits nothing).
@@ -3438,16 +3436,10 @@ function transformImpl(
     // Apply mangling if map is provided
     if (mangleMap) {
         const mangledClasses = finalClasses.map(cls => mangleMap[cls] || cls);
-        return {
-            className: mangledClasses.join(' '),
-            attributes,
-        };
+        return { className: mangledClasses.join(' ') };
     }
 
-    return {
-        className: finalClasses.join(' '),
-        attributes,
-    };
+    return { className: finalClasses.join(' ') };
 }
 
 /**

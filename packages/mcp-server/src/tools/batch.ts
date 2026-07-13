@@ -30,8 +30,6 @@ export function handleBatch(input: BatchInput): { content: Array<{ type: 'text';
             return {
                 index,
                 className: result.className,
-                attributes:
-                    Object.keys(result.attributes).length > 0 ? result.attributes : undefined,
             };
         } catch (err) {
             return {

@@ -610,7 +610,7 @@ export function transformSourceCode(
                                     const staticObject = evaluateStaticObject(flatExpression);
                                     if (staticObject !== null) {
                                         // Compile time transformation
-                                        const { className, attributes } = transform(staticObject);
+                                        const { className } = transform(staticObject);
                                         for (const c of className.split(/\s+/)) {
                                             if (c) {
                                                 collectedClasses.add(c);
@@ -620,28 +620,6 @@ export function transformSourceCode(
                                         path.node.value = createMergedClassNameValue(
                                             t.stringLiteral(className),
                                         );
-
-                                        // Inject attributes (will-change)
-                                        Object.entries(attributes).forEach(([key, val]) => {
-                                            if (path.parentPath?.isJSXOpeningElement()) {
-                                                if (key === 'style') {
-                                                    const newProps =
-                                                        parseStyleStringToObjectExpr(
-                                                            val,
-                                                        ).properties;
-                                                    mergeAndInjectStyle(
-                                                        newProps as t.ObjectProperty[],
-                                                    );
-                                                } else {
-                                                    path.parentPath.node.attributes.push(
-                                                        t.jsxAttribute(
-                                                            t.jsxIdentifier(key),
-                                                            t.stringLiteral(val),
-                                                        ),
-                                                    );
-                                                }
-                                            }
-                                        });
 
                                         transformed = true;
                                         return;
