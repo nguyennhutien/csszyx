@@ -3299,6 +3299,52 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Mangle a whitespace-separated HTML class attribute value.
+     * @param classes - Original attribute value.
+     * @returns Attribute value with known classes replaced.
+     */
+    function mangleHtmlClassList(classes: string): string {
+        const output: string[] = [];
+        for (const className of classes.split(/\s+/)) {
+            if (className) output.push(state.mangleMap[className] || className);
+        }
+        return output.join(' ');
+    }
+
+    /**
+     * Replace one double-quoted HTML class attribute.
+     * @param match - Complete matched attribute.
+     * @param classes - Captured class list.
+     * @returns Original or mangled attribute.
+     */
+    function replaceDoubleQuotedHtmlClass(match: string, classes: string): string {
+        const output = mangleHtmlClassList(classes);
+        return output !== classes ? `class="${output}"` : match;
+    }
+
+    /**
+     * Replace one single-quoted HTML class attribute.
+     * @param match - Complete matched attribute.
+     * @param classes - Captured class list.
+     * @returns Original or mangled attribute.
+     */
+    function replaceSingleQuotedHtmlClass(match: string, classes: string): string {
+        const output = mangleHtmlClassList(classes);
+        return output !== classes ? `class='${output}'` : match;
+    }
+
+    /**
+     * Mangle class attributes in one HTML asset.
+     * @param source - HTML source.
+     * @returns HTML with known class attributes mangled.
+     */
+    function mangleHtmlClasses(source: string): string {
+        return source
+            .replace(/\bclass="([^"]*)"/g, replaceDoubleQuotedHtmlClass)
+            .replace(/\bclass='([^']*)'/g, replaceSingleQuotedHtmlClass);
+    }
+
+    /**
      * Replaces checksum and mangle map placeholders with actual values.
      * @param code code containing placeholders
      * @returns code with placeholders replaced
@@ -4151,29 +4197,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             ) {
                                 if (file.endsWith('.html')) {
                                     // Mangle class attributes in HTML assets (SSR-generated pages)
-                                    const mangledHtml = source
-                                        .replace(
-                                            /\bclass="([^"]*)"/g,
-                                            (_m: string, cls: string) => {
-                                                const out = cls
-                                                    .split(/\s+/)
-                                                    .filter(Boolean)
-                                                    .map((c: string) => state.mangleMap[c] || c)
-                                                    .join(' ');
-                                                return out !== cls ? `class="${out}"` : _m;
-                                            },
-                                        )
-                                        .replace(
-                                            /\bclass='([^']*)'/g,
-                                            (_m: string, cls: string) => {
-                                                const out = cls
-                                                    .split(/\s+/)
-                                                    .filter(Boolean)
-                                                    .map((c: string) => state.mangleMap[c] || c)
-                                                    .join(' ');
-                                                return out !== cls ? `class='${out}'` : _m;
-                                            },
-                                        );
+                                    const mangledHtml = mangleHtmlClasses(source);
                                     if (mangledHtml !== source) {
                                         compilation.updateAsset(
                                             file,
