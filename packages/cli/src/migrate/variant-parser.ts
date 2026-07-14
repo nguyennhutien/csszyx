@@ -122,130 +122,104 @@ export function extractVariants(token: string): { variantParts: string[]; baseCl
  * @returns {string[]} Array of sz object keys for nesting
  */
 export function mapVariant(variant: string): string[] {
-    // ================================================================
-    // @ PREFIXED VARIANTS (container queries)
-    // ================================================================
     if (variant.startsWith('@')) {
-        // @container → @container
-        if (variant === '@container') {
-            return ['@container'];
-        }
-
-        // @md/sidebar → @md, sidebar
-        const slashIdx = variant.indexOf('/');
-        if (slashIdx !== -1) {
-            const queryPart = variant.slice(0, slashIdx);
-            const namePart = variant.slice(slashIdx + 1);
-            return [normalizeVariantKey(queryPart), namePart];
-        }
-
-        // @min-[475px] → @min, 475px (strip brackets)
-        // @max-[600px] → @max, 600px
-        const match = variant.match(/^(@min|@max)-\[(.+)\]$/);
-        if (match) {
-            return [match[1], match[2]];
-        }
-
-        // @md, @lg, etc.
-        return [normalizeVariantKey(variant)];
+        return mapContainerVariant(variant);
     }
-
-    // ================================================================
-    // GROUP/PEER VARIANTS
-    // ================================================================
     if (variant.startsWith('group-') || variant.startsWith('peer-')) {
         return parseGroupPeerVariant(variant);
     }
-
-    // ================================================================
-    // HAS VARIANT: has-[selector], has-[:checked]
-    // ================================================================
     if (variant.startsWith('has-')) {
-        const rest = variant.slice(4); // after "has-"
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            let selector = rest.slice(1, -1);
-            // Strip leading : from pseudo-selectors
-            if (selector.startsWith(':')) {
-                selector = selector.slice(1);
-            }
-            return ['has', selector];
-        }
-        return ['has', rest];
+        return mapHasVariant(variant);
     }
-
-    // ================================================================
-    // NOT VARIANT: not-hover, not-first, not-supports-[cond]
-    // ================================================================
     if (variant.startsWith('not-')) {
-        const rest = variant.slice(4);
-        // not-supports-[condition]
-        if (rest.startsWith('supports-[') && rest.endsWith(']')) {
-            const cond = rest.slice(10, -1); // strip "supports-[" and "]"
-            return ['not', 'supports', cond];
-        }
-        // Simple: not-hover → not, hover
-        return ['not', normalizeVariantKey(rest)];
+        return mapNotVariant(variant);
     }
-
-    // ================================================================
-    // DATA VARIANT: data-[attr], data-[attr=value]
-    // ================================================================
     if (variant.startsWith('data-')) {
-        const rest = variant.slice(5);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            return ['data', rest.slice(1, -1)];
-        }
-        return ['data', rest];
+        return mapAttributeVariant('data', variant.slice(5));
     }
-
-    // ================================================================
-    // ARIA VARIANT: aria-checked, aria-[current=page]
-    // ================================================================
     if (variant.startsWith('aria-')) {
-        const rest = variant.slice(5);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            return ['aria', rest.slice(1, -1)];
-        }
-        // Standard aria state
-        return ['aria', rest];
+        return mapAttributeVariant('aria', variant.slice(5));
     }
-
-    // ================================================================
-    // SUPPORTS VARIANT: supports-[display:grid]
-    // ================================================================
     if (variant.startsWith('supports-')) {
-        const rest = variant.slice(9);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            return ['supports', rest.slice(1, -1)];
-        }
-        return ['supports', rest];
+        return mapAttributeVariant('supports', variant.slice(9));
     }
-
-    // ================================================================
-    // MIN/MAX BREAKPOINTS: min-[320px], min-md, max-[600px]
-    // ================================================================
     if (variant.startsWith('min-') || variant.startsWith('max-')) {
-        const prefix = variant.startsWith('min-') ? 'min' : 'max';
-        const rest = variant.slice(4);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            // Arbitrary: min-[320px] → min, 320px (no brackets in key)
-            return [prefix, rest.slice(1, -1)];
-        }
-        // Named: min-md → min, md
-        return [prefix, rest];
+        return mapRangeVariant(variant);
     }
-
-    // ================================================================
-    // ARBITRARY VARIANT: [&>span], [&:nth-child(3)]
-    // ================================================================
     if (variant.startsWith('[') && variant.endsWith(']')) {
-        return [variant]; // Keep as-is including brackets
+        return [variant];
     }
-
-    // ================================================================
-    // SIMPLE VARIANT: hover, focus, md, dark, etc.
-    // ================================================================
     return [normalizeVariantKey(variant)];
+}
+
+/**
+ * Maps an `@`-prefixed container-query variant.
+ * @param variant - The complete container-query variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapContainerVariant(variant: string): string[] {
+    if (variant === '@container') return ['@container'];
+    const slashIndex = variant.indexOf('/');
+    if (slashIndex !== -1) {
+        return [normalizeVariantKey(variant.slice(0, slashIndex)), variant.slice(slashIndex + 1)];
+    }
+    const arbitraryRange = variant.match(/^(@min|@max)-\[(.+)\]$/);
+    return arbitraryRange ? [arbitraryRange[1], arbitraryRange[2]] : [normalizeVariantKey(variant)];
+}
+
+/**
+ * Maps `has-*`, stripping brackets and a leading pseudo-selector colon.
+ * @param variant - The complete has variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapHasVariant(variant: string): string[] {
+    const rest = variant.slice(4);
+    if (!isBracketed(rest)) return ['has', rest];
+    const selector = rest.slice(1, -1);
+    return ['has', selector.startsWith(':') ? selector.slice(1) : selector];
+}
+
+/**
+ * Maps simple and supports-wrapped negation variants.
+ * @param variant - The complete not variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapNotVariant(variant: string): string[] {
+    const rest = variant.slice(4);
+    if (rest.startsWith('supports-[') && rest.endsWith(']')) {
+        return ['not', 'supports', rest.slice(10, -1)];
+    }
+    return ['not', normalizeVariantKey(rest)];
+}
+
+/**
+ * Maps a data, aria, or supports value, unwrapping arbitrary brackets.
+ * @param prefix - The sz nesting prefix.
+ * @param rest - The variant value after its prefix.
+ * @returns The normalized sz nesting keys.
+ */
+function mapAttributeVariant(prefix: string, rest: string): string[] {
+    return [prefix, isBracketed(rest) ? rest.slice(1, -1) : rest];
+}
+
+/**
+ * Maps named and arbitrary min/max breakpoint variants.
+ * @param variant - The complete min or max variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapRangeVariant(variant: string): string[] {
+    const prefix = variant.startsWith('min-') ? 'min' : 'max';
+    const rest = variant.slice(4);
+    return [prefix, isBracketed(rest) ? rest.slice(1, -1) : rest];
+}
+
+/**
+ * Tests whether a variant segment is enclosed in square brackets.
+ * @param value - The variant segment to inspect.
+ * @returns Whether the segment is bracketed.
+ */
+function isBracketed(value: string): boolean {
+    return value.startsWith('[') && value.endsWith(']');
 }
 
 /**
