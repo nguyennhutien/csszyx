@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.11.7](https://github.com/nguyennhutien/csszyx/compare/v0.11.6...v0.11.7) (2026-07-14)
+
+
+### Bug Fixes
+
+* resolve dynamic spacing and unit values the way the static path would ([eb1555e](https://github.com/nguyennhutien/csszyx/commit/eb1555eb35ce05f927d11f7d36d8329c3b67625a))
+
 ## [0.11.6](https://github.com/nguyennhutien/csszyx/compare/v0.11.5...v0.11.6) (2026-07-13)
 
 ### Bug Fixes
