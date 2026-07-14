@@ -22,7 +22,7 @@ run() {
 run healthcheck.sh
 
 if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
-    run cleanup-credentials.sh
+    run personal/cleanup-credentials.sh
 
     # The private profile bind-mounts the canonical host checkout. Its portable
     # linker makes host-authored absolute symlinks resolve without copying or
@@ -35,8 +35,14 @@ if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
         echo "[poststart] WARN: dotfiles-ai global linker not found (skipping)"
     fi
 
-    run configure-codex.sh
-    run configure-claude.sh
+    # Pull the newest claude-code + codex on every container start. Unthrottled
+    # here (a deliberate start = check latest now); the per-shell path in
+    # ensure-claude-sync.sh throttles to once/day. Runs before the configure
+    # scripts so their wrapper rebuilds point at any freshly installed version.
+    run personal/upgrade-ai-clis.sh
+
+    run personal/configure-codex.sh
+    run personal/configure-claude.sh
 fi
 
 run init-firewall.sh
