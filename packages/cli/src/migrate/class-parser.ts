@@ -361,40 +361,7 @@ function disambiguateAndParse(
     rawValue: string,
     negative: boolean,
 ): ParsedClass | null {
-    // Handle color+opacity: value contains / at top level
-    const slashIdx = findTopLevelSlash(rawValue);
-    let opacity: string | number | undefined;
-    let value = rawValue;
-
-    if (slashIdx !== -1 && !isGradientPrefix(prefix)) {
-        // Check if this is a fraction (e.g., "1/2") before treating as opacity
-        const isFraction = FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(rawValue);
-
-        if (!isFraction) {
-            opacity = rawValue.slice(slashIdx + 1);
-            value = rawValue.slice(0, slashIdx);
-
-            // Parse opacity
-            if (opacity.startsWith('[') && opacity.endsWith(']')) {
-                opacity = opacity.slice(1, -1); // strip brackets → "0.05" or "78%"
-                // Convert numeric strings to numbers after stripping brackets.
-                // "0.05" → 0.05 (decimal fraction), "78%" stays as string (percentage).
-                if (!String(opacity).includes('%')) {
-                    const opNum = Number(opacity);
-                    if (!Number.isNaN(opNum)) {
-                        opacity = opNum;
-                    }
-                }
-            } else if (opacity.startsWith('(') && opacity.endsWith(')')) {
-                opacity = opacity.slice(1, -1); // strip parens → "--alpha"
-            } else {
-                const opNum = Number(opacity);
-                if (!Number.isNaN(opNum)) {
-                    opacity = opNum;
-                }
-            }
-        }
-    }
+    const { value, opacity } = extractOpacity(prefix, rawValue);
 
     // Disambiguate ambiguous prefixes
     const result = disambiguate(prefix, value, negative);
@@ -411,6 +378,53 @@ function disambiguateAndParse(
     }
 
     return result;
+}
+
+/**
+ * Separates a top-level color opacity modifier from a utility value.
+ * @param prefix - The matched Tailwind prefix.
+ * @param rawValue - The value portion after the prefix.
+ * @returns The base value and optional normalized opacity.
+ */
+function extractOpacity(
+    prefix: string,
+    rawValue: string,
+): { value: string; opacity?: string | number } {
+    const slashIndex = findTopLevelSlash(rawValue);
+    const isFraction = FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(rawValue);
+    if (slashIndex === -1 || isGradientPrefix(prefix) || isFraction) {
+        return { value: rawValue };
+    }
+    return {
+        value: rawValue.slice(0, slashIndex),
+        opacity: parseOpacity(rawValue.slice(slashIndex + 1)),
+    };
+}
+
+/**
+ * Normalizes bracketed, parenthesized, numeric, and percentage opacity values.
+ * @param rawOpacity - The opacity substring after the slash.
+ * @returns The normalized opacity value.
+ */
+function parseOpacity(rawOpacity: string): string | number {
+    if (rawOpacity.startsWith('[') && rawOpacity.endsWith(']')) {
+        const unwrapped = rawOpacity.slice(1, -1);
+        return unwrapped.includes('%') ? unwrapped : numericOpacity(unwrapped);
+    }
+    if (rawOpacity.startsWith('(') && rawOpacity.endsWith(')')) {
+        return rawOpacity.slice(1, -1);
+    }
+    return numericOpacity(rawOpacity);
+}
+
+/**
+ * Converts a numeric opacity string while preserving non-numeric tokens.
+ * @param value - The candidate opacity value.
+ * @returns A number when parseable; otherwise the original string.
+ */
+function numericOpacity(value: string): string | number {
+    const numeric = Number(value);
+    return Number.isNaN(numeric) ? value : numeric;
 }
 
 /**
