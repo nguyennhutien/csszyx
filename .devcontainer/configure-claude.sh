@@ -83,15 +83,35 @@ if [ "$WRAPPER_ONLY" -ne 1 ]; then
     shopt -u dotglob nullglob
 
     # /root/.claude.json (project trust + user prefs) lives at $HOME, not
-    # inside /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects
-    # it at $CLAUDE_CONFIG_DIR/.claude.json. Symlink it back to the host
-    # file so login state, project trust, and tips history survive without
-    # reinitialization.
+    # inside /root/.claude/. When CLAUDE_CONFIG_DIR is set, Claude expects it
+    # at $CLAUDE_CONFIG_DIR/.claude.json. This file is ISOLATED (a real
+    # container-local file), NOT symlinked back to the host copy.
+    #
+    # Why isolated: Claude rewrites .claude.json on nearly every action (tips
+    # counters, typed-prompt history, statsig/experiment caches). Sharing the
+    # host file via symlink made host-claude and container-claude do concurrent
+    # read-modify-write on ONE json, which races into a truncated/corrupted
+    # file (`JSON Parse error: Unexpected EOF`) — worsened by Docker Desktop's
+    # single-file bind mount not following the host's atomic-rename recovery,
+    # so a host self-heal left the container stuck on the stale corrupt inode.
+    # Login + transcripts + memory stay SHARED (.credentials.json and projects/
+    # are symlinked by the loop above); only this hot-written prefs file splits.
+    #
+    # Seed ONCE from the host copy (validated) so the first container run skips
+    # onboarding/trust prompts; afterwards the two diverge. Existing containers
+    # created before this change carry the legacy host symlink — drop it and
+    # seed a real file in its place. Only runs at full setup (not --wrapper-only),
+    # i.e. when Claude is not yet running, so the rm is race-free.
     HOST_CLAUDE_JSON="/root/.claude.json"
     DEV_CLAUDE_JSON="$DEV_CLAUDE_HOME/.claude.json"
-    if [ -f "$HOST_CLAUDE_JSON" ]; then
-        if ! { [ -L "$DEV_CLAUDE_JSON" ] && [ "$(readlink "$DEV_CLAUDE_JSON")" = "$HOST_CLAUDE_JSON" ]; }; then
-            ln -sfT "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
+    if [ -L "$DEV_CLAUDE_JSON" ]; then
+        rm -f "$DEV_CLAUDE_JSON"
+    fi
+    if [ ! -e "$DEV_CLAUDE_JSON" ]; then
+        if [ -f "$HOST_CLAUDE_JSON" ] && jq empty "$HOST_CLAUDE_JSON" >/dev/null 2>&1; then
+            cp "$HOST_CLAUDE_JSON" "$DEV_CLAUDE_JSON"
+        else
+            printf '{}\n' > "$DEV_CLAUDE_JSON"
         fi
     fi
 fi
@@ -316,7 +336,7 @@ ensure_self_heal /root/.bashrc
 ensure_self_heal /root/.zshrc
 
 echo "[claude] Container CLAUDE_CONFIG_DIR: $DEV_CLAUDE_HOME"
-echo "[claude] Shared state symlinked from $HOST_CLAUDE_HOME (settings.json overridden)"
+echo "[claude] Shared state symlinked from $HOST_CLAUDE_HOME (settings.json overridden, .claude.json isolated)"
 echo "[claude] AI env exported from $AI_ENV_FILE"
 echo "[claude] PATH override appended to /root/.bashrc and /root/.zshrc"
 echo "[claude] Open a new terminal (or run \`exec bash\`) for changes to take effect"
