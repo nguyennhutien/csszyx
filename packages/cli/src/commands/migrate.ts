@@ -79,6 +79,38 @@ function createLogFile(cwd: string): {
 }
 
 /**
+ * Find the exclusive end offset of one valid sz-todo comment.
+ *
+ * @param source Source containing the comment opener.
+ * @param open Comment opener offset.
+ * @returns End offset including one trailing newline, or null when invalid.
+ */
+function findSzTodoCommentEnd(source: string, open: number): number | null {
+    const marker = '@sz-todo:';
+    let markerStart = open + '{/*'.length;
+    while (markerStart < source.length && /\s/.test(source[markerStart] as string)) {
+        markerStart++;
+    }
+    if (!source.startsWith(marker, markerStart)) {
+        return null;
+    }
+    const close = source.indexOf('*/}', markerStart);
+    const newline = source.indexOf('\n', markerStart);
+    if (close === -1 || (newline !== -1 && newline < close)) {
+        return null;
+    }
+    let contentStart = markerStart + marker.length;
+    while (contentStart < close && /\s/.test(source[contentStart] as string)) {
+        contentStart++;
+    }
+    if (contentStart >= close) {
+        return null;
+    }
+    const end = close + '*/}'.length;
+    return source[end] === '\n' ? end + 1 : end;
+}
+
+/**
  * Return true if `pattern` appears in the root .gitignore.
  * @param cwd - Project root directory.
  * @param pattern - Pattern string to search for.
@@ -450,7 +482,6 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
  */
 function stripSzTodoComments(source: string): string {
     const OPEN = '{/*';
-    const MARKER = '@sz-todo:';
     let out = '';
     let i = 0;
     for (;;) {
@@ -458,42 +489,11 @@ function stripSzTodoComments(source: string): string {
         if (open === -1) {
             return out + source.slice(i);
         }
-        // `\s*@sz-todo:` — whitespace (incl. newlines, matching `\s*`) then marker.
-        let p = open + OPEN.length;
-        while (p < source.length && /\s/.test(source[p] as string)) {
-            p++;
-        }
-        if (!source.startsWith(MARKER, p)) {
-            // Not a todo comment — keep `{/*` and continue after it.
+        const end = findSzTodoCommentEnd(source, open);
+        if (end === null) {
             out += source.slice(i, open + OPEN.length);
             i = open + OPEN.length;
             continue;
-        }
-        // The closing `*/}` must appear before the next newline (content is `.`,
-        // no newline; the surrounding `\s*` also cannot cross into a value that
-        // would let `\S` restart on another line).
-        const close = source.indexOf('*/}', p);
-        const nl = source.indexOf('\n', p);
-        if (close === -1 || (nl !== -1 && nl < close)) {
-            out += source.slice(i, open + OPEN.length);
-            i = open + OPEN.length;
-            continue;
-        }
-        // Require the `\S(?:.*\S)?` content: at least one non-space between the
-        // marker (after `\s*`) and the trailing `\s*` before `*/}`.
-        let contentStart = p;
-        while (contentStart < close && /\s/.test(source[contentStart] as string)) {
-            contentStart++;
-        }
-        if (contentStart >= close) {
-            out += source.slice(i, open + OPEN.length);
-            i = open + OPEN.length;
-            continue;
-        }
-        // Drop the whole `{/* … */}` plus one optional trailing newline.
-        let end = close + '*/}'.length;
-        if (source[end] === '\n') {
-            end++;
         }
         out += source.slice(i, open);
         i = end;

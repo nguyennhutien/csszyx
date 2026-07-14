@@ -61,129 +61,129 @@ export interface ParseClassOptions {
  * @returns {ParsedClass | null} Parsed prop/value or null if unrecognized
  */
 export function parseClass(cls: string, options: ParseClassOptions = {}): ParsedClass | null {
-    // Handle important modifier
-    let important = false;
-    let input = cls;
-    if (input.endsWith('!')) {
-        important = true;
-        input = input.slice(0, -1);
+    const { input, source, negative, important } = parseClassModifiers(cls);
+    void options;
+
+    const container = parseContainerMarker(input);
+    if (container) {
+        return container;
     }
 
-    // Handle negative prefix
-    let negative = false;
-    let negInput = input;
-    if (input.startsWith('-')) {
-        negative = true;
-        negInput = input.slice(1);
-    }
-
-    // Container-query marker: `@container` enables container queries, and the
-    // named form `@container/sidebar` carries the container name as a sugar value.
-    if (input === '@container') {
-        return { prop: '@container', value: true };
-    }
-    if (input.startsWith('@container/')) {
-        return { prop: '@container', value: input.slice('@container/'.length) };
-    }
-
-    // 1. Try exact boolean match first (highest priority)
     const boolResult = tryBooleanMatch(input);
     if (boolResult) {
         return applyImportant(boolResult, important);
     }
 
-    // 2. Try gradient patterns (bg-linear-*, bg-radial*, bg-conic*)
-    const gradResult = tryGradient(negInput, negative);
+    const gradResult = tryGradient(source, negative);
     if (gradResult) {
         return applyImportant(gradResult, important);
     }
 
-    // 3. Try longest-prefix-match
-    const source = negative ? negInput : input;
+    const utility = parseLongestPrefix(source, negative);
+    if (utility) {
+        return applyImportant(utility, important);
+    }
+
+    const customProperty = parseCustomPropertyDeclaration(input);
+    return customProperty ? applyImportant(customProperty, important) : null;
+}
+
+/**
+ * Splits important and negative syntax from a Tailwind class.
+ * @param cls - The original utility class.
+ * @returns Its normalized source and modifier flags.
+ */
+function parseClassModifiers(cls: string): {
+    input: string;
+    source: string;
+    negative: boolean;
+    important: boolean;
+} {
+    const important = cls.endsWith('!');
+    const input = important ? cls.slice(0, -1) : cls;
+    const negative = input.startsWith('-');
+    return { input, source: negative ? input.slice(1) : input, negative, important };
+}
+
+/**
+ * Parses the base and named container-query markers.
+ * @param input - The utility after removing the important marker.
+ * @returns The container marker result, or null.
+ */
+function parseContainerMarker(input: string): ParsedClass | null {
+    if (input === '@container') return { prop: '@container', value: true };
+    return input.startsWith('@container/')
+        ? { prop: '@container', value: input.slice('@container/'.length) }
+        : null;
+}
+
+/**
+ * Applies longest-prefix matching to an unsigned utility source.
+ * @param source - The utility after removing its negative marker.
+ * @param negative - Whether the original utility was negative.
+ * @returns The parsed utility, or null.
+ */
+function parseLongestPrefix(source: string, negative: boolean): ParsedClass | null {
     for (const prefix of SORTED_PREFIXES) {
-        // Exact match: class IS the prefix (e.g., "blur", "ring", "outline")
         if (source === prefix) {
-            // Some of these are booleans handled above, but others have default values
-            const prop = REVERSE_PROPERTY_MAP[prefix];
-            if (negative && NEGATIVE_ALLOWED.has(prefix)) {
-                // e.g., "-z" doesn't make sense alone; skip
-                continue;
-            }
-            // For properties like "ring", "outline" — boolean true
-            if (REVERSE_BOOLEAN_MAP[source]) {
-                return applyImportant(
-                    { prop: REVERSE_BOOLEAN_MAP[source], value: true },
-                    important,
-                );
-            }
-            // For divide-x, divide-y without value → boolean
-            if (prefix === 'divide-x' || prefix === 'divide-y') {
-                return applyImportant({ prop, value: true }, important);
-            }
-            // For border without value → boolean
-            if (prefix === 'border') {
-                return applyImportant({ prop: 'border', value: true }, important);
-            }
-            // For border-t/r/b/l/x/y/s/e without value → boolean side border
-            if (
-                [
-                    'border-t',
-                    'border-r',
-                    'border-b',
-                    'border-l',
-                    'border-x',
-                    'border-y',
-                    'border-s',
-                    'border-e',
-                ].includes(prefix)
-            ) {
-                return applyImportant({ prop, value: true }, important);
-            }
+            const exact = parseExactPrefix(prefix, negative);
+            if (exact) return exact;
             continue;
         }
-
-        // Class starts with prefix + "-"
-        if (source.startsWith(`${prefix}-`)) {
-            const rawValue = source.slice(prefix.length + 1); // strip prefix and "-"
-            if (!rawValue) {
-                continue;
-            }
-
-            // Validate negative
-            if (negative && !NEGATIVE_ALLOWED.has(prefix)) {
-                continue; // Invalid negative for this prefix
-            }
-
-            // For spacing-type prefixes, validate value looks like a spacing value
-            // This prevents false positives like "my-custom-class" matching "my" (margin-y)
-            if (SPACING_PROPS.has(prefix) && !isValidSpacingValue(rawValue)) {
-                continue;
-            }
-
-            // Disambiguate and parse
-            const result = disambiguateAndParse(prefix, rawValue, negative);
-            if (result) {
-                return applyImportant(result, important);
-            }
+        const parsed = parseValuedPrefix(source, prefix, negative);
+        if (parsed) {
+            return parsed;
         }
     }
-
-    // 5. Try CSS custom property declaration: [--var:value]
-    if (input.startsWith('[') && input.endsWith(']') && input.includes(':')) {
-        const inner = input.slice(1, -1);
-        if (inner.startsWith('--')) {
-            const colonIdx = inner.indexOf(':');
-            return applyImportant(
-                {
-                    prop: inner.slice(0, colonIdx),
-                    value: inner.slice(colonIdx + 1),
-                },
-                important,
-            );
-        }
-    }
-
     return null;
+}
+
+/**
+ * Parses an exact utility prefix with its implicit boolean value.
+ * @param prefix - The exact matched prefix.
+ * @param negative - Whether the original utility was negative.
+ * @returns The implicit utility value, or null.
+ */
+function parseExactPrefix(prefix: string, negative: boolean): ParsedClass | null {
+    if (negative && NEGATIVE_ALLOWED.has(prefix)) return null;
+    if (REVERSE_BOOLEAN_MAP[prefix]) {
+        return { prop: REVERSE_BOOLEAN_MAP[prefix], value: true };
+    }
+    const prop = REVERSE_PROPERTY_MAP[prefix];
+    if (prefix === 'divide-x' || prefix === 'divide-y') return { prop, value: true };
+    if (prefix === 'border') return { prop: 'border', value: true };
+    return /^border-[trblxyse]$/.test(prefix) ? { prop, value: true } : null;
+}
+
+/**
+ * Parses one prefix followed by a non-empty value.
+ * @param source - The unsigned utility source.
+ * @param prefix - The candidate prefix.
+ * @param negative - Whether the original utility was negative.
+ * @returns The parsed utility, or null.
+ */
+function parseValuedPrefix(source: string, prefix: string, negative: boolean): ParsedClass | null {
+    if (!source.startsWith(`${prefix}-`)) return null;
+    const rawValue = source.slice(prefix.length + 1);
+    if (!rawValue || (negative && !NEGATIVE_ALLOWED.has(prefix))) return null;
+    if (SPACING_PROPS.has(prefix) && !isValidSpacingValue(rawValue)) return null;
+    return disambiguateAndParse(prefix, rawValue, negative);
+}
+
+/**
+ * Parses an arbitrary CSS custom-property declaration.
+ * @param input - The utility after removing the important marker.
+ * @returns The custom-property declaration, or null.
+ */
+function parseCustomPropertyDeclaration(input: string): ParsedClass | null {
+    if (!input.startsWith('[') || !input.endsWith(']') || !input.includes(':')) return null;
+    const inner = input.slice(1, -1);
+    if (!inner.startsWith('--')) return null;
+    const colonIndex = inner.indexOf(':');
+    return {
+        prop: inner.slice(0, colonIndex),
+        value: inner.slice(colonIndex + 1),
+    };
 }
 
 /**
@@ -243,6 +243,50 @@ function tryBooleanMatch(cls: string): ParsedClass | null {
 // ============================================================================
 
 /**
+ * Split a gradient utility into its type and remaining suffix.
+ *
+ * @param className Candidate background-gradient class.
+ * @returns Gradient type and suffix, or null when not a gradient.
+ */
+function parseGradientType(
+    className: string,
+): { type: 'linear' | 'radial' | 'conic'; suffix: string } | null {
+    const types = ['linear', 'radial', 'conic'] as const;
+    for (const type of types) {
+        const prefix = `bg-${type}`;
+        if (className.startsWith(prefix)) {
+            return { type, suffix: className.slice(prefix.length) };
+        }
+    }
+    return null;
+}
+
+/**
+ * Parse the optional gradient direction suffix.
+ *
+ * @param input Gradient suffix before interpolation mode.
+ * @param negative Whether numeric angles are negative.
+ * @returns Parsed direction, or undefined when absent.
+ */
+function parseGradientDirection(input: string, negative: boolean): string | number | undefined {
+    if (!input.startsWith('-')) {
+        return undefined;
+    }
+    const direction = input.slice(1);
+    if (direction.startsWith('[') && direction.endsWith(']')) {
+        return direction.slice(1, -1).replace(/_/g, ' ');
+    }
+    if (direction.startsWith('(') && direction.endsWith(')')) {
+        return direction.slice(1, -1);
+    }
+    if (/^\d+$/.test(direction)) {
+        const angle = parseInt(direction, 10);
+        return negative ? -angle : angle;
+    }
+    return direction;
+}
+
+/**
  * Attempts to parse a gradient class (linear, radial, conic).
  * @param cls - The class string to parse
  * @param negative - Whether the class has a negative prefix
@@ -253,23 +297,11 @@ function tryGradient(cls: string, negative: boolean): ParsedClass | null {
     // bg-radial, bg-radial-[at_50%_75%], bg-radial/oklab
     // bg-conic, bg-conic-90, bg-conic-90/oklch
 
-    let input = cls;
-    let type: 'linear' | 'radial' | 'conic' | null = null;
-
-    if (input.startsWith('bg-linear')) {
-        type = 'linear';
-        input = input.slice('bg-linear'.length);
-    } else if (input.startsWith('bg-radial')) {
-        type = 'radial';
-        input = input.slice('bg-radial'.length);
-    } else if (input.startsWith('bg-conic')) {
-        type = 'conic';
-        input = input.slice('bg-conic'.length);
-    }
-
-    if (!type) {
+    const parsedType = parseGradientType(cls);
+    if (!parsedType) {
         return null;
     }
+    let { suffix: input } = parsedType;
 
     // Parse color interpolation (after /)
     let colorInterp: string | undefined;
@@ -281,26 +313,10 @@ function tryGradient(cls: string, negative: boolean): ParsedClass | null {
     }
 
     // Parse direction
-    const grad: Record<string, unknown> = { gradient: type };
-
-    if (input === '' || input === undefined) {
-        // No direction: bg-radial, bg-conic
-    } else if (input.startsWith('-')) {
-        // Has direction: -to-r, -45, -[at_50%_75%]
-        const dir = input.slice(1);
-        if (dir.startsWith('[') && dir.endsWith(']')) {
-            // Arbitrary: [at_50%_75%] → "at 50% 75%"
-            grad.dir = dir.slice(1, -1).replace(/_/g, ' ');
-        } else if (dir.startsWith('(') && dir.endsWith(')')) {
-            // CSS variable: (--dir)
-            grad.dir = dir.slice(1, -1);
-        } else if (/^\d+$/.test(dir)) {
-            // Numeric angle
-            grad.dir = negative ? -parseInt(dir, 10) : parseInt(dir, 10);
-        } else {
-            // Keyword: to-r, to-br, etc.
-            grad.dir = dir;
-        }
+    const grad: Record<string, unknown> = { gradient: parsedType.type };
+    const direction = parseGradientDirection(input, negative);
+    if (direction !== undefined) {
+        grad.dir = direction;
     }
 
     if (colorInterp) {
@@ -345,40 +361,7 @@ function disambiguateAndParse(
     rawValue: string,
     negative: boolean,
 ): ParsedClass | null {
-    // Handle color+opacity: value contains / at top level
-    const slashIdx = findTopLevelSlash(rawValue);
-    let opacity: string | number | undefined;
-    let value = rawValue;
-
-    if (slashIdx !== -1 && !isGradientPrefix(prefix)) {
-        // Check if this is a fraction (e.g., "1/2") before treating as opacity
-        const isFraction = FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(rawValue);
-
-        if (!isFraction) {
-            opacity = rawValue.slice(slashIdx + 1);
-            value = rawValue.slice(0, slashIdx);
-
-            // Parse opacity
-            if (opacity.startsWith('[') && opacity.endsWith(']')) {
-                opacity = opacity.slice(1, -1); // strip brackets → "0.05" or "78%"
-                // Convert numeric strings to numbers after stripping brackets.
-                // "0.05" → 0.05 (decimal fraction), "78%" stays as string (percentage).
-                if (!String(opacity).includes('%')) {
-                    const opNum = Number(opacity);
-                    if (!Number.isNaN(opNum)) {
-                        opacity = opNum;
-                    }
-                }
-            } else if (opacity.startsWith('(') && opacity.endsWith(')')) {
-                opacity = opacity.slice(1, -1); // strip parens → "--alpha"
-            } else {
-                const opNum = Number(opacity);
-                if (!Number.isNaN(opNum)) {
-                    opacity = opNum;
-                }
-            }
-        }
-    }
+    const { value, opacity } = extractOpacity(prefix, rawValue);
 
     // Disambiguate ambiguous prefixes
     const result = disambiguate(prefix, value, negative);
@@ -395,6 +378,53 @@ function disambiguateAndParse(
     }
 
     return result;
+}
+
+/**
+ * Separates a top-level color opacity modifier from a utility value.
+ * @param prefix - The matched Tailwind prefix.
+ * @param rawValue - The value portion after the prefix.
+ * @returns The base value and optional normalized opacity.
+ */
+function extractOpacity(
+    prefix: string,
+    rawValue: string,
+): { value: string; opacity?: string | number } {
+    const slashIndex = findTopLevelSlash(rawValue);
+    const isFraction = FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(rawValue);
+    if (slashIndex === -1 || isGradientPrefix(prefix) || isFraction) {
+        return { value: rawValue };
+    }
+    return {
+        value: rawValue.slice(0, slashIndex),
+        opacity: parseOpacity(rawValue.slice(slashIndex + 1)),
+    };
+}
+
+/**
+ * Normalizes bracketed, parenthesized, numeric, and percentage opacity values.
+ * @param rawOpacity - The opacity substring after the slash.
+ * @returns The normalized opacity value.
+ */
+function parseOpacity(rawOpacity: string): string | number {
+    if (rawOpacity.startsWith('[') && rawOpacity.endsWith(']')) {
+        const unwrapped = rawOpacity.slice(1, -1);
+        return unwrapped.includes('%') ? unwrapped : numericOpacity(unwrapped);
+    }
+    if (rawOpacity.startsWith('(') && rawOpacity.endsWith(')')) {
+        return rawOpacity.slice(1, -1);
+    }
+    return numericOpacity(rawOpacity);
+}
+
+/**
+ * Converts a numeric opacity string while preserving non-numeric tokens.
+ * @param value - The candidate opacity value.
+ * @returns A number when parseable; otherwise the original string.
+ */
+function numericOpacity(value: string): string | number {
+    const numeric = Number(value);
+    return Number.isNaN(numeric) ? value : numeric;
 }
 
 /**
@@ -980,74 +1010,70 @@ function isValidSpacingValue(value: string): boolean {
  * @returns The parsed sz value (number, string, or other)
  */
 export function parseValue(prefix: string, value: string, negative: boolean): unknown {
-    // Arbitrary values: [10px], [calc(100%-1rem)]
     if (value.startsWith('[') && value.endsWith(']')) {
-        const inner = value.slice(1, -1).replace(/_/g, ' ');
-        if (negative) {
-            return `-${inner}`;
-        }
-        // content prefix: normalize CSS string literals to double-quote form so that
-        // content-[''] and content-[""] both produce { content: '""' } for round-trip stability.
-        if (prefix === 'content') {
-            const isQuoted =
-                (inner.startsWith("'") && inner.endsWith("'")) ||
-                (inner.startsWith('"') && inner.endsWith('"'));
-            if (isQuoted) {
-                return `"${inner.slice(1, -1)}"`;
-            }
-        }
-        return inner;
+        return parseArbitraryValue(prefix, value.slice(1, -1).replace(/_/g, ' '), negative);
     }
 
-    // CSS variable sugar: (--spacing), (--my-var)
     if (value.startsWith('(') && value.endsWith(')')) {
-        const inner = value.slice(1, -1);
-        if (negative) {
-            return `-${inner}`;
-        }
-        return inner;
+        return signedString(value.slice(1, -1), negative);
     }
 
-    // Fraction: 1/2, 2/3, etc. Negative is allowed for inset/translate (e.g. -translate-x-1/2);
-    // parseClass already rejected negatives for prefixes outside NEGATIVE_ALLOWED.
     if (FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(value)) {
-        return negative ? `-${value}` : value; // Keep as string "1/2" / "-1/2"
+        return signedString(value, negative);
     }
 
-    // Px keyword
     if (value === 'px') {
-        return negative ? '-px' : 'px';
+        return signedString('px', negative);
     }
-
-    // Auto
-    if (value === 'auto') {
-        return 'auto';
-    }
-
-    // Full (negatable: -inset-full, -translate-x-full)
     if (value === 'full') {
-        return negative ? '-full' : 'full';
+        return signedString('full', negative);
+    }
+    if (value === 'auto' || value === 'screen') {
+        return value;
     }
 
-    // Screen
-    if (value === 'screen') {
-        return 'screen';
-    }
-
-    // Numeric: integer or 0.5-step decimal
     const num = Number(value);
     if (!Number.isNaN(num)) {
-        if (negative) {
-            return -num;
-        }
-        return num;
+        return negative ? -num : num;
     }
+    return signedString(value, negative);
+}
 
-    // String value
-    if (negative) {
-        return `-${value}`;
+/**
+ * Normalizes an arbitrary value, including content string quote stability.
+ * @param prefix - The matched Tailwind prefix.
+ * @param inner - The unwrapped arbitrary value.
+ * @param negative - Whether to apply a negative prefix.
+ * @returns The normalized arbitrary value.
+ */
+function parseArbitraryValue(prefix: string, inner: string, negative: boolean): string {
+    if (negative) return `-${inner}`;
+    if (prefix === 'content' && isQuotedString(inner)) {
+        return `"${inner.slice(1, -1)}"`;
     }
-    return value;
+    return inner;
+}
+
+/**
+ * Tests whether a value is wrapped in matching single or double quotes.
+ * @param value - The value to inspect.
+ * @returns Whether it has matching quote delimiters.
+ */
+function isQuotedString(value: string): boolean {
+    return (
+        (value.startsWith("'") && value.endsWith("'")) ||
+        (value.startsWith('"') && value.endsWith('"'))
+    );
+}
+
+/**
+ * Applies the Tailwind negative marker to a string value when requested.
+ * @param value - The unsigned string value.
+ * @param negative - Whether to prepend the negative marker.
+ * @returns The signed string value.
+ */
+function signedString(value: string, negative: boolean): string {
+    return negative ? `-${value}` : value;
 }
 
 /**

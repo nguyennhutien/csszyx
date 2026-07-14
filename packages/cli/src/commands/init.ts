@@ -8,7 +8,12 @@ import { execa } from 'execa';
 import fs from 'fs-extra';
 import prompts from 'prompts';
 
-import { type Framework, getFrameworkName, getProjectInfo } from '../utils/framework-detector.js';
+import {
+    type Framework,
+    getFrameworkName,
+    getProjectInfo,
+    type ProjectInfo,
+} from '../utils/framework-detector.js';
 import {
     printError,
     printHeader,
@@ -63,6 +68,15 @@ const CSS_ENTRY_CANDIDATES = [
     'styles/globals.css',
 ];
 
+/** Setup choices gathered from defaults or prompts. */
+interface InitConfig {
+    enableSSR: boolean;
+    enableRecovery: boolean;
+    installTailwind: boolean;
+    setupGitignore: boolean;
+    setupTsconfig: boolean;
+}
+
 /**
  * @param options - Command line options
  */
@@ -77,129 +91,9 @@ export async function init(options: InitOptions = {}): Promise<void> {
         printInfo(`Package Manager: ${projectInfo.packageManager}`);
     }
 
-    let config = {
-        enableSSR: true,
-        enableRecovery: true,
-        installTailwind: !projectInfo.hasTailwind,
-        setupGitignore: true,
-        setupTsconfig: !!projectInfo.hasTypeScript,
-    };
-
-    if (!options.yes) {
-        const answers = await prompts([
-            {
-                type: projectInfo.hasTailwind ? null : 'confirm',
-                name: 'installTailwind',
-                message: 'Install Tailwind CSS v4?',
-                initial: true,
-            },
-            {
-                type: 'confirm',
-                name: 'enableSSR',
-                message: 'Enable SSR Hydration Guard?',
-                initial: true,
-            },
-            {
-                type: 'confirm',
-                name: 'enableRecovery',
-                message: 'Enable development mode recovery?',
-                initial: true,
-            },
-            {
-                type: 'confirm',
-                name: 'setupGitignore',
-                message: 'Add .csszyx to .gitignore?',
-                initial: true,
-            },
-            {
-                type: projectInfo.hasTypeScript ? 'confirm' : null,
-                name: 'setupTsconfig',
-                message: 'Add .csszyx/theme.d.ts to tsconfig.json (Theme Auto-Scan)?',
-                initial: true,
-            },
-        ]);
-
-        config = { ...config, ...answers };
-    }
-
-    // Install packages
-    const spin = spinner.start('Installing csszyx...');
-    try {
-        // @csszyx/runtime is added as a direct dependency: the build injects a
-        // bare `import { _szMerge } from '@csszyx/runtime'`, which a strict
-        // package manager (pnpm) cannot resolve as a transitive dependency.
-        await execa(projectInfo.packageManager, ['add', 'csszyx', '@csszyx/runtime'], { cwd });
-        if (projectInfo.hasTypeScript) {
-            // @csszyx/types provides the `sz` JSX augmentation; it must be
-            // resolvable at the top level for the csszyx-env.d.ts reference.
-            await execa(projectInfo.packageManager, ['add', '-D', '@csszyx/types'], { cwd });
-        }
-        if (config.installTailwind) {
-            // Tailwind v4: install the appropriate integration package
-            const twPackage = VITE_FRAMEWORKS.has(projectInfo.framework)
-                ? '@tailwindcss/vite'
-                : '@tailwindcss/postcss';
-            await execa(projectInfo.packageManager, ['add', '-D', 'tailwindcss', twPackage], {
-                cwd,
-            });
-        }
-        spinner.succeed(spin, 'Installed csszyx');
-    } catch (error) {
-        spinner.fail(spin, 'Failed to install packages');
-        printError(String(error));
-        return;
-    }
-
-    // Create/update config files
-    const spin2 = spinner.start('Creating config files...');
-    try {
-        // csszyx.config.ts / csszyx.config.js
-        const configContent = generateConfigFile(config);
-        const configPath = path.join(
-            cwd,
-            projectInfo.hasTypeScript ? 'csszyx.config.ts' : 'csszyx.config.js',
-        );
-        await fs.writeFile(configPath, configContent);
-
-        // Tailwind v4 CSS setup (no tailwind.config.js)
-        if (config.installTailwind) {
-            await setupTailwindCss(cwd, projectInfo.framework);
-        }
-
-        // Plugin injection into vite.config / next.config
-        await injectPlugin(cwd, projectInfo.framework);
-
-        // .gitignore
-        if (config.setupGitignore) {
-            const gitignorePath = path.join(cwd, '.gitignore');
-            const ignoreEntry = '\n# csszyx generated theme types\n.csszyx\n';
-            const existing = await readFileOrNull(gitignorePath);
-            if (existing !== null) {
-                if (!existing.includes('.csszyx')) {
-                    await fs.appendFile(gitignorePath, ignoreEntry);
-                }
-            } else {
-                await fs.writeFile(gitignorePath, 'node_modules\n.csszyx\n');
-            }
-        }
-
-        // tsconfig.json
-        if (config.setupTsconfig) {
-            await setupTsconfig(cwd);
-        }
-
-        // sz prop JSX types — core for any TypeScript project, so not gated on
-        // the optional theme-scan tsconfig prompt above.
-        if (projectInfo.hasTypeScript) {
-            await setupSzTypes(cwd);
-        }
-
-        spinner.succeed(spin2, 'Created configuration files');
-    } catch (error) {
-        spinner.fail(spin2, 'Failed to create config files');
-        printError(String(error));
-        return;
-    }
+    const config = await resolveInitConfig(projectInfo, options.yes);
+    if (!(await installInitPackages(cwd, projectInfo, config))) return;
+    if (!(await createInitFiles(cwd, projectInfo, config))) return;
 
     console.log();
     printSuccess('🎉 All done!');
@@ -217,6 +111,141 @@ export async function init(options: InitOptions = {}): Promise<void> {
         console.log('    Setup guide: https://csszyx.com/docs/installation#nextjs-turbopack-setup');
     }
     console.log('  • Check the docs at https://csszyx.com');
+}
+
+/**
+ * Resolve setup defaults and optional interactive overrides.
+ * @param projectInfo - Detected project metadata.
+ * @param acceptDefaults - Whether to skip prompts.
+ * @returns Final setup configuration.
+ */
+async function resolveInitConfig(
+    projectInfo: ProjectInfo,
+    acceptDefaults = false,
+): Promise<InitConfig> {
+    const defaults: InitConfig = {
+        enableSSR: true,
+        enableRecovery: true,
+        installTailwind: !projectInfo.hasTailwind,
+        setupGitignore: true,
+        setupTsconfig: projectInfo.hasTypeScript,
+    };
+    if (acceptDefaults) return defaults;
+    const answers = await prompts([
+        {
+            type: projectInfo.hasTailwind ? null : 'confirm',
+            name: 'installTailwind',
+            message: 'Install Tailwind CSS v4?',
+            initial: true,
+        },
+        {
+            type: 'confirm',
+            name: 'enableSSR',
+            message: 'Enable SSR Hydration Guard?',
+            initial: true,
+        },
+        {
+            type: 'confirm',
+            name: 'enableRecovery',
+            message: 'Enable development mode recovery?',
+            initial: true,
+        },
+        {
+            type: 'confirm',
+            name: 'setupGitignore',
+            message: 'Add .csszyx to .gitignore?',
+            initial: true,
+        },
+        {
+            type: projectInfo.hasTypeScript ? 'confirm' : null,
+            name: 'setupTsconfig',
+            message: 'Add .csszyx/theme.d.ts to tsconfig.json (Theme Auto-Scan)?',
+            initial: true,
+        },
+    ]);
+    return { ...defaults, ...answers };
+}
+
+/**
+ * Install runtime, type, and optional Tailwind packages.
+ * @param cwd - Project directory.
+ * @param projectInfo - Detected project metadata.
+ * @param config - Final setup configuration.
+ * @returns Whether installation succeeded.
+ */
+async function installInitPackages(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    config: InitConfig,
+): Promise<boolean> {
+    const spin = spinner.start('Installing csszyx...');
+    try {
+        await execa(projectInfo.packageManager, ['add', 'csszyx', '@csszyx/runtime'], { cwd });
+        if (projectInfo.hasTypeScript) {
+            await execa(projectInfo.packageManager, ['add', '-D', '@csszyx/types'], { cwd });
+        }
+        if (config.installTailwind) {
+            const integration = VITE_FRAMEWORKS.has(projectInfo.framework)
+                ? '@tailwindcss/vite'
+                : '@tailwindcss/postcss';
+            await execa(projectInfo.packageManager, ['add', '-D', 'tailwindcss', integration], {
+                cwd,
+            });
+        }
+        spinner.succeed(spin, 'Installed csszyx');
+        return true;
+    } catch (error) {
+        spinner.fail(spin, 'Failed to install packages');
+        printError(String(error));
+        return false;
+    }
+}
+
+/**
+ * Create and update all selected integration files.
+ * @param cwd - Project directory.
+ * @param projectInfo - Detected project metadata.
+ * @param config - Final setup configuration.
+ * @returns Whether file setup succeeded.
+ */
+async function createInitFiles(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    config: InitConfig,
+): Promise<boolean> {
+    const spin = spinner.start('Creating config files...');
+    try {
+        const configPath = path.join(
+            cwd,
+            projectInfo.hasTypeScript ? 'csszyx.config.ts' : 'csszyx.config.js',
+        );
+        await fs.writeFile(configPath, generateConfigFile(config));
+        if (config.installTailwind) await setupTailwindCss(cwd, projectInfo.framework);
+        await injectPlugin(cwd, projectInfo.framework);
+        if (config.setupGitignore) await setupGitignore(cwd);
+        if (config.setupTsconfig) await setupTsconfig(cwd);
+        if (projectInfo.hasTypeScript) await setupSzTypes(cwd);
+        spinner.succeed(spin, 'Created configuration files');
+        return true;
+    } catch (error) {
+        spinner.fail(spin, 'Failed to create config files');
+        printError(String(error));
+        return false;
+    }
+}
+
+/**
+ * Add the generated theme directory to gitignore.
+ * @param cwd - Project directory.
+ */
+async function setupGitignore(cwd: string): Promise<void> {
+    const gitignorePath = path.join(cwd, '.gitignore');
+    const existing = await readFileOrNull(gitignorePath);
+    if (existing === null) {
+        await fs.writeFile(gitignorePath, 'node_modules\n.csszyx\n');
+    } else if (!existing.includes('.csszyx')) {
+        await fs.appendFile(gitignorePath, '\n# csszyx generated theme types\n.csszyx\n');
+    }
 }
 
 /**

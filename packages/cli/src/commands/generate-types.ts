@@ -26,6 +26,14 @@ export interface GenerateTypesOptions {
     silent?: boolean;
 }
 
+type CommandLogger = (message: string) => void;
+type TailwindScanResult = Awaited<ReturnType<typeof scanTailwindConfig>>;
+
+interface CommandOutput {
+    log: CommandLogger;
+    error: CommandLogger;
+}
+
 /**
  * Execute the generate-types command.
  *
@@ -39,48 +47,13 @@ export interface GenerateTypesOptions {
  */
 export async function generateTypes(options: GenerateTypesOptions = {}): Promise<void> {
     const cwd = options.cwd || process.cwd();
-    const log = options.silent ? () => {} : console.log;
-    const error = options.silent ? () => {} : console.error;
-
-    // Find or use provided config path
-    let configPath: string;
-    let scanResult: Awaited<ReturnType<typeof scanTailwindConfig>>;
-
-    if (options.config) {
-        configPath = resolve(cwd, options.config);
-    } else {
-        log('🔍 Searching for tailwind.config...');
-        const foundConfig = findConfigFile(cwd);
-
-        if (!foundConfig) {
-            error('❌ Could not find tailwind.config.js in current directory');
-            error('   Please specify the path with --config flag');
-            process.exit(1);
-        }
-
-        configPath = foundConfig;
-    }
+    const { log, error } = commandOutput(options.silent);
+    const configPath = resolveConfigPath(options.config, cwd, log, error);
 
     log(`📖 Reading config from: ${configPath}`);
-
-    // Scan and resolve Tailwind config
-    try {
-        scanResult = await scanTailwindConfig(configPath);
-    } catch (err) {
-        error(
-            `❌ Failed to read Tailwind config: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        process.exit(1);
-    }
-
+    const scanResult = await loadTailwindConfig(configPath, error);
     log('✅ Config loaded successfully');
-
-    if (scanResult.hasCustomColors) {
-        log('   • Custom colors detected');
-    }
-    if (scanResult.hasCustomSpacing) {
-        log('   • Custom spacing detected');
-    }
+    logCustomThemeParts(scanResult, log);
 
     // Generate types
     const outputPath = options.output || './csszyx.d.ts';
@@ -90,15 +63,113 @@ export async function generateTypes(options: GenerateTypesOptions = {}): Promise
     };
 
     log('\n📝 Generating TypeScript declarations...');
+    await writeDeclarations(scanResult, generatorOptions, log, error);
+}
 
+/**
+ * Creates the command's visible or silent output functions.
+ * @param silent - Whether command output should be suppressed.
+ * @returns The log and error functions for this invocation.
+ */
+function commandOutput(silent = false): CommandOutput {
+    if (silent) {
+        const noop: CommandLogger = () => {};
+        return { log: noop, error: noop };
+    }
+    return { log: console.log, error: console.error };
+}
+
+/**
+ * Resolves an explicit config or discovers the default config in the working directory.
+ * @param config - The optional config path supplied by the user.
+ * @param cwd - The command working directory.
+ * @param log - The normal-output logger.
+ * @param error - The error-output logger.
+ * @returns The absolute Tailwind config path.
+ */
+function resolveConfigPath(
+    config: string | undefined,
+    cwd: string,
+    log: CommandLogger,
+    error: CommandLogger,
+): string {
+    if (config) {
+        return resolve(cwd, config);
+    }
+
+    log('🔍 Searching for tailwind.config...');
+    const foundConfig = findConfigFile(cwd);
+    if (foundConfig) {
+        return foundConfig;
+    }
+
+    error('❌ Could not find tailwind.config.js in current directory');
+    error('   Please specify the path with --config flag');
+    process.exit(1);
+}
+
+/**
+ * Loads and normalizes a Tailwind config, reporting a CLI-friendly failure.
+ * @param configPath - The absolute Tailwind config path.
+ * @param error - The error-output logger.
+ * @returns The normalized Tailwind scan result.
+ */
+async function loadTailwindConfig(
+    configPath: string,
+    error: CommandLogger,
+): Promise<TailwindScanResult> {
+    try {
+        return await scanTailwindConfig(configPath);
+    } catch (cause) {
+        error(`❌ Failed to read Tailwind config: ${errorMessage(cause)}`);
+        process.exit(1);
+    }
+}
+
+/**
+ * Reports the custom theme sections discovered by the scanner.
+ * @param scanResult - The normalized Tailwind scan result.
+ * @param log - The normal-output logger.
+ */
+function logCustomThemeParts(scanResult: TailwindScanResult, log: CommandLogger): void {
+    if (scanResult.hasCustomColors) {
+        log('   • Custom colors detected');
+    }
+    if (scanResult.hasCustomSpacing) {
+        log('   • Custom spacing detected');
+    }
+}
+
+/**
+ * Generates the declarations and prints the successful command summary.
+ * @param scanResult - The normalized Tailwind scan result.
+ * @param generatorOptions - The declaration generator options.
+ * @param log - The normal-output logger.
+ * @param error - The error-output logger.
+ */
+async function writeDeclarations(
+    scanResult: TailwindScanResult,
+    generatorOptions: GeneratorOptions,
+    log: CommandLogger,
+    error: CommandLogger,
+): Promise<void> {
     try {
         const writtenPath = await generateAndWriteTypes(scanResult.theme, generatorOptions);
         log('\n✨ Types generated successfully!');
         log(`   Output: ${writtenPath}`);
         log('\n💡 Add this to your tsconfig.json "include" array:');
         log('   "include": ["src", "csszyx.d.ts"]');
-    } catch (err) {
-        error(`❌ Failed to generate types: ${err instanceof Error ? err.message : String(err)}`);
+    } catch (cause) {
+        error(`❌ Failed to generate types: ${errorMessage(cause)}`);
         process.exit(1);
     }
+}
+
+/**
+ * Converts an unknown thrown value to its CLI display form.
+ * @param cause - The thrown value.
+ * @returns A human-readable error message.
+ */
+function errorMessage(cause: unknown): string {
+    return cause instanceof Error ? cause.message : String(cause);
 }

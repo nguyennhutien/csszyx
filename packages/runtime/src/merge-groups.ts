@@ -240,54 +240,75 @@ export function registerSzcnGroups(groups: SzcnThemeGroups): void {
         ['fontWeights', groups.fontWeights],
     ];
     for (const [category, names] of entries) {
-        for (const name of names ?? []) {
-            if (!name || typeof name !== 'string') {
-                continue;
-            }
-            if (COLLISION_BLOCKLIST[category].has(name)) {
-                warnOnce(
-                    `theme token "${name}" shadows a built-in ${category === 'colors' ? 'utility keyword' : 'value'} — ` +
-                        'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
-                        'Rename the token to enable precise merging.',
-                );
-                continue;
-            }
-            const ambiguityPair = AMBIGUITY_PAIR_BY_CATEGORY[category];
-            if (ambiguityPair.dropped.has(name)) {
-                // warnOnce de-dupes: the drop that recorded the name already
-                // warned with the same message, so replays stay quiet.
-                warnOnce(ambiguityPair.message(name));
-                continue;
-            }
-            if (!customTokens[category].has(name)) {
-                customTokens[category].add(name);
-                changed = true;
-            }
-        }
+        if (registerThemeCategory(category, names)) changed = true;
     }
     // Cross-category ambiguity: `--color-huge` + `--text-huge` makes `text-huge`
     // mean two different properties. Drop from both — keep-both over guessing.
-    for (const name of [...customTokens.colors]) {
-        if (customTokens.textSizes.has(name)) {
-            customTokens.colors.delete(name);
-            customTokens.textSizes.delete(name);
-            AMBIGUITY_PAIRS.colorTextSize.dropped.add(name);
-            changed = true;
-            warnOnce(AMBIGUITY_PAIRS.colorTextSize.message(name));
-        }
-    }
-    for (const name of [...customTokens.fontFamilies]) {
-        if (customTokens.fontWeights.has(name)) {
-            customTokens.fontFamilies.delete(name);
-            customTokens.fontWeights.delete(name);
-            AMBIGUITY_PAIRS.fontFamilyWeight.dropped.add(name);
-            changed = true;
-            warnOnce(AMBIGUITY_PAIRS.fontFamilyWeight.message(name));
-        }
-    }
+    if (dropAmbiguousThemeTokens('colors', 'textSizes', AMBIGUITY_PAIRS.colorTextSize))
+        changed = true;
+    if (dropAmbiguousThemeTokens('fontFamilies', 'fontWeights', AMBIGUITY_PAIRS.fontFamilyWeight))
+        changed = true;
     if (changed) {
         _generation++;
     }
+}
+
+/**
+ * Register one theme category, rejecting collisions and prior ambiguities.
+ * @param category - Theme token category.
+ * @param names - Candidate token names.
+ * @returns Whether the registry changed.
+ */
+function registerThemeCategory(
+    category: keyof typeof customTokens,
+    names: readonly string[] | undefined,
+): boolean {
+    let changed = false;
+    for (const name of names ?? []) {
+        if (!name || typeof name !== 'string') continue;
+        if (COLLISION_BLOCKLIST[category].has(name)) {
+            warnOnce(
+                `theme token "${name}" shadows a built-in ${category === 'colors' ? 'utility keyword' : 'value'} — ` +
+                    'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
+                    'Rename the token to enable precise merging.',
+            );
+            continue;
+        }
+        const pair = AMBIGUITY_PAIR_BY_CATEGORY[category];
+        if (pair.dropped.has(name)) {
+            warnOnce(pair.message(name));
+            continue;
+        }
+        if (!customTokens[category].has(name)) {
+            customTokens[category].add(name);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/**
+ * Drop names registered into two categories that share class syntax.
+ * @param first - First conflicting category.
+ * @param second - Second conflicting category.
+ * @param pair - Ambiguity state shared by the categories.
+ * @returns Whether any token was dropped.
+ */
+function dropAmbiguousThemeTokens(
+    first: keyof typeof customTokens,
+    second: keyof typeof customTokens,
+    pair: (typeof AMBIGUITY_PAIRS)[keyof typeof AMBIGUITY_PAIRS],
+): boolean {
+    let changed = false;
+    for (const name of [...customTokens[first]]) {
+        if (!customTokens[second].has(name)) continue;
+        customTokens[first].delete(name);
+        customTokens[second].delete(name);
+        pair.dropped.add(name);
+        warnOnce(pair.message(name));
+        changed = true;
+    }
+    return changed;
 }
 
 /**
@@ -356,113 +377,125 @@ function isLengthArbitrary(value: string): boolean {
  */
 export function classifyAmbiguousValue(prefix: string, value: string): string | null {
     switch (prefix) {
-        case 'text': {
-            const sizeValue = value.replace(/\/[\w.[\]]+$/, ''); // text-sm/6 line-height modifier
-            if (TEXT_SIZES.has(sizeValue) || customTokens.textSizes.has(sizeValue)) {
-                return 'text:size';
-            }
-            if (isLengthArbitrary(sizeValue)) {
-                return 'text:size';
-            }
-            if (TEXT_ALIGNS.has(value)) {
-                return 'text:align';
-            }
-            if (TEXT_WRAPS.has(value)) {
-                return 'text:wrap';
-            }
-            if (TEXT_OVERFLOWS.has(value)) {
-                return 'text:overflow';
-            }
-            if (isColorValue(value)) {
-                return 'text:color';
-            }
-            return null;
-        }
-        case 'font': {
-            if (FONT_FAMILIES.has(value) || customTokens.fontFamilies.has(value)) {
-                return 'font:family';
-            }
-            if (
-                FONT_WEIGHTS.has(value) ||
-                customTokens.fontWeights.has(value) ||
-                /^\[\d+\]$/.test(value)
-            ) {
-                return 'font:weight';
-            }
-            return null;
-        }
-        case 'bg': {
-            if (isColorValue(value)) {
-                return 'bg:color';
-            }
-            if (BG_POSITIONS.has(value) || value.startsWith('position-')) {
-                return 'bg:position';
-            }
-            if (BG_SIZES.has(value) || value.startsWith('size-')) {
-                return 'bg:size';
-            }
-            if (BG_REPEATS.has(value)) {
-                return 'bg:repeat';
-            }
-            if (BG_ATTACHMENTS.has(value)) {
-                return 'bg:attachment';
-            }
-            if (value.startsWith('clip-')) {
-                return 'bg:clip';
-            }
-            if (value.startsWith('origin-')) {
-                return 'bg:origin';
-            }
-            if (
-                value === 'none' ||
-                value.startsWith('gradient-to-') ||
-                value.startsWith('linear-') ||
-                value === 'radial' ||
-                value.startsWith('radial-') ||
-                value.startsWith('conic-') ||
-                value === 'conic' ||
-                /^\[url\(/.test(value) ||
-                /^\[image:/.test(value)
-            ) {
-                return 'bg:image';
-            }
-            return null;
-        }
+        case 'text':
+            return classifyTextValue(value);
+        case 'font':
+            return classifyFontValue(value);
+        case 'bg':
+            return classifyBackgroundValue(value);
         case 'border':
         case 'divide':
         case 'ring':
-        case 'outline': {
-            // Directional/axis forms (border-t-2, divide-x-4) stay keep-both in
-            // v1: a directional width interacts with the shorthand the same way
-            // p/px/pt do, and that coverage logic is deferred for these prefixes.
-            const firstSegment = value.split('-', 1)[0] ?? '';
-            if (DIRECTIONAL_SEGMENTS.has(firstSegment)) {
-                return null;
-            }
-            if (isColorValue(value)) {
-                return `${prefix}:color`;
-            }
-            if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-                return `${prefix}:width`;
-            }
-            if (BORDER_STYLES.has(value)) {
-                return `${prefix}:style`;
-            }
-            return null;
-        }
-        case 'flex': {
-            if (FLEX_DIRECTIONS.has(value)) {
-                return 'flex:direction';
-            }
-            if (FLEX_WRAPS.has(value)) {
-                return 'flex:wrap';
-            }
-            if (FLEX_SHORTHANDS.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-                return 'flex:shorthand';
-            }
-            return null;
-        }
+        case 'outline':
+            return classifyBorderValue(prefix, value);
+        case 'flex':
+            return classifyFlexValue(value);
         default:
             return null;
     }
+}
+
+/**
+ * Classifies an ambiguous `text-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The text property group, or `null` when uncertain.
+ */
+function classifyTextValue(value: string): string | null {
+    const sizeValue = value.replace(/\/[\w.[\]]+$/, '');
+    if (TEXT_SIZES.has(sizeValue) || customTokens.textSizes.has(sizeValue)) {
+        return 'text:size';
+    }
+    if (isLengthArbitrary(sizeValue)) {
+        return 'text:size';
+    }
+    if (TEXT_ALIGNS.has(value)) {
+        return 'text:align';
+    }
+    if (TEXT_WRAPS.has(value)) {
+        return 'text:wrap';
+    }
+    if (TEXT_OVERFLOWS.has(value)) {
+        return 'text:overflow';
+    }
+    return isColorValue(value) ? 'text:color' : null;
+}
+
+/**
+ * Classifies an ambiguous `font-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The font property group, or `null` when uncertain.
+ */
+function classifyFontValue(value: string): string | null {
+    if (FONT_FAMILIES.has(value) || customTokens.fontFamilies.has(value)) {
+        return 'font:family';
+    }
+    if (FONT_WEIGHTS.has(value) || customTokens.fontWeights.has(value) || /^\[\d+\]$/.test(value)) {
+        return 'font:weight';
+    }
+    return null;
+}
+
+/**
+ * Classifies an ambiguous `bg-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The background property group, or `null` when uncertain.
+ */
+function classifyBackgroundValue(value: string): string | null {
+    if (isColorValue(value)) return 'bg:color';
+    if (BG_POSITIONS.has(value) || value.startsWith('position-')) return 'bg:position';
+    if (BG_SIZES.has(value) || value.startsWith('size-')) return 'bg:size';
+    if (BG_REPEATS.has(value)) return 'bg:repeat';
+    if (BG_ATTACHMENTS.has(value)) return 'bg:attachment';
+    if (value.startsWith('clip-')) return 'bg:clip';
+    if (value.startsWith('origin-')) return 'bg:origin';
+    return isBackgroundImage(value) ? 'bg:image' : null;
+}
+
+/**
+ * Tests whether a background value selects an image or gradient utility.
+ * @param value - The value after the `bg-` prefix.
+ * @returns Whether the value belongs to the background-image group.
+ */
+function isBackgroundImage(value: string): boolean {
+    return (
+        value === 'none' ||
+        value.startsWith('gradient-to-') ||
+        value.startsWith('linear-') ||
+        value === 'radial' ||
+        value.startsWith('radial-') ||
+        value.startsWith('conic-') ||
+        value === 'conic' ||
+        /^\[url\(/.test(value) ||
+        /^\[image:/.test(value)
+    );
+}
+
+/**
+ * Classifies an ambiguous border-like utility value.
+ * @param prefix - The border-like utility prefix.
+ * @param value - The value after the utility prefix.
+ * @returns The border property group, or `null` when uncertain.
+ */
+function classifyBorderValue(prefix: string, value: string): string | null {
+    const firstSegment = value.split('-', 1)[0] ?? '';
+    if (DIRECTIONAL_SEGMENTS.has(firstSegment)) return null;
+    if (isColorValue(value)) return `${prefix}:color`;
+    if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
+        return `${prefix}:width`;
+    }
+    return BORDER_STYLES.has(value) ? `${prefix}:style` : null;
+}
+
+/**
+ * Classifies an ambiguous `flex-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The flex property group, or `null` when uncertain.
+ */
+function classifyFlexValue(value: string): string | null {
+    if (FLEX_DIRECTIONS.has(value)) return 'flex:direction';
+    if (FLEX_WRAPS.has(value)) return 'flex:wrap';
+    if (FLEX_SHORTHANDS.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
+        return 'flex:shorthand';
+    }
+    return null;
 }

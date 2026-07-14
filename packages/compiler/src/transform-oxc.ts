@@ -1307,6 +1307,31 @@ interface OxcComponentHoistCandidate {
 }
 
 /**
+ * Resolve one supported identifier spread to its static sz object.
+ *
+ * @param spread Oxc spread node.
+ * @param filename Filename used in unsupported-shape diagnostics.
+ * @param bindings Static object bindings available at the call site.
+ * @returns Resolved static sz object.
+ */
+function resolveSzObjectSpread(
+    spread: SpreadElementNode,
+    filename: string,
+    bindings: ReadonlyMap<string, ObjectExpressionNode>,
+): SzObject {
+    if (spread.argument.type === 'Identifier') {
+        const bound = bindings.get(String((spread.argument as IdentifierNode).name));
+        if (bound) {
+            return astObjectToSzObject(bound, filename, bindings);
+        }
+    }
+    throw new OxcNotImplementedError(
+        'D5',
+        `unsupported object spread in sz object at ${filename}:${spread.start}`,
+    );
+}
+
+/**
  * Convert an oxc `ObjectExpression` AST node into a plain {@link SzObject}
  * the browser-pure `transform()` helper can consume. Throws
  * {@link OxcNotImplementedError} on any pattern D2.1 does not handle
@@ -1327,18 +1352,11 @@ function astObjectToSzObject(
     const result: Record<string, SzValue> = {};
     for (const propRaw of node.properties) {
         if (propRaw.type === 'SpreadElement') {
-            const spread = propRaw as SpreadElementNode;
-            if (spread.argument.type === 'Identifier') {
-                const bound = bindings.get(String((spread.argument as IdentifierNode).name));
-                if (bound) {
-                    Object.assign(result, astObjectToSzObject(bound, filename, bindings));
-                    continue;
-                }
-            }
-            throw new OxcNotImplementedError(
-                'D5',
-                `unsupported object spread in sz object at ${filename}:${propRaw.start}`,
+            Object.assign(
+                result,
+                resolveSzObjectSpread(propRaw as SpreadElementNode, filename, bindings),
             );
+            continue;
         }
         if (propRaw.type !== 'Property') {
             throw new OxcNotImplementedError(
@@ -2015,42 +2033,44 @@ function collectSzvCallClasses(
     }
 
     const variantsNode = readConfigSubObjectNode(configNode, 'variants', bindings);
-    if (!variantsNode) {
-        return;
-    }
+    if (!variantsNode) return;
     for (const dimensionRaw of variantsNode.properties) {
-        if (dimensionRaw.type !== 'Property') {
-            continue;
-        }
-        const dimension = dimensionRaw as PropertyNode;
-        if (dimension.computed) {
-            continue;
-        }
-        const dimensionValue = resolveCatalogObjectExpression(
-            dimension.value,
+        collectSzvDimensionClasses(dimensionRaw, base, constInits, budget, classes);
+    }
+}
+
+/**
+ * Collect all statically reachable classes from one szv variant dimension.
+ * @param dimensionRaw - Dimension property to inspect.
+ * @param base - Base style merged into each candidate.
+ * @param constInits - Const initializer lookup.
+ * @param budget - Alternate-branch budget and memo.
+ * @param classes - Class catalog to populate.
+ */
+function collectSzvDimensionClasses(
+    dimensionRaw: ObjectExpressionNode['properties'][number],
+    base: SzObject,
+    constInits: ReadonlyMap<string, OxcNode>,
+    budget: CatalogExtrasBudget,
+    classes: Set<string>,
+): void {
+    if (dimensionRaw.type !== 'Property') return;
+    const dimension = dimensionRaw as PropertyNode;
+    if (dimension.computed) return;
+    const value = resolveCatalogObjectExpression(dimension.value, constInits, new Set());
+    if (!value) return;
+    for (const variantRaw of value.properties) {
+        if (variantRaw.type !== 'Property') continue;
+        const variant = variantRaw as PropertyNode;
+        if (variant.computed) continue;
+        for (const candidate of lenientCatalogObjectCandidates(
+            variant.value,
             constInits,
             new Set(),
-        );
-        if (!dimensionValue) {
-            continue;
-        }
-        for (const variantRaw of dimensionValue.properties) {
-            if (variantRaw.type !== 'Property') {
-                continue;
-            }
-            const variant = variantRaw as PropertyNode;
-            if (variant.computed) {
-                continue;
-            }
-            for (const candidate of lenientCatalogObjectCandidates(
-                variant.value,
-                constInits,
-                new Set(),
-                0,
-                budget,
-            )) {
-                addCompiledClasses({ ...base, ...candidate }, classes);
-            }
+            0,
+            budget,
+        )) {
+            addCompiledClasses({ ...base, ...candidate }, classes);
         }
     }
 }
@@ -2155,45 +2175,55 @@ function lenientCatalogObjects(
     const primary: Record<string, SzValue> = {};
     const extras: SzObject[] = [];
     for (const propRaw of node.properties) {
-        if (propRaw.type === 'SpreadElement') {
-            const spreadCandidates = lenientCatalogObjectCandidates(
-                (propRaw as SpreadElementNode).argument,
-                constInits,
-                seen,
-                depth + 1,
-                budget,
-            );
-            const [first, ...rest] = spreadCandidates;
-            if (first) {
-                Object.assign(primary, first);
-            }
-            for (const extra of rest) {
-                pushCatalogExtra(extras, extra, budget);
-            }
-            continue;
-        }
-        if (propRaw.type !== 'Property') {
-            continue;
-        }
-        const prop = propRaw as PropertyNode;
-        if (prop.computed) {
-            continue;
-        }
-        const key = extractKeyName(prop.key);
-        if (key === null) {
-            continue;
-        }
-        const values = lenientCatalogValues(prop.value, constInits, seen, depth + 1, budget);
-        const [firstValue, ...restValues] = values;
-        if (firstValue === undefined) {
-            continue;
-        }
-        primary[key] = firstValue;
-        for (const value of restValues) {
-            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
-        }
+        collectLenientCatalogProperty(propRaw, primary, extras, constInits, seen, depth, budget);
     }
     return [primary as SzObject, ...extras];
+}
+
+/**
+ * Add one object property or spread to the lenient catalog candidates.
+ * @param propRaw - Property or spread to collect.
+ * @param primary - Primary catalog object being built.
+ * @param extras - Alternate catalog objects being built.
+ * @param constInits - Const initializer lookup.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget.
+ */
+function collectLenientCatalogProperty(
+    propRaw: ObjectExpressionNode['properties'][number],
+    primary: Record<string, SzValue>,
+    extras: SzObject[],
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): void {
+    if (propRaw.type === 'SpreadElement') {
+        const candidates = lenientCatalogObjectCandidates(
+            (propRaw as SpreadElementNode).argument,
+            constInits,
+            seen,
+            depth + 1,
+            budget,
+        );
+        const [first, ...rest] = candidates;
+        if (first) Object.assign(primary, first);
+        for (const extra of rest) pushCatalogExtra(extras, extra, budget);
+        return;
+    }
+    if (propRaw.type !== 'Property') return;
+    const prop = propRaw as PropertyNode;
+    if (prop.computed) return;
+    const key = extractKeyName(prop.key);
+    if (key === null) return;
+    const values = lenientCatalogValues(prop.value, constInits, seen, depth + 1, budget);
+    const [firstValue, ...restValues] = values;
+    if (firstValue === undefined) return;
+    primary[key] = firstValue;
+    for (const value of restValues) {
+        pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
+    }
 }
 
 /**
@@ -2221,24 +2251,8 @@ function lenientCatalogValues(
         return [];
     }
     const unwrapped = unwrapExpression(node);
-    if (unwrapped.type === 'Literal') {
-        const value = (unwrapped as unknown as { value: unknown }).value;
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-            return [value];
-        }
-        return [];
-    }
-    if (unwrapped.type === 'UnaryExpression') {
-        const operator = (unwrapped as unknown as { operator: string }).operator;
-        const argument = (unwrapped as unknown as { argument: OxcNode }).argument;
-        if ((operator === '-' || operator === '+') && argument.type === 'Literal') {
-            const argValue = (argument as unknown as { value: unknown }).value;
-            if (typeof argValue === 'number') {
-                return [operator === '-' ? -argValue : argValue];
-            }
-        }
-        return [];
-    }
+    const literal = oxcCatalogLiteralValues(unwrapped);
+    if (literal !== null) return literal;
     if (unwrapped.type === 'ObjectExpression') {
         return lenientCatalogObjects(
             unwrapped as ObjectExpressionNode,
@@ -2249,47 +2263,94 @@ function lenientCatalogValues(
         );
     }
     if (unwrapped.type === 'ConditionalExpression') {
-        const conditional = unwrapped as ConditionalExpressionNode;
-        const values = lenientCatalogValues(
-            conditional.consequent,
-            constInits,
-            seen,
-            depth,
-            budget,
-        );
-        // Same paid-exploration guard as the object-candidate lane.
-        if (budget.explores > 0) {
-            budget.explores -= 1;
-            values.push(
-                ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
-            );
-        }
-        return truncateCatalogCandidates(values, budget);
+        return oxcCatalogConditionalValues(unwrapped, constInits, seen, depth, budget);
     }
     if (unwrapped.type === 'Identifier') {
-        const name = String((unwrapped as IdentifierNode).name);
-        if (name === 'undefined') {
-            return [];
-        }
-        const init = constInits.get(name);
-        if (!init || seen.has(name)) {
-            return [];
-        }
-        const cached = budget.valueMemo.get(init);
-        if (cached) {
-            return [...cached];
-        }
-        const values = lenientCatalogValues(
-            init,
-            constInits,
-            new Set([...seen, name]),
-            depth,
-            budget,
-        );
-        budget.valueMemo.set(init, values);
-        return [...values];
+        return oxcCatalogIdentifierValues(unwrapped, constInits, seen, depth, budget);
     }
     return [];
+}
+
+/**
+ * Classify OXC primitive and signed numeric catalog values.
+ * @param node - OXC node to classify.
+ * @returns Candidate values, or null when this helper does not own the shape.
+ */
+function oxcCatalogLiteralValues(node: OxcNode): SzValue[] | null {
+    if (node.type === 'Literal') {
+        const value = (node as unknown as { value: unknown }).value;
+        return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+            ? [value]
+            : [];
+    }
+    if (node.type !== 'UnaryExpression') return null;
+    const unary = node as unknown as { operator: string; argument: OxcNode };
+    if ((unary.operator !== '-' && unary.operator !== '+') || unary.argument.type !== 'Literal') {
+        return [];
+    }
+    const value = (unary.argument as unknown as { value: unknown }).value;
+    if (typeof value !== 'number') return [];
+    return [unary.operator === '-' ? -value : value];
+}
+
+/**
+ * Explore the bounded branches of one OXC catalog conditional.
+ * @param node - Conditional node to explore.
+ * @param constInits - Const initializer lookup.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Bounded branch values in source order.
+ */
+function oxcCatalogConditionalValues(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    const conditional = node as ConditionalExpressionNode;
+    const values = lenientCatalogValues(conditional.consequent, constInits, seen, depth, budget);
+    if (budget.explores > 0) {
+        budget.explores -= 1;
+        values.push(
+            ...lenientCatalogValues(conditional.alternate, constInits, seen, depth, budget),
+        );
+    }
+    return truncateCatalogCandidates(values, budget);
+}
+
+/**
+ * Resolve one OXC const identifier through the bounded catalog memo.
+ * @param node - Identifier node to resolve.
+ * @param constInits - Const initializer lookup.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Memoized candidate values.
+ */
+function oxcCatalogIdentifierValues(
+    node: OxcNode,
+    constInits: ReadonlyMap<string, OxcNode>,
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    const name = String((node as IdentifierNode).name);
+    if (name === 'undefined' || seen.has(name)) return [];
+    const initializer = constInits.get(name);
+    if (!initializer) return [];
+    const cached = budget.valueMemo.get(initializer);
+    if (cached) return [...cached];
+    const values = lenientCatalogValues(
+        initializer,
+        constInits,
+        new Set([...seen, name]),
+        depth,
+        budget,
+    );
+    budget.valueMemo.set(initializer, values);
+    return [...values];
 }
 
 /**
@@ -3028,7 +3089,13 @@ function planOxcComponentVariableHoists(
     const nodes: CSSVariableHoistNode[] = [];
     const candidates: OxcComponentHoistCandidate[] = [];
 
-    collectOxcHoistCandidates(root, null, nodes, candidates, filename, bindings, source);
+    collectOxcHoistCandidates(root, null, {
+        nodes,
+        candidates,
+        filename,
+        bindings,
+        source,
+    });
     if (candidates.length < 2) {
         return {
             stylePropsByTarget: new Map(),
@@ -3106,46 +3173,72 @@ function formatHoistSkipDiagnostic(diagnostic: CSSVariableHoistDiagnostic): stri
     return `[csszyx] mangleVars skipped component CSS variable hoist for ${diagnostic.name} across ${diagnostic.usageCount} usages: ${diagnostic.reason}${suffix}`;
 }
 
+/** Shared traversal state for component-tier OXC hoist collection. */
+interface OxcHoistCollectionContext {
+    nodes: CSSVariableHoistNode[];
+    candidates: OxcComponentHoistCandidate[];
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    source: string;
+}
+
+/**
+ * Visit ordinary AST children that are outside JSX host nodes.
+ *
+ * @param node Current AST node.
+ * @param parentElementId Current JSX parent id.
+ * @param context Shared hoist collection state.
+ */
+function collectOxcChildNodes(
+    node: OxcNode,
+    parentElementId: string | null,
+    context: OxcHoistCollectionContext,
+): void {
+    for (const key of Object.keys(node)) {
+        if (isAstMetadataKey(key)) {
+            continue;
+        }
+        const child = (node as Record<string, unknown>)[key];
+        const children = Array.isArray(child) ? child : [child];
+        for (const item of children) {
+            if (isOxcNode(item)) {
+                collectOxcHoistCandidates(item, parentElementId, context);
+            }
+        }
+    }
+}
+
 /**
  * Collects JSX host nodes and dynamic CSS-var candidates for component hoisting.
  *
  * @param node Current AST node.
  * @param parentElementId Current JSX parent id.
- * @param nodes Hoist tree nodes to populate.
- * @param candidates Dynamic var candidates to populate.
- * @param filename Filename for diagnostics.
- * @param bindings Local object-literal bindings.
- * @param source Original source for expression slicing.
+ * @param context Shared hoist collection state.
  */
 function collectOxcHoistCandidates(
     node: OxcNode,
     parentElementId: string | null,
-    nodes: CSSVariableHoistNode[],
-    candidates: OxcComponentHoistCandidate[],
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    source: string,
+    context: OxcHoistCollectionContext,
 ): void {
     if (node.type === 'JSXElement') {
         const element = node as JsxElementNode;
         const opening = element.openingElement;
         const elementId = elementIdForOpening(opening);
-        nodes.push({
+        context.nodes.push({
             id: elementId,
             parentId: parentElementId,
             canHost: canHostHoistedStyleProps(opening),
         });
-        collectOpeningHoistCandidates(opening, elementId, candidates, filename, bindings, source);
+        collectOpeningHoistCandidates(
+            opening,
+            elementId,
+            context.candidates,
+            context.filename,
+            context.bindings,
+            context.source,
+        );
         for (const child of element.children) {
-            collectOxcHoistCandidates(
-                child,
-                elementId,
-                nodes,
-                candidates,
-                filename,
-                bindings,
-                source,
-            );
+            collectOxcHoistCandidates(child, elementId, context);
         }
         return;
     }
@@ -3153,52 +3246,13 @@ function collectOxcHoistCandidates(
     if (node.type === 'JSXFragment') {
         const fragment = node as JsxFragmentNode;
         const elementId = `f${node.start}`;
-        nodes.push({ id: elementId, parentId: parentElementId, canHost: false });
+        context.nodes.push({ id: elementId, parentId: parentElementId, canHost: false });
         for (const child of fragment.children) {
-            collectOxcHoistCandidates(
-                child,
-                elementId,
-                nodes,
-                candidates,
-                filename,
-                bindings,
-                source,
-            );
+            collectOxcHoistCandidates(child, elementId, context);
         }
         return;
     }
-
-    for (const key of Object.keys(node)) {
-        if (isAstMetadataKey(key)) {
-            continue;
-        }
-        const child = (node as Record<string, unknown>)[key];
-        if (Array.isArray(child)) {
-            for (const item of child) {
-                if (isOxcNode(item)) {
-                    collectOxcHoistCandidates(
-                        item,
-                        parentElementId,
-                        nodes,
-                        candidates,
-                        filename,
-                        bindings,
-                        source,
-                    );
-                }
-            }
-        } else if (isOxcNode(child)) {
-            collectOxcHoistCandidates(
-                child,
-                parentElementId,
-                nodes,
-                candidates,
-                filename,
-                bindings,
-                source,
-            );
-        }
-    }
+    collectOxcChildNodes(node, parentElementId, context);
 }
 
 /**
@@ -3672,38 +3726,49 @@ function hasRedundantOuterParens(expressionSource: string): boolean {
     if (!expressionSource.startsWith('(') || !expressionSource.endsWith(')')) {
         return false;
     }
-    let depth = 0;
-    let quote: string | null = null;
-    let escaped = false;
+    const state: ParenthesisScanState = { depth: 0, quote: null, escaped: false };
     for (let index = 0; index < expressionSource.length; index++) {
-        const char = expressionSource[index];
-        if (quote) {
-            if (escaped) {
-                escaped = false;
-            } else if (char === '\\') {
-                escaped = true;
-            } else if (char === quote) {
-                quote = null;
-            }
-            continue;
-        }
-        if (char === '"' || char === "'" || char === '`') {
-            quote = char;
-            continue;
-        }
-        if (char === '(') {
-            depth++;
-        } else if (char === ')') {
-            depth--;
-            if (depth === 0 && index !== expressionSource.length - 1) {
-                return false;
-            }
-        }
-        if (depth < 0) {
+        if (!scanParenthesisCharacter(expressionSource[index], index, expressionSource, state)) {
             return false;
         }
     }
-    return depth === 0;
+    return state.depth === 0;
+}
+
+/** Mutable state for redundant-parenthesis validation. */
+interface ParenthesisScanState {
+    depth: number;
+    quote: string | null;
+    escaped: boolean;
+}
+
+/**
+ * Consume one character while checking whether the outer pair spans the input.
+ * @param char - Current source character.
+ * @param index - Current source offset.
+ * @param source - Full expression source.
+ * @param state - Mutable scanner state.
+ * @returns Whether the outer pair can still span the full input.
+ */
+function scanParenthesisCharacter(
+    char: string,
+    index: number,
+    source: string,
+    state: ParenthesisScanState,
+): boolean {
+    if (state.quote) {
+        if (state.escaped) state.escaped = false;
+        else if (char === '\\') state.escaped = true;
+        else if (char === state.quote) state.quote = null;
+        return true;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+        state.quote = char;
+        return true;
+    }
+    if (char === '(') state.depth++;
+    if (char === ')') state.depth--;
+    return state.depth >= 0 && (state.depth !== 0 || index === source.length - 1);
 }
 
 /**

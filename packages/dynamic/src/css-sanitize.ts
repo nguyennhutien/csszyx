@@ -14,6 +14,34 @@
  * keyword / looked-up values are csszyx-generated and always safe.
  */
 
+/** Mutable state for one CSS value scan. */
+interface CssValueScanState {
+    quote: string | null;
+    parenDepth: number;
+}
+
+/**
+ * Consume one character outside a quoted CSS string.
+ *
+ * @param char Current character.
+ * @param state Scanner state to update.
+ * @returns Whether scanning may continue.
+ */
+function scanUnquotedCssCharacter(char: string, state: CssValueScanState): boolean {
+    if (char === '"' || char === "'") {
+        state.quote = char;
+    } else if (char === '(') {
+        state.parenDepth++;
+    } else if (char === ')') {
+        state.parenDepth = Math.max(0, state.parenDepth - 1);
+    } else if (char === '{' || char === '}' || char === '<' || char === '>') {
+        return false;
+    } else if (char === ';' && state.parenDepth === 0) {
+        return false;
+    }
+    return true;
+}
+
 /**
  * True when a single CSS *property value* cannot break out of its declaration.
  * Tracks quote and parenthesis state with a linear scan (no backtracking regex):
@@ -25,49 +53,27 @@
  * @returns true if safe to interpolate into a declaration.
  */
 export function isSafeCssValue(value: string): boolean {
-    let quote: string | null = null;
-    let parenDepth = 0;
+    const state: CssValueScanState = { quote: null, parenDepth: 0 };
     for (let i = 0; i < value.length; i++) {
-        const ch = value[i];
         if (value.charCodeAt(i) < 0x20) {
             return false; // raw control char / CR / LF / tab
         }
-        if (quote !== null) {
-            if (ch === '\\') {
+        const char = value[i] as string;
+        if (state.quote !== null) {
+            if (char === '\\') {
                 i++; // skip the escaped character
                 continue;
             }
-            if (ch === quote) {
-                quote = null;
+            if (char === state.quote) {
+                state.quote = null;
             }
             continue;
         }
-        switch (ch) {
-            case '"':
-            case "'":
-                quote = ch;
-                break;
-            case '(':
-                parenDepth++;
-                break;
-            case ')':
-                if (parenDepth > 0) {
-                    parenDepth--;
-                }
-                break;
-            case '{':
-            case '}':
-            case '<':
-            case '>':
-                return false;
-            case ';':
-                if (parenDepth === 0) {
-                    return false;
-                }
-                break;
+        if (!scanUnquotedCssCharacter(char, state)) {
+            return false;
         }
     }
-    return quote === null && parenDepth === 0;
+    return state.quote === null && state.parenDepth === 0;
 }
 
 /**

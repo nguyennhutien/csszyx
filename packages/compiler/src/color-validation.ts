@@ -94,41 +94,65 @@ export function stripInvalidColorStrings(
     }
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(sz)) {
-        // Never assign a prototype-polluting key from (possibly JSON-sourced) input.
-        if (isForbiddenSzKey(key)) {
-            continue;
-        }
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-            // Recurse into nested variants
-            result[key] = stripInvalidColorStrings(value as Record<string, unknown>, _depth + 1);
-            continue;
-        }
-        if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[key] === PropertyCategory.COLOR) {
-            const strVal = value.replace(/!$/, '');
-            if (hasSlashOpacity(strVal)) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
-                    const slashIdx = strVal.indexOf('/');
-                    const colorPart = strVal.slice(0, slashIdx);
-                    const opPart = strVal.slice(slashIdx + 1);
-                    console.warn(
-                        `[csszyx] "${key}: '${strVal}'" — string slash opacity is not supported. ` +
-                            `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
-                    );
-                }
-                continue; // strip from result
-            }
-            if (!isValidColorString(strVal)) {
-                if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
-                    console.warn(
-                        `[csszyx] "${key}: '${strVal}'" is not a recognized color value and will be ignored. ` +
-                            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-                    );
-                }
-                continue; // strip from result
-            }
-        }
-        result[key] = value;
+        const sanitized = sanitizeColorEntry(key, value, _depth);
+        if (sanitized.keep) result[key] = sanitized.value;
     }
     return result;
+}
+
+/**
+ * Sanitize one key/value pair while preserving recursive variants.
+ * @param key - Sz property or variant key.
+ * @param value - Candidate value.
+ * @param depth - Current recursion depth.
+ * @returns Sanitized value and whether to retain it.
+ */
+function sanitizeColorEntry(
+    key: string,
+    value: unknown,
+    depth: number,
+): { keep: boolean; value: unknown } {
+    if (isForbiddenSzKey(key)) return { keep: false, value };
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        return {
+            keep: true,
+            value: stripInvalidColorStrings(value as Record<string, unknown>, depth + 1),
+        };
+    }
+    if (typeof value !== 'string' || PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.COLOR) {
+        return { keep: true, value };
+    }
+    const color = value.replace(/!$/, '');
+    if (hasSlashOpacity(color)) {
+        warnInvalidColor(key, color, true);
+        return { keep: false, value };
+    }
+    if (!isValidColorString(color)) {
+        warnInvalidColor(key, color, false);
+        return { keep: false, value };
+    }
+    return { keep: true, value };
+}
+
+/**
+ * Emit development-only guidance for a rejected color string.
+ * @param key - Color property key.
+ * @param color - Rejected color value.
+ * @param slashOpacity - Whether slash-opacity syntax caused rejection.
+ */
+function warnInvalidColor(key: string, color: string, slashOpacity: boolean): void {
+    if (process.env.NODE_ENV === 'production' || typeof window !== 'undefined') return;
+    if (slashOpacity) {
+        const slash = color.indexOf('/');
+        console.warn(
+            `[csszyx] "${key}: '${color}'" — string slash opacity is not supported. ` +
+                `Use object form: { color: '${color.slice(0, slash)}', op: ${color.slice(slash + 1)} }.`,
+        );
+        return;
+    }
+    console.warn(
+        `[csszyx] "${key}: '${color}'" is not a recognized color value and will be ignored. ` +
+            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+    );
 }

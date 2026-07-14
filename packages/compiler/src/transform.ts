@@ -27,6 +27,20 @@ export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export * from './transform-core.js';
 
 /**
+ * Return JSX attributes without one previously captured attribute node.
+ *
+ * @param attributes Opening-element attributes.
+ * @param target Attribute node to remove.
+ * @returns Attributes excluding the target node.
+ */
+function withoutJSXAttribute(
+    attributes: Array<t.JSXAttribute | t.JSXSpreadAttribute>,
+    target: t.JSXAttribute,
+): Array<t.JSXAttribute | t.JSXSpreadAttribute> {
+    return attributes.filter(attribute => attribute !== target);
+}
+
+/**
  * Options for {@link transformSourceCode}.
  */
 export interface TransformSourceCodeOptions {
@@ -485,10 +499,10 @@ export function transformSourceCode(
                                     existingClassNameNode &&
                                     path.parentPath?.isJSXOpeningElement()
                                 ) {
-                                    path.parentPath.node.attributes =
-                                        path.parentPath.node.attributes.filter(
-                                            a => a !== existingClassNameNode,
-                                        );
+                                    path.parentPath.node.attributes = withoutJSXAttribute(
+                                        path.parentPath.node.attributes,
+                                        existingClassNameNode,
+                                    );
                                     existingClassNameNode = null;
                                 }
 
@@ -524,10 +538,10 @@ export function transformSourceCode(
                                 }
 
                                 if (existingStyleNode && existingStyleExpr) {
-                                    path.parentPath.node.attributes =
-                                        path.parentPath.node.attributes.filter(
-                                            a => a !== existingStyleNode,
-                                        );
+                                    path.parentPath.node.attributes = withoutJSXAttribute(
+                                        path.parentPath.node.attributes,
+                                        existingStyleNode,
+                                    );
                                     existingStyleNode = null; // Prevent re-filtering
 
                                     if (t.isObjectExpression(existingStyleExpr)) {
@@ -1759,21 +1773,7 @@ function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expres
 
     // Static object: { p: 4, bg: 'blue-500' } → "p-4 bg-blue-500"
     if (t.isObjectExpression(node)) {
-        const resolved = getBinding ? (resolveObjectSpreads(node, getBinding) ?? node) : node;
-        const staticObj = evaluateStaticObject(resolved);
-        if (staticObj !== null) {
-            const { className } = transform(staticObj);
-            return t.stringLiteral(className);
-        }
-        // Hoist conditional spread: { ...(cond ? varA : varB), key: 'val' }
-        // → cond ? "classes-a key-val" : "classes-b key-val"
-        if (getBinding) {
-            const hoisted = tryHoistConditionalSpread(node, getBinding);
-            if (hoisted !== null) {
-                return hoisted;
-            }
-        }
-        return null;
+        return tryStaticObjectTransform(node, getBinding);
     }
 
     // Already a string literal: pass through
@@ -1784,33 +1784,70 @@ function tryStaticTransformNode(node: t.Node, getBinding?: GetBinding): t.Expres
     // Identifier: resolve the binding and recurse — handles sz={var}, array elements,
     // and ternary branches that are variable references rather than inline objects.
     if (t.isIdentifier(node) && getBinding) {
-        const binding = getBinding(node.name);
-        if (binding?.path.isVariableDeclarator()) {
-            const init = binding.path.node.init;
-            if (init) {
-                return tryStaticTransformNode(init, getBinding);
-            }
-        }
-        return null;
+        return tryStaticIdentifierTransform(node, getBinding);
     }
 
     // Conditional expression: cond ? {...} : {...}
     // Recursively resolve both branches
     if (t.isConditionalExpression(node)) {
-        const consequent = tryStaticTransformNode(node.consequent, getBinding);
-        const alternate = tryStaticTransformNode(node.alternate, getBinding);
-        if (consequent !== null && alternate !== null) {
-            return t.conditionalExpression(
-                node.test,
-                emptyClassToUndefined(consequent),
-                emptyClassToUndefined(alternate),
-            );
-        }
-        return null;
+        return tryStaticConditionalTransform(node, getBinding);
     }
 
     // Unary expression for negative numbers: not applicable here, skip
     return null;
+}
+
+/**
+ * Compile an object literal or its hoistable conditional spread.
+ * @param node - Object literal to compile.
+ * @param getBinding - Optional scope binding lookup.
+ * @returns Static class expression, or null.
+ */
+function tryStaticObjectTransform(
+    node: t.ObjectExpression,
+    getBinding?: GetBinding,
+): t.Expression | null {
+    const resolved = getBinding ? (resolveObjectSpreads(node, getBinding) ?? node) : node;
+    const staticObject = evaluateStaticObject(resolved);
+    if (staticObject !== null) return t.stringLiteral(transform(staticObject).className);
+    return getBinding ? tryHoistConditionalSpread(node, getBinding) : null;
+}
+
+/**
+ * Resolve and statically transform one bound identifier.
+ * @param node - Identifier to resolve.
+ * @param getBinding - Scope binding lookup.
+ * @returns Static class expression, or null.
+ */
+function tryStaticIdentifierTransform(
+    node: t.Identifier,
+    getBinding: GetBinding,
+): t.Expression | null {
+    const binding = getBinding(node.name);
+    if (!binding?.path.isVariableDeclarator()) return null;
+    const initializer = binding.path.node.init;
+    return initializer ? tryStaticTransformNode(initializer, getBinding) : null;
+}
+
+/**
+ * Statically transform both branches of a conditional expression.
+ * @param node - Conditional expression to compile.
+ * @param getBinding - Optional scope binding lookup.
+ * @returns Compiled conditional, or null when either branch is dynamic.
+ */
+function tryStaticConditionalTransform(
+    node: t.ConditionalExpression,
+    getBinding?: GetBinding,
+): t.Expression | null {
+    const consequent = tryStaticTransformNode(node.consequent, getBinding);
+    const alternate = tryStaticTransformNode(node.alternate, getBinding);
+    return consequent !== null && alternate !== null
+        ? t.conditionalExpression(
+              node.test,
+              emptyClassToUndefined(consequent),
+              emptyClassToUndefined(alternate),
+          )
+        : null;
 }
 
 /**
@@ -2193,6 +2230,81 @@ function resolveConstInitializer(name: string, scope: babel.NodePath['scope']): 
 }
 
 /**
+ * Merge catalog candidates produced by one object spread.
+ *
+ * @param argument Spread argument to resolve.
+ * @param primary Primary catalog object under construction.
+ * @param extras Alternate catalog objects under construction.
+ * @param scope Babel scope at the szv call site.
+ * @param seen Identifier cycle guard.
+ * @param depth Current catalog depth.
+ * @param budget Remaining alternate-branch allowance.
+ */
+function mergeCatalogSpread(
+    argument: t.Expression,
+    primary: Record<string, SzValue>,
+    extras: SzObject[],
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): void {
+    const [first, ...rest] = lenientCatalogObjectCandidates(
+        argument,
+        scope,
+        seen,
+        depth + 1,
+        budget,
+    );
+    if (first) {
+        Object.assign(primary, first);
+    }
+    for (const extra of rest) {
+        pushCatalogExtra(extras, extra, budget);
+    }
+}
+
+/**
+ * Merge catalog candidates produced by one static object property.
+ *
+ * @param prop Object property to classify.
+ * @param primary Primary catalog object under construction.
+ * @param extras Alternate catalog objects under construction.
+ * @param scope Babel scope at the szv call site.
+ * @param seen Identifier cycle guard.
+ * @param depth Current catalog depth.
+ * @param budget Remaining alternate-branch allowance.
+ */
+function mergeCatalogProperty(
+    prop: t.ObjectProperty,
+    primary: Record<string, SzValue>,
+    extras: SzObject[],
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): void {
+    const key = getObjectPropertyKey(prop);
+    if (key === null) {
+        return;
+    }
+    const [firstValue, ...restValues] = lenientCatalogValues(
+        prop.value,
+        scope,
+        seen,
+        depth + 1,
+        budget,
+    );
+    if (firstValue === undefined) {
+        return;
+    }
+    primary[key] = firstValue;
+    for (const value of restValues) {
+        pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
+    }
+}
+
+/**
  * Convert an object node into catalog candidates, PER KEY: index 0 is the
  * primary object (conditionals resolved to their consequent), the rest are
  * minimal path-preserving objects carrying alternate branch values (e.g.
@@ -2222,38 +2334,13 @@ function lenientCatalogObjects(
     const extras: SzObject[] = [];
     for (const prop of node.properties) {
         if (t.isSpreadElement(prop)) {
-            const spreadCandidates = lenientCatalogObjectCandidates(
-                prop.argument,
-                scope,
-                seen,
-                depth + 1,
-                budget,
-            );
-            const [first, ...rest] = spreadCandidates;
-            if (first) {
-                Object.assign(primary, first);
-            }
-            for (const extra of rest) {
-                pushCatalogExtra(extras, extra, budget);
-            }
+            mergeCatalogSpread(prop.argument, primary, extras, scope, seen, depth, budget);
             continue;
         }
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
         }
-        const key = getObjectPropertyKey(prop);
-        if (key === null) {
-            continue;
-        }
-        const values = lenientCatalogValues(prop.value, scope, seen, depth + 1, budget);
-        const [firstValue, ...restValues] = values;
-        if (firstValue === undefined) {
-            continue;
-        }
-        primary[key] = firstValue;
-        for (const value of restValues) {
-            pushCatalogExtra(extras, { [key]: value } as SzObject, budget);
-        }
+        mergeCatalogProperty(prop, primary, extras, scope, seen, depth, budget);
     }
     return [primary as SzObject, ...extras];
 }
@@ -2286,61 +2373,89 @@ function lenientCatalogValues(
     if (!value) {
         return [];
     }
-    if (t.isStringLiteral(value) || t.isNumericLiteral(value) || t.isBooleanLiteral(value)) {
-        return [value.value];
-    }
-    if (t.isNullLiteral(value)) {
-        return [];
-    }
-    if (t.isUnaryExpression(value) && t.isNumericLiteral(value.argument)) {
-        if (value.operator === '-') {
-            return [-value.argument.value];
-        }
-        if (value.operator === '+') {
-            return [value.argument.value];
-        }
-        return [];
-    }
+    const literal = catalogLiteralValues(value);
+    if (literal !== null) return literal;
     if (t.isObjectExpression(value)) {
         return lenientCatalogObjects(value, scope, seen, depth, budget);
     }
     if (t.isConditionalExpression(value)) {
-        const values = lenientCatalogValues(value.consequent, scope, seen, depth, budget);
-        // The alternate is a paid exploration (see `explores`); once the
-        // allowance is spent every further conditional degrades to its
-        // consequent, keeping the recursion tree linear in the source.
-        if (budget.explores > 0) {
-            budget.explores -= 1;
-            values.push(...lenientCatalogValues(value.alternate, scope, seen, depth, budget));
-        }
-        return truncateCatalogCandidates(values, budget);
+        return catalogConditionalValues(value, scope, seen, depth, budget);
     }
     if (t.isIdentifier(value)) {
-        if (value.name === 'undefined') {
-            return [];
-        }
-        if (seen.has(value.name)) {
-            return [];
-        }
-        const init = resolveConstInitializer(value.name, scope);
-        if (!init) {
-            return [];
-        }
-        const cached = budget.valueMemo.get(init);
-        if (cached) {
-            return [...cached];
-        }
-        const values = lenientCatalogValues(
-            init,
-            scope,
-            new Set([...seen, value.name]),
-            depth,
-            budget,
-        );
-        budget.valueMemo.set(init, values);
-        return [...values];
+        return catalogIdentifierValues(value, scope, seen, depth, budget);
     }
     return [];
+}
+
+/**
+ * Classify primitive and signed numeric catalog values.
+ * @param value - Babel node to classify.
+ * @returns Candidate values, or null when this helper does not own the shape.
+ */
+function catalogLiteralValues(value: t.Node): SzValue[] | null {
+    if (t.isStringLiteral(value) || t.isNumericLiteral(value) || t.isBooleanLiteral(value)) {
+        return [value.value];
+    }
+    if (t.isNullLiteral(value)) return [];
+    if (!t.isUnaryExpression(value) || !t.isNumericLiteral(value.argument)) return null;
+    if (value.operator === '-') return [-value.argument.value];
+    return value.operator === '+' ? [value.argument.value] : [];
+}
+
+/**
+ * Explore the bounded branches of one catalog conditional.
+ * @param value - Conditional value to explore.
+ * @param scope - Babel scope for identifier resolution.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Bounded branch values in source order.
+ */
+function catalogConditionalValues(
+    value: t.ConditionalExpression,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    const values = lenientCatalogValues(value.consequent, scope, seen, depth, budget);
+    if (budget.explores > 0) {
+        budget.explores -= 1;
+        values.push(...lenientCatalogValues(value.alternate, scope, seen, depth, budget));
+    }
+    return truncateCatalogCandidates(values, budget);
+}
+
+/**
+ * Resolve one const identifier through the bounded catalog memo.
+ * @param value - Const identifier to resolve.
+ * @param scope - Babel scope for identifier resolution.
+ * @param seen - Identifier cycle guard.
+ * @param depth - Current catalog depth.
+ * @param budget - Alternate-branch budget and memo.
+ * @returns Memoized candidate values.
+ */
+function catalogIdentifierValues(
+    value: t.Identifier,
+    scope: babel.NodePath['scope'],
+    seen: ReadonlySet<string>,
+    depth: number,
+    budget: CatalogExtrasBudget,
+): SzValue[] {
+    if (value.name === 'undefined' || seen.has(value.name)) return [];
+    const initializer = resolveConstInitializer(value.name, scope);
+    if (!initializer) return [];
+    const cached = budget.valueMemo.get(initializer);
+    if (cached) return [...cached];
+    const values = lenientCatalogValues(
+        initializer,
+        scope,
+        new Set([...seen, value.name]),
+        depth,
+        budget,
+    );
+    budget.valueMemo.set(initializer, values);
+    return [...values];
 }
 
 /**
@@ -2519,9 +2634,34 @@ function resolveToConstObjectExpression(
 }
 
 /**
+ * Evaluate one AST value when it is representable in a static SzObject.
+ *
+ * @param value AST value to evaluate.
+ * @returns Static sz value, or undefined when dynamic.
+ */
+function evaluateStaticValue(value: t.Node | null | undefined): SzValue | undefined {
+    const unwrapped = unwrapTsExpression(value);
+    if (t.isStringLiteral(unwrapped) || t.isNumericLiteral(unwrapped)) {
+        return unwrapped.value;
+    }
+    if (t.isBooleanLiteral(unwrapped)) {
+        return unwrapped.value;
+    }
+    if (
+        t.isUnaryExpression(unwrapped) &&
+        unwrapped.operator === '-' &&
+        t.isNumericLiteral(unwrapped.argument)
+    ) {
+        return -unwrapped.argument.value;
+    }
+    return t.isObjectExpression(unwrapped)
+        ? (evaluateStaticObject(unwrapped) ?? undefined)
+        : undefined;
+}
+
+/**
  * Evaluate an ObjectExpression to a plain SzObject when every property (and
- * nested object) is a static literal. Returns null on the first dynamic value —
- * spread, computed key, identifier, call, etc.
+ * nested object) is a static literal. Returns null on the first dynamic value.
  *
  * @param node The object expression to evaluate.
  * @returns The static SzObject, or null if any part is dynamic.
@@ -2534,32 +2674,11 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
             return null;
         }
         const key = getObjectPropertyKey(prop);
-        if (key === null) {
+        const value = evaluateStaticValue(prop.value);
+        if (key === null || value === undefined) {
             return null;
         }
-
-        const value = unwrapTsExpression(prop.value);
-        if (t.isStringLiteral(value)) {
-            result[key] = value.value;
-        } else if (t.isNumericLiteral(value)) {
-            result[key] = value.value;
-        } else if (t.isBooleanLiteral(value)) {
-            result[key] = value.value;
-        } else if (
-            t.isUnaryExpression(value) &&
-            value.operator === '-' &&
-            t.isNumericLiteral(value.argument)
-        ) {
-            result[key] = -value.argument.value;
-        } else if (t.isObjectExpression(value)) {
-            const nested = evaluateStaticObject(value);
-            if (nested === null) {
-                return null;
-            }
-            result[key] = nested;
-        } else {
-            return null; // Dynamic value
-        }
+        result[key] = value;
     }
 
     return result;
@@ -2590,49 +2709,35 @@ function resolveObjectSpreads(
 ): t.ObjectExpression | null {
     const newProps: t.ObjectExpression['properties'] = [];
     for (const prop of node.properties) {
-        if (!t.isSpreadElement(prop)) {
-            // For regular properties whose value is a nested ObjectExpression, recurse
-            // so that spreads inside variant/pseudo-element values are also resolved.
-            // e.g. { before: { ...BASE, content: '' } } — spread is inside 'before' value.
-            if (t.isObjectProperty(prop) && t.isObjectExpression(prop.value)) {
-                const resolvedValue = resolveObjectSpreads(prop.value, getBinding);
-                if (resolvedValue === null) {
-                    return null;
-                }
-                newProps.push(
-                    t.objectProperty(prop.key, resolvedValue, prop.computed, prop.shorthand),
-                );
-            } else {
-                newProps.push(prop);
-            }
-            continue;
-        }
-        // Only identifier spreads are resolvable: { ...localVar }
-        const arg = prop.argument;
-        if (!t.isIdentifier(arg)) {
-            return null;
-        }
-        const binding = getBinding(arg.name);
-        if (!binding?.path.isVariableDeclarator()) {
-            return null;
-        }
-        let init = binding.path.node.init;
-        // Unwrap `as const` / `satisfies T` — both are TSAsExpression / TSSatisfiesExpression
-        // wrapping the actual ObjectExpression.
-        if (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
-            init = init.expression;
-        }
-        if (!t.isObjectExpression(init)) {
-            return null;
-        }
-        // Recurse so spreads-of-spreads also resolve
-        const inner = resolveObjectSpreads(init, getBinding);
-        if (inner === null) {
-            return null;
-        }
-        newProps.push(...inner.properties);
+        const resolved = resolveObjectSpreadProperty(prop, getBinding);
+        if (resolved === null) return null;
+        newProps.push(...resolved);
     }
     return t.objectExpression(newProps);
+}
+
+/**
+ * Resolve one regular property or local identifier spread.
+ * @param prop - Property or spread to resolve.
+ * @param getBinding - Scope binding lookup.
+ * @returns Resolved properties, or null when resolution is unsafe.
+ */
+function resolveObjectSpreadProperty(
+    prop: t.ObjectExpression['properties'][number],
+    getBinding: (name: string) => { path: babel.NodePath } | null | undefined,
+): t.ObjectExpression['properties'] | null {
+    if (!t.isSpreadElement(prop)) {
+        if (!t.isObjectProperty(prop) || !t.isObjectExpression(prop.value)) return [prop];
+        const value = resolveObjectSpreads(prop.value, getBinding);
+        return value ? [t.objectProperty(prop.key, value, prop.computed, prop.shorthand)] : null;
+    }
+    if (!t.isIdentifier(prop.argument)) return null;
+    const binding = getBinding(prop.argument.name);
+    if (!binding?.path.isVariableDeclarator()) return null;
+    let init = binding.path.node.init;
+    if (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) init = init.expression;
+    if (!t.isObjectExpression(init)) return null;
+    return resolveObjectSpreads(init, getBinding)?.properties ?? null;
 }
 
 // ============================================================================
@@ -3060,28 +3165,39 @@ function generateStyleValueExpression(info: DynamicPropInfo): t.Expression {
  */
 function collectFromExpr(node: t.Expression, classes: Set<string>): void {
     if (t.isStringLiteral(node)) {
-        for (const c of node.value.split(/\s+/)) {
-            if (c) {
-                classes.add(c);
-            }
-        }
-    } else if (t.isConditionalExpression(node)) {
+        collectClassWords(node.value, classes);
+        return;
+    }
+    if (t.isConditionalExpression(node)) {
         collectFromExpr(node.consequent as t.Expression, classes);
         collectFromExpr(node.alternate as t.Expression, classes);
-    } else if (t.isTemplateLiteral(node)) {
-        // A hoisted nested conditional emits `${static} ${cond ? a : b}`. Walk
-        // quasis and interpolated expressions INTERLEAVED in source order so the
-        // discovery order stays [static, consequent, alternate] — matching Rust.
-        for (let i = 0; i < node.quasis.length; i++) {
-            for (const c of (node.quasis[i].value.cooked ?? '').split(/\s+/)) {
-                if (c) {
-                    classes.add(c);
-                }
-            }
-            const expr = node.expressions[i];
-            if (expr && t.isExpression(expr)) {
-                collectFromExpr(expr, classes);
-            }
+        return;
+    }
+    if (t.isTemplateLiteral(node)) collectFromTemplateExpr(node, classes);
+}
+
+/**
+ * Add whitespace-separated class candidates in source order.
+ * @param value - Whitespace-separated class text.
+ * @param classes - Candidate set to update.
+ */
+function collectClassWords(value: string, classes: Set<string>): void {
+    for (const className of value.split(/\s+/)) {
+        if (className) classes.add(className);
+    }
+}
+
+/**
+ * Collect interleaved static and conditional pieces from a template.
+ * @param node - Template expression to traverse.
+ * @param classes - Candidate set to update.
+ */
+function collectFromTemplateExpr(node: t.TemplateLiteral, classes: Set<string>): void {
+    for (let index = 0; index < node.quasis.length; index++) {
+        collectClassWords(node.quasis[index].value.cooked ?? '', classes);
+        const expression = node.expressions[index];
+        if (expression && t.isExpression(expression)) {
+            collectFromExpr(expression, classes);
         }
     }
 }
@@ -3105,36 +3221,62 @@ function collectCandidatesFromBabelExpr(
         t.isTSInstantiationExpression(node)
     ) {
         collectCandidatesFromBabelExpr(node.expression as t.Expression, path, classes);
-    } else if (t.isArrayExpression(node)) {
-        for (const element of node.elements) {
-            if (element === null || t.isSpreadElement(element)) {
-                continue;
-            }
-            const cand =
-                t.isLogicalExpression(element) && element.operator === '&&'
-                    ? (element.right as t.Expression)
-                    : (element as t.Expression);
-            collectCandidatesFromBabelExpr(cand, path, classes);
-        }
+        return;
+    }
+    if (t.isArrayExpression(node)) {
+        collectCandidatesFromBabelArray(node, path, classes);
     } else if (t.isObjectExpression(node)) {
         collectCandidatesFromBabelObj(node, path, classes, '');
     } else if (t.isIdentifier(node)) {
-        const binding = path.scope.getBinding(node.name);
-        if (binding?.path.isVariableDeclarator()) {
-            let init = binding.path.node.init;
-            if (init) {
-                while (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
-                    init = init.expression;
-                }
-                collectCandidatesFromBabelExpr(init as t.Expression, path, classes);
-            }
-        }
+        collectCandidatesFromBabelIdentifier(node, path, classes);
     } else if (t.isConditionalExpression(node)) {
         collectCandidatesFromBabelExpr(node.consequent as t.Expression, path, classes);
         collectCandidatesFromBabelExpr(node.alternate as t.Expression, path, classes);
     } else if (t.isLogicalExpression(node) && node.operator === '&&') {
         collectCandidatesFromBabelExpr(node.right as t.Expression, path, classes);
     }
+}
+
+/**
+ * Collect candidates from each non-spread array element.
+ * @param node - Array expression to traverse.
+ * @param path - Babel path used for binding lookup.
+ * @param classes - Candidate set to populate.
+ */
+function collectCandidatesFromBabelArray(
+    node: t.ArrayExpression,
+    path: babel.NodePath,
+    classes: Set<string>,
+): void {
+    for (const element of node.elements) {
+        if (element === null || t.isSpreadElement(element)) continue;
+        const candidate =
+            t.isLogicalExpression(element) && element.operator === '&&'
+                ? (element.right as t.Expression)
+                : (element as t.Expression);
+        collectCandidatesFromBabelExpr(candidate, path, classes);
+    }
+}
+
+/**
+ * Resolve a bound identifier and collect from its initializer.
+ * @param node - Identifier to resolve.
+ * @param path - Babel path used for binding lookup.
+ * @param classes - Candidate set to populate.
+ */
+function collectCandidatesFromBabelIdentifier(
+    node: t.Identifier,
+    path: babel.NodePath,
+    classes: Set<string>,
+): void {
+    const binding = path.scope.getBinding(node.name);
+    if (!binding?.path.isVariableDeclarator()) return;
+    let initializer = binding.path.node.init;
+    if (!initializer) return;
+    while (t.isTSAsExpression(initializer) || t.isTSSatisfiesExpression(initializer)) {
+        initializer = initializer.expression;
+    }
+    collectCandidatesFromBabelExpr(initializer as t.Expression, path, classes);
 }
 
 /**

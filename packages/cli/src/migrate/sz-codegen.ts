@@ -157,39 +157,35 @@ function formatValue(value: unknown, indent: number): string {
     }
 
     if (typeof value === 'object') {
-        // Color+opacity object: { color: 'blue-500', op: 50 }
-        if (isColorOpacityObj(value)) {
-            const parts = [`color: '${escapeString(String(value.color))}'`];
-            if (typeof value.op === 'number') {
-                parts.push(`op: ${value.op}`);
-            } else {
-                parts.push(`op: '${escapeString(String(value.op))}'`);
-            }
-            return `{ ${parts.join(', ')} }`;
-        }
-
-        // Gradient object: { gradient: 'linear', dir: 'to-r', in: 'hsl' }
-        if (isGradientObj(value)) {
-            const grad = value as Record<string, unknown>;
-            const parts: string[] = [`gradient: '${grad.gradient}'`];
-            if ('dir' in grad) {
-                if (typeof grad.dir === 'number') {
-                    parts.push(`dir: ${grad.dir}`);
-                } else {
-                    parts.push(`dir: '${escapeString(String(grad.dir))}'`);
-                }
-            }
-            if ('in' in grad) {
-                parts.push(`in: '${escapeString(String(grad.in))}'`);
-            }
-            return `{ ${parts.join(', ')} }`;
-        }
-
-        // Regular nested object
-        return objectToString(value as Record<string, unknown>, indent);
+        return formatObjectValue(value as Record<string, unknown>, indent);
     }
 
     return String(value);
+}
+
+/**
+ * Format structured color, gradient, or regular object values.
+ * @param value - Object value to format.
+ * @param indent - Current indentation level.
+ * @returns JavaScript object expression source.
+ */
+function formatObjectValue(value: Record<string, unknown>, indent: number): string {
+    if (isColorOpacityObj(value)) {
+        const opacity =
+            typeof value.op === 'number' ? String(value.op) : `'${escapeString(String(value.op))}'`;
+        return `{ color: '${escapeString(String(value.color))}', op: ${opacity} }`;
+    }
+    if (!isGradientObj(value)) return objectToString(value, indent);
+    const parts: string[] = [`gradient: '${value.gradient}'`];
+    if ('dir' in value) {
+        const direction =
+            typeof value.dir === 'number'
+                ? String(value.dir)
+                : `'${escapeString(String(value.dir))}'`;
+        parts.push(`dir: ${direction}`);
+    }
+    if ('in' in value) parts.push(`in: '${escapeString(String(value.in))}'`);
+    return `{ ${parts.join(', ')} }`;
 }
 
 /**

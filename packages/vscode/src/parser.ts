@@ -91,26 +91,8 @@ interface SzStart {
 function findCsszyxCallStart(text: string): { idx: number; start: SzStart } | null {
     let best: { idx: number; start: SzStart } | null = null;
     for (const form of ['szv', 'szr'] as const) {
-        const marker = `${form}(`;
-        let from = text.length;
-        while (from >= 0) {
-            const idx = text.lastIndexOf(marker, from);
-            if (idx === -1) break;
-            from = idx - 1;
-            // Word boundary: `myszv(` is not a csszyx call; `csszyx.szv(` is.
-            const before = idx > 0 ? (text[idx - 1] ?? '') : '';
-            if (/[\w$]/.test(before)) continue;
-            let j = idx + marker.length;
-            while (j < text.length && /\s/.test(text[j] ?? '')) j++;
-            if (text[j] !== '{') continue;
-            if (best === null || idx > best.idx) {
-                best = {
-                    idx,
-                    start: { bodyStart: j, explicit: true, terminator: null, form },
-                };
-            }
-            break;
-        }
+        const candidate = findCallFormStart(text, form);
+        if (candidate && (best === null || candidate.idx > best.idx)) best = candidate;
     }
     const szs = text.lastIndexOf('szs={{');
     if (szs !== -1 && (best === null || szs > best.idx)) {
@@ -123,58 +105,88 @@ function findCsszyxCallStart(text: string): { idx: number; start: SzStart } | nu
 }
 
 /**
+ * Locate the rightmost valid object argument for one csszyx call form.
+ * @param text - Source text to scan.
+ * @param form - Call form to locate.
+ * @returns Marker index and opening description, or null.
+ */
+function findCallFormStart(
+    text: string,
+    form: 'szv' | 'szr',
+): { idx: number; start: SzStart } | null {
+    const marker = `${form}(`;
+    let from = text.length;
+    while (from >= 0) {
+        const idx = text.lastIndexOf(marker, from);
+        if (idx === -1) return null;
+        from = idx - 1;
+        const before = idx > 0 ? (text[idx - 1] ?? '') : '';
+        if (/[\w$]/.test(before)) continue;
+        let bodyStart = idx + marker.length;
+        while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) bodyStart++;
+        if (text[bodyStart] === '{') {
+            return {
+                idx,
+                start: { bodyStart, explicit: true, terminator: null, form },
+            };
+        }
+    }
+    return null;
+}
+
+/**
+ * Find the rightmost quoted sz attribute.
+ *
+ * @param text Source text to scan.
+ * @param quote Attribute quote style.
+ * @returns Marker index and opening description, or null.
+ */
+function findLastQuotedSz(text: string, quote: '"' | "'"): { idx: number; start: SzStart } | null {
+    const marker = `sz=${quote}`;
+    const idx = text.lastIndexOf(marker);
+    if (idx === -1) {
+        return null;
+    }
+    let bodyStart = idx + marker.length;
+    while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) {
+        bodyStart++;
+    }
+    const start: SzStart =
+        text[bodyStart] === '{'
+            ? { bodyStart, explicit: true, terminator: null, form: 'sz' }
+            : {
+                  bodyStart: idx + marker.length,
+                  explicit: false,
+                  terminator: quote,
+                  form: 'sz',
+              };
+    return { idx, start };
+}
+
+/**
  * Return the rightmost sz-expression opening in `text`, or null.
  * @param text - Source text to scan.
  * @returns Description of the opening, or null if no sz expression is present.
  */
 function findSzStart(text: string): SzStart | null {
-    /**
-     *
-     */
-    type Best = { idx: number; start: SzStart } | null;
-    let best: Best = null;
-    const beat = (idx: number): boolean => best === null || idx > best.idx;
-
     const jsx = text.lastIndexOf('sz={{');
-    if (jsx !== -1 && beat(jsx)) {
-        best = {
-            idx: jsx,
-            start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
-        };
-    }
-
-    const dq = text.lastIndexOf('sz="');
-    if (dq !== -1 && beat(dq)) {
-        let j = dq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) {
-            j++;
-        }
-        const start: SzStart =
-            text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
-                : { bodyStart: dq + 4, explicit: false, terminator: '"', form: 'sz' };
-        best = { idx: dq, start };
-    }
-
-    const sq = text.lastIndexOf("sz='");
-    if (sq !== -1 && beat(sq)) {
-        let j = sq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) {
-            j++;
-        }
-        const start: SzStart =
-            text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
-                : { bodyStart: sq + 4, explicit: false, terminator: "'", form: 'sz' };
-        best = { idx: sq, start };
-    }
-
-    const call = findCsszyxCallStart(text);
-    if (call !== null && beat(call.idx)) {
-        best = call;
-    }
-
-    return best === null ? null : best.start;
+    const candidates = [
+        jsx === -1
+            ? null
+            : {
+                  idx: jsx,
+                  start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
+              },
+        findLastQuotedSz(text, '"'),
+        findLastQuotedSz(text, "'"),
+        findCsszyxCallStart(text),
+    ].filter((candidate): candidate is { idx: number; start: SzStart } => candidate !== null);
+    return (
+        candidates.reduce<{ idx: number; start: SzStart } | null>(
+            (best, candidate) => (best === null || candidate.idx > best.idx ? candidate : best),
+            null,
+        )?.start ?? null
+    );
 }
 
 /**
@@ -321,50 +333,53 @@ interface MarkerHit {
 }
 
 /**
+ * Find one quoted sz attribute and classify its explicit or implicit body.
+ *
+ * @param text Source text to scan.
+ * @param from Offset to start searching from.
+ * @param quote Attribute quote style.
+ * @returns Marker hit or null when absent.
+ */
+function findQuotedSz(text: string, from: number, quote: '"' | "'"): MarkerHit | null {
+    const marker = `sz=${quote}`;
+    const idx = text.indexOf(marker, from);
+    if (idx === -1) {
+        return null;
+    }
+    let bodyStart = idx + marker.length;
+    while (bodyStart < text.length && /\s/.test(text[bodyStart] ?? '')) {
+        bodyStart++;
+    }
+    const start: SzStart =
+        text[bodyStart] === '{'
+            ? { bodyStart, explicit: true, terminator: null, form: 'sz' }
+            : { bodyStart: idx + marker.length, explicit: false, terminator: quote, form: 'sz' };
+    return { idx, start };
+}
+
+/**
  * Find the next sz expression opening at or after `from`.
  * @param text - Source text to scan.
  * @param from - Offset to start searching from.
  * @returns Hit info (source idx + start description), or null if none.
  */
 function findNextSz(text: string, from: number): MarkerHit | null {
-    let earliest: MarkerHit | null = null;
-    const beat = (idx: number): boolean => earliest === null || idx < earliest.idx;
-
     const jsx = text.indexOf('sz={{', from);
-    if (jsx !== -1 && beat(jsx)) {
-        earliest = {
-            idx: jsx,
-            start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
-        };
-    }
-
-    const dq = text.indexOf('sz="', from);
-    if (dq !== -1 && beat(dq)) {
-        let j = dq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) {
-            j++;
-        }
-        const start: SzStart =
-            text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
-                : { bodyStart: dq + 4, explicit: false, terminator: '"', form: 'sz' };
-        earliest = { idx: dq, start };
-    }
-
-    const sq = text.indexOf("sz='", from);
-    if (sq !== -1 && beat(sq)) {
-        let j = sq + 4;
-        while (j < text.length && /\s/.test(text[j] ?? '')) {
-            j++;
-        }
-        const start: SzStart =
-            text[j] === '{'
-                ? { bodyStart: j, explicit: true, terminator: null, form: 'sz' }
-                : { bodyStart: sq + 4, explicit: false, terminator: "'", form: 'sz' };
-        earliest = { idx: sq, start };
-    }
-
-    return earliest;
+    const candidates = [
+        jsx === -1
+            ? null
+            : {
+                  idx: jsx,
+                  start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
+              },
+        findQuotedSz(text, from, '"'),
+        findQuotedSz(text, from, "'"),
+    ].filter((candidate): candidate is MarkerHit => candidate !== null);
+    return candidates.reduce<MarkerHit | null>(
+        (earliest, candidate) =>
+            earliest === null || candidate.idx < earliest.idx ? candidate : earliest,
+        null,
+    );
 }
 
 /**

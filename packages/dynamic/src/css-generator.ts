@@ -194,6 +194,26 @@ const SIZE_KEYWORDS: Record<string, string> = {
 };
 
 /**
+ * Resolve a finite fraction token to a percentage.
+ *
+ * @param value Candidate fraction token.
+ * @returns Percentage string or null when invalid.
+ */
+function resolveFraction(value: string): string | null {
+    const slash = value.indexOf('/');
+    if (slash === -1) {
+        return null;
+    }
+    const numerator = parseFloat(value.slice(0, slash));
+    const denominator = parseFloat(value.slice(slash + 1));
+    if (Number.isNaN(numerator) || Number.isNaN(denominator) || denominator === 0) {
+        return null;
+    }
+    const percentage = (numerator / denominator) * 100;
+    return `${parseFloat(percentage.toFixed(6))}%`;
+}
+
+/**
  * Resolves a Tailwind spacing/size value to a CSS value string.
  * Handles: 0, px, auto, full, numeric, fraction, arbitrary.
  *
@@ -232,14 +252,9 @@ function resolveSpacingValue(v: string, prop?: string): string {
     }
 
     // Fraction: 1/2 → 50%
-    if (v.includes('/')) {
-        const slash = v.indexOf('/');
-        const num = parseFloat(v.slice(0, slash));
-        const den = parseFloat(v.slice(slash + 1));
-        if (!Number.isNaN(num) && !Number.isNaN(den) && den !== 0) {
-            const pct = (num / den) * 100;
-            return `${parseFloat(pct.toFixed(6))}%`;
-        }
+    const fraction = resolveFraction(v);
+    if (fraction !== null) {
+        return fraction;
     }
 
     // Negative numeric: -4 → calc(var(--spacing) * -4)

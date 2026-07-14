@@ -176,6 +176,48 @@ function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t
 }
 
 /**
+ * Group static CSS-variable usages by variable name and serialized value.
+ *
+ * @param usages All CSS variable usages collected during transform.
+ * @returns Static usages grouped by variable identity and value.
+ */
+function groupStaticUsages(usages: CSSVarUsage[]): Map<string, CSSVarUsage[]> {
+    const groups = new Map<string, CSSVarUsage[]>();
+    for (const usage of usages) {
+        if (usage.serializedValue === null) {
+            continue;
+        } // Can't hoist dynamic values
+        const groupKey = `${usage.varName}::${usage.serializedValue}`;
+        const group = groups.get(groupKey) || [];
+        group.push(usage);
+        groups.set(groupKey, group);
+    }
+    return groups;
+}
+
+/**
+ * Find a non-fragment common ancestor for every usage in one static group.
+ *
+ * @param group Static usages that share an identity and value.
+ * @param parentMap Child-to-parent AST relationships.
+ * @returns Common JSX ancestor or null when no safe target exists.
+ */
+function findGroupLca(
+    group: CSSVarUsage[],
+    parentMap: Map<t.Node, t.Node>,
+): t.JSXOpeningElement | null {
+    let lca: t.JSXOpeningElement | null = group[0].element;
+    for (let i = 1; i < group.length; i++) {
+        const next = findLCA(lca, group[i].element, parentMap);
+        if (next === null || isFragment(next)) {
+            return null;
+        }
+        lca = next;
+    }
+    return lca;
+}
+
+/**
  * Hoists CSS variables to common ancestor elements when multiple siblings
  * share the same variable name and value.
  *
@@ -187,35 +229,13 @@ export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, 
         return;
     }
 
-    // Group by varName + serializedValue (identical pairs)
-    const groups = new Map<string, CSSVarUsage[]>();
-    for (const usage of usages) {
-        if (usage.serializedValue === null) {
-            continue;
-        } // Can't hoist dynamic values
-        const groupKey = `${usage.varName}::${usage.serializedValue}`;
-        const group = groups.get(groupKey) || [];
-        group.push(usage);
-        groups.set(groupKey, group);
-    }
-
     // For each group with 2+ elements, find LCA and hoist
-    for (const [, group] of groups) {
+    for (const [, group] of groupStaticUsages(usages)) {
         if (group.length < 2) {
             continue;
         }
 
-        // Find LCA of all elements in the group
-        let lca = group[0].element;
-        for (let i = 1; i < group.length; i++) {
-            const newLca = findLCA(lca, group[i].element, parentMap);
-            if (newLca === null || isFragment(newLca)) {
-                lca = null as unknown as t.JSXOpeningElement;
-                break;
-            }
-            lca = newLca;
-        }
-
+        const lca = findGroupLca(group, parentMap);
         if (!lca) {
             continue;
         } // No valid LCA (Fragment or no common ancestor)
@@ -229,6 +249,31 @@ export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, 
 }
 
 /**
+ * Add one AST node and all of its child nodes to a parent map.
+ *
+ * @param node Current AST node.
+ * @param parent Parent AST node, when present.
+ * @param map Destination child-to-parent map.
+ */
+function mapNodeParents(node: t.Node, parent: t.Node | undefined, map: Map<t.Node, t.Node>): void {
+    if (parent) {
+        map.set(node, parent);
+    }
+    for (const key of Object.keys(node) as (keyof t.Node)[]) {
+        const value = (node as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                if (item && typeof item === 'object' && 'type' in item) {
+                    mapNodeParents(item as t.Node, node, map);
+                }
+            }
+        } else if (value && typeof value === 'object' && 'type' in value) {
+            mapNodeParents(value as t.Node, node, map);
+        }
+    }
+}
+
+/**
  * Builds a parent map for AST nodes (child-to-parent relationship).
  * Used by hoistCSSVariables to find LCA.
  *
@@ -237,29 +282,6 @@ export function hoistCSSVariables(usages: CSSVarUsage[], parentMap: Map<t.Node, 
  */
 export function buildParentMap(ast: t.Node): Map<t.Node, t.Node> {
     const map = new Map<t.Node, t.Node>();
-
-    /** @param node - The current AST node being visited
-     *  @param parent - The parent of the current node */
-    function traverse(node: t.Node, parent?: t.Node): void {
-        if (parent) {
-            map.set(node, parent);
-        }
-        for (const key of Object.keys(node) as (keyof t.Node)[]) {
-            const value = (node as unknown as Record<string, unknown>)[key];
-            if (value && typeof value === 'object') {
-                if (Array.isArray(value)) {
-                    for (const item of value) {
-                        if (item && typeof item === 'object' && 'type' in item) {
-                            traverse(item as t.Node, node);
-                        }
-                    }
-                } else if ('type' in (value as Record<string, unknown>)) {
-                    traverse(value as t.Node, node);
-                }
-            }
-        }
-    }
-
-    traverse(ast);
+    mapNodeParents(ast, undefined, map);
     return map;
 }

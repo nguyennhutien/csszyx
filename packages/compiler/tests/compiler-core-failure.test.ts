@@ -44,8 +44,32 @@ describe('CsszyxCompiler when the WASM core fails', () => {
             buildId: 'b1',
         };
         const token = compiler.generateRecoveryToken(metadata);
-        expect(token).toMatch(/^[0-9a-f]{12}$/);
+        expect(token).toBe('000004a68e6f');
         expect(compiler.generateRecoveryToken(metadata)).toBe(token);
+    });
+
+    it('preserves legacy recovery hashes for Unicode and unpaired surrogates', () => {
+        const compiler = CsszyxCompiler.getInstance();
+        expect(
+            compiler.generateRecoveryToken({
+                component: 'Café 🚀',
+                filePath: 'src/组件/😀.tsx',
+                line: 3,
+                column: 7,
+                mode: 'dev-only',
+                buildId: 'b1',
+            }),
+        ).toBe('00002b1e62a9');
+        expect(
+            compiler.generateRecoveryToken({
+                component: '\ud800',
+                filePath: '\udc00',
+                line: 0,
+                column: 0,
+                mode: 'csr',
+                buildId: 'x',
+            }),
+        ).toBe('0000285bf788');
     });
 
     it('falls back to JS when an active WASM transform throws', async () => {

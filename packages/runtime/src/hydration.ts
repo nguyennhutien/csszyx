@@ -230,7 +230,7 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
     }
 
     const htmlElement = document.documentElement;
-    const actualChecksum = htmlElement.getAttribute('data-sz-checksum');
+    const actualChecksum = htmlElement.dataset.szChecksum;
 
     return actualChecksum === expectedChecksum;
 }
@@ -314,7 +314,7 @@ export function verifyMangleMapIntegrity(): boolean {
 
     // Get checksum from HTML
     const htmlElement = document.documentElement;
-    const checksum = htmlElement.getAttribute('data-sz-checksum');
+    const checksum = htmlElement.dataset.szChecksum;
 
     if (!checksum) {
         console.warn('[csszyx] No checksum found in HTML');
@@ -398,12 +398,12 @@ export function abortHydration(element: HTMLElement, error: HydrationError): voi
     console.error(`[csszyx] Hydration aborted at ${element.tagName}:`, error.message);
 
     // Step 4: Inject abort attribute
-    element.setAttribute('data-sz-hydration-aborted', error.timestamp.toString());
-    element.setAttribute('data-sz-abort-reason', error.type);
+    element.dataset.szHydrationAborted = error.timestamp.toString();
+    element.dataset.szAbortReason = error.type;
 
     // Step 5: Block event handlers (framework-specific)
     // For now, add a marker that frameworks can check
-    element.setAttribute('data-sz-interactive', 'false');
+    element.dataset.szInteractive = 'false';
 
     // Store error, bounded — evict the oldest so the retained element
     // references cannot grow past the cap.
@@ -430,7 +430,7 @@ export function abortHydration(element: HTMLElement, error: HydrationError): voi
  * ```
  */
 export function isHydrationAborted(element: HTMLElement): boolean {
-    return state.abortedSubtrees.has(element) || element.hasAttribute('data-sz-hydration-aborted');
+    return state.abortedSubtrees.has(element) || element.dataset.szHydrationAborted !== undefined;
 }
 
 /**
@@ -513,9 +513,9 @@ export function attemptCSRRecovery(element: HTMLElement): boolean {
     );
 
     // Remove abort markers
-    element.removeAttribute('data-sz-hydration-aborted');
-    element.removeAttribute('data-sz-abort-reason');
-    element.removeAttribute('data-sz-interactive');
+    delete element.dataset.szHydrationAborted;
+    delete element.dataset.szAbortReason;
+    delete element.dataset.szInteractive;
 
     if (state.abortedSubtrees.delete(element)) {
         state.abortedSubtreeCount--;
@@ -637,7 +637,7 @@ export function isHydrating(): boolean {
     // Check for React hydration (common pattern)
     if (window.__NEXT_DATA__ || window.__REMIX_CONTEXT__) {
         // These frameworks set hydration state
-        return document.documentElement.hasAttribute('data-sz-checksum');
+        return document.documentElement.dataset.szChecksum !== undefined;
     }
 
     return false;
@@ -666,14 +666,14 @@ export function getSSRContext(): SSRContext | null {
     }
 
     const htmlElement = document.documentElement;
-    const checksum = htmlElement.getAttribute('data-sz-checksum');
-    const buildId = htmlElement.getAttribute('data-sz-build-id');
+    const checksum = htmlElement.dataset.szChecksum;
+    const buildId = htmlElement.dataset.szBuildId;
 
     if (!checksum || !buildId) {
         return null;
     }
 
-    const timestampAttr = htmlElement.getAttribute('data-sz-timestamp');
+    const timestampAttr = htmlElement.dataset.szTimestamp;
     const timestamp = timestampAttr ? parseInt(timestampAttr, 10) : 0;
 
     const hasRecoveryTokens = document.querySelector('[data-sz-recovery-token]') !== null;

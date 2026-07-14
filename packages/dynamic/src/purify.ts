@@ -135,6 +135,33 @@ function purifyValue(
 }
 
 /**
+ * Sanitize an unknown boundary key when it is a valid variant object.
+ *
+ * @param key Candidate variant key.
+ * @param value Candidate variant body.
+ * @param strict Whether strict value rules apply.
+ * @param onDrop Drop reporter.
+ * @param path Dotted key path.
+ * @param depth Current recursion depth.
+ * @returns Cleaned variant body or the drop sentinel.
+ */
+function sanitizeBoundaryVariant(
+    key: string,
+    value: SzValue,
+    strict: boolean,
+    onDrop: PurifySzOptions['onDrop'],
+    path: string,
+    depth: number,
+): SzValue | typeof DROP {
+    if (!isVariantKey(key) || value === null || typeof value !== 'object' || Array.isArray(value)) {
+        onDrop?.(path, 'unknown-key');
+        return DROP;
+    }
+    const cleaned = sanitizeObject(value as SzObject, strict, onDrop, path, depth + 1, true);
+    return Object.keys(cleaned).length > 0 ? cleaned : DROP;
+}
+
+/**
  * Walk an sz object. At the boundary (`applyKeyAllowlist === true`) unknown
  * top-level/variant keys are dropped; inside a property sub-object it only
  * sanitizes values + skips forbidden keys.
@@ -164,24 +191,17 @@ function sanitizeObject(
             continue;
         }
         if (applyKeyAllowlist && !SZ_KEY_CATEGORY.has(key)) {
-            if (
-                isVariantKey(key) &&
-                value !== null &&
-                typeof value === 'object' &&
-                !Array.isArray(value)
-            ) {
-                const cleaned = sanitizeObject(
-                    value as SzObject,
-                    strict,
-                    onDrop,
-                    keyPath,
-                    depth + 1,
-                    true,
-                );
-                if (Object.keys(cleaned).length > 0) out[key] = cleaned;
-                continue;
+            const cleaned = sanitizeBoundaryVariant(
+                key,
+                value as SzValue,
+                strict,
+                onDrop,
+                keyPath,
+                depth,
+            );
+            if (cleaned !== DROP) {
+                out[key] = cleaned;
             }
-            onDrop?.(keyPath, 'unknown-key');
             continue;
         }
         const cleaned = purifyValue(value as SzValue, strict, onDrop, keyPath, depth);

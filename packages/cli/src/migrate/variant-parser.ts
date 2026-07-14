@@ -122,130 +122,104 @@ export function extractVariants(token: string): { variantParts: string[]; baseCl
  * @returns {string[]} Array of sz object keys for nesting
  */
 export function mapVariant(variant: string): string[] {
-    // ================================================================
-    // @ PREFIXED VARIANTS (container queries)
-    // ================================================================
     if (variant.startsWith('@')) {
-        // @container → @container
-        if (variant === '@container') {
-            return ['@container'];
-        }
-
-        // @md/sidebar → @md, sidebar
-        const slashIdx = variant.indexOf('/');
-        if (slashIdx !== -1) {
-            const queryPart = variant.slice(0, slashIdx);
-            const namePart = variant.slice(slashIdx + 1);
-            return [normalizeVariantKey(queryPart), namePart];
-        }
-
-        // @min-[475px] → @min, 475px (strip brackets)
-        // @max-[600px] → @max, 600px
-        const match = variant.match(/^(@min|@max)-\[(.+)\]$/);
-        if (match) {
-            return [match[1], match[2]];
-        }
-
-        // @md, @lg, etc.
-        return [normalizeVariantKey(variant)];
+        return mapContainerVariant(variant);
     }
-
-    // ================================================================
-    // GROUP/PEER VARIANTS
-    // ================================================================
     if (variant.startsWith('group-') || variant.startsWith('peer-')) {
         return parseGroupPeerVariant(variant);
     }
-
-    // ================================================================
-    // HAS VARIANT: has-[selector], has-[:checked]
-    // ================================================================
     if (variant.startsWith('has-')) {
-        const rest = variant.slice(4); // after "has-"
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            let selector = rest.slice(1, -1);
-            // Strip leading : from pseudo-selectors
-            if (selector.startsWith(':')) {
-                selector = selector.slice(1);
-            }
-            return ['has', selector];
-        }
-        return ['has', rest];
+        return mapHasVariant(variant);
     }
-
-    // ================================================================
-    // NOT VARIANT: not-hover, not-first, not-supports-[cond]
-    // ================================================================
     if (variant.startsWith('not-')) {
-        const rest = variant.slice(4);
-        // not-supports-[condition]
-        if (rest.startsWith('supports-[') && rest.endsWith(']')) {
-            const cond = rest.slice(10, -1); // strip "supports-[" and "]"
-            return ['not', 'supports', cond];
-        }
-        // Simple: not-hover → not, hover
-        return ['not', normalizeVariantKey(rest)];
+        return mapNotVariant(variant);
     }
-
-    // ================================================================
-    // DATA VARIANT: data-[attr], data-[attr=value]
-    // ================================================================
     if (variant.startsWith('data-')) {
-        const rest = variant.slice(5);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            return ['data', rest.slice(1, -1)];
-        }
-        return ['data', rest];
+        return mapAttributeVariant('data', variant.slice(5));
     }
-
-    // ================================================================
-    // ARIA VARIANT: aria-checked, aria-[current=page]
-    // ================================================================
     if (variant.startsWith('aria-')) {
-        const rest = variant.slice(5);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            return ['aria', rest.slice(1, -1)];
-        }
-        // Standard aria state
-        return ['aria', rest];
+        return mapAttributeVariant('aria', variant.slice(5));
     }
-
-    // ================================================================
-    // SUPPORTS VARIANT: supports-[display:grid]
-    // ================================================================
     if (variant.startsWith('supports-')) {
-        const rest = variant.slice(9);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            return ['supports', rest.slice(1, -1)];
-        }
-        return ['supports', rest];
+        return mapAttributeVariant('supports', variant.slice(9));
     }
-
-    // ================================================================
-    // MIN/MAX BREAKPOINTS: min-[320px], min-md, max-[600px]
-    // ================================================================
     if (variant.startsWith('min-') || variant.startsWith('max-')) {
-        const prefix = variant.startsWith('min-') ? 'min' : 'max';
-        const rest = variant.slice(4);
-        if (rest.startsWith('[') && rest.endsWith(']')) {
-            // Arbitrary: min-[320px] → min, 320px (no brackets in key)
-            return [prefix, rest.slice(1, -1)];
-        }
-        // Named: min-md → min, md
-        return [prefix, rest];
+        return mapRangeVariant(variant);
     }
-
-    // ================================================================
-    // ARBITRARY VARIANT: [&>span], [&:nth-child(3)]
-    // ================================================================
     if (variant.startsWith('[') && variant.endsWith(']')) {
-        return [variant]; // Keep as-is including brackets
+        return [variant];
     }
-
-    // ================================================================
-    // SIMPLE VARIANT: hover, focus, md, dark, etc.
-    // ================================================================
     return [normalizeVariantKey(variant)];
+}
+
+/**
+ * Maps an `@`-prefixed container-query variant.
+ * @param variant - The complete container-query variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapContainerVariant(variant: string): string[] {
+    if (variant === '@container') return ['@container'];
+    const slashIndex = variant.indexOf('/');
+    if (slashIndex !== -1) {
+        return [normalizeVariantKey(variant.slice(0, slashIndex)), variant.slice(slashIndex + 1)];
+    }
+    const arbitraryRange = variant.match(/^(@min|@max)-\[(.+)\]$/);
+    return arbitraryRange ? [arbitraryRange[1], arbitraryRange[2]] : [normalizeVariantKey(variant)];
+}
+
+/**
+ * Maps `has-*`, stripping brackets and a leading pseudo-selector colon.
+ * @param variant - The complete has variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapHasVariant(variant: string): string[] {
+    const rest = variant.slice(4);
+    if (!isBracketed(rest)) return ['has', rest];
+    const selector = rest.slice(1, -1);
+    return ['has', selector.startsWith(':') ? selector.slice(1) : selector];
+}
+
+/**
+ * Maps simple and supports-wrapped negation variants.
+ * @param variant - The complete not variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapNotVariant(variant: string): string[] {
+    const rest = variant.slice(4);
+    if (rest.startsWith('supports-[') && rest.endsWith(']')) {
+        return ['not', 'supports', rest.slice(10, -1)];
+    }
+    return ['not', normalizeVariantKey(rest)];
+}
+
+/**
+ * Maps a data, aria, or supports value, unwrapping arbitrary brackets.
+ * @param prefix - The sz nesting prefix.
+ * @param rest - The variant value after its prefix.
+ * @returns The normalized sz nesting keys.
+ */
+function mapAttributeVariant(prefix: string, rest: string): string[] {
+    return [prefix, isBracketed(rest) ? rest.slice(1, -1) : rest];
+}
+
+/**
+ * Maps named and arbitrary min/max breakpoint variants.
+ * @param variant - The complete min or max variant.
+ * @returns The normalized sz nesting keys.
+ */
+function mapRangeVariant(variant: string): string[] {
+    const prefix = variant.startsWith('min-') ? 'min' : 'max';
+    const rest = variant.slice(4);
+    return [prefix, isBracketed(rest) ? rest.slice(1, -1) : rest];
+}
+
+/**
+ * Tests whether a variant segment is enclosed in square brackets.
+ * @param value - The variant segment to inspect.
+ * @returns Whether the segment is bracketed.
+ */
+function isBracketed(value: string): boolean {
+    return value.startsWith('[') && value.endsWith(']');
 }
 
 /**
@@ -282,47 +256,43 @@ function parseGroupPeerVariant(variant: string): string[] {
         keys.push(name);
     }
 
-    // Parse the state/selector part
-    if (rest.startsWith('[') && rest.endsWith(']')) {
-        // Arbitrary selector: group-[.is-published]
-        keys.push(rest.slice(1, -1));
-    } else if (rest.startsWith('has-')) {
-        // has inside group: group-has-[a]
-        const hasRest = rest.slice(4);
-        if (hasRest.startsWith('[') && hasRest.endsWith(']')) {
-            keys.push('has');
-            keys.push(hasRest.slice(1, -1));
-        } else {
-            keys.push('has');
-            keys.push(hasRest);
-        }
-    } else if (rest.startsWith('data-')) {
-        // data attribute inside group: group-data-[active], group-data-active,
-        // group-data-[active='true'], group-data-(--state)
-        const dataRest = rest.slice(5);
-        keys.push('data');
-        if (dataRest.startsWith('[') && dataRest.endsWith(']')) {
-            keys.push(dataRest.slice(1, -1)); // strip brackets
-        } else if (dataRest.startsWith('(') && dataRest.endsWith(')')) {
-            keys.push(dataRest.slice(1, -1)); // strip parens → CSS var sugar
-        } else {
-            keys.push(dataRest); // bare shorthand: data-active
-        }
-    } else if (rest.startsWith('aria-')) {
-        // aria state inside group: group-aria-checked, group-aria-[current=page]
-        const ariaRest = rest.slice(5);
-        keys.push('aria');
-        if (ariaRest.startsWith('[') && ariaRest.endsWith(']')) {
-            keys.push(ariaRest.slice(1, -1));
-        } else {
-            keys.push(ariaRest);
-        }
-    } else {
-        // Simple state: hover, checked, etc.
-        keys.push(normalizeVariantKey(rest));
-    }
+    keys.push(...parseGroupPeerState(rest));
 
     return keys;
+}
+
+/**
+ * Parse the state suffix of a group or peer variant.
+ * @param state - Variant state suffix.
+ * @returns Nested sz keys for the state.
+ */
+function parseGroupPeerState(state: string): string[] {
+    if (isWrappedVariantState(state)) return [state.slice(1, -1)];
+    if (state.startsWith('has-')) return ['has', unwrapVariantState(state.slice(4))];
+    if (state.startsWith('data-')) return ['data', unwrapVariantState(state.slice(5))];
+    if (state.startsWith('aria-')) return ['aria', unwrapVariantState(state.slice(5))];
+    return [normalizeVariantKey(state)];
+}
+
+/**
+ * Whether a variant state uses arbitrary brackets or CSS-variable parentheses.
+ * @param state - Variant state to inspect.
+ * @returns Whether the state has a supported wrapper.
+ */
+function isWrappedVariantState(state: string): boolean {
+    return (
+        (state.startsWith('[') && state.endsWith(']')) ||
+        (state.startsWith('(') && state.endsWith(')'))
+    );
+}
+
+/**
+ * Remove supported state wrappers while preserving bare shorthand names.
+ * @param state - Variant state to unwrap.
+ * @returns Unwrapped or original state.
+ */
+function unwrapVariantState(state: string): string {
+    return isWrappedVariantState(state) ? state.slice(1, -1) : state;
 }
 
 /**
@@ -390,6 +360,14 @@ interface ParsedClassToken {
     prop: string;
     value: unknown;
     cssProperty?: string;
+}
+
+interface ClassNameConversionState {
+    szObject: Record<string, unknown>;
+    unrecognized: string[];
+    keepInClassName: string[];
+    seenCssPropertiesByPath: Map<string, Map<string, string>>;
+    conflictedCssPropertiesByPath: Map<string, Set<string>>;
 }
 
 const MAX_TOKEN_CACHE_SIZE = 4096;
@@ -486,92 +464,105 @@ export function classNameToSzObject(
     keepInClassName: string[];
 } {
     const tokens = tokenize(className);
-    const szObject: Record<string, unknown> = {};
-    const unrecognized: string[] = [];
-    const keepInClassName: string[] = [];
-    const seenCssPropertiesByPath = new Map<string, Map<string, string>>();
-    const conflictedCssPropertiesByPath = new Map<string, Set<string>>();
+    const state: ClassNameConversionState = {
+        szObject: {},
+        unrecognized: [],
+        keepInClassName: [],
+        seenCssPropertiesByPath: new Map(),
+        conflictedCssPropertiesByPath: new Map(),
+    };
 
     for (const token of tokens) {
-        // Check custom map first
-        if (customMap && token in customMap) {
-            const entry = resolveCustomMapEntry(
-                token,
-                customMap,
-                // Inline resolver: parse Tailwind string recursively (no customMap to avoid infinite loop).
-                // Returns both the sz object and any unrecognized tokens from the string value,
-                // so partially-valid strings cascade their unknowns back to the unrecognized list.
-                twStr => {
-                    const inner = classNameToSzObject(twStr);
-                    if (Object.keys(inner.szObject).length === 0) {
-                        return null;
-                    }
-                    return { sz: inner.szObject, cascade: inner.unrecognized };
-                },
-            );
-
-            if (entry) {
-                if (entry.action === 'sz') {
-                    Object.assign(szObject, entry.value);
-                    // Cascade: unrecognized tokens from string-route values are treated as
-                    // additional unrecognized classes so they surface in reports and auto-
-                    // cascade back into csszyx-todo.json when --resolve-todos is active.
-                    if (entry.cascade && entry.cascade.length > 0) {
-                        unrecognized.push(...entry.cascade);
-                    }
-                    continue;
-                }
-                if (entry.action === 'keep') {
-                    keepInClassName.push(token);
-                    continue;
-                }
-                if (entry.action === 'remove') {
-                    // Omit entirely — don't add to sz or className
-                    continue;
-                }
-                // action === 'unresolved': token has sz:todo / null / false value —
-                // "not yet decided". Never fall through to the normal parser here;
-                // that would silently convert valid TW classes (e.g. "flex") even
-                // though the dev explicitly marked them as pending. Instead, surface
-                // them in unrecognized[] so @sz-todo comments get re-injected and
-                // they appear in reports as still-unresolved.
-                if (entry.action === 'unresolved') {
-                    unrecognized.push(token);
-                    continue;
-                }
-            }
-        }
-
-        const parsedToken = parseClassTokenCached(token);
-        if (!parsedToken) {
-            unrecognized.push(token);
+        if (applyCustomMapToken(token, customMap, state)) {
             continue;
         }
-
-        if (isCssPropertyConflicted(conflictedCssPropertiesByPath, parsedToken)) {
-            unrecognized.push(token);
-            continue;
-        }
-
-        const conflict = findCssPropertyConflict(seenCssPropertiesByPath, parsedToken, token);
-        if (conflict) {
-            rememberCssPropertyConflict(conflictedCssPropertiesByPath, parsedToken);
-            unrecognized.push(conflict, token);
-            removeNestedValue(szObject, parsedToken.keyPath, parsedToken.prop);
-            continue;
-        }
-        rememberCssProperty(seenCssPropertiesByPath, parsedToken, token);
-
-        // Set value in the nested object
-        setNestedValue(
-            szObject,
-            parsedToken.keyPath,
-            parsedToken.prop,
-            cloneParsedValue(parsedToken.value),
-        );
+        applyParsedToken(token, state);
     }
 
-    return { szObject, unrecognized, keepInClassName };
+    return {
+        szObject: state.szObject,
+        unrecognized: state.unrecognized,
+        keepInClassName: state.keepInClassName,
+    };
+}
+
+/**
+ * Resolves a custom-map Tailwind string without recursively applying that map.
+ * @param value - The replacement Tailwind class string.
+ * @returns Its recognized sz object and unresolved cascade, or null when none is recognized.
+ */
+function resolveCustomMapString(
+    value: string,
+): { sz: Record<string, unknown>; cascade: string[] } | null {
+    const inner = classNameToSzObject(value);
+    return Object.keys(inner.szObject).length === 0
+        ? null
+        : { sz: inner.szObject, cascade: inner.unrecognized };
+}
+
+/**
+ * Applies one custom-map action and reports whether normal parsing is bypassed.
+ * @param token - The original Tailwind token.
+ * @param customMap - The optional todo resolution map.
+ * @param state - The conversion state to update.
+ * @returns Whether a custom-map entry consumed the token.
+ */
+function applyCustomMapToken(
+    token: string,
+    customMap: CsszyxTodoMap | undefined,
+    state: ClassNameConversionState,
+): boolean {
+    if (!customMap) return false;
+    const entry = resolveCustomMapEntry(token, customMap, resolveCustomMapString);
+    if (!entry) return false;
+
+    switch (entry.action) {
+        case 'sz':
+            Object.assign(state.szObject, entry.value);
+            if (entry.cascade?.length) state.unrecognized.push(...entry.cascade);
+            return true;
+        case 'keep':
+            state.keepInClassName.push(token);
+            return true;
+        case 'remove':
+            return true;
+        case 'unresolved':
+            state.unrecognized.push(token);
+            return true;
+    }
+}
+
+/**
+ * Parses and applies one ordinary Tailwind token to the conversion state.
+ * @param token - The Tailwind token to parse.
+ * @param state - The conversion state to update.
+ */
+function applyParsedToken(token: string, state: ClassNameConversionState): void {
+    const parsedToken = parseClassTokenCached(token);
+    if (!parsedToken) {
+        state.unrecognized.push(token);
+        return;
+    }
+    if (isCssPropertyConflicted(state.conflictedCssPropertiesByPath, parsedToken)) {
+        state.unrecognized.push(token);
+        return;
+    }
+
+    const conflict = findCssPropertyConflict(state.seenCssPropertiesByPath, parsedToken, token);
+    if (conflict) {
+        rememberCssPropertyConflict(state.conflictedCssPropertiesByPath, parsedToken);
+        state.unrecognized.push(conflict, token);
+        removeNestedValue(state.szObject, parsedToken.keyPath, parsedToken.prop);
+        return;
+    }
+
+    rememberCssProperty(state.seenCssPropertiesByPath, parsedToken, token);
+    setNestedValue(
+        state.szObject,
+        parsedToken.keyPath,
+        parsedToken.prop,
+        cloneParsedValue(parsedToken.value),
+    );
 }
 
 /**

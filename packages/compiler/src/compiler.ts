@@ -5,6 +5,34 @@ import type { SzObject } from './transform.js';
 import { transform as jsTransform } from './transform.js';
 
 /**
+ * Fold one UTF-16 code unit into the legacy signed-int32 recovery hash.
+ *
+ * @param hash Current signed-int32 hash.
+ * @param codeUnit UTF-16 code unit to append.
+ * @returns Updated signed-int32 hash.
+ */
+function foldRecoveryHash(hash: number, codeUnit: number): number {
+    return Math.imul(Math.imul(hash, 31) + codeUnit, 1);
+}
+
+/**
+ * Fold a Unicode code point as the one or two UTF-16 units used by the legacy hash.
+ *
+ * @param hash Current signed-int32 hash.
+ * @param codePoint Unicode code point to append.
+ * @returns Updated signed-int32 hash.
+ */
+function foldRecoveryCodePoint(hash: number, codePoint: number): number {
+    if (codePoint <= 0xffff) {
+        return foldRecoveryHash(hash, codePoint);
+    }
+    const supplementary = codePoint - 0x10000;
+    const highSurrogate = Math.floor(supplementary / 0x400) + 0xd800;
+    const lowSurrogate = (supplementary % 0x400) + 0xdc00;
+    return foldRecoveryHash(foldRecoveryHash(hash, highSurrogate), lowSurrogate);
+}
+
+/**
  * Core Compiler class for csszyx.
  *
  * This class manages the WASM lifecycle and provides high-performance
@@ -128,8 +156,8 @@ export class CsszyxCompiler {
         // TODO(Phase 3): Replace with WASM generate_token when available
         const str = `${metadata.component}:${metadata.filePath}:${metadata.line}:${metadata.column}:${metadata.mode}:${metadata.buildId}`;
         let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+        for (const character of str) {
+            hash = foldRecoveryCodePoint(hash, character.codePointAt(0) ?? 0);
         }
         return Math.abs(hash).toString(16).padStart(12, '0').slice(0, 12);
     }

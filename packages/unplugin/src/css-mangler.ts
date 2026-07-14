@@ -81,50 +81,71 @@ export function unescapeTailwindClass(escapedName: string): string {
     let i = 0;
 
     while (i < escapedName.length) {
-        if (escapedName[i] === '\\') {
-            i++;
-            if (i >= escapedName.length) {
-                break;
-            }
-
-            const char = escapedName[i];
-
-            // Check for hex escape sequences (e.g., \31, \32 for digits)
-            if (/[0-9a-f]/i.test(char)) {
-                // Collect up to 6 hex digits
-                let hexStr = '';
-                while (
-                    i < escapedName.length &&
-                    /[0-9a-f]/i.test(escapedName[i]) &&
-                    hexStr.length < 6
-                ) {
-                    hexStr += escapedName[i];
-                    i++;
-                }
-
-                // If followed by a space, consume it (CSS escape terminator)
-                if (i < escapedName.length && escapedName[i] === ' ') {
-                    i++;
-                }
-
-                // Convert hex to character
-                const codePoint = parseInt(hexStr, 16);
-                if (codePoint > 0) {
-                    result += String.fromCodePoint(codePoint);
-                }
-                continue;
-            }
-
-            // Simple escape: \. \/ \: \! \[ \] \# \@ etc.
-            result += char;
-            i++;
-        } else {
+        if (escapedName[i] !== '\\') {
             result += escapedName[i];
             i++;
+            continue;
         }
+        const decoded = readCssEscape(escapedName, i + 1);
+        if (!decoded) break;
+        result += decoded.value;
+        i = decoded.next;
     }
 
     return result;
+}
+
+/**
+ * Decode one CSS escape beginning after its backslash.
+ * @param source - Escaped CSS identifier.
+ * @param start - Offset immediately after the backslash.
+ * @returns Decoded value and next offset, or null for a trailing backslash.
+ */
+function readCssEscape(source: string, start: number): { value: string; next: number } | null {
+    if (start >= source.length) return null;
+    if (!/[0-9a-f]/i.test(source[start])) return { value: source[start], next: start + 1 };
+    let next = start;
+    let hex = '';
+    while (next < source.length && /[0-9a-f]/i.test(source[next]) && hex.length < 6) {
+        hex += source[next];
+        next++;
+    }
+    if (source[next] === ' ') next++;
+    const codePoint = parseInt(hex, 16);
+    return { value: codePoint > 0 ? String.fromCodePoint(codePoint) : '', next };
+}
+
+/**
+ * Escape a leading character when CSS identifier grammar requires it.
+ *
+ * @param className Complete class name.
+ * @param char Leading character.
+ * @returns Escaped prefix or null when ordinary escaping should continue.
+ */
+function escapeLeadingClassCharacter(className: string, char: string): string | null {
+    if (/\d/.test(char)) {
+        return `\\3${char} `;
+    }
+    if (char === '-' && className.length > 1) {
+        const next = className[1] as string;
+        if (/\d/.test(next) || next === '-') {
+            return '\\-';
+        }
+    }
+    return null;
+}
+
+/**
+ * Escape one non-leading CSS identifier character.
+ *
+ * @param char Character to escape when required.
+ * @returns CSS-safe character representation.
+ */
+function escapeClassCharacter(char: string): string {
+    if (/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/.test(char)) {
+        return `\\${char}`;
+    }
+    return char;
 }
 
 /**
@@ -139,36 +160,15 @@ export function escapeCSSClassName(className: string): string {
     let result = '';
 
     for (let i = 0; i < className.length; i++) {
-        const char = className[i];
-        const code = char.charCodeAt(0);
-
-        // First character rules
+        const char = className[i] as string;
         if (i === 0) {
-            // If starts with digit, escape it
-            if (/\d/.test(char)) {
-                result += `\\3${char} `;
+            const escapedLeading = escapeLeadingClassCharacter(className, char);
+            if (escapedLeading !== null) {
+                result += escapedLeading;
                 continue;
             }
-            // If starts with hyphen followed by digit or another hyphen
-            if (char === '-' && i + 1 < className.length) {
-                const next = className[i + 1];
-                if (/\d/.test(next) || next === '-') {
-                    result += '\\-';
-                    continue;
-                }
-            }
         }
-
-        // Characters that need escaping in CSS identifiers
-        if (/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/.test(char)) {
-            result += `\\${char}`;
-        } else if (code >= 0x80) {
-            // Non-ASCII characters don't need escaping in modern CSS
-            result += char;
-        } else {
-            // Safe characters
-            result += char;
-        }
+        result += escapeClassCharacter(char);
     }
 
     return result;

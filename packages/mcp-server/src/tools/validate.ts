@@ -35,6 +35,44 @@ interface ValidationError {
 }
 
 /**
+ * Return the validation error for one sz entry, if any.
+ *
+ * @param key Candidate sz key.
+ * @param value Candidate sz value.
+ * @returns Validation error when the entry is unsupported.
+ */
+function validateEntry(key: string, value: unknown): ValidationError | undefined {
+    const suggestion = SUGGESTION_MAP[key];
+    if (suggestion) {
+        return {
+            key,
+            message: `Unknown prop '${key}'. This is a CSS property name, not an sz key.`,
+            suggestion: `Use '${suggestion}' instead. Example: { ${suggestion.split(/[\s/(]/)[0]}: ${JSON.stringify(value)} }`,
+        };
+    }
+
+    const removed = REMOVED_BOOLEAN_SUGAR[key];
+    if (removed && value === true) {
+        return {
+            key,
+            message: `'${key}: true' boolean sugar was removed; it emits no class.`,
+            suggestion: `Use { ${removed.key}: ${JSON.stringify(removed.value)} } instead.`,
+        };
+    }
+
+    const isSpecial =
+        ['css', '@container', '*'].includes(key) || key.startsWith('@') || key.startsWith('[');
+    const isKnown =
+        key in PROPERTY_MAP || BOOLEAN_SHORTHANDS.has(key) || KNOWN_VARIANTS.has(key) || isSpecial;
+    return isKnown
+        ? undefined
+        : {
+              key,
+              message: `Unknown prop '${key}'. Not a valid sz key, variant, or special prop.`,
+          };
+}
+
+/**
  * Validate a sz prop object and report unknown keys, CSS property name mistakes, and transform errors.
  * @param input - The validated input object.
  * @returns MCP tool response with validation results.
@@ -46,42 +84,9 @@ export function handleValidate(input: ValidateInput): {
     const warnings: string[] = [];
 
     for (const key of Object.keys(input.sz)) {
-        // Catch CSS property names used instead of sz keys (e.g. padding, margin).
-        if (SUGGESTION_MAP[key]) {
-            errors.push({
-                key,
-                message: `Unknown prop '${key}'. This is a CSS property name, not an sz key.`,
-                suggestion: `Use '${SUGGESTION_MAP[key]}' instead. Example: { ${SUGGESTION_MAP[key].split(/[\s/(]/)[0]}: ${JSON.stringify(input.sz[key])} }`,
-            });
-            continue;
-        }
-
-        // Removed boolean-sugar aliases in their BOOLEAN form (`{ flex: true }`,
-        // `{ absolute: true }`, …) now emit NO class — a silent no-op that passes a
-        // naive "is it a known key" check. Flag only the `=== true` form with the
-        // canonical replacement; the same keys stay valid for real shorthand values
-        // (`flex: 'auto'`, `flex: 1`), so don't touch those.
-        const removed = REMOVED_BOOLEAN_SUGAR[key];
-        if (removed && input.sz[key] === true) {
-            errors.push({
-                key,
-                message: `'${key}: true' boolean sugar was removed; it emits no class.`,
-                suggestion: `Use { ${removed.key}: ${JSON.stringify(removed.value)} } instead.`,
-            });
-            continue;
-        }
-
-        const isProperty = key in PROPERTY_MAP;
-        const isBoolean = BOOLEAN_SHORTHANDS.has(key);
-        const isVariant = KNOWN_VARIANTS.has(key);
-        const isSpecial =
-            ['css', '@container', '*'].includes(key) || key.startsWith('@') || key.startsWith('[');
-
-        if (!isProperty && !isBoolean && !isVariant && !isSpecial) {
-            errors.push({
-                key,
-                message: `Unknown prop '${key}'. Not a valid sz key, variant, or special prop.`,
-            });
+        const error = validateEntry(key, input.sz[key]);
+        if (error) {
+            errors.push(error);
         }
     }
 
