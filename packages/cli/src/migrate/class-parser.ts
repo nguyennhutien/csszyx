@@ -1010,74 +1010,70 @@ function isValidSpacingValue(value: string): boolean {
  * @returns The parsed sz value (number, string, or other)
  */
 export function parseValue(prefix: string, value: string, negative: boolean): unknown {
-    // Arbitrary values: [10px], [calc(100%-1rem)]
     if (value.startsWith('[') && value.endsWith(']')) {
-        const inner = value.slice(1, -1).replace(/_/g, ' ');
-        if (negative) {
-            return `-${inner}`;
-        }
-        // content prefix: normalize CSS string literals to double-quote form so that
-        // content-[''] and content-[""] both produce { content: '""' } for round-trip stability.
-        if (prefix === 'content') {
-            const isQuoted =
-                (inner.startsWith("'") && inner.endsWith("'")) ||
-                (inner.startsWith('"') && inner.endsWith('"'));
-            if (isQuoted) {
-                return `"${inner.slice(1, -1)}"`;
-            }
-        }
-        return inner;
+        return parseArbitraryValue(prefix, value.slice(1, -1).replace(/_/g, ' '), negative);
     }
 
-    // CSS variable sugar: (--spacing), (--my-var)
     if (value.startsWith('(') && value.endsWith(')')) {
-        const inner = value.slice(1, -1);
-        if (negative) {
-            return `-${inner}`;
-        }
-        return inner;
+        return signedString(value.slice(1, -1), negative);
     }
 
-    // Fraction: 1/2, 2/3, etc. Negative is allowed for inset/translate (e.g. -translate-x-1/2);
-    // parseClass already rejected negatives for prefixes outside NEGATIVE_ALLOWED.
     if (FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(value)) {
-        return negative ? `-${value}` : value; // Keep as string "1/2" / "-1/2"
+        return signedString(value, negative);
     }
 
-    // Px keyword
     if (value === 'px') {
-        return negative ? '-px' : 'px';
+        return signedString('px', negative);
     }
-
-    // Auto
-    if (value === 'auto') {
-        return 'auto';
-    }
-
-    // Full (negatable: -inset-full, -translate-x-full)
     if (value === 'full') {
-        return negative ? '-full' : 'full';
+        return signedString('full', negative);
+    }
+    if (value === 'auto' || value === 'screen') {
+        return value;
     }
 
-    // Screen
-    if (value === 'screen') {
-        return 'screen';
-    }
-
-    // Numeric: integer or 0.5-step decimal
     const num = Number(value);
     if (!Number.isNaN(num)) {
-        if (negative) {
-            return -num;
-        }
-        return num;
+        return negative ? -num : num;
     }
+    return signedString(value, negative);
+}
 
-    // String value
-    if (negative) {
-        return `-${value}`;
+/**
+ * Normalizes an arbitrary value, including content string quote stability.
+ * @param prefix - The matched Tailwind prefix.
+ * @param inner - The unwrapped arbitrary value.
+ * @param negative - Whether to apply a negative prefix.
+ * @returns The normalized arbitrary value.
+ */
+function parseArbitraryValue(prefix: string, inner: string, negative: boolean): string {
+    if (negative) return `-${inner}`;
+    if (prefix === 'content' && isQuotedString(inner)) {
+        return `"${inner.slice(1, -1)}"`;
     }
-    return value;
+    return inner;
+}
+
+/**
+ * Tests whether a value is wrapped in matching single or double quotes.
+ * @param value - The value to inspect.
+ * @returns Whether it has matching quote delimiters.
+ */
+function isQuotedString(value: string): boolean {
+    return (
+        (value.startsWith("'") && value.endsWith("'")) ||
+        (value.startsWith('"') && value.endsWith('"'))
+    );
+}
+
+/**
+ * Applies the Tailwind negative marker to a string value when requested.
+ * @param value - The unsigned string value.
+ * @param negative - Whether to prepend the negative marker.
+ * @returns The signed string value.
+ */
+function signedString(value: string, negative: boolean): string {
+    return negative ? `-${value}` : value;
 }
 
 /**
