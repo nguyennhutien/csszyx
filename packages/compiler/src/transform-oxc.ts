@@ -1411,6 +1411,13 @@ interface ArrayCompositionContext {
     diagnostics: string[];
 }
 
+/** One classified element of an sz array expression. */
+type ArrayCompositionPart =
+    | { kind: 'obj'; sz: SzObject }
+    | { kind: 'str'; value: string }
+    | { kind: 'cond'; condSource: string; classNames: string }
+    | { kind: 'dyn'; src: string; node: OxcNode };
+
 /**
  * Classify an sz array (`sz={[a, b, …]}`) for later-wins composition.
  *
@@ -1432,26 +1439,7 @@ function buildArrayComposition(
     node: ArrayExpressionNode,
     context: ArrayCompositionContext,
 ): ArrayComposition | null {
-    const { filename, bindings, globalVarAliases, cssVariableMap, source, classes, diagnostics } =
-        context;
-    /** One classified array element. */
-    type Part =
-        | { kind: 'obj'; sz: SzObject }
-        | { kind: 'str'; value: string }
-        | { kind: 'cond'; condSource: string; classNames: string }
-        | { kind: 'dyn'; src: string; node: OxcNode };
-    const parts: Part[] = [];
-
-    /**
-     * Compile one static sz object with the alias table applied.
-     *
-     * @param sz Static sz object.
-     * @returns Space-joined class names.
-     */
-    const compilePart = (sz: SzObject): string =>
-        compileSzObject(applyGlobalVarAliasesToSzObject(sz, globalVarAliases, cssVariableMap))
-            .className;
-
+    const parts: ArrayCompositionPart[] = [];
     for (const element of node.elements) {
         if (!element || isFalsyLiteral(element)) {
             continue;
@@ -1459,142 +1447,246 @@ function buildArrayComposition(
         if (element.type === 'SpreadElement') {
             return null;
         }
-        const unwrapped = unwrapExpression(element);
-        if (
-            isFalsyLiteral(unwrapped) ||
-            (unwrapped.type === 'Identifier' &&
-                String((unwrapped as IdentifierNode).name) === 'undefined')
-        ) {
-            continue;
-        }
-        const literalValue =
-            unwrapped.type === 'Literal'
-                ? (unwrapped as unknown as { value: unknown }).value
-                : undefined;
-        if (typeof literalValue === 'string') {
-            parts.push({ kind: 'str', value: literalValue });
-            continue;
-        }
-        if (
-            unwrapped.type === 'LogicalExpression' &&
-            (unwrapped as LogicalExpressionNode).operator === '&&'
-        ) {
-            const logical = unwrapped as LogicalExpressionNode;
-            const right = unwrapExpression(logical.right);
-            const rightLiteral =
-                right.type === 'Literal'
-                    ? (right as unknown as { value: unknown }).value
-                    : undefined;
-            let classNames: string | null = typeof rightLiteral === 'string' ? rightLiteral : null;
-            if (classNames === null) {
-                const objectNode = resolveObjectExpression(right, bindings);
-                if (objectNode) {
-                    try {
-                        classNames = compilePart(
-                            astObjectToSzObject(objectNode, filename, bindings),
-                        );
-                    } catch (err) {
-                        if (!(err instanceof OxcNotImplementedError)) {
-                            throw err;
-                        }
-                    }
-                }
-            }
-            if (classNames !== null) {
-                if (classNames !== '') {
-                    parts.push({
-                        kind: 'cond',
-                        condSource: source.slice(logical.left.start, logical.left.end),
-                        classNames,
-                    });
-                }
-                continue;
-            }
-            // Dynamic right side: the whole guarded element resolves at runtime.
-            parts.push({
-                kind: 'dyn',
-                src: source.slice(element.start, element.end),
-                node: element,
-            });
-            continue;
-        }
-        const objectNode = resolveObjectExpression(unwrapped, bindings);
-        if (objectNode) {
-            try {
-                parts.push({
-                    kind: 'obj',
-                    sz: astObjectToSzObject(objectNode, filename, bindings),
-                });
-                continue;
-            } catch (err) {
-                if (!(err instanceof OxcNotImplementedError)) {
-                    throw err;
-                }
-            }
-        }
-        parts.push({
-            kind: 'dyn',
-            src: source.slice(element.start, element.end),
-            node: element,
-        });
+        const part = classifyArrayCompositionElement(element, context);
+        if (part) parts.push(part);
     }
 
-    if (parts.every(part => part.kind === 'obj')) {
-        const merged = (parts as Array<{ kind: 'obj'; sz: SzObject }>).reduce<SzObject>(
-            (acc, part) => deepMergeSzObjects(acc, part.sz),
-            {},
-        );
-        const compiled = compilePart(merged);
-        const staticClasses: string[] = [];
-        for (const c of compiled.split(/\s+/)) {
-            if (c) {
-                staticClasses.push(c);
-                classes.add(c);
-            }
-        }
-        return { kind: 'static', classes: staticClasses };
+    return parts.every(isStaticArrayCompositionPart)
+        ? buildStaticArrayComposition(parts, context)
+        : buildRuntimeArrayComposition(parts, context);
+}
+
+/**
+ * Classifies one non-spread array element.
+ *
+ * @param element - Array element to classify.
+ * @param context - Shared transform state.
+ * @returns Classified part, or undefined when the element can be omitted.
+ */
+function classifyArrayCompositionElement(
+    element: OxcNode,
+    context: ArrayCompositionContext,
+): ArrayCompositionPart | undefined {
+    const unwrapped = unwrapExpression(element);
+    if (isFalsyOrUndefinedExpression(unwrapped)) return undefined;
+
+    const literalValue = literalNodeValue(unwrapped);
+    if (typeof literalValue === 'string') return { kind: 'str', value: literalValue };
+
+    if (
+        unwrapped.type === 'LogicalExpression' &&
+        (unwrapped as LogicalExpressionNode).operator === '&&'
+    ) {
+        return classifyLogicalArrayPart(element, unwrapped as LogicalExpressionNode, context);
     }
 
+    const objectNode = resolveObjectExpression(unwrapped, context.bindings);
+    const sz = objectNode ? tryConvertArrayObject(objectNode, context) : null;
+    return sz
+        ? { kind: 'obj', sz }
+        : { kind: 'dyn', src: context.source.slice(element.start, element.end), node: element };
+}
+
+/**
+ * Returns whether an expression is a skipped falsy/undefined array value.
+ *
+ * @param node - Expression to inspect.
+ * @returns Whether the expression contributes no runtime class value.
+ */
+function isFalsyOrUndefinedExpression(node: OxcNode): boolean {
+    return (
+        isFalsyLiteral(node) ||
+        (node.type === 'Identifier' && String((node as IdentifierNode).name) === 'undefined')
+    );
+}
+
+/**
+ * Reads an Oxc literal value without treating other node shapes as literals.
+ *
+ * @param node - Expression to inspect.
+ * @returns Literal value, or undefined for a non-literal expression.
+ */
+function literalNodeValue(node: OxcNode): unknown {
+    return node.type === 'Literal' ? (node as unknown as { value: unknown }).value : undefined;
+}
+
+/**
+ * Classifies a guarded `condition && value` array element.
+ *
+ * @param element - Complete guarded element used for runtime fallback source.
+ * @param logical - Unwrapped logical expression.
+ * @param context - Shared transform state.
+ * @returns Classified conditional or dynamic part, or undefined for an empty value.
+ */
+function classifyLogicalArrayPart(
+    element: OxcNode,
+    logical: LogicalExpressionNode,
+    context: ArrayCompositionContext,
+): ArrayCompositionPart | undefined {
+    const right = unwrapExpression(logical.right);
+    const literalValue = literalNodeValue(right);
+    let classNames = typeof literalValue === 'string' ? literalValue : null;
+    if (classNames === null) {
+        const objectNode = resolveObjectExpression(right, context.bindings);
+        const sz = objectNode ? tryConvertArrayObject(objectNode, context) : null;
+        if (sz) classNames = compileArrayCompositionPart(sz, context);
+    }
+
+    if (classNames === '') return undefined;
+    if (classNames !== null) {
+        return {
+            kind: 'cond',
+            condSource: context.source.slice(logical.left.start, logical.left.end),
+            classNames,
+        };
+    }
+    return { kind: 'dyn', src: context.source.slice(element.start, element.end), node: element };
+}
+
+/**
+ * Converts a resolvable object while treating unsupported Oxc shapes as dynamic.
+ *
+ * @param objectNode - Resolved object expression.
+ * @param context - Shared transform state.
+ * @returns Static sz object, or null when runtime evaluation is required.
+ */
+function tryConvertArrayObject(
+    objectNode: ObjectExpressionNode,
+    context: ArrayCompositionContext,
+): SzObject | null {
+    try {
+        return astObjectToSzObject(objectNode, context.filename, context.bindings);
+    } catch (error) {
+        if (error instanceof OxcNotImplementedError) return null;
+        throw error;
+    }
+}
+
+/**
+ * Compiles one static array part with global variable aliases applied.
+ *
+ * @param sz - Static sz object.
+ * @param context - Shared transform state.
+ * @returns Space-delimited compiled classes.
+ */
+function compileArrayCompositionPart(sz: SzObject, context: ArrayCompositionContext): string {
+    return compileSzObject(
+        applyGlobalVarAliasesToSzObject(sz, context.globalVarAliases, context.cssVariableMap),
+    ).className;
+}
+
+/**
+ * Type guard for the all-static array lane.
+ *
+ * @param part - Classified array part.
+ * @returns Whether the part is a static sz object.
+ */
+function isStaticArrayCompositionPart(
+    part: ArrayCompositionPart,
+): part is Extract<ArrayCompositionPart, { kind: 'obj' }> {
+    return part.kind === 'obj';
+}
+
+/**
+ * Deep-merges and compiles an all-static array composition.
+ *
+ * @param parts - Static object parts in authored order.
+ * @param context - Shared transform state.
+ * @returns Static array composition with later-wins semantics.
+ */
+function buildStaticArrayComposition(
+    parts: Array<Extract<ArrayCompositionPart, { kind: 'obj' }>>,
+    context: ArrayCompositionContext,
+): ArrayComposition {
+    const merged = parts.reduce<SzObject>(
+        (accumulator, part) => deepMergeSzObjects(accumulator, part.sz),
+        {},
+    );
+    const staticClasses = collectArrayCompositionClasses(
+        compileArrayCompositionPart(merged, context),
+        context.classes,
+    );
+    return { kind: 'static', classes: staticClasses };
+}
+
+/**
+ * Emits runtime `szcn` arguments for a mixed array composition.
+ *
+ * @param parts - Classified parts in authored order.
+ * @param context - Shared transform state.
+ * @returns Runtime composition and helper requirements.
+ */
+function buildRuntimeArrayComposition(
+    parts: ArrayCompositionPart[],
+    context: ArrayCompositionContext,
+): ArrayComposition {
     const args: string[] = [];
     let usesSzPart = false;
     for (const part of parts) {
-        if (part.kind === 'obj') {
-            const compiled = compilePart(part.sz);
-            for (const c of compiled.split(/\s+/)) {
-                if (c) {
-                    classes.add(c);
-                }
-            }
-            args.push(JSON.stringify(compiled));
-        } else if (part.kind === 'str') {
-            for (const c of part.value.split(/\s+/)) {
-                if (c) {
-                    classes.add(c);
-                }
-            }
-            args.push(JSON.stringify(part.value));
-        } else if (part.kind === 'cond') {
-            for (const c of part.classNames.split(/\s+/)) {
-                if (c) {
-                    classes.add(c);
-                }
-            }
-            args.push(`${part.condSource} && ${JSON.stringify(part.classNames)}`);
-        } else {
-            // Safelist best-effort: static object literals reachable inside the
-            // dynamic expression (ternary branches, etc.) still get their CSS.
-            collectCandidateClassesFromExpression(part.node, filename, bindings, classes, '');
-            // An OBJECT LITERAL landing here means one runtime value dragged an
-            // otherwise-visible element to _szPart — say so. Identifiers/calls
-            // are legitimate forwarded slots and stay silent.
-            if (unwrapExpression(part.node).type === 'ObjectExpression') {
-                diagnostics.push(buildSzPartElementDiagnostic(part.node, source));
-            }
-            args.push(`_szPart(${part.src})`);
-            usesSzPart = true;
-        }
+        if (appendRuntimeArrayPart(part, args, context)) usesSzPart = true;
     }
     return { kind: 'szcn', args: args.join(', '), usesSzPart };
+}
+
+/**
+ * Appends one runtime array argument and reports whether `_szPart` is required.
+ *
+ * @param part - Classified part to emit.
+ * @param args - Mutable runtime argument list.
+ * @param context - Shared transform state.
+ * @returns Whether the emitted argument requires `_szPart`.
+ */
+function appendRuntimeArrayPart(
+    part: ArrayCompositionPart,
+    args: string[],
+    context: ArrayCompositionContext,
+): boolean {
+    if (part.kind === 'obj') {
+        const compiled = compileArrayCompositionPart(part.sz, context);
+        collectArrayCompositionClasses(compiled, context.classes);
+        args.push(JSON.stringify(compiled));
+        return false;
+    }
+    if (part.kind === 'str') {
+        collectArrayCompositionClasses(part.value, context.classes);
+        args.push(JSON.stringify(part.value));
+        return false;
+    }
+    if (part.kind === 'cond') {
+        collectArrayCompositionClasses(part.classNames, context.classes);
+        args.push(`${part.condSource} && ${JSON.stringify(part.classNames)}`);
+        return false;
+    }
+
+    collectCandidateClassesFromExpression(
+        part.node,
+        context.filename,
+        context.bindings,
+        context.classes,
+        '',
+    );
+    if (unwrapExpression(part.node).type === 'ObjectExpression') {
+        context.diagnostics.push(buildSzPartElementDiagnostic(part.node, context.source));
+    }
+    args.push(`_szPart(${part.src})`);
+    return true;
+}
+
+/**
+ * Adds whitespace-delimited class tokens to the shared set and returns them.
+ *
+ * @param value - Space-delimited class string.
+ * @param classes - Shared generated-class set.
+ * @returns Non-empty class tokens in source order.
+ */
+function collectArrayCompositionClasses(value: string, classes: Set<string>): string[] {
+    const collected: string[] = [];
+    for (const className of value.split(/\s+/)) {
+        if (!className) continue;
+        collected.push(className);
+        classes.add(className);
+    }
+    return collected;
 }
 
 /**

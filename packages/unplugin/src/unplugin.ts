@@ -2472,74 +2472,130 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const cacheKey = cacheEnabled ? createTransformCacheKey(cacheInput) : null;
 
         if (cacheEnabled && cacheKey) {
-            const memoryCached = transformMemoryCache.get(cacheKey.key);
-            if (memoryCached) {
-                transformMemoryCache.delete(cacheKey.key);
-                transformMemoryCache.set(cacheKey.key, memoryCached);
-                return memoryCached;
-            }
-
-            const cached = readTransformCache(cacheRoot, cacheInput, cacheKey);
-            if (cached) {
-                rememberTransformCacheEntry(cacheKey.key, cached);
-                return cached;
-            }
-
-            // Transform-hook lane only (the prescan lanes pass an explicit
-            // budget): reuse the in-process prescan result for unchanged
-            // content instead of transforming the same file a second time.
-            // Deliberately NOT filed into either cache — the caches stay
-            // budget-keyed; this is a same-process, same-content shortcut.
-            if (astBudget === undefined) {
-                const handoff = prescanResultHandoff.get(effectiveFilename);
-                if (handoff) {
-                    prescanResultHandoff.delete(effectiveFilename);
-                    if (handoff.inputSha256 === cacheKey.inputSha256) {
-                        return handoff.result;
-                    }
-                }
-            }
+            const cached = findConfiguredTransformCacheEntry(
+                cacheRoot,
+                cacheInput,
+                cacheKey,
+                effectiveFilename,
+                astBudget,
+            );
+            if (cached) return cached;
         }
 
-        let result: SourceTransformResult;
+        const execution = runConfiguredParser(source, effectiveFilename, compilerOptions);
+        if (cacheEnabled && cacheKey && execution.cacheable) {
+            writeTransformCache(cacheRoot, cacheInput, execution.result, cacheKey);
+            rememberTransformCacheEntry(cacheKey.key, execution.result);
+        }
+        return execution.result;
+    }
+
+    /**
+     * Finds an in-memory, disk, or prescan-handoff transform result.
+     * @param cacheRoot Transform cache directory.
+     * @param cacheInput Full transform cache identity.
+     * @param cacheKey Precomputed cache key.
+     * @param effectiveFilename Normalized source filename.
+     * @param astBudget Explicit prescan budget, when this is a prescan lane.
+     * @returns A reusable result, or null on a cold miss.
+     */
+    function findConfiguredTransformCacheEntry(
+        cacheRoot: string,
+        cacheInput: TransformCacheKeyInput,
+        cacheKey: TransformCacheKey,
+        effectiveFilename: string,
+        astBudget: number | undefined,
+    ): SourceTransformResult | null {
+        const memoryCached = transformMemoryCache.get(cacheKey.key);
+        if (memoryCached) {
+            transformMemoryCache.delete(cacheKey.key);
+            transformMemoryCache.set(cacheKey.key, memoryCached);
+            return memoryCached;
+        }
+
+        const diskCached = readTransformCache(cacheRoot, cacheInput, cacheKey);
+        if (diskCached) {
+            rememberTransformCacheEntry(cacheKey.key, diskCached);
+            return diskCached;
+        }
+
+        if (astBudget !== undefined) return null;
+        const handoff = prescanResultHandoff.get(effectiveFilename);
+        if (!handoff) return null;
+        prescanResultHandoff.delete(effectiveFilename);
+        return handoff.inputSha256 === cacheKey.inputSha256 ? handoff.result : null;
+    }
+
+    /**
+     * Runs the selected parser and marks fallback output as non-cacheable.
+     * @param source Source module contents.
+     * @param effectiveFilename Normalized source filename.
+     * @param compilerOptions Compiler options.
+     * @returns Transform result plus whether it is safe under the configured cache key.
+     */
+    function runConfiguredParser(
+        source: string,
+        effectiveFilename: string,
+        compilerOptions: TransformSourceCodeOptions,
+    ): { result: SourceTransformResult; cacheable: boolean } {
         if (parserMode === 'babel') {
-            result = transformSourceCode(source, effectiveFilename, compilerOptions);
-        } else if (parserMode === 'rust') {
+            return {
+                result: transformSourceCode(source, effectiveFilename, compilerOptions),
+                cacheable: true,
+            };
+        }
+        if (parserMode === 'rust') {
             // Honour the documented contract: `rust` is opt-in and never
             // silently falls back to oxc/Babel. Any failure here surfaces
             // to the caller with the same compatibility error the compiler
             // wrapper raises when the native addon is missing for the current
             // host, so misconfigured environments fail loudly instead of
             // producing oxc output users were not expecting.
-            result = transformRust(source, effectiveFilename, compilerOptions);
-        } else {
-            try {
-                result = transformOxc(source, effectiveFilename, compilerOptions);
-            } catch (err) {
-                result = transformSourceCode(source, effectiveFilename, compilerOptions);
-                const reason = err instanceof Error ? err.message : String(err);
-                result.diagnostics.push(
-                    `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
-                );
-                // Surface the fallback to the console once per file. A silent
-                // per-file drop to Babel was invisible before (it only lived in
-                // the diagnostics array), so a project could be running on a
-                // different engine than intended without any signal.
-                if (!_babelFallbackFiles.has(effectiveFilename)) {
-                    _babelFallbackFiles.add(effectiveFilename);
-                    console.warn(
-                        `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason} ` +
-                            `(${_babelFallbackFiles.size} file(s) so far). Output is still correct; ` +
-                            'this usually means the file uses a syntax the oxc lane does not yet handle.',
-                    );
-                }
-                return result;
-            }
+            return {
+                result: transformRust(source, effectiveFilename, compilerOptions),
+                cacheable: true,
+            };
         }
 
-        if (cacheEnabled && cacheKey) {
-            writeTransformCache(cacheRoot, cacheInput, result, cacheKey);
-            rememberTransformCacheEntry(cacheKey.key, result);
+        try {
+            return {
+                result: transformOxc(source, effectiveFilename, compilerOptions),
+                cacheable: true,
+            };
+        } catch (error) {
+            return {
+                result: runBabelFallback(source, effectiveFilename, compilerOptions, error),
+                cacheable: false,
+            };
+        }
+    }
+
+    /**
+     * Runs and reports the compatibility fallback for an Oxc parser failure.
+     * @param source Source module contents.
+     * @param effectiveFilename Normalized source filename.
+     * @param compilerOptions Compiler options.
+     * @param error Oxc parser failure.
+     * @returns Babel compatibility transform result.
+     */
+    function runBabelFallback(
+        source: string,
+        effectiveFilename: string,
+        compilerOptions: TransformSourceCodeOptions,
+        error: unknown,
+    ): SourceTransformResult {
+        const result = transformSourceCode(source, effectiveFilename, compilerOptions);
+        const reason = error instanceof Error ? error.message : String(error);
+        result.diagnostics.push(
+            `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
+        );
+        if (!_babelFallbackFiles.has(effectiveFilename)) {
+            _babelFallbackFiles.add(effectiveFilename);
+            console.warn(
+                `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason} ` +
+                    `(${_babelFallbackFiles.size} file(s) so far). Output is still correct; ` +
+                    'this usually means the file uses a syntax the oxc lane does not yet handle.',
+            );
         }
         return result;
     }

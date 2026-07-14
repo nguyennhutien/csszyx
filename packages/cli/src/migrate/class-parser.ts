@@ -57,12 +57,11 @@ export interface ParseClassOptions {
  * Parse a single Tailwind utility class (no variant prefix) into an sz prop/value.
  * Returns null if the class is not recognized.
  * @param cls - The Tailwind utility class string
- * @param options - Parser output policy.
+ * @param _options - Reserved parser output policy for migration callers.
  * @returns {ParsedClass | null} Parsed prop/value or null if unrecognized
  */
-export function parseClass(cls: string, options: ParseClassOptions = {}): ParsedClass | null {
+export function parseClass(cls: string, _options: ParseClassOptions = {}): ParsedClass | null {
     const { input, source, negative, important } = parseClassModifiers(cls);
-    void options;
 
     const container = parseContainerMarker(input);
     if (container) {
