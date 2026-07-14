@@ -27,7 +27,11 @@ fi
 if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
     # Wire the Claude native binary and establish host/container memory sync
     # only when the private profile has explicitly mounted that host state.
-    bash /workspaces/csszyx/.devcontainer/ensure-claude-sync.sh || true
+    # The AI scripts live under .devcontainer/personal/ (gitignored, private);
+    # guard with -f so a checkout without them (public clone, docs not pulled)
+    # skips instead of aborting.
+    sync_sh="/workspaces/csszyx/.devcontainer/personal/ensure-claude-sync.sh"
+    [ -f "$sync_sh" ] && bash "$sync_sh" || true
 fi
 
 # Cocogitto validates Conventional Commit messages. It is baked into new
@@ -42,9 +46,10 @@ fi
 CI=true pnpm install
 
 # Linux-arm64 native binaries that the macOS-created lockfile doesn't carry.
-# Safe to run repeatedly — the script skips already-installed binaries.
-if [ -f .scripts/fix-linux-arm64-binaries.sh ]; then
-    bash .scripts/fix-linux-arm64-binaries.sh
+# Public helper (arch-gated: no-op off linux/arm64). Runs for every profile so
+# any arm64 contributor gets working binaries. Safe to run repeatedly.
+if [ -f .devcontainer/fix-linux-arm64-binaries.sh ]; then
+    bash .devcontainer/fix-linux-arm64-binaries.sh
 fi
 
 echo "[setup] Done."

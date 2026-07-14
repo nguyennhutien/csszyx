@@ -95,6 +95,11 @@ playwright/.cache/
 .tmp/
 .cache/
 
+# Local codegraph index (generated; one shared source via workspace bind-mount,
+# never committed). Previously ignored via .git/info/exclude by the now-removed
+# .agent/install-codegraph.sh — tracked here so a fresh clone ignores it too.
+.codegraph/
+
 # AI agent docs — tracked on internal/docs branch, private remote only.
 # To commit changes: git docs "your message"
 # To view history:   git log internal/docs -- AGENTS.md .agent/
