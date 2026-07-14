@@ -377,113 +377,125 @@ function isLengthArbitrary(value: string): boolean {
  */
 export function classifyAmbiguousValue(prefix: string, value: string): string | null {
     switch (prefix) {
-        case 'text': {
-            const sizeValue = value.replace(/\/[\w.[\]]+$/, ''); // text-sm/6 line-height modifier
-            if (TEXT_SIZES.has(sizeValue) || customTokens.textSizes.has(sizeValue)) {
-                return 'text:size';
-            }
-            if (isLengthArbitrary(sizeValue)) {
-                return 'text:size';
-            }
-            if (TEXT_ALIGNS.has(value)) {
-                return 'text:align';
-            }
-            if (TEXT_WRAPS.has(value)) {
-                return 'text:wrap';
-            }
-            if (TEXT_OVERFLOWS.has(value)) {
-                return 'text:overflow';
-            }
-            if (isColorValue(value)) {
-                return 'text:color';
-            }
-            return null;
-        }
-        case 'font': {
-            if (FONT_FAMILIES.has(value) || customTokens.fontFamilies.has(value)) {
-                return 'font:family';
-            }
-            if (
-                FONT_WEIGHTS.has(value) ||
-                customTokens.fontWeights.has(value) ||
-                /^\[\d+\]$/.test(value)
-            ) {
-                return 'font:weight';
-            }
-            return null;
-        }
-        case 'bg': {
-            if (isColorValue(value)) {
-                return 'bg:color';
-            }
-            if (BG_POSITIONS.has(value) || value.startsWith('position-')) {
-                return 'bg:position';
-            }
-            if (BG_SIZES.has(value) || value.startsWith('size-')) {
-                return 'bg:size';
-            }
-            if (BG_REPEATS.has(value)) {
-                return 'bg:repeat';
-            }
-            if (BG_ATTACHMENTS.has(value)) {
-                return 'bg:attachment';
-            }
-            if (value.startsWith('clip-')) {
-                return 'bg:clip';
-            }
-            if (value.startsWith('origin-')) {
-                return 'bg:origin';
-            }
-            if (
-                value === 'none' ||
-                value.startsWith('gradient-to-') ||
-                value.startsWith('linear-') ||
-                value === 'radial' ||
-                value.startsWith('radial-') ||
-                value.startsWith('conic-') ||
-                value === 'conic' ||
-                /^\[url\(/.test(value) ||
-                /^\[image:/.test(value)
-            ) {
-                return 'bg:image';
-            }
-            return null;
-        }
+        case 'text':
+            return classifyTextValue(value);
+        case 'font':
+            return classifyFontValue(value);
+        case 'bg':
+            return classifyBackgroundValue(value);
         case 'border':
         case 'divide':
         case 'ring':
-        case 'outline': {
-            // Directional/axis forms (border-t-2, divide-x-4) stay keep-both in
-            // v1: a directional width interacts with the shorthand the same way
-            // p/px/pt do, and that coverage logic is deferred for these prefixes.
-            const firstSegment = value.split('-', 1)[0] ?? '';
-            if (DIRECTIONAL_SEGMENTS.has(firstSegment)) {
-                return null;
-            }
-            if (isColorValue(value)) {
-                return `${prefix}:color`;
-            }
-            if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-                return `${prefix}:width`;
-            }
-            if (BORDER_STYLES.has(value)) {
-                return `${prefix}:style`;
-            }
-            return null;
-        }
-        case 'flex': {
-            if (FLEX_DIRECTIONS.has(value)) {
-                return 'flex:direction';
-            }
-            if (FLEX_WRAPS.has(value)) {
-                return 'flex:wrap';
-            }
-            if (FLEX_SHORTHANDS.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-                return 'flex:shorthand';
-            }
-            return null;
-        }
+        case 'outline':
+            return classifyBorderValue(prefix, value);
+        case 'flex':
+            return classifyFlexValue(value);
         default:
             return null;
     }
+}
+
+/**
+ * Classifies an ambiguous `text-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The text property group, or `null` when uncertain.
+ */
+function classifyTextValue(value: string): string | null {
+    const sizeValue = value.replace(/\/[\w.[\]]+$/, '');
+    if (TEXT_SIZES.has(sizeValue) || customTokens.textSizes.has(sizeValue)) {
+        return 'text:size';
+    }
+    if (isLengthArbitrary(sizeValue)) {
+        return 'text:size';
+    }
+    if (TEXT_ALIGNS.has(value)) {
+        return 'text:align';
+    }
+    if (TEXT_WRAPS.has(value)) {
+        return 'text:wrap';
+    }
+    if (TEXT_OVERFLOWS.has(value)) {
+        return 'text:overflow';
+    }
+    return isColorValue(value) ? 'text:color' : null;
+}
+
+/**
+ * Classifies an ambiguous `font-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The font property group, or `null` when uncertain.
+ */
+function classifyFontValue(value: string): string | null {
+    if (FONT_FAMILIES.has(value) || customTokens.fontFamilies.has(value)) {
+        return 'font:family';
+    }
+    if (FONT_WEIGHTS.has(value) || customTokens.fontWeights.has(value) || /^\[\d+\]$/.test(value)) {
+        return 'font:weight';
+    }
+    return null;
+}
+
+/**
+ * Classifies an ambiguous `bg-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The background property group, or `null` when uncertain.
+ */
+function classifyBackgroundValue(value: string): string | null {
+    if (isColorValue(value)) return 'bg:color';
+    if (BG_POSITIONS.has(value) || value.startsWith('position-')) return 'bg:position';
+    if (BG_SIZES.has(value) || value.startsWith('size-')) return 'bg:size';
+    if (BG_REPEATS.has(value)) return 'bg:repeat';
+    if (BG_ATTACHMENTS.has(value)) return 'bg:attachment';
+    if (value.startsWith('clip-')) return 'bg:clip';
+    if (value.startsWith('origin-')) return 'bg:origin';
+    return isBackgroundImage(value) ? 'bg:image' : null;
+}
+
+/**
+ * Tests whether a background value selects an image or gradient utility.
+ * @param value - The value after the `bg-` prefix.
+ * @returns Whether the value belongs to the background-image group.
+ */
+function isBackgroundImage(value: string): boolean {
+    return (
+        value === 'none' ||
+        value.startsWith('gradient-to-') ||
+        value.startsWith('linear-') ||
+        value === 'radial' ||
+        value.startsWith('radial-') ||
+        value.startsWith('conic-') ||
+        value === 'conic' ||
+        /^\[url\(/.test(value) ||
+        /^\[image:/.test(value)
+    );
+}
+
+/**
+ * Classifies an ambiguous border-like utility value.
+ * @param prefix - The border-like utility prefix.
+ * @param value - The value after the utility prefix.
+ * @returns The border property group, or `null` when uncertain.
+ */
+function classifyBorderValue(prefix: string, value: string): string | null {
+    const firstSegment = value.split('-', 1)[0] ?? '';
+    if (DIRECTIONAL_SEGMENTS.has(firstSegment)) return null;
+    if (isColorValue(value)) return `${prefix}:color`;
+    if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
+        return `${prefix}:width`;
+    }
+    return BORDER_STYLES.has(value) ? `${prefix}:style` : null;
+}
+
+/**
+ * Classifies an ambiguous `flex-*` value.
+ * @param value - The value after the utility prefix.
+ * @returns The flex property group, or `null` when uncertain.
+ */
+function classifyFlexValue(value: string): string | null {
+    if (FLEX_DIRECTIONS.has(value)) return 'flex:direction';
+    if (FLEX_WRAPS.has(value)) return 'flex:wrap';
+    if (FLEX_SHORTHANDS.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
+        return 'flex:shorthand';
+    }
+    return null;
 }
