@@ -362,6 +362,14 @@ interface ParsedClassToken {
     cssProperty?: string;
 }
 
+interface ClassNameConversionState {
+    szObject: Record<string, unknown>;
+    unrecognized: string[];
+    keepInClassName: string[];
+    seenCssPropertiesByPath: Map<string, Map<string, string>>;
+    conflictedCssPropertiesByPath: Map<string, Set<string>>;
+}
+
 const MAX_TOKEN_CACHE_SIZE = 4096;
 const parsedTokenCache = new Map<string, ParsedClassToken | null>();
 
@@ -456,92 +464,105 @@ export function classNameToSzObject(
     keepInClassName: string[];
 } {
     const tokens = tokenize(className);
-    const szObject: Record<string, unknown> = {};
-    const unrecognized: string[] = [];
-    const keepInClassName: string[] = [];
-    const seenCssPropertiesByPath = new Map<string, Map<string, string>>();
-    const conflictedCssPropertiesByPath = new Map<string, Set<string>>();
+    const state: ClassNameConversionState = {
+        szObject: {},
+        unrecognized: [],
+        keepInClassName: [],
+        seenCssPropertiesByPath: new Map(),
+        conflictedCssPropertiesByPath: new Map(),
+    };
 
     for (const token of tokens) {
-        // Check custom map first
-        if (customMap && token in customMap) {
-            const entry = resolveCustomMapEntry(
-                token,
-                customMap,
-                // Inline resolver: parse Tailwind string recursively (no customMap to avoid infinite loop).
-                // Returns both the sz object and any unrecognized tokens from the string value,
-                // so partially-valid strings cascade their unknowns back to the unrecognized list.
-                twStr => {
-                    const inner = classNameToSzObject(twStr);
-                    if (Object.keys(inner.szObject).length === 0) {
-                        return null;
-                    }
-                    return { sz: inner.szObject, cascade: inner.unrecognized };
-                },
-            );
-
-            if (entry) {
-                if (entry.action === 'sz') {
-                    Object.assign(szObject, entry.value);
-                    // Cascade: unrecognized tokens from string-route values are treated as
-                    // additional unrecognized classes so they surface in reports and auto-
-                    // cascade back into csszyx-todo.json when --resolve-todos is active.
-                    if (entry.cascade && entry.cascade.length > 0) {
-                        unrecognized.push(...entry.cascade);
-                    }
-                    continue;
-                }
-                if (entry.action === 'keep') {
-                    keepInClassName.push(token);
-                    continue;
-                }
-                if (entry.action === 'remove') {
-                    // Omit entirely — don't add to sz or className
-                    continue;
-                }
-                // action === 'unresolved': token has sz:todo / null / false value —
-                // "not yet decided". Never fall through to the normal parser here;
-                // that would silently convert valid TW classes (e.g. "flex") even
-                // though the dev explicitly marked them as pending. Instead, surface
-                // them in unrecognized[] so @sz-todo comments get re-injected and
-                // they appear in reports as still-unresolved.
-                if (entry.action === 'unresolved') {
-                    unrecognized.push(token);
-                    continue;
-                }
-            }
-        }
-
-        const parsedToken = parseClassTokenCached(token);
-        if (!parsedToken) {
-            unrecognized.push(token);
+        if (applyCustomMapToken(token, customMap, state)) {
             continue;
         }
-
-        if (isCssPropertyConflicted(conflictedCssPropertiesByPath, parsedToken)) {
-            unrecognized.push(token);
-            continue;
-        }
-
-        const conflict = findCssPropertyConflict(seenCssPropertiesByPath, parsedToken, token);
-        if (conflict) {
-            rememberCssPropertyConflict(conflictedCssPropertiesByPath, parsedToken);
-            unrecognized.push(conflict, token);
-            removeNestedValue(szObject, parsedToken.keyPath, parsedToken.prop);
-            continue;
-        }
-        rememberCssProperty(seenCssPropertiesByPath, parsedToken, token);
-
-        // Set value in the nested object
-        setNestedValue(
-            szObject,
-            parsedToken.keyPath,
-            parsedToken.prop,
-            cloneParsedValue(parsedToken.value),
-        );
+        applyParsedToken(token, state);
     }
 
-    return { szObject, unrecognized, keepInClassName };
+    return {
+        szObject: state.szObject,
+        unrecognized: state.unrecognized,
+        keepInClassName: state.keepInClassName,
+    };
+}
+
+/**
+ * Resolves a custom-map Tailwind string without recursively applying that map.
+ * @param value - The replacement Tailwind class string.
+ * @returns Its recognized sz object and unresolved cascade, or null when none is recognized.
+ */
+function resolveCustomMapString(
+    value: string,
+): { sz: Record<string, unknown>; cascade: string[] } | null {
+    const inner = classNameToSzObject(value);
+    return Object.keys(inner.szObject).length === 0
+        ? null
+        : { sz: inner.szObject, cascade: inner.unrecognized };
+}
+
+/**
+ * Applies one custom-map action and reports whether normal parsing is bypassed.
+ * @param token - The original Tailwind token.
+ * @param customMap - The optional todo resolution map.
+ * @param state - The conversion state to update.
+ * @returns Whether a custom-map entry consumed the token.
+ */
+function applyCustomMapToken(
+    token: string,
+    customMap: CsszyxTodoMap | undefined,
+    state: ClassNameConversionState,
+): boolean {
+    if (!customMap) return false;
+    const entry = resolveCustomMapEntry(token, customMap, resolveCustomMapString);
+    if (!entry) return false;
+
+    switch (entry.action) {
+        case 'sz':
+            Object.assign(state.szObject, entry.value);
+            if (entry.cascade?.length) state.unrecognized.push(...entry.cascade);
+            return true;
+        case 'keep':
+            state.keepInClassName.push(token);
+            return true;
+        case 'remove':
+            return true;
+        case 'unresolved':
+            state.unrecognized.push(token);
+            return true;
+    }
+}
+
+/**
+ * Parses and applies one ordinary Tailwind token to the conversion state.
+ * @param token - The Tailwind token to parse.
+ * @param state - The conversion state to update.
+ */
+function applyParsedToken(token: string, state: ClassNameConversionState): void {
+    const parsedToken = parseClassTokenCached(token);
+    if (!parsedToken) {
+        state.unrecognized.push(token);
+        return;
+    }
+    if (isCssPropertyConflicted(state.conflictedCssPropertiesByPath, parsedToken)) {
+        state.unrecognized.push(token);
+        return;
+    }
+
+    const conflict = findCssPropertyConflict(state.seenCssPropertiesByPath, parsedToken, token);
+    if (conflict) {
+        rememberCssPropertyConflict(state.conflictedCssPropertiesByPath, parsedToken);
+        state.unrecognized.push(conflict, token);
+        removeNestedValue(state.szObject, parsedToken.keyPath, parsedToken.prop);
+        return;
+    }
+
+    rememberCssProperty(state.seenCssPropertiesByPath, parsedToken, token);
+    setNestedValue(
+        state.szObject,
+        parsedToken.keyPath,
+        parsedToken.prop,
+        cloneParsedValue(parsedToken.value),
+    );
 }
 
 /**
