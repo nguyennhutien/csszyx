@@ -61,129 +61,129 @@ export interface ParseClassOptions {
  * @returns {ParsedClass | null} Parsed prop/value or null if unrecognized
  */
 export function parseClass(cls: string, options: ParseClassOptions = {}): ParsedClass | null {
-    // Handle important modifier
-    let important = false;
-    let input = cls;
-    if (input.endsWith('!')) {
-        important = true;
-        input = input.slice(0, -1);
+    const { input, source, negative, important } = parseClassModifiers(cls);
+    void options;
+
+    const container = parseContainerMarker(input);
+    if (container) {
+        return container;
     }
 
-    // Handle negative prefix
-    let negative = false;
-    let negInput = input;
-    if (input.startsWith('-')) {
-        negative = true;
-        negInput = input.slice(1);
-    }
-
-    // Container-query marker: `@container` enables container queries, and the
-    // named form `@container/sidebar` carries the container name as a sugar value.
-    if (input === '@container') {
-        return { prop: '@container', value: true };
-    }
-    if (input.startsWith('@container/')) {
-        return { prop: '@container', value: input.slice('@container/'.length) };
-    }
-
-    // 1. Try exact boolean match first (highest priority)
     const boolResult = tryBooleanMatch(input);
     if (boolResult) {
         return applyImportant(boolResult, important);
     }
 
-    // 2. Try gradient patterns (bg-linear-*, bg-radial*, bg-conic*)
-    const gradResult = tryGradient(negInput, negative);
+    const gradResult = tryGradient(source, negative);
     if (gradResult) {
         return applyImportant(gradResult, important);
     }
 
-    // 3. Try longest-prefix-match
-    const source = negative ? negInput : input;
+    const utility = parseLongestPrefix(source, negative);
+    if (utility) {
+        return applyImportant(utility, important);
+    }
+
+    const customProperty = parseCustomPropertyDeclaration(input);
+    return customProperty ? applyImportant(customProperty, important) : null;
+}
+
+/**
+ * Splits important and negative syntax from a Tailwind class.
+ * @param cls - The original utility class.
+ * @returns Its normalized source and modifier flags.
+ */
+function parseClassModifiers(cls: string): {
+    input: string;
+    source: string;
+    negative: boolean;
+    important: boolean;
+} {
+    const important = cls.endsWith('!');
+    const input = important ? cls.slice(0, -1) : cls;
+    const negative = input.startsWith('-');
+    return { input, source: negative ? input.slice(1) : input, negative, important };
+}
+
+/**
+ * Parses the base and named container-query markers.
+ * @param input - The utility after removing the important marker.
+ * @returns The container marker result, or null.
+ */
+function parseContainerMarker(input: string): ParsedClass | null {
+    if (input === '@container') return { prop: '@container', value: true };
+    return input.startsWith('@container/')
+        ? { prop: '@container', value: input.slice('@container/'.length) }
+        : null;
+}
+
+/**
+ * Applies longest-prefix matching to an unsigned utility source.
+ * @param source - The utility after removing its negative marker.
+ * @param negative - Whether the original utility was negative.
+ * @returns The parsed utility, or null.
+ */
+function parseLongestPrefix(source: string, negative: boolean): ParsedClass | null {
     for (const prefix of SORTED_PREFIXES) {
-        // Exact match: class IS the prefix (e.g., "blur", "ring", "outline")
         if (source === prefix) {
-            // Some of these are booleans handled above, but others have default values
-            const prop = REVERSE_PROPERTY_MAP[prefix];
-            if (negative && NEGATIVE_ALLOWED.has(prefix)) {
-                // e.g., "-z" doesn't make sense alone; skip
-                continue;
-            }
-            // For properties like "ring", "outline" — boolean true
-            if (REVERSE_BOOLEAN_MAP[source]) {
-                return applyImportant(
-                    { prop: REVERSE_BOOLEAN_MAP[source], value: true },
-                    important,
-                );
-            }
-            // For divide-x, divide-y without value → boolean
-            if (prefix === 'divide-x' || prefix === 'divide-y') {
-                return applyImportant({ prop, value: true }, important);
-            }
-            // For border without value → boolean
-            if (prefix === 'border') {
-                return applyImportant({ prop: 'border', value: true }, important);
-            }
-            // For border-t/r/b/l/x/y/s/e without value → boolean side border
-            if (
-                [
-                    'border-t',
-                    'border-r',
-                    'border-b',
-                    'border-l',
-                    'border-x',
-                    'border-y',
-                    'border-s',
-                    'border-e',
-                ].includes(prefix)
-            ) {
-                return applyImportant({ prop, value: true }, important);
-            }
+            const exact = parseExactPrefix(prefix, negative);
+            if (exact) return exact;
             continue;
         }
-
-        // Class starts with prefix + "-"
-        if (source.startsWith(`${prefix}-`)) {
-            const rawValue = source.slice(prefix.length + 1); // strip prefix and "-"
-            if (!rawValue) {
-                continue;
-            }
-
-            // Validate negative
-            if (negative && !NEGATIVE_ALLOWED.has(prefix)) {
-                continue; // Invalid negative for this prefix
-            }
-
-            // For spacing-type prefixes, validate value looks like a spacing value
-            // This prevents false positives like "my-custom-class" matching "my" (margin-y)
-            if (SPACING_PROPS.has(prefix) && !isValidSpacingValue(rawValue)) {
-                continue;
-            }
-
-            // Disambiguate and parse
-            const result = disambiguateAndParse(prefix, rawValue, negative);
-            if (result) {
-                return applyImportant(result, important);
-            }
+        const parsed = parseValuedPrefix(source, prefix, negative);
+        if (parsed) {
+            return parsed;
         }
     }
-
-    // 5. Try CSS custom property declaration: [--var:value]
-    if (input.startsWith('[') && input.endsWith(']') && input.includes(':')) {
-        const inner = input.slice(1, -1);
-        if (inner.startsWith('--')) {
-            const colonIdx = inner.indexOf(':');
-            return applyImportant(
-                {
-                    prop: inner.slice(0, colonIdx),
-                    value: inner.slice(colonIdx + 1),
-                },
-                important,
-            );
-        }
-    }
-
     return null;
+}
+
+/**
+ * Parses an exact utility prefix with its implicit boolean value.
+ * @param prefix - The exact matched prefix.
+ * @param negative - Whether the original utility was negative.
+ * @returns The implicit utility value, or null.
+ */
+function parseExactPrefix(prefix: string, negative: boolean): ParsedClass | null {
+    if (negative && NEGATIVE_ALLOWED.has(prefix)) return null;
+    if (REVERSE_BOOLEAN_MAP[prefix]) {
+        return { prop: REVERSE_BOOLEAN_MAP[prefix], value: true };
+    }
+    const prop = REVERSE_PROPERTY_MAP[prefix];
+    if (prefix === 'divide-x' || prefix === 'divide-y') return { prop, value: true };
+    if (prefix === 'border') return { prop: 'border', value: true };
+    return /^border-[trblxyse]$/.test(prefix) ? { prop, value: true } : null;
+}
+
+/**
+ * Parses one prefix followed by a non-empty value.
+ * @param source - The unsigned utility source.
+ * @param prefix - The candidate prefix.
+ * @param negative - Whether the original utility was negative.
+ * @returns The parsed utility, or null.
+ */
+function parseValuedPrefix(source: string, prefix: string, negative: boolean): ParsedClass | null {
+    if (!source.startsWith(`${prefix}-`)) return null;
+    const rawValue = source.slice(prefix.length + 1);
+    if (!rawValue || (negative && !NEGATIVE_ALLOWED.has(prefix))) return null;
+    if (SPACING_PROPS.has(prefix) && !isValidSpacingValue(rawValue)) return null;
+    return disambiguateAndParse(prefix, rawValue, negative);
+}
+
+/**
+ * Parses an arbitrary CSS custom-property declaration.
+ * @param input - The utility after removing the important marker.
+ * @returns The custom-property declaration, or null.
+ */
+function parseCustomPropertyDeclaration(input: string): ParsedClass | null {
+    if (!input.startsWith('[') || !input.endsWith(']') || !input.includes(':')) return null;
+    const inner = input.slice(1, -1);
+    if (!inner.startsWith('--')) return null;
+    const colonIndex = inner.indexOf(':');
+    return {
+        prop: inner.slice(0, colonIndex),
+        value: inner.slice(colonIndex + 1),
+    };
 }
 
 /**
