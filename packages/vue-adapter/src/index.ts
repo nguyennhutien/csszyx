@@ -372,7 +372,7 @@ export function vitePlugin(options: VueAdapterOptions = {}): Plugin {
 
             return {
                 code: result.code,
-                map: null, // TODO: Generate source map
+                map: null, // Source-map generation is not implemented yet.
             };
         },
     };

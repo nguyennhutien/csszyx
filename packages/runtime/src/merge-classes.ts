@@ -93,7 +93,7 @@ function decodeToken(token: string): string {
  * are a different CSS longhand and could flip under RTL — leaving those as
  * keep-both (still cascade-correct, never wrongly dropped).
  *
- * TODO(v2): `border-<width>` is directional too, but the `border` prefix is
+ * Deferred for v2: `border-<width>` is directional too, but the `border` prefix is
  * ambiguous (width vs color vs style), so it needs value-aware classification
  * (the same work as collapsing two `text-<size>` / two `bg-<color>`); deferred.
  */

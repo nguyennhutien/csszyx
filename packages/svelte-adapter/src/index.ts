@@ -289,7 +289,7 @@ export function preprocessor(options: SvelteAdapterOptions = {}): PreprocessorGr
 
             return {
                 code: mergedContent,
-                map: undefined, // TODO: Generate source map
+                map: undefined, // Source-map generation is not implemented yet.
             };
         },
     };
@@ -347,7 +347,7 @@ export function vitePlugin(options: SvelteAdapterOptions = {}): Plugin {
 
             return {
                 code: mergedContent,
-                map: undefined, // TODO: Generate source map
+                map: undefined, // Source-map generation is not implemented yet.
             };
         },
     };
