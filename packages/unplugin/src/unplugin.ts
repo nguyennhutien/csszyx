@@ -3429,19 +3429,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // state.classes (the safelist) via the fallback scan but never
         // ownedClasses, so they are never renamed out from under an external
         // stylesheet or name-based JS lookup.
-        const sortedClasses = Array.from(state.ownedClasses); // Keep insertion order for stability
         const newMap: Record<string, string> = {};
         // Walk the encoder sequence, skipping any token that equals a reserved
         // (external) class name, so no mangled alias collides with one. `tokenIndex`
         // advances independently of the class index whenever a token is skipped.
         let tokenIndex = 0;
-        for (let i = 0; i < sortedClasses.length; i++) {
+        for (const className of state.ownedClasses) {
             let token = encode(tokenIndex);
             while (mangleReserved.has(token)) {
                 tokenIndex++;
                 token = encode(tokenIndex);
             }
-            newMap[sortedClasses[i]] = token;
+            newMap[className] = token;
             tokenIndex++;
         }
         state.mangleMap = newMap;
