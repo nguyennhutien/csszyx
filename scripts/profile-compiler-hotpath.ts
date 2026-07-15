@@ -253,14 +253,15 @@ function readQuoted(code: string, start: number): number {
  */
 function readBalanced(code: string, start: number): number {
     let depth = 0;
-    for (let i = start; i < code.length; i++) {
+    let i = start;
+    while (i < code.length) {
         const ch = code[i];
         if (ch === '"' || ch === "'" || ch === '`') {
             const end = readQuoted(code, i);
             if (end === i) {
                 return start;
             }
-            i = end - 1;
+            i = end;
             continue;
         }
         if (ch === '{') {
@@ -271,6 +272,7 @@ function readBalanced(code: string, start: number): number {
                 return i + 1;
             }
         }
+        i++;
     }
     return start;
 }
