@@ -2263,6 +2263,41 @@ function isGradientPositionKey(key: string): boolean {
     return key === 'fromPos' || key === 'viaPos' || key === 'toPos';
 }
 
+/** Collects closed font style and smoothing modes. */
+function collectFontModeProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (key === 'fontStyle') {
+        const className = value === 'italic' ? 'italic' : value === 'normal' ? 'not-italic' : '';
+        if (className) classes.push(`${prefix}${className}`);
+        else warnUnsupportedFontStyle(value);
+        return true;
+    }
+    if (key !== 'fontSmoothing') return false;
+    const className =
+        value === 'grayscale' ? 'antialiased' : value === 'subpixel' ? 'subpixel-antialiased' : '';
+    if (className) classes.push(`${prefix}${className}`);
+    else if (szDevWarningsEnabled()) {
+        console.warn(
+            `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
+                `'grayscale' or 'subpixel'.`,
+        );
+    }
+    return true;
+}
+
+/** Warns when fontStyle cannot map to a Tailwind class. */
+function warnUnsupportedFontStyle(value: string): void {
+    if (!szDevWarningsEnabled()) return;
+    console.warn(
+        `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
+            `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
+    );
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2506,6 +2541,8 @@ function transformImpl(
         // HANDLE DIRECT OUTPUT PROPERTIES (shorthands)
         // ================================================================
         if (typeof value === 'string') {
+            if (collectFontModeProperty(rawKey, value, prefix, classes)) continue;
+
             // decoration: 'underline' | 'overline' | 'line-through' | 'no-underline' → direct output
             if (rawKey === 'decoration') {
                 if (
@@ -2533,53 +2570,6 @@ function transformImpl(
                     classes.push(className);
                     continue;
                 }
-            }
-
-            // fontStyle: 'italic' → italic, 'normal' → not-italic. Tailwind only models these
-            // two; oblique has no class. The handler is closed — an unsupported value warns and
-            // emits nothing rather than falling through to a broken `font-style-*` class.
-            if (rawKey === 'fontStyle') {
-                if (value === 'italic') {
-                    className += 'italic';
-                    classes.push(className);
-                    continue;
-                }
-                if (value === 'normal') {
-                    className += 'not-italic';
-                    classes.push(className);
-                    continue;
-                }
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
-                            `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
-                    );
-                }
-                continue;
-            }
-
-            // fontSmoothing: 'grayscale' → antialiased, 'subpixel' → subpixel-antialiased.
-            // Both set -webkit-/-moz- font-smoothing; the values name the rendering technique
-            // (grayscale vs subpixel/RGB) rather than Tailwind's misleading "antialiased" name.
-            // Closed handler — an unsupported value warns and emits nothing.
-            if (rawKey === 'fontSmoothing') {
-                if (value === 'grayscale') {
-                    className += 'antialiased';
-                    classes.push(className);
-                    continue;
-                }
-                if (value === 'subpixel') {
-                    className += 'subpixel-antialiased';
-                    classes.push(className);
-                    continue;
-                }
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
-                            `'grayscale' or 'subpixel'.`,
-                    );
-                }
-                continue;
             }
 
             // fontVariant: 'normal-nums' | 'ordinal' | etc → direct output
