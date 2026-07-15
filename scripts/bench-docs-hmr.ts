@@ -532,6 +532,7 @@ function parseTraceTimings(logs: string[]): TraceTimings {
 function failedRow(parser: BenchMode, error: unknown, logs: string[]): HmrStats {
     const message = error instanceof Error ? error.message : String(error);
     const logSummary = summarizeLogs(logs);
+    const logSuffix = logSummary ? `; ${logSummary}` : '';
     return {
         name: `docs-hmr/${parser}`,
         parser,
@@ -547,7 +548,7 @@ function failedRow(parser: BenchMode, error: unknown, logs: string[]): HmrStats 
         rounds: 1,
         failedRounds: 1,
         status: 'failed',
-        note: `${message}${logSummary ? `; ${logSummary}` : ''}`.slice(0, 240),
+        note: `${message}${logSuffix}`.slice(0, 240),
     };
 }
 
@@ -583,10 +584,11 @@ function aggregateRows(parser: BenchMode, rows: HmrStats[]): HmrStats {
     row.rounds = rows.length;
     row.failedRounds = rows.length - measured.length;
     const failureNote = rows.find(item => item.status === 'failed')?.note;
+    const failureSuffix = failureNote ? `: ${failureNote}` : '';
     row.note =
         row.failedRounds === 0
             ? `Aggregated across ${row.rounds} round(s); parser order alternated per round.`
-            : `Aggregated across ${measured.length}/${row.rounds} successful round(s); ${row.failedRounds} round(s) failed${failureNote ? `: ${failureNote}` : ''}.`;
+            : `Aggregated across ${measured.length}/${row.rounds} successful round(s); ${row.failedRounds} round(s) failed${failureSuffix}.`;
     return row;
 }
 

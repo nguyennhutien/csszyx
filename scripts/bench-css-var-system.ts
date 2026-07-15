@@ -133,8 +133,10 @@ writeFileSync(
     'utf8',
 );
 
-console.log(`Wrote ${join(options.outDir, `${REPORT_NAME}.md`)}`);
-console.log(`Wrote ${join(options.outDir, `${REPORT_NAME}.json`)}`);
+const markdownReportPath = join(options.outDir, `${REPORT_NAME}.md`);
+const jsonReportPath = join(options.outDir, `${REPORT_NAME}.json`);
+console.log(`Wrote ${markdownReportPath}`);
+console.log(`Wrote ${jsonReportPath}`);
 
 /**
  * Parses CLI options.

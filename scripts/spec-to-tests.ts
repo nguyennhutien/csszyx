@@ -1070,8 +1070,11 @@ function main(): void {
                 inTable = true;
 
                 if (columnInfo.isUtilityTable) {
+                    const szColumns = columnInfo.szIndices
+                        .map(s => `col${s.idx}(${s.label})`)
+                        .join(', ');
                     log(
-                        `  Table: ${cells.length} columns, tw=col${columnInfo.tailwindIdx}, sz=[${columnInfo.szIndices.map(s => `col${s.idx}(${s.label})`).join(', ')}]`,
+                        `  Table: ${cells.length} columns, tw=col${columnInfo.tailwindIdx}, sz=[${szColumns}]`,
                     );
                 }
                 continue;
