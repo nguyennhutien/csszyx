@@ -52,18 +52,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
         });
 
         if (matches.length === 0) {
-            const message = `No source files matched pattern \`${pattern}\` under ${root}.`;
-            if (options.json) {
-                console.log(
-                    JSON.stringify(
-                        { ok: false, reason: 'no-files-matched', root, pattern, mode },
-                        null,
-                        2,
-                    ),
-                );
-            } else {
-                console.error(`${colors.error(icons.error)} ${message}`);
-            }
+            reportNoFilesMatched(options.json, root, pattern, mode);
             return 1;
         }
 
@@ -82,47 +71,93 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             // tracks the engine that actually runs the transform.
         });
 
-        if (options.json) {
-            console.log(
-                JSON.stringify(
-                    {
-                        ok: true,
-                        root,
-                        mode,
-                        scannedCount: result.scannedCount,
-                        transformedCount: result.transformedCount,
-                        skippedMissingCount: result.skippedMissingCount,
-                        sourceCount: result.sourceCount,
-                        classCount: result.classCount,
-                        manifestPath: result.manifestPath,
-                        safelistOutputPath: result.safelistOutputPath,
-                    },
-                    null,
-                    2,
-                ),
-            );
-        } else {
-            console.log(`${colors.success(icons.success)} csszyx next prebuild done`);
-            console.log(`  root:        ${root}`);
-            console.log(`  mode:        ${mode}`);
-            console.log(`  scanned:     ${result.scannedCount}`);
-            console.log(`  transformed: ${result.transformedCount}`);
-            console.log(`  skipped:     ${result.skippedMissingCount}`);
-            console.log(`  sources:     ${result.sourceCount}`);
-            console.log(`  classes:     ${result.classCount}`);
-            console.log(`  safelist:    ${result.safelistOutputPath}`);
-            console.log(`  manifest:    ${result.manifestPath}`);
-        }
+        reportPrebuildSuccess(options.json, root, mode, result);
         return 0;
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (options.json) {
-            console.log(JSON.stringify({ ok: false, reason: message }, null, 2));
-        } else {
-            console.error(`${colors.error(icons.error)} ${message}`);
-        }
+        reportPrebuildFailure(options.json, message);
         return 1;
     }
+}
+
+/**
+ * Report that the configured source pattern matched no files.
+ * @param json - Whether to emit structured JSON.
+ * @param root - Absolute scan root.
+ * @param pattern - Source glob pattern.
+ * @param mode - Prebuild mode.
+ */
+function reportNoFilesMatched(
+    json: boolean | undefined,
+    root: string,
+    pattern: string,
+    mode: 'development' | 'production',
+): void {
+    if (json) {
+        console.log(
+            JSON.stringify({ ok: false, reason: 'no-files-matched', root, pattern, mode }, null, 2),
+        );
+        return;
+    }
+    console.error(
+        `${colors.error(icons.error)} No source files matched pattern \`${pattern}\` under ${root}.`,
+    );
+}
+
+/**
+ * Report a successful prebuild in human-readable or JSON form.
+ * @param json - Whether to emit structured JSON.
+ * @param root - Absolute scan root.
+ * @param mode - Prebuild mode.
+ * @param result - Completed prebuild metrics and output paths.
+ */
+function reportPrebuildSuccess(
+    json: boolean | undefined,
+    root: string,
+    mode: 'development' | 'production',
+    result: ReturnType<typeof runNextPrebuild>,
+): void {
+    if (json) {
+        console.log(
+            JSON.stringify(
+                {
+                    ok: true,
+                    root,
+                    mode,
+                    scannedCount: result.scannedCount,
+                    transformedCount: result.transformedCount,
+                    skippedMissingCount: result.skippedMissingCount,
+                    sourceCount: result.sourceCount,
+                    classCount: result.classCount,
+                    manifestPath: result.manifestPath,
+                    safelistOutputPath: result.safelistOutputPath,
+                },
+                null,
+                2,
+            ),
+        );
+        return;
+    }
+    console.log(`${colors.success(icons.success)} csszyx next prebuild done`);
+    console.log(`  root:        ${root}`);
+    console.log(`  mode:        ${mode}`);
+    console.log(`  scanned:     ${result.scannedCount}`);
+    console.log(`  transformed: ${result.transformedCount}`);
+    console.log(`  skipped:     ${result.skippedMissingCount}`);
+    console.log(`  sources:     ${result.sourceCount}`);
+    console.log(`  classes:     ${result.classCount}`);
+    console.log(`  safelist:    ${result.safelistOutputPath}`);
+    console.log(`  manifest:    ${result.manifestPath}`);
+}
+
+/**
+ * Report a failed prebuild in human-readable or JSON form.
+ * @param json - Whether to emit structured JSON.
+ * @param message - Failure reason.
+ */
+function reportPrebuildFailure(json: boolean | undefined, message: string): void {
+    if (json) console.log(JSON.stringify({ ok: false, reason: message }, null, 2));
+    else console.error(`${colors.error(icons.error)} ${message}`);
 }
 
 function normalizeMode(mode: NextPrebuildCommandOptions['mode']): 'development' | 'production' {
