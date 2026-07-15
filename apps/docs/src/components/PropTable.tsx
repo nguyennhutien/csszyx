@@ -3,6 +3,13 @@ import { szv } from '@csszyx/runtime';
 import { dynamic } from '@csszyx/dynamic';
 
 import { parseSzObjectEntries } from '../utils/parse-sz-object.js';
+import {
+    type MarginDirection,
+    type PaddingKind,
+    resolveMarginViz,
+    resolvePaddingKind,
+    type SpacingVizProps,
+} from '../utils/spacing-viz.js';
 
 interface PropTableRow {
     sz: string;
@@ -136,7 +143,7 @@ const hatchSz = szv({
     },
 });
 
-function resolveMarginKind(dir: 'right' | 'left' | 'bottom' | 'top', magnitude: number): MarginKind {
+function resolveMarginKind(dir: MarginDirection, magnitude: number): MarginKind {
     if (dir === 'right') return magnitude === 4 ? 'mr4' : 'mr2';
     if (dir === 'left') return 'ml2';
     if (dir === 'bottom') return magnitude === 8 ? 'mb8' : 'mb6';
@@ -150,6 +157,27 @@ function paddingOverrideClass(p: number | 'px' | '5px' | '--p'): string {
     return dynamic(_O_PVAR);
 }
 
+function resolvePaddingClasses(
+    kind: PaddingKind,
+    p: SpacingVizProps['p'],
+): { overrideClass: string; targetClass: string } {
+    if (kind === 'p' && p != null) {
+        return {
+            overrideClass: paddingOverrideClass(p),
+            targetClass: p === 4 || p === '5px' || p === '--p' ? '' : dynamic(_T_PAD),
+        };
+    }
+    if (kind === 'px') return { overrideClass: dynamic(_O_PX6), targetClass: '' };
+    if (kind === 'py') return { overrideClass: dynamic(_O_PY2), targetClass: '' };
+    if (kind === 'pt') return { overrideClass: dynamic(_O_PT4), targetClass: dynamic(_T_PAD_PT4) };
+    if (kind === 'pr') return { overrideClass: dynamic(_O_PR2), targetClass: dynamic(_T_PAD_PR2) };
+    if (kind === 'pb') return { overrideClass: dynamic(_O_PB4), targetClass: dynamic(_T_PAD_PB4) };
+    if (kind === 'ps') return { overrideClass: dynamic(_O_PS4), targetClass: dynamic(_T_PAD_PS4) };
+    if (kind === 'pe') return { overrideClass: dynamic(_O_PE4), targetClass: dynamic(_T_PAD_PE4) };
+    if (kind === 'pl') return { overrideClass: dynamic(_O_PL2), targetClass: dynamic(_T_PAD_PL2) };
+    return { overrideClass: '', targetClass: '' };
+}
+
 /**
  * Spacing viz — padding and margin.
  *
@@ -161,29 +189,13 @@ function paddingOverrideClass(p: number | 'px' | '5px' | '--p'): string {
  *
  * MARGIN:  Two boxes: green target + adjacent box with gradient fading away.
  */
-export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, mr, mb, ml }: {
-    p?: number | 'px' | '5px' | '--p'; px?: number; py?: number;
-    pt?: number; pr?: number; pb?: number; pl?: number;
-    ps?: number; pe?: number;
-    m?: number; mx?: number; my?: number; mt?: number; mr?: number; mb?: number; ml?: number;
-}) {
-    const hasMargin = [m, mx, my, mt, mr, mb, ml].some(v => v != null);
+export function SpacingViz(props: SpacingVizProps) {
+    const { p, ps, pe } = props;
+    const margin = resolveMarginViz(props);
 
-    if (hasMargin) {
-        let dir: 'right' | 'left' | 'bottom' | 'top' = 'right';
-        if      (mr != null) dir = 'right';
-        else if (ml != null) dir = 'left';
-        else if (mb != null) dir = 'bottom';
-        else if (mt != null) dir = 'top';
-        else if (mx != null || m != null) dir = 'right';
-        else if (my != null) dir = 'bottom';
-
-        const isHoriz = dir === 'right' || dir === 'left';
-
-        const adjCls = dynamic(adjBoxSz({ dir }));
-
-        const mAbs = Math.abs(mr ?? ml ?? mb ?? mt ?? mx ?? my ?? m ?? 0);
-        const marginKind = resolveMarginKind(dir, mAbs);
+    if (margin) {
+        const adjCls = dynamic(adjBoxSz({ dir: margin.direction }));
+        const marginKind = resolveMarginKind(margin.direction, margin.magnitude);
         const targetCls    = dynamic(targetMarginSz({ kind: marginKind }));
         const fakeMarginCls = dynamic(fakeMarginSz({  kind: marginKind }));
 
@@ -199,12 +211,12 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
           <div sz={{ position: 'relative', w: 8, h: 8, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-800', to: 'indigo-900', rounded: 'sm', shrink: 0, z: 2 }} />
         </div>;
         const adjBox    = <div key="adj" className={adjCls} sz={{ from: 'indigo-800', to: 'transparent', rounded: 'md', shrink: 0 }} />;
-        const ordered = dir === 'right' || dir === 'bottom'
+        const ordered = margin.direction === 'right' || margin.direction === 'bottom'
             ? [targetBox, adjBox] : [adjBox, targetBox];
 
         return (
             <div sz={{ w: 40, h: 24, display: 'flex', items: 'center', justify: 'center', overflow: 'hidden' }}>
-                <div className={dynamic(marginContainerSz({ dir: isHoriz ? 'horiz' : 'vert' }))}>
+                <div className={dynamic(marginContainerSz({ dir: margin.horizontal ? 'horiz' : 'vert' }))}>
                     {ordered}
                 </div>
             </div>
@@ -212,36 +224,7 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
     }
 
     // ── Padding visualization ─────────────────────────────────────────────────
-    let padOverrideCls = '';
-    let padTargetCls = '';
-    if (p != null) {
-      padOverrideCls = paddingOverrideClass(p);
-      padTargetCls = p === 4 || p === '5px' || p === '--p'
-        ? ''
-        : dynamic(_T_PAD);
-    } else if (px != null) {
-        padOverrideCls = dynamic(_O_PX6);
-    } else if (py != null) {
-        padOverrideCls = dynamic(_O_PY2);
-    } else if (pt != null) {
-        padOverrideCls = dynamic(_O_PT4);
-        padTargetCls = dynamic(_T_PAD_PT4);
-    } else if (pr != null) {
-        padOverrideCls = dynamic(_O_PR2);
-        padTargetCls = dynamic(_T_PAD_PR2);
-    } else if (pb != null) {
-        padOverrideCls = dynamic(_O_PB4);
-        padTargetCls = dynamic(_T_PAD_PB4);
-    } else if (ps != null) {
-        padOverrideCls = dynamic(_O_PS4);
-        padTargetCls = dynamic(_T_PAD_PS4);
-    } else if (pe != null) {
-        padOverrideCls = dynamic(_O_PE4);
-        padTargetCls = dynamic(_T_PAD_PE4);
-    } else if (pl != null) {
-        padOverrideCls = dynamic(_O_PL2);
-        padTargetCls = dynamic(_T_PAD_PL2);
-    }
+    const padding = resolvePaddingClasses(resolvePaddingKind(props), p);
 
     // ps/pe: show text content so the inline-start/end direction is obvious
     const showText = ps != null || pe != null;
@@ -250,11 +233,11 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
         <div sz={{ w: 40, h: 24, display: 'flex', items: 'center', justify: 'center', overflow: 'hidden' }}>
           <div sz={{ bg: '--sl-color-accent-high', rounded: 'md' }}>
             <div
-              className={`${padOverrideCls} ${dynamic(hatchSz({ dir: pe != null ? 'vert' : 'horiz' }))}`}
+              className={`${padding.overrideClass} ${dynamic(hatchSz({ dir: pe != null ? 'vert' : 'horiz' }))}`}
               {...(p === '--p' ? { style: { '--p': '0.75em' } as React.CSSProperties } : {})}
             >
               <div
-                className={padTargetCls}
+                className={padding.targetClass}
                 sz={[{ w: 8, h: 8, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-800', to: 'indigo-900', shrink: 0 }, pe && { textAlign: 'right' }]}
               >
                 {showText && <span sz={{ text: 'xs', fontMono: true, color: 'indigo-200', leading: 'none', select: 'none' }}>ABC</span>}
