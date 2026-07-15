@@ -304,69 +304,47 @@ describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => 
 });
 
 describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => {
-    // Button component: sz={[{ display: 'flex', items: 'center', rounded: 'full' },
-    //   variant === 'primary' && { bg: 'violet-500' },
-    //   size === 'lg' ? { scale: 100 } : { scale: 75 }]}
-    // Minified bundle: className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")
-    it('Button — static base + && variant + size ternary (minified)', () => {
-        const code =
-            'className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // Pass 2 sees ternary → mangles all "..." including the && string and ternary branches
-        // Pass 3 is then a no-op (already-mangled tokens not in map)
-        expect(result).toBe(
+    it.each([
+        [
+            'a minified Button',
+            'className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")',
             'className:_szMerge("z h e",variant==="primary"&&"g",size==="lg"?"j":"i")',
-        );
-    });
-
-    it('Button — SSR unminified form (spaces after colon + operators)', () => {
-        const code =
-            'className: _szMerge("flex items-center rounded-full", variant === "primary" && "bg-violet-500", size === "lg" ? "scale-100" : "scale-75")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // Pass 2: space after colon is accepted; expression mangled in full
-        expect(result).toBe(
+            false,
+        ],
+        [
+            'an SSR Button',
+            'className: _szMerge("flex items-center rounded-full", variant === "primary" && "bg-violet-500", size === "lg" ? "scale-100" : "scale-75")',
             'className: _szMerge("z h e", variant === "primary" && "g", size === "lg" ? "j" : "i")',
-        );
-    });
-
-    it('Avatar — all-ternary _szMerge, no static base (size variant)', () => {
-        // sz={[ isRow ? { flexDir: 'row' } : { flexDir: 'col' }, isBig ? { size: 24 } : { p: 4 } ]}
-        const code = 'className:_szMerge(isRow?"flex-row":"flex-col",isBig?"size-24":"p-4")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:_szMerge(isRow?"a":"b",isBig?"f":"c")');
-    });
-
-    it('Modal — 4-arg _szMerge: static + two && booleans + ternary', () => {
-        // sz={[{ display: 'flex', items: 'center' }, open && { p: 4 }, active && { rounded: 'xl' },
-        //       full ? { rounded: 'full' } : { scale: 75 }]}
-        const code =
-            'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:_szMerge("z h",open&&"c",active&&"d",full?"e":"i")');
-    });
-
-    it('full minified JSX line with two sibling elements', () => {
-        // Two React.createElement calls on one line, as produced by esbuild
-        const code =
-            'n.createElement("div",{className:isA?"flex":"items-center"},n.createElement("span",{className:isRow?"flex-row":"flex-col"}))';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(
+            false,
+        ],
+        [
+            'an all-ternary Avatar',
+            'className:_szMerge(isRow?"flex-row":"flex-col",isBig?"size-24":"p-4")',
+            'className:_szMerge(isRow?"a":"b",isBig?"f":"c")',
+            false,
+        ],
+        [
+            'a four-argument Modal',
+            'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")',
+            'className:_szMerge("z h",open&&"c",active&&"d",full?"e":"i")',
+            false,
+        ],
+        [
+            'minified sibling elements',
+            'n.createElement("div",{className:isA?"flex":"items-center"},n.createElement("span",{className:isRow?"flex-row":"flex-col"}))',
             'n.createElement("div",{className:isA?"z":"h"},n.createElement("span",{className:isRow?"a":"b"}))',
-        );
-    });
-
-    it('Pass 2 then Pass 3 — no double-mangling on already-mangled strings', () => {
-        // Verifies idempotency: if Pass 2 already mangled the static string inside
-        // _szMerge, Pass 3's lookbehind still runs but must not corrupt the result.
-        // "flex items-center" is static (no ternary alone), so if we include a ternary
-        // the whole expression goes through Pass 2 first.
-        const code =
-            'className:_szMerge("flex items-center",pe&&"p-4",cond?"rounded-xl":"rounded-full")';
+            false,
+        ],
+        [
+            'an idempotent multi-pass expression',
+            'className:_szMerge("flex items-center",pe&&"p-4",cond?"rounded-xl":"rounded-full")',
+            'className:_szMerge("z h",pe&&"c",cond?"d":"e")',
+            true,
+        ],
+    ])('mangles %s', (_label, code, expected, verifyIdempotency) => {
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // Run a second time — idempotent
-        const result2 = mangleCodeClassesSync(result, TEST_MANGLE);
-        expect(result).toBe('className:_szMerge("z h",pe&&"c",cond?"d":"e")');
-        expect(result2).toBe(result); // second pass must be no-op
+        expect(result).toBe(expected);
+        if (verifyIdempotency) expect(mangleCodeClassesSync(result, TEST_MANGLE)).toBe(result);
     });
 });
 
