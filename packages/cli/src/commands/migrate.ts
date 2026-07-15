@@ -66,7 +66,7 @@ function createLogFile(cwd: string): {
 } {
     const now = new Date();
     // Format: 2026-04-12_14-05-30
-    const ts = now.toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+    const ts = now.toISOString().slice(0, 19).replace('T', '_').split(':').join('-');
     const logDir = path.join(cwd, '.csszyx', 'logs');
     fs.mkdirSync(logDir, { recursive: true });
     const filePath = path.join(logDir, `migrate-${ts}.log`);

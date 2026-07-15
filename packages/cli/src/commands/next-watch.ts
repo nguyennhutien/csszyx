@@ -18,6 +18,7 @@ import { colors, icons } from '../utils/terminal-ui.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/i;
+const WINDOWS_PATH_SEPARATOR = String.fromCodePoint(92);
 
 /** Options accepted by the `next-watch` CLI command. */
 export interface NextWatchCommandOptions {
@@ -263,7 +264,7 @@ function createIgnoredMatcher(
 ): (candidate: string) => boolean {
     const normalizedShardsDir = path.resolve(shardsDir);
     const matchers = ignore.flatMap(pattern => {
-        const normalized = pattern.replace(/\\/g, '/');
+        const normalized = normalizeGlobPath(pattern);
         const variants = normalized.endsWith('/**')
             ? [normalized, normalized.slice(0, -3)]
             : [normalized];
@@ -282,12 +283,22 @@ function createIgnoredMatcher(
         ) {
             return false;
         }
-        const relative = path.relative(root, absolute).replace(/\\/g, '/');
+        const relative = normalizeGlobPath(path.relative(root, absolute));
         if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) {
             return false;
         }
         return matchers.some(matcher => matcher.match(relative));
     };
+}
+
+/**
+ * Normalize platform path separators for glob matching.
+ *
+ * @param value Path or glob pattern to normalize.
+ * @returns Path using forward slashes.
+ */
+function normalizeGlobPath(value: string): string {
+    return value.split(WINDOWS_PATH_SEPARATOR).join('/');
 }
 
 /**
