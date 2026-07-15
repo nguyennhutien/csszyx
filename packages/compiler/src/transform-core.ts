@@ -815,6 +815,10 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
+// Object-valued keys lowered by dedicated branches rather than PROPERTY_MAP.
+// This table also feeds native known-key generation so diagnostics cannot drift.
+const KNOWN_SPECIAL_PROPERTIES = new Set(['css']);
+
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities
 // (truncate, srOnly), additive/stackable flags (font-variant-numeric, which
@@ -2715,6 +2719,7 @@ function warnUnknownSzProperty(key: string, szProp: SzObject): void {
 function isKnownSzPropertyKey(key: string): boolean {
     return Boolean(
         PROPERTY_MAP[key] ||
+            KNOWN_SPECIAL_PROPERTIES.has(key) ||
             BOOLEAN_SHORTHANDS.has(key) ||
             SNAP_DIRECT_MAP[key] ||
             isGradientPositionKey(key) ||

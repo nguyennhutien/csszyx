@@ -432,6 +432,11 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     )
 }
 
+/// Returns true when a property is lowered by a dedicated object branch.
+pub(crate) fn is_known_special_property(key: &str) -> bool {
+    matches!(key, "css")
+}
+
 /// Returns true when a key is a removed boolean-sugar alias (flex/absolute/
 /// italic/...). A `true` value on such a key emits no class — the canonical
 /// key with a value is the only spelling.

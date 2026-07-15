@@ -183,6 +183,7 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             // flag-only utilities: emit a class but carry no value, so they were
             // absent from rust's boolean_class table and over-warned (field report)
             'truncate',
+            'css',
             'textEllipsis',
             'textClip',
             'blur',
@@ -210,6 +211,18 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             }
         }
         expect(overWarns).toEqual([]);
+    });
+
+    runOr('accepts the css escape hatch without diagnosing its sub-properties', () => {
+        const result = transformRust(
+            'export const A = () => <div sz={{ css: { writingMode: "vertical-lr" } }} />;',
+            '/p/F.tsx',
+            { rootDir: '/p' },
+        );
+        expect(result.classes).toContain('[writing-mode:vertical-lr]');
+        expect(result.diagnostics.some(message => message.includes('Unknown property'))).toBe(
+            false,
+        );
     });
 
     runOr.each(['textEllipsis', 'textClip'])(

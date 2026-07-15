@@ -8,8 +8,8 @@ use std::borrow::Cow;
 
 use super::{
     generated::tables::{
-        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar, property_prefix,
-        variant_prefix,
+        boolean_class, is_aria_state, is_known_variant,
+        is_removed_boolean_sugar, property_prefix, variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzValue,
 };
@@ -146,6 +146,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         // import, breaking the native build. Referencing it inline keeps the
         // symbol tied to its single cfg-gated use.
         || super::generated::tables::is_boolean_shorthand(key)
+        || is_known_special_property(key)
         || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
@@ -1489,6 +1490,7 @@ mod tests {
             // is_known_sz_key must still recognize them or rust warns for a class
             // it emits (field-reported for `truncate`).
             "truncate",
+            "css",
             "textEllipsis",
             "textClip",
             "blur",
