@@ -76,15 +76,16 @@ if (enableTurboBroad) {
     }
 }
 
+function resolveDistDir(): string {
+    if (enableTurboBroad) return '.next-turbo-broad';
+    if (enableTurboCsszyxLoader) return '.next-turbo-csszyx';
+    if (process.env.CSSZYX_NEXT16_TURBO_SOURCE === '1') return '.next-turbo-source';
+    return '.next';
+}
+
 const nextConfig: NextConfig = {
     reactStrictMode: true,
-    distDir: enableTurboBroad
-        ? '.next-turbo-broad'
-        : process.env.CSSZYX_NEXT16_TURBO_CSSZYX === '1'
-          ? '.next-turbo-csszyx'
-          : process.env.CSSZYX_NEXT16_TURBO_SOURCE === '1'
-            ? '.next-turbo-source'
-            : '.next',
+    distDir: resolveDistDir(),
     turbopack,
     webpack: config => {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
