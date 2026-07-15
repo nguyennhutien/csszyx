@@ -83,6 +83,33 @@ describe('safelist scan robustness', () => {
         );
     });
 
+    describe('raw class discovery is independent of JSX attribute order', () => {
+        const fixtures = [
+            'export const A=()=> <div className="raw token" sz={{p:4}}/>;',
+            'export const A=()=> <div sz={{p:4}} className="raw token"/>;',
+        ];
+
+        for (const [name, engine] of ENGINES) {
+            it(`${name} catalogs className before and after sz`, () => {
+                for (const source of fixtures) {
+                    expect([...engine(source, 'A.tsx').rawClassNames].sort()).toEqual([
+                        'raw',
+                        'token',
+                    ]);
+                }
+            });
+        }
+
+        it.skipIf(!isRustTransformAvailable())('rust catalogs both attribute orders', () => {
+            for (const source of fixtures) {
+                expect([...transformRust(source, 'A.tsx').rawClassNames].sort()).toEqual([
+                    'raw',
+                    'token',
+                ]);
+            }
+        });
+    });
+
     describe('purely numeric sz keys never mint garbage classes', () => {
         const numericSz = 'export const A = () => <div sz={{ 50: 100, p: 2 }} />;';
         const numericSzvLeaf =

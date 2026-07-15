@@ -1246,9 +1246,16 @@ export function transformSourceCode(
                                 ),
                             );
 
+                            const existingAttributes = findExistingJsxAttributes(path);
+                            if (existingAttributes.classNameNode) {
+                                collectRawClassNameAttribute(
+                                    existingAttributes.classNameNode,
+                                    rawClassNames,
+                                );
+                            }
                             const valueResult = transformSzAttributeValue(
                                 path,
-                                findExistingJsxAttributes(path),
+                                existingAttributes,
                                 classMergeUsage,
                                 collectedClasses,
                                 diagnostics,
