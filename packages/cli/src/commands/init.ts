@@ -490,12 +490,8 @@ export async function injectNextPlugin(cwd: string): Promise<boolean> {
         return true;
     }
 
-    if (content?.includes('csszyx')) {
-        return true;
-    }
-
     // next.config already exists but doesn't have csszyx — too risky to auto-modify
-    return false;
+    return content?.includes('csszyx') ?? false;
 }
 
 /**
