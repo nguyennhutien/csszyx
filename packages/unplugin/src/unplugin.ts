@@ -2957,10 +2957,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
-        // Escape the class list before it lands in an HTML attribute so a hostile
-        // class token (e.g. one carrying `"` or `<`) cannot break out of the
-        // attribute and inject markup. Valid Tailwind classes contain none of the
-        // escaped characters, so the file is byte-identical for normal input.
+        // Escape only attribute-breaking `"`/`<`. Raw `&` and `>` are valid
+        // arbitrary-variant syntax and must remain byte-identical because
+        // Tailwind scans source text without decoding HTML entities.
         // The three nested divs are intentional: Tailwind v4's oxide scanner only
         // emits child-combinator CSS (space-y-*, divide-y-*) when it sees the class
         // on an element that has children — a single div would drop that CSS.

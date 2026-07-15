@@ -24,8 +24,14 @@ function dts(theme: Partial<typeof emptyTheme>): string {
 
 describe('escapeHtmlAttribute (safelist writer F3)', () => {
     it('escapes characters that could break out of a class="…" attribute', () => {
-        expect(escapeHtmlAttribute('a"><script>')).toBe('a&quot;&gt;&lt;script&gt;');
-        expect(escapeHtmlAttribute('a&b')).toBe('a&amp;b');
+        expect(escapeHtmlAttribute('a"><script>')).toBe('a&quot;>&lt;script>');
+    });
+
+    it('preserves Tailwind arbitrary-variant selector bytes', () => {
+        expect(escapeHtmlAttribute('[&_.tab-item-header]:py-0!')).toBe(
+            '[&_.tab-item-header]:py-0!',
+        );
+        expect(escapeHtmlAttribute('[&>span]:text-sm')).toBe('[&>span]:text-sm');
     });
 
     it('leaves a normal class list byte-identical', () => {

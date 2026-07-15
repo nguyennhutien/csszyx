@@ -14,6 +14,8 @@ describe('Tailwind 4.3 compatibility', () => {
             'text-[--alpha(var(--color-brand)_/_50%)]',
             'm-0',
             'm-1',
+            '[&_.tab-item-header]:py-0!',
+            '[&>span]:text-sm',
         ]);
 
         expect(css).toContain('grid-auto-columns: calc(var(--spacing) * 12)');
@@ -22,5 +24,8 @@ describe('Tailwind 4.3 compatibility', () => {
         expect(css).toContain('color: color-mix(in oklab, var(--color-brand) 50%, transparent)');
         expect(css).toContain('margin: 0');
         expect(css).toContain('margin: var(--spacing)');
+        expect(css).toContain('.tab-item-header');
+        expect(css).toContain('padding-block: 0 !important');
+        expect(css).toContain('&>span');
     });
 });

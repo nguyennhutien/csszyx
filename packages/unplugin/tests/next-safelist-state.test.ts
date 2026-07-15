@@ -50,7 +50,7 @@ describe('Next safelist state', () => {
             {
                 sourcePath,
                 sourceHash: 'hash-a',
-                classes: ['p-8', 'bg-red-500', 'p-8'],
+                classes: ['p-8', 'bg-red-500', 'p-8', '[&_.tab-item-header]:py-0!'],
                 timestamp: 1,
             },
             { retryDelayMs: 0 },
@@ -59,13 +59,14 @@ describe('Next safelist state', () => {
         const result = materializeNextSafelist(paths, { retryDelayMs: 0 });
 
         expect(result).toEqual({
-            classCount: 2,
+            classCount: 3,
             sourceCount: 1,
             tombstonedSourceCount: 0,
             shardCount: 1,
         });
         expect(readFileSync(paths.outputPath, 'utf8')).toBe(
-            '<div class="bg-red-500"></div>\n<div class="p-8"></div>\n',
+            '<div class="[&_.tab-item-header]:py-0!"></div>\n' +
+                '<div class="bg-red-500"></div>\n<div class="p-8"></div>\n',
         );
         // The snapshot stores resolved OS-native paths, and JSON escapes
         // Windows backslashes to `\\`, so a raw substring match against the
