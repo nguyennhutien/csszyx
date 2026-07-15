@@ -179,32 +179,30 @@ describe('existing className/style detection', () => {
         expect(r.code).toContain('className={undefined}');
     });
 
-    it('merges CSS-var class into an existing object style attribute', () => {
-        const jsx = 'const A = ({ v }) => <div style={{ color: "red" }} sz={{ p: v }} />;';
+    it.each([
+        [
+            'an object attribute',
+            'const A = ({ v }) => <div style={{ color: "red" }} sz={{ p: v }} />;',
+            ['color: "red"', '"--_sz-p"'],
+        ],
+        [
+            'a string attribute',
+            'const A = ({ v }) => <div style="color: red; margin-top: 10px" sz={{ p: v }} />;',
+            ['marginTop: "10px"', '"--_sz-p"'],
+        ],
+        [
+            'a custom property',
+            'const A = ({ v }) => <div style="--x: 1px; color: red" sz={{ p: v }} />;',
+            ['"--x": "1px"', '"--_sz-p"'],
+        ],
+        [
+            'a dynamic reference',
+            'const A = ({ v, myStyle }) => <div style={myStyle} sz={{ p: v }} />;',
+            ['...myStyle', '"--_sz-p"'],
+        ],
+    ])('merges CSS variables with %s style', (_label, jsx, expectedCode) => {
         const r = run(jsx);
-        expect(r.code).toContain('color: "red"');
-        expect(r.code).toContain('"--_sz-p"');
-    });
-
-    it('parses an existing string style attribute and merges CSS vars', () => {
-        const jsx =
-            'const A = ({ v }) => <div style="color: red; margin-top: 10px" sz={{ p: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('marginTop: "10px"');
-        expect(r.code).toContain('"--_sz-p"');
-    });
-
-    it('preserves a CSS custom property key when parsing a style string', () => {
-        const jsx = 'const A = ({ v }) => <div style="--x: 1px; color: red" sz={{ p: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('"--x": "1px"');
-    });
-
-    it('spreads a dynamic style reference alongside injected CSS vars', () => {
-        const jsx = 'const A = ({ v, myStyle }) => <div style={myStyle} sz={{ p: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('...myStyle');
-        expect(r.code).toContain('"--_sz-p"');
+        for (const fragment of expectedCode) expect(r.code).toContain(fragment);
     });
 });
 
@@ -426,64 +424,50 @@ describe('sz={[ ... ]} array composition', () => {
 
 // ── Runtime fallback + diagnostics ──────────────────────────────────────────
 describe('runtime fallback diagnostics', () => {
-    it('warns about a function call and wraps it in _sz', () => {
-        const jsx = 'const A = () => <div sz={getStyles()} />;';
+    it.each([
+        [
+            'a function call',
+            'const A = () => <div sz={getStyles()} />;',
+            'function call `getStyles()`',
+        ],
+        ['a member call', 'const A = () => <div sz={styles.get()} />;', 'function call `get()`'],
+        [
+            'an imported identifier',
+            "import { external } from './x'; const A = () => <div sz={external} />;",
+            'identifier `external`',
+        ],
+        [
+            'a member expression',
+            'const A = ({ o }) => <div sz={o.styles} />;',
+            'member expression is not statically',
+        ],
+        [
+            'a binary expression',
+            'const A = ({ a, b }) => <div sz={a + b} />;',
+            'is not statically analyzable',
+        ],
+        [
+            'an unresolvable object spread',
+            "import { x } from './x'; const A = () => <div sz={{ ...x }} />;",
+            'unresolvable sz spread',
+        ],
+    ])('falls back with a diagnostic for %s', (_label, jsx, diagnostic) => {
         const r = run(jsx);
         expect(r.usesRuntime).toBe(true);
-        expect(r.diagnostics.some(d => d.includes('function call `getStyles()`'))).toBe(true);
-    });
-
-    it('warns about a member-call callee name', () => {
-        const jsx = 'const A = () => <div sz={styles.get()} />;';
-        const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('function call `get()`'))).toBe(true);
-    });
-
-    it('warns about an unresolvable identifier', () => {
-        const jsx = "import { external } from './x'; const A = () => <div sz={external} />;";
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-        expect(r.diagnostics.some(d => d.includes('identifier `external`'))).toBe(true);
-    });
-
-    it('warns about a member expression', () => {
-        const jsx = 'const A = ({ o }) => <div sz={o.styles} />;';
-        const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('member expression is not statically'))).toBe(
-            true,
-        );
-    });
-
-    it('warns about an otherwise non-analyzable expression type', () => {
-        const jsx = 'const A = ({ a, b }) => <div sz={a + b} />;';
-        const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('is not statically analyzable'))).toBe(true);
-    });
-
-    it('surfaces an unresolvable top-level object spread as a build warning', () => {
-        const jsx = "import { x } from './x'; const A = () => <div sz={{ ...x }} />;";
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-        expect(r.diagnostics.some(d => d.includes('unresolvable sz spread'))).toBe(true);
+        expect(r.diagnostics.some(message => message.includes(diagnostic))).toBe(true);
     });
 });
 
 // ── szv catalog extraction ──────────────────────────────────────────────────
 describe('szv catalog extraction (VariableDeclarator)', () => {
-    it('ignores a declarator whose init is not a call', () => {
-        const jsx = 'const notSzv = 5; const A = () => <div sz={{ p: 4 }} />;';
-        const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('ignores a non-szv call', () => {
-        const jsx = 'const x = other({ base: { p: 4 } }); const B = () => <i sz="m-1" />;';
-        const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('ignores szv() with no arguments', () => {
-        const jsx = 'const x = szv(); const B = () => <i sz="m-1" />;';
+    it.each([
+        ['a non-call initializer', 'const notSzv = 5; const A = () => <div sz={{ p: 4 }} />;'],
+        [
+            'a different callee',
+            'const x = other({ base: { p: 4 } }); const B = () => <i sz="m-1" />;',
+        ],
+        ['no arguments', 'const x = szv(); const B = () => <i sz="m-1" />;'],
+    ])('does not inject a catalog for %s', (_label, jsx) => {
         const r = run(jsx);
         expect(r.code).not.toContain('_szv_catalog');
     });
