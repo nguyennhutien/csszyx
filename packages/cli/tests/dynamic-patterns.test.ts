@@ -48,22 +48,14 @@ describe('clsx/cn calls', () => {
         expect(result.code).toContain("position: 'relative'");
     });
 
-    it('twMerge function name', () => {
-        const result = migrate('<div className={twMerge("p-4")} />');
+    it.each([
+        ['twMerge', '<div className={twMerge("p-4")} />', 'p: 4'],
+        ['cx', '<div className={cx("m-2")} />', 'm: 2'],
+        ['classNames', '<div className={classNames("bg-red-500")} />', "bg: 'red-500'"],
+    ])('supports the %s function name', (_functionName, source, expectedCode) => {
+        const result = migrate(source);
         expect(result.changed).toBe(true);
-        expect(result.code).toContain('p: 4');
-    });
-
-    it('cx function name', () => {
-        const result = migrate('<div className={cx("m-2")} />');
-        expect(result.changed).toBe(true);
-        expect(result.code).toContain('m: 2');
-    });
-
-    it('classNames function name', () => {
-        const result = migrate('<div className={classNames("bg-red-500")} />');
-        expect(result.changed).toBe(true);
-        expect(result.code).toContain("bg: 'red-500'");
+        expect(result.code).toContain(expectedCode);
     });
 
     it('multiple string arguments', () => {
