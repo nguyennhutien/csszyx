@@ -53,6 +53,7 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export { sortStrings } from './sort.js';
+export { parseStaticObjectLiteral } from './static-object-parser.js';
 export {
     type CssVariableMangleValue,
     type GlobalVarAliasTableInput,

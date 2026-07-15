@@ -449,9 +449,6 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
-      oxc-parser:
-        specifier: 0.131.0
-        version: 0.131.0
     devDependencies:
       '@types/node':
         specifier: ^20.11.0
@@ -640,9 +637,6 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
-      oxc-parser:
-        specifier: 0.131.0
-        version: 0.131.0
     devDependencies:
       '@types/node':
         specifier: ^20.11.0
