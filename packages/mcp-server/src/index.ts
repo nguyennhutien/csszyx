@@ -18,7 +18,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
     CallToolRequestSchema,
@@ -49,7 +49,7 @@ import { handleValidate, validateSchema } from './tools/validate.js';
 // SERVER INIT
 // ============================================================================
 
-export const server = new Server(
+export const server = new McpServer(
     {
         name: 'csszyx-mcp-server',
         version: VERSION,
@@ -214,16 +214,13 @@ const TOOL_HANDLERS: Record<
     csszyx_theme: { schema: themeSchema, handler: handleTheme as ToolHandler },
 };
 
-// ============================================================================
-// REQUEST HANDLERS
-// ============================================================================
-
-// Tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+// The low-level request handlers intentionally preserve the established wire
+// contract while the non-deprecated McpServer owns lifecycle and transport.
+server.server.setRequestHandler(ListToolsRequestSchema, async () => {
     return { tools: TOOLS };
 });
 
-server.setRequestHandler(CallToolRequestSchema, async request => {
+server.server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args } = request.params;
     const entry = TOOL_HANDLERS[name];
 
@@ -245,12 +242,11 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
     }
 });
 
-// Resources
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
+server.server.setRequestHandler(ListResourcesRequestSchema, async () => {
     return { resources: listResources() };
 });
 
-server.setRequestHandler(ReadResourceRequestSchema, async request => {
+server.server.setRequestHandler(ReadResourceRequestSchema, async request => {
     try {
         return readResource(request.params.uri);
     } catch (error: unknown) {
@@ -259,12 +255,11 @@ server.setRequestHandler(ReadResourceRequestSchema, async request => {
     }
 });
 
-// Prompts
-server.setRequestHandler(ListPromptsRequestSchema, async () => {
+server.server.setRequestHandler(ListPromptsRequestSchema, async () => {
     return { prompts: listPrompts() };
 });
 
-server.setRequestHandler(GetPromptRequestSchema, async request => {
+server.server.setRequestHandler(GetPromptRequestSchema, async request => {
     try {
         return getPrompt(
             request.params.name,
