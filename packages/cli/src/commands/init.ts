@@ -433,7 +433,7 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
         .join('\n');
 
     const lastImportMatch = [...content.matchAll(/^import .+$/gm)].pop();
-    if (!lastImportMatch || lastImportMatch.index === undefined) {
+    if (lastImportMatch?.index === undefined) {
         return false;
     }
 
@@ -442,7 +442,7 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
 
     // Inject ...csszyx() as first plugin, before tailwindcss() if present
     const pluginsMatch = content.match(/plugins\s*:\s*\[/);
-    if (!pluginsMatch || pluginsMatch.index === undefined) {
+    if (pluginsMatch?.index === undefined) {
         return false;
     }
 
@@ -519,7 +519,7 @@ async function setupTsconfig(cwd: string): Promise<void> {
     }
 
     const includeMatch = content.match(/"include"\s*:\s*\[/);
-    if (includeMatch && includeMatch.index !== undefined) {
+    if (includeMatch?.index !== undefined) {
         const insertPos = includeMatch.index + includeMatch[0].length;
         content =
             content.slice(0, insertPos) +
@@ -571,7 +571,7 @@ async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> 
             return;
         }
         const includeMatch = content.match(/"include"\s*:\s*\[/);
-        if (includeMatch && includeMatch.index !== undefined) {
+        if (includeMatch?.index !== undefined) {
             const insertPos = includeMatch.index + includeMatch[0].length;
             await fs.writeFile(
                 tsconfigPath,
