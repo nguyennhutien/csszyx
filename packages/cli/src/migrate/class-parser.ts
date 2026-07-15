@@ -797,7 +797,9 @@ function disambiguateStroke(value: string): ParsedClass | null {
  * @returns Parsed gradient-stop result
  */
 function disambiguateGradientStop(prefix: string, value: string): ParsedClass | null {
-    const posKey = prefix === 'from' ? 'fromPos' : prefix === 'via' ? 'viaPos' : 'toPos';
+    let posKey = 'toPos';
+    if (prefix === 'from') posKey = 'fromPos';
+    else if (prefix === 'via') posKey = 'viaPos';
     if (/^\d+(\.\d+)?%$/.test(value) || /^\d+$/.test(value) || isArbitraryDimension(value)) {
         return { prop: posKey, value: parseStringValue(value) };
     }

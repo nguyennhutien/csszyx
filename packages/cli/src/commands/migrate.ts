@@ -241,7 +241,9 @@ function reportMigrationMode(audit: boolean, dryRun: boolean): void {
 /** Creates and initializes the migration log. */
 function startMigrationLog(context: MigrationContext): MigrationLog {
     const log = createLogFile(context.cwd);
-    const mode = context.audit ? 'audit' : context.dryRun ? 'dry-run' : 'migrate';
+    let mode = 'migrate';
+    if (context.audit) mode = 'audit';
+    else if (context.dryRun) mode = 'dry-run';
     const resolution = context.resolveTodosPath
         ? ` (resolve-todos: ${context.resolveTodosPath})`
         : '';

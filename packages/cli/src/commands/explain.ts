@@ -88,8 +88,9 @@ function objectToValue(node: ObjectExpression): Record<string, unknown> {
             throw new ExplainParseError('computed keys are dynamic');
         }
         const { key } = property;
-        const name =
-            key.type === 'Identifier' ? key.name : key.type === 'StringLiteral' ? key.value : null;
+        let name: string | null = null;
+        if (key.type === 'Identifier') name = key.name;
+        else if (key.type === 'StringLiteral') name = key.value;
         if (name === null) {
             throw new ExplainParseError(`unsupported key type "${key.type}"`);
         }

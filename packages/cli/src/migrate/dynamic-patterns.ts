@@ -381,17 +381,16 @@ function migrateTemplateExpression(
         state.converted++;
         return null;
     }
-    const result = t.isConditionalExpression(expression)
-        ? handleTernaryInner(expression, source, t, customMap)
-        : t.isLogicalExpression(expression) && expression.operator === '&&'
-          ? handleLogicalAndInner(expression, source, t, customMap)
-          : null;
+    let result: ReturnType<typeof handleTernaryInner> = null;
+    if (t.isConditionalExpression(expression)) {
+        result = handleTernaryInner(expression, source, t, customMap);
+    } else if (t.isLogicalExpression(expression) && expression.operator === '&&') {
+        result = handleLogicalAndInner(expression, source, t, customMap);
+    }
     if (!result) {
-        const kind = t.isConditionalExpression(expression)
-            ? 'template ternary'
-            : t.isLogicalExpression(expression)
-              ? 'template logical expr'
-              : 'template expression';
+        let kind = 'template expression';
+        if (t.isConditionalExpression(expression)) kind = 'template ternary';
+        else if (t.isLogicalExpression(expression)) kind = 'template logical expr';
         return `Cannot migrate ${kind}: ${safeSlice(source, expression.start, expression.end)}`;
     }
     state.dynamicElements.push(result.exprStr);
