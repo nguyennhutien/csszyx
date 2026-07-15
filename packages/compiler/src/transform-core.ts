@@ -2150,6 +2150,68 @@ function warnStringColorOpacity(key: string, value: string): void {
     );
 }
 
+/** Collects direct, named, and arbitrary container-query variants. */
+function collectContainerQueryVariants(
+    key: string,
+    values: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    const mappedKey = VARIANT_MAP[key] || key;
+    for (const [nestedKey, value] of Object.entries(values)) {
+        if (isInactiveVariantValue(value)) continue;
+        const target = resolveContainerQueryTarget(mappedKey, nestedKey, value);
+        if (target.wrapProperty) {
+            appendVariantClasses({ [nestedKey]: value }, `${prefix}${target.segment}:`, classes);
+        } else {
+            appendVariantClasses(value, `${prefix}${target.segment}:`, classes);
+        }
+    }
+}
+
+/** Container-query prefix plus whether the nested key remains a property. */
+interface ContainerQueryTarget {
+    segment: string;
+    wrapProperty: boolean;
+}
+
+/** Classifies one nested container-query key. */
+function resolveContainerQueryTarget(
+    mappedKey: string,
+    nestedKey: string,
+    value: SzValue,
+): ContainerQueryTarget {
+    if (isArbitraryVariant(nestedKey)) {
+        return { segment: `${mappedKey}-${nestedKey}`, wrapProperty: false };
+    }
+    if (isArbitraryContainerBreakpoint(mappedKey, nestedKey, value)) {
+        return { segment: `${mappedKey}-[${nestedKey}]`, wrapProperty: false };
+    }
+    const direct =
+        PROPERTY_MAP[nestedKey] ||
+        BOOLEAN_SHORTHANDS.has(nestedKey) ||
+        nestedKey.startsWith('@') ||
+        typeof value !== 'object';
+    return direct
+        ? { segment: mappedKey, wrapProperty: true }
+        : { segment: `${mappedKey}/${nestedKey}`, wrapProperty: false };
+}
+
+/** Returns whether @min/@max should bracket a custom breakpoint key. */
+function isArbitraryContainerBreakpoint(
+    mappedKey: string,
+    nestedKey: string,
+    value: SzValue,
+): boolean {
+    return (
+        (mappedKey === '@min' || mappedKey === '@max') &&
+        typeof value === 'object' &&
+        !KNOWN_BREAKPOINTS.has(nestedKey) &&
+        !PROPERTY_MAP[nestedKey] &&
+        !BOOLEAN_SHORTHANDS.has(nestedKey)
+    );
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2304,81 +2366,7 @@ function transformImpl(
             // { @md: { sidebar: { ... }}} → @md/sidebar:... (named container)
             // { @min: { "[475px]": { ... }}} → @min-[475px]:...
             if (rawKey.startsWith('@')) {
-                // Map the @ query key through VARIANT_MAP if needed
-                const mappedKey = VARIANT_MAP[rawKey] || rawKey;
-
-                // { @container: "sidebar" } → @container/sidebar
-                if (typeof value === 'string') {
-                    classes.push(`${prefix}${mappedKey}/${value}`);
-                    continue;
-                }
-
-                const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
-                for (const [nestedKey, nestedValue] of Object.entries(value as SzObject)) {
-                    if (
-                        nestedValue === null ||
-                        nestedValue === undefined ||
-                        nestedValue === false
-                    ) {
-                        continue;
-                    }
-                    // Check if it's an arbitrary value like [475px] (legacy bracket keys)
-                    if (isArbitraryVariant(nestedKey)) {
-                        const nestedPrefix = `${prefix}${mappedKey}-${nestedKey}:`;
-                        const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else if (
-                        (mappedKey === '@min' || mappedKey === '@max') &&
-                        nestedValue !== null &&
-                        typeof nestedValue === 'object' &&
-                        !KNOWN_BP.has(nestedKey) &&
-                        !PROPERTY_MAP[nestedKey] &&
-                        !BOOLEAN_SHORTHANDS.has(nestedKey)
-                    ) {
-                        // Auto-wrap arbitrary breakpoint values in brackets
-                        // { '@min': { '475px': { ... }}} → @min-[475px]:...
-                        const nestedPrefix = `${prefix}${mappedKey}-[${nestedKey}]:`;
-                        const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else if (
-                        PROPERTY_MAP[nestedKey] ||
-                        BOOLEAN_SHORTHANDS.has(nestedKey) ||
-                        nestedKey.startsWith('@')
-                    ) {
-                        // Check if nestedKey is a property (not a container name)
-                        // Properties are in PROPERTY_MAP or BOOLEAN_SHORTHANDS
-                        // It's a direct property or another @ query
-                        const nestedPrefix = `${prefix}${mappedKey}:`;
-                        const result = transform(
-                            { [nestedKey]: nestedValue } as SzObject,
-                            nestedPrefix,
-                        );
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else if (typeof nestedValue === 'object') {
-                        // It's a named container: @md/sidebar
-                        const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
-                        const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else {
-                        // Fallback: treat as property
-                        const nestedPrefix = `${prefix}${mappedKey}:`;
-                        const result = transform(
-                            { [nestedKey]: nestedValue } as SzObject,
-                            nestedPrefix,
-                        );
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    }
-                }
+                collectContainerQueryVariants(rawKey, value as SzObject, prefix, classes);
                 continue;
             }
 
