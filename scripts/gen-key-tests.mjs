@@ -21,7 +21,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
 import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.js';
 import { transform } from '../packages/compiler/src/transform.js';
@@ -120,26 +120,46 @@ const stripMarkdown = t => t.replace(/`/g, '').replace(/\*\*/g, '').replace(/\*/
  * @param cell Raw Tailwind-column cell.
  * @returns Class token strings.
  */
-function classTokens(cell) {
+export function classTokens(cell) {
     const ticked = [...cell.matchAll(/`([^`]+)`/g)].map(m => m[1].trim());
     const raw = ticked.length ? ticked : [stripMarkdown(cell)];
-    const out = [];
-    for (const chunk of raw) {
-        let depth = 0;
-        let cur = '';
-        for (const ch of chunk) {
-            if (ch === '[' || ch === '(') depth++;
-            else if (ch === ']' || ch === ')') depth--;
-            if (ch === ',' && depth === 0) {
-                if (cur.trim()) out.push(cur.trim());
-                cur = '';
-            } else {
-                cur += ch;
-            }
+    return raw.flatMap(splitClassChunk);
+}
+
+/**
+ * Split one class-list chunk at commas outside brackets and parentheses.
+ * @param {string} chunk Class-list text.
+ * @returns {string[]} Trimmed class tokens.
+ */
+function splitClassChunk(chunk) {
+    const tokens = [];
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < chunk.length; index++) {
+        const character = chunk[index];
+        if (character === '[' || character === '(') depth++;
+        else if (character === ']' || character === ')') depth--;
+        else if (character === ',' && depth === 0) {
+            pushTrimmedSlice(tokens, chunk, start, index);
+            start = index + 1;
         }
-        if (cur.trim()) out.push(cur.trim());
     }
-    return out;
+    pushTrimmedSlice(tokens, chunk, start, chunk.length);
+    return tokens;
+}
+
+/** Add one non-empty trimmed source slice to a token list. */
+function pushTrimmedSlice(tokens, source, start, end) {
+    const token = source.slice(start, end).trim();
+    if (token) tokens.push(token);
+}
+
+/** Remove the prose-only trailing `etc` marker from a spec example. */
+function removeEtcSuffix(value) {
+    const withoutPeriod = value.endsWith('.') ? value.slice(0, -1) : value;
+    if (!withoutPeriod.endsWith('etc')) return value;
+    const prefix = withoutPeriod.slice(0, -3);
+    return /\s/.test(prefix.at(-1) ?? '') ? prefix.trimEnd() : value;
 }
 
 /**
@@ -148,9 +168,9 @@ function classTokens(cell) {
  * @param raw Raw sz-column fragment.
  * @returns Parsed object or null.
  */
-function parseSzProp(raw) {
+export function parseSzProp(raw) {
     let cleaned = stripMarkdown(raw).trim();
-    cleaned = cleaned.replace(/\s+etc\.?\s*$/, '');
+    cleaned = removeEtcSuffix(cleaned);
     if (!cleaned.startsWith('{') || !cleaned.endsWith('}')) return null;
     if (/\{\s*\.\.\.\s*\}/.test(cleaned) || /\{\s*\.\.\./.test(cleaned)) return null;
     const strings = [];
@@ -176,7 +196,7 @@ function parseSzProp(raw) {
  * @param cell Raw sz-column cell.
  * @returns Array of object-literal substrings.
  */
-function szObjectLiterals(cell) {
+export function szObjectLiterals(cell) {
     const objs = [];
     const re = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
     for (const m of cell.matchAll(re)) objs.push(m[0]);
@@ -186,6 +206,120 @@ function szObjectLiterals(cell) {
 const roundTrip = cls => transform(classNameToSzObject(cls).szObject).className;
 const topKey = sz => (sz && typeof sz === 'object' ? Object.keys(sz)[0] : undefined);
 
+function ensureKey(keys, key) {
+    if (!keys[key]) keys[key] = { forward: new Map(), reverse: new Set() };
+    return keys[key];
+}
+
+function readTableColumns(cells) {
+    const tw = cells.findIndex(cell => /tailwind/i.test(cell) && /(class|output)/i.test(cell));
+    const sz = cells.findIndex(cell => /\bsz\b/i.test(cell));
+    return tw >= 0 && sz >= 0 ? { tw, sz } : null;
+}
+
+function verifiedForwardPair(rawClass, rawObject) {
+    const cls = concretizeClass(rawClass);
+    if (!cls) return null;
+    const sz = concretizeSz(rawObject);
+    const key = topKey(sz);
+    if (!sz || !key) return null;
+    try {
+        return transform(sz).className === cls ? { key, sz, class: cls } : null;
+    } catch {
+        return null;
+    }
+}
+
+function recordForwardPairs(keys, classes, objects) {
+    const pairCount = Math.min(classes.length, objects.length);
+    for (let index = 0; index < pairCount; index++) {
+        const pair = verifiedForwardPair(classes[index], objects[index]);
+        if (!pair) continue;
+        ensureKey(keys, pair.key).forward.set(JSON.stringify([pair.key, pair.class]), {
+            sz: pair.sz,
+            class: pair.class,
+        });
+    }
+}
+
+function recordReverseCandidates(candidates, classes) {
+    for (const raw of classes) {
+        const cls = concretizeClass(raw);
+        if (cls) candidates.add(cls);
+    }
+}
+
+function roundTripsExactly(className) {
+    try {
+        return roundTrip(className) === className;
+    } catch {
+        return false;
+    }
+}
+
+function canonicalKey(className) {
+    try {
+        return parseClass(className, { display: 'canonical' })?.prop;
+    } catch {
+        return undefined;
+    }
+}
+
+function collectSnippetFile(file, keys, reverseCandidates) {
+    const lines = readFileSync(join(snippetsDir, file), 'utf8').split('\n');
+    let columns = null;
+    for (const line of lines) {
+        if (!isTableRow(line) || isSeparatorRow(line)) continue;
+        const cells = splitTableRow(line);
+        const detected = readTableColumns(cells);
+        if (detected) {
+            columns = detected;
+            continue;
+        }
+        if (!columns) continue;
+        const classes = classTokens(cells[columns.tw] ?? '');
+        const szCell = cells[columns.sz] ?? '';
+        const objects = szCell.includes('{') ? szObjectLiterals(szCell) : [];
+        recordForwardPairs(keys, classes, objects);
+        recordReverseCandidates(reverseCandidates, classes);
+    }
+}
+
+function collectSnippetCases(keys, reverseCandidates) {
+    const files = readdirSync(snippetsDir)
+        .filter(file => file.endsWith('.md'))
+        .sort();
+    for (const file of files) collectSnippetFile(file, keys, reverseCandidates);
+}
+
+function indexDocumentedClasses(keys) {
+    const classToDocKey = new Map();
+    for (const [key, cases] of Object.entries(keys)) {
+        for (const { class: className } of cases.forward.values()) {
+            const docKeys = classToDocKey.get(className) ?? new Set();
+            docKeys.add(key);
+            classToDocKey.set(className, docKeys);
+        }
+    }
+    return classToDocKey;
+}
+
+function bucketReverseCases(keys, reverseCandidates, reverseSkipped, classToDocKey) {
+    for (const className of reverseCandidates) {
+        if (!roundTripsExactly(className)) {
+            reverseSkipped.push(className);
+            continue;
+        }
+        const docKeys = classToDocKey.get(className);
+        if (docKeys?.size) {
+            for (const key of docKeys) ensureKey(keys, key).reverse.add(className);
+            continue;
+        }
+        const key = canonicalKey(className);
+        if (key) ensureKey(keys, key).reverse.add(className);
+    }
+}
+
 /**
  * Walks every snippet table and collects forward/reverse cases per sz key.
  * @returns The keyed case map plus skipped-class diagnostics.
@@ -193,103 +327,10 @@ const topKey = sz => (sz && typeof sz === 'object' ? Object.keys(sz)[0] : undefi
 function collect() {
     const keys = {}; // key -> { forward: Map<sig,{sz,class}>, reverse: Set<class> }
     const reverseSkipped = [];
-    // class -> the sz key it is documented under (forward column), so its reverse
-    // case lands in the same describe block instead of the migrate-derived key.
-    const classToDocKey = new Map();
     const reverseCandidates = new Set();
-
-    const ensure = k => {
-        if (!keys[k]) keys[k] = { forward: new Map(), reverse: new Set() };
-        return keys[k];
-    };
-
-    for (const file of readdirSync(snippetsDir)
-        .filter(f => f.endsWith('.md'))
-        .sort()) {
-        const lines = readFileSync(join(snippetsDir, file), 'utf8').split('\n');
-        // Persist the detected columns across blank lines / sub-headings that split
-        // one logical table into chunks; only a real header row re-detects them.
-        let twIdx = -1;
-        let szIdx = -1;
-        for (const line of lines) {
-            if (!isTableRow(line) || isSeparatorRow(line)) continue;
-            const cells = splitTableRow(line);
-            const twHdr = cells.findIndex(c => /tailwind/i.test(c) && /(class|output)/i.test(c));
-            const szHdr = cells.findIndex(c => /\bsz\b/i.test(c));
-            if (twHdr >= 0 && szHdr >= 0) {
-                twIdx = twHdr; // header row — (re)detect columns and skip
-                szIdx = szHdr;
-                continue;
-            }
-            if (twIdx < 0 || szIdx < 0) continue;
-            const twCell = cells[twIdx] ?? '';
-            const szCell = cells[szIdx] ?? '';
-            const classes = classTokens(twCell);
-
-            // FORWARD: pair documented sz objects with their class by index.
-            const objs = szCell.includes('{') ? szObjectLiterals(szCell) : [];
-            for (let i = 0; i < Math.min(classes.length, objs.length); i++) {
-                const cls = concretizeClass(classes[i]);
-                if (!cls) continue;
-                const sz = concretizeSz(objs[i]);
-                const key = topKey(sz);
-                if (!sz || !key) continue;
-                let out;
-                try {
-                    out = transform(sz).className;
-                } catch {
-                    continue;
-                }
-                if (out !== cls) continue; // only keep verified forward pairs
-                ensure(key).forward.set(`${key} ${cls}`, { sz, class: cls });
-            }
-
-            // REVERSE: collect candidates; bucket them after the walk so each
-            // class can be filed under the key its forward case uses.
-            for (const raw of classes) {
-                const cls = concretizeClass(raw);
-                if (cls) reverseCandidates.add(cls);
-            }
-        }
-    }
-
-    // Map each documented class to the key its forward case is filed under, so a
-    // class is tested in both directions inside one describe block; keyword-only
-    // classes (no documented sz) fall back to the migrate-derived key.
-    for (const [k, v] of Object.entries(keys)) {
-        for (const { class: c } of v.forward.values()) {
-            if (!classToDocKey.has(c)) classToDocKey.set(c, new Set());
-            classToDocKey.get(c).add(k);
-        }
-    }
-    for (const cls of reverseCandidates) {
-        let ok = false;
-        try {
-            ok = roundTrip(cls) === cls;
-        } catch {
-            ok = false;
-        }
-        if (!ok) {
-            reverseSkipped.push(cls);
-            continue;
-        }
-        // File the reverse case under every key the class is documented under (an
-        // alias like inset-e-4 ↔ { end } and { insetE } is documented twice), so
-        // neither alias key shows a false reverse-only gap.
-        const docKeys = classToDocKey.get(cls);
-        if (docKeys?.size) {
-            for (const k of docKeys) ensure(k).reverse.add(cls);
-            continue;
-        }
-        let key;
-        try {
-            key = parseClass(cls, { display: 'canonical' })?.prop;
-        } catch {
-            key = undefined;
-        }
-        if (key) ensure(key).reverse.add(cls);
-    }
-
+    collectSnippetCases(keys, reverseCandidates);
+    const classToDocKey = indexDocumentedClasses(keys);
+    bucketReverseCases(keys, reverseCandidates, reverseSkipped, classToDocKey);
     return { keys, reverseSkipped };
 }
 
@@ -329,29 +370,34 @@ function build() {
     };
 }
 
-const payload = build();
-const json = `${JSON.stringify(payload, null, 4)}\n`;
-const check = process.argv.includes('--check');
+function main() {
+    const payload = build();
+    const json = `${JSON.stringify(payload, null, 4)}\n`;
+    if (process.argv.includes('--check')) {
+        let current = '';
+        try {
+            current = readFileSync(outPath, 'utf8');
+        } catch {
+            /* missing */
+        }
+        if (current !== json) {
+            console.error(
+                '[gen-key-tests] sz-key-cases.json is stale. Run pnpm gen:key-tests and commit.',
+            );
+            process.exitCode = 1;
+            return;
+        }
+        console.log('[gen-key-tests] up to date.');
+        return;
+    }
 
-if (check) {
-    let current = '';
-    try {
-        current = readFileSync(outPath, 'utf8');
-    } catch {
-        /* missing */
-    }
-    if (current !== json) {
-        console.error(
-            '[gen-key-tests] sz-key-cases.json is stale. Run pnpm gen:key-tests and commit.',
-        );
-        process.exit(1);
-    }
-    console.log('[gen-key-tests] up to date.');
-    process.exit(0);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, json);
+    console.log(
+        `[gen-key-tests] wrote ${payload.keyCount} keys (${payload.reverseSkippedCount} reverse-only classes skipped).`,
+    );
 }
 
-mkdirSync(dirname(outPath), { recursive: true });
-writeFileSync(outPath, json);
-console.log(
-    `[gen-key-tests] wrote ${payload.keyCount} keys (${payload.reverseSkippedCount} reverse-only classes skipped).`,
-);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    main();
+}
