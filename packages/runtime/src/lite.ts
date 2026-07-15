@@ -30,7 +30,7 @@ export type SzStringInput = string | null | undefined | false;
  * pre-compiled class strings, and the bare name collided with the object-accepting
  * `SzInput` from `@csszyx/runtime`. This alias is kept for back-compat.
  */
-export type SzInput = string | null | undefined | false;
+export type SzInput = string | null | undefined | false; // NOSONAR: public compatibility alias
 
 /**
  * Dev-only guard: throw when a plain object reaches a string-only helper.
