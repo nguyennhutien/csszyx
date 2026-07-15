@@ -143,11 +143,13 @@ test.describe('@csszyx/dynamic — runtime injection', () => {
         expect(after.hasDuplicates).toBe(false);
     });
 
-    test('21 tier sheets are added to adoptedStyleSheets in correct order', async ({ page }) => {
-        // @csszyx/dynamic adds exactly 21 sheets (one per Tier). We cannot
-        // inspect their identity, so wait for the observable sheet count.
+    test('all 21 tier sheets are added to adoptedStyleSheets', async ({ page }) => {
+        // @csszyx/dynamic initializes 21 sheets (one per Tier). The host may
+        // already own adopted sheets, so wait for the observable lower bound.
         await expect
             .poll(() => page.evaluate(() => document.adoptedStyleSheets.length))
             .toBeGreaterThanOrEqual(21);
+        const sheetCount = await page.evaluate(() => document.adoptedStyleSheets.length);
+        expect(sheetCount).toBeGreaterThanOrEqual(21);
     });
 });
