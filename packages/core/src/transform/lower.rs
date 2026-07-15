@@ -1489,6 +1489,8 @@ mod tests {
             // is_known_sz_key must still recognize them or rust warns for a class
             // it emits (field-reported for `truncate`).
             "truncate",
+            "textEllipsis",
+            "textClip",
             "blur",
             "grayscale",
             "invert",

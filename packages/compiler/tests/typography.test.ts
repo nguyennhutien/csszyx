@@ -300,6 +300,12 @@ describe('typography — text overflow & whitespace', () => {
         expect(t({ textOverflow: 'ellipsis' })).toBe('text-ellipsis');
     });
 
+    it('supports the public boolean text-overflow spellings', () => {
+        expect(t({ textEllipsis: true })).toBe('text-ellipsis');
+        expect(t({ textClip: true })).toBe('text-clip');
+        expect(t({ textEllipsis: false, textClip: false })).toBe('');
+    });
+
     it('{ textWrap: "balance" } → text-balance', () => {
         expect(t({ textWrap: 'balance' })).toBe('text-balance');
     });

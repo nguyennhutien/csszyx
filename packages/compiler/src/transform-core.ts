@@ -826,6 +826,9 @@ const ARIA_STATES = new Set([
 export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // Typography (composite — no single-property canonical form)
     'truncate',
+    // Public text-overflow boolean spellings retained alongside textOverflow.
+    'textEllipsis',
+    'textClip',
     // Flexbox (grow/shrink only — flexWrap uses string values)
     'grow',
     'shrink',
@@ -978,6 +981,8 @@ function warnAlignmentValue(rawKey: string, value: unknown): void {
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
 const BOOLEAN_TO_CLASS: Record<string, string> = {
+    textEllipsis: 'text-ellipsis',
+    textClip: 'text-clip',
     backdropBlur: 'backdrop-blur',
     backdropGrayscale: 'backdrop-grayscale',
     backdropInvert: 'backdrop-invert',

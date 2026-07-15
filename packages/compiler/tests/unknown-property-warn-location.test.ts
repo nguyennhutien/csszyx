@@ -79,6 +79,22 @@ describe('unknown-property warning — source location', () => {
         // Whichever canonical-key/unknown branch fires, it must carry the location.
         expect(messages.some(m => m.includes('at src/X.tsx'))).toBe(true);
     });
+
+    it.each([
+        'textEllipsis',
+        'textClip',
+    ])('%s emits its class without a Babel or oxc warning', key => {
+        const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
+        expect(
+            transformSourceCode(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
+        ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
+        expect(transformOxc(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code).toContain(
+            key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+        );
+        expect(warn.mock.calls.some(call => String(call[0]).includes('Unknown property'))).toBe(
+            false,
+        );
+    });
 });
 
 /**
@@ -167,6 +183,8 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             // flag-only utilities: emit a class but carry no value, so they were
             // absent from rust's boolean_class table and over-warned (field report)
             'truncate',
+            'textEllipsis',
+            'textClip',
             'blur',
             'grayscale',
             'invert',
@@ -193,6 +211,23 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
         }
         expect(overWarns).toEqual([]);
     });
+
+    runOr.each(['textEllipsis', 'textClip'])(
+        '%s emits its class without a native diagnostic',
+        key => {
+            const result = transformRust(
+                `export const A = () => <div sz={{ ${key}: true }} />;`,
+                '/p/F.tsx',
+                { rootDir: '/p' },
+            );
+            expect(result.classes).toContain(
+                key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+            );
+            expect(result.diagnostics.some(message => message.includes('Unknown property'))).toBe(
+                false,
+            );
+        },
+    );
 });
 
 /**
