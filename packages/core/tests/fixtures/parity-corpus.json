@@ -25940,6 +25940,44 @@
     "oxc": "text-left"
   },
   {
+    "sz": "{\"textClip\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "textClip",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "text-clip"
+  },
+  {
+    "sz": "{\"textEllipsis\":true}",
+    "ir": {
+      "properties": [
+        {
+          "key": "textEllipsis",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        }
+      ]
+    },
+    "oxc": "text-ellipsis"
+  },
+  {
     "sz": "{\"textShadow\":\"2px 2px 4px var(--tw-shadow-color)\"}",
     "ir": {
       "properties": [
