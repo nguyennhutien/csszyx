@@ -117,52 +117,29 @@ describe('Basic Class Selectors', () => {
 // 2. Pseudo-classes and Pseudo-elements (8 tests)
 // ============================================================================
 describe('Pseudo-classes and Pseudo-elements', () => {
-    it('should mangle class with :hover pseudo-class', () => {
-        const css = '.p-4:hover { padding: 2rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:hover { padding: 2rem; }');
-    });
-
-    it('should mangle class with :focus pseudo-class', () => {
-        const css = '.p-4:focus { outline: none; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:focus { outline: none; }');
-    });
-
-    it('should mangle class with :active pseudo-class', () => {
-        const css = '.p-4:active { opacity: 0.8; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:active { opacity: 0.8; }');
-    });
-
-    it('should mangle class with ::before pseudo-element', () => {
-        const css = '.p-4::before { content: ""; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a::before { content: ""; }');
-    });
-
-    it('should mangle class with ::after pseudo-element', () => {
-        const css = '.p-4::after { content: ""; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a::after { content: ""; }');
-    });
-
-    it('should mangle class with :first-child', () => {
-        const css = '.p-4:first-child { margin-top: 0; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:first-child { margin-top: 0; }');
-    });
-
-    it('should mangle class with :nth-child()', () => {
-        const css = '.p-4:nth-child(2n) { background: gray; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:nth-child(2n) { background: gray; }');
-    });
-
-    it('should mangle class with multiple pseudo-selectors', () => {
-        const css = '.p-4:hover:focus { transform: scale(1.05); }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:hover:focus { transform: scale(1.05); }');
+    it.each([
+        [':hover', '.p-4:hover { padding: 2rem; }', '.a:hover { padding: 2rem; }'],
+        [':focus', '.p-4:focus { outline: none; }', '.a:focus { outline: none; }'],
+        [':active', '.p-4:active { opacity: 0.8; }', '.a:active { opacity: 0.8; }'],
+        ['::before', '.p-4::before { content: ""; }', '.a::before { content: ""; }'],
+        ['::after', '.p-4::after { content: ""; }', '.a::after { content: ""; }'],
+        [
+            ':first-child',
+            '.p-4:first-child { margin-top: 0; }',
+            '.a:first-child { margin-top: 0; }',
+        ],
+        [
+            ':nth-child()',
+            '.p-4:nth-child(2n) { background: gray; }',
+            '.a:nth-child(2n) { background: gray; }',
+        ],
+        [
+            'multiple pseudos',
+            '.p-4:hover:focus { transform: scale(1.05); }',
+            '.a:hover:focus { transform: scale(1.05); }',
+        ],
+    ])('mangles %s selectors', (_label, css, expected) => {
+        expect(mangleCSSSync(css, testMangleMap).css).toBe(expected);
     });
 });
 
@@ -170,40 +147,31 @@ describe('Pseudo-classes and Pseudo-elements', () => {
 // 3. Combinators (6 tests)
 // ============================================================================
 describe('Combinators', () => {
-    it('should mangle descendant selector', () => {
-        const css = '.dark .p-4 { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .a { padding: 1rem; }');
-    });
-
-    it('should mangle child selector', () => {
-        const css = '.flex > .p-4 { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.s > .a { padding: 1rem; }');
-    });
-
-    it('should mangle adjacent sibling selector', () => {
-        const css = '.p-4 + .m-4 { margin-left: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a + .b { margin-left: 1rem; }');
-    });
-
-    it('should mangle general sibling selector', () => {
-        const css = '.p-4 ~ .m-4 { margin-left: 0.5rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a ~ .b { margin-left: 0.5rem; }');
-    });
-
-    it('should handle complex combinator chain', () => {
-        const css = '.dark .flex > .p-4:hover { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .s > .a:hover { opacity: 1; }');
-    });
-
-    it('should mangle nested group-hover pattern', () => {
-        const css = '.group:hover .group-hover\\:opacity-100 { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.group:hover .k { opacity: 1; }');
+    it.each([
+        ['descendant', '.dark .p-4 { padding: 1rem; }', '.dark .a { padding: 1rem; }'],
+        ['child', '.flex > .p-4 { padding: 1rem; }', '.s > .a { padding: 1rem; }'],
+        [
+            'adjacent sibling',
+            '.p-4 + .m-4 { margin-left: 1rem; }',
+            '.a + .b { margin-left: 1rem; }',
+        ],
+        [
+            'general sibling',
+            '.p-4 ~ .m-4 { margin-left: 0.5rem; }',
+            '.a ~ .b { margin-left: 0.5rem; }',
+        ],
+        [
+            'complex chain',
+            '.dark .flex > .p-4:hover { opacity: 1; }',
+            '.dark .s > .a:hover { opacity: 1; }',
+        ],
+        [
+            'group-hover chain',
+            '.group:hover .group-hover\\:opacity-100 { opacity: 1; }',
+            '.group:hover .k { opacity: 1; }',
+        ],
+    ])('mangles a %s combinator', (_label, css, expected) => {
+        expect(mangleCSSSync(css, testMangleMap).css).toBe(expected);
     });
 });
 
