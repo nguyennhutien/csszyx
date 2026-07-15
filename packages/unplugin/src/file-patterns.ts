@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { normalizePathSeparators } from './path-normalization.js';
 import { sortStrings } from './sort.js';
 
 /** File matcher accepted by csszyx plugin include/exclude options. */
@@ -19,7 +20,7 @@ const DEFAULT_IGNORED_DIRS = new Set(['node_modules', '.git', '.next', '.turbo',
  * @returns Normalized path without query/hash suffix.
  */
 export function normalizeFileId(id: string): string {
-    return id.split(/[?#]/, 1)[0].replace(/\\/g, '/');
+    return normalizePathSeparators(id.split(/[?#]/, 1)[0]);
 }
 
 /**
@@ -29,7 +30,7 @@ export function normalizeFileId(id: string): string {
  * @returns Absolute normalized root path.
  */
 function normalizeRoot(rootDir: string): string {
-    return path.resolve(rootDir).replace(/\\/g, '/');
+    return normalizePathSeparators(path.resolve(rootDir));
 }
 
 /**
@@ -60,7 +61,7 @@ function escapeRegExp(ch: string): string {
  * @returns RegExp equivalent for the supported glob subset.
  */
 export function globToRegExp(pattern: string): RegExp {
-    const normalized = pattern.replace(/\\/g, '/');
+    const normalized = normalizePathSeparators(pattern);
     let out = '^';
     for (let i = 0; i < normalized.length; i++) {
         const ch = normalized[i];
@@ -91,7 +92,7 @@ export function globToRegExp(pattern: string): RegExp {
 function relativeToRoot(file: string, rootDir: string): string {
     const root = normalizeRoot(rootDir);
     const normalizedFile = normalizeFileId(file);
-    return path.posix.relative(root, normalizedFile).replace(/\\/g, '/');
+    return normalizePathSeparators(path.posix.relative(root, normalizedFile));
 }
 
 /**
@@ -111,7 +112,7 @@ export function matchesPattern(id: string, pattern: FilePattern, rootDir: string
         return pattern.test(file) || pattern.test(relative);
     }
 
-    const normalizedPattern = pattern.replace(/\\/g, '/');
+    const normalizedPattern = normalizePathSeparators(pattern);
     if (hasGlobMagic(normalizedPattern)) {
         const re = globToRegExp(normalizedPattern);
         return re.test(file) || re.test(relative);
