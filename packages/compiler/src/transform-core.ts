@@ -2511,6 +2511,35 @@ function formatGradientPosition(key: string, value: string): string {
     return /^\d+%$/.test(value) ? `${property}-${value}` : `${property}-[${value}]`;
 }
 
+/** Formats background image keywords, gradients, variables, and URLs. */
+function formatBackgroundImage(rawValue: string): string {
+    const value = rawValue.trim();
+    if (value === 'none') return 'bg-none';
+    const normalized = value.startsWith('-') ? value.slice(1) : value;
+    if (normalized.startsWith('repeating-')) {
+        return `bg-[${normalizeArbitraryValue(value)}]`;
+    }
+    if (isBackgroundGradientString(normalized)) {
+        const mapped = normalized.startsWith('gradient-to-')
+            ? normalized.replace('gradient-to-', 'linear-to-')
+            : normalized;
+        return value.startsWith('-') ? `-bg-${mapped}` : `bg-${mapped}`;
+    }
+    if (value.startsWith('--')) return `bg-(image:${value})`;
+    if (value.startsWith('url(')) return `bg-[${value}]`;
+    return `bg-[url(${value})]`;
+}
+
+/** Returns whether a string names a Tailwind background-gradient utility. */
+function isBackgroundGradientString(value: string): boolean {
+    return (
+        value.startsWith('linear-') ||
+        value.startsWith('radial') ||
+        value.startsWith('conic') ||
+        value.startsWith('gradient-to-')
+    );
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2762,48 +2791,7 @@ function transformImpl(
 
             // bgImg handler
             if (rawKey === 'bgImg') {
-                const v = String(value).trim();
-                // Keywords
-                if (v === 'none') {
-                    classes.push(`${prefix}bg-none`);
-                    continue;
-                }
-                // Gradient prefixes: linear-*, radial*, conic* (with optional negative)
-                // v3 compat: gradient-to-* → linear-to-* (v4 renamed bg-gradient-to-* to bg-linear-to-*)
-                // repeating-*-gradient → arbitrary bg-[repeating-*-gradient(...)] (no Tailwind utility)
-                const vNorm = v.startsWith('-') ? v.slice(1) : v;
-                if (vNorm.startsWith('repeating-')) {
-                    classes.push(`${prefix}bg-[${normalizeArbitraryValue(v)}]`);
-                    continue;
-                }
-                if (
-                    vNorm.startsWith('linear-') ||
-                    vNorm.startsWith('radial') ||
-                    vNorm.startsWith('conic') ||
-                    vNorm.startsWith('gradient-to-')
-                ) {
-                    const vMapped = vNorm.startsWith('gradient-to-')
-                        ? vNorm.replace('gradient-to-', 'linear-to-')
-                        : vNorm;
-                    if (v.startsWith('-')) {
-                        classes.push(`${prefix}-bg-${vMapped}`);
-                    } else {
-                        classes.push(`${prefix}bg-${vMapped}`);
-                    }
-                    continue;
-                }
-                // CSS variable
-                if (v.startsWith('--')) {
-                    classes.push(`${prefix}bg-(image:${v})`);
-                    continue;
-                }
-                // Already has url()
-                if (v.startsWith('url(')) {
-                    classes.push(`${prefix}bg-[${v}]`);
-                    continue;
-                }
-                // Arbitrary URL
-                classes.push(`${prefix}bg-[url(${v})]`);
+                classes.push(`${prefix}${formatBackgroundImage(value)}`);
                 continue;
             }
 
