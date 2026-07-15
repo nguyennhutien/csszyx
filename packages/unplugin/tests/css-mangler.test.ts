@@ -179,28 +179,29 @@ describe('Combinators', () => {
 // 4. Media Queries and @rules (6 tests)
 // ============================================================================
 describe('Media Queries and @rules', () => {
-    it('should mangle classes inside media query', () => {
-        const css = '@media (min-width: 768px) { .p-4 { padding: 2rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 768px) { .a { padding: 2rem; } }');
-    });
-
-    it('should mangle Tailwind responsive prefix class', () => {
-        const css = '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 768px) { .h { padding: 2rem; } }');
-    });
-
-    it('should mangle classes inside @supports', () => {
-        const css = '@supports (display: grid) { .grid { display: grid; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@supports (display: grid) { .u { display: grid; } }');
-    });
-
-    it('should mangle classes inside @layer', () => {
-        const css = '@layer utilities { .p-4 { padding: 1rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@layer utilities { .a { padding: 1rem; } }');
+    it.each([
+        [
+            'media queries',
+            '@media (min-width: 768px) { .p-4 { padding: 2rem; } }',
+            '@media (min-width: 768px) { .a { padding: 2rem; } }',
+        ],
+        [
+            'responsive media classes',
+            '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }',
+            '@media (min-width: 768px) { .h { padding: 2rem; } }',
+        ],
+        [
+            '@supports',
+            '@supports (display: grid) { .grid { display: grid; } }',
+            '@supports (display: grid) { .u { display: grid; } }',
+        ],
+        [
+            '@layer',
+            '@layer utilities { .p-4 { padding: 1rem; } }',
+            '@layer utilities { .a { padding: 1rem; } }',
+        ],
+    ])('mangles classes inside %s', (_label, css, expected) => {
+        expect(mangleCSSSync(css, testMangleMap).css).toBe(expected);
     });
 
     it('should handle nested @rules', () => {
