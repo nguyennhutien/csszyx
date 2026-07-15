@@ -94,7 +94,7 @@ describe('szv config/selection validation (dev)', () => {
         // @ts-expect-error
         f({ size: 'xl' });
         const xlWarns = warn.mock.calls.filter(c => /is not a value of variant/.test(String(c[0])));
-        expect(xlWarns.length).toBe(1);
+        expect(xlWarns).toHaveLength(1);
     });
 });
 

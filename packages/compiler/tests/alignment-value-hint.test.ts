@@ -27,7 +27,7 @@ describe('alignment CSS-longhand value warning (dev)', () => {
 
     it('warns on self: flex-start and names the short form', () => {
         const w = warns({ self: 'flex-start' } as SzObject);
-        expect(w.length).toBe(1);
+        expect(w).toHaveLength(1);
         expect(w[0]).toContain("self: 'flex-start'");
         expect(w[0]).toContain("'start'");
         expect(w[0]).toContain('no Tailwind utility');
@@ -38,7 +38,7 @@ describe('alignment CSS-longhand value warning (dev)', () => {
     });
 
     it('warns on items: flex-start', () => {
-        expect(warns({ items: 'flex-start' } as SzObject).length).toBe(1);
+        expect(warns({ items: 'flex-start' } as SzObject)).toHaveLength(1);
     });
 
     it('warns on alignContent: space-around', () => {
@@ -68,6 +68,6 @@ describe('alignment CSS-longhand value warning (dev)', () => {
         transform({ placeItems: 'space-between' } as SzObject);
         transform({ placeItems: 'space-between' } as SzObject);
         spy.mockRestore();
-        expect(calls.length).toBe(1);
+        expect(calls).toHaveLength(1);
     });
 });

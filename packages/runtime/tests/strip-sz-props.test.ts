@@ -83,7 +83,7 @@ describe('stripSzProps', () => {
     it('returns non-object inputs unchanged', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         // @ts-expect-error — exercising a defensive runtime path
-        expect(stripSzProps(null)).toBe(null);
+        expect(stripSzProps(null)).toBeNull();
         // @ts-expect-error — exercising a defensive runtime path
         expect(stripSzProps('nope')).toBe('nope');
         expect(warn).not.toHaveBeenCalled();

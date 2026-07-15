@@ -172,11 +172,11 @@ describe('getRecoveryMode', () => {
     it('should return null for invalid mode', () => {
         const element = document.createElement('div');
         element.setAttribute('szRecover', 'invalid');
-        expect(getRecoveryMode(element)).toBe(null);
+        expect(getRecoveryMode(element)).toBeNull();
     });
 
     it('should return null for missing attribute', () => {
         const element = document.createElement('div');
-        expect(getRecoveryMode(element)).toBe(null);
+        expect(getRecoveryMode(element)).toBeNull();
     });
 });

@@ -174,7 +174,7 @@ describe('generate-types silent and default-output paths', () => {
         // No `output` → default resolves to ./csszyx.d.ts under cwd; silent suppresses logs.
         await generateTypes({ cwd, config: configPath, silent: true });
         expect(readFileSync(join(cwd, 'csszyx.d.ts'), 'utf8')).toContain('brand');
-        expect(logs.length).toBe(0); // silent
+        expect(logs).toHaveLength(0); // silent
     });
 });
 
@@ -203,7 +203,7 @@ describe('pure helper branches', () => {
 
     it('printBar uses the default width when called with two arguments', () => {
         const bar = printBar([2, 2], 4);
-        expect(bar.length).toBe(20); // default width
+        expect(bar).toHaveLength(20); // default width
         expect(bar).toContain('■');
     });
 

@@ -48,7 +48,7 @@ describe('MCP request handlers over an in-memory transport', () => {
 
     it('lists every registered tool', async () => {
         const { tools } = await client.listTools();
-        expect(tools.length).toBe(TOOLS.length);
+        expect(tools).toHaveLength(TOOLS.length);
         expect(tools.some(tool => tool.name === 'csszyx_lookup')).toBe(true);
     });
 

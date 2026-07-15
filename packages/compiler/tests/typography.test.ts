@@ -68,7 +68,7 @@ describe('typography — font size', () => {
         const value = `--spacing(${'('.repeat(64 * 1024)}`;
         const className = t({ text: value });
         expect(className.startsWith('text-[--spacing(')).toBe(true);
-        expect(className.length).toBe(value.length + 'text-[]'.length);
+        expect(className).toHaveLength(value.length + 'text-[]'.length);
     });
 });
 
