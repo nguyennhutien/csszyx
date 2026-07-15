@@ -466,7 +466,7 @@ function offsetToLocation(
     let line = 1;
     let column = 1;
     for (let index = 0; index < offset; index++) {
-        if (source.charCodeAt(index) === 10) {
+        if (source.codePointAt(index) === 10) {
             line++;
             column = 1;
         } else {

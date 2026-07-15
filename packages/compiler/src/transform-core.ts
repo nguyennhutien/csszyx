@@ -1317,8 +1317,8 @@ function needsArbitraryBrackets(value: string): boolean {
  * Returns whether a character can occur in the ASCII identifier used by
  * Tailwind build-time functions such as `--spacing(4)`.
  *
- * @param code - UTF-16 code unit to classify
- * @returns Whether the code unit is an ASCII identifier character
+ * @param code - Unicode code point to classify
+ * @returns Whether the code point is an ASCII identifier character
  */
 function isAsciiIdentifierCode(code: number): boolean {
     return (
@@ -1331,8 +1331,8 @@ function isAsciiIdentifierCode(code: number): boolean {
 }
 
 /**
- * @param code - UTF-16 code unit to classify
- * @returns Whether the code unit can start an ASCII Tailwind function name
+ * @param code - Unicode code point to classify
+ * @returns Whether the code point can start an ASCII Tailwind function name
  */
 function isAsciiIdentifierStartCode(code: number): boolean {
     return (code >= 65 && code <= 90) || code === 95 || (code >= 97 && code <= 122);
@@ -1349,17 +1349,17 @@ function isAsciiIdentifierStartCode(code: number): boolean {
  */
 function isTailwindBuildFunction(value: string): boolean {
     const length = value.length;
-    if (length < 5 || value.charCodeAt(0) !== 45 || value.charCodeAt(1) !== 45) {
+    if (length < 5 || value.codePointAt(0) !== 45 || value.codePointAt(1) !== 45) {
         return false;
     }
 
-    if (!isAsciiIdentifierStartCode(value.charCodeAt(2))) return false;
+    if (!isAsciiIdentifierStartCode(value.codePointAt(2) ?? -1)) return false;
 
     let index = 3;
-    while (index < length && isAsciiIdentifierCode(value.charCodeAt(index))) {
+    while (index < length && isAsciiIdentifierCode(value.codePointAt(index) ?? -1)) {
         index += 1;
     }
-    if (index === 2 || index >= length || value.charCodeAt(index) !== 40) {
+    if (index === 2 || index >= length || value.codePointAt(index) !== 40) {
         return false;
     }
 
@@ -1375,7 +1375,7 @@ function isTailwindBuildFunction(value: string): boolean {
 function scanTailwindFunctionBody(value: string, start: number): boolean {
     const state = { depth: 0, quote: 0, escaped: false };
     for (let index = start; index < value.length; index++) {
-        const code = value.charCodeAt(index);
+        const code = value.codePointAt(index) ?? -1;
         if (consumeTailwindQuotedCode(code, state)) continue;
         if (code === 40) state.depth += 1;
         if (code === 41) {

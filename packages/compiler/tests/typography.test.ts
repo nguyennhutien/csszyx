@@ -45,6 +45,7 @@ describe('typography — font size', () => {
 
     it('{ text: "--spacing(4)" } → text-[--spacing(4)] (Tailwind function)', () => {
         expect(t({ text: '--spacing(4)' })).toBe('text-[--spacing(4)]');
+        expect(t({ text: '--spacing("🚀")' })).toBe('text-[--spacing("🚀")]');
     });
 
     it('handles nested calls, quoted parentheses, and escapes in linear time', () => {

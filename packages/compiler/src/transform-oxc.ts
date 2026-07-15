@@ -1681,7 +1681,7 @@ function offsetToLineColumn(source: string, offset: number): { line: number; col
     let column = 0;
     const limit = Math.min(offset, source.length);
     for (let i = 0; i < limit; i++) {
-        if (source.charCodeAt(i) === 10) {
+        if (source.codePointAt(i) === 10) {
             line++;
             column = 0;
         } else {
