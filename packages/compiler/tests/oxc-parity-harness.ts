@@ -133,6 +133,21 @@ export interface ParityFixture {
 }
 
 /**
+ * Assert the intentionally divergent contract of one pending fixture.
+ *
+ * @param fixture Pending parity fixture.
+ * @param comparison Current Babel/Oxc comparison.
+ */
+function assertPendingParity(fixture: ParityFixture, comparison: ParityComparison): void {
+    if (comparison.oxcError && comparison.oxcIsSkeleton) return;
+    if (!comparison.classesEqual || !comparison.codeEqual) return;
+    throw new Error(
+        `Fixture "${fixture.name}" marked as pending but oxc matched Babel exactly. ` +
+            'Flip its `expected` to "parity" and remove `pendingReason`.',
+    );
+}
+
+/**
  * Assert that a comparison matches the fixture's expected state.
  * Throws a descriptive error when the actual state differs.
  *
@@ -141,16 +156,8 @@ export interface ParityFixture {
  */
 export function assertExpectedParity(fixture: ParityFixture, comparison: ParityComparison): void {
     if (fixture.expected === 'pending') {
-        if (comparison.oxcError && comparison.oxcIsSkeleton) {
-            return;
-        }
-        if (!comparison.classesEqual || !comparison.codeEqual) {
-            return;
-        }
-        throw new Error(
-            `Fixture "${fixture.name}" marked as pending but oxc matched Babel exactly. ` +
-                'Flip its `expected` to "parity" and remove `pendingReason`.',
-        );
+        assertPendingParity(fixture, comparison);
+        return;
     }
     if (comparison.oxcError) {
         throw new Error(
