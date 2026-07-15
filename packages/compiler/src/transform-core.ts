@@ -2781,6 +2781,83 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
     return value;
 }
 
+/** Indexed text-size utility eligible for a matching leading utility. */
+interface TextSizeEntry {
+    index: number;
+    prefix: string;
+    size: string;
+}
+
+/** Indexed leading utility eligible for a matching text-size utility. */
+interface LeadingEntry {
+    index: number;
+    prefix: string;
+    value: string;
+}
+
+const TEXT_SIZE_BASE_RE = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
+const LEADING_BASE_RE = /^leading-(.+)$/;
+
+/** Merges compatible text-size and line-height utilities with equal prefixes. */
+function mergeTextSizeAndLeading(classes: string[]): string[] {
+    const textEntries: TextSizeEntry[] = [];
+    const leadingEntries: LeadingEntry[] = [];
+    for (let index = 0; index < classes.length; index++) {
+        collectTextLeadingEntry(classes[index], index, textEntries, leadingEntries);
+    }
+    if (textEntries.length === 0 || leadingEntries.length === 0) return classes;
+
+    const mergedClasses = [...classes];
+    const removeIndices = new Set<number>();
+    for (const textEntry of textEntries) {
+        const leadingEntry = findMatchingLeading(textEntry.prefix, leadingEntries, removeIndices);
+        if (!leadingEntry) continue;
+        mergedClasses[textEntry.index] =
+            `${textEntry.prefix}text-${textEntry.size}/${leadingEntry.value}`;
+        removeIndices.add(leadingEntry.index);
+    }
+    return removeIndices.size === 0
+        ? classes
+        : mergedClasses.filter((_, index) => !removeIndices.has(index));
+}
+
+/** Indexes one utility when it is a mergeable text-size or leading class. */
+function collectTextLeadingEntry(
+    className: string,
+    index: number,
+    textEntries: TextSizeEntry[],
+    leadingEntries: LeadingEntry[],
+): void {
+    const lastColon = className.lastIndexOf(':');
+    const prefix = lastColon === -1 ? '' : className.slice(0, lastColon + 1);
+    const base = lastColon === -1 ? className : className.slice(lastColon + 1);
+    const textMatch = TEXT_SIZE_BASE_RE.exec(base);
+    if (textMatch) textEntries.push({ index, prefix, size: textMatch[1] });
+    const leadingMatch = LEADING_BASE_RE.exec(base);
+    if (leadingMatch) leadingEntries.push({ index, prefix, value: leadingMatch[1] });
+}
+
+/** Finds the first unconsumed leading utility with the requested prefix. */
+function findMatchingLeading(
+    prefix: string,
+    entries: LeadingEntry[],
+    consumedIndices: Set<number>,
+): LeadingEntry | undefined {
+    return entries.find(entry => entry.prefix === prefix && !consumedIndices.has(entry.index));
+}
+
+/** Filters empty utilities, applies optional mangling, and joins the result. */
+function finalizeTransformResult(
+    classes: string[],
+    mangleMap?: Record<string, string>,
+): TransformResult {
+    const finalClasses = mergeTextSizeAndLeading(classes).filter(Boolean);
+    const outputClasses = mangleMap
+        ? finalClasses.map(className => mangleMap[className] || className)
+        : finalClasses;
+    return { className: outputClasses.join(' ') };
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -3105,60 +3182,7 @@ function transformImpl(
         }
     }
 
-    // Post-processing: merge text-{size} + leading-{value} → text-{size}/{value}
-    //
-    // WHY restricted pattern: text-(.+) is too broad — it also matches color classes
-    // like text-emerald-300 (from `color` prop). Those must NOT be merged with leading.
-    // Only font-size suffixes are valid merge targets: xs, sm, base, lg, [2-9]?xl,
-    // arbitrary [...], or CSS variable (...).
-    let mergedClasses = classes;
-    const textSizeBaseRe = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
-    const leadingBaseRe = /^leading-(.+)$/;
-    const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
-    const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
-        const lastColon = cls.lastIndexOf(':');
-        const prefix = lastColon === -1 ? '' : cls.slice(0, lastColon + 1);
-        const base = lastColon === -1 ? cls : cls.slice(lastColon + 1);
-        const tm = textSizeBaseRe.exec(base);
-        if (tm) {
-            textEntries.push({ index: i, prefix, size: tm[1] });
-        }
-        const lm = leadingBaseRe.exec(base);
-        if (lm) {
-            leadingEntries.push({ index: i, prefix, value: lm[1] });
-        }
-    }
-    if (textEntries.length > 0 && leadingEntries.length > 0) {
-        const removeIndices = new Set<number>();
-        // Track consumed leading entries so one leading cannot merge with multiple text-size classes.
-        const consumedLeading = new Set<number>();
-        for (const te of textEntries) {
-            const matchingLeading = leadingEntries.find(
-                le => le.prefix === te.prefix && !consumedLeading.has(le.index),
-            );
-            if (matchingLeading) {
-                // Merge: text-lg + leading-7 → text-lg/7
-                mergedClasses[te.index] = `${te.prefix}text-${te.size}/${matchingLeading.value}`;
-                removeIndices.add(matchingLeading.index);
-                consumedLeading.add(matchingLeading.index);
-            }
-        }
-        if (removeIndices.size > 0) {
-            mergedClasses = mergedClasses.filter((_, i) => !removeIndices.has(i));
-        }
-    }
-
-    const finalClasses = mergedClasses.filter(Boolean);
-
-    // Apply mangling if map is provided
-    if (mangleMap) {
-        const mangledClasses = finalClasses.map(cls => mangleMap[cls] || cls);
-        return { className: mangledClasses.join(' ') };
-    }
-
-    return { className: finalClasses.join(' ') };
+    return finalizeTransformResult(classes, mangleMap);
 }
 
 /**
