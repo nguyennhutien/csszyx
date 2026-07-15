@@ -1979,6 +1979,109 @@ export function transform(
     }
 }
 
+/** Structured background-gradient sz value. */
+interface BackgroundGradientValue {
+    gradient?: string;
+    dir?: string | number;
+    in?: string;
+}
+
+/* eslint-disable jsdoc/require-param, jsdoc/require-returns -- Internal gradient stages share the object-syntax contract. */
+
+/** Builds one background-gradient utility from object syntax. */
+function buildBackgroundGradientClass(gradient: BackgroundGradientValue): string {
+    let className = '';
+    if (gradient.gradient === 'linear') {
+        className = buildLinearGradientClass(gradient.dir ?? 'to-r');
+    } else if (gradient.gradient === 'radial') {
+        className = buildRadialGradientClass(gradient.dir);
+    } else if (gradient.gradient === 'conic') {
+        className = buildConicGradientClass(gradient.dir);
+    }
+    return className && gradient.in ? `${className}/${gradient.in}` : className;
+}
+
+/** Builds a linear background-gradient utility. */
+function buildLinearGradientClass(direction: string | number): string {
+    if (typeof direction === 'number') {
+        return direction < 0 ? `-bg-linear-${Math.abs(direction)}` : `bg-linear-${direction}`;
+    }
+    if (direction.startsWith('--')) return `bg-linear-(${direction})`;
+    if (direction.startsWith('to-')) return `bg-linear-${direction}`;
+    return `bg-linear-[${normalizeArbitraryValue(direction)}]`;
+}
+
+/** Builds a radial background-gradient utility. */
+function buildRadialGradientClass(direction: string | number | undefined): string {
+    if (direction === undefined || direction === null) return 'bg-radial';
+    if (typeof direction !== 'string') return '';
+    return direction.startsWith('--')
+        ? `bg-radial-(${direction})`
+        : `bg-radial-[${normalizeArbitraryValue(direction)}]`;
+}
+
+/** Builds a conic background-gradient utility. */
+function buildConicGradientClass(direction: string | number | undefined): string {
+    if (direction === undefined || direction === null) return 'bg-conic';
+    if (typeof direction === 'number') {
+        return direction < 0 ? `-bg-conic-${Math.abs(direction)}` : `bg-conic-${direction}`;
+    }
+    return direction.startsWith('--')
+        ? `bg-conic-(${direction})`
+        : `bg-conic-[${normalizeArbitraryValue(direction)}]`;
+}
+
+/** Builds a color utility from the `{ color, op }` object syntax. */
+function buildColorObjectClass(
+    key: string,
+    color: { color: string; op?: number | string },
+    prefix: string,
+): string {
+    const utilityPrefix =
+        PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    const rawColor = String(color.color);
+    const colorValue = formatColorObjectBase(rawColor);
+    if (color.op === undefined) return `${prefix}${utilityPrefix}-${colorValue}`;
+    const opacity = formatOpacity(color.op);
+    warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`, opacity);
+    return `${prefix}${utilityPrefix}-${colorValue}/${opacity}`;
+}
+
+/** Formats a color-object base using Tailwind variable and arbitrary syntax. */
+function formatColorObjectBase(color: string): string {
+    if (isTailwindBuildFunction(color) || (color.startsWith('--') && color.includes('('))) {
+        return `[${normalizeArbitraryValue(color)}]`;
+    }
+    if (color.startsWith('--')) return `(${color})`;
+    return needsArbitraryBrackets(color)
+        ? `[${normalizeArbitraryValue(color)}]`
+        : normalizeArbitraryValue(color);
+}
+
+/** Warns when a custom theme token may ignore an opacity modifier. */
+function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
+    if (
+        !szDevWarningsEnabled() ||
+        color.startsWith('--') ||
+        needsArbitraryBrackets(color) ||
+        /-\d{2,3}$/.test(color) ||
+        ALPHA_SAFE_NAMED_COLORS.has(color) ||
+        _warnedOpacityTokens.has(color)
+    ) {
+        return;
+    }
+    _warnedOpacityTokens.add(color);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${className}"${at}: the /${opacity} opacity applies only if the ` +
+            `"${color}" theme token is alpha-capable (oklch or space-separated RGB). ` +
+            'A comma-separated RGB triplet, or a token that resolves through its own alpha ' +
+            'variable, silently ignores the modifier — verify the emitted rule.',
+    );
+}
+
+/* eslint-enable jsdoc/require-param, jsdoc/require-returns */
+
 /**
  * Depth-unchecked transform body. Called by {@link transform} once the depth
  * guard has been applied.
@@ -2060,69 +2163,10 @@ function transformImpl(
             typeof value === 'object' &&
             !Array.isArray(value)
         ) {
-            const grad = value as { gradient?: string; dir?: string | number; in?: string };
-            const gradType = grad.gradient;
-            if (!gradType) {
-                continue;
-            }
-
-            let cls = '';
-            if (gradType === 'linear') {
-                const dir = grad.dir ?? 'to-r'; // default direction
-                if (typeof dir === 'number') {
-                    if (dir < 0) {
-                        cls = `-bg-linear-${Math.abs(dir)}`;
-                    } else {
-                        cls = `bg-linear-${dir}`;
-                    }
-                } else if (typeof dir === 'string') {
-                    if (dir.startsWith('--')) {
-                        cls = `bg-linear-(${dir})`;
-                    } else if (dir.startsWith('to-')) {
-                        cls = `bg-linear-${dir}`;
-                    } else {
-                        // Arbitrary: contains commas, spaces, etc.
-                        cls = `bg-linear-[${normalizeArbitraryValue(dir)}]`;
-                    }
-                }
-            } else if (gradType === 'radial') {
-                const dir = grad.dir;
-                if (dir === undefined || dir === null) {
-                    cls = 'bg-radial';
-                } else if (typeof dir === 'string') {
-                    if (dir.startsWith('--')) {
-                        cls = `bg-radial-(${dir})`;
-                    } else {
-                        cls = `bg-radial-[${normalizeArbitraryValue(dir)}]`;
-                    }
-                }
-            } else if (gradType === 'conic') {
-                const dir = grad.dir;
-                if (dir === undefined || dir === null) {
-                    cls = 'bg-conic';
-                } else if (typeof dir === 'number') {
-                    if (dir < 0) {
-                        cls = `-bg-conic-${Math.abs(dir)}`;
-                    } else {
-                        cls = `bg-conic-${dir}`;
-                    }
-                } else if (typeof dir === 'string') {
-                    if (dir.startsWith('--')) {
-                        cls = `bg-conic-(${dir})`;
-                    } else {
-                        cls = `bg-conic-[${normalizeArbitraryValue(dir)}]`;
-                    }
-                }
-            }
-
-            // Append color interpolation suffix
-            if (grad.in) {
-                cls += `/${grad.in}`;
-            }
-
-            if (cls) {
-                classes.push(`${prefix}${cls}`);
-            }
+            const gradient = buildBackgroundGradientClass(
+                value as { gradient?: string; dir?: string | number; in?: string },
+            );
+            if (gradient) classes.push(`${prefix}${gradient}`);
             continue;
         }
 
@@ -2145,53 +2189,13 @@ function transformImpl(
             rawKey in PROPERTY_MAP &&
             'color' in (value as Record<string, unknown>)
         ) {
-            const colorObj = value as { color: string; op?: number | string };
-            const twPrefix =
-                PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-            const rawColorBase = String(colorObj.color);
-            // CSS variables use (--var) syntax; hex/rgb/hsl/units need [bracket] wrapping;
-            // named colors (e.g. 'blue-500') pass through as-is.
-            const colorBase =
-                isTailwindBuildFunction(rawColorBase) ||
-                (rawColorBase.startsWith('--') && rawColorBase.includes('('))
-                    ? `[${normalizeArbitraryValue(rawColorBase)}]`
-                    : rawColorBase.startsWith('--')
-                      ? `(${rawColorBase})`
-                      : needsArbitraryBrackets(rawColorBase)
-                        ? `[${normalizeArbitraryValue(rawColorBase)}]`
-                        : normalizeArbitraryValue(rawColorBase);
-
-            if (colorObj.op !== undefined) {
-                const opStr = formatOpacity(colorObj.op);
-                // Dev nudge for custom theme tokens: `border-tag-violet-fg/35` is
-                // minted here, but whether the /35 actually applies depends on the
-                // token being alpha-capable (oklch / space-separated RGB). A token
-                // defined as a comma-separated RGB triplet (or one that carries its
-                // own alpha var) silently ignores the modifier — the class NAME then
-                // advertises an opacity the CSS does not deliver. Standard palette
-                // shades (`red-500`) and alpha-safe named colors are exempt.
-                if (
-                    szDevWarningsEnabled() &&
-                    !rawColorBase.startsWith('--') &&
-                    !needsArbitraryBrackets(rawColorBase) &&
-                    !/-\d{2,3}$/.test(rawColorBase) &&
-                    !ALPHA_SAFE_NAMED_COLORS.has(rawColorBase) &&
-                    !_warnedOpacityTokens.has(rawColorBase)
-                ) {
-                    _warnedOpacityTokens.add(rawColorBase);
-                    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-                    console.warn(
-                        `[csszyx] "${prefix}${twPrefix}-${colorBase}/${opStr}"${at}: the ` +
-                            `/${opStr} opacity applies only if the "${rawColorBase}" theme token ` +
-                            'is alpha-capable (oklch or space-separated RGB). A comma-separated ' +
-                            'RGB triplet, or a token that resolves through its own alpha ' +
-                            'variable, silently ignores the modifier — verify the emitted rule.',
-                    );
-                }
-                classes.push(`${prefix}${twPrefix}-${colorBase}/${opStr}`);
-            } else {
-                classes.push(`${prefix}${twPrefix}-${colorBase}`);
-            }
+            classes.push(
+                buildColorObjectClass(
+                    rawKey,
+                    value as { color: string; op?: number | string },
+                    prefix,
+                ),
+            );
             continue;
         }
 
