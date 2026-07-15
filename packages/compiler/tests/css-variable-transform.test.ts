@@ -85,6 +85,34 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('z-(--_sz-z)');
         });
+
+        it.each([
+            'undefined',
+            'null',
+            'false',
+            "''",
+        ])('omits a nullable dynamic utility when the alternate is %s', absentValue => {
+            const source =
+                `const App = ({ flex }) => <div sz={{ ` +
+                `flex: typeof flex === 'number' ? flex : ${absentValue} }} />`;
+            const result = transformSourceCode(source);
+            expect(result.code).toContain(
+                `typeof flex === 'number' ? "flex-(--_sz-flex)" : undefined`,
+            );
+            expect(result.code).toContain(
+                `"--_sz-flex": typeof flex === 'number' ? flex : ${absentValue}`,
+            );
+            expect(result.code).not.toContain('flex-undefined');
+            expect(result.code).not.toContain('`${typeof flex');
+        });
+
+        it('preserves zero as a valid dynamic utility value', () => {
+            const source =
+                'const App = ({ flex }) => <div sz={{ flex: flex === undefined ? 0 : flex }} />';
+            const result = transformSourceCode(source);
+            expect(result.code).toContain('flex-(--_sz-flex)');
+            expect(result.code).not.toContain('? undefined :');
+        });
     });
 
     describe('spread fallback', () => {

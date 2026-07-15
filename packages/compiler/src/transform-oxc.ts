@@ -1256,6 +1256,7 @@ interface OxcDynamicPropInfo {
     varName: string;
     twPrefix: string;
     variantChain: string;
+    skipClass?: boolean;
 }
 
 /** Conditional static class entry for a single property ternary. */
@@ -2963,7 +2964,8 @@ function buildPartialObjectTransform(
     // conditional with runtime css vars still falls back to the runtime.
     if (
         partial.conditionalClasses.length > 0 &&
-        (partial.conditionalClasses.length !== 1 || partial.dynamicProps.size > 0)
+        (partial.conditionalClasses.length !== 1 ||
+            [...partial.dynamicProps.values()].some(info => !info.skipClass))
     ) {
         return null;
     }
@@ -2981,10 +2983,11 @@ function buildPartialObjectTransform(
     if (options?.mangleVars) {
         applyHoistedVariableNames(partial, hoistedNames, cssVariableMap);
         applyScopedVariablePlan(partial, hoistedNames, cssVariableMap, reservedNames);
+        refreshNullableDynamicConditional(partial);
     }
 
     for (const [, info] of partial.dynamicProps) {
-        classParts.push(buildCSSVarClassName(info));
+        if (!info.skipClass) classParts.push(buildCSSVarClassName(info));
     }
     for (const entry of partial.conditionalClasses) {
         classParts.push(entry.consequent, entry.alternate);
@@ -3014,6 +3017,20 @@ function buildPartialObjectTransform(
         usesUnitVar: partial.usesUnitVar,
         hasConditional: partial.conditionalClasses.length > 0,
     };
+}
+
+/**
+ * Refreshes a nullable conditional utility after CSS variable name planning.
+ *
+ * @param partial Partially evaluated object with planned variable names.
+ */
+function refreshNullableDynamicConditional(partial: OxcPartialObjectResult): void {
+    const info = [...partial.dynamicProps.values()].find(candidate => candidate.skipClass);
+    const conditional = partial.conditionalClasses[0];
+    if (!info || !conditional) return;
+    const className = buildCSSVarClassName(info);
+    if (conditional.consequent) conditional.consequent = className;
+    if (conditional.alternate) conditional.alternate = className;
 }
 
 /**
@@ -3777,6 +3794,7 @@ function evaluatePartialConditional(
     context: PartialObjectContext,
     result: OxcPartialObjectResult,
 ): boolean {
+    if (evaluateNullablePartialConditional(key, conditional, context, result)) return true;
     const consequent = extractStaticLiteralValue(conditional.consequent);
     const alternate = extractStaticLiteralValue(conditional.alternate);
     if (consequent === null || alternate === null) return false;
@@ -3788,6 +3806,72 @@ function evaluatePartialConditional(
         alternate: prefixVariantClasses(alternateClasses, context.variantChain),
     });
     return true;
+}
+
+/**
+ * Compiles a conditional whose falsy/nullish branch omits the sz property.
+ *
+ * @param key Static property key.
+ * @param conditional Conditional value.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether an absent branch was handled.
+ */
+function evaluateNullablePartialConditional(
+    key: string,
+    conditional: ConditionalExpressionNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    const consequentAbsent = isAbsentSzExpression(conditional.consequent);
+    const alternateAbsent = isAbsentSzExpression(conditional.alternate);
+    if (!consequentAbsent && !alternateAbsent) return false;
+    if (consequentAbsent && alternateAbsent) {
+        result.conditionalClasses.push({
+            test: conditional.test,
+            consequent: '',
+            alternate: '',
+        });
+        return true;
+    }
+
+    const presentNode = consequentAbsent ? conditional.alternate : conditional.consequent;
+    const staticValue = extractStaticLiteralValue(presentNode);
+    let presentClass: string;
+    if (staticValue !== null) {
+        presentClass = compileAliasedPartialClass(key, staticValue, context);
+        presentClass = prefixVariantClasses(presentClass, context.variantChain);
+    } else {
+        if (!evaluateDynamicPartialProperty(key, conditional, context, result)) return false;
+        const uniqueKey = context.variantChain ? `${context.variantChain}-${key}` : key;
+        const info = result.dynamicProps.get(uniqueKey);
+        if (!info) return false;
+        info.skipClass = true;
+        presentClass = buildCSSVarClassName(info);
+    }
+    result.conditionalClasses.push({
+        test: conditional.test,
+        consequent: consequentAbsent ? '' : presentClass,
+        alternate: alternateAbsent ? '' : presentClass,
+    });
+    return true;
+}
+
+/**
+ * Returns whether an expression is an omitted sz value while preserving numeric zero.
+ *
+ * @param expression Candidate conditional branch.
+ * @returns Whether the branch emits no utility or CSS variable value.
+ */
+function isAbsentSzExpression(expression: OxcNode): boolean {
+    const value = unwrapExpression(expression);
+    if (value.type === 'Identifier') return String((value as IdentifierNode).name) === 'undefined';
+    if (value.type === 'UnaryExpression') {
+        return String((value as unknown as { operator: string }).operator) === 'void';
+    }
+    if (value.type !== 'Literal') return false;
+    const literal = (value as unknown as { value: unknown }).value;
+    return literal === null || literal === false || literal === '';
 }
 
 /**
@@ -3917,7 +4001,7 @@ function generateStyleValueSource(info: OxcDynamicPropInfo, source: string): str
         case PropertyCategory.DURATION:
             return `__szUnitVar(${expressionSource}, "ms", ${JSON.stringify(info.szKey)})`;
         default:
-            return `\`\${${expressionSource}}\``;
+            return expressionSource;
     }
 }
 

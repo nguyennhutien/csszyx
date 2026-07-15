@@ -283,6 +283,9 @@ pub struct DynamicCssVarIr {
     pub variant_prefix: Option<String>,
     /// Whether this declaration was hoisted to an ancestor style prop.
     pub hoisted: bool,
+    /// Whether a companion conditional emits the utility only when the value exists.
+    #[serde(default)]
+    pub skip_class: bool,
 }
 
 /// Runtime value transform used when writing a CSS custom property.
@@ -299,7 +302,7 @@ pub enum DynamicCssVarCategory {
     Angle,
     /// `__szUnitVar(value, "ms", key)`.
     Duration,
-    /// Direct stringification.
+    /// Direct value passthrough so nullish/falsy values omit the custom property.
     Passthrough,
 }
 

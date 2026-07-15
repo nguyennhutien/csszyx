@@ -15,10 +15,11 @@ use oxc_span::{GetSpan, SourceType, Span};
 use std::time::Instant;
 
 use super::{
-    lower::lower_static_sz_object, ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr,
-    JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SourceIr, StaticArrayPartIr,
-    StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr,
-    SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
+    lower::{dynamic_css_var_class, lower_static_sz_object},
+    ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
+    RecoveryAttributeIr, RecoveryMode, SourceIr, StaticArrayPartIr, StaticSzObject,
+    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
+    SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -2010,6 +2011,24 @@ fn partial_object_from_object_expression(
                 }
 
                 if let Expression::ConditionalExpression(conditional) = &property.value {
+                    if let Some((conditional_ternary, dynamic_prop)) =
+                        nullable_conditional_class_from_property(
+                            &key,
+                            conditional,
+                            ctx,
+                            variant_prefix,
+                            variant_keys,
+                        )
+                    {
+                        if ternary.is_some() {
+                            return None;
+                        }
+                        ternary = Some(conditional_ternary);
+                        if let Some(dynamic_prop) = dynamic_prop {
+                            dynamic_css_vars.push(dynamic_prop);
+                        }
+                        continue;
+                    }
                     if let Some(conditional_ternary) =
                         conditional_class_from_property(&key, conditional, ctx, variant_keys)
                     {
@@ -2045,7 +2064,7 @@ fn partial_object_from_object_expression(
     // classes and the conditional becomes a runtime ternary appended in a
     // template literal, matching the Babel/oxc build-time output. Mixing a
     // conditional with runtime css vars is still punted to the runtime.
-    if ternary.is_some() && !dynamic_css_vars.is_empty() {
+    if ternary.is_some() && dynamic_css_vars.iter().any(|prop| !prop.skip_class) {
         return None;
     }
 
@@ -2127,6 +2146,74 @@ fn conditional_class_from_property(
         consequent_classes: conditional_property_classes(key, consequent, variant_keys),
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
     })
+}
+
+fn nullable_conditional_class_from_property(
+    key: &str,
+    conditional: &ConditionalExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_prefix: Option<&str>,
+    variant_keys: &[String],
+) -> Option<(StaticTernaryIr, Option<DynamicCssVarIr>)> {
+    let consequent_absent = is_absent_sz_expression(&conditional.consequent);
+    let alternate_absent = is_absent_sz_expression(&conditional.alternate);
+    if !consequent_absent && !alternate_absent {
+        return None;
+    }
+    if consequent_absent && alternate_absent {
+        return Some((
+            StaticTernaryIr {
+                test_span: text_span(conditional.test.span()),
+                consequent_classes: Vec::new(),
+                alternate_classes: Vec::new(),
+            },
+            None,
+        ));
+    }
+
+    let present = if consequent_absent {
+        &conditional.alternate
+    } else {
+        &conditional.consequent
+    };
+    let (present_classes, dynamic_prop) =
+        if let Some(value) = static_value_from_expression(present, ctx) {
+            (conditional_property_classes(key, value, variant_keys), None)
+        } else {
+            if !is_runtime_expression(present) {
+                return None;
+            }
+            let mut prop =
+                dynamic_css_var_from_property(key, text_span(conditional.span), variant_prefix);
+            prop.skip_class = true;
+            (vec![dynamic_css_var_class(&prop)], Some(prop))
+        };
+    Some((
+        StaticTernaryIr {
+            test_span: text_span(conditional.test.span()),
+            consequent_classes: if consequent_absent {
+                Vec::new()
+            } else {
+                present_classes.clone()
+            },
+            alternate_classes: if alternate_absent {
+                Vec::new()
+            } else {
+                present_classes
+            },
+        },
+        dynamic_prop,
+    ))
+}
+
+fn is_absent_sz_expression(expression: &Expression<'_>) -> bool {
+    match unwrap_expression(expression) {
+        Expression::NullLiteral(_) => true,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        Expression::BooleanLiteral(value) => !value.value,
+        Expression::StringLiteral(value) => value.value.is_empty(),
+        _ => false,
+    }
 }
 
 /// Wraps a leaf object in the given variant-key chain (outer→inner) so the full
@@ -2321,6 +2408,7 @@ fn dynamic_css_var_from_property(
         expression_span,
         variant_prefix: variant_prefix.map(ToString::to_string),
         hoisted: false,
+        skip_class: false,
     }
 }
 

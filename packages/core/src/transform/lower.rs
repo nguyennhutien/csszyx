@@ -82,18 +82,27 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         // its safelist candidates — mangle IDs follow discovery order.
         part.classes.iter().chain(part.candidates.iter()).cloned()
     }));
-    classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
-        let variant = prop
-            .variant_prefix
-            .as_ref()
-            .map_or_else(String::new, |prefix| format!("{prefix}:"));
-        format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
-    }));
+    classes.extend(
+        attribute
+            .dynamic_css_vars
+            .iter()
+            .filter(|prop| !prop.skip_class)
+            .map(dynamic_css_var_class),
+    );
     if let Some(ternary) = &attribute.ternary {
         classes.extend(ternary.consequent_classes.iter().cloned());
         classes.extend(ternary.alternate_classes.iter().cloned());
     }
     classes
+}
+
+/// Build the Tailwind CSS-variable utility for one dynamic property.
+pub(super) fn dynamic_css_var_class(prop: &super::DynamicCssVarIr) -> String {
+    let variant = prop
+        .variant_prefix
+        .as_ref()
+        .map_or_else(String::new, |prefix| format!("{prefix}:"));
+    format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
 }
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.

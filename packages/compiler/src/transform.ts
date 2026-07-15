@@ -3238,6 +3238,7 @@ function evaluatePartialConditional(
     variantChain: string,
     result: PartialObjectResult,
 ): void {
+    if (evaluateNullablePartialConditional(key, value, variantChain, result)) return;
     const consequent = extractStaticLiteralValue(value.consequent);
     const alternate = extractStaticLiteralValue(value.alternate);
     if (consequent === null || alternate === null) {
@@ -3254,18 +3255,78 @@ function evaluatePartialConditional(
 }
 
 /**
+ * Compiles conditionals whose nullish/falsy branch means that the property is absent.
+ *
+ * @param key sz property key.
+ * @param value Conditional property expression.
+ * @param variantChain Active nested variant path.
+ * @param result Partial-object state to update.
+ * @returns Whether an absent branch was handled.
+ */
+function evaluateNullablePartialConditional(
+    key: string,
+    value: t.ConditionalExpression,
+    variantChain: string,
+    result: PartialObjectResult,
+): boolean {
+    const consequentAbsent = isAbsentSzExpression(value.consequent);
+    const alternateAbsent = isAbsentSzExpression(value.alternate);
+    if (!consequentAbsent && !alternateAbsent) return false;
+    if (consequentAbsent && alternateAbsent) {
+        result.conditionalClasses.push({ test: value.test, consequent: '', alternate: '' });
+        return true;
+    }
+
+    const presentNode = consequentAbsent ? value.alternate : value.consequent;
+    const staticValue = extractStaticLiteralValue(presentNode);
+    let presentClass: string;
+    if (staticValue !== null) {
+        presentClass = transform({ [key]: staticValue }).className;
+        if (variantChain) presentClass = prefixClasses(presentClass, variantChain);
+    } else {
+        const info = registerPartialDynamicProp(key, value, variantChain, result);
+        info.skipClass = true;
+        presentClass = buildCSSVarClassName(info);
+    }
+    result.conditionalClasses.push({
+        test: value.test,
+        consequent: consequentAbsent ? '' : presentClass,
+        alternate: alternateAbsent ? '' : presentClass,
+    });
+    return true;
+}
+
+/**
+ * Returns whether an expression represents an omitted sz value while preserving numeric zero.
+ *
+ * @param expression Candidate conditional branch.
+ * @returns Whether the branch should emit no class or CSS variable value.
+ */
+function isAbsentSzExpression(expression: t.Expression): boolean {
+    const value = unwrapTsExpression(expression) ?? expression;
+    return (
+        t.isNullLiteral(value) ||
+        (t.isIdentifier(value) && value.name === 'undefined') ||
+        (t.isBooleanLiteral(value) && !value.value) ||
+        (t.isStringLiteral(value) && value.value === '') ||
+        (t.isUnaryExpression(value) && value.operator === 'void')
+    );
+}
+
+/**
  * Registers a runtime-valued property and its required helper family.
  * @param key - sz property key
  * @param expression - Runtime value expression
  * @param variantChain - Active nested variant path
  * @param result - Partial-object state to update
+ * @returns Registered dynamic-property metadata
  */
 function registerPartialDynamicProp(
     key: string,
     expression: t.Expression,
     variantChain: string,
     result: PartialObjectResult,
-): void {
+): DynamicPropInfo {
     const registration = createDynamicPropRegistration(key, expression, variantChain);
     const { category } = registration.info;
     result.usesColorVar ||= COLOR_PROPERTIES.has(key);
@@ -3273,6 +3334,7 @@ function registerPartialDynamicProp(
     result.usesUnitVar ||=
         category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION;
     result.dynamicProps.set(registration.uniqueKey, registration.info);
+    return registration.info;
 }
 
 /**
@@ -3308,13 +3370,7 @@ function generateStyleValueExpression(info: DynamicPropInfo): t.Expression {
                 t.stringLiteral(info.szKey),
             ]);
         default:
-            return t.templateLiteral(
-                [
-                    t.templateElement({ raw: '', cooked: '' }, false),
-                    t.templateElement({ raw: '', cooked: '' }, true),
-                ],
-                [expression],
-            );
+            return expression;
     }
 }
 

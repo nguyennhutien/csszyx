@@ -388,6 +388,17 @@ time and emits a conditional class expression — no CSS variables, no inline st
 Only when at least one branch is a **runtime expression** (variable, function call, etc.).
 In that case the compiler falls back to `prop-[var(--_sz-prop)]` with an inline `style`.
 
+If the opposite branch is `undefined`, `null`, `false`, or an empty string, that
+branch emits neither the utility class nor the CSS custom-property value. This
+keeps nullable values from becoming strings such as `"undefined"`. Numeric `0`
+is not treated as absent—it remains a valid value.
+
+```tsx
+<div sz={{ flex: typeof flex === 'number' ? flex : undefined }} />
+// present: flex-(--_sz-flex) + --_sz-flex: <number>
+// absent:  no flex utility and no --_sz-flex value
+```
+
 The injected value resolves at runtime the same way the static path lowers the
 same literal: numbers ride the spacing scale (`calc(n * var(--spacing))`),
 tokens resolve to their CSS values (`'full'` → `100%`, `'3/12'` → `25%`,

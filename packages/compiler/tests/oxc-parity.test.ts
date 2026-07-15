@@ -147,6 +147,12 @@ const fixtures: readonly ParityFixture[] = [
         expected: 'surgical-parity',
     },
     {
+        name: 'sz-nullable-dynamic-css-var',
+        source: "const X = ({ flex }) => <div sz={{ flex: typeof flex === 'number' ? flex : undefined }} />;",
+        filename: 'nullable-dynamic-css-var.tsx',
+        expected: 'surgical-parity',
+    },
+    {
         name: 'sz-static-property-ternary',
         source: 'const X = ({ big }) => <div sz={{ p: big ? 8 : 4 }} />;',
         filename: 'property-ternary.tsx',

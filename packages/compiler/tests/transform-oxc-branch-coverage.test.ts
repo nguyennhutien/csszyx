@@ -342,7 +342,9 @@ describe('transform-oxc: partial (static + dynamic) objects', () => {
     });
 
     it('emits a passthrough style value for a unitless prop', () => {
-        expect(code('export const A = ({ z }) => <div sz={{ z: z }} />;')).toContain('${z}');
+        expect(code('export const A = ({ z }) => <div sz={{ z: z }} />;')).toContain(
+            '"--_sz-z": z',
+        );
     });
 
     it('lowers a single literal-branch conditional prop into a className ternary', () => {
@@ -751,9 +753,10 @@ describe('transform-oxc: nested & conditional class-source edge cases', () => {
         expect(out).toContain(': undefined');
     });
 
-    it('treats a null-literal conditional branch as dynamic', () => {
+    it('omits a utility for a null-literal conditional branch', () => {
         const out = code('export const A = ({ on }) => <div sz={{ p: on ? null : 2 }} />;');
-        expect(out).toContain('__szSpacingVar(on ? null : 2, "p")');
+        expect(out).toContain('on ? undefined : "p-2"');
+        expect(out).not.toContain('__szSpacingVar');
     });
 
     it('returns null (fallback) when a static-conditional branch is an unbound identifier', () => {

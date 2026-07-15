@@ -94,6 +94,7 @@ pub fn rewrite_static_sz_attributes_with_options(
                 .any(|index| ir.sz_attributes[*index].ternary.is_some());
 
             if has_ternary {
+                apply_dynamic_style_props(source, ir, element, &mut magic);
                 rewrite_ternary_sz_attribute(source, ir, element, &mut magic)?;
                 rewrote = true;
                 continue;
@@ -547,7 +548,7 @@ fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
                 js_string_literal(&prop.key)
             )
         }
-        DynamicCssVarCategory::Passthrough => format!("`${{{expression}}}`"),
+        DynamicCssVarCategory::Passthrough => expression.to_string(),
     }
 }
 
@@ -740,6 +741,17 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = () => <div className=\"p-(--_sz-p)\" style={{\"--_sz-p\": __szSpacingVar(padVal, \"p\")}} />;"
+        );
+    }
+
+    #[test]
+    fn omits_nullable_dynamic_utility() {
+        let source = "const App = ({ flex }) => <div sz={{ flex: typeof flex === 'number' ? flex : undefined }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = ({ flex }) => <div className={typeof flex === 'number' ? \"flex-(--_sz-flex)\" : undefined} style={{\"--_sz-flex\": typeof flex === 'number' ? flex : undefined}} />;"
         );
     }
 

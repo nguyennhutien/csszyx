@@ -709,7 +709,7 @@ describe('partial color-object and style-value categories', () => {
     it('emits a bare unitless style value for a dynamic opacity', () => {
         const jsx = 'const A = ({ v }) => <div sz={{ opacity: v }} />;';
         const r = run(jsx);
-        expect(r.code).toContain('"--_sz-opacity": `${v}`');
+        expect(r.code).toContain('"--_sz-opacity": v');
     });
 
     it('handles a static color + static op inside an otherwise-dynamic color object', () => {
