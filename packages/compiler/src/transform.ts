@@ -230,6 +230,12 @@ interface ExistingJsxAttributes {
     styleExpression: t.Expression | null;
 }
 
+/** Runtime helpers required by class-name merging. */
+interface ClassMergeUsage {
+    runtime: boolean;
+    merge: boolean;
+}
+
 /**
  * Finds existing class and style values that an sz transform must preserve.
  *
@@ -255,6 +261,101 @@ function findExistingJsxAttributes(path: babel.NodePath<t.JSXAttribute>): Existi
         }
     }
     return existing;
+}
+
+/**
+ * Merges a compiled sz class value with an existing JSX class attribute.
+ *
+ * @param path sz attribute path.
+ * @param szExpression Compiled sz class expression.
+ * @param existing Existing JSX attributes for the opening element.
+ * @param usage Runtime helper usage accumulated by the transform.
+ * @returns JSX-compatible merged class value.
+ */
+function mergeClassNameValue(
+    path: babel.NodePath<t.JSXAttribute>,
+    szExpression: t.Expression,
+    existing: ExistingJsxAttributes,
+    usage: ClassMergeUsage,
+): t.StringLiteral | t.JSXExpressionContainer {
+    if (!existing.classExpression) {
+        if (t.isStringLiteral(szExpression) && szExpression.value === '') {
+            return t.jsxExpressionContainer(t.identifier('undefined'));
+        }
+        return t.isStringLiteral(szExpression)
+            ? szExpression
+            : t.jsxExpressionContainer(szExpression);
+    }
+
+    if (existing.classNameNode && path.parentPath?.isJSXOpeningElement()) {
+        path.parentPath.node.attributes = withoutJSXAttribute(
+            path.parentPath.node.attributes,
+            existing.classNameNode,
+        );
+        existing.classNameNode = null;
+    }
+
+    if (t.isStringLiteral(existing.classExpression) && t.isStringLiteral(szExpression)) {
+        return t.stringLiteral(`${existing.classExpression.value} ${szExpression.value}`.trim());
+    }
+
+    usage.runtime = true;
+    usage.merge = true;
+    return t.jsxExpressionContainer(
+        t.callExpression(t.identifier('_szMerge'), [existing.classExpression, szExpression]),
+    );
+}
+
+/**
+ * Adds generated CSS custom properties to an opening element style attribute.
+ *
+ * @param path sz attribute path.
+ * @param newStyleProperties Generated style properties.
+ * @param existing Existing JSX attributes for the opening element.
+ */
+function mergeStyleProperties(
+    path: babel.NodePath<t.JSXAttribute>,
+    newStyleProperties: t.ObjectProperty[],
+    existing: ExistingJsxAttributes,
+): void {
+    if (newStyleProperties.length === 0 || !path.parentPath?.isJSXOpeningElement()) return;
+
+    if (!existing.styleNode || !existing.styleExpression) {
+        const styleExpression = t.objectExpression(newStyleProperties);
+        const styleAttribute = t.jsxAttribute(
+            t.jsxIdentifier('style'),
+            t.jsxExpressionContainer(styleExpression),
+        );
+        path.parentPath.node.attributes.push(styleAttribute);
+        existing.styleExpression = styleExpression;
+        existing.styleNode = styleAttribute;
+        return;
+    }
+
+    path.parentPath.node.attributes = withoutJSXAttribute(
+        path.parentPath.node.attributes,
+        existing.styleNode,
+    );
+    existing.styleNode = null;
+
+    let mergedStyle: t.ObjectExpression;
+    if (t.isObjectExpression(existing.styleExpression)) {
+        existing.styleExpression.properties.push(...newStyleProperties);
+        mergedStyle = existing.styleExpression;
+    } else if (t.isStringLiteral(existing.styleExpression)) {
+        const parsedProperties = parseStyleStringToObjectExpr(
+            existing.styleExpression.value,
+        ).properties;
+        mergedStyle = t.objectExpression([...parsedProperties, ...newStyleProperties]);
+    } else {
+        mergedStyle = t.objectExpression([
+            t.spreadElement(existing.styleExpression),
+            ...newStyleProperties,
+        ]);
+    }
+    path.parentPath.node.attributes.push(
+        t.jsxAttribute(t.jsxIdentifier('style'), t.jsxExpressionContainer(mergedStyle)),
+    );
 }
 
 /**
@@ -383,8 +484,7 @@ export function transformSourceCode(
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
     const astBudget = options?.astBudget ?? AST_BUDGET;
-    let usesRuntime = false;
-    let usesMerge = false;
+    const classMergeUsage: ClassMergeUsage = { runtime: false, merge: false };
     let usesSzcn = false;
     let usesSzPart = false;
     let usesColorVar = false;
@@ -541,130 +641,6 @@ export function transformSourceCode(
                             const value = path.node.value;
 
                             const existingAttributes = findExistingJsxAttributes(path);
-                            let existingClassNameNode = existingAttributes.classNameNode;
-                            const existingClassExpr = existingAttributes.classExpression;
-                            let existingStyleNode = existingAttributes.styleNode;
-                            let existingStyleExpr = existingAttributes.styleExpression;
-
-                            const createMergedClassNameValue = (
-                                szExpr: t.Expression,
-                            ): t.StringLiteral | t.JSXExpressionContainer => {
-                                if (!existingClassExpr) {
-                                    // An sz that lowers to zero classes and has no
-                                    // className to merge into emits `className={undefined}`
-                                    // (renders no class attribute) rather than the noisy
-                                    // `className=""`.
-                                    if (t.isStringLiteral(szExpr) && szExpr.value === '') {
-                                        return t.jsxExpressionContainer(t.identifier('undefined'));
-                                    }
-                                    return t.isStringLiteral(szExpr)
-                                        ? szExpr
-                                        : t.jsxExpressionContainer(szExpr);
-                                }
-
-                                // Remove the old className attribute so we don't duplicate
-                                if (
-                                    existingClassNameNode &&
-                                    path.parentPath?.isJSXOpeningElement()
-                                ) {
-                                    path.parentPath.node.attributes = withoutJSXAttribute(
-                                        path.parentPath.node.attributes,
-                                        existingClassNameNode,
-                                    );
-                                    existingClassNameNode = null;
-                                }
-
-                                // Both are strings: static merge
-                                if (
-                                    t.isStringLiteral(existingClassExpr) &&
-                                    t.isStringLiteral(szExpr)
-                                ) {
-                                    const merged =
-                                        `${existingClassExpr.value} ${szExpr.value}`.trim();
-                                    return t.stringLiteral(merged);
-                                }
-
-                                // Runtime merge using _szMerge(existing, sz)
-                                usesRuntime = true;
-                                usesMerge = true;
-                                return t.jsxExpressionContainer(
-                                    t.callExpression(t.identifier('_szMerge'), [
-                                        existingClassExpr,
-                                        szExpr,
-                                    ]),
-                                );
-                            };
-
-                            const mergeAndInjectStyle = (
-                                newStyleProps: t.ObjectProperty[],
-                            ): void => {
-                                if (newStyleProps.length === 0) {
-                                    return;
-                                }
-                                if (!path.parentPath?.isJSXOpeningElement()) {
-                                    return;
-                                }
-
-                                if (existingStyleNode && existingStyleExpr) {
-                                    path.parentPath.node.attributes = withoutJSXAttribute(
-                                        path.parentPath.node.attributes,
-                                        existingStyleNode,
-                                    );
-                                    existingStyleNode = null; // Prevent re-filtering
-
-                                    if (t.isObjectExpression(existingStyleExpr)) {
-                                        existingStyleExpr.properties.push(...newStyleProps);
-                                        path.parentPath.node.attributes.push(
-                                            t.jsxAttribute(
-                                                t.jsxIdentifier('style'),
-                                                t.jsxExpressionContainer(existingStyleExpr),
-                                            ),
-                                        );
-                                    } else if (t.isStringLiteral(existingStyleExpr)) {
-                                        // existing style is a string. parse it.
-                                        const parsedOldProps = parseStyleStringToObjectExpr(
-                                            existingStyleExpr.value,
-                                        ).properties;
-                                        path.parentPath.node.attributes.push(
-                                            t.jsxAttribute(
-                                                t.jsxIdentifier('style'),
-                                                t.jsxExpressionContainer(
-                                                    t.objectExpression([
-                                                        ...parsedOldProps,
-                                                        ...newStyleProps,
-                                                    ]),
-                                                ),
-                                            ),
-                                        );
-                                    } else {
-                                        // It's a dynamic reference like style={myStyles}
-                                        const mergedStyle = t.objectExpression([
-                                            t.spreadElement(existingStyleExpr),
-                                            ...newStyleProps,
-                                        ]);
-                                        path.parentPath.node.attributes.push(
-                                            t.jsxAttribute(
-                                                t.jsxIdentifier('style'),
-                                                t.jsxExpressionContainer(mergedStyle),
-                                            ),
-                                        );
-                                    }
-                                } else {
-                                    path.parentPath.node.attributes.push(
-                                        t.jsxAttribute(
-                                            t.jsxIdentifier('style'),
-                                            t.jsxExpressionContainer(
-                                                t.objectExpression(newStyleProps),
-                                            ),
-                                        ),
-                                    );
-                                    // Update so future calls inside the same element use it
-                                    existingStyleExpr = t.objectExpression(newStyleProps);
-                                    existingStyleNode = path.parentPath.node.attributes[
-                                        path.parentPath.node.attributes.length - 1
-                                    ] as t.JSXAttribute;
-                                }
-                            };
 
                             // Case 1: sz="string"
                             if (t.isStringLiteral(value)) {
@@ -674,7 +650,12 @@ export function transformSourceCode(
                                         collectedClasses.add(c);
                                     }
                                 }
-                                path.node.value = createMergedClassNameValue(value);
+                                path.node.value = mergeClassNameValue(
+                                    path,
+                                    value,
+                                    existingAttributes,
+                                    classMergeUsage,
+                                );
                                 transformed = true;
                                 return;
                             }
@@ -705,8 +686,11 @@ export function transformSourceCode(
                                             }
                                         }
                                         path.node.name.name = 'className';
-                                        path.node.value = createMergedClassNameValue(
+                                        path.node.value = mergeClassNameValue(
+                                            path,
                                             t.stringLiteral(className),
+                                            existingAttributes,
+                                            classMergeUsage,
                                         );
 
                                         transformed = true;
@@ -721,7 +705,12 @@ export function transformSourceCode(
                                     );
                                     if (hoisted !== null) {
                                         path.node.name.name = 'className';
-                                        path.node.value = createMergedClassNameValue(hoisted);
+                                        path.node.value = mergeClassNameValue(
+                                            path,
+                                            hoisted,
+                                            existingAttributes,
+                                            classMergeUsage,
+                                        );
                                         collectFromExpr(hoisted, collectedClasses);
                                         transformed = true;
                                         return;
@@ -737,7 +726,12 @@ export function transformSourceCode(
                                     );
                                     if (hoistedNested !== null) {
                                         path.node.name.name = 'className';
-                                        path.node.value = createMergedClassNameValue(hoistedNested);
+                                        path.node.value = mergeClassNameValue(
+                                            path,
+                                            hoistedNested,
+                                            existingAttributes,
+                                            classMergeUsage,
+                                        );
                                         collectFromExpr(hoistedNested, collectedClasses);
                                         transformed = true;
                                         return;
@@ -815,10 +809,15 @@ export function transformSourceCode(
 
                                         // Set className
                                         path.node.name.name = 'className';
-                                        path.node.value = createMergedClassNameValue(classExpr);
+                                        path.node.value = mergeClassNameValue(
+                                            path,
+                                            classExpr,
+                                            existingAttributes,
+                                            classMergeUsage,
+                                        );
 
                                         // Inject style attribute (only when CSS variables are needed)
-                                        mergeAndInjectStyle(styleProps);
+                                        mergeStyleProperties(path, styleProps, existingAttributes);
 
                                         // Track runtime style-var helper usage
                                         if (partial.usesColorVar) {
@@ -854,16 +853,24 @@ export function transformSourceCode(
                                             if (resolved !== null) {
                                                 path.node.name.name = 'className';
                                                 if (t.isStringLiteral(resolved)) {
-                                                    path.node.value =
-                                                        createMergedClassNameValue(resolved);
+                                                    path.node.value = mergeClassNameValue(
+                                                        path,
+                                                        resolved,
+                                                        existingAttributes,
+                                                        classMergeUsage,
+                                                    );
                                                     for (const c of resolved.value.split(/\s+/)) {
                                                         if (c) {
                                                             collectedClasses.add(c);
                                                         }
                                                     }
                                                 } else {
-                                                    path.node.value =
-                                                        createMergedClassNameValue(resolved);
+                                                    path.node.value = mergeClassNameValue(
+                                                        path,
+                                                        resolved,
+                                                        existingAttributes,
+                                                        classMergeUsage,
+                                                    );
                                                     collectFromExpr(resolved, collectedClasses);
                                                 }
                                                 transformed = true;
@@ -883,14 +890,24 @@ export function transformSourceCode(
                                     if (resolved !== null) {
                                         path.node.name.name = 'className';
                                         if (t.isStringLiteral(resolved)) {
-                                            path.node.value = createMergedClassNameValue(resolved);
+                                            path.node.value = mergeClassNameValue(
+                                                path,
+                                                resolved,
+                                                existingAttributes,
+                                                classMergeUsage,
+                                            );
                                             for (const c of resolved.value.split(/\s+/)) {
                                                 if (c) {
                                                     collectedClasses.add(c);
                                                 }
                                             }
                                         } else {
-                                            path.node.value = createMergedClassNameValue(resolved);
+                                            path.node.value = mergeClassNameValue(
+                                                path,
+                                                resolved,
+                                                existingAttributes,
+                                                classMergeUsage,
+                                            );
                                             collectFromExpr(resolved, collectedClasses);
                                         }
                                         transformed = true;
@@ -1013,8 +1030,11 @@ export function transformSourceCode(
                                                 }
                                             }
                                             path.node.name.name = 'className';
-                                            path.node.value = createMergedClassNameValue(
+                                            path.node.value = mergeClassNameValue(
+                                                path,
                                                 t.stringLiteral(compiled),
+                                                existingAttributes,
+                                                classMergeUsage,
                                             );
                                             transformed = true;
                                             return;
@@ -1081,17 +1101,18 @@ export function transformSourceCode(
                                                 anySzPart = true;
                                             }
                                         }
-                                        if (existingClassExpr) {
-                                            args.unshift(existingClassExpr);
+                                        if (existingAttributes.classExpression) {
+                                            args.unshift(existingAttributes.classExpression);
                                             if (
-                                                existingClassNameNode &&
+                                                existingAttributes.classNameNode &&
                                                 path.parentPath?.isJSXOpeningElement()
                                             ) {
                                                 path.parentPath.node.attributes =
-                                                    path.parentPath.node.attributes.filter(
-                                                        a => a !== existingClassNameNode,
+                                                    withoutJSXAttribute(
+                                                        path.parentPath.node.attributes,
+                                                        existingAttributes.classNameNode,
                                                     );
-                                                existingClassNameNode = null;
+                                                existingAttributes.classNameNode = null;
                                             }
                                         }
                                         path.node.name.name = 'className';
@@ -1171,8 +1192,13 @@ export function transformSourceCode(
                                     path,
                                     collectedClasses,
                                 );
-                                path.node.value = createMergedClassNameValue(szCall);
-                                usesRuntime = true;
+                                path.node.value = mergeClassNameValue(
+                                    path,
+                                    szCall,
+                                    existingAttributes,
+                                    classMergeUsage,
+                                );
+                                classMergeUsage.runtime = true;
                                 transformed = true;
                             }
                         },
@@ -1224,8 +1250,8 @@ export function transformSourceCode(
         return {
             code: result?.code || source,
             transformed: transformed,
-            usesRuntime: usesRuntime,
-            usesMerge: usesMerge,
+            usesRuntime: classMergeUsage.runtime,
+            usesMerge: classMergeUsage.merge,
             usesSzcn: usesSzcn,
             usesSzPart: usesSzPart,
             usesColorVar: usesColorVar,
