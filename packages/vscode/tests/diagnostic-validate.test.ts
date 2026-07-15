@@ -138,6 +138,14 @@ describe('validateDocument — unknown keys', () => {
         ]);
     });
 
+    it('locates an unknown bare key containing regex punctuation', () => {
+        const text = 'const A = () => <div sz={{ foo$bar: 4 }} />;';
+        const diags = diagnosticsFor(text);
+        expect(diags).toHaveLength(1);
+        expect(diags[0].message).toContain("Unknown sz prop 'foo$bar'");
+        expect(diags[0].range.start.character).toBe(text.indexOf('foo$bar'));
+    });
+
     it('skips a key whose spelling cannot be located in the source', () => {
         // '@foo' parses as a valid string key but `\b@foo` never matches
         // (quote→@ is not a word boundary), so no range can be attributed.

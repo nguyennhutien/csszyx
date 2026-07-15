@@ -21,6 +21,23 @@ import { findSzExpressions } from './parser.js';
 import { parseObjectLiteralSafe } from './safe-eval.js';
 
 const DIAGNOSTIC_SOURCE = 'csszyx';
+const BACKSLASH = String.fromCodePoint(92);
+const REGEX_SPECIAL_CHARACTERS = new Set([
+    '.',
+    '*',
+    '+',
+    '?',
+    '^',
+    '$',
+    '{',
+    '}',
+    '(',
+    ')',
+    '|',
+    '[',
+    ']',
+    BACKSLASH,
+]);
 
 /** Set of all valid top-level sz prop keys (built once). */
 const VALID_KEYS = new Set<string>([
@@ -127,7 +144,11 @@ export function validateDocument(
  * @returns Escaped string safe for use as a regex literal
  */
 function escapeRegex(s: string): string {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let escaped = '';
+    for (const char of s) {
+        escaped += REGEX_SPECIAL_CHARACTERS.has(char) ? `${BACKSLASH}${char}` : char;
+    }
+    return escaped;
 }
 
 /**
