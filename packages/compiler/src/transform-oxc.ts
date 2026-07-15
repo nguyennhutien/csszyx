@@ -284,12 +284,7 @@ export function transformOxc(
             }
             const stringValue = stringLiteralValue(value);
             if (stringValue !== null) {
-                for (const c of stringValue.split(/\s+/)) {
-                    if (c) {
-                        szDerived.push(c);
-                        classes.add(c);
-                    }
-                }
+                collectOxcClassTokens(stringValue, classes, szDerived);
                 continue;
             }
             if (value.type !== 'JSXExpressionContainer') {
@@ -314,12 +309,7 @@ export function transformOxc(
                             cssVariableMap,
                         ),
                     );
-                    for (const c of result.className.split(/\s+/)) {
-                        if (c) {
-                            szDerived.push(c);
-                            classes.add(c);
-                        }
-                    }
+                    collectOxcClassTokens(result.className, classes, szDerived);
                     continue;
                 }
                 staticConditional = conditionalBindings.get(identifierName);
@@ -432,12 +422,7 @@ export function transformOxc(
             const result = compileSzObject(
                 applyGlobalVarAliasesToSzObject(szObj, globalVarAliases, cssVariableMap),
             );
-            for (const c of result.className.split(/\s+/)) {
-                if (c) {
-                    szDerived.push(c);
-                    classes.add(c);
-                }
-            }
+            collectOxcClassTokens(result.className, classes, szDerived);
         }
         // Done lowering this element's sz attributes — drop the location so an
         // unrelated later transform (or the runtime path) doesn't inherit it.
@@ -497,6 +482,21 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/**
+ * Record non-empty class tokens in discovery order and optional element output.
+ *
+ * @param className Whitespace-delimited class string.
+ * @param classes Transform-wide discovery set.
+ * @param derived Optional element-local ordered class list.
+ */
+function collectOxcClassTokens(className: string, classes: Set<string>, derived?: string[]): void {
+    for (const token of className.split(/\s+/)) {
+        if (!token) continue;
+        derived?.push(token);
+        classes.add(token);
+    }
 }
 
 /** State needed to recover an object that the fully-static converter rejected. */
@@ -617,9 +617,7 @@ function transformOxcUnsupportedObject(
         context.openingNameEnd,
         spreadStyleRewrite,
     );
-    for (const className of partial.className.split(/\s+/)) {
-        if (className) context.classes.add(className);
-    }
+    collectOxcClassTokens(partial.className, context.classes);
     return {
         ...completedUnsupportedObject(expressionClassName, expressionClassName),
         usesColorVar: partial.usesColorVar,
