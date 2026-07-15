@@ -4523,9 +4523,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * Process a complete Vite bundle after all source modules were observed.
      *
      * @param bundle Rollup output bundle.
-     * @param emitAsset Asset emitter supplied by the Vite hook context.
+     * @param emitAsset Asset emitter supplied by the Rollup-compatible hook context.
      */
-    function processViteBundle(
+    function processRollupBundle(
         bundle: ViteOutputBundleLike,
         emitAsset: (fileName: string, source: string) => void,
     ): void {
@@ -4573,17 +4573,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             registerWebpackAssetProcessor(compiler, processWebpackAssets);
         },
 
-        vite: {
-            /**
-             * Vite hook: mangles CSS selectors and JS class strings in the final bundle.
-             * @param _options - the output options (unused)
-             * @param bundle - the output bundle containing chunks and assets to process
-             */
-            generateBundle(_options, bundle) {
-                processViteBundle(bundle, (fileName, source) => {
-                    this.emitFile({ type: 'asset', fileName, source });
-                });
+        /**
+         * Rollup-compatible hook used by both pure Rollup and Vite adapters.
+         *
+         * @param this Rollup-compatible output hook context.
+         * @param this.emitFile Output asset emitter.
+         * @param _options Output options (unused).
+         * @param bundle Complete Rollup output bundle.
+         */
+        generateBundle(
+            this: {
+                emitFile(file: { type: 'asset'; fileName: string; source: string }): string;
             },
+            _options: unknown,
+            bundle: ViteOutputBundleLike,
+        ) {
+            processRollupBundle(bundle, (fileName, source) => {
+                this.emitFile({ type: 'asset', fileName, source });
+            });
         },
     }));
 
@@ -4643,7 +4650,17 @@ export const rollupPlugin = (options: PartialCsszyxConfig = {}): InputPluginOpti
  * @returns an esbuild plugin combining both pre-transform and post-mangle phases
  */
 export const esbuildPlugin = (options: PartialCsszyxConfig = {}): EsbuildPlugin => {
-    const { prePlugin, postPlugin } = createCsszyxPlugins(options);
+    if (options.production?.mangle === true) {
+        console.warn(
+            '[csszyx] production.mangle is not supported by the esbuild adapter; ' +
+                'class mangling is disabled so emitted JS and CSS keep matching names.',
+        );
+    }
+    const safeOptions: PartialCsszyxConfig = {
+        ...options,
+        production: { ...options.production, mangle: false },
+    };
+    const { prePlugin, postPlugin } = createCsszyxPlugins(safeOptions);
     return {
         name: 'csszyx',
         /**
@@ -4656,8 +4673,8 @@ export const esbuildPlugin = (options: PartialCsszyxConfig = {}): EsbuildPlugin 
             const b = build as unknown as Parameters<
                 ReturnType<typeof prePlugin.esbuild>['setup']
             >[0];
-            prePlugin.esbuild(options).setup(b);
-            postPlugin.esbuild(options).setup(b);
+            prePlugin.esbuild(safeOptions).setup(b);
+            postPlugin.esbuild(safeOptions).setup(b);
         },
     };
 };

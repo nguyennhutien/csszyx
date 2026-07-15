@@ -202,10 +202,16 @@ that builds on **Vite or Webpack** gets mangling:
 | Next.js (`--webpack`) | Webpack | ✅ |
 | Next.js (`--turbopack`) | Turbopack | ❌ not yet (a Turbopack limitation) |
 
+Pure Rollup uses the same final-bundle mangling path as Vite. The esbuild adapter
+supports source transforms and safelist generation, but class mangling is disabled:
+esbuild does not expose a mutable final-output hook for normal write-to-disk builds.
+An explicit `production.mangle: true` therefore warns and keeps readable class names.
+
 So Astro and SolidJS mangle through the same Vite path as React — there is no
-separate setup, and the same warning / `mangleExclude` apply. The only place
-class mangling does not run is **Next.js Turbopack** (it lacks a deep-enough build
-hook); use `next --webpack` when you need mangling.
+separate setup, and the same warning / `mangleExclude` apply. The two lanes without
+class mangling are **Next.js Turbopack** (it lacks a deep-enough build hook) and the
+standalone esbuild adapter described above; use `next --webpack` when a Next.js app
+needs mangling.
 :::
 
 ```ts

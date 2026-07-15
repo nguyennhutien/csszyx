@@ -72,6 +72,11 @@ module.exports = {
 - **CSS mangling** -- Compresses owned class names (e.g., `text-center` -> `z`) while retaining names shared with source-visible `class`/`className` strings and template quasis
 - **File filters** -- Top-level `include` / `exclude` (glob or RegExp) skip large generated files before the AST budget guard fires; see [Config Overview](https://csszyx.com/config/overview#file-filters)
 
+Class mangling runs in Vite, Webpack, and Rollup final-output hooks. The esbuild
+adapter supports source transforms and safelist generation but disables class
+mangling because esbuild does not expose a mutable final-output hook when writing
+directly to disk; explicit `production.mangle: true` emits a warning.
+
 ## Parser selection
 
 The default parser is `rust`, which runs through the native engine in the

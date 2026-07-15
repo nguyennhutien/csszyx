@@ -711,6 +711,11 @@ continue to reference the same emitted rule. Use `mangleExclude` when the class 
 only visible through an imported constant, DOM selector/class API, ignored
 dependency, downstream macro, or another value unavailable to the source scan.
 
+Final-output class mangling is available in Vite, Webpack, and Rollup. The esbuild
+adapter keeps class names readable (and warns when `production.mangle: true` is
+explicit) because normal esbuild write-to-disk builds do not expose mutable final
+assets; source transforms and safelist generation still run.
+
 Set `production: { mangle: false }` to keep readable class names — the supported way to
 inspect the emitted CSS. To check what a single `sz` object
 compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
