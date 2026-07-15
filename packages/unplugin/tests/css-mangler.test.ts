@@ -354,47 +354,25 @@ describe('Multi-class Selectors', () => {
 // 8. No-mangle Scenarios (8 tests)
 // ============================================================================
 describe('No-mangle Scenarios', () => {
-    it('should NOT mangle CSS variables in values', () => {
-        const css = '.p-4 { padding: var(--p-4); }';
+    it.each([
+        ['CSS variables in values', '.p-4 { padding: var(--p-4); }', '.a { padding: var(--p-4); }'],
+        ['CSS variable definitions', ':root { --p-4: 1rem; }', ':root { --p-4: 1rem; }'],
+        ['ID selectors', '#p-4 { padding: 1rem; }', '#p-4 { padding: 1rem; }'],
+        [
+            'attribute selectors',
+            '[class="p-4"] { padding: 1rem; }',
+            '[class="p-4"] { padding: 1rem; }',
+        ],
+        ['element selectors', 'div { padding: 1rem; }', 'div { padding: 1rem; }'],
+        [
+            'the universal selector',
+            '* { box-sizing: border-box; }',
+            '* { box-sizing: border-box; }',
+        ],
+        ['data attributes', '[data-p-4] { padding: 1rem; }', '[data-p-4] { padding: 1rem; }'],
+    ])('should not mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        // Class should be mangled but variable should not
-        expect(result.css).toBe('.a { padding: var(--p-4); }');
-    });
-
-    it('should NOT mangle CSS variable definitions', () => {
-        const css = ':root { --p-4: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe(':root { --p-4: 1rem; }');
-    });
-
-    it('should NOT mangle ID selectors', () => {
-        const css = '#p-4 { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('#p-4 { padding: 1rem; }');
-    });
-
-    it('should NOT mangle attribute selectors', () => {
-        const css = '[class="p-4"] { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('[class="p-4"] { padding: 1rem; }');
-    });
-
-    it('should NOT mangle element selectors', () => {
-        const css = 'div { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('div { padding: 1rem; }');
-    });
-
-    it('should NOT mangle * universal selector', () => {
-        const css = '* { box-sizing: border-box; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('* { box-sizing: border-box; }');
-    });
-
-    it('should NOT mangle data attributes', () => {
-        const css = '[data-p-4] { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('[data-p-4] { padding: 1rem; }');
+        expect(result.css).toBe(expectedCSS);
     });
 
     it('should NOT mangle partial class matches', () => {
