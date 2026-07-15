@@ -2123,6 +2123,33 @@ function collectMinMaxVariants(
     }
 }
 
+/** Validates and diagnoses one string-valued color property. */
+function validateColorPropertyString(key: string, value: string): boolean {
+    if (hasSlashOpacity(value)) {
+        warnStringColorOpacity(key, value);
+        return false;
+    }
+    if (isValidColorString(value)) return true;
+    if (szDevWarningsEnabled()) {
+        console.warn(
+            `[csszyx] "${key}: '${value}'" is not a recognized color value and will be ignored. ` +
+                'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+                'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+        );
+    }
+    return false;
+}
+
+/** Warns that slash opacity requires color-object syntax. */
+function warnStringColorOpacity(key: string, value: string): void {
+    if (!szDevWarningsEnabled()) return;
+    const slash = value.indexOf('/');
+    console.warn(
+        `[csszyx] "${key}: '${value}'" — string slash opacity is not supported. ` +
+            `Use object form: { color: '${value.slice(0, slash)}', op: ${value.slice(slash + 1)} }.`,
+    );
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2250,32 +2277,7 @@ function transformImpl(
         // 18 COLOR-category properties uniformly via PROPERTY_CATEGORY_MAP.
         // ================================================================
         if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR) {
-            const strVal = (value as string).replace(/!$/, '');
-
-            if (hasSlashOpacity(strVal)) {
-                if (szDevWarningsEnabled()) {
-                    const slashIdx = strVal.indexOf('/');
-                    const colorPart = strVal.slice(0, slashIdx);
-                    const opPart = strVal.slice(slashIdx + 1);
-                    console.warn(
-                        `[csszyx] "${rawKey}: '${strVal}'" — string slash opacity is not supported. ` +
-                            `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
-                    );
-                }
-                continue;
-            }
-
-            if (!isValidColorString(strVal)) {
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] "${rawKey}: '${strVal}'" is not a recognized color value and will be ignored. ` +
-                            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-                    );
-                }
-                continue;
-            }
-            // Valid string → falls through to specific or generic handler
+            if (!validateColorPropertyString(rawKey, value.replace(/!$/, ''))) continue;
         }
 
         // ================================================================
