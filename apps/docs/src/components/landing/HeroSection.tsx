@@ -279,6 +279,27 @@ async function runHeroOpening(
   elements.opening.style.opacity = '0';
 }
 
+interface PositionedAnimationItem {
+  xPos: number;
+}
+
+function waitForItemPosition(
+  item: PositionedAnimationItem,
+  target: number,
+  activeItems: readonly PositionedAnimationItem[],
+): Promise<void> {
+  return new Promise(resolve => {
+    function checkPosition() {
+      if (!activeItems.includes(item) || item.xPos >= target) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(checkPosition);
+    }
+    checkPosition();
+  });
+}
+
 export default function HeroSection() {
   const containerRef = useRef<HTMLDivElement>(null);
   const isReadyRef = useRef(false);
@@ -379,17 +400,11 @@ export default function HeroSection() {
       if (!activeItems.includes(item)) return;
       await item.scrambler.setText(item.data.sz, 'phase-sz', false, highlightSz(item.data.sz));
       const twT = ANIM_CONFIG.twTriggerMin + Math.random() * ANIM_CONFIG.twTriggerRange;
-      await new Promise<void>(r => {
-        const c = () => { if (!activeItems.includes(item)) return r(); if (item.xPos >= twT) return r(); requestAnimationFrame(c); };
-        c();
-      });
+      await waitForItemPosition(item, twT, activeItems);
       if (!activeItems.includes(item)) return;
       await item.scrambler.setText(item.data.tw, 'phase-tw', true);
       const mgT = ANIM_CONFIG.mangleTriggerMin + Math.random() * ANIM_CONFIG.mangleTriggerRange;
-      await new Promise<void>(r => {
-        const c = () => { if (!activeItems.includes(item)) return r(); if (item.xPos >= mgT) return r(); requestAnimationFrame(c); };
-        c();
-      });
+      await waitForItemPosition(item, mgT, activeItems);
       if (!activeItems.includes(item)) return;
       const mangled = mangleCache.get(item.data.sz) || (() => { const m = getNextMangle(); mangleCache.set(item.data.sz, m); return m; })();
       await item.scrambler.setText(mangled, 'phase-mangle', true);
