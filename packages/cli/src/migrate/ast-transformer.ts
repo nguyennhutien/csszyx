@@ -114,7 +114,7 @@ function walkAst(node: VisitNode, visitors: AstVisitors, ancestors: VisitNode[] 
     } else if (t.isCallExpression(node)) {
         visitors.CallExpression?.(node, ancestors);
     } else if (t.isJSXAttribute(node)) {
-        visitors.JSXAttribute?.(node, ancestors[ancestors.length - 1] ?? null);
+        visitors.JSXAttribute?.(node, ancestors.at(-1) ?? null);
     }
 
     const keys = VISITOR_KEYS[node.type];
@@ -391,7 +391,7 @@ function unchangedTransformResult(source: string): TransformResult {
  * @returns A no-change result, or null when parsing is required.
  */
 function fastPathResult(source: string, keysOnly: boolean): TransformResult | null {
-    const hasSz = source.indexOf('sz=') !== -1;
+    const hasSz = source.includes('sz=');
     if (
         (keysOnly && !hasSz) ||
         (!hasSz && !source.includes('className') && !source.includes('cva'))
