@@ -325,12 +325,10 @@ function normalizeGlobalVarAliasesForCache(
     if (!aliases) {
         return [];
     }
-    const entries =
-        aliases instanceof Map
-            ? aliases.entries()
-            : Array.isArray(aliases)
-              ? aliases
-              : Object.entries(aliases);
+    let entries: Iterable<[string, string]>;
+    if (aliases instanceof Map) entries = aliases.entries();
+    else if (Array.isArray(aliases)) entries = aliases;
+    else entries = Object.entries(aliases);
     const normalized = new Map<string, string>();
     for (const [original, alias] of entries) {
         if (original.startsWith('--') && alias.startsWith('--')) {

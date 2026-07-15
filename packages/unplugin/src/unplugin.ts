@@ -1307,12 +1307,10 @@ export function normalizeGlobalVarAliasesForCache(
     if (!aliases) {
         return [];
     }
-    const entries =
-        aliases instanceof Map
-            ? aliases.entries()
-            : Array.isArray(aliases)
-              ? aliases
-              : Object.entries(aliases);
+    let entries: Iterable<[string, string]>;
+    if (aliases instanceof Map) entries = aliases.entries();
+    else if (Array.isArray(aliases)) entries = aliases;
+    else entries = Object.entries(aliases);
     const normalized = new Map<string, string>();
     for (const [original, alias] of entries) {
         if (original.startsWith('--') && alias.startsWith('--')) {
@@ -2276,11 +2274,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (!_loggedActiveParsers.has(parserMode)) {
             _loggedActiveParsers.add(parserMode);
-            const detail = parserDegraded
-                ? 'oxc (degraded from default `rust`: no native binary for this platform)'
-                : parserMode === 'rust'
-                  ? 'rust (native engine)'
-                  : parserMode;
+            let detail: string = parserMode;
+            if (parserDegraded) {
+                detail = 'oxc (degraded from default `rust`: no native binary for this platform)';
+            } else if (parserMode === 'rust') {
+                detail = 'rust (native engine)';
+            }
             // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
             // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
             console.warn(`[csszyx] active parser: ${detail}`);
