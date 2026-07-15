@@ -318,34 +318,35 @@ describe('Arbitrary Values', () => {
 // 7. Multi-class Selectors (5 tests)
 // ============================================================================
 describe('Multi-class Selectors', () => {
-    it('should mangle multiple classes on same element', () => {
-        const css = '.p-4.m-4 { padding: 1rem; margin: 1rem; }';
+    it.each([
+        [
+            'multiple classes on the same element',
+            '.p-4.m-4 { padding: 1rem; margin: 1rem; }',
+            '.a.b { padding: 1rem; margin: 1rem; }',
+        ],
+        [
+            'three classes on the same element',
+            '.flex.items-center.justify-between { display: flex; }',
+            '.s.v.w { display: flex; }',
+        ],
+        [
+            'comma-separated selectors',
+            '.p-4, .m-4 { box-sizing: border-box; }',
+            '.a, .b { box-sizing: border-box; }',
+        ],
+        [
+            'mixed known and unknown classes',
+            '.p-4.custom-class { padding: 1rem; }',
+            '.a.custom-class { padding: 1rem; }',
+        ],
+        [
+            'a complex multi-class selector with a pseudo-class',
+            '.flex.items-center:hover { opacity: 1; }',
+            '.s.v:hover { opacity: 1; }',
+        ],
+    ])('should mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a.b { padding: 1rem; margin: 1rem; }');
-    });
-
-    it('should mangle three classes on same element', () => {
-        const css = '.flex.items-center.justify-between { display: flex; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.s.v.w { display: flex; }');
-    });
-
-    it('should mangle comma-separated selectors', () => {
-        const css = '.p-4, .m-4 { box-sizing: border-box; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a, .b { box-sizing: border-box; }');
-    });
-
-    it('should handle mixed known and unknown classes', () => {
-        const css = '.p-4.custom-class { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a.custom-class { padding: 1rem; }');
-    });
-
-    it('should mangle complex multi-class with pseudo', () => {
-        const css = '.flex.items-center:hover { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.s.v:hover { opacity: 1; }');
+        expect(result.css).toBe(expectedCSS);
     });
 });
 
