@@ -2080,6 +2080,49 @@ function warnCustomOpacityToken(color: string, className: string, opacity: strin
     );
 }
 
+/** Dispatches nested variants that use custom Tailwind syntax. */
+function collectSpecialNestedVariant(
+    key: string,
+    value: SzObject,
+    prefix: string,
+): string[] | null {
+    switch (key) {
+        case 'group':
+            return handleGroupPeer('group', value, prefix);
+        case 'peer':
+            return handleGroupPeer('peer', value, prefix);
+        case 'has':
+            return handleHas(value, prefix);
+        case 'not':
+            return handleNot(value, prefix);
+        case 'data':
+            return handleData(value, prefix);
+        case 'aria':
+            return handleAria(value, prefix);
+        case 'supports':
+            return handleSupports(value, prefix);
+        default:
+            return null;
+    }
+}
+
+const KNOWN_BREAKPOINTS = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+
+/** Collects named and arbitrary min/max breakpoint variants. */
+function collectMinMaxVariants(
+    kind: 'min' | 'max',
+    breakpoints: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    for (const [breakpoint, value] of Object.entries(breakpoints)) {
+        if (isInactiveVariantValue(value)) continue;
+        const direct = isArbitraryVariant(breakpoint) || KNOWN_BREAKPOINTS.has(breakpoint);
+        const segment = direct ? `${kind}-${breakpoint}` : `${kind}-[${breakpoint}]`;
+        appendVariantClasses(value, `${prefix}${segment}:`, classes);
+    }
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2239,46 +2282,9 @@ function transformImpl(
         // HANDLE NESTED OBJECTS (VARIANTS)
         // ================================================================
         if (typeof value === 'object' && !Array.isArray(value)) {
-            // Handle special variants with custom syntax
-            if (rawKey === 'group') {
-                const groupClasses = handleGroupPeer('group', value as SzObject, prefix);
-                classes.push(...groupClasses);
-                continue;
-            }
-
-            if (rawKey === 'peer') {
-                const peerClasses = handleGroupPeer('peer', value as SzObject, prefix);
-                classes.push(...peerClasses);
-                continue;
-            }
-
-            if (rawKey === 'has') {
-                const hasClasses = handleHas(value as SzObject, prefix);
-                classes.push(...hasClasses);
-                continue;
-            }
-
-            if (rawKey === 'not') {
-                const notClasses = handleNot(value as SzObject, prefix);
-                classes.push(...notClasses);
-                continue;
-            }
-
-            if (rawKey === 'data') {
-                const dataClasses = handleData(value as SzObject, prefix);
-                classes.push(...dataClasses);
-                continue;
-            }
-
-            if (rawKey === 'aria') {
-                const ariaClasses = handleAria(value as SzObject, prefix);
-                classes.push(...ariaClasses);
-                continue;
-            }
-
-            if (rawKey === 'supports') {
-                const supportsClasses = handleSupports(value as SzObject, prefix);
-                classes.push(...supportsClasses);
+            const specialClasses = collectSpecialNestedVariant(rawKey, value as SzObject, prefix);
+            if (specialClasses !== null) {
+                classes.push(...specialClasses);
                 continue;
             }
 
@@ -2287,32 +2293,7 @@ function transformImpl(
             // { min: { md: { ... }}} → min-md:...
             // { min: { '[320px]': { ... }}} → min-[320px]:... (legacy bracket keys still work)
             if (rawKey === 'min' || rawKey === 'max') {
-                const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
-                for (const [breakpoint, breakpointValue] of Object.entries(value as SzObject)) {
-                    if (
-                        breakpointValue === null ||
-                        breakpointValue === undefined ||
-                        breakpointValue === false
-                    ) {
-                        continue;
-                    }
-                    let bpStr: string;
-                    if (isArbitraryVariant(breakpoint)) {
-                        // Already has brackets: [320px] → min-[320px]
-                        bpStr = `${rawKey}-${breakpoint}`;
-                    } else if (KNOWN_BP.has(breakpoint)) {
-                        // Named breakpoint: md → min-md
-                        bpStr = `${rawKey}-${breakpoint}`;
-                    } else {
-                        // Arbitrary value without brackets: 320px → min-[320px]
-                        bpStr = `${rawKey}-[${breakpoint}]`;
-                    }
-                    const nestedPrefix = `${prefix}${bpStr}:`;
-                    const result = transform(breakpointValue as SzObject, nestedPrefix);
-                    if (result.className) {
-                        classes.push(result.className);
-                    }
-                }
+                collectMinMaxVariants(rawKey, value as SzObject, prefix, classes);
                 continue;
             }
 
