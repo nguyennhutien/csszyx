@@ -902,49 +902,25 @@ function parseCommaSeparatedRow(
 
     const tests: TestCase[] = [];
 
-    if (szObjects.length >= twClasses.length) {
-        // Pair each class with its corresponding sz object
-        for (let i = 0; i < twClasses.length; i++) {
-            const parsed = parseSzProp(szObjects[i]);
-            if (parsed && twClasses[i]) {
-                const id = generateId(
-                    category,
-                    subcategory,
-                    `${concept}-${i + 1}`,
-                    undefined,
-                    idCounter,
-                );
-                tests.push({
-                    id,
-                    szInput: parsed,
-                    expectedClass: twClasses[i],
-                    tailwindVersion: '4',
-                    category,
-                    subcategory,
-                });
-            }
-        }
-    } else {
-        // More classes than objects: pair what we can
-        for (let i = 0; i < Math.min(twClasses.length, szObjects.length); i++) {
-            const parsed = parseSzProp(szObjects[i]);
-            if (parsed && twClasses[i]) {
-                const id = generateId(
-                    category,
-                    subcategory,
-                    `${concept}-${i + 1}`,
-                    undefined,
-                    idCounter,
-                );
-                tests.push({
-                    id,
-                    szInput: parsed,
-                    expectedClass: twClasses[i],
-                    tailwindVersion: '4',
-                    category,
-                    subcategory,
-                });
-            }
+    const pairCount = Math.min(twClasses.length, szObjects.length);
+    for (let i = 0; i < pairCount; i++) {
+        const parsed = parseSzProp(szObjects[i]);
+        if (parsed && twClasses[i]) {
+            const id = generateId(
+                category,
+                subcategory,
+                `${concept}-${i + 1}`,
+                undefined,
+                idCounter,
+            );
+            tests.push({
+                id,
+                szInput: parsed,
+                expectedClass: twClasses[i],
+                tailwindVersion: '4',
+                category,
+                subcategory,
+            });
         }
     }
 
