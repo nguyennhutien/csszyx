@@ -728,6 +728,27 @@ function normalizeForMatch(p: string): string {
 }
 
 /**
+ * Find the exclusive end of one JSX expression container.
+ *
+ * @param code Source code.
+ * @param bodyStart Offset after the opening brace.
+ * @returns Exclusive expression-body end offset.
+ */
+function findJsxExpressionEnd(code: string, bodyStart: number): number {
+    let depth = 1;
+    let index = bodyStart;
+    while (index < code.length && depth > 0) {
+        if (code[index] === '{') {
+            depth++;
+        } else if (code[index] === '}') {
+            depth--;
+        }
+        index++;
+    }
+    return index - 1;
+}
+
+/**
  * Resolve `compileSources` entries to absolute, realpath-resolved directories.
  * Each entry resolves like a Vite config path: relative to the project `root`
  * (`config.root`), absolute passes through. The result is realpath-resolved so a
@@ -3368,27 +3389,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 addSafelistClasses(match[1] ?? '');
             }
         }
-    }
-
-    /**
-     * Find the exclusive end of one JSX expression container.
-     *
-     * @param code Source code.
-     * @param bodyStart Offset after the opening brace.
-     * @returns Exclusive expression-body end offset.
-     */
-    function findJsxExpressionEnd(code: string, bodyStart: number): number {
-        let depth = 1;
-        let index = bodyStart;
-        while (index < code.length && depth > 0) {
-            if (code[index] === '{') {
-                depth++;
-            } else if (code[index] === '}') {
-                depth--;
-            }
-            index++;
-        }
-        return index - 1;
     }
 
     /**
