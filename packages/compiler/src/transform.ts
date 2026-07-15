@@ -130,6 +130,98 @@ function recoveryElementType(name: t.JSXOpeningElement['name']): string {
     return t.isJSXMemberExpression(name) ? '<member>' : '<unknown>';
 }
 
+/** One validated and compiled szs slot. */
+interface CompiledSzsSlot {
+    slot: t.ObjectProperty;
+    classes: string;
+    rewrite: boolean;
+}
+
+/**
+ * Compiles a static szs slot map and renames it to the read-side prop.
+ *
+ * @param path szs attribute path.
+ * @param filename Source filename for diagnostics.
+ * @param rootDir Project root for relative diagnostics.
+ * @param diagnostics Shared compiler diagnostics.
+ * @param pendingClasses Ordered szs class collection.
+ * @returns Whether the attribute was compiled.
+ */
+function transformSzsAttribute(
+    path: babel.NodePath<t.JSXAttribute>,
+    filename: string | undefined,
+    rootDir: string | undefined,
+    diagnostics: string[],
+    pendingClasses: string[],
+): boolean {
+    const opening = path.parentPath?.isJSXOpeningElement() ? path.parentPath.node : null;
+    if (opening && isHostElementName(opening.name)) {
+        diagnostics.push(
+            `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
+                'szs has no effect on a host element — it maps slot names of a ' +
+                'custom component. Attribute left unchanged.',
+        );
+        return false;
+    }
+    const container = path.node.value;
+    if (!t.isJSXExpressionContainer(container) || !t.isObjectExpression(container.expression)) {
+        diagnostics.push(szsUnsupportedMessage(filename));
+        return false;
+    }
+    const slotMap = container.expression;
+    if (!isValidSzsSlotMap(slotMap)) {
+        diagnostics.push(szsUnsupportedMessage(filename));
+        return false;
+    }
+    setSzWarnLocation(
+        formatSzWarnLocation(filename ?? 'file.tsx', path.node.loc?.start.line, rootDir),
+    );
+    const compiledSlots = compileSzsSlots(slotMap);
+    if (!compiledSlots) {
+        diagnostics.push(szsUnsupportedMessage(filename));
+        return false;
+    }
+    applyCompiledSzsSlots(compiledSlots, pendingClasses);
+    path.node.name = t.jsxIdentifier('szsc');
+    return true;
+}
+
+/**
+ * Compiles every validated szs slot without mutating the source map.
+ *
+ * @param slotMap Validated static slot map.
+ * @returns Compiled slots, or null when a value is unsupported.
+ */
+function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] | null {
+    const compiledSlots: CompiledSzsSlot[] = [];
+    for (const property of slotMap.properties) {
+        const slot = property as t.ObjectProperty;
+        if (t.isStringLiteral(slot.value)) {
+            compiledSlots.push({ slot, classes: slot.value.value, rewrite: false });
+            continue;
+        }
+        const compiled = tryStaticTransformNode(slot.value as t.Node);
+        if (!compiled || !t.isStringLiteral(compiled)) return null;
+        compiledSlots.push({ slot, classes: compiled.value, rewrite: true });
+    }
+    return compiledSlots;
+}
+
+/**
+ * Applies compiled szs values and records their class tokens in slot order.
+ *
+ * @param compiledSlots Fully compiled slots.
+ * @param pendingClasses Ordered szs class collection.
+ */
+function applyCompiledSzsSlots(compiledSlots: CompiledSzsSlot[], pendingClasses: string[]): void {
+    for (const { slot, classes, rewrite } of compiledSlots) {
+        if (rewrite) slot.value = t.stringLiteral(classes);
+        for (const className of classes.split(/\s+/)) {
+            if (className) pendingClasses.push(className);
+        }
+    }
+}
+
 /**
  * Options for {@link transformSourceCode}.
  */
@@ -366,95 +458,17 @@ export function transformSourceCode(
                             // (pure-literal object or class-string values, identifier
                             // keys) is enforced identically across all three engines.
                             if (attrName === 'szs') {
-                                const openingEl = path.parentPath?.isJSXOpeningElement()
-                                    ? path.parentPath.node
-                                    : null;
-                                if (openingEl && isHostElementName(openingEl.name)) {
-                                    diagnostics.push(
-                                        `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
-                                            'szs has no effect on a host element — it maps slot names of a ' +
-                                            'custom component. Attribute left unchanged.',
-                                    );
-                                    return;
-                                }
-                                const container = path.node.value;
                                 if (
-                                    !t.isJSXExpressionContainer(container) ||
-                                    !t.isObjectExpression(container.expression)
-                                ) {
-                                    diagnostics.push(szsUnsupportedMessage(filename));
-                                    return;
-                                }
-                                const slotMap = container.expression;
-                                if (!isValidSzsSlotMap(slotMap)) {
-                                    diagnostics.push(szsUnsupportedMessage(filename));
-                                    return;
-                                }
-                                setSzWarnLocation(
-                                    formatSzWarnLocation(
-                                        filename ?? 'file.tsx',
-                                        path.node.loc?.start.line,
+                                    transformSzsAttribute(
+                                        path,
+                                        filename,
                                         options?.rootDir,
-                                    ),
-                                );
-                                // Two phases so a failure never leaves the attribute
-                                // partially rewritten: compile everything first, then
-                                // apply the mutations and record the classes.
-                                const compiledSlots: Array<{
-                                    slot: t.ObjectProperty;
-                                    classes: string;
-                                    rewrite: boolean;
-                                }> = [];
-                                for (const prop of slotMap.properties) {
-                                    // Validated above: every prop is a non-computed
-                                    // identifier-keyed ObjectProperty.
-                                    const slot = prop as t.ObjectProperty;
-                                    if (t.isStringLiteral(slot.value)) {
-                                        // Raw class string (also pass-1 output, so the
-                                        // transform is idempotent): safelist, keep as-is.
-                                        compiledSlots.push({
-                                            slot,
-                                            classes: slot.value.value,
-                                            rewrite: false,
-                                        });
-                                        continue;
-                                    }
-                                    const compiled = tryStaticTransformNode(slot.value as t.Node);
-                                    if (!compiled || !t.isStringLiteral(compiled)) {
-                                        diagnostics.push(szsUnsupportedMessage(filename));
-                                        return;
-                                    }
-                                    compiledSlots.push({
-                                        slot,
-                                        classes: compiled.value,
-                                        rewrite: true,
-                                    });
+                                        diagnostics,
+                                        szsPendingClasses,
+                                    )
+                                ) {
+                                    transformed = true;
                                 }
-                                for (const {
-                                    slot,
-                                    classes: slotClasses,
-                                    rewrite,
-                                } of compiledSlots) {
-                                    if (rewrite) {
-                                        slot.value = t.stringLiteral(slotClasses);
-                                    }
-                                    for (const c of slotClasses.split(/\s+/)) {
-                                        if (c) {
-                                            szsPendingClasses.push(c);
-                                        }
-                                    }
-                                }
-                                // The compiled map lands on `szsc` — the read-side
-                                // prop typed as strings — so the authoring prop
-                                // `szs` (typed as sz objects) never reaches runtime
-                                // and the component forwards `szsc?.<slot>` into a
-                                // child className with no cast. The rename also
-                                // keeps the transform idempotent: `szsc` is never
-                                // matched by this branch. Renamed even when every
-                                // slot was already a class string — the component
-                                // reads only `szsc`.
-                                path.node.name = t.jsxIdentifier('szsc');
-                                transformed = true;
                                 return;
                             }
 
