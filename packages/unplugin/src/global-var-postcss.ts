@@ -5,6 +5,9 @@ import type { CssVarLocation } from './global-var-types.js';
 /** Default scope id when a node has no ancestor rule or at-rule. */
 export const DEFAULT_SCOPE_ID = '<root>';
 
+/** PostCSS ancestor shape while walking toward the root. */
+type PostCssAncestor = ChildNode | Root | undefined;
+
 /**
  * Checks whether a node is nested inside Tailwind's @theme at-rule.
  *
@@ -12,12 +15,12 @@ export const DEFAULT_SCOPE_ID = '<root>';
  * @returns true when an ancestor at-rule is @theme.
  */
 export function isInsideThemeAtRule(node: ChildNode): boolean {
-    let current = node.parent as ChildNode | Root | undefined;
+    let current = node.parent as PostCssAncestor;
     while (current && current.type !== 'root') {
         if (current.type === 'atrule' && (current as AtRule).name === 'theme') {
             return true;
         }
-        current = current.parent as ChildNode | Root | undefined;
+        current = current.parent as PostCssAncestor;
     }
     return false;
 }
@@ -60,7 +63,7 @@ export function nodeLocation(node: ChildNode, filePath: string): CssVarLocation 
  */
 export function buildScopeId(node: ChildNode): string {
     const parts: string[] = [];
-    let current = node.parent as ChildNode | Root | undefined;
+    let current = node.parent as PostCssAncestor;
     while (current && current.type !== 'root') {
         if (current.type === 'rule') {
             parts.push(`rule:${current.selector}`);
@@ -68,7 +71,7 @@ export function buildScopeId(node: ChildNode): string {
             const atRule = current as AtRule;
             parts.push(`@${atRule.name} ${atRule.params}`.trim());
         }
-        current = current.parent as ChildNode | Root | undefined;
+        current = current.parent as PostCssAncestor;
     }
     parts.reverse();
     return parts.join(' > ') || DEFAULT_SCOPE_ID;
