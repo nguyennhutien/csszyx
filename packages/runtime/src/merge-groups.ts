@@ -465,8 +465,8 @@ function isBackgroundImage(value: string): boolean {
         value.startsWith('radial-') ||
         value.startsWith('conic-') ||
         value === 'conic' ||
-        /^\[url\(/.test(value) ||
-        /^\[image:/.test(value)
+        value.startsWith('[url(') ||
+        value.startsWith('[image:')
     );
 }
 
