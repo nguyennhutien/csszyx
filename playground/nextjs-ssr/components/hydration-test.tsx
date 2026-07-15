@@ -50,11 +50,12 @@ export function HydrationTest() {
         }
     }, []);
 
+    const mismatchOrPendingSz = hydrationStatus === 'mismatch'
+        ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
+        : { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
     const statusSz = hydrationStatus === 'success'
         ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'green-500', op: 20 }, color: 'green-400' }
-        : hydrationStatus === 'mismatch'
-          ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
-          : { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
+        : mismatchOrPendingSz;
 
     return (
         <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>
