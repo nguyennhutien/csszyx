@@ -2486,7 +2486,7 @@ function formatFontStretch(value: string): string {
     if (FONT_STRETCH_KEYWORDS.has(value)) return `font-${value}`;
     if (value.startsWith('--')) return `font-stretch-(${value})`;
     if (!/^\d+(\.\d+)?%$/.test(value)) return `font-stretch-[${value}]`;
-    const numeric = parseFloat(value);
+    const numeric = Number.parseFloat(value);
     return value.includes('.') || !Number.isInteger(numeric)
         ? `font-stretch-[${value}]`
         : `font-stretch-${value}`;
