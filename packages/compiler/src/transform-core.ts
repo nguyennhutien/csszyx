@@ -2892,6 +2892,79 @@ function collectFallbackProperty(
     }
 }
 
+/** Routes object-valued properties to CSS, color, gradient, or variant handling. */
+function collectObjectProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (rawKey === 'css') {
+        if (isRecordValue(value)) appendArbitraryCss(value, prefix, classes);
+        return true;
+    }
+    if (!isRecordValue(value)) return false;
+    if (rawKey === 'bgImg') {
+        const gradient = buildBackgroundGradientClass(value as BackgroundGradientValue);
+        if (gradient) classes.push(`${prefix}${gradient}`);
+        return true;
+    }
+    if (rawKey in PROPERTY_MAP && 'color' in value) {
+        classes.push(
+            buildColorObjectClass(rawKey, value as { color: string; op?: number | string }, prefix),
+        );
+        return true;
+    }
+    collectNestedVariant(rawKey, value as SzObject, prefix, classes);
+    return true;
+}
+
+/** Returns whether a value is a non-array object. */
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Emits arbitrary CSS declarations from the `css` escape hatch. */
+function appendArbitraryCss(
+    declarations: Record<string, unknown>,
+    prefix: string,
+    classes: string[],
+): void {
+    for (const [property, value] of Object.entries(declarations)) {
+        if (value === null || value === undefined) continue;
+        classes.push(
+            `${prefix}[${camelToKebab(property)}:${normalizeArbitraryValue(String(value))}]`,
+        );
+    }
+}
+
+/** Collects one nested special, breakpoint, container, or standard variant. */
+function collectNestedVariant(
+    rawKey: string,
+    value: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    const specialClasses = collectSpecialNestedVariant(rawKey, value, prefix);
+    if (specialClasses !== null) {
+        classes.push(...specialClasses);
+        return;
+    }
+    if (rawKey === 'min' || rawKey === 'max') {
+        collectMinMaxVariants(rawKey, value, prefix, classes);
+        return;
+    }
+    if (rawKey.startsWith('@')) {
+        collectContainerQueryVariants(rawKey, value, prefix, classes);
+        return;
+    }
+    const variantName = isArbitraryVariant(rawKey)
+        ? normalizeArbitraryVariant(rawKey)
+        : getVariantPrefix(rawKey);
+    const nestedResult = transform(value, `${prefix}${variantName}:`);
+    if (nestedResult.className) classes.push(nestedResult.className);
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2938,47 +3011,12 @@ function transformImpl(
             }
         }
 
-        // ================================================================
-        // css: {} — Arbitrary CSS sub-prop
-        // Escape hatch for CSS properties with no sz/Tailwind equivalent.
-        // { css: { writingMode: 'vertical-lr' } } → [writing-mode:vertical-lr]
-        // { css: { '--my-color': 'red' } } → [--my-color:red]
-        // Works inside variants via recursion (hover: { css: { cursor: 'crosshair' } })
-        // ================================================================
-        if (rawKey === 'css') {
-            if (value && typeof value === 'object' && !Array.isArray(value)) {
-                for (const [cssProp, cssVal] of Object.entries(value as Record<string, unknown>)) {
-                    if (cssVal === null || cssVal === undefined) {
-                        continue;
-                    }
-                    const kebab = camelToKebab(cssProp);
-                    classes.push(`${prefix}[${kebab}:${normalizeArbitraryValue(String(cssVal))}]`);
-                }
-            }
-            continue;
-        }
+        if (collectObjectProperty(rawKey, value, prefix, classes)) continue;
 
         // { @container: "sidebar" } → @container/sidebar (string value with @ prefix)
         if (rawKey.startsWith('@') && typeof value === 'string') {
             const mappedKey = VARIANT_MAP[rawKey] || rawKey;
             classes.push(`${prefix}${mappedKey}/${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE bgImg OBJECT SYNTAX (before variant nesting)
-        // { bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } } → bg-linear-to-r/hsl
-        // ================================================================
-        if (
-            rawKey === 'bgImg' &&
-            value !== null &&
-            typeof value === 'object' &&
-            !Array.isArray(value)
-        ) {
-            const gradient = buildBackgroundGradientClass(
-                value as { gradient?: string; dir?: string | number; in?: string },
-            );
-            if (gradient) classes.push(`${prefix}${gradient}`);
             continue;
         }
 
@@ -2991,27 +3029,6 @@ function transformImpl(
         }
 
         // ================================================================
-        // HANDLE COLOR OBJECT SYNTAX (before variant nesting)
-        // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
-        // ================================================================
-        if (
-            value !== null &&
-            typeof value === 'object' &&
-            !Array.isArray(value) &&
-            rawKey in PROPERTY_MAP &&
-            'color' in (value as Record<string, unknown>)
-        ) {
-            classes.push(
-                buildColorObjectClass(
-                    rawKey,
-                    value as { color: string; op?: number | string },
-                    prefix,
-                ),
-            );
-            continue;
-        }
-
-        // ================================================================
         // VALIDATE STRING VALUES FOR COLOR PROPERTIES
         // Slash opacity → warn + suppress (use object form instead)
         // Unrecognized pattern → warn + suppress
@@ -3020,55 +3037,6 @@ function transformImpl(
         // ================================================================
         if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR) {
             if (!validateColorPropertyString(rawKey, value.replace(/!$/, ''))) continue;
-        }
-
-        // ================================================================
-        // HANDLE NESTED OBJECTS (VARIANTS)
-        // ================================================================
-        if (typeof value === 'object' && !Array.isArray(value)) {
-            const specialClasses = collectSpecialNestedVariant(rawKey, value as SzObject, prefix);
-            if (specialClasses !== null) {
-                classes.push(...specialClasses);
-                continue;
-            }
-
-            // Handle min/max breakpoints with arbitrary values
-            // { min: { '320px': { ... }}} → min-[320px]:...
-            // { min: { md: { ... }}} → min-md:...
-            // { min: { '[320px]': { ... }}} → min-[320px]:... (legacy bracket keys still work)
-            if (rawKey === 'min' || rawKey === 'max') {
-                collectMinMaxVariants(rawKey, value as SzObject, prefix, classes);
-                continue;
-            }
-
-            // Handle container queries with @ prefix
-            // { @md: { flex: true }} → @md:flex (direct property)
-            // { @md: { sidebar: { ... }}} → @md/sidebar:... (named container)
-            // { @min: { "[475px]": { ... }}} → @min-[475px]:...
-            if (rawKey.startsWith('@')) {
-                collectContainerQueryVariants(rawKey, value as SzObject, prefix, classes);
-                continue;
-            }
-
-            // Handle arbitrary variants (Fix #5)
-            if (isArbitraryVariant(rawKey)) {
-                const normalizedKey = normalizeArbitraryVariant(rawKey);
-                const nestedPrefix = `${prefix}${normalizedKey}:`;
-                const nestedResult = transform(value as SzObject, nestedPrefix);
-                if (nestedResult.className) {
-                    classes.push(nestedResult.className);
-                }
-                continue;
-            }
-
-            // Standard variant handling
-            const variantName = getVariantPrefix(rawKey);
-            const nestedPrefix = `${prefix}${variantName}:`;
-            const nestedResult = transform(value as SzObject, nestedPrefix);
-            if (nestedResult.className) {
-                classes.push(nestedResult.className);
-            }
-            continue;
         }
 
         // Check snap direct mappings
