@@ -227,64 +227,52 @@ describe('Media Queries and @rules', () => {
 // 5. Tailwind-specific Escapes (10 tests)
 // ============================================================================
 describe('Tailwind-specific Escapes', () => {
-    it('should mangle hover: variant class', () => {
-        const css = '.hover\\:bg-blue-500:hover { background: blue; }';
+    it.each([
+        [
+            'hover: variant class',
+            '.hover\\:bg-blue-500:hover { background: blue; }',
+            '.e:hover { background: blue; }',
+        ],
+        [
+            'focus: variant class',
+            '.focus\\:ring-2:focus { ring-width: 2px; }',
+            '.f:focus { ring-width: 2px; }',
+        ],
+        [
+            'dark: variant class',
+            '.dark .dark\\:bg-gray-900 { background: #111827; }',
+            '.dark .g { background: #111827; }',
+        ],
+        [
+            'md: responsive prefix',
+            '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }',
+            '@media (min-width: 768px) { .h { padding: 2rem; } }',
+        ],
+        [
+            '2xl: responsive prefix with numeric escape',
+            '@media (min-width: 1536px) { .\\32 xl\\:p-12 { padding: 3rem; } }',
+            '@media (min-width: 1536px) { .j { padding: 3rem; } }',
+        ],
+        ['class with forward slash (fractions)', '.w-1\\/2 { width: 50%; }', '.m { width: 50%; }'],
+        [
+            'class with dot (decimals)',
+            '.p-0\\.5 { padding: 0.125rem; }',
+            '.n { padding: 0.125rem; }',
+        ],
+        [
+            'important modifier class',
+            '.\\!p-4 { padding: 1rem !important; }',
+            '.r { padding: 1rem !important; }',
+        ],
+        ['negative value class', '.-mt-4 { margin-top: -1rem; }', '.ai { margin-top: -1rem; }'],
+        [
+            'complex nested variant',
+            '.dark .dark\\:hover\\:bg-gray-800:hover { background: #1f2937; }',
+            '.dark .ae:hover { background: #1f2937; }',
+        ],
+    ])('should mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.e:hover { background: blue; }');
-    });
-
-    it('should mangle focus: variant class', () => {
-        const css = '.focus\\:ring-2:focus { ring-width: 2px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.f:focus { ring-width: 2px; }');
-    });
-
-    it('should mangle dark: variant class', () => {
-        const css = '.dark .dark\\:bg-gray-900 { background: #111827; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .g { background: #111827; }');
-    });
-
-    it('should mangle md: responsive prefix', () => {
-        const css = '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 768px) { .h { padding: 2rem; } }');
-    });
-
-    it('should mangle 2xl: responsive prefix with numeric escape', () => {
-        const css = '@media (min-width: 1536px) { .\\32 xl\\:p-12 { padding: 3rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 1536px) { .j { padding: 3rem; } }');
-    });
-
-    it('should mangle class with forward slash (fractions)', () => {
-        const css = '.w-1\\/2 { width: 50%; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.m { width: 50%; }');
-    });
-
-    it('should mangle class with dot (decimals)', () => {
-        const css = '.p-0\\.5 { padding: 0.125rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.n { padding: 0.125rem; }');
-    });
-
-    it('should mangle important modifier class', () => {
-        const css = '.\\!p-4 { padding: 1rem !important; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.r { padding: 1rem !important; }');
-    });
-
-    it('should mangle negative value class', () => {
-        const css = '.-mt-4 { margin-top: -1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.ai { margin-top: -1rem; }');
-    });
-
-    it('should mangle complex nested variant', () => {
-        const css = '.dark .dark\\:hover\\:bg-gray-800:hover { background: #1f2937; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .ae:hover { background: #1f2937; }');
+        expect(result.css).toBe(expectedCSS);
     });
 });
 
