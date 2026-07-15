@@ -222,6 +222,57 @@ function applyCompiledSzsSlots(compiledSlots: CompiledSzsSlot[], pendingClasses:
     }
 }
 
+/** Existing class and style attributes resolved from one opening element. */
+interface ExistingJsxAttributes {
+    classNameNode: t.JSXAttribute | null;
+    classExpression: t.Expression | null;
+    styleNode: t.JSXAttribute | null;
+    styleExpression: t.Expression | null;
+}
+
+/**
+ * Finds existing class and style values that an sz transform must preserve.
+ *
+ * @param path sz attribute path.
+ * @returns Existing mergeable attribute nodes and expressions.
+ */
+function findExistingJsxAttributes(path: babel.NodePath<t.JSXAttribute>): ExistingJsxAttributes {
+    const existing: ExistingJsxAttributes = {
+        classNameNode: null,
+        classExpression: null,
+        styleNode: null,
+        styleExpression: null,
+    };
+    if (!path.parentPath?.isJSXOpeningElement()) return existing;
+    for (const attribute of path.parentPath.node.attributes) {
+        if (!t.isJSXAttribute(attribute) || !t.isJSXIdentifier(attribute.name)) continue;
+        if (attribute.name.name === 'className' || attribute.name.name === 'class') {
+            existing.classNameNode = attribute;
+            existing.classExpression = jsxAttributeExpression(attribute.value);
+        } else if (attribute.name.name === 'style') {
+            existing.styleNode = attribute;
+            existing.styleExpression = jsxAttributeExpression(attribute.value);
+        }
+    }
+    return existing;
+}
+
+/**
+ * Resolves a literal or expression-container attribute value to an expression.
+ *
+ * @param value JSX attribute value.
+ * @returns Mergeable expression, or null for unsupported value shapes.
+ */
+function jsxAttributeExpression(
+    value: t.JSXAttribute['value'],
+): t.Expression | t.StringLiteral | null {
+    if (t.isStringLiteral(value)) return value;
+    if (t.isJSXExpressionContainer(value) && t.isExpression(value.expression)) {
+        return value.expression;
+    }
+    return null;
+}
+
 /**
  * Options for {@link transformSourceCode}.
  */
@@ -489,40 +540,11 @@ export function transformSourceCode(
 
                             const value = path.node.value;
 
-                            // Piggyback: Check if there's an existing className or style to merge
-                            let existingClassNameNode: t.JSXAttribute | null = null;
-                            let existingClassExpr: t.Expression | null = null;
-                            let existingStyleNode: t.JSXAttribute | null = null;
-                            let existingStyleExpr: t.Expression | null = null;
-
-                            if (path.parentPath?.isJSXOpeningElement()) {
-                                for (const attr of path.parentPath.node.attributes) {
-                                    if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name)) {
-                                        const aName = attr.name;
-                                        if (aName.name === 'className' || aName.name === 'class') {
-                                            existingClassNameNode = attr;
-                                            const aVal = attr.value;
-                                            if (t.isStringLiteral(aVal)) {
-                                                existingClassExpr = aVal;
-                                            } else if (t.isJSXExpressionContainer(aVal)) {
-                                                if (t.isExpression(aVal.expression)) {
-                                                    existingClassExpr = aVal.expression;
-                                                }
-                                            }
-                                        } else if (aName.name === 'style') {
-                                            existingStyleNode = attr;
-                                            const aVal = attr.value;
-                                            if (t.isJSXExpressionContainer(aVal)) {
-                                                if (t.isExpression(aVal.expression)) {
-                                                    existingStyleExpr = aVal.expression;
-                                                }
-                                            } else if (t.isStringLiteral(aVal)) {
-                                                existingStyleExpr = aVal;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            const existingAttributes = findExistingJsxAttributes(path);
+                            let existingClassNameNode = existingAttributes.classNameNode;
+                            const existingClassExpr = existingAttributes.classExpression;
+                            let existingStyleNode = existingAttributes.styleNode;
+                            let existingStyleExpr = existingAttributes.styleExpression;
 
                             const createMergedClassNameValue = (
                                 szExpr: t.Expression,
