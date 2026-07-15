@@ -2540,6 +2540,57 @@ function isBackgroundGradientString(value: string): boolean {
     );
 }
 
+const SIMPLE_MASK_KEYS = new Set(['maskPos', 'maskSize', 'maskShape', 'maskComposite', 'maskMode']);
+
+/** Collects background position/size/repeat and simple mask utilities. */
+function collectBackgroundMaskProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'bgPos') utility = formatBackgroundPosition(value);
+    else if (key === 'bgSize') utility = formatBackgroundSize(value);
+    else if (key === 'bgRepeat' || key === 'backgroundRepeat') {
+        utility = formatBackgroundRepeat(value);
+    } else if (key === 'maskRepeat') utility = formatMaskRepeat(value);
+    else if (key === 'maskType') utility = `mask-type-${value}`;
+    else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats a background-position value. */
+function formatBackgroundPosition(value: string): string {
+    if (value.startsWith('--')) return `bg-(${value})`;
+    return value.includes('_') || needsArbitraryBrackets(value)
+        ? `bg-[${normalizeArbitraryValue(value)}]`
+        : `bg-${value}`;
+}
+
+/** Formats a background-size value. */
+function formatBackgroundSize(value: string): string {
+    if (value === 'auto' || value === 'cover' || value === 'contain') return `bg-${value}`;
+    if (value.startsWith('--')) return `bg-size-(${value})`;
+    return `bg-size-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Formats a background-repeat value. */
+function formatBackgroundRepeat(value: string): string {
+    if (value === 'repeat') return 'bg-repeat';
+    if (value === 'no-repeat') return 'bg-no-repeat';
+    const suffix = value.startsWith('repeat-') ? value.slice(7) : value;
+    return `bg-repeat-${suffix}`;
+}
+
+/** Formats a mask-repeat value. */
+function formatMaskRepeat(value: string): string {
+    if (value === 'repeat') return 'mask-repeat';
+    return value === 'no-repeat' ? 'mask-no-repeat' : `mask-${value}`;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2794,104 +2845,7 @@ function transformImpl(
                 classes.push(`${prefix}${formatBackgroundImage(value)}`);
                 continue;
             }
-
-            // bgPos: 'center' → bg-center, 'center_top_1rem' → bg-[center_top_1rem]
-            if (rawKey === 'bgPos') {
-                const sVal = String(value);
-                if (sVal.startsWith('--')) {
-                    classes.push(`${prefix}bg-(${sVal})`);
-                } else if (sVal.includes('_') || needsArbitraryBrackets(sVal)) {
-                    classes.push(`${prefix}bg-[${normalizeArbitraryValue(sVal)}]`);
-                } else {
-                    classes.push(`${prefix}bg-${sVal}`);
-                }
-                continue;
-            }
-
-            // bgSize: Tailwind v4 uses bg-size-[<value>] for arbitrary background-size.
-            // Keywords (auto/cover/contain) stay as bg-auto/bg-cover/bg-contain via generic map.
-            if (rawKey === 'bgSize') {
-                const sVal = String(value);
-                if (sVal === 'auto' || sVal === 'cover' || sVal === 'contain') {
-                    classes.push(`${prefix}bg-${sVal}`);
-                } else if (sVal.startsWith('--')) {
-                    classes.push(`${prefix}bg-size-(${sVal})`);
-                } else {
-                    classes.push(`${prefix}bg-size-[${normalizeArbitraryValue(sVal)}]`);
-                }
-                continue;
-            }
-
-            // maskPos: 'center' → mask-center
-            if (rawKey === 'maskPos') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskRepeat: 'repeat' → mask-repeat (not mask-repeat-repeat)
-            if (rawKey === 'maskRepeat') {
-                if (value === 'repeat') {
-                    className += 'mask-repeat';
-                } else if (value === 'no-repeat') {
-                    className += 'mask-no-repeat';
-                } else {
-                    className += `mask-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // bgRepeat: 'repeat' → bg-repeat
-            if (rawKey === 'bgRepeat' || rawKey === 'backgroundRepeat') {
-                if (value === 'repeat') {
-                    className += 'bg-repeat';
-                } else if (value === 'no-repeat') {
-                    className += 'bg-no-repeat';
-                } else {
-                    // Strip optional 'repeat-' prefix so both 'x' and 'repeat-x' produce bg-repeat-x.
-                    // Canonical sz form is the TW suffix ('x', 'y', 'space', 'round') for consistency.
-                    const suffix = value.startsWith('repeat-') ? value.slice(7) : value;
-                    className += `bg-repeat-${suffix}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // maskSize: 'cover' | 'contain' | 'auto' → mask-auto, mask-cover, mask-contain
-            if (rawKey === 'maskSize') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskShape: 'circle' | 'ellipse' → mask-circle, mask-ellipse
-            if (rawKey === 'maskShape') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskComposite: 'add' | 'subtract' | etc → mask-add, mask-subtract
-            if (rawKey === 'maskComposite') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskMode: 'alpha' | 'luminance' | 'match-source' → mask-alpha, mask-luminance
-            if (rawKey === 'maskMode') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskType: 'alpha' | 'luminance' → mask-type-alpha, mask-type-luminance
-            if (rawKey === 'maskType') {
-                className += `mask-type-${value}`;
-                classes.push(className);
-                continue;
-            }
+            if (collectBackgroundMaskProperty(rawKey, value, prefix, classes)) continue;
 
             // alignContent → align-content via Tailwind content-* classes.
             if (rawKey === 'alignContent') {
