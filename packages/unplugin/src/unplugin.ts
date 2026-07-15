@@ -34,7 +34,7 @@ import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
 import type { PluginOption } from 'vite';
-import type { Compiler as WebpackCompiler } from 'webpack';
+import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
@@ -175,6 +175,45 @@ interface CSSVariableMetrics {
     estimatedHoistedDeclarationsSaved: number;
     scopedClassUses: number;
     scopedStyleDeclarations: number;
+}
+
+/** Manifest emitted beside final Vite/Webpack assets. */
+interface CSSzyxBundleManifest {
+    version: string;
+    buildId: string;
+    classes: string[];
+    mangleMap?: Record<string, string>;
+    varMangleMap?: Record<string, CssVariableMangleValue>;
+    globalVarAliases?: Record<string, string>;
+    cssVarMetrics?: CSSVariableMetrics;
+}
+
+/** Final Webpack asset processor registered outside adapter callback nesting. */
+type WebpackAssetProcessor = (
+    assets: WebpackCompilation['assets'],
+    compilation: WebpackCompilation,
+    compiler: WebpackCompiler,
+) => void;
+
+/**
+ * Register the Webpack process-assets stage without nesting it inside plugin factories.
+ *
+ * @param compiler Webpack compiler instance.
+ * @param processAssets Final asset processor.
+ */
+function registerWebpackAssetProcessor(
+    compiler: WebpackCompiler,
+    processAssets: WebpackAssetProcessor,
+): void {
+    compiler.hooks.compilation.tap('csszyx:post', compilation => {
+        const stage =
+            compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
+            (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE?: number })
+                .PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
+        compilation.hooks.processAssets.tap({ name: 'csszyx:post', stage: stage || 400 }, assets =>
+            processAssets(assets, compilation, compiler),
+        );
+    });
 }
 
 /** Source file queued by the prescan walker. */
@@ -4216,6 +4255,204 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }),
     );
 
+    /**
+     * Build the manifest shared by Vite and Webpack output hooks.
+     *
+     * @param includeMangleMap Whether class mangling applies to this output.
+     * @returns Complete dynamic-runtime manifest for the current plugin state.
+     */
+    function createBundleManifest(includeMangleMap: boolean): CSSzyxBundleManifest {
+        const manifest: CSSzyxBundleManifest = {
+            version: '0.4.0',
+            buildId: state.checksum,
+            classes: Object.keys(state.mangleMap),
+        };
+        if (includeMangleMap && Object.keys(state.mangleMap).length > 0) {
+            manifest.mangleMap = state.mangleMap;
+        }
+        if (Object.keys(state.varMangleMap).length > 0) {
+            manifest.varMangleMap = state.varMangleMap;
+        }
+        const globalVarAliases = extractGlobalVarAliasesForManifest(
+            state.varMangleMap,
+            globalVarAliasPrefix,
+            state.globalVarValidationResult,
+        );
+        if (Object.keys(globalVarAliases).length > 0) {
+            manifest.globalVarAliases = globalVarAliases;
+        }
+        if (hasCSSVariableMetrics(state.cssVarMetrics)) {
+            manifest.cssVarMetrics = state.cssVarMetrics;
+        }
+        return manifest;
+    }
+
+    /**
+     * Identify PostCSS syntax failures that should leave third-party CSS untouched.
+     *
+     * @param error CSS mangler failure.
+     * @returns True for a PostCSS syntax error.
+     */
+    function isCssSyntaxError(error: unknown): boolean {
+        return (
+            !!error &&
+            typeof error === 'object' &&
+            'name' in error &&
+            (error as { name: string }).name === 'CssSyntaxError'
+        );
+    }
+
+    /**
+     * Rewrite one emitted CSS asset and collect hybrid-mangle ownership evidence.
+     *
+     * @param source Original CSS source.
+     * @param file Output filename.
+     * @param shouldMangle Whether class mangling applies to this output.
+     * @param mangledSources Classes rewritten by csszyx.
+     * @param externalClasses Classes left under external ownership.
+     * @returns Rewritten CSS, or the original source after an ignorable syntax error.
+     */
+    function rewriteOutputCss(
+        source: string,
+        file: string,
+        shouldMangle: boolean,
+        mangledSources: Set<string>,
+        externalClasses: Set<string>,
+    ): string {
+        let css = rewriteCssWithValidatedGlobalVarPlan(
+            source,
+            file,
+            state.globalVarValidationResult,
+        );
+        if (!shouldMangle) return css;
+        try {
+            const result = mangleCSSSync(css, state.mangleMap, {
+                debug: options.development?.debug,
+                from: file,
+            });
+            for (const className of result.mangledClasses) mangledSources.add(className);
+            for (const className of result.unmangledClasses) externalClasses.add(className);
+            if (result.transformedCount > 0) css = result.css;
+            return css;
+        } catch (error) {
+            if (isCssSyntaxError(error)) return css;
+            throw error;
+        }
+    }
+
+    /**
+     * Emit the hybrid ownership warning after every CSS asset is observed.
+     *
+     * @param shouldMangle Whether class mangling applies to this output.
+     * @param mangledSources Classes rewritten by csszyx.
+     * @param externalClasses Classes left under external ownership.
+     */
+    function reportOutputMangleHazards(
+        shouldMangle: boolean,
+        mangledSources: Set<string>,
+        externalClasses: Set<string>,
+    ): void {
+        if (!shouldMangle) return;
+        const message = mangleHybridHazardMessage(
+            collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
+        );
+        if (message) console.warn(message);
+    }
+
+    /**
+     * Rewrite one non-CSS Webpack asset in its final output phase.
+     *
+     * @param file Output filename.
+     * @param source Original asset source.
+     * @param shouldMangle Whether class mangling applies to this output.
+     * @param compilation Active Webpack compilation.
+     * @param compiler Active Webpack compiler.
+     */
+    function rewriteWebpackCodeAsset(
+        file: string,
+        source: string,
+        shouldMangle: boolean,
+        compilation: WebpackCompilation,
+        compiler: WebpackCompiler,
+    ): void {
+        if (shouldMangle && file.endsWith('.html')) {
+            const mangledHtml = mangleHtmlClasses(source);
+            if (mangledHtml !== source) {
+                compilation.updateAsset(file, new compiler.webpack.sources.RawSource(mangledHtml));
+            }
+            return;
+        }
+        if (!file.endsWith('.js')) return;
+
+        const rewritten = shouldMangle
+            ? replacePlaceholders(mangleCodeClasses(source))
+            : replacePlaceholders(source);
+        if (rewritten !== source) {
+            compilation.updateAsset(file, new compiler.webpack.sources.RawSource(rewritten));
+        }
+    }
+
+    /**
+     * Process all Webpack assets after the full class map is available.
+     *
+     * @param assets Webpack output assets.
+     * @param compilation Active Webpack compilation.
+     * @param compiler Active Webpack compiler.
+     */
+    function processWebpackAssets(
+        assets: WebpackCompilation['assets'],
+        compilation: WebpackCompilation,
+        compiler: WebpackCompiler,
+    ): void {
+        finalizeMangleMap();
+        state.globalVarValidationResult = validateGlobalVarBundleInputs(
+            collectWebpackGlobalVarCssAssets(assets),
+        );
+        const shouldMangle =
+            manglingEnabled &&
+            compiler.options.mode !== 'development' &&
+            Object.keys(state.mangleMap).length > 0;
+        const manifest = createBundleManifest(shouldMangle);
+        compilation.emitAsset(
+            'csszyx-manifest.json',
+            new compiler.webpack.sources.RawSource(JSON.stringify(manifest)),
+        );
+        if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
+            const globalVarMap = createGlobalVarMapAssetSource(
+                state.varMangleMap,
+                globalVarAliasPrefix,
+                state.globalVarValidationResult,
+            );
+            if (globalVarMap) {
+                compilation.emitAsset(
+                    '.csszyx/global-var-map.json',
+                    new compiler.webpack.sources.RawSource(globalVarMap),
+                );
+            }
+        }
+
+        const mangledSources = new Set<string>();
+        const externalClasses = new Set<string>();
+        for (const file in assets) {
+            const source = assets[file].source().toString();
+            if (file.endsWith('.css')) {
+                const css = rewriteOutputCss(
+                    source,
+                    file,
+                    shouldMangle,
+                    mangledSources,
+                    externalClasses,
+                );
+                if (css !== source) {
+                    compilation.updateAsset(file, new compiler.webpack.sources.RawSource(css));
+                }
+            } else {
+                rewriteWebpackCodeAsset(file, source, shouldMangle, compilation, compiler);
+            }
+        }
+        reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+    }
+
     const postPlugin = createUnplugin<PartialCsszyxConfig, boolean>(() => ({
         name: 'csszyx:post',
         enforce: 'post',
@@ -4228,207 +4465,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param compiler - the Webpack compiler instance
          */
         webpack(compiler: WebpackCompiler) {
-            compiler.hooks.compilation.tap('csszyx:post', compilation => {
-                // Determine stage - default to optimize size to encompass most transformations
-                const stage =
-                    compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
-                    (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE?: number })
-                        .PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
-
-                compilation.hooks.processAssets.tap(
-                    {
-                        name: 'csszyx:post',
-                        stage: stage || 400, // Fallback integer
-                    },
-                    assets => {
-                        finalizeMangleMap();
-                        state.globalVarValidationResult = validateGlobalVarBundleInputs(
-                            collectWebpackGlobalVarCssAssets(assets),
-                        );
-
-                        // Webpack dev mode wraps every module in eval("..."), which means
-                        // className:"..." strings become className:\"...\" inside the eval.
-                        // The mangleCodeClasses regex matches plain "..." delimiters only,
-                        // so it cannot mangle classes inside eval-wrapped bundles.
-                        // Disabling class mangling in dev mode keeps CSS and HTML consistent:
-                        // both use the original Tailwind class names (e.g. "text-white"),
-                        // so styles render correctly during development.
-                        const isWebpackDevMode = compiler.options.mode === 'development';
-
-                        // Emit CSS manifest for @csszyx/dynamic delta check.
-                        const manifestData: {
-                            version: string;
-                            buildId: string;
-                            classes: string[];
-                            mangleMap?: Record<string, string>;
-                            varMangleMap?: Record<string, CssVariableMangleValue>;
-                            globalVarAliases?: Record<string, string>;
-                            cssVarMetrics?: CSSVariableMetrics;
-                        } = {
-                            version: '0.4.0',
-                            buildId: state.checksum,
-                            classes: Object.keys(state.mangleMap),
-                        };
-                        if (
-                            manglingEnabled &&
-                            !isWebpackDevMode &&
-                            Object.keys(state.mangleMap).length > 0
-                        ) {
-                            manifestData.mangleMap = state.mangleMap;
-                        }
-                        if (Object.keys(state.varMangleMap).length > 0) {
-                            manifestData.varMangleMap = state.varMangleMap;
-                        }
-                        const globalVarAliases = extractGlobalVarAliasesForManifest(
-                            state.varMangleMap,
-                            globalVarAliasPrefix,
-                            state.globalVarValidationResult,
-                        );
-                        if (Object.keys(globalVarAliases).length > 0) {
-                            manifestData.globalVarAliases = globalVarAliases;
-                        }
-                        if (hasCSSVariableMetrics(state.cssVarMetrics)) {
-                            manifestData.cssVarMetrics = state.cssVarMetrics;
-                        }
-                        compilation.emitAsset(
-                            'csszyx-manifest.json',
-                            new compiler.webpack.sources.RawSource(JSON.stringify(manifestData)),
-                        );
-                        if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
-                            const globalVarMapAsset = createGlobalVarMapAssetSource(
-                                state.varMangleMap,
-                                globalVarAliasPrefix,
-                                state.globalVarValidationResult,
-                            );
-                            if (globalVarMapAsset) {
-                                compilation.emitAsset(
-                                    '.csszyx/global-var-map.json',
-                                    new compiler.webpack.sources.RawSource(globalVarMapAsset),
-                                );
-                            }
-                        }
-
-                        // Accumulated across every CSS asset for the hybrid-mangle
-                        // hazard report emitted once after the loop.
-                        const mangledSources = new Set<string>();
-                        const externalClasses = new Set<string>();
-
-                        for (const file in assets) {
-                            const asset = assets[file];
-                            const source = asset.source().toString();
-
-                            if (file.endsWith('.css')) {
-                                let css = rewriteCssWithValidatedGlobalVarPlan(
-                                    source,
-                                    file,
-                                    state.globalVarValidationResult,
-                                );
-                                if (
-                                    manglingEnabled &&
-                                    !isWebpackDevMode &&
-                                    Object.keys(state.mangleMap).length > 0
-                                ) {
-                                    try {
-                                        const result = mangleCSSSync(css, state.mangleMap, {
-                                            debug: options.development?.debug,
-                                            from: file,
-                                        });
-                                        for (const c of result.mangledClasses) {
-                                            mangledSources.add(c);
-                                        }
-                                        for (const c of result.unmangledClasses) {
-                                            externalClasses.add(c);
-                                        }
-                                        if (result.transformedCount > 0) {
-                                            css = result.css;
-                                        }
-                                    } catch (e: unknown) {
-                                        if (
-                                            e &&
-                                            typeof e === 'object' &&
-                                            'name' in e &&
-                                            (e as { name: string }).name === 'CssSyntaxError'
-                                        ) {
-                                            // Ignore CSS syntax errors
-                                        } else {
-                                            throw e;
-                                        }
-                                    }
-                                }
-                                if (css !== source) {
-                                    compilation.updateAsset(
-                                        file,
-                                        new compiler.webpack.sources.RawSource(css),
-                                    );
-                                }
-                                continue;
-                            }
-
-                            if (
-                                manglingEnabled &&
-                                !isWebpackDevMode &&
-                                Object.keys(state.mangleMap).length > 0
-                            ) {
-                                if (file.endsWith('.html')) {
-                                    // Mangle class attributes in HTML assets (SSR-generated pages)
-                                    const mangledHtml = mangleHtmlClasses(source);
-                                    if (mangledHtml !== source) {
-                                        compilation.updateAsset(
-                                            file,
-                                            new compiler.webpack.sources.RawSource(mangledHtml),
-                                        );
-                                        continue;
-                                    }
-                                } else if (file.endsWith('.js')) {
-                                    // Mangle class name strings in JS bundles
-                                    let mangled = mangleCodeClasses(source);
-                                    mangled = replacePlaceholders(mangled);
-                                    if (mangled !== source) {
-                                        compilation.updateAsset(
-                                            file,
-                                            new compiler.webpack.sources.RawSource(mangled),
-                                        );
-                                        continue;
-                                    }
-                                }
-                            }
-
-                            // Even when mangling is disabled, still replace placeholders
-                            // (checksum + mangle map) in JS files
-                            if (
-                                file.endsWith('.js') &&
-                                (source.includes(CHECKSUM_PLACEHOLDER) ||
-                                    source.includes(MANGLE_MAP_PLACEHOLDER))
-                            ) {
-                                const replaced = replacePlaceholders(source);
-                                if (replaced !== source) {
-                                    compilation.updateAsset(
-                                        file,
-                                        new compiler.webpack.sources.RawSource(replaced),
-                                    );
-                                }
-                            }
-                        }
-
-                        if (
-                            manglingEnabled &&
-                            !isWebpackDevMode &&
-                            Object.keys(state.mangleMap).length > 0
-                        ) {
-                            const hazardMessage = mangleHybridHazardMessage(
-                                collectMangleHybridHazards(
-                                    state.mangleMap,
-                                    mangledSources,
-                                    externalClasses,
-                                ),
-                            );
-                            if (hazardMessage) {
-                                console.warn(hazardMessage);
-                            }
-                        }
-                    },
-                );
-            });
+            registerWebpackAssetProcessor(compiler, processWebpackAssets);
         },
 
         vite: {
