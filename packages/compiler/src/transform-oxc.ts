@@ -391,157 +391,35 @@ export function transformOxc(
                 );
             } catch (err) {
                 if (err instanceof OxcNotImplementedError) {
-                    const conditionalSpreadClassExpr = buildConditionalSpreadClassExpression(
-                        expression as ObjectExpressionNode,
-                        effectiveFilename,
-                        objectBindings,
+                    const unsupportedResult = transformOxcUnsupportedObject({
+                        expression: expression as ObjectExpressionNode,
+                        filename: effectiveFilename,
+                        bindings: objectBindings,
                         source,
                         classes,
                         globalVarAliases,
                         cssVariableMap,
-                    );
-                    if (conditionalSpreadClassExpr) {
-                        if (classNameAttr || szAttrs.length > 1) {
-                            runtimeFallbackExpr = expression;
-                            runtimeFallbackAttr = szAttr;
-                            break;
-                        }
-                        edits.overwrite(
-                            szAttr.start,
-                            szAttr.end,
-                            `className={${conditionalSpreadClassExpr}}`,
-                        );
-                        transformed = true;
-                        return;
-                    }
-                    const nestedConditionalClassExpr = buildNestedConditionalClassExpression(
-                        expression as ObjectExpressionNode,
-                        effectiveFilename,
-                        objectBindings,
-                        source,
-                        classes,
-                        globalVarAliases,
-                        cssVariableMap,
-                    );
-                    if (nestedConditionalClassExpr) {
-                        if (classNameAttr || szAttrs.length > 1) {
-                            runtimeFallbackExpr = expression;
-                            runtimeFallbackAttr = szAttr;
-                            break;
-                        }
-                        edits.overwrite(
-                            szAttr.start,
-                            szAttr.end,
-                            `className={${nestedConditionalClassExpr}}`,
-                        );
-                        transformed = true;
-                        return;
-                    }
-                    const partial = buildPartialObjectTransform(
-                        expression as ObjectExpressionNode,
-                        effectiveFilename,
-                        objectBindings,
-                        source,
                         options,
-                        componentHoists?.usageNamesByElement.get(elementId),
-                        cssVariableMap,
+                        plannedUsageNames: componentHoists?.usageNamesByElement.get(elementId),
                         reservedCSSVariableNames,
-                        globalVarAliases,
-                    );
-                    // A conditional partial beside an existing className would
-                    // inline both branches into the merge, so that combination
-                    // stays on the runtime fallback below.
-                    if (
-                        partial &&
-                        szAttrs.length === 1 &&
-                        !(partial.hasConditional && classNameAttr)
-                    ) {
-                        const mergedStyleProps =
-                            hoistedStyleProps.length > 0
-                                ? [...hoistedStyleProps, ...partial.styleProps]
-                                : partial.styleProps;
-                        const spreadStyleRewrite = buildOxcSafeStyleSpreadRewrite(
-                            openingAttributes.spreads,
-                            styleAttr,
-                            mergedStyleProps,
-                            source,
-                        );
-                        warnOxcStyleSpreadCollision(
-                            mergedStyleProps,
-                            hasUnresolvedStyleSpread(
-                                openingAttributes.hasSpread,
-                                spreadStyleRewrite,
-                            ),
-                            effectiveFilename,
-                            diagnostics,
-                        );
-                        if (classNameAttr?.value?.type === 'JSXExpressionContainer') {
-                            const classExpression = (
-                                classNameAttr.value as unknown as { expression: OxcNode }
-                            ).expression;
-                            const classExpressionSource = source.slice(
-                                classExpression.start,
-                                classExpression.end,
-                            );
-                            edits.overwrite(
-                                classNameAttr.start,
-                                classNameAttr.end,
-                                `className={_szMerge(${classExpressionSource}, ${JSON.stringify(partial.className)})}`,
-                            );
-                            edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                            applyOxcGeneratedStyle(
-                                edits,
-                                source,
-                                styleAttr,
-                                lastAttr,
-                                mergedStyleProps,
-                                openingNode.name.end,
-                                spreadStyleRewrite,
-                            );
-                            appliedHoistedStyleProps = true;
-                            for (const c of partial.className.split(/\s+/)) {
-                                if (c) {
-                                    classes.add(c);
-                                }
-                            }
-                            usesRuntime = true;
-                            usesMerge = true;
-                            usesColorVar ||= partial.usesColorVar;
-                            usesSpacingVar ||= partial.usesSpacingVar;
-                            usesUnitVar ||= partial.usesUnitVar;
-                            transformed = true;
-                            return;
-                        }
-                        if (classNameAttr && stringLiteralValue(classNameAttr.value) !== null) {
-                            const existing = stringLiteralValue(classNameAttr.value);
-                            const merged = [existing, partial.className].filter(Boolean).join(' ');
-                            edits.overwrite(
-                                classNameAttr.start,
-                                classNameAttr.end,
-                                `className="${merged}"`,
-                            );
-                            edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                        } else {
-                            edits.overwrite(szAttr.start, szAttr.end, partial.classNameAttr);
-                        }
-                        applyOxcGeneratedStyle(
-                            edits,
-                            source,
-                            styleAttr,
-                            lastAttr,
-                            mergedStyleProps,
-                            openingNode.name.end,
-                            spreadStyleRewrite,
-                        );
-                        appliedHoistedStyleProps = true;
-                        for (const c of partial.className.split(/\s+/)) {
-                            if (c) {
-                                classes.add(c);
-                            }
-                        }
-                        usesColorVar ||= partial.usesColorVar;
-                        usesSpacingVar ||= partial.usesSpacingVar;
-                        usesUnitVar ||= partial.usesUnitVar;
+                        hoistedStyleProps,
+                        openingAttributes,
+                        styleAttr,
+                        lastAttr,
+                        classNameAttr,
+                        szAttrs,
+                        szAttr,
+                        openingNameEnd: openingNode.name.end,
+                        edits,
+                        diagnostics,
+                    });
+                    if (unsupportedResult?.kind === 'complete') {
+                        appliedHoistedStyleProps = unsupportedResult.appliedHoistedStyleProps;
+                        usesRuntime ||= unsupportedResult.usesRuntime;
+                        usesMerge ||= unsupportedResult.usesMerge;
+                        usesColorVar ||= unsupportedResult.usesColorVar;
+                        usesSpacingVar ||= unsupportedResult.usesSpacingVar;
+                        usesUnitVar ||= unsupportedResult.usesUnitVar;
                         transformed = true;
                         return;
                     }
@@ -618,6 +496,201 @@ export function transformOxc(
         diagnostics,
         recoveryTokens,
         cssVariableMap,
+    };
+}
+
+/** State needed to recover an object that the fully-static converter rejected. */
+interface OxcUnsupportedObjectContext {
+    expression: ObjectExpressionNode;
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    source: string;
+    classes: Set<string>;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
+    options: TransformSourceCodeOptions | undefined;
+    plannedUsageNames: ReadonlyMap<string, string> | undefined;
+    reservedCSSVariableNames: ReadonlySet<string> | undefined;
+    hoistedStyleProps: string[];
+    openingAttributes: OxcOpeningAttributes;
+    styleAttr: JsxAttributeNode | null;
+    lastAttr: JsxAttributeNode | null;
+    classNameAttr: JsxAttributeNode | null;
+    szAttrs: JsxAttributeNode[];
+    szAttr: JsxAttributeNode;
+    openingNameEnd: number;
+    edits: MagicString;
+    diagnostics: string[];
+}
+
+/** Flags accumulated by a completed partial-object rewrite. */
+interface OxcUnsupportedObjectComplete {
+    kind: 'complete';
+    appliedHoistedStyleProps: boolean;
+    usesRuntime: boolean;
+    usesMerge: boolean;
+    usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
+}
+
+/**
+ * Recover conditional and dynamic-value object forms outside static lowering.
+ *
+ * @param context Object expression and element rewrite state.
+ * @returns Completion flags, or null when runtime fallback is required.
+ */
+function transformOxcUnsupportedObject(
+    context: OxcUnsupportedObjectContext,
+): OxcUnsupportedObjectComplete | null {
+    const classExpression =
+        buildConditionalSpreadClassExpression(
+            context.expression,
+            context.filename,
+            context.bindings,
+            context.source,
+            context.classes,
+            context.globalVarAliases,
+            context.cssVariableMap,
+        ) ??
+        buildNestedConditionalClassExpression(
+            context.expression,
+            context.filename,
+            context.bindings,
+            context.source,
+            context.classes,
+            context.globalVarAliases,
+            context.cssVariableMap,
+        );
+    if (classExpression) {
+        if (context.classNameAttr || context.szAttrs.length > 1) return null;
+        context.edits.overwrite(
+            context.szAttr.start,
+            context.szAttr.end,
+            `className={${classExpression}}`,
+        );
+        return completedUnsupportedObject(false, false);
+    }
+
+    const partial = buildPartialObjectTransform(
+        context.expression,
+        context.filename,
+        context.bindings,
+        context.source,
+        context.options,
+        context.plannedUsageNames,
+        context.cssVariableMap,
+        context.reservedCSSVariableNames,
+        context.globalVarAliases,
+    );
+    if (
+        !partial ||
+        context.szAttrs.length !== 1 ||
+        (partial.hasConditional && context.classNameAttr)
+    ) {
+        return null;
+    }
+    const mergedStyleProps =
+        context.hoistedStyleProps.length > 0
+            ? [...context.hoistedStyleProps, ...partial.styleProps]
+            : partial.styleProps;
+    const spreadStyleRewrite = buildOxcSafeStyleSpreadRewrite(
+        context.openingAttributes.spreads,
+        context.styleAttr,
+        mergedStyleProps,
+        context.source,
+    );
+    warnOxcStyleSpreadCollision(
+        mergedStyleProps,
+        hasUnresolvedStyleSpread(context.openingAttributes.hasSpread, spreadStyleRewrite),
+        context.filename,
+        context.diagnostics,
+    );
+    const expressionClassName = context.classNameAttr?.value?.type === 'JSXExpressionContainer';
+    rewriteOxcPartialClassName(context, partial, expressionClassName);
+    applyOxcGeneratedStyle(
+        context.edits,
+        context.source,
+        context.styleAttr,
+        context.lastAttr,
+        mergedStyleProps,
+        context.openingNameEnd,
+        spreadStyleRewrite,
+    );
+    for (const className of partial.className.split(/\s+/)) {
+        if (className) context.classes.add(className);
+    }
+    return {
+        ...completedUnsupportedObject(expressionClassName, expressionClassName),
+        usesColorVar: partial.usesColorVar,
+        usesSpacingVar: partial.usesSpacingVar,
+        usesUnitVar: partial.usesUnitVar,
+    };
+}
+
+/**
+ * Rewrite className for one accepted partial-object transform.
+ *
+ * @param context Element rewrite state.
+ * @param partial Prepared partial-object output.
+ * @param expressionClassName Whether authored className requires `_szMerge`.
+ */
+function rewriteOxcPartialClassName(
+    context: OxcUnsupportedObjectContext,
+    partial: OxcPartialTransform,
+    expressionClassName: boolean,
+): void {
+    if (expressionClassName && context.classNameAttr?.value) {
+        const classExpression = (context.classNameAttr.value as unknown as { expression: OxcNode })
+            .expression;
+        const classSource = context.source.slice(classExpression.start, classExpression.end);
+        context.edits.overwrite(
+            context.classNameAttr.start,
+            context.classNameAttr.end,
+            `className={_szMerge(${classSource}, ${JSON.stringify(partial.className)})}`,
+        );
+        context.edits.remove(
+            whitespaceStart(context.source, context.szAttr.start),
+            context.szAttr.end,
+        );
+        return;
+    }
+    if (context.classNameAttr && stringLiteralValue(context.classNameAttr.value) !== null) {
+        const existing = stringLiteralValue(context.classNameAttr.value);
+        const merged = [existing, partial.className].filter(Boolean).join(' ');
+        context.edits.overwrite(
+            context.classNameAttr.start,
+            context.classNameAttr.end,
+            `className="${merged}"`,
+        );
+        context.edits.remove(
+            whitespaceStart(context.source, context.szAttr.start),
+            context.szAttr.end,
+        );
+        return;
+    }
+    context.edits.overwrite(context.szAttr.start, context.szAttr.end, partial.classNameAttr);
+}
+
+/**
+ * Build common completion flags for a recovered object rewrite.
+ *
+ * @param usesRuntime Whether the rewrite requires runtime helpers.
+ * @param usesMerge Whether the rewrite emits `_szMerge`.
+ * @returns Normalized completion flags.
+ */
+function completedUnsupportedObject(
+    usesRuntime: boolean,
+    usesMerge: boolean,
+): OxcUnsupportedObjectComplete {
+    return {
+        kind: 'complete',
+        appliedHoistedStyleProps: true,
+        usesRuntime,
+        usesMerge,
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
     };
 }
 
