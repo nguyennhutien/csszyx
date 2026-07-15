@@ -25,15 +25,17 @@ afterEach(() => {
 });
 
 /**
- * Builds a fixture with one sz file (csszyx-owned class) and one non-sz file
- * whose author `className` literals reach the regex fallback scan.
+ * Builds a fixture with one app sz file (csszyx-owned class) and one raw-only
+ * `compileSources` package whose author `className` literals must reach prescan.
  * @returns The fixture root directory.
  */
 function createFixture(): string {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-mangle-ownership-')));
     tempDirs.push(root);
     const src = join(root, 'src');
+    const vuiSrc = join(root, 'packages/vui/src');
     mkdirSync(src, { recursive: true });
+    mkdirSync(vuiSrc, { recursive: true });
     writeFileSync(
         join(root, 'index.html'),
         '<html><head></head><body><div id="root"></div><script type="module" src="/src/App.tsx"></script></body></html>',
@@ -44,7 +46,7 @@ function createFixture(): string {
         [
             "import { createRoot } from 'react-dom/client';",
             "import { mangleMap } from 'virtual:csszyx/mangle-map';",
-            "import { Author } from './Author';",
+            "import { Author } from '../packages/vui/src/Author';",
             'document.documentElement.dataset.fixtureMap = JSON.stringify(mangleMap);',
             'const App = () => <div sz={{ p: 4, m: 3 }}><Author /></div>;',
             "createRoot(document.getElementById('root')!).render(<App />);",
@@ -53,7 +55,7 @@ function createFixture(): string {
     // Mixed known/unknown clsx string reproduces the hybrid orphan: `p-4` is also
     // sz-owned, while `main-body` is raw-only. Both must keep authored spelling.
     writeFileSync(
-        join(src, 'Author.tsx'),
+        join(vuiSrc, 'Author.tsx'),
         [
             "const clsx = (...values: string[]) => values.join(' ');",
             "export const Author = () => <div className={clsx('z p-4 main-body')}>author</div>;",
@@ -87,13 +89,18 @@ async function runVite(root: string): Promise<void> {
                 { find: 'react', replacement: requireFromHere.resolve('react') },
             ],
         },
-        plugins: [...(vitePlugin({ build: { cache: false, parser: 'oxc' } }) as PluginOption[])],
+        plugins: [
+            ...(vitePlugin({
+                build: { cache: false, parser: 'oxc' },
+                compileSources: ['packages/vui/src'],
+            }) as PluginOption[]),
+        ],
         build: { emptyOutDir: true, minify: true, outDir: 'dist' },
     });
 }
 
 describe('mangle ownership', () => {
-    it('mangles csszyx-owned sz classes but never author className literals', async () => {
+    it('preserves shared raw classes from an opted-in workspace package', async () => {
         const root = createFixture();
         await runVite(root);
 
