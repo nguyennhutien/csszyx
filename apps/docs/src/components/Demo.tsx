@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { dynamic } from '@csszyx/dynamic';
 import { SzToken } from './PropTable.tsx';
+import { segmentDemoLabel } from '../utils/segment-demo-label.js';
 
 // Prescan anchor — all content-area classes in one const so Tailwind generates CSS for them.
 // Also covers the default bg; callers may override bg with any value they've added to the safelist.
@@ -19,18 +20,7 @@ interface DemoProps {
  * Traffic-light dots on left, label on right, dark content area below.
  */
 export function Demo({ children, label, hint, bg = 'zinc-900' }: DemoProps) {
-    type Segment = { type: 'sz' | 'text'; value: string };
-    const segments: Segment[] = [];
-    if (label) {
-        const pattern = /(\{[^}]+\})/g;
-        let last = 0, match: RegExpExecArray | null;
-        while ((match = pattern.exec(label)) !== null) {
-            if (match.index > last) segments.push({ type: 'text', value: label.slice(last, match.index) });
-            segments.push({ type: 'sz', value: match[0] });
-            last = match.index + match[0].length;
-        }
-        if (last < label.length) segments.push({ type: 'text', value: label.slice(last) });
-    }
+    const segments = label ? segmentDemoLabel(label) : [];
 
     return (
         <figure className="not-content" sz={{ mt: 6, rounded: 'xl', border: true, borderColor: 'zinc-800', overflow: 'hidden', shadow: 'xl' }}>
@@ -56,7 +46,6 @@ export function Demo({ children, label, hint, bg = 'zinc-900' }: DemoProps) {
             {/* Content area — dynamic() ensures SSR mangle map is applied for all classes.
                 Pass _DEMO_CONTENT directly for the default case so prescan can follow the
                 reference and discover min-h-40; spread only when bg is overridden. */}
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             <div className={`demo-preview ${bg === 'zinc-900' ? dynamic(_DEMO_CONTENT) : dynamic({ ..._DEMO_CONTENT, bg })}`}>
                 {children}
             </div>

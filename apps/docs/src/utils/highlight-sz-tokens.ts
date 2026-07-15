@@ -15,7 +15,7 @@ const TOKEN_RULES: TokenRule[] = [
         render: (match, prefix) => `<span class="${prefix}string">${match[0]}</span>`,
     },
     {
-        pattern: /^[a-zA-Z0-9_]+(?=\s*:)/,
+        pattern: /^\w+(?=\s*:)/,
         render: (match, prefix) => `<span class="${prefix}key">${match[0]}</span>`,
     },
     {
