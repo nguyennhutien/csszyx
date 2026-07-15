@@ -3030,6 +3030,49 @@ function collectUnresolvedDirectProperty(
     return true;
 }
 
+/** Collects one property after filtering inactive values and shortcut forms. */
+function collectTransformProperty(
+    rawKey: string,
+    value: SzValue,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): void {
+    if (value === false || value === null || value === undefined) return;
+    warnAlignmentValue(rawKey, value);
+    if (collectRemovedBooleanSugar(rawKey, value)) return;
+    if (collectObjectProperty(rawKey, value, prefix, classes)) return;
+    if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
+    if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
+
+    const key = PROPERTY_MAP[rawKey] || camelToKebab(rawKey);
+    if (collectBasicSpecialProperty(rawKey, key, value, prefix, classes)) return;
+    if (collectResolvedStringProperty(rawKey, value, prefix, classes)) return;
+    collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
+}
+
+/** Collects string utilities that require a resolved property context. */
+function collectResolvedStringProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string') return false;
+    if (collectFontModeProperty(rawKey, value, prefix, classes)) return true;
+    if (collectTextKeywordProperty(rawKey, value, prefix, classes)) return true;
+    if (collectTextFlowProperty(rawKey, value, prefix, classes)) return true;
+    if (collectDecorationProperty(rawKey, value, prefix, classes)) return true;
+    if (collectEffectStringProperty(rawKey, value, prefix, classes)) return true;
+    if (collectContentBorderProperty(rawKey, value, prefix, classes)) return true;
+    if (collectTransformStringProperty(rawKey, value, prefix, classes)) return true;
+    if (rawKey === 'bgImg') {
+        classes.push(`${prefix}${formatBackgroundImage(value)}`);
+        return true;
+    }
+    return collectBackgroundMaskProperty(rawKey, value, prefix, classes);
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -3049,60 +3092,7 @@ function transformImpl(
     const classes: string[] = [];
 
     for (const [rawKey, value] of Object.entries(szProp)) {
-        // Skip false/null/undefined values (a false toggle emits nothing).
-        if (value === false || value === null || value === undefined) {
-            continue;
-        }
-
-        // Dev: flag an alignment prop given a CSS-longhand value (dead class).
-        warnAlignmentValue(rawKey, value);
-
-        if (collectRemovedBooleanSugar(rawKey, value)) continue;
-
-        if (collectObjectProperty(rawKey, value, prefix, classes)) continue;
-        if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) continue;
-        if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) continue;
-
-        // ================================================================
-        // RESOLVE PROPERTY NAME
-        // ================================================================
-        let key = rawKey;
-        if (PROPERTY_MAP[key]) {
-            key = PROPERTY_MAP[key];
-        } else {
-            // Fallback: Convert camelCase to kebab-case
-            key = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-        }
-
-        // ================================================================
-        // HANDLE SPECIAL PROPERTIES
-        // ================================================================
-        if (collectBasicSpecialProperty(rawKey, key, value, prefix, classes)) continue;
-
-        // ================================================================
-        // HANDLE DIRECT OUTPUT PROPERTIES (shorthands)
-        // ================================================================
-        if (typeof value === 'string') {
-            if (collectFontModeProperty(rawKey, value, prefix, classes)) continue;
-            if (collectTextKeywordProperty(rawKey, value, prefix, classes)) continue;
-            if (collectTextFlowProperty(rawKey, value, prefix, classes)) continue;
-            if (collectDecorationProperty(rawKey, value, prefix, classes)) continue;
-            if (collectEffectStringProperty(rawKey, value, prefix, classes)) continue;
-            if (collectContentBorderProperty(rawKey, value, prefix, classes)) continue;
-            if (collectTransformStringProperty(rawKey, value, prefix, classes)) continue;
-
-            // bgImg handler
-            if (rawKey === 'bgImg') {
-                classes.push(`${prefix}${formatBackgroundImage(value)}`);
-                continue;
-            }
-            if (collectBackgroundMaskProperty(rawKey, value, prefix, classes)) continue;
-        }
-
-        // ================================================================
-        // GENERIC / FALLBACK HANDLERS
-        // ================================================================
-        collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
+        collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
 
     return finalizeTransformResult(classes, mangleMap);
