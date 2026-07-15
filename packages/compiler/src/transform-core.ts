@@ -1247,6 +1247,48 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'aspect',
 ]);
 
+const ARBITRARY_LENGTH_UNITS = new Set([
+    'px',
+    'rem',
+    'em',
+    '%',
+    'vh',
+    'vw',
+    'ch',
+    'dvh',
+    'dvw',
+    'svh',
+    'svw',
+    'lvh',
+    'lvw',
+    'cqw',
+    'cqh',
+    'deg',
+    'rad',
+    'turn',
+    'grad',
+    'ms',
+    's',
+    'fr',
+]);
+const LEADING_DECIMAL_UNITS = new Set(['px', 'rem', 'em', '%', 'vh', 'vw', 'ch']);
+
+/**
+ * Returns whether a value is a numeric arbitrary value with a supported unit.
+ *
+ * @param value Candidate property value.
+ * @returns Whether the value needs Tailwind arbitrary-value brackets.
+ */
+function isArbitraryLength(value: string): boolean {
+    const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/.exec(value);
+    if (!match) return false;
+    const leadingDecimal = match[1].replace(/^-/, '').startsWith('.');
+    const unit = match[2];
+    if (!unit) return leadingDecimal;
+    if (leadingDecimal) return LEADING_DECIMAL_UNITS.has(unit);
+    return ARBITRARY_LENGTH_UNITS.has(unit);
+}
+
 /**
  * Checks if a value needs arbitrary brackets
  * @param value - the CSS value to check
@@ -1256,14 +1298,7 @@ function needsArbitraryBrackets(value: string): boolean {
     // Strip user-provided outer brackets before detection so '[100px]' is treated as '100px'
     const v = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
     return (
-        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(
-            v,
-        ) || // Positive units
-        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(
-            v,
-        ) || // Negative units like -1px, -2rem
-        /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Values starting with . like .25em
-        /^-\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Negative values starting with -. like -.25em
+        isArbitraryLength(v) ||
         v.startsWith('#') || // Hex colors
         v.startsWith('rgb') || // RGB colors
         v.startsWith('hsl') || // HSL colors

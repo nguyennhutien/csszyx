@@ -924,8 +924,30 @@ export const COLOR_NAMES = new Set([
     'rose',
 ]);
 
-const COLOR_SCALE_RE =
-    /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+$/;
+const COLOR_SCALE_NAMES = new Set([
+    'slate',
+    'gray',
+    'zinc',
+    'neutral',
+    'stone',
+    'red',
+    'orange',
+    'amber',
+    'yellow',
+    'lime',
+    'green',
+    'emerald',
+    'teal',
+    'cyan',
+    'sky',
+    'blue',
+    'indigo',
+    'violet',
+    'purple',
+    'fuchsia',
+    'pink',
+    'rose',
+]);
 
 /**
  * Checks if a value matches a known Tailwind color name or color-scale pattern.
@@ -936,7 +958,10 @@ export function isColorValue(value: string): boolean {
     if (COLOR_NAMES.has(value)) {
         return true;
     }
-    if (COLOR_SCALE_RE.test(value)) {
+    const separator = value.lastIndexOf('-');
+    const colorName = value.slice(0, separator);
+    const shade = value.slice(separator + 1);
+    if (separator > 0 && COLOR_SCALE_NAMES.has(colorName) && /^\d+$/.test(shade)) {
         return true;
     }
     return false;

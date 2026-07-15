@@ -909,8 +909,40 @@ function disambiguateDivide(value: string): ParsedClass | null {
  * CSS length/dimension units — used to decide if an arbitrary value like
  * [1.5px] or [0.8rem] is a *dimension* (maps to width/size prop) vs a color.
  */
-const CSS_DIMENSION_RE =
-    /^-?[\d.]+(?:px|r?em|ex|ch|vw|vh|vmin|vmax|svh|svw|dvh|dvw|lvh|lvw|cqw|cqh|cqi|cqb|%|fr|deg|rad|turn|grad|ms|s|pt|pc|cm|mm|in)$/;
+const CSS_DIMENSION_UNITS = [
+    'vmin',
+    'vmax',
+    'rem',
+    'svh',
+    'svw',
+    'dvh',
+    'dvw',
+    'lvh',
+    'lvw',
+    'cqw',
+    'cqh',
+    'cqi',
+    'cqb',
+    'turn',
+    'grad',
+    'px',
+    'em',
+    'ex',
+    'ch',
+    'vw',
+    'vh',
+    '%',
+    'fr',
+    'deg',
+    'rad',
+    'ms',
+    's',
+    'pt',
+    'pc',
+    'cm',
+    'mm',
+    'in',
+] as const;
 
 /**
  * Returns true when value is an arbitrary bracket expression whose inner
@@ -923,7 +955,11 @@ function isArbitraryDimension(value: string): boolean {
     if (!value.startsWith('[') || !value.endsWith(']')) {
         return false;
     }
-    return CSS_DIMENSION_RE.test(value.slice(1, -1));
+    const dimension = value.slice(1, -1);
+    return CSS_DIMENSION_UNITS.some(unit => {
+        if (!dimension.endsWith(unit)) return false;
+        return /^-?[\d.]+$/.test(dimension.slice(0, -unit.length));
+    });
 }
 
 // ============================================================================

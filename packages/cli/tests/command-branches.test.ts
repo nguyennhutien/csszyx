@@ -182,6 +182,9 @@ describe('pure helper branches', () => {
     it('isColorValue recognizes named and scaled colors', () => {
         expect(isColorValue('red')).toBe(true); // COLOR_NAMES hit
         expect(isColorValue('blue-500')).toBe(true); // scale regex hit
+        expect(isColorValue('rose-950')).toBe(true);
+        expect(isColorValue('transparent-500')).toBe(false);
+        expect(isColorValue('blue-bright')).toBe(false);
         expect(isColorValue('definitely-not-a-color')).toBe(false);
     });
 

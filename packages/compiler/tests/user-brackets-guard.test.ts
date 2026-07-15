@@ -69,6 +69,12 @@ describe('normalizeArbitraryValue — bracket stripping', () => {
 // ============================================================================
 
 describe('user brackets — sizing props', () => {
+    it('preserves leading-decimal and container-query arbitrary lengths', () => {
+        expect(t({ w: '.25' })).toBe('w-[.25]');
+        expect(t({ w: '-.25ch' })).toBe('w-[-.25ch]');
+        expect(t({ w: '1cqw' })).toBe('w-[1cqw]');
+    });
+
     it('w: "[100px]" → w-[100px]  (same as w: "100px")', () => {
         expect(t({ w: '[100px]' })).toBe(t({ w: '100px' }));
         expect(t({ w: '[100px]' })).toBe('w-[100px]');
