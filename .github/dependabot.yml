@@ -12,8 +12,8 @@
 #   - dev/runtime split: separates non-shipped (development) from shipped
 #     (production) deps so review can weigh blast radius (a runtime dep reaches
 #     users; a dev dep can still steal the npm token at release time).
-# Install scripts are already blocked by pnpm 10's default (no dependency build
-# scripts run unless allowlisted via `onlyBuiltDependencies`, which is unset).
+# Install scripts are blocked by pnpm 11's build policy: no dependency is granted
+# permission through `allowBuilds`.
 version: 2
 updates:
   - package-ecosystem: npm
