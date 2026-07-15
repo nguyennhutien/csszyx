@@ -2,6 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listResources, RESOURCE_URIS, readResource } from '../src/resources/index.js';
 
+function reportMissingFile(): false {
+    return false;
+}
+
+function throwMissingFile(): never {
+    throw new Error('ENOENT: mocked — no llms-full.txt anywhere');
+}
+
 describe('mcp resources', () => {
     it('lists the setup guide resource', () => {
         expect(RESOURCE_URIS).toContain('csszyx://setup');
@@ -49,10 +57,8 @@ describe('mcp resources', () => {
                 const actual = await importOriginal<typeof import('node:fs')>();
                 const patched = {
                     ...actual,
-                    existsSync: () => false,
-                    readFileSync: () => {
-                        throw new Error('ENOENT: mocked — no llms-full.txt anywhere');
-                    },
+                    existsSync: reportMissingFile,
+                    readFileSync: throwMissingFile,
                 };
                 return { ...patched, default: patched };
             });
