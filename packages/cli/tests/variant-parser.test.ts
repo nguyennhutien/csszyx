@@ -66,6 +66,13 @@ describe('variant-parser', () => {
             });
         });
 
+        it('preserves non-BMP characters while splitting variants', () => {
+            expect(extractVariants('data-[icon=🧭:active]:content-["🚀"]')).toEqual({
+                variantParts: ['data-[icon=🧭:active]'],
+                baseClass: 'content-["🚀"]',
+            });
+        });
+
         it('group-hover/name', () => {
             expect(extractVariants('group-hover/sidebar:text-white')).toEqual({
                 variantParts: ['group-hover/sidebar'],

@@ -69,8 +69,7 @@ export function extractVariants(token: string): { variantParts: string[]; baseCl
     let current = '';
     let depth = 0;
 
-    for (let i = 0; i < token.length; i++) {
-        const ch = token[i];
+    for (const ch of token) {
         if (ch === '[' || ch === '(') {
             depth++;
             current += ch;
