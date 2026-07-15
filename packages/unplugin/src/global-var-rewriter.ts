@@ -120,7 +120,7 @@ function rewriteGlobalVarValue(
             return;
         }
         const firstArgument = node.nodes.find(child => child.type !== 'space');
-        if (!firstArgument || firstArgument.type !== 'word') {
+        if (firstArgument?.type !== 'word') {
             return;
         }
         const alias = aliases.get(firstArgument.value);
