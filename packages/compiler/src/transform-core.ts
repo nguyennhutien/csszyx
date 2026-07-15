@@ -2298,6 +2298,56 @@ function warnUnsupportedFontStyle(value: string): void {
     );
 }
 
+const DECORATION_CLASSES = new Set([
+    'underline',
+    'overline',
+    'line-through',
+    'no-underline',
+    'none',
+]);
+const TEXT_TRANSFORM_CLASSES = new Set(['uppercase', 'lowercase', 'capitalize']);
+const FONT_VARIANT_CLASSES = new Set([
+    'normal-nums',
+    'ordinal',
+    'slashed-zero',
+    'lining-nums',
+    'oldstyle-nums',
+    'proportional-nums',
+    'tabular-nums',
+    'diagonal-fractions',
+    'stacked-fractions',
+]);
+
+/** Collects direct text decoration, transform, wrapping, and numeral modes. */
+function collectTextKeywordProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (key === 'decoration' && DECORATION_CLASSES.has(value)) {
+        classes.push(`${prefix}${value === 'none' ? 'no-underline' : value}`);
+        return true;
+    }
+    if (key === 'textTransform' && TEXT_TRANSFORM_CLASSES.has(value)) {
+        classes.push(`${prefix}${value}`);
+        return true;
+    }
+    if (key === 'textTransform' && (value === 'normal-case' || value === 'none')) {
+        classes.push(`${prefix}normal-case`);
+        return true;
+    }
+    if (key === 'fontVariant' && FONT_VARIANT_CLASSES.has(value)) {
+        classes.push(`${prefix}${value}`);
+        return true;
+    }
+    if (key === 'textWrap') {
+        classes.push(`${prefix}text-${value}`);
+        return true;
+    }
+    return false;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2542,62 +2592,7 @@ function transformImpl(
         // ================================================================
         if (typeof value === 'string') {
             if (collectFontModeProperty(rawKey, value, prefix, classes)) continue;
-
-            // decoration: 'underline' | 'overline' | 'line-through' | 'no-underline' → direct output
-            if (rawKey === 'decoration') {
-                if (
-                    ['underline', 'overline', 'line-through', 'no-underline', 'none'].includes(
-                        value,
-                    )
-                ) {
-                    className += value === 'none' ? 'no-underline' : value;
-                    classes.push(className);
-                    continue;
-                }
-            }
-
-            // textTransform: 'uppercase' | 'lowercase' | 'capitalize' | 'normal-case' → direct
-            // output. The CSS off-value `none` is accepted as an alias for normal-case (its
-            // Tailwind class), since text-transform: none is what normal-case emits.
-            if (rawKey === 'textTransform') {
-                if (['uppercase', 'lowercase', 'capitalize'].includes(value)) {
-                    className += value;
-                    classes.push(className);
-                    continue;
-                }
-                if (value === 'normal-case' || value === 'none') {
-                    className += 'normal-case';
-                    classes.push(className);
-                    continue;
-                }
-            }
-
-            // fontVariant: 'normal-nums' | 'ordinal' | etc → direct output
-            if (rawKey === 'fontVariant') {
-                const FONT_VARIANT_CLASSES = new Set([
-                    'normal-nums',
-                    'ordinal',
-                    'slashed-zero',
-                    'lining-nums',
-                    'oldstyle-nums',
-                    'proportional-nums',
-                    'tabular-nums',
-                    'diagonal-fractions',
-                    'stacked-fractions',
-                ]);
-                if (FONT_VARIANT_CLASSES.has(value)) {
-                    className += value;
-                    classes.push(className);
-                    continue;
-                }
-            }
-
-            // textWrap: 'wrap' | 'nowrap' | 'balance' | 'pretty' → text-wrap, text-nowrap, etc.
-            if (rawKey === 'textWrap') {
-                className += `text-${value}`;
-                classes.push(className);
-                continue;
-            }
+            if (collectTextKeywordProperty(rawKey, value, prefix, classes)) continue;
 
             // break: 'normal' | 'all' | 'keep' → break-normal, break-all, break-keep
             if (rawKey === 'break') {
