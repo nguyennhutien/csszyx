@@ -111,8 +111,16 @@ describe('_szMerge', () => {
         expect(_szMerge()).toBe('');
     });
 
-    it('should preserve order of first occurrence', () => {
-        expect(_szMerge('c b a', 'a b c')).toBe('c b a');
+    it('should preserve the order of last occurrence', () => {
+        expect(_szMerge('c b a', 'a b c')).toBe('a b c');
+    });
+
+    it('should let later utility groups override earlier values', () => {
+        expect(_szMerge('gap-2 p-4 text-sm', 'gap-8 text-lg')).toBe('p-4 gap-8 text-lg');
+    });
+
+    it('should apply utility-aware merging after resolving sz objects', () => {
+        expect(_szMerge({ p: 4, gap: 2 }, { p: 8 })).toBe('gap-2 p-8');
     });
 
     it('should handle multiple spaces', () => {

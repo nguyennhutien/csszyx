@@ -96,7 +96,11 @@ export function _sz(...classes: SzStringInput[]): string {
 }
 
 /**
- * Merges className strings from compiled array sz props, deduplicating tokens.
+ * Merges className strings from compiled sz props, deduplicating exact tokens.
+ *
+ * This lite-entry compatibility helper intentionally does not ship the full
+ * utility classifier used by root-runtime `_szMerge`/`szcn`; importing that
+ * classifier would turn the ~2 kB lite entry into the full runtime graph.
  *
  * Emitted by the compiler for sz={[varA, cond && varB, ...]} when at least one
  * element is a runtime conditional. All arguments must be pre-compiled strings

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { _szMerge } from '../src/concatenate.js';
 import { _szcn, szcn } from '../src/merge-classes.js';
 
 // szcn is the single resolution point for a layered design-system
@@ -404,6 +405,148 @@ describe('_szcn — the unmemoized compiler-emitted twin', () => {
         };
         try {
             expect(_szcn('q1', 'q2')).toBe('q2'); // mangle-aware: same utility, last wins
+        } finally {
+            (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+        }
+    });
+});
+
+describe('_szMerge — utility-aware parity with szcn', () => {
+    const corpus: ReadonlyArray<readonly (string | false | null | undefined)[]> = [
+        ['gap-2 p-4', 'gap-8'],
+        ['m-4', 'p-2'],
+        ['p-2', 'p-8'],
+        ['w-1/2', 'w-full'],
+        ['rounded-md', 'rounded-xl'],
+        ['gap-2 m-4 gap-8'],
+        ['gap-2', 'md:gap-8'],
+        ['md:gap-2', 'md:gap-8'],
+        ['gap-2', 'hover:gap-8'],
+        ['hover:p-2', 'hover:p-8'],
+        ['md:hover:p-2 p-1', 'p-8'],
+        ['flex-1', 'flex-row'],
+        ['text-sm', 'text-red-500'],
+        ['text-base', 'text-sm'],
+        ['bg-red-500', 'bg-cover'],
+        ['my-custom-thing', 'p-4'],
+        ['a b', 'c'],
+        ['font-sans', 'font-bold'],
+        ['font-semibold', 'font-normal'],
+        ['font-bold', 'font-bold'],
+        ['flex', 'block'],
+        ['p-4', 'pb-8'],
+        ['m-8', 'mb-2'],
+        ['pb-4', 'p-8'],
+        ['mt-2', 'm-8'],
+        ['pl-4', 'px-2'],
+        ['px-2', 'pl-4'],
+        ['p-4', 'px-2'],
+        ['px-2', 'p-4'],
+        ['md:pb-4', 'p-8'],
+        ['p-4', 'md:p-8'],
+        ['mb-4', 'p-8'],
+        ['top-0', 'inset-0'],
+        ['inset-x-2', 'inset-0'],
+        ['inset-0', 'top-4'],
+        ['left-0', 'inset-x-2'],
+        ['inset-x-2', 'left-0'],
+        ['inset-x-2', 'top-4'],
+        ['rounded-t-sm', 'rounded-lg'],
+        ['rounded-tl-sm', 'rounded-t-lg'],
+        ['rounded-lg', 'rounded-t-sm'],
+        ['rounded-tl-sm', 'rounded-r-lg'],
+        ['start-0', 'inset-0'],
+        ['rounded-s-lg', 'rounded-lg'],
+        ['rounded-lg', 'inset-0'],
+        ['p-4', 'inset-0'],
+        [],
+        [false, null, undefined, ''],
+        ['   '],
+        ['p-4\n  m-2', 'p-4'],
+        ['w-[337px]', 'w-[400px]'],
+        ['mt-2', '-mt-4'],
+        ['p-2', '!p-8'],
+        ['bg-warning', 'bg-danger'],
+        ['leading-4', 'leading-8'],
+        ['group-hover:gap-2', 'group-hover:gap-8'],
+        ['peer-checked:p-2', 'peer-checked:p-8'],
+        ['gap-2', 'group-hover:gap-8'],
+        ['data-[state=open]:gap-2', 'data-[state=open]:gap-8'],
+        ['supports-[display:grid]:gap-2', 'supports-[display:grid]:gap-8'],
+        ['min-[320px]:gap-2', 'min-[320px]:gap-8'],
+        ['@md:gap-2', '@md:gap-8'],
+        ['[&>span]:gap-2', '[&>span]:gap-8'],
+        ['-mt-2', '-m-8'],
+        ['-m-4', '-mb-8'],
+        ['!pb-2', '!p-8'],
+        ['!p-8', '!pb-2'],
+        ['pb-2!', 'p-8!'],
+        ['p-8!', 'pb-2!'],
+        ['p-2!', 'p-8!'],
+        ['p-2', 'p-8!'],
+        ['gap-2!', 'gap-8'],
+        ['pb-[2px]', 'p-[9px]'],
+        ['p-[10px]', 'pb-[2px]'],
+        ['ps-2', 'px-4'],
+        ['pe-2', 'p-4'],
+        ['start-0', 'inset-x-4'],
+        ['flex', 'flex'],
+        ['tab-item-header', 'tab-item-header--active'],
+        ['foo-bar', 'foo-bar--active'],
+        ['btn', 'btn--lg'],
+        ['gap-2 gap-8'],
+        ['p-2 p-8'],
+        ['custom-x custom-x', 'custom-x'],
+        ['p-4', false, null, undefined, '', 'm-2'],
+        ['gap-2 p-4 m-4', 'gap-8 p-8'],
+        ['gap-2 m-4 p-4 rounded-md', 'gap-8 p-8 rounded-xl'],
+        ['a gap-2 b', 'm-4 gap-8', false, 'c', 'm-2'],
+    ];
+
+    it.each(corpus)('matches szcn for %j', (...inputs) => {
+        expect(_szMerge(...inputs)).toBe(szcn(...inputs));
+    });
+
+    it('matches szcn through the production mangle decode bridge', () => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: (token: string) => ({ q3: 'gap-2', q7: 'gap-8' })[token],
+        };
+        try {
+            expect(_szMerge('q3', 'q7')).toBe(szcn('q3', 'q7'));
+            expect(_szMerge('q3', 'q7')).toBe('q7');
+        } finally {
+            (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+        }
+    });
+
+    it.each([
+        ['different decoded utilities', { q3: 'gap-2', q9: 'p-4' }],
+        ['a partial decode map', { q3: 'gap-2' }],
+    ] as const)('matches szcn with %s', (_label, decodeMap) => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: (token: string) => decodeMap[token as keyof typeof decodeMap],
+        };
+        try {
+            const right = 'q9' in decodeMap ? 'q9' : 'gap-8';
+            expect(_szMerge('q3', right)).toBe(szcn('q3', right));
+        } finally {
+            (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+        }
+    });
+
+    it.each([
+        [
+            'throws',
+            () => {
+                throw new Error('boom');
+            },
+        ],
+        ['returns a number', () => 42],
+        ['returns an object', () => ({})],
+    ] as const)('matches szcn when decode %s', (_label, decode) => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = { decode };
+        try {
+            expect(_szMerge('q3', 'q7')).toBe(szcn('q3', 'q7'));
         } finally {
             (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
         }

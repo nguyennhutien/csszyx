@@ -471,6 +471,10 @@ are compiler-injected, do not hand-author them):
     names shadowing built-in keywords, or defined in two conflicting
     categories, are rejected to keep-both — never a wrong merge).
   - Fail-safe: a token szcn cannot confidently group is NEVER dropped.
+- Compiler-injected `_szMerge(existingClassName, compiledSz)` in the full
+  runtime uses the same uncached, mangle-aware utility merge engine as `szcn`,
+  so the compiled `sz` argument wins same-utility conflicts. The intentionally
+  tiny `@csszyx/runtime/lite` compatibility helper only exact-dedupes tokens.
 - `szr` takes sz OBJECTS and concatenates; `szcn` takes STRINGS and overrides.
 
 ```tsx
