@@ -67,5 +67,21 @@ test('pnpm 11 pins stay synchronized and workspace config uses the v11 location'
     assert.match(workspace, /^overrides:/m);
     assert.match(workspace, /^supportedArchitectures:/m);
     assert.match(workspace, /^strictDepBuilds: false$/m);
-    assert.match(workspace, /^allowBuilds: \{\}$/m);
+    // allowBuilds records an explicit review decision per build-script dependency.
+    // Every known package is denied (`false`) — same deny-all posture as the empty
+    // map, but pnpm 11 stops rewriting the file into a "set this to true or false"
+    // placeholder on every install once each entry is an explicit decision.
+    assert.match(workspace, /^allowBuilds:$/m);
+    assert.doesNotMatch(workspace, /set this to true or false/);
+    assert.match(workspace, /^ {2}'esbuild': false$/m);
+    assert.match(workspace, /^ {2}'lefthook': false$/m);
+    // Behavior settings pnpm 11 no longer reads from .npmrc must live here.
+    assert.match(workspace, /^shamefullyHoist: true$/m);
+    assert.match(workspace, /^strictPeerDependencies: false$/m);
+    assert.match(workspace, /^autoInstallPeers: true$/m);
+    assert.match(workspace, /^verifyDepsBeforeRun: false$/m);
+    assert.match(workspace, /^managePackageManagerVersions: false$/m);
+    // .npmrc must not keep the moved pnpm keys (pnpm 11 reads only auth/registry there).
+    const npmrc = readFileSync(path.join(root, '.npmrc'), 'utf8');
+    assert.doesNotMatch(npmrc, /^shamefully-hoist/m);
 });

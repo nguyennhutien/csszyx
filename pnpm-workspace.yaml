@@ -40,7 +40,15 @@ supportedArchitectures:
 # explicitly granted here. Keep unknown scripts warning-only so adding a package
 # cannot turn the install gate red before maintainers can record a false entry.
 strictDepBuilds: false
-allowBuilds: {}
+allowBuilds:
+  '@swc/core': false
+  '@vscode/vsce-sign': false
+  'esbuild': false
+  'keytar': false
+  'lefthook': false
+  'sharp': false
+  'unrs-resolver': false
+  'workerd': false
 auditConfig: {}
 
 # mise is the single toolchain manager (pnpm pinned in .mise.toml), so pnpm must
