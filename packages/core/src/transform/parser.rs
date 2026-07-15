@@ -1476,17 +1476,26 @@ fn static_array_parts_from_array_expression(
         // dynamic expression (ternary branches, etc.) still get their CSS.
         // An object literal that lands here carried a runtime value, so the
         // whole element defers to `_szPart` — flagged for a build diagnostic.
-        parts.push(StaticArrayPartIr {
-            condition_span: None,
-            classes: Vec::new(),
-            ternary: None,
-            dynamic_span: Some(text_span(expression.span())),
-            candidates: candidate_classes_from_expression(expression, ctx),
-            dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
-        });
+        parts.push(dynamic_array_part(expression, unwrapped, ctx));
     }
 
     Some(parts)
+}
+
+/// Preserve one unresolved array element for runtime lowering and safelisting.
+fn dynamic_array_part(
+    expression: &Expression<'_>,
+    unwrapped: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> StaticArrayPartIr {
+    StaticArrayPartIr {
+        condition_span: None,
+        classes: Vec::new(),
+        ternary: None,
+        dynamic_span: Some(text_span(expression.span())),
+        candidates: candidate_classes_from_expression(expression, ctx),
+        dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
+    }
 }
 
 /// Pre-lower a finite array-element ternary with static object or string branches.
@@ -2092,9 +2101,13 @@ fn partial_object_from_object_expression(
         }
     }
 
-    let mut properties = Vec::with_capacity(object.properties.len());
-    let mut dynamic_css_vars = Vec::new();
-    let mut ternary = None;
+    let mut partial = PartialSzObject {
+        object: StaticSzObject {
+            properties: Vec::with_capacity(object.properties.len()),
+        },
+        dynamic_css_vars: Vec::new(),
+        ternary: None,
+    };
 
     for property in &object.properties {
         match property {
@@ -2103,57 +2116,21 @@ fn partial_object_from_object_expression(
                     continue;
                 }
                 if let Some(static_property) = static_property_from_object_property(property, ctx) {
-                    properties.push(static_property);
+                    partial.object.properties.push(static_property);
                     continue;
                 }
 
                 let key = static_property_key(&property.key)?;
                 if let Expression::ObjectExpression(nested) = &property.value {
-                    if let Some(color_opacity_ternary) =
-                        color_opacity_ternary_from_object(&key, nested, ctx, variant_keys)
-                    {
-                        if ternary.is_some() {
-                            return None;
-                        }
-                        ternary = Some(color_opacity_ternary);
-                        continue;
-                    }
-                    // A property whose value is an object (color+opacity, gradient,
-                    // arbitrary `css`, mask, …) is a value object, not variant
-                    // nesting. A fully static one was already captured above, so if
-                    // it reached here it carries a dynamic sub-field the static
-                    // composers do not cover. Recursing would prefix the sub-key with
-                    // the property name and emit a dead `<property>:<subkey>` class
-                    // (e.g. `bg:op-(--var)`, `css:text-red`, `bgImg:dir-to-r`). Punt
-                    // the whole attribute to the runtime instead, which resolves the
-                    // dynamic value correctly. Variant keys (hover, md, supports, …)
-                    // are absent from the property map and still nest normally.
-                    if super::generated::tables::property_prefix(&key).is_some() || key == "css" {
-                        return None;
-                    }
-                    let variant = variant_prefix_string(variant_prefix, &key);
-                    let mut next_keys = variant_keys.to_vec();
-                    next_keys.push(key.clone());
-                    let nested = partial_object_from_object_expression(
+                    collect_nested_partial_property(
+                        &mut partial,
+                        key,
+                        property,
                         nested,
                         ctx,
-                        Some(variant.as_str()),
-                        &next_keys,
+                        variant_prefix,
+                        variant_keys,
                     )?;
-                    if !nested.object.is_empty() {
-                        properties.push(StaticSzProperty {
-                            key,
-                            span: text_span(property.span),
-                            value: StaticSzValue::Object(nested.object),
-                        });
-                    }
-                    dynamic_css_vars.extend(nested.dynamic_css_vars);
-                    if nested.ternary.is_some() {
-                        if ternary.is_some() {
-                            return None;
-                        }
-                        ternary = nested.ternary;
-                    }
                     continue;
                 }
 
@@ -2167,22 +2144,16 @@ fn partial_object_from_object_expression(
                             variant_keys,
                         )
                     {
-                        if ternary.is_some() {
-                            return None;
-                        }
-                        ternary = Some(conditional_ternary);
+                        set_partial_ternary(&mut partial, conditional_ternary)?;
                         if let Some(dynamic_prop) = dynamic_prop {
-                            dynamic_css_vars.push(dynamic_prop);
+                            partial.dynamic_css_vars.push(dynamic_prop);
                         }
                         continue;
                     }
                     if let Some(conditional_ternary) =
                         conditional_class_from_property(&key, conditional, ctx, variant_keys)
                     {
-                        if ternary.is_some() {
-                            return None;
-                        }
-                        ternary = Some(conditional_ternary);
+                        set_partial_ternary(&mut partial, conditional_ternary)?;
                         continue;
                     }
                 }
@@ -2193,14 +2164,16 @@ fn partial_object_from_object_expression(
                 // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
                 // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
                 // — redundant parens broke rust==oxc byte parity.
-                dynamic_css_vars.push(dynamic_css_var_from_property(
+                partial.dynamic_css_vars.push(dynamic_css_var_from_property(
                     &key,
                     text_span(unwrap_expression(&property.value).span()),
                     variant_prefix,
                 ));
             }
             ObjectPropertyKind::SpreadProperty(spread) => {
-                properties
+                partial
+                    .object
+                    .properties
                     .extend(static_object_from_spread_argument(&spread.argument, ctx)?.properties);
             }
         }
@@ -2211,15 +2184,59 @@ fn partial_object_from_object_expression(
     // classes and the conditional becomes a runtime ternary appended in a
     // template literal, matching the Babel/oxc build-time output. Mixing a
     // conditional with runtime css vars is still punted to the runtime.
-    if ternary.is_some() && dynamic_css_vars.iter().any(|prop| !prop.skip_class) {
+    if partial.ternary.is_some() && partial.dynamic_css_vars.iter().any(|prop| !prop.skip_class) {
         return None;
     }
 
-    Some(PartialSzObject {
-        object: StaticSzObject { properties },
-        dynamic_css_vars,
-        ternary,
-    })
+    Some(partial)
+}
+
+/// Merge one nested variant/value object into an in-progress partial object.
+fn collect_nested_partial_property(
+    partial: &mut PartialSzObject,
+    key: String,
+    property: &ObjectProperty<'_>,
+    nested: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_prefix: Option<&str>,
+    variant_keys: &[String],
+) -> Option<()> {
+    if let Some(ternary) = color_opacity_ternary_from_object(&key, nested, ctx, variant_keys) {
+        return set_partial_ternary(partial, ternary);
+    }
+
+    // Value objects with a dynamic sub-field cannot be lowered as variants:
+    // doing so would emit a dead `<property>:<subkey>` class. True variant keys
+    // are absent from the property table and remain safe to recurse through.
+    if super::generated::tables::property_prefix(&key).is_some() || key == "css" {
+        return None;
+    }
+    let variant = variant_prefix_string(variant_prefix, &key);
+    let mut next_keys = variant_keys.to_vec();
+    next_keys.push(key.clone());
+    let nested =
+        partial_object_from_object_expression(nested, ctx, Some(variant.as_str()), &next_keys)?;
+    if !nested.object.is_empty() {
+        partial.object.properties.push(StaticSzProperty {
+            key,
+            span: text_span(property.span),
+            value: StaticSzValue::Object(nested.object),
+        });
+    }
+    partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
+    if let Some(ternary) = nested.ternary {
+        set_partial_ternary(partial, ternary)?;
+    }
+    Some(())
+}
+
+/// Keep partial lowering deterministic by accepting at most one ternary lane.
+fn set_partial_ternary(partial: &mut PartialSzObject, ternary: StaticTernaryIr) -> Option<()> {
+    if partial.ternary.is_some() {
+        return None;
+    }
+    partial.ternary = Some(ternary);
+    Some(())
 }
 
 fn conditional_spread_ternary_from_object_expression(
