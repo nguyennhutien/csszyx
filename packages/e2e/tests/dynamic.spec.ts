@@ -10,7 +10,24 @@
  *   - Tests verify injection happened correctly and no rule is duplicated.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+/**
+ * Wait until the runtime has observably inserted at least one CSS rule.
+ * @param page - Browser page hosting the dynamic fixture.
+ */
+async function waitForInjectedRules(page: Page): Promise<void> {
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                Array.from(document.adoptedStyleSheets).reduce(
+                    (total, sheet) => total + sheet.cssRules.length,
+                    0,
+                ),
+            ),
+        )
+        .toBeGreaterThan(0);
+}
 
 test.describe('@csszyx/dynamic — runtime injection', () => {
     test.beforeEach(async ({ page }) => {
@@ -41,8 +58,7 @@ test.describe('@csszyx/dynamic — runtime injection', () => {
     });
 
     test('CSS rules are injected into document.adoptedStyleSheets', async ({ page }) => {
-        // Allow a moment for the manifest fetch to resolve (404 → empty fallback)
-        await page.waitForTimeout(300);
+        await waitForInjectedRules(page);
 
         const result = await page.evaluate(() => {
             const sheets = Array.from(document.adoptedStyleSheets);
@@ -59,7 +75,7 @@ test.describe('@csszyx/dynamic — runtime injection', () => {
     });
 
     test('no duplicate CSS selectors across all adoptedStyleSheets', async ({ page }) => {
-        await page.waitForTimeout(300);
+        await waitForInjectedRules(page);
 
         const { duplicates, allSelectors } = await page.evaluate(() => {
             // Collect every top-level rule text from all adopted sheets
@@ -90,7 +106,7 @@ test.describe('@csszyx/dynamic — runtime injection', () => {
     });
 
     test('re-rendering does not create new duplicate rules', async ({ page }) => {
-        await page.waitForTimeout(300);
+        await waitForInjectedRules(page);
 
         const before = await page.evaluate(() => {
             let total = 0;
@@ -104,7 +120,7 @@ test.describe('@csszyx/dynamic — runtime injection', () => {
         await page.goto('/');
         await page.goto('/?page=dynamic');
         await page.waitForSelector('[data-testid="dynamic-form-container"]');
-        await page.waitForTimeout(300);
+        await waitForInjectedRules(page);
 
         const after = await page.evaluate(() => {
             let total = 0;
@@ -128,15 +144,10 @@ test.describe('@csszyx/dynamic — runtime injection', () => {
     });
 
     test('21 tier sheets are added to adoptedStyleSheets in correct order', async ({ page }) => {
-        await page.waitForTimeout(300);
-
-        const tierCount = await page.evaluate(() => {
-            // @csszyx/dynamic adds exactly 21 sheets (one per Tier)
-            // We can't inspect their identity, but count must be >= 21
-            return document.adoptedStyleSheets.length;
-        });
-
-        // All 21 tier sheets must have been appended
-        expect(tierCount).toBeGreaterThanOrEqual(21);
+        // @csszyx/dynamic adds exactly 21 sheets (one per Tier). We cannot
+        // inspect their identity, so wait for the observable sheet count.
+        await expect
+            .poll(() => page.evaluate(() => document.adoptedStyleSheets.length))
+            .toBeGreaterThanOrEqual(21);
     });
 });
