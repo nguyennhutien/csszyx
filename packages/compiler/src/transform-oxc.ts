@@ -267,162 +267,46 @@ export function transformOxc(
         let runtimeFallbackExpr: OxcNode | null = null;
         let runtimeFallbackAttr: JsxAttributeNode | null = null;
         for (const szAttr of szAttrs) {
-            // Point the dev-mode unknown-property warning at this sz prop. All
-            // lowering for this attribute (and nested objects) runs synchronously
-            // below, so the location is correct until the next attribute or the
-            // post-loop clear.
-            const { line: szWarnLine } = offsetToLineColumn(source, szAttr.start);
-            setSzWarnLocation(
-                formatSzWarnLocation(effectiveFilename, szWarnLine, options?.rootDir),
-            );
-            const value = szAttr.value;
-            if (!value) {
-                throw new OxcNotImplementedError(
-                    'D3',
-                    `sz attribute without value at ${effectiveFilename}:${szAttr.start}`,
-                );
-            }
-            const stringValue = stringLiteralValue(value);
-            if (stringValue !== null) {
-                collectOxcClassTokens(stringValue, classes, szDerived);
-                continue;
-            }
-            if (value.type !== 'JSXExpressionContainer') {
-                throw new OxcNotImplementedError(
-                    'D3',
-                    `unsupported sz attribute value ${value.type} at ${effectiveFilename}:${szAttr.start}`,
-                );
-            }
-            const expression = (value as unknown as { expression: OxcNode }).expression;
-            let staticConditional: ConditionalExpressionNode | undefined;
-            if (expression.type === 'ConditionalExpression') {
-                staticConditional = expression as ConditionalExpressionNode;
-            }
-            if (expression.type === 'Identifier') {
-                const identifierName = String((expression as IdentifierNode).name);
-                const bound = objectBindings.get(identifierName);
-                if (bound) {
-                    const result = compileSzObject(
-                        applyGlobalVarAliasesToSzObject(
-                            astObjectToSzObject(bound, effectiveFilename, objectBindings),
-                            globalVarAliases,
-                            cssVariableMap,
-                        ),
-                    );
-                    collectOxcClassTokens(result.className, classes, szDerived);
-                    continue;
-                }
-                staticConditional = conditionalBindings.get(identifierName);
-            }
-            if (staticConditional) {
-                const conditionalResult = transformOxcStaticConditional({
-                    conditional: staticConditional,
-                    filename: effectiveFilename,
-                    bindings: objectBindings,
-                    source,
-                    classes,
-                    globalVarAliases,
-                    cssVariableMap,
-                    classNameAttr,
-                    szAttributeCount: szAttrs.length,
-                    szAttr,
-                    edits,
-                });
-                if (conditionalResult === 'fallback') {
-                    runtimeFallbackExpr = expression;
-                    runtimeFallbackAttr = szAttr;
-                    break;
-                }
-                if (conditionalResult === 'complete') {
-                    transformed = true;
-                    return;
-                }
-            }
-            if (expression.type === 'ArrayExpression') {
-                const arrayResult = transformOxcArrayExpression({
-                    expression: expression as ArrayExpressionNode,
-                    filename: effectiveFilename,
-                    bindings: objectBindings,
-                    globalVarAliases,
-                    cssVariableMap,
-                    source,
-                    classes,
-                    diagnostics,
-                    szDerived,
-                    classNameAttr,
-                    szAttrs,
-                    szAttr,
-                    edits,
-                });
-                if (arrayResult.kind === 'fallback') {
-                    runtimeFallbackExpr = expression;
-                    runtimeFallbackAttr = szAttr;
-                    break;
-                }
-                if (arrayResult.kind === 'continue') {
-                    continue;
-                }
-                usesSzcn = true;
-                usesSzPart ||= arrayResult.usesSzPart;
-                transformed = true;
-                return;
-            }
-            if (expression.type !== 'ObjectExpression') {
-                runtimeFallbackExpr = expression;
+            const attributeResult = transformOxcSzAttribute({
+                szAttr,
+                szAttrs,
+                classNameAttr,
+                styleAttr,
+                lastAttr,
+                openingAttributes,
+                openingNameEnd: openingNode.name.end,
+                elementId,
+                hoistedStyleProps,
+                filename: effectiveFilename,
+                source,
+                options,
+                bindings: objectBindings,
+                conditionalBindings,
+                componentHoists,
+                reservedCSSVariableNames,
+                globalVarAliases,
+                cssVariableMap,
+                classes,
+                szDerived,
+                diagnostics,
+                edits,
+            });
+            if (attributeResult.kind === 'continue') continue;
+            if (attributeResult.kind === 'fallback') {
+                runtimeFallbackExpr = attributeResult.expression;
                 runtimeFallbackAttr = szAttr;
                 break;
             }
-            let szObj: SzObject;
-            try {
-                szObj = astObjectToSzObject(
-                    expression as ObjectExpressionNode,
-                    effectiveFilename,
-                    objectBindings,
-                );
-            } catch (err) {
-                if (err instanceof OxcNotImplementedError) {
-                    const unsupportedResult = transformOxcUnsupportedObject({
-                        expression: expression as ObjectExpressionNode,
-                        filename: effectiveFilename,
-                        bindings: objectBindings,
-                        source,
-                        classes,
-                        globalVarAliases,
-                        cssVariableMap,
-                        options,
-                        plannedUsageNames: componentHoists?.usageNamesByElement.get(elementId),
-                        reservedCSSVariableNames,
-                        hoistedStyleProps,
-                        openingAttributes,
-                        styleAttr,
-                        lastAttr,
-                        classNameAttr,
-                        szAttrs,
-                        szAttr,
-                        openingNameEnd: openingNode.name.end,
-                        edits,
-                        diagnostics,
-                    });
-                    if (unsupportedResult?.kind === 'complete') {
-                        appliedHoistedStyleProps = unsupportedResult.appliedHoistedStyleProps;
-                        usesRuntime ||= unsupportedResult.usesRuntime;
-                        usesMerge ||= unsupportedResult.usesMerge;
-                        usesColorVar ||= unsupportedResult.usesColorVar;
-                        usesSpacingVar ||= unsupportedResult.usesSpacingVar;
-                        usesUnitVar ||= unsupportedResult.usesUnitVar;
-                        transformed = true;
-                        return;
-                    }
-                    runtimeFallbackExpr = expression;
-                    runtimeFallbackAttr = szAttr;
-                    break;
-                }
-                throw err;
-            }
-            const result = compileSzObject(
-                applyGlobalVarAliasesToSzObject(szObj, globalVarAliases, cssVariableMap),
-            );
-            collectOxcClassTokens(result.className, classes, szDerived);
+            appliedHoistedStyleProps ||= attributeResult.appliedHoistedStyleProps;
+            usesRuntime ||= attributeResult.usesRuntime;
+            usesMerge ||= attributeResult.usesMerge;
+            usesSzcn ||= attributeResult.usesSzcn;
+            usesSzPart ||= attributeResult.usesSzPart;
+            usesColorVar ||= attributeResult.usesColorVar;
+            usesSpacingVar ||= attributeResult.usesSpacingVar;
+            usesUnitVar ||= attributeResult.usesUnitVar;
+            transformed = true;
+            return;
         }
         // Done lowering this element's sz attributes — drop the location so an
         // unrelated later transform (or the runtime path) doesn't inherit it.
@@ -481,6 +365,275 @@ export function transformOxc(
         diagnostics,
         recoveryTokens,
         cssVariableMap,
+    };
+}
+
+/** Inputs shared while classifying one JSX sz attribute. */
+interface OxcSzAttributeContext {
+    szAttr: JsxAttributeNode;
+    szAttrs: JsxAttributeNode[];
+    classNameAttr: JsxAttributeNode | null;
+    styleAttr: JsxAttributeNode | null;
+    lastAttr: JsxAttributeNode | null;
+    openingAttributes: OxcOpeningAttributes;
+    openingNameEnd: number;
+    elementId: string;
+    hoistedStyleProps: string[];
+    filename: string;
+    source: string;
+    options: TransformSourceCodeOptions | undefined;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    conditionalBindings: ReadonlyMap<string, ConditionalExpressionNode>;
+    componentHoists: OxcComponentHoistAnalysis | null;
+    reservedCSSVariableNames: ReadonlySet<string> | undefined;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
+    classes: Set<string>;
+    szDerived: string[];
+    diagnostics: string[];
+    edits: MagicString;
+}
+
+/** Control result for one sz attribute. */
+type OxcSzAttributeResult =
+    | { kind: 'continue' }
+    | { kind: 'fallback'; expression: OxcNode }
+    | ({ kind: 'complete' } & OxcSzUsageFlags);
+
+/** Runtime/helper flags emitted by one completed sz rewrite. */
+interface OxcSzUsageFlags {
+    appliedHoistedStyleProps: boolean;
+    usesRuntime: boolean;
+    usesMerge: boolean;
+    usesSzcn: boolean;
+    usesSzPart: boolean;
+    usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
+}
+
+/**
+ * Classify and rewrite one sz attribute without nesting inside the JSX visitor.
+ *
+ * @param context Attribute, element, and transform state.
+ * @returns Loop control plus helper usage for a completed rewrite.
+ */
+function transformOxcSzAttribute(context: OxcSzAttributeContext): OxcSzAttributeResult {
+    setOxcSzWarningLocation(context);
+    const value = context.szAttr.value;
+    if (!value) {
+        throw new OxcNotImplementedError(
+            'D3',
+            `sz attribute without value at ${context.filename}:${context.szAttr.start}`,
+        );
+    }
+    const stringValue = stringLiteralValue(value);
+    if (stringValue !== null) {
+        collectOxcClassTokens(stringValue, context.classes, context.szDerived);
+        return { kind: 'continue' };
+    }
+    if (value.type !== 'JSXExpressionContainer') {
+        throw new OxcNotImplementedError(
+            'D3',
+            `unsupported sz attribute value ${value.type} at ${context.filename}:${context.szAttr.start}`,
+        );
+    }
+    const expression = (value as unknown as { expression: OxcNode }).expression;
+    return transformOxcSzExpression(expression, context);
+}
+
+/**
+ * Attach source location to dev warnings for one sz attribute.
+ *
+ * @param context Attribute source and transform options.
+ */
+function setOxcSzWarningLocation(context: OxcSzAttributeContext): void {
+    const { line } = offsetToLineColumn(context.source, context.szAttr.start);
+    setSzWarnLocation(formatSzWarnLocation(context.filename, line, context.options?.rootDir));
+}
+
+/**
+ * Lower a JSX expression-container value into one attribute control result.
+ *
+ * @param expression Expression stored in the sz JSX container.
+ * @param context Attribute and element transform state.
+ * @returns Loop control plus helper usage for a completed rewrite.
+ */
+function transformOxcSzExpression(
+    expression: OxcNode,
+    context: OxcSzAttributeContext,
+): OxcSzAttributeResult {
+    const identifierResult = transformOxcIdentifierExpression(expression, context);
+    if (identifierResult) return identifierResult;
+
+    const conditional = resolveOxcStaticConditional(expression, context.conditionalBindings);
+    if (conditional) {
+        const result = transformOxcStaticConditional({
+            conditional,
+            filename: context.filename,
+            bindings: context.bindings,
+            source: context.source,
+            classes: context.classes,
+            globalVarAliases: context.globalVarAliases,
+            cssVariableMap: context.cssVariableMap,
+            classNameAttr: context.classNameAttr,
+            szAttributeCount: context.szAttrs.length,
+            szAttr: context.szAttr,
+            edits: context.edits,
+        });
+        if (result === 'fallback') return { kind: 'fallback', expression };
+        if (result === 'complete') return completeOxcSzUsage();
+    }
+    if (expression.type === 'ArrayExpression') {
+        return transformOxcSzArrayResult(expression as ArrayExpressionNode, context);
+    }
+    if (expression.type !== 'ObjectExpression') return { kind: 'fallback', expression };
+    return transformOxcObjectExpression(expression as ObjectExpressionNode, context);
+}
+
+/**
+ * Resolve a static identifier immediately; conditional identifiers continue.
+ *
+ * @param expression Candidate identifier expression.
+ * @param context Attribute state containing static object bindings.
+ * @returns Attribute control when the identifier is statically bound, otherwise null.
+ */
+function transformOxcIdentifierExpression(
+    expression: OxcNode,
+    context: OxcSzAttributeContext,
+): OxcSzAttributeResult | null {
+    if (expression.type !== 'Identifier') return null;
+    const bound = context.bindings.get(String((expression as IdentifierNode).name));
+    if (!bound) return null;
+    const result = compileSzObject(
+        applyGlobalVarAliasesToSzObject(
+            astObjectToSzObject(bound, context.filename, context.bindings),
+            context.globalVarAliases,
+            context.cssVariableMap,
+        ),
+    );
+    collectOxcClassTokens(result.className, context.classes, context.szDerived);
+    return { kind: 'continue' };
+}
+
+/**
+ * Resolve direct and identifier-backed finite conditionals.
+ *
+ * @param expression Candidate conditional or identifier expression.
+ * @param bindings Finite conditionals collected from local bindings.
+ * @returns The resolved conditional when statically known.
+ */
+function resolveOxcStaticConditional(
+    expression: OxcNode,
+    bindings: ReadonlyMap<string, ConditionalExpressionNode>,
+): ConditionalExpressionNode | undefined {
+    if (expression.type === 'ConditionalExpression') {
+        return expression as ConditionalExpressionNode;
+    }
+    if (expression.type !== 'Identifier') return undefined;
+    return bindings.get(String((expression as IdentifierNode).name));
+}
+
+/**
+ * Adapt the array-lane control result to the shared attribute result.
+ *
+ * @param expression Array expression from the sz attribute.
+ * @param context Attribute and element transform state.
+ * @returns Shared attribute control and helper-usage flags.
+ */
+function transformOxcSzArrayResult(
+    expression: ArrayExpressionNode,
+    context: OxcSzAttributeContext,
+): OxcSzAttributeResult {
+    const result = transformOxcArrayExpression({
+        expression,
+        filename: context.filename,
+        bindings: context.bindings,
+        globalVarAliases: context.globalVarAliases,
+        cssVariableMap: context.cssVariableMap,
+        source: context.source,
+        classes: context.classes,
+        diagnostics: context.diagnostics,
+        szDerived: context.szDerived,
+        classNameAttr: context.classNameAttr,
+        szAttrs: context.szAttrs,
+        szAttr: context.szAttr,
+        edits: context.edits,
+    });
+    if (result.kind === 'fallback') return { kind: 'fallback', expression };
+    if (result.kind === 'continue') return { kind: 'continue' };
+    return completeOxcSzUsage({ usesSzcn: true, usesSzPart: result.usesSzPart });
+}
+
+/**
+ * Lower a static or partially-static object expression.
+ *
+ * @param expression Object expression from the sz attribute.
+ * @param context Attribute and element transform state.
+ * @returns Shared attribute control and helper-usage flags.
+ */
+function transformOxcObjectExpression(
+    expression: ObjectExpressionNode,
+    context: OxcSzAttributeContext,
+): OxcSzAttributeResult {
+    try {
+        const object = astObjectToSzObject(expression, context.filename, context.bindings);
+        const result = compileSzObject(
+            applyGlobalVarAliasesToSzObject(
+                object,
+                context.globalVarAliases,
+                context.cssVariableMap,
+            ),
+        );
+        collectOxcClassTokens(result.className, context.classes, context.szDerived);
+        return { kind: 'continue' };
+    } catch (error) {
+        if (!(error instanceof OxcNotImplementedError)) throw error;
+        const result = transformOxcUnsupportedObject({
+            expression,
+            filename: context.filename,
+            bindings: context.bindings,
+            source: context.source,
+            classes: context.classes,
+            globalVarAliases: context.globalVarAliases,
+            cssVariableMap: context.cssVariableMap,
+            options: context.options,
+            plannedUsageNames: context.componentHoists?.usageNamesByElement.get(context.elementId),
+            reservedCSSVariableNames: context.reservedCSSVariableNames,
+            hoistedStyleProps: context.hoistedStyleProps,
+            openingAttributes: context.openingAttributes,
+            styleAttr: context.styleAttr,
+            lastAttr: context.lastAttr,
+            classNameAttr: context.classNameAttr,
+            szAttrs: context.szAttrs,
+            szAttr: context.szAttr,
+            openingNameEnd: context.openingNameEnd,
+            edits: context.edits,
+            diagnostics: context.diagnostics,
+        });
+        if (!result) return { kind: 'fallback', expression };
+        return completeOxcSzUsage(result);
+    }
+}
+
+/**
+ * Normalize sparse helper flags into one complete attribute result.
+ *
+ * @param overrides Helper flags emitted by the selected lowering lane.
+ * @returns A completed attribute result with every usage flag populated.
+ */
+function completeOxcSzUsage(overrides: Partial<OxcSzUsageFlags> = {}): OxcSzAttributeResult {
+    return {
+        kind: 'complete',
+        appliedHoistedStyleProps: false,
+        usesRuntime: false,
+        usesMerge: false,
+        usesSzcn: false,
+        usesSzPart: false,
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
+        ...overrides,
     };
 }
 
