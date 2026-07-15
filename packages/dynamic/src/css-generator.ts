@@ -734,23 +734,16 @@ export function parseVariants(cls: string): ParsedVariants {
 
     for (let i = 0; i < parts.length - 1; i++) {
         const variant = parts[i];
+        utilityIdx = i + 1;
 
         if (RESPONSIVE_TIERS.has(variant)) {
             tier = variant as Tier;
-            utilityIdx = i + 1;
-        } else if (variant === 'dark') {
-            selectorPrefix = '.dark ';
-            utilityIdx = i + 1;
-        } else if (variant === 'light') {
-            selectorPrefix = '.light ';
-            utilityIdx = i + 1;
+        } else if (variant === 'dark' || variant === 'light') {
+            selectorPrefix = `.${variant} `;
         } else if (variant in PSEUDO_CLASS_MAP) {
             pseudoSuffix += PSEUDO_CLASS_MAP[variant];
-            utilityIdx = i + 1;
-        } else {
-            // Unknown variant (e.g. group-hover, aria-*, data-*) — keep as tier=base
-            utilityIdx = i + 1;
         }
+        // Unknown variants (e.g. group-hover, aria-*, data-*) keep the base tier.
     }
 
     const utility = parts.slice(utilityIdx).join(':');
