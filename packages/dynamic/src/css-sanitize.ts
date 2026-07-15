@@ -55,7 +55,8 @@ function scanUnquotedCssCharacter(char: string, state: CssValueScanState): boole
 export function isSafeCssValue(value: string): boolean {
     const state: CssValueScanState = { quote: null, parenDepth: 0 };
     for (let i = 0; i < value.length; i++) {
-        if (value.charCodeAt(i) < 0x20) {
+        const codePoint = value.codePointAt(i);
+        if (codePoint !== undefined && codePoint < 0x20) {
             return false; // raw control char / CR / LF / tab
         }
         const char = value[i] as string;
@@ -109,8 +110,8 @@ export function isUtilityArbitrarySafe(utility: string): boolean {
 
     // Whole-utility arbitrary property: [property:value]
     if (
-        utility.charCodeAt(0) === 0x5b /* [ */ &&
-        utility.charCodeAt(utility.length - 1) === 0x5d /* ] */ &&
+        utility.codePointAt(0) === 0x5b /* [ */ &&
+        utility.codePointAt(utility.length - 1) === 0x5d /* ] */ &&
         inner.includes(':')
     ) {
         const colon = inner.indexOf(':');

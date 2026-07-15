@@ -25,6 +25,7 @@ describe('isSafeCssValue', () => {
             'url("a.png")',
             'url(data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)', // ; inside url() is fine
             '"some;text"', // ; inside a quoted string is fine
+            '"launch 🚀"',
             '1fr 2fr',
         ]) {
             expect(isSafeCssValue(v), v).toBe(true);
@@ -87,6 +88,7 @@ describe('isUtilityArbitrarySafe', () => {
             'w-[calc(100%-2rem)]',
             '[mask-type:luminance]',
             '[--c:red]',
+            'content-["🧭"]',
         ]) {
             expect(isUtilityArbitrarySafe(u), u).toBe(true);
         }
