@@ -37,12 +37,9 @@ interface EngineOutput {
  * @returns code, ordered classes, and diagnostic count.
  */
 function run(engine: 'babel' | 'oxc' | 'rust', tsx: string): EngineOutput {
-    const result =
-        engine === 'babel'
-            ? transformSourceCode(tsx, 'F.tsx')
-            : engine === 'oxc'
-              ? transformOxc(tsx, 'F.tsx')
-              : transformRust(tsx, 'F.tsx');
+    let result = transformSourceCode(tsx, 'F.tsx');
+    if (engine === 'oxc') result = transformOxc(tsx, 'F.tsx');
+    else if (engine === 'rust') result = transformRust(tsx, 'F.tsx');
     return {
         code: typeof result === 'string' ? result : result.code,
         classes: [...(result.classes ?? [])],

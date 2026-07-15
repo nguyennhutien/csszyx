@@ -129,7 +129,9 @@ describe('splitBoxSz parity with splitBox(compile(x))', () => {
     it('routes every mapped sz key to its declared role', () => {
         for (const [key, entry] of BOX_ROLE_BY_KEY) {
             const { outer, inner } = splitBoxSz({ [key]: 1 });
-            const bucket = key in outer ? 'outer' : key in inner ? 'inner' : 'missing';
+            let bucket = 'missing';
+            if (key in outer) bucket = 'outer';
+            else if (key in inner) bucket = 'inner';
             expect(bucket, key).toBe(entry.role);
         }
     });

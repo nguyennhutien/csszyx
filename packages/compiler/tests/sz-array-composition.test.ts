@@ -43,8 +43,9 @@ function norm(code: string): string {
 
 function run(engine: 'oxc' | 'babel' | 'rust', attr: string) {
     const source = `${PRELUDE}export const A = () => <div ${attr} />;`;
-    const fn =
-        engine === 'oxc' ? transformOxc : engine === 'rust' ? transformRust : transformSourceCode;
+    let fn = transformSourceCode;
+    if (engine === 'oxc') fn = transformOxc;
+    else if (engine === 'rust') fn = transformRust;
     const result = fn(source, 'array.tsx');
     return {
         code: result.code,

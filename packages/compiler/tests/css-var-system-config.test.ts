@@ -318,5 +318,6 @@ describe('CSS variable system config contract', () => {
 });
 
 function asArray<T>(value: T | T[] | undefined): T[] {
-    return value === undefined ? [] : Array.isArray(value) ? value : [value];
+    if (value === undefined) return [];
+    return Array.isArray(value) ? value : [value];
 }
