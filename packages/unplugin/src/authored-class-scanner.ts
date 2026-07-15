@@ -1,5 +1,20 @@
 /** Characters that can precede a JavaScript regular-expression literal. */
 const REGEX_PREFIXES = new Set('([{:,;=!?&|+-*%^~<>/');
+const REGEX_PREFIX_KEYWORDS = new Set([
+    'await',
+    'case',
+    'delete',
+    'do',
+    'else',
+    'in',
+    'instanceof',
+    'of',
+    'return',
+    'throw',
+    'typeof',
+    'void',
+    'yield',
+]);
 const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
     b: '\b',
     f: '\f',
@@ -43,6 +58,17 @@ function decodeEscape(value: string, cursor: number): DecodedEscape {
     if (SIMPLE_ESCAPES[escaped] !== undefined) {
         return { value: SIMPLE_ESCAPES[escaped], cursor };
     }
+    if (escaped === '\r' && value[cursor + 1] === '\n') {
+        return { value: '', cursor: cursor + 1 };
+    }
+    if (escaped === 'u' && value[cursor + 1] === '{') {
+        const close = value.indexOf('}', cursor + 2);
+        const hex = close === -1 ? '' : value.slice(cursor + 2, close);
+        const codePoint = hex && /^[\dA-F]+$/i.test(hex) ? Number.parseInt(hex, 16) : -1;
+        if (codePoint >= 0 && codePoint <= 0x10ffff) {
+            return { value: String.fromCodePoint(codePoint), cursor: close };
+        }
+    }
     let width = 0;
     if (escaped === 'x') width = 2;
     else if (escaped === 'u') width = 4;
@@ -85,7 +111,14 @@ function decodeJavaScriptString(value: string): string {
  * @returns Content with class-separating entities decoded.
  */
 function decodeAttributeWhitespace(value: string): string {
-    return value.replace(/&#(?:32|x20);|&(?:Tab|NewLine);/gi, ' ');
+    return value.replace(
+        /&#(?:(\d+)|x([\da-f]+));|&(?:Tab|NewLine);/gi,
+        (entity, decimal: string | undefined, hexadecimal: string | undefined) => {
+            if (!decimal && !hexadecimal) return ' ';
+            const codePoint = Number.parseInt(decimal ?? hexadecimal ?? '', decimal ? 10 : 16);
+            return [9, 10, 12, 13, 32].includes(codePoint) ? ' ' : entity;
+        },
+    );
 }
 
 /**
@@ -141,7 +174,11 @@ function isRegexStart(source: string, start: number): boolean {
     let cursor = start - 1;
     while (cursor >= 0 && /\s/.test(source[cursor])) cursor--;
     if (source[cursor] === '<' && /[A-Z]/i.test(source[start + 1] ?? '')) return false;
-    return cursor < 0 || REGEX_PREFIXES.has(source[cursor]);
+    if (cursor < 0 || REGEX_PREFIXES.has(source[cursor])) return true;
+    if (!/[\w$]/.test(source[cursor])) return false;
+    const end = cursor + 1;
+    while (cursor >= 0 && /[\w$]/.test(source[cursor])) cursor--;
+    return REGEX_PREFIX_KEYWORDS.has(source.slice(cursor + 1, end));
 }
 
 /**
@@ -382,6 +419,59 @@ function isClassSink(source: string, start: number, end: number): boolean {
 }
 
 /**
+ * Collect a framework `class:*` directive when one starts at an object-like colon value.
+ * @param target Class candidate sink.
+ * @param source Complete source text.
+ * @param sinkStart Class identifier start.
+ * @param valueStart Offset immediately after the colon and trivia.
+ * @returns Consumed end for a directive, or null for an ordinary object property.
+ */
+function collectClassDirective(
+    target: Set<string>,
+    source: string,
+    sinkStart: number,
+    valueStart: number,
+): number | null {
+    if (!/[\w$-]/.test(source[valueStart] ?? '')) return null;
+    let directiveEnd = valueStart;
+    while (/[\w$-]/.test(source[directiveEnd] ?? '')) directiveEnd++;
+    const equals = triviaEnd(source, directiveEnd);
+    if (source[equals] !== '=') {
+        const insideMarkupTag =
+            source.lastIndexOf('<', sinkStart) > source.lastIndexOf('>', sinkStart);
+        const next = source[equals] ?? '';
+        const continuesMarkupTag =
+            next === '/' || next === '>' || next === '{' || /[A-Z_:]/i.test(next);
+        if (!insideMarkupTag || !continuesMarkupTag) return null;
+        // Svelte permits shorthand `class:name` when the condition variable
+        // has the same name as the class.
+        collectClassTokens(target, source.slice(valueStart, directiveEnd));
+        return directiveEnd;
+    }
+
+    const directive = source.slice(valueStart, directiveEnd);
+    const directiveValueStart = triviaEnd(source, equals + 1);
+    const directiveQuote = source[directiveValueStart];
+    // Svelte's class:name directive authors `name` directly. Astro's
+    // class:list directive instead carries the authored names in its value, so
+    // `list` itself is not a runtime class.
+    if (directive !== 'list') collectClassTokens(target, directive);
+    if (directiveQuote === '{') {
+        const end = findBalancedCodeEnd(source, directiveValueStart + 1);
+        if (directive === 'list') {
+            collectExpressionTokens(target, source.slice(directiveValueStart + 1, end));
+        }
+        return end + 1;
+    }
+    if (directive === 'list' && (directiveQuote === '"' || directiveQuote === "'")) {
+        const end = quotedEnd(source, directiveValueStart, directiveQuote);
+        collectExpressionTokens(target, source.slice(directiveValueStart, end));
+        return end;
+    }
+    return directiveValueStart;
+}
+
+/**
  * Collect one recognized class/className sink and return its consumed end.
  * @param target Class candidate sink.
  * @param source Complete source text.
@@ -401,6 +491,10 @@ function collectClassSink(
     const valueStart = triviaEnd(source, operatorStart + 1);
     const quote = source[valueStart];
     const vueBinding = operator === '=' && source.slice(Math.max(0, start - 1), start) === ':';
+    if (operator === ':' && valueStart === operatorStart + 1) {
+        const directiveEnd = collectClassDirective(target, source, start, valueStart);
+        if (directiveEnd !== null) return directiveEnd;
+    }
     if (quote === '"' || quote === "'") {
         const end = quotedEnd(source, valueStart, quote);
         const value = source.slice(valueStart + 1, end - 1);

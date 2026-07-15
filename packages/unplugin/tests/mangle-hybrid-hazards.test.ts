@@ -45,21 +45,35 @@ describe('hybrid raw-class ownership', () => {
         expect([...collectAuthoredClassNames(source)].sort()).toEqual(['p-4', 'raw', '}']);
     });
 
+    it('does not close class expressions on regex braces after prefix keywords', () => {
+        const source = `
+            const A = () => (
+                <div className={factory(() => { return /[}]/.test(value); }, 'p-4 after-regex')} />
+            );
+        `;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual(['after-regex', 'p-4']);
+    });
+
     it('collects class expressions and object-property class sinks', () => {
         const source = `
             const A = () => <div class={clsx('p-4 raw')} />;
             const props = { className: clsx('m-2 object-raw') };
             const B = React.createElement('div', { className: 'gap-3 created-raw' });
             const C = <div {...{ 'className': 'px-2 quoted-key-raw' }} />;
+            const D = <div {...{ class: condition ? 'py-2 object-class' : 'py-3' }} />;
         `;
 
         expect([...collectAuthoredClassNames(source)].sort()).toEqual([
             'created-raw',
             'gap-3',
             'm-2',
+            'object-class',
             'object-raw',
             'p-4',
             'px-2',
+            'py-2',
+            'py-3',
             'quoted-key-raw',
             'raw',
         ]);
@@ -80,19 +94,42 @@ describe('hybrid raw-class ownership', () => {
         ]);
     });
 
+    it('collects Svelte class directives and Astro class:list values', () => {
+        const source = `
+            <div class:active={active} class:disabled />
+            <section class:list={['m-2', active && 'astro-active']} />
+        `;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual([
+            'active',
+            'astro-active',
+            'disabled',
+            'm-2',
+        ]);
+    });
+
     it('decodes static concatenation, JavaScript whitespace escapes, and entities', () => {
         const source = String.raw`
-            const A = () => <div className={'p-' + '4 raw\u0020m-2'} />;
-            const B = () => <div className="gap-3&#32;entity-raw" />;
+            const A = () => <div className={'p-' + '4 raw\u0020m-2\u{20}gap-1'} />;
+            const B = () => <div className="gap-3&#9;entity-raw&#xA;next-line" />;
         `;
 
         expect([...collectAuthoredClassNames(source)].sort()).toEqual([
             'entity-raw',
+            'gap-1',
             'gap-3',
             'm-2',
+            'next-line',
             'p-4',
             'raw',
         ]);
+    });
+
+    it('removes CRLF string continuations without splitting one class token', () => {
+        const continuation = `\\${'\r\n'}`;
+        const source = `<div className={'before-${continuation}after raw'} />`;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual(['before-after', 'raw']);
     });
 
     it('keeps shared raw/sz classes out of the mangle map', () => {
