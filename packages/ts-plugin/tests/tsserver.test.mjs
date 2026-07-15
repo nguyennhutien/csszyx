@@ -69,19 +69,22 @@ const runServer = async (label, serverPath) => {
             offset: completionOffset,
         });
         const response = await responseFor(request);
-        assert.strictEqual(response.success, true);
         const owned = (response.body?.entries ?? []).filter(
             entry =>
                 entry.data?.owner === '@csszyx/ts-plugin' && entry.data?.schema === 1,
         );
-        assert.ok(owned.some(entry => entry.name === 'bg'));
-        assert.ok(owned.some(entry => entry.name === 'hover'));
-        console.log(`${label} tsserver check passed (${owned.length} csszyx entries)`);
+        return { response, owned };
     } finally {
         child.kill();
     }
 };
 
 for (const [label, serverPath] of servers) {
-    test(`${label} tsserver loads the csszyx plugin`, () => runServer(label, serverPath));
+    test(`${label} tsserver loads the csszyx plugin`, async () => {
+        const { response, owned } = await runServer(label, serverPath);
+        assert.strictEqual(response.success, true);
+        assert.ok(owned.some(entry => entry.name === 'bg'));
+        assert.ok(owned.some(entry => entry.name === 'hover'));
+        console.log(`${label} tsserver check passed (${owned.length} csszyx entries)`);
+    });
 }
