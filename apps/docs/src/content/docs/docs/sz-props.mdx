@@ -431,6 +431,23 @@ is not treated as absent—it remains a valid value.
 // absent:  no flex utility and no --_sz-flex value
 ```
 
+When the generated CSS variable sits beside one direct object-literal JSX prop
+spread—or one conditional whose branches are object literals—the compiler
+injects it into every branch's `style`. This preserves authored style without
+evaluating the spread expression twice:
+
+```tsx
+<div sz={{ w: width }} {...(cond ? { style: { flex } } : {})} />
+// → {...(cond
+//   ? { style: { flex, "--_sz-w": __szSpacingVar(width, "w") } }
+//   : { style: { "--_sz-w": __szSpacingVar(width, "w") } })}
+```
+
+Unresolved spreads (`{...props}`), multiple spreads, and object branches with
+their own unknown spreads retain the collision diagnostic. Move their style to
+an explicit `style={...}` prop so the compiler can merge it without guessing
+about evaluation or precedence.
+
 The injected value resolves at runtime the same way the static path lowers the
 same literal: numbers ride the spacing scale (`calc(n * var(--spacing))`),
 tokens resolve to their CSS values (`'full'` → `100%`, `'3/12'` → `25%`,

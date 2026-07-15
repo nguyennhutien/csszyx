@@ -476,6 +476,7 @@ fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr
     ir.jsx_opening_elements
         .iter()
         .filter(|element| element.has_spread_attribute)
+        .filter(|element| element.safe_style_spread.is_none())
         .filter(|element| {
             element.hoisted_dynamic_css_vars.iter().next().is_some()
                 || element.sz_attribute_indices.iter().any(|index| {

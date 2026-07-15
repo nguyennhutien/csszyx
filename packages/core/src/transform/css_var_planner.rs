@@ -716,6 +716,7 @@ mod tests {
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
             has_spread_attribute: false,
+            safe_style_spread: None,
             last_attribute_end: None,
             element_name: "div".to_string(),
             hoisted_dynamic_css_vars: Vec::new(),

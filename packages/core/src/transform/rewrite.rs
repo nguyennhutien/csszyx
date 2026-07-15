@@ -501,6 +501,21 @@ fn apply_dynamic_style_props(
         .collect::<Vec<_>>()
         .join(", ");
 
+    if let Some(spread) = &element.safe_style_spread {
+        if let Some(replacement) = safe_style_spread_source(source, spread, &props) {
+            magic.update_with(
+                spread.attribute_span.start as usize,
+                spread.attribute_span.end as usize,
+                replacement,
+                UpdateOptions {
+                    overwrite: true,
+                    ..UpdateOptions::default()
+                },
+            );
+            return;
+        }
+    }
+
     if let Some(style_index) = element.style_attribute_index {
         let style_attr = &ir.style_attributes[style_index];
         if let Some(expression_span) = style_attr.expression_span {
@@ -523,6 +538,80 @@ fn apply_dynamic_style_props(
         |offset| offset as usize,
     );
     magic.append_right(insert_at, format!(" style={{{{{props}}}}}"));
+}
+
+fn safe_style_spread_source(
+    source: &str,
+    spread: &super::SafeStyleSpreadIr,
+    props: &str,
+) -> Option<String> {
+    let expression = match &spread.expression {
+        super::SafeStyleSpreadExpressionIr::Object(object) => {
+            safe_style_spread_object_source(source, object, props)?
+        }
+        super::SafeStyleSpreadExpressionIr::Conditional {
+            test_span,
+            consequent,
+            alternate,
+        } => {
+            let test = &source[test_span.start as usize..test_span.end as usize];
+            let consequent = safe_style_spread_object_source(source, consequent, props)?;
+            let alternate = safe_style_spread_object_source(source, alternate, props)?;
+            format!("({test} ? {consequent} : {alternate})")
+        }
+    };
+    Some(format!("{{...{expression}}}"))
+}
+
+fn safe_style_spread_object_source(
+    source: &str,
+    object: &super::SafeStyleSpreadObjectIr,
+    props: &str,
+) -> Option<String> {
+    let object_source = &source[object.object_span.start as usize..object.object_span.end as usize];
+    let Some(style_value) = &object.style_value else {
+        return append_object_property(
+            object_source,
+            object.has_properties,
+            &format!("style: {{{props}}}"),
+        );
+    };
+    let (span, replacement) = match style_value {
+        super::SafeStyleSpreadValueIr::Object {
+            span,
+            has_properties,
+        } => {
+            let style_source = &source[span.start as usize..span.end as usize];
+            (
+                *span,
+                append_object_property(style_source, *has_properties, props)?,
+            )
+        }
+        super::SafeStyleSpreadValueIr::Expression(span) => {
+            let value = &source[span.start as usize..span.end as usize];
+            (*span, format!("{{...({value}), {props}}}"))
+        }
+    };
+    let relative_start = (span.start - object.object_span.start) as usize;
+    let relative_end = (span.end - object.object_span.start) as usize;
+    Some(format!(
+        "{}{}{}",
+        &object_source[..relative_start],
+        replacement,
+        &object_source[relative_end..]
+    ))
+}
+
+fn append_object_property(source: &str, has_properties: bool, property: &str) -> Option<String> {
+    let body = source.strip_suffix('}')?;
+    let separator = if !has_properties {
+        ""
+    } else if body.trim_end().ends_with(',') {
+        " "
+    } else {
+        ", "
+    };
+    Some(format!("{body}{separator}{property}}}"))
 }
 
 fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {

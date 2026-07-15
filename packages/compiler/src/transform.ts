@@ -358,6 +358,109 @@ function mergeStyleProperties(
     );
 }
 
+/**
+ * Returns a non-computed object property name used by safe spread rewriting.
+ * @param property Object property to inspect.
+ * @returns Static property name, or null for unsupported keys.
+ */
+function babelObjectPropertyName(property: t.ObjectProperty): string | null {
+    if (property.computed) return null;
+    if (t.isIdentifier(property.key)) return property.key.name;
+    if (t.isStringLiteral(property.key)) return property.key.value;
+    return null;
+}
+
+/**
+ * Collects object-literal branches whose prop spread can receive generated style.
+ * @param expression JSX spread argument.
+ * @returns Safe object branches, or null for unsupported shapes.
+ */
+function safeStyleSpreadObjects(expression: t.Expression): t.ObjectExpression[] | null {
+    const inner = unwrapTsExpression(expression) ?? expression;
+    if (t.isObjectExpression(inner)) return [inner];
+    if (!t.isConditionalExpression(inner)) return null;
+    const consequent = unwrapTsExpression(inner.consequent) ?? inner.consequent;
+    const alternate = unwrapTsExpression(inner.alternate) ?? inner.alternate;
+    return t.isObjectExpression(consequent) && t.isObjectExpression(alternate)
+        ? [consequent, alternate]
+        : null;
+}
+
+/**
+ * Checks that an object branch exposes at most one explicit, mergeable style value.
+ * @param object Object-literal spread branch.
+ * @returns Whether generated style can be injected without changing prop precedence.
+ */
+function canInjectStyleIntoSpreadObject(object: t.ObjectExpression): boolean {
+    if (
+        object.properties.some(
+            property =>
+                t.isSpreadElement(property) || (t.isObjectProperty(property) && property.computed),
+        )
+    ) {
+        return false;
+    }
+    const styles = object.properties.filter(
+        (property): property is t.ObjectProperty =>
+            t.isObjectProperty(property) && babelObjectPropertyName(property) === 'style',
+    );
+    return styles.length <= 1 && (styles.length === 0 || t.isExpression(styles[0].value));
+}
+
+/**
+ * Appends generated custom properties to one safe object-literal spread branch.
+ * @param object Object-literal spread branch.
+ * @param newStyleProperties Generated style properties.
+ */
+function injectStyleIntoSpreadObject(
+    object: t.ObjectExpression,
+    newStyleProperties: t.ObjectProperty[],
+): void {
+    const style = object.properties.find(
+        (property): property is t.ObjectProperty =>
+            t.isObjectProperty(property) && babelObjectPropertyName(property) === 'style',
+    );
+    const cloned = newStyleProperties.map(property => t.cloneNode(property, true));
+    if (!style) {
+        object.properties.push(t.objectProperty(t.identifier('style'), t.objectExpression(cloned)));
+        return;
+    }
+    const value = style.value as t.Expression;
+    style.value = t.isObjectExpression(value)
+        ? t.objectExpression([...value.properties, ...cloned])
+        : t.objectExpression([t.spreadElement(value), ...cloned]);
+}
+
+/**
+ * Moves generated style custom properties into every safe prop-spread branch.
+ *
+ * @param path sz attribute path.
+ * @param newStyleProperties Generated style properties.
+ * @param existing Existing JSX attributes for the opening element.
+ * @returns Whether the generated style was injected without an explicit style attribute.
+ */
+function injectStylePropertiesIntoSafeSpread(
+    path: babel.NodePath<t.JSXAttribute>,
+    newStyleProperties: t.ObjectProperty[],
+    existing: ExistingJsxAttributes,
+): boolean {
+    if (
+        newStyleProperties.length === 0 ||
+        existing.styleExpression ||
+        !path.parentPath?.isJSXOpeningElement()
+    ) {
+        return false;
+    }
+    const spreads = path.parentPath.node.attributes.filter(attribute =>
+        t.isJSXSpreadAttribute(attribute),
+    );
+    if (spreads.length !== 1) return false;
+    const objects = safeStyleSpreadObjects(spreads[0].argument);
+    if (!objects?.every(canInjectStyleIntoSpreadObject)) return false;
+    for (const object of objects) injectStyleIntoSpreadObject(object, newStyleProperties);
+    return true;
+}
+
 /** One classified sz array element. */
 type SzArrayPart =
     | { kind: 'obj'; sz: SzObject }
@@ -518,7 +621,12 @@ function transformSzObjectExpression(
     }
 
     const artifacts = buildPartialObjectArtifacts(partial, classes);
-    if (artifacts.styleProperties.length > 0) {
+    const injectedSpreadStyle = injectStylePropertiesIntoSafeSpread(
+        path,
+        artifacts.styleProperties,
+        existing,
+    );
+    if (artifacts.styleProperties.length > 0 && !injectedSpreadStyle) {
         warnStyleSpreadCollision(path, filename, diagnostics);
     }
     applyCompiledClassExpression(
@@ -528,7 +636,7 @@ function transformSzObjectExpression(
         classMergeUsage,
         classes,
     );
-    mergeStyleProperties(path, artifacts.styleProperties, existing);
+    if (!injectedSpreadStyle) mergeStyleProperties(path, artifacts.styleProperties, existing);
     return {
         transformed: true,
         usesColorVar: partial.usesColorVar,

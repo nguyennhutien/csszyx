@@ -4,8 +4,8 @@ use oxc_ast::{
         Argument, ArrayExpression, ArrayExpressionElement, CallExpression, ConditionalExpression,
         Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue,
         JSXElement, JSXElementName, JSXExpression, JSXFragment, JSXMemberExpression,
-        JSXMemberExpressionObject, JSXOpeningElement, ObjectExpression, ObjectProperty,
-        ObjectPropertyKind, PropertyKey, UnaryOperator,
+        JSXMemberExpressionObject, JSXOpeningElement, JSXSpreadAttribute, ObjectExpression,
+        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
     },
     AstKind,
 };
@@ -17,7 +17,8 @@ use std::time::Instant;
 use super::{
     lower::{dynamic_css_var_class, lower_static_sz_object},
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
-    RecoveryAttributeIr, RecoveryMode, SourceIr, StaticArrayPartIr, StaticSzObject,
+    RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr,
+    SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject,
     StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
     SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
 };
@@ -205,6 +206,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
             has_spread_attribute: false,
+            safe_style_spread: None,
             last_attribute_end: None,
             element_name: "<>".to_string(),
             hoisted_dynamic_css_vars: Vec::new(),
@@ -227,11 +229,23 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         let mut recovery_attribute_index = None;
         let mut has_recovery_token_attribute = false;
         let mut has_spread_attribute = false;
+        let mut safe_style_spread = None;
+        let mut spread_count = 0usize;
         let mut last_attribute_end = None;
 
         for item in &element.attributes {
             let JSXAttributeItem::Attribute(attr) = item else {
+                let spread = match item {
+                    JSXAttributeItem::SpreadAttribute(spread) => spread,
+                    JSXAttributeItem::Attribute(_) => unreachable!("attribute matched above"),
+                };
                 has_spread_attribute = true;
+                spread_count += 1;
+                safe_style_spread = if spread_count == 1 {
+                    safe_style_spread_from_attribute(spread)
+                } else {
+                    None
+                };
                 continue;
             };
             last_attribute_end = Some(attr.span.end);
@@ -286,6 +300,11 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             recovery_attribute_index,
             has_recovery_token_attribute,
             has_spread_attribute,
+            safe_style_spread: if style_attribute_index.is_none() && spread_count == 1 {
+                safe_style_spread
+            } else {
+                None
+            },
             last_attribute_end,
             element_name,
             hoisted_dynamic_css_vars: Vec::new(),
@@ -302,6 +321,75 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         self.collect_catalog_call_classes(call);
         walk::walk_call_expression(self, call);
     }
+}
+
+/// Classify one JSX spread whose object branches can absorb generated style vars.
+fn safe_style_spread_from_attribute(spread: &JSXSpreadAttribute<'_>) -> Option<SafeStyleSpreadIr> {
+    let expression = unwrap_expression(&spread.argument);
+    let expression = match expression {
+        Expression::ObjectExpression(object) => {
+            SafeStyleSpreadExpressionIr::Object(safe_style_spread_object(object)?)
+        }
+        Expression::ConditionalExpression(conditional) => {
+            let consequent = unwrap_expression(&conditional.consequent);
+            let alternate = unwrap_expression(&conditional.alternate);
+            let Expression::ObjectExpression(consequent) = consequent else {
+                return None;
+            };
+            let Expression::ObjectExpression(alternate) = alternate else {
+                return None;
+            };
+            SafeStyleSpreadExpressionIr::Conditional {
+                test_span: text_span(conditional.test.span()),
+                consequent: safe_style_spread_object(consequent)?,
+                alternate: safe_style_spread_object(alternate)?,
+            }
+        }
+        _ => return None,
+    };
+    Some(SafeStyleSpreadIr {
+        attribute_span: text_span(spread.span),
+        expression,
+    })
+}
+
+/// Capture one object-literal spread branch with at most one explicit style key.
+fn safe_style_spread_object(object: &ObjectExpression<'_>) -> Option<SafeStyleSpreadObjectIr> {
+    if object
+        .properties
+        .iter()
+        .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_)))
+    {
+        return None;
+    }
+    let mut style_value = None;
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        if property.computed {
+            return None;
+        }
+        if static_property_key(&property.key).as_deref() != Some("style") {
+            continue;
+        }
+        if style_value.is_some() {
+            return None;
+        }
+        let value = unwrap_expression(&property.value);
+        style_value = Some(match value {
+            Expression::ObjectExpression(style_object) => SafeStyleSpreadValueIr::Object {
+                span: text_span(style_object.span),
+                has_properties: !style_object.properties.is_empty(),
+            },
+            _ => SafeStyleSpreadValueIr::Expression(text_span(value.span())),
+        });
+    }
+    Some(SafeStyleSpreadObjectIr {
+        object_span: text_span(object.span),
+        has_properties: !object.properties.is_empty(),
+        style_value,
+    })
 }
 
 /// Scope + program pair threaded through static-lowering recursions so the

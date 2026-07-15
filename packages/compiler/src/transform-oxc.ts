@@ -502,16 +502,25 @@ export function transformOxc(
                         szAttrs.length === 1 &&
                         !(partial.hasConditional && classNameAttr)
                     ) {
-                        warnOxcStyleSpreadCollision(
-                            partial.styleProps,
-                            openingAttributes.hasSpread,
-                            effectiveFilename,
-                            diagnostics,
-                        );
                         const mergedStyleProps =
                             hoistedStyleProps.length > 0
                                 ? [...hoistedStyleProps, ...partial.styleProps]
                                 : partial.styleProps;
+                        const spreadStyleRewrite = buildOxcSafeStyleSpreadRewrite(
+                            openingAttributes.spreads,
+                            styleAttr,
+                            mergedStyleProps,
+                            source,
+                        );
+                        warnOxcStyleSpreadCollision(
+                            mergedStyleProps,
+                            hasUnresolvedStyleSpread(
+                                openingAttributes.hasSpread,
+                                spreadStyleRewrite,
+                            ),
+                            effectiveFilename,
+                            diagnostics,
+                        );
                         if (classNameAttr?.value?.type === 'JSXExpressionContainer') {
                             const classExpression = (
                                 classNameAttr.value as unknown as { expression: OxcNode }
@@ -526,13 +535,14 @@ export function transformOxc(
                                 `className={_szMerge(${classExpressionSource}, ${JSON.stringify(partial.className)})}`,
                             );
                             edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                            applyStyleProps(
+                            applyOxcGeneratedStyle(
                                 edits,
                                 source,
                                 styleAttr,
                                 lastAttr,
                                 mergedStyleProps,
                                 openingNode.name.end,
+                                spreadStyleRewrite,
                             );
                             appliedHoistedStyleProps = true;
                             for (const c of partial.className.split(/\s+/)) {
@@ -560,13 +570,14 @@ export function transformOxc(
                         } else {
                             edits.overwrite(szAttr.start, szAttr.end, partial.classNameAttr);
                         }
-                        applyStyleProps(
+                        applyOxcGeneratedStyle(
                             edits,
                             source,
                             styleAttr,
                             lastAttr,
                             mergedStyleProps,
                             openingNode.name.end,
+                            spreadStyleRewrite,
                         );
                         appliedHoistedStyleProps = true;
                         for (const c of partial.className.split(/\s+/)) {
@@ -791,6 +802,7 @@ interface OxcOpeningAttributes {
     recovery: JsxAttributeNode | null;
     alreadyTagged: boolean;
     hasSpread: boolean;
+    spreads: OxcNode[];
     last: JsxAttributeNode | null;
 }
 
@@ -806,6 +818,156 @@ function styleSpreadCollisionDiagnostic(filename: string): string {
         'this element spreads props that may contain style, while sz emits an explicit style attribute. ' +
         'Move the spread style to an explicit style prop so csszyx can merge both values.'
     );
+}
+
+/** Source rewrite that moves generated style props into one safe JSX spread. */
+interface OxcSafeStyleSpreadRewrite {
+    start: number;
+    end: number;
+    replacement: string;
+}
+
+/**
+ * Reports whether generated style still collides with an unresolved prop spread.
+ * @param hasSpread Whether the opening element contains any prop spread.
+ * @param rewrite Proven-safe spread rewrite, when available.
+ * @returns Whether the collision diagnostic remains necessary.
+ */
+function hasUnresolvedStyleSpread(
+    hasSpread: boolean,
+    rewrite: OxcSafeStyleSpreadRewrite | null,
+): boolean {
+    return hasSpread && !rewrite;
+}
+
+/**
+ * Appends one source fragment before an object literal's closing brace.
+ * @param objectSource Complete object literal source.
+ * @param hasProperties Whether the object already has members.
+ * @param propertySource Property source to append.
+ * @returns Rebuilt object source, or null for a malformed span.
+ */
+function appendOxcObjectProperty(
+    objectSource: string,
+    hasProperties: boolean,
+    propertySource: string,
+): string | null {
+    if (!objectSource.endsWith('}')) return null;
+    const body = objectSource.slice(0, -1);
+    const separator = !hasProperties ? '' : body.trimEnd().endsWith(',') ? ' ' : ', ';
+    return `${body}${separator}${propertySource}}`;
+}
+
+/**
+ * Rebuilds an object literal with generated custom properties inside `style`.
+ * @param object Object-literal spread branch.
+ * @param styleProps Generated style property source.
+ * @param source Original source.
+ * @returns Rewritten object source, or null when the branch is unsafe.
+ */
+function buildOxcStyleSpreadObject(
+    object: ObjectExpressionNode,
+    styleProps: string,
+    source: string,
+): string | null {
+    if (
+        object.properties.some(
+            property =>
+                property.type === 'SpreadElement' ||
+                (property.type === 'Property' && (property as PropertyNode).computed),
+        )
+    ) {
+        return null;
+    }
+    const styles = object.properties.filter(property => {
+        if (property.type !== 'Property') return false;
+        const candidate = property as PropertyNode;
+        return !candidate.computed && extractKeyName(candidate.key) === 'style';
+    }) as PropertyNode[];
+    if (styles.length > 1) return null;
+
+    const objectSource = source.slice(object.start, object.end);
+    const style = styles[0];
+    if (!style) {
+        return appendOxcObjectProperty(
+            objectSource,
+            object.properties.length > 0,
+            `style: {${styleProps}}`,
+        );
+    }
+
+    const value = unwrapExpression(style.value);
+    let replacement: string;
+    if (value.type === 'ObjectExpression') {
+        const styleObject = value as ObjectExpressionNode;
+        const styleSource = source.slice(styleObject.start, styleObject.end);
+        const appended = appendOxcObjectProperty(
+            styleSource,
+            styleObject.properties.length > 0,
+            styleProps,
+        );
+        if (!appended) return null;
+        replacement = appended;
+    } else {
+        replacement = `{...(${source.slice(value.start, value.end)}), ${styleProps}}`;
+    }
+    const relativeStart = value.start - object.start;
+    const relativeEnd = value.end - object.start;
+    return `${objectSource.slice(0, relativeStart)}${replacement}${objectSource.slice(relativeEnd)}`;
+}
+
+/**
+ * Builds a single-evaluation rewrite for object or object-branch JSX spreads.
+ * @param spreads JSX spread attributes on the opening element.
+ * @param styleAttr Existing explicit style attribute.
+ * @param styleProps Generated style property fragments.
+ * @param source Original source.
+ * @returns Safe spread rewrite, or null when explicit style emission is required.
+ */
+function buildOxcSafeStyleSpreadRewrite(
+    spreads: readonly OxcNode[],
+    styleAttr: JsxAttributeNode | null,
+    styleProps: readonly string[],
+    source: string,
+): OxcSafeStyleSpreadRewrite | null {
+    if (spreads.length !== 1 || styleAttr || styleProps.length === 0) return null;
+    const spread = spreads[0] as OxcNode & { argument?: OxcNode };
+    if (!spread.argument) return null;
+    const argument = unwrapExpression(spread.argument);
+    const propsSource = styleProps.join(', ');
+    let expressionSource: string | null = null;
+    if (argument.type === 'ObjectExpression') {
+        expressionSource = buildOxcStyleSpreadObject(
+            argument as ObjectExpressionNode,
+            propsSource,
+            source,
+        );
+    } else if (argument.type === 'ConditionalExpression') {
+        const conditional = argument as ConditionalExpressionNode;
+        const consequent = unwrapExpression(conditional.consequent);
+        const alternate = unwrapExpression(conditional.alternate);
+        if (consequent.type !== 'ObjectExpression' || alternate.type !== 'ObjectExpression') {
+            return null;
+        }
+        const consequentSource = buildOxcStyleSpreadObject(
+            consequent as ObjectExpressionNode,
+            propsSource,
+            source,
+        );
+        const alternateSource = buildOxcStyleSpreadObject(
+            alternate as ObjectExpressionNode,
+            propsSource,
+            source,
+        );
+        if (!consequentSource || !alternateSource) return null;
+        expressionSource = `(${source.slice(conditional.test.start, conditional.test.end)} ? ${consequentSource} : ${alternateSource})`;
+    }
+    if (!expressionSource) return null;
+    return {
+        start: spread.start,
+        end: spread.end,
+        replacement: `{...${expressionSource}}`,
+    };
 }
 
 /**
@@ -841,11 +1003,13 @@ function collectOxcOpeningAttributes(attributes: OxcNode[]): OxcOpeningAttribute
         recovery: null,
         alreadyTagged: false,
         hasSpread: false,
+        spreads: [],
         last: null,
     };
     for (const rawAttribute of attributes) {
         if (rawAttribute.type !== 'JSXAttribute') {
             collected.hasSpread = true;
+            collected.spreads.push(rawAttribute);
             continue;
         }
         const attribute = rawAttribute as JsxAttributeNode;
@@ -4267,6 +4431,33 @@ function markPartialRuntimeHelper(
     else if (category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION) {
         result.usesUnitVar = true;
     }
+}
+
+/**
+ * Applies generated style either inside a proven-safe spread or as an explicit attribute.
+ *
+ * @param edits MagicString instance to update.
+ * @param source Original source.
+ * @param styleAttr Existing style attribute, if any.
+ * @param lastAttr Last JSX attribute in the opening element.
+ * @param styleProps Object property source fragments.
+ * @param fallbackInsertOffset Offset used when the element has no attributes.
+ * @param spreadRewrite Safe spread rewrite, when available.
+ */
+function applyOxcGeneratedStyle(
+    edits: MagicString,
+    source: string,
+    styleAttr: JsxAttributeNode | null,
+    lastAttr: JsxAttributeNode | null,
+    styleProps: string[],
+    fallbackInsertOffset: number,
+    spreadRewrite: OxcSafeStyleSpreadRewrite | null,
+): void {
+    if (spreadRewrite) {
+        edits.overwrite(spreadRewrite.start, spreadRewrite.end, spreadRewrite.replacement);
+        return;
+    }
+    applyStyleProps(edits, source, styleAttr, lastAttr, styleProps, fallbackInsertOffset);
 }
 
 /**

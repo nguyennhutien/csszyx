@@ -42,7 +42,7 @@ const KNOWN_DIVERGENT_SNIPPETS: ReadonlyArray<{ id: string; reason: string }> = 
 ];
 
 const EXPECTED_SUMMARY: Record<RustCorpusCategory, number> = {
-    parity: 140 - KNOWN_DIVERGENT_SNIPPETS.length,
+    parity: 141 - KNOWN_DIVERGENT_SNIPPETS.length,
     'rust-ahead': 0,
     'code-divergence': KNOWN_DIVERGENT_SNIPPETS.length,
     'class-divergence': 0,
@@ -59,7 +59,7 @@ describe('Rust native engine — extracted compiler corpus', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(140);
+        expect(snippets).toHaveLength(141);
     });
 
     it('matches the current Rust-vs-oxc category summary', () => {

@@ -157,6 +157,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
             has_spread_attribute: false,
+            safe_style_spread: None,
             last_attribute_end: Some(u32::try_from(attribute_end).ok()?),
             element_name: element_name(opening)?,
             hoisted_dynamic_css_vars: Vec::new(),

@@ -30,7 +30,7 @@ interface ExtractedSnippet {
 
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
     parity: 8,
-    'surgical-parity': 132,
+    'surgical-parity': 133,
     'oxc-throws': 0,
     // Was 1: the `bg:{ color, op: cond ? 30 : 100 }` snippet — oxc used to diverge
     // (incomplete safelist) and now expands the finite conditional like babel.
@@ -44,7 +44,7 @@ describe('Phase D3 — extracted compiler corpus categories', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(140);
+        expect(snippets).toHaveLength(141);
     });
 
     it('matches the current Babel-vs-oxc category summary', () => {

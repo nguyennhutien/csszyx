@@ -151,12 +151,65 @@ pub struct JsxOpeningElementIr {
     /// Whether the opening element contains a JSX prop spread.
     #[serde(default)]
     pub has_spread_attribute: bool,
+    /// Single object-literal spread whose style can safely absorb generated vars.
+    #[serde(default)]
+    pub safe_style_spread: Option<SafeStyleSpreadIr>,
     /// End offset of the last JSX attribute on the opening element.
     pub last_attribute_end: Option<u32>,
     /// String form of the JSX element name used by recovery tokens.
     pub element_name: String,
     /// Dynamic CSS custom properties hoisted from descendant `sz` attributes.
     pub hoisted_dynamic_css_vars: Vec<DynamicCssVarIr>,
+}
+
+/// One JSX prop spread that can absorb compiler-generated style properties.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SafeStyleSpreadIr {
+    /// Full `{...expression}` attribute span.
+    pub attribute_span: TextSpan,
+    /// Object or conditional-object shape carried by the spread.
+    pub expression: SafeStyleSpreadExpressionIr,
+}
+
+/// Safe source shapes accepted for generated style injection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SafeStyleSpreadExpressionIr {
+    /// A direct object-literal spread.
+    Object(SafeStyleSpreadObjectIr),
+    /// A conditional whose two branches are object literals.
+    Conditional {
+        /// Source span of the conditional test.
+        test_span: TextSpan,
+        /// Truthy object branch.
+        consequent: SafeStyleSpreadObjectIr,
+        /// Falsy object branch.
+        alternate: SafeStyleSpreadObjectIr,
+    },
+}
+
+/// Object-literal branch metadata needed for source-preserving style injection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SafeStyleSpreadObjectIr {
+    /// Full object literal span, including braces.
+    pub object_span: TextSpan,
+    /// Whether the object already contains properties.
+    pub has_properties: bool,
+    /// Existing explicit style value, if present.
+    pub style_value: Option<SafeStyleSpreadValueIr>,
+}
+
+/// Existing style value shape inside a safe prop-spread object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SafeStyleSpreadValueIr {
+    /// Object literal style value, with property-presence metadata.
+    Object {
+        /// Full object literal span.
+        span: TextSpan,
+        /// Whether it already contains properties.
+        has_properties: bool,
+    },
+    /// Any other expression, preserved behind an object spread.
+    Expression(TextSpan),
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -481,6 +534,7 @@ mod tests {
                 recovery_attribute_index: None,
                 has_recovery_token_attribute: false,
                 has_spread_attribute: false,
+                safe_style_spread: None,
                 last_attribute_end: Some(72),
                 element_name: "div".to_string(),
                 hoisted_dynamic_css_vars: Vec::new(),
