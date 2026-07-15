@@ -530,7 +530,8 @@ function reportUnusedImports(summary: MigrationSummary, log: MigrationLog): void
     console.info();
     printWarn('Potentially unused imports (run ESLint to clean up):');
     for (const { file, imports } of summary.unusedImports) {
-        printInfo(`  ${file}: ${imports.map(name => `import { ${name} }`).join(', ')}`);
+        const importNames = imports.map(name => `import { ${name} }`).join(', ');
+        printInfo(`  ${file}: ${importNames}`);
         log.writeLine(`  Unused import in ${file}: ${imports.join(', ')}`);
     }
 }

@@ -3469,9 +3469,8 @@ function evaluatePartialColorOpacity(
     const variable = getCSSVariableName(`${key}-op`, variantChain || undefined);
     const uniqueKey = variantChain ? `${variantChain}-${key}-op` : `${key}-op`;
     const prefix = PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-    result.rawClasses.push(
-        `${variantChain ? `${variantChain}:` : ''}${prefix}-${color}/(${variable})`,
-    );
+    const variantPrefix = variantChain ? `${variantChain}:` : '';
+    result.rawClasses.push(`${variantPrefix}${prefix}-${color}/(${variable})`);
     result.dynamicProps.set(uniqueKey, {
         expression: opacity,
         category: PropertyCategory.UNITLESS,

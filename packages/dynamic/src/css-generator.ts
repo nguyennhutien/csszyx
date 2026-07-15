@@ -1082,7 +1082,8 @@ function resolveTransitionDeclaration(utility: string): string | null {
         out: 'cubic-bezier(0, 0, 0.2, 1)',
         'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
     };
-    return `transition-timing-function: ${eases[value] ?? `var(--ease-${value})`}`;
+    const timingFunction = eases[value] ?? `var(--ease-${value})`;
+    return `transition-timing-function: ${timingFunction}`;
 }
 
 /**
@@ -1091,7 +1092,8 @@ function resolveTransitionDeclaration(utility: string): string | null {
  * @param kind
  */
 function resolveTimedTransition(value: string, kind: 'duration' | 'delay'): string {
-    return `transition-${kind}: ${value.startsWith('[') ? value.slice(1, -1) : `${value}ms`}`;
+    const duration = value.startsWith('[') ? value.slice(1, -1) : `${value}ms`;
+    return `transition-${kind}: ${duration}`;
 }
 
 /**
