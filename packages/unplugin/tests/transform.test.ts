@@ -199,71 +199,46 @@ describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', 
 });
 
 describe('mangleCodeClassesSync — Pass 2 (ternary className expressions)', () => {
-    it('mangles quoted strings in a simple ternary', () => {
-        const code = 'className:cond?"flex":"items-center"';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:cond?"z":"h"');
-    });
-
-    it('skips expressions without a ternary operator', () => {
-        const code = 'className:someVar';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(code);
-    });
-
-    it('mangles ternary arg inside a call with a leading static string', () => {
-        // _szMerge("flex", cond?"p-4":"rounded-xl") — the leading static string causes
-        // the old regex (stopped at first comma) to miss the ternary branch strings
-        const code = 'className:r("flex",cond?"p-4":"rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:r("z",cond?"c":"d")');
-    });
-
-    it('mangles multi-arg call: static + && + ternary', () => {
-        // sz array: [baseClass, cond && conditionalClass, ternaryClass]
-        const code = 'className:r("flex",pe&&"p-4",cond?"rounded-xl":"rounded-full")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:r("z",pe&&"c",cond?"d":"e")');
-    });
-
-    it('mangles ternary-only call (no leading static)', () => {
-        const code = 'className:r(cond?"p-4":"rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:r(cond?"c":"d")');
-    });
-
-    it('mangles chained ternary direct expression (3-way variant switcher)', () => {
-        // sz={{ size: s==="sm" ? 4 : s==="md" ? "rounded-xl" : "rounded-full" }}
-        // Compiler emits a direct ternary, no _szMerge wrapper.
-        const code = 'className:s==="sm"?"p-4":s==="md"?"rounded-xl":"rounded-full"';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // "sm" and "md" are comparison strings, not classes → preserved unchanged
-        expect(result).toBe('className:s==="sm"?"c":s==="md"?"d":"e"');
-    });
-
-    it('handles multiple className: blocks in same line (minified multi-component)', () => {
-        // Minified bundle often has many JSX elements on a single line.
-        const code =
-            '{className:isA?"flex":"items-center"},{className:isRow?"flex-row":"flex-col"}';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('{className:isA?"z":"h"},{className:isRow?"a":"b"}');
-    });
-
-    it('does not contaminate adjacent object props (depth-0 comma terminates scan)', () => {
-        // Scanner must stop at the comma separating className from a neighbouring prop
-        // such as id or title, otherwise it could corrupt those string values.
-        const code = '{className:cond?"flex":"items-center",id:"flex-guide"}';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // class strings mangled, "flex-guide" in id prop left untouched
-        expect(result).toBe('{className:cond?"z":"h",id:"flex-guide"}');
-    });
-
-    it('preserves non-class condition strings (variant==="primary" pattern)', () => {
-        // sz={{ bg: variant === 'primary' ? 'violet-500' : undefined, ... }}
-        // "primary" is a comparison operand, not a CSS class — must not be altered.
-        const code = 'className:variant==="primary"?"bg-violet-500 p-4":"flex items-center"';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:variant==="primary"?"g c":"z h"');
+    it.each([
+        ['a simple ternary', 'className:cond?"flex":"items-center"', 'className:cond?"z":"h"'],
+        ['a non-ternary expression', 'className:someVar', 'className:someVar'],
+        [
+            'a call with a static prefix',
+            'className:r("flex",cond?"p-4":"rounded-xl")',
+            'className:r("z",cond?"c":"d")',
+        ],
+        [
+            'a multi-argument call',
+            'className:r("flex",pe&&"p-4",cond?"rounded-xl":"rounded-full")',
+            'className:r("z",pe&&"c",cond?"d":"e")',
+        ],
+        [
+            'a ternary-only call',
+            'className:r(cond?"p-4":"rounded-xl")',
+            'className:r(cond?"c":"d")',
+        ],
+        [
+            'a chained direct ternary',
+            'className:s==="sm"?"p-4":s==="md"?"rounded-xl":"rounded-full"',
+            'className:s==="sm"?"c":s==="md"?"d":"e"',
+        ],
+        [
+            'multiple className blocks',
+            '{className:isA?"flex":"items-center"},{className:isRow?"flex-row":"flex-col"}',
+            '{className:isA?"z":"h"},{className:isRow?"a":"b"}',
+        ],
+        [
+            'an adjacent object property',
+            '{className:cond?"flex":"items-center",id:"flex-guide"}',
+            '{className:cond?"z":"h",id:"flex-guide"}',
+        ],
+        [
+            'a non-class condition operand',
+            'className:variant==="primary"?"bg-violet-500 p-4":"flex items-center"',
+            'className:variant==="primary"?"g c":"z h"',
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
