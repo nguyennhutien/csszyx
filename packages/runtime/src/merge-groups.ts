@@ -192,8 +192,8 @@ const COLLISION_BLOCKLIST: Record<keyof typeof customTokens, ReadonlySet<string>
         ...BORDER_STYLES,
     ]),
     textSizes: new Set([...TEXT_ALIGNS, ...TEXT_WRAPS, ...TEXT_OVERFLOWS, ...NAMED_COLORS]),
-    fontFamilies: new Set([...FONT_WEIGHTS]),
-    fontWeights: new Set([...FONT_FAMILIES]),
+    fontFamilies: new Set(FONT_WEIGHTS),
+    fontWeights: new Set(FONT_FAMILIES),
 };
 
 /**
@@ -300,7 +300,7 @@ function dropAmbiguousThemeTokens(
     pair: (typeof AMBIGUITY_PAIRS)[keyof typeof AMBIGUITY_PAIRS],
 ): boolean {
     let changed = false;
-    for (const name of [...customTokens[first]]) {
+    for (const name of customTokens[first]) {
         if (!customTokens[second].has(name)) continue;
         customTokens[first].delete(name);
         customTokens[second].delete(name);
