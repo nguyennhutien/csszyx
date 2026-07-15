@@ -831,7 +831,7 @@ function resolveBorderDeclaration(utility: string): string | null {
         return property ? `${property}: 1px` : null;
     }
     if (/^border-\d+$/.test(utility)) return `border-width: ${utility.slice(7)}px`;
-    const sideWidth = utility.match(/^border-([trblxse])-(\d+)$/);
+    const sideWidth = /^border-([trblxse])-(\d+)$/.exec(utility);
     if (!sideWidth) return null;
     const property = BORDER_SIDES[sideWidth[1]];
     return property ? `${property}: ${sideWidth[2]}px` : null;
@@ -849,7 +849,7 @@ function resolveRadiusDeclaration(utility: string): string | null {
     if (value === 'full') return 'border-radius: calc(infinity * 1px)';
     if (RADIUS_SIZES.has(value)) return `border-radius: var(--radius-${value})`;
     if (value in ROUNDED_DIRECTIONS) return ROUNDED_DIRECTIONS[value];
-    const directional = value.match(/^([trblse]+)-(.+)$/);
+    const directional = /^([trblse]+)-(.+)$/.exec(value);
     if (directional && directional[1] in ROUNDED_DIRECTIONS) {
         return ROUNDED_DIRECTIONS[directional[1]].replace(
             /var\(--radius\)/g,
