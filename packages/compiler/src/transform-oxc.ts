@@ -631,70 +631,15 @@ export function transformOxc(
         }
         applyHoistedStyleProps();
 
-        // Merge classes: existing className value first, then sz-derived.
-        // This matches the order Babel produces in `transform.ts:228-371`.
-        const existingRaw = classNameAttr ? stringLiteralValue(classNameAttr.value) : null;
-        const mergedClasses = [
-            ...(existingRaw ? existingRaw.split(/\s+/).filter(Boolean) : []),
-            ...szDerived,
-        ];
-        // An sz that lowers to zero classes (and has no className to merge into)
-        // emits `className={undefined}` so the DOM has no `class` attribute,
-        // instead of the noisy `class=""`.
-        const mergedAttr =
-            mergedClasses.length === 0
-                ? 'className={undefined}'
-                : `className="${mergedClasses.join(' ')}"`;
-
-        if (classNameAttr) {
-            const classNameValue = classNameAttr.value;
-            if (
-                existingRaw === null &&
-                classNameValue &&
-                classNameValue.type === 'JSXExpressionContainer'
-            ) {
-                // className holds an EXPRESSION (ternary / identifier / clsx(...)).
-                // Overwriting it with the compiled string would silently delete the
-                // expression's classes at runtime — the classic symptom was a panel
-                // losing its `dems-panel` class next to a static sz. Merge instead,
-                // keeping the expression, exactly like babel and the native engine:
-                // `className={_szMerge(<expr>, "<compiled>")}`.
-                const exprNode = (classNameValue as unknown as { expression: OxcNode }).expression;
-                const exprSource = source.slice(exprNode.start, exprNode.end);
-                edits.overwrite(
-                    classNameAttr.start,
-                    classNameAttr.end,
-                    `className={_szMerge(${exprSource}, ${JSON.stringify(szDerived.join(' '))})}`,
-                );
-                for (const szAttr of szAttrs) {
-                    const deleteStart = whitespaceStart(source, szAttr.start);
-                    edits.remove(deleteStart, szAttr.end);
-                }
-                usesRuntime = true;
-                usesMerge = true;
-                transformed = true;
-                return;
-            }
-            // Replace className value (or whole attribute) in place, then
-            // delete each sz attribute + the whitespace preceding it.
-            edits.overwrite(classNameAttr.start, classNameAttr.end, mergedAttr);
-            for (const szAttr of szAttrs) {
-                const deleteStart = whitespaceStart(source, szAttr.start);
-                edits.remove(deleteStart, szAttr.end);
-            }
-        } else {
-            // No existing className — first sz becomes the className,
-            // subsequent sz attributes (rare) are deleted with whitespace.
-            const [firstSz, ...rest] = szAttrs;
-            if (!firstSz) {
-                return;
-            }
-            edits.overwrite(firstSz.start, firstSz.end, mergedAttr);
-            for (const szAttr of rest) {
-                const deleteStart = whitespaceStart(source, szAttr.start);
-                edits.remove(deleteStart, szAttr.end);
-            }
-        }
+        const mergeResult = mergeOxcStaticElementClasses(
+            szAttrs,
+            classNameAttr,
+            szDerived,
+            source,
+            edits,
+        );
+        usesRuntime ||= mergeResult.usesRuntime;
+        usesMerge ||= mergeResult.usesMerge;
         transformed = true;
     });
 
@@ -720,6 +665,83 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/** Result flags produced while merging one element's static class output. */
+interface OxcStaticClassMergeResult {
+    usesRuntime: boolean;
+    usesMerge: boolean;
+}
+
+/**
+ * Merge static sz classes after any authored className, preserving expressions.
+ *
+ * @param szAttrs Compiled sz attributes to remove or replace.
+ * @param classNameAttr Existing className attribute, when present.
+ * @param szDerived Ordered classes compiled from sz.
+ * @param source Original source used to retain expression text.
+ * @param edits Magic-string rewrite buffer.
+ * @returns Runtime-helper flags required by the rewritten element.
+ */
+function mergeOxcStaticElementClasses(
+    szAttrs: JsxAttributeNode[],
+    classNameAttr: JsxAttributeNode | null,
+    szDerived: string[],
+    source: string,
+    edits: MagicString,
+): OxcStaticClassMergeResult {
+    const existingRaw = classNameAttr ? stringLiteralValue(classNameAttr.value) : null;
+    const mergedClasses = [
+        ...(existingRaw ? existingRaw.split(/\s+/).filter(Boolean) : []),
+        ...szDerived,
+    ];
+    const mergedAttr =
+        mergedClasses.length === 0
+            ? 'className={undefined}'
+            : `className="${mergedClasses.join(' ')}"`;
+
+    if (!classNameAttr) {
+        const [firstSz, ...rest] = szAttrs;
+        if (firstSz) {
+            edits.overwrite(firstSz.start, firstSz.end, mergedAttr);
+            removeOxcAttributes(rest, source, edits);
+        }
+        return { usesRuntime: false, usesMerge: false };
+    }
+
+    const classNameValue = classNameAttr.value;
+    if (existingRaw === null && classNameValue?.type === 'JSXExpressionContainer') {
+        const exprNode = (classNameValue as unknown as { expression: OxcNode }).expression;
+        const exprSource = source.slice(exprNode.start, exprNode.end);
+        edits.overwrite(
+            classNameAttr.start,
+            classNameAttr.end,
+            `className={_szMerge(${exprSource}, ${JSON.stringify(szDerived.join(' '))})}`,
+        );
+        removeOxcAttributes(szAttrs, source, edits);
+        return { usesRuntime: true, usesMerge: true };
+    }
+
+    edits.overwrite(classNameAttr.start, classNameAttr.end, mergedAttr);
+    removeOxcAttributes(szAttrs, source, edits);
+    return { usesRuntime: false, usesMerge: false };
+}
+
+/**
+ * Remove JSX attributes together with their preceding whitespace.
+ *
+ * @param attributes Attributes selected for removal.
+ * @param source Original source used to locate leading whitespace.
+ * @param edits Magic-string rewrite buffer.
+ */
+function removeOxcAttributes(
+    attributes: JsxAttributeNode[],
+    source: string,
+    edits: MagicString,
+): void {
+    for (const attribute of attributes) {
+        edits.remove(whitespaceStart(source, attribute.start), attribute.end);
+    }
 }
 
 /**
