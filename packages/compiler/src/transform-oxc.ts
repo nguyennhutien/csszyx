@@ -594,64 +594,24 @@ export function transformOxc(
         // unrelated later transform (or the runtime path) doesn't inherit it.
         setSzWarnLocation(undefined);
 
-        if (runtimeFallbackExpr && runtimeFallbackAttr) {
-            // Non-static sz value → emit `className={_sz(<original-expr>)}`
-            // by source-slicing the expression's original byte range. Babel
-            // does the equivalent at `transform.ts:745-786` via
-            // `_szMerge`/`_sz` wrappers. Existing className merging in this
-            // path is deferred to a later slice — the fixtures only
-            // exercise the single-sz / no-className case so far.
-            if (classNameAttr) {
-                throw new OxcNotImplementedError(
-                    'D2.5+',
-                    `runtime sz fallback combined with existing className at ${effectiveFilename}:${runtimeFallbackAttr.start}`,
-                );
-            }
-            const exprSource = source.slice(runtimeFallbackExpr.start, runtimeFallbackExpr.end);
-            if (runtimeFallbackExpr.type !== 'ArrayExpression') {
-                diagnostics.push(buildRuntimeFallbackDiagnostic(runtimeFallbackExpr, source));
-            }
-            // A top-level object spread can't be resolved at build time and may
-            // produce no styles in production — surface it with a marker the
-            // bundler plugin promotes to a build-log warning (matches the rust
-            // engine). Other fallback shapes stay quiet.
-            if (
-                runtimeFallbackExpr.type === 'ObjectExpression' &&
-                (runtimeFallbackExpr as ObjectExpressionNode).properties.some(
-                    prop => prop.type === 'SpreadElement',
-                )
-            ) {
-                const { line, column } = offsetToLineColumn(source, runtimeFallbackExpr.start);
-                diagnostics.push(
-                    `[csszyx] unresolvable sz spread at ${line}:${column + 1}: ` +
-                        'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
-                        'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
-                );
-            }
-            collectCandidateClassesFromExpression(
+        if (
+            transformOxcRuntimeFallback(
                 runtimeFallbackExpr,
+                runtimeFallbackAttr,
+                szAttrs,
+                classNameAttr,
                 effectiveFilename,
                 objectBindings,
+                source,
+                edits,
                 classes,
-                '',
-            );
-            edits.overwrite(
-                runtimeFallbackAttr.start,
-                runtimeFallbackAttr.end,
-                `className={_sz(${exprSource})}`,
-            );
-            // Delete any remaining sz attributes (rare — typically only
-            // one sz per element).
-            for (const szAttr of szAttrs) {
-                if (szAttr === runtimeFallbackAttr) continue;
-                const deleteStart = whitespaceStart(source, szAttr.start);
-                edits.remove(deleteStart, szAttr.end);
-            }
+                diagnostics,
+            )
+        ) {
             usesRuntime = true;
             transformed = true;
             return;
         }
-
         applyHoistedStyleProps();
 
         // Merge classes: existing className value first, then sz-derived.
@@ -743,6 +703,77 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/**
+ * Whether an oxc object expression contains a top-level spread.
+ *
+ * @param expression Object expression to inspect.
+ * @returns Whether a top-level spread is present.
+ */
+function hasOxcTopLevelSpread(expression: ObjectExpressionNode): boolean {
+    for (const property of expression.properties) {
+        if (property.type === 'SpreadElement') return true;
+    }
+    return false;
+}
+
+/**
+ * Emits the oxc runtime fallback for one unresolved sz expression.
+ *
+ * @param expression Unresolved sz expression.
+ * @param attribute Attribute owning the expression.
+ * @param attributes All sz attributes on the element.
+ * @param classNameAttribute Existing class attribute.
+ * @param filename Source filename.
+ * @param bindings Static object bindings.
+ * @param source Original source.
+ * @param edits Pending source edits.
+ * @param classes Tailwind discovery set.
+ * @param diagnostics Compiler diagnostics.
+ * @returns Whether runtime fallback was emitted.
+ */
+function transformOxcRuntimeFallback(
+    expression: OxcNode | null,
+    attribute: JsxAttributeNode | null,
+    attributes: JsxAttributeNode[],
+    classNameAttribute: JsxAttributeNode | null,
+    filename: string,
+    bindings: Map<string, ObjectExpressionNode>,
+    source: string,
+    edits: MagicString,
+    classes: Set<string>,
+    diagnostics: string[],
+): boolean {
+    if (!expression || !attribute) return false;
+    if (classNameAttribute) {
+        throw new OxcNotImplementedError(
+            'D2.5+',
+            `runtime sz fallback combined with existing className at ${filename}:${attribute.start}`,
+        );
+    }
+    if (expression.type !== 'ArrayExpression') {
+        diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
+    }
+    if (
+        expression.type === 'ObjectExpression' &&
+        hasOxcTopLevelSpread(expression as ObjectExpressionNode)
+    ) {
+        const { line, column } = offsetToLineColumn(source, expression.start);
+        diagnostics.push(
+            `[csszyx] unresolvable sz spread at ${line}:${column + 1}: ` +
+                'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
+                'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
+        );
+    }
+    collectCandidateClassesFromExpression(expression, filename, bindings, classes, '');
+    const expressionSource = source.slice(expression.start, expression.end);
+    edits.overwrite(attribute.start, attribute.end, `className={_sz(${expressionSource})}`);
+    for (const szAttribute of attributes) {
+        if (szAttribute === attribute) continue;
+        edits.remove(whitespaceStart(source, szAttribute.start), szAttribute.end);
+    }
+    return true;
 }
 
 /** Relevant attributes collected from one oxc JSX opening element. */
