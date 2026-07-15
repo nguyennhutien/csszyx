@@ -150,7 +150,7 @@ function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t
         }
 
         // Check if variable already exists
-        const existing = styleObj.properties.find(
+        const existing = styleObj.properties.some(
             prop =>
                 t.isObjectProperty(prop) &&
                 t.isStringLiteral(prop.key) &&
