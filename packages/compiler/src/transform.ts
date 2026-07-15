@@ -648,6 +648,104 @@ function transformRuntimeSzFallback(
     classMergeUsage.runtime = true;
 }
 
+/** Runtime helpers used while transforming one sz attribute value. */
+interface SzValueTransformResult {
+    transformed: boolean;
+    usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
+    usesSzcn: boolean;
+    usesSzPart: boolean;
+}
+
+/**
+ * Empty helper usage for an unsupported JSX attribute value.
+ *
+ * @returns A result with every transform and helper flag disabled.
+ */
+function unchangedSzValueResult(): SzValueTransformResult {
+    return {
+        transformed: false,
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
+        usesSzcn: false,
+        usesSzPart: false,
+    };
+}
+
+/**
+ * Transforms one sz attribute value and reports its runtime helper usage.
+ *
+ * @param path sz attribute path.
+ * @param existing Existing JSX attributes.
+ * @param classMergeUsage Runtime class merge usage.
+ * @param classes Tailwind discovery set.
+ * @param diagnostics Compiler diagnostics.
+ * @returns Transform status and runtime helper usage.
+ */
+function transformSzAttributeValue(
+    path: babel.NodePath<t.JSXAttribute>,
+    existing: ExistingJsxAttributes,
+    classMergeUsage: ClassMergeUsage,
+    classes: Set<string>,
+    diagnostics: string[],
+): SzValueTransformResult {
+    const value = path.node.value;
+    if (t.isStringLiteral(value)) {
+        applyCompiledClassExpression(path, value, existing, classMergeUsage, classes);
+        return { ...unchangedSzValueResult(), transformed: true };
+    }
+    if (!t.isJSXExpressionContainer(value)) return unchangedSzValueResult();
+
+    const expression = value.expression;
+    if (t.isObjectExpression(expression)) {
+        const objectResult = transformSzObjectExpression(
+            path,
+            expression,
+            existing,
+            classMergeUsage,
+            classes,
+        );
+        if (objectResult.transformed) {
+            return { ...objectResult, usesSzcn: false, usesSzPart: false };
+        }
+    }
+
+    const staticExpression = resolveStaticSzExpression(path, expression);
+    if (staticExpression !== null) {
+        applyCompiledClassExpression(path, staticExpression, existing, classMergeUsage, classes);
+        return { ...unchangedSzValueResult(), transformed: true };
+    }
+
+    if (t.isArrayExpression(expression)) {
+        const arrayResult = transformSzArrayExpression(
+            path,
+            expression,
+            existing,
+            classMergeUsage,
+            classes,
+            diagnostics,
+        );
+        if (arrayResult.transformed) {
+            return {
+                ...unchangedSzValueResult(),
+                ...arrayResult,
+            };
+        }
+    }
+
+    transformRuntimeSzFallback(
+        path,
+        expression as t.Expression,
+        existing,
+        classMergeUsage,
+        classes,
+        diagnostics,
+    );
+    return { ...unchangedSzValueResult(), transformed: true };
+}
+
 /**
  * Classifies a conditional sz array element.
  *
@@ -1113,96 +1211,19 @@ export function transformSourceCode(
                                 ),
                             );
 
-                            const value = path.node.value;
-
-                            const existingAttributes = findExistingJsxAttributes(path);
-
-                            // Case 1: sz="string"
-                            if (t.isStringLiteral(value)) {
-                                path.node.name.name = 'className';
-                                for (const c of value.value.split(/\s+/)) {
-                                    if (c) {
-                                        collectedClasses.add(c);
-                                    }
-                                }
-                                path.node.value = mergeClassNameValue(
-                                    path,
-                                    value,
-                                    existingAttributes,
-                                    classMergeUsage,
-                                );
-                                transformed = true;
-                                return;
-                            }
-
-                            // Case 2: sz={...}
-                            if (t.isJSXExpressionContainer(value)) {
-                                const expression = value.expression;
-
-                                // Static Extraction Logic: sz={{ p: 4, bg: 'blue' }}
-                                if (t.isObjectExpression(expression)) {
-                                    const objectResult = transformSzObjectExpression(
-                                        path,
-                                        expression,
-                                        existingAttributes,
-                                        classMergeUsage,
-                                        collectedClasses,
-                                    );
-                                    if (objectResult.transformed) {
-                                        usesColorVar ||= objectResult.usesColorVar;
-                                        usesSpacingVar ||= objectResult.usesSpacingVar;
-                                        usesUnitVar ||= objectResult.usesUnitVar;
-                                        transformed = true;
-                                        return;
-                                    }
-                                }
-                                const staticExpression = resolveStaticSzExpression(
-                                    path,
-                                    expression,
-                                );
-                                if (staticExpression !== null) {
-                                    applyCompiledClassExpression(
-                                        path,
-                                        staticExpression,
-                                        existingAttributes,
-                                        classMergeUsage,
-                                        collectedClasses,
-                                    );
-                                    transformed = true;
-                                    return;
-                                }
-                                // Array expression: sz={[obj1, cond && obj2, ...]} —
-                                // later-wins composition. All-static-object arrays
-                                // deep-merge at build; anything else emits szcn()
-                                // so later elements override earlier ones per
-                                // property group at runtime (mirrors the oxc/rust
-                                // classification exactly).
-                                if (t.isArrayExpression(expression)) {
-                                    const arrayResult = transformSzArrayExpression(
-                                        path,
-                                        expression,
-                                        existingAttributes,
-                                        classMergeUsage,
-                                        collectedClasses,
-                                        diagnostics,
-                                    );
-                                    if (arrayResult.transformed) {
-                                        usesSzcn ||= arrayResult.usesSzcn;
-                                        usesSzPart ||= arrayResult.usesSzPart;
-                                        transformed = true;
-                                        return;
-                                    }
-                                }
-                                transformRuntimeSzFallback(
-                                    path,
-                                    expression as t.Expression,
-                                    existingAttributes,
-                                    classMergeUsage,
-                                    collectedClasses,
-                                    diagnostics,
-                                );
-                                transformed = true;
-                            }
+                            const valueResult = transformSzAttributeValue(
+                                path,
+                                findExistingJsxAttributes(path),
+                                classMergeUsage,
+                                collectedClasses,
+                                diagnostics,
+                            );
+                            transformed ||= valueResult.transformed;
+                            usesColorVar ||= valueResult.usesColorVar;
+                            usesSpacingVar ||= valueResult.usesSpacingVar;
+                            usesUnitVar ||= valueResult.usesUnitVar;
+                            usesSzcn ||= valueResult.usesSzcn;
+                            usesSzPart ||= valueResult.usesSzPart;
                         },
 
                         // ── szv catalog extraction ────────────────────────────────────────
