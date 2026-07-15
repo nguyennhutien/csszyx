@@ -124,10 +124,34 @@ const FIXTURES: Fixture[] = [
         usesSzPart: true,
     },
     {
-        name: 'ternary element stays runtime but safelists both branches',
+        name: 'static ternary element compiles both branches without _szPart',
         attr: 'sz={[{ p: 4 }, big ? { m: 2 } : { m: 8 }]}',
-        expectDiv: '<div className={_szcn("p-4", _szPart(big ? { m: 2 } : { m: 8 }))} />',
+        expectDiv: '<div className={_szcn("p-4", big ? "m-2" : "m-8")} />',
         classes: ['p-4', 'm-2', 'm-8'],
+        usesSzcn: true,
+    },
+    {
+        name: 'static class-string ternary compiles without _szPart',
+        attr: 'sz={[{ p: 4 }, big ? "flex" : "block"]}',
+        expectDiv: '<div className={_szcn("p-4", big ? "flex" : "block")} />',
+        classes: ['p-4', 'flex', 'block'],
+        usesSzcn: true,
+    },
+    {
+        name: 'static conditional property compiles inside an array object',
+        attr: 'sz={[{ decoration: "none", color: big ? "muted" : "main" }, szsc?.title]}',
+        expectDiv:
+            '<div className={_szcn("no-underline", big ? "text-muted" : "text-main", _szPart(szsc?.title))} />',
+        classes: ['no-underline', 'text-muted', 'text-main'],
+        usesSzcn: true,
+        usesSzPart: true,
+    },
+    {
+        name: 'absent conditional property branch emits an empty class argument',
+        attr: 'sz={[{ decoration: "none", flex: big ? 1 : undefined }, szsc?.title]}',
+        expectDiv:
+            '<div className={_szcn("no-underline", big ? "flex-1" : "", _szPart(szsc?.title))} />',
+        classes: ['no-underline', 'flex-1'],
         usesSzcn: true,
         usesSzPart: true,
     },

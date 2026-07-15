@@ -194,14 +194,22 @@ fn rewrite_array_sz_attribute(
             arguments.push(format!("_szPart({expression})"));
             continue;
         }
-        let classes = js_string_literal(&part.classes.join(" "));
-        arguments.push(part.condition_span.map_or_else(
-            || classes.clone(),
-            |span| {
-                let condition = &source[span.start as usize..span.end as usize];
-                format!("{condition} && {classes}")
-            },
-        ));
+        if !part.classes.is_empty() || part.ternary.is_none() {
+            let classes = js_string_literal(&part.classes.join(" "));
+            arguments.push(part.condition_span.map_or_else(
+                || classes.clone(),
+                |span| {
+                    let condition = &source[span.start as usize..span.end as usize];
+                    format!("{condition} && {classes}")
+                },
+            ));
+        }
+        if let Some(ternary) = &part.ternary {
+            let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+            let consequent = js_string_literal(&ternary.consequent_classes.join(" "));
+            let alternate = js_string_literal(&ternary.alternate_classes.join(" "));
+            arguments.push(format!("{test} ? {consequent} : {alternate}"));
+        }
     }
     // `_szcn` = the unmemoized szcn twin: compiled arrays carry per-render
     // runtime parts, which would thrash (and evict) the authored-szcn memo.

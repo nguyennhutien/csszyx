@@ -1202,8 +1202,8 @@ function buildSzPartElementDiagnostic(node: OxcNode, source: string): string {
     return (
         `sz array element at ${line}:${column + 1}: this object literal contains a runtime ` +
         'value, so the whole element is deferred to _szPart at runtime (its classes are ' +
-        'still safelisted best-effort).\n  Suggestion: lift the condition to the element ' +
-        'level (cond ? { a } : { b }) or move runtime values to dynamic().'
+        'still safelisted best-effort).\n  Suggestion: use finite literal ternary branches ' +
+        'when possible, or move truly runtime values to dynamic().'
     );
 }
 
@@ -1637,6 +1637,13 @@ type ArrayCompositionPart =
     | { kind: 'obj'; sz: SzObject }
     | { kind: 'str'; value: string }
     | { kind: 'cond'; condSource: string; classNames: string }
+    | {
+          kind: 'ternary';
+          baseClasses: string;
+          testSource: string;
+          consequentClasses: string;
+          alternateClasses: string;
+      }
     | { kind: 'dyn'; src: string; node: OxcNode };
 
 /**
@@ -1701,11 +1708,98 @@ function classifyArrayCompositionElement(
         return classifyLogicalArrayPart(element, unwrapped as LogicalExpressionNode, context);
     }
 
+    if (unwrapped.type === 'ConditionalExpression') {
+        return (
+            classifyTernaryArrayPart(unwrapped as ConditionalExpressionNode, context) ?? {
+                kind: 'dyn',
+                src: context.source.slice(element.start, element.end),
+                node: element,
+            }
+        );
+    }
+
     const objectNode = resolveObjectExpression(unwrapped, context.bindings);
     const sz = objectNode ? tryConvertArrayObject(objectNode, context) : null;
-    return sz
-        ? { kind: 'obj', sz }
-        : { kind: 'dyn', src: context.source.slice(element.start, element.end), node: element };
+    if (sz) return { kind: 'obj', sz };
+    if (objectNode) {
+        const partial = classifyPartialObjectArrayPart(objectNode, context);
+        if (partial) return partial;
+    }
+    return { kind: 'dyn', src: context.source.slice(element.start, element.end), node: element };
+}
+
+/**
+ * Precompiles a finite ternary array element whose branches are static sz values.
+ *
+ * @param conditional - Conditional array element.
+ * @param context - Shared transform state.
+ * @returns A compiled ternary part, or null when either branch is dynamic.
+ */
+function classifyTernaryArrayPart(
+    conditional: ConditionalExpressionNode,
+    context: ArrayCompositionContext,
+): ArrayCompositionPart | null {
+    const consequent = resolveStaticClassString(
+        conditional.consequent,
+        context.filename,
+        context.bindings,
+        context.globalVarAliases,
+        context.cssVariableMap,
+    );
+    const alternate = resolveStaticClassString(
+        conditional.alternate,
+        context.filename,
+        context.bindings,
+        context.globalVarAliases,
+        context.cssVariableMap,
+    );
+    if (consequent === null || alternate === null) return null;
+    return {
+        kind: 'ternary',
+        baseClasses: '',
+        testSource: context.source.slice(conditional.test.start, conditional.test.end),
+        consequentClasses: consequent,
+        alternateClasses: alternate,
+    };
+}
+
+/**
+ * Precompiles one object array element with a finite conditional property.
+ *
+ * @param objectNode - Object array element.
+ * @param context - Shared transform state.
+ * @returns A compiled ternary part, or null when runtime values/styles remain.
+ */
+function classifyPartialObjectArrayPart(
+    objectNode: ObjectExpressionNode,
+    context: ArrayCompositionContext,
+): ArrayCompositionPart | null {
+    const partial = evaluatePartialObject(
+        objectNode,
+        context.filename,
+        context.bindings,
+        context.source,
+        context.globalVarAliases,
+        context.cssVariableMap,
+    );
+    if (!partial || partial.dynamicProps.size > 0 || partial.conditionalClasses.length !== 1) {
+        return null;
+    }
+    const conditional = partial.conditionalClasses[0];
+    const baseClasses = compileSzObject(
+        applyGlobalVarAliasesToSzObject(
+            partial.staticProps,
+            context.globalVarAliases,
+            context.cssVariableMap,
+        ),
+    ).className;
+    return {
+        kind: 'ternary',
+        baseClasses,
+        testSource: context.source.slice(conditional.test.start, conditional.test.end),
+        consequentClasses: conditional.consequent,
+        alternateClasses: conditional.alternate,
+    };
 }
 
 /**
@@ -1876,6 +1970,16 @@ function appendRuntimeArrayPart(
     if (part.kind === 'cond') {
         collectArrayCompositionClasses(part.classNames, context.classes);
         args.push(`${part.condSource} && ${JSON.stringify(part.classNames)}`);
+        return false;
+    }
+    if (part.kind === 'ternary') {
+        collectArrayCompositionClasses(part.baseClasses, context.classes);
+        collectArrayCompositionClasses(part.consequentClasses, context.classes);
+        collectArrayCompositionClasses(part.alternateClasses, context.classes);
+        if (part.baseClasses) args.push(JSON.stringify(part.baseClasses));
+        args.push(
+            `${part.testSource} ? ${JSON.stringify(part.consequentClasses)} : ${JSON.stringify(part.alternateClasses)}`,
+        );
         return false;
     }
 
@@ -4497,6 +4601,8 @@ function resolveStaticClassString(
     cssVariableMap: Map<string, CssVariableMangleValue>,
 ): string | null {
     const unwrapped = unwrapExpression(node);
+    const literalValue = literalNodeValue(unwrapped);
+    if (typeof literalValue === 'string') return literalValue;
     let objectNode: ObjectExpressionNode | null = null;
     if (unwrapped.type === 'ObjectExpression') {
         objectNode = unwrapped as ObjectExpressionNode;

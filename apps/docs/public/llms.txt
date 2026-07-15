@@ -584,6 +584,13 @@ forwarded `szsc` slot) pass through `_szPart`:
 />
 // slot-default one-liner in a compound component:
 <h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]} />
+
+// Finite ternaries stay compiler-owned, including conditionals inside an object:
+<a sz={[{ decoration: "none" }, disabled ? { color: "muted" } : { color: "main" }, szsc?.link]} />
+// → _szcn("no-underline", disabled ? "text-muted" : "text-main", _szPart(szsc?.link))
+
+<div sz={[{ decoration: "none", flex: fluid ? 1 : undefined }, szsc?.root]} />
+// → _szcn("no-underline", fluid ? "flex-1" : "", _szPart(szsc?.root))
 ```
 
 ## Reusing Styles

@@ -45,20 +45,16 @@ describe.each(ENGINES)('dynamic spacing/unit lowering (%s)', (_name, run) => {
         expect(result.usesColorVar).toBe(true);
     });
 
-    it('diagnoses an object-literal array element that degrades to _szPart', () => {
+    it('precompiles a finite conditional property inside an array object', () => {
         const jsx =
             'export const A = ({ on, other }) => ' +
             '<div sz={[{ py: 2, border: true, opacity: on ? 50 : 100 }, other]} />;';
         const result = run(jsx);
-        // The degrade itself is reported…
-        const diagnostic = result.diagnostics.find(d => d.includes('sz array element at'));
-        expect(diagnostic).toBeDefined();
-        expect(diagnostic).toContain('_szPart');
-        expect(diagnostic).toContain('dynamic()');
-        // …and only once: the forwarded identifier `other` is a legitimate
-        // runtime slot and must stay silent.
-        expect(result.diagnostics.filter(d => d.includes('sz array element at'))).toHaveLength(1);
-        // Static siblings and both ternary branches are safelisted best-effort.
+        expect(result.diagnostics).toEqual([]);
+        expect(result.code).toContain(
+            '_szcn("py-2 border", on ? "opacity-50" : "opacity-100", _szPart(other))',
+        );
+        // Static siblings and both finite branches are compiler-owned classes.
         for (const cls of ['py-2', 'border', 'opacity-50', 'opacity-100']) {
             expect(result.classes.has(cls)).toBe(true);
         }

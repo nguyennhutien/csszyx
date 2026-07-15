@@ -80,7 +80,16 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
     classes.extend(attribute.array_parts.iter().flat_map(|part| {
         // Element order: a static part contributes its classes, a dynamic part
         // its safelist candidates — mangle IDs follow discovery order.
-        part.classes.iter().chain(part.candidates.iter()).cloned()
+        part.classes
+            .iter()
+            .chain(part.ternary.iter().flat_map(|ternary| {
+                ternary
+                    .consequent_classes
+                    .iter()
+                    .chain(ternary.alternate_classes.iter())
+            }))
+            .chain(part.candidates.iter())
+            .cloned()
     }));
     classes.extend(
         attribute

@@ -231,6 +231,9 @@ pub struct StaticArrayPartIr {
     pub condition_span: Option<TextSpan>,
     /// Classes produced by the static object/string item (empty for dynamic).
     pub classes: Vec<String>,
+    /// Finite ternary carried by an element or one of its static properties.
+    #[serde(default)]
+    pub ternary: Option<StaticTernaryIr>,
     /// Source span of a dynamic item's expression; absent for static items.
     #[serde(default)]
     pub dynamic_span: Option<TextSpan>,

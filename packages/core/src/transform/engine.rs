@@ -571,7 +571,7 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
             let span = part.dynamic_span?;
             let (line, column) = offset_to_line_column(&file.source, span.start);
             Some(format!(
-                "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: lift the condition to the element level (cond ? {{ a }} : {{ b }}) or move runtime values to dynamic().",
+                "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: use finite literal ternary branches when possible, or move truly runtime values to dynamic().",
                 column + 1
             ))
         })

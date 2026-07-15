@@ -43,6 +43,9 @@ pub fn apply_global_var_aliases(
             for class_name in &mut part.classes {
                 rewrite_class_name(class_name, &alias_map, &mut variable_map);
             }
+            if let Some(ternary) = &mut part.ternary {
+                rewrite_ternary_classes(ternary, &alias_map, &mut variable_map);
+            }
         }
     }
 

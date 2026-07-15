@@ -1301,6 +1301,7 @@ fn static_array_parts_from_array_expression(
             parts.push(StaticArrayPartIr {
                 condition_span: None,
                 classes: split_class_tokens(&value.value),
+                ternary: None,
                 dynamic_span: None,
                 candidates: Vec::new(),
                 dynamic_object_literal: false,
@@ -1321,6 +1322,7 @@ fn static_array_parts_from_array_expression(
                         parts.push(StaticArrayPartIr {
                             condition_span: Some(text_span(logical.left.span())),
                             classes,
+                            ternary: None,
                             dynamic_span: None,
                             candidates: Vec::new(),
                             dynamic_object_literal: false,
@@ -1333,8 +1335,22 @@ fn static_array_parts_from_array_expression(
                 parts.push(StaticArrayPartIr {
                     condition_span: None,
                     classes: Vec::new(),
+                    ternary: None,
                     dynamic_span: Some(text_span(expression.span())),
                     candidates: candidate_classes_from_expression(expression, ctx),
+                    dynamic_object_literal: false,
+                });
+                continue;
+            }
+        }
+        if let Expression::ConditionalExpression(conditional) = unwrapped {
+            if let Some(ternary) = static_array_ternary_from_conditional(conditional, ctx) {
+                parts.push(StaticArrayPartIr {
+                    condition_span: None,
+                    classes: Vec::new(),
+                    ternary: Some(ternary),
+                    dynamic_span: None,
+                    candidates: Vec::new(),
                     dynamic_object_literal: false,
                 });
                 continue;
@@ -1344,11 +1360,29 @@ fn static_array_parts_from_array_expression(
             parts.push(StaticArrayPartIr {
                 condition_span: None,
                 classes: lower_static_sz_object(&object),
+                ternary: None,
                 dynamic_span: None,
                 candidates: Vec::new(),
                 dynamic_object_literal: false,
             });
             continue;
+        }
+        if let Expression::ObjectExpression(object) = unwrapped {
+            if let Some(partial) = partial_object_from_object_expression(object, ctx, None, &[]) {
+                if partial.dynamic_css_vars.is_empty() {
+                    if let Some(ternary) = partial.ternary {
+                        parts.push(StaticArrayPartIr {
+                            condition_span: None,
+                            classes: lower_static_sz_object(&partial.object),
+                            ternary: Some(ternary),
+                            dynamic_span: None,
+                            candidates: Vec::new(),
+                            dynamic_object_literal: false,
+                        });
+                        continue;
+                    }
+                }
+            }
         }
         // Safelist best-effort: static object literals reachable inside the
         // dynamic expression (ternary branches, etc.) still get their CSS.
@@ -1357,6 +1391,7 @@ fn static_array_parts_from_array_expression(
         parts.push(StaticArrayPartIr {
             condition_span: None,
             classes: Vec::new(),
+            ternary: None,
             dynamic_span: Some(text_span(expression.span())),
             candidates: candidate_classes_from_expression(expression, ctx),
             dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
@@ -1364,6 +1399,26 @@ fn static_array_parts_from_array_expression(
     }
 
     Some(parts)
+}
+
+/// Pre-lower a finite array-element ternary with static object or string branches.
+fn static_array_ternary_from_conditional(
+    conditional: &ConditionalExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticTernaryIr> {
+    let branch_classes = |branch: &Expression<'_>| {
+        let unwrapped = unwrap_expression(branch);
+        if let Expression::StringLiteral(value) = unwrapped {
+            return Some(split_class_tokens(&value.value));
+        }
+        let (object, _, _) = static_object_from_expression(unwrapped, ctx)?;
+        Some(lower_static_sz_object(&object))
+    };
+    Some(StaticTernaryIr {
+        test_span: text_span(conditional.test.span()),
+        consequent_classes: branch_classes(&conditional.consequent)?,
+        alternate_classes: branch_classes(&conditional.alternate)?,
+    })
 }
 
 /// Split a raw class string into its non-empty tokens.

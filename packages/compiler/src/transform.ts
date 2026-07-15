@@ -363,6 +363,13 @@ type SzArrayPart =
     | { kind: 'obj'; sz: SzObject }
     | { kind: 'str'; value: string }
     | { kind: 'cond'; cond: t.Expression; classNames: string }
+    | {
+          kind: 'ternary';
+          baseClasses: string;
+          test: t.Expression;
+          consequentClasses: string;
+          alternateClasses: string;
+      }
     | { kind: 'dyn'; node: t.Expression };
 
 /** Result of compiling an sz array expression. */
@@ -805,6 +812,87 @@ function classifyConditionalArrayPart(
 }
 
 /**
+ * Precompiles a finite ternary array element whose branches are static sz values.
+ *
+ * @param expression Conditional array element.
+ * @param getBinding Babel binding resolver.
+ * @returns A compiled ternary part, or null when either branch is dynamic.
+ */
+function classifyTernaryArrayPart(
+    expression: t.ConditionalExpression,
+    getBinding: GetBinding,
+): SzArrayPart | null {
+    const consequent = tryStaticTransformNode(expression.consequent, getBinding);
+    const alternate = tryStaticTransformNode(expression.alternate, getBinding);
+    if (!t.isStringLiteral(consequent) || !t.isStringLiteral(alternate)) return null;
+    return {
+        kind: 'ternary',
+        baseClasses: '',
+        test: expression.test,
+        consequentClasses: consequent.value,
+        alternateClasses: alternate.value,
+    };
+}
+
+/**
+ * Precompiles one object array element with a finite conditional property.
+ *
+ * @param expression Object array element.
+ * @param getBinding Babel binding resolver.
+ * @returns A compiled ternary part, or null when runtime values/styles remain.
+ */
+function classifyPartialObjectArrayPart(
+    expression: t.ObjectExpression,
+    getBinding: GetBinding,
+): SzArrayPart | null {
+    const resolved = resolveObjectSpreads(expression, getBinding) ?? expression;
+    const partial = evaluatePartialObject(resolved);
+    if (
+        partial === null ||
+        partial.hasSpread ||
+        partial.dynamicProps.size > 0 ||
+        partial.conditionalClasses.length !== 1
+    ) {
+        return null;
+    }
+    const conditional = partial.conditionalClasses[0];
+    const staticClasses =
+        Object.keys(partial.staticProps).length > 0 ? transform(partial.staticProps).className : '';
+    return {
+        kind: 'ternary',
+        baseClasses: [staticClasses, ...partial.rawClasses].filter(Boolean).join(' '),
+        test: conditional.test,
+        consequentClasses: conditional.consequent,
+        alternateClasses: conditional.alternate,
+    };
+}
+
+/**
+ * Classifies literal and conditional array shapes before object resolution.
+ *
+ * @param inner Unwrapped array element.
+ * @param getBinding Babel binding resolver.
+ * @returns A classified/inert part, or undefined when object resolution remains.
+ */
+function classifyDirectSzArrayPart(
+    inner: t.Node,
+    getBinding: GetBinding,
+): SzArrayPart | null | undefined {
+    if (t.isBooleanLiteral(inner) && !inner.value) return null;
+    if (t.isNullLiteral(inner)) return null;
+    if (t.isIdentifier(inner) && inner.name === 'undefined') return null;
+    if (t.isStringLiteral(inner)) return { kind: 'str', value: inner.value };
+    if (t.isLogicalExpression(inner) && inner.operator === '&&') {
+        const part = classifyConditionalArrayPart(inner, getBinding);
+        return part.kind === 'cond' && part.classNames === '' ? null : part;
+    }
+    if (t.isConditionalExpression(inner)) {
+        return classifyTernaryArrayPart(inner, getBinding) ?? { kind: 'dyn', node: inner };
+    }
+    return undefined;
+}
+
+/**
  * Classifies one non-spread sz array element, omitting inert values.
  *
  * @param element Array element to classify.
@@ -817,16 +905,14 @@ function classifySzArrayElement(
 ): SzArrayPart | null {
     if (element === null) return null;
     const inner = unwrapTsExpression(element) ?? element;
-    if (t.isBooleanLiteral(inner) && !inner.value) return null;
-    if (t.isNullLiteral(inner)) return null;
-    if (t.isIdentifier(inner) && inner.name === 'undefined') return null;
-    if (t.isStringLiteral(inner)) return { kind: 'str', value: inner.value };
-    if (t.isLogicalExpression(inner) && inner.operator === '&&') {
-        const part = classifyConditionalArrayPart(inner, getBinding);
-        return part.kind === 'cond' && part.classNames === '' ? null : part;
-    }
+    const direct = classifyDirectSzArrayPart(inner, getBinding);
+    if (direct !== undefined) return direct;
     const resolved = tryResolveStaticSzObject(inner, getBinding);
     if (resolved !== null) return { kind: 'obj', sz: resolved };
+    if (t.isObjectExpression(inner)) {
+        const partial = classifyPartialObjectArrayPart(inner, getBinding);
+        if (partial) return partial;
+    }
     return { kind: 'dyn', node: element as t.Expression };
 }
 
@@ -879,30 +965,62 @@ function appendSzArrayArgument(
     classes: Set<string>,
     diagnostics: string[],
 ): boolean {
+    if (appendCompiledSzArrayArgument(part, args, classes)) return false;
+
+    const dynamicPart = part as Extract<SzArrayPart, { kind: 'dyn' }>;
+    collectDynamicElementCandidates(dynamicPart.node, getBinding, classes);
+    const unwrapped = unwrapTsExpression(dynamicPart.node);
+    if (unwrapped && t.isObjectExpression(unwrapped)) {
+        diagnostics.push(buildSzPartElementDiagnostic(dynamicPart.node));
+    }
+    args.push(t.callExpression(t.identifier('_szPart'), [dynamicPart.node]));
+    return true;
+}
+
+/**
+ * Appends a precompiled array part that does not require `_szPart`.
+ *
+ * @param part Classified array part.
+ * @param args Runtime composition arguments.
+ * @param classes Tailwind discovery set.
+ * @returns Whether the part was handled as compiler-owned output.
+ */
+function appendCompiledSzArrayArgument(
+    part: SzArrayPart,
+    args: t.Expression[],
+    classes: Set<string>,
+): boolean {
     if (part.kind === 'obj') {
         const compiled = transform(part.sz).className;
         collectClassTokens(compiled, classes);
         args.push(t.stringLiteral(compiled));
-        return false;
+        return true;
     }
     if (part.kind === 'str') {
         collectClassTokens(part.value, classes);
         args.push(t.stringLiteral(part.value));
-        return false;
+        return true;
     }
     if (part.kind === 'cond') {
         collectClassTokens(part.classNames, classes);
         args.push(t.logicalExpression('&&', part.cond, t.stringLiteral(part.classNames)));
-        return false;
+        return true;
     }
-
-    collectDynamicElementCandidates(part.node, getBinding, classes);
-    const unwrapped = unwrapTsExpression(part.node);
-    if (unwrapped && t.isObjectExpression(unwrapped)) {
-        diagnostics.push(buildSzPartElementDiagnostic(part.node));
+    if (part.kind === 'ternary') {
+        collectClassTokens(part.baseClasses, classes);
+        collectClassTokens(part.consequentClasses, classes);
+        collectClassTokens(part.alternateClasses, classes);
+        if (part.baseClasses) args.push(t.stringLiteral(part.baseClasses));
+        args.push(
+            t.conditionalExpression(
+                part.test,
+                t.stringLiteral(part.consequentClasses),
+                t.stringLiteral(part.alternateClasses),
+            ),
+        );
+        return true;
     }
-    args.push(t.callExpression(t.identifier('_szPart'), [part.node]));
-    return true;
+    return false;
 }
 
 /**
@@ -1907,8 +2025,8 @@ function buildSzPartElementDiagnostic(node: t.Node): string {
     return (
         `sz array element at ${lineCol}: this object literal contains a runtime ` +
         'value, so the whole element is deferred to _szPart at runtime (its classes are ' +
-        'still safelisted best-effort).\n  Suggestion: lift the condition to the element ' +
-        'level (cond ? { a } : { b }) or move runtime values to dynamic().'
+        'still safelisted best-effort).\n  Suggestion: use finite literal ternary branches ' +
+        'when possible, or move truly runtime values to dynamic().'
     );
 }
 

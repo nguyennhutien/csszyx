@@ -391,11 +391,11 @@ describe('sz={[ ... ]} array composition', () => {
         expect(r.classes.has('p-4')).toBe(true);
     });
 
-    it('emits _szPart for a truly dynamic array element and safelists ternary branches', () => {
+    it('precompiles a finite ternary array element', () => {
         const jsx = 'const A = ({ c }) => <div sz={[{ p: 4 }, c ? { m: 2 } : { m: 8 }]} />;';
         const r = run(jsx);
-        expect(r.usesSzPart).toBe(true);
-        expect(r.code).toContain('_szPart(');
+        expect(r.usesSzPart).toBe(false);
+        expect(r.code).toContain('c ? "m-2" : "m-8"');
         expect(r.classes.has('m-2')).toBe(true);
         expect(r.classes.has('m-8')).toBe(true);
     });
