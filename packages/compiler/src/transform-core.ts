@@ -1477,150 +1477,106 @@ export function getVariantPrefix(key: string): string {
  */
 function handleGroupPeer(type: 'group' | 'peer', nestedObj: SzObject, prefix: string): string[] {
     const classes: string[] = [];
-
-    // Helper to standardise arbitrary values (space to underscore)
-    // Fix 11: Space → Underscore Conversion for Arbitrary Values
-    // const toArbitraryValue = (val: string | number): string => {
-    //     return String(val).replace(/ /g, '_');
-    // };
-
     for (const [nestedKey, nestedValue] of Object.entries(nestedObj)) {
-        if (nestedValue === null || nestedValue === undefined || nestedValue === false) {
-            continue;
-        }
-
-        // Special case: group/peer with has selector
-        // { group: { has: { a: { block: true }}}} → group-has-[a]:block
-        if (nestedKey === 'has' && typeof nestedValue === 'object') {
-            for (const [selector, selectorValue] of Object.entries(nestedValue as SzObject)) {
-                if (
-                    selectorValue === null ||
-                    selectorValue === undefined ||
-                    selectorValue === false
-                ) {
-                    continue;
-                }
-                const variantPrefix = `${prefix}${type}-has-[${selector}]:`;
-                const result = transform(selectorValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-            continue;
-        }
-
-        // Special case: group/peer with data attribute
-        // { group: { data: { active: { bg: 'blue' }}}} → group-data-[active]:bg-blue
-        // { group: { data: { 'state=open': { text: 'lg' }}}} → group-data-[state=open]:text-lg
-        if (nestedKey === 'data' && typeof nestedValue === 'object') {
-            for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
-                if (attrValue === null || attrValue === undefined || attrValue === false) {
-                    continue;
-                }
-                const variantPrefix = `${prefix}${type}-data-[${attr}]:`;
-                const result = transform(attrValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-            continue;
-        }
-
-        // Special case: group/peer with aria attribute
-        // { group: { aria: { checked: { bg: 'blue' }}}} → group-aria-checked:bg-blue
-        // { group: { aria: { 'current=page': { ... }}}} → group-aria-[current=page]:
-        if (nestedKey === 'aria' && typeof nestedValue === 'object') {
-            for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
-                if (attrValue === null || attrValue === undefined || attrValue === false) {
-                    continue;
-                }
-                const variantPrefix = ARIA_STATES.has(attr)
-                    ? `${prefix}${type}-aria-${attr}:`
-                    : `${prefix}${type}-aria-[${attr}]:`;
-                const result = transform(attrValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-            continue;
-        }
-
-        // Check if nestedKey is a known variant
-        const isVariant =
-            KNOWN_VARIANTS.has(nestedKey) || KNOWN_VARIANTS.has(getVariantPrefix(nestedKey));
-        // Check if it starts with arbitrary selector syntax
-        const isArbitrary =
-            nestedKey.startsWith('.') ||
-            nestedKey.startsWith('#') ||
-            nestedKey.startsWith('[') ||
-            nestedKey.startsWith(':');
-
-        if (isArbitrary) {
-            // { group: { ".is-published": { block: true }}} → group-[.is-published]:block
-            const variantPrefix = `${prefix}${type}-[${nestedKey}]:`;
-            const result = transform(nestedValue as SzObject, variantPrefix);
-            if (result.className) {
-                classes.push(result.className);
-            }
-        } else if (isVariant) {
-            // { group: { hover: { ... }}} → group-hover:
-            const mappedVariant = getVariantPrefix(nestedKey);
-            const variantPrefix = `${prefix}${type}-${mappedVariant}:`;
-            const result = transform(nestedValue as SzObject, variantPrefix);
-            if (result.className) {
-                classes.push(result.className);
-            }
-        } else if (typeof nestedValue === 'object') {
-            // { group: { name: { hover: { ... }}}} → group-hover/name:
-            // Also handles data/aria inside named group:
-            // { group: { card: { data: { active: { ... }}}}} → group-data-[active]/card:
-            for (const [state, stateValue] of Object.entries(nestedValue as SzObject)) {
-                if (stateValue === null || stateValue === undefined || stateValue === false) {
-                    continue;
-                }
-                // data inside named group
-                if (state === 'data' && typeof stateValue === 'object') {
-                    for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
-                        if (attrValue === null || attrValue === undefined || attrValue === false) {
-                            continue;
-                        }
-                        const variantPrefix = `${prefix}${type}-data-[${attr}]/${nestedKey}:`;
-                        const result = transform(attrValue as SzObject, variantPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    }
-                    continue;
-                }
-                // aria inside named group
-                if (state === 'aria' && typeof stateValue === 'object') {
-                    for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
-                        if (attrValue === null || attrValue === undefined || attrValue === false) {
-                            continue;
-                        }
-                        const ariaSegment = ARIA_STATES.has(attr)
-                            ? `aria-${attr}`
-                            : `aria-[${attr}]`;
-                        const variantPrefix = `${prefix}${type}-${ariaSegment}/${nestedKey}:`;
-                        const result = transform(attrValue as SzObject, variantPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    }
-                    continue;
-                }
-                const mappedState = getVariantPrefix(state);
-                const variantPrefix = `${prefix}${type}-${mappedState}/${nestedKey}:`;
-                const result = transform(stateValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-        }
+        collectGroupPeerEntry(type, nestedKey, nestedValue, prefix, classes);
     }
-
     return classes;
 }
+
+/* eslint-disable jsdoc/require-param, jsdoc/require-returns -- Internal variant stages share the handleGroupPeer contract. */
+
+/** Collects one direct or named group/peer entry. */
+function collectGroupPeerEntry(
+    type: 'group' | 'peer',
+    key: string,
+    value: SzValue,
+    prefix: string,
+    classes: string[],
+): void {
+    if (isInactiveVariantValue(value)) return;
+    if (key === 'has' && typeof value === 'object') {
+        collectGroupPeerAttributes(type, 'has', value as SzObject, prefix, '', classes);
+    } else if (key === 'data' && typeof value === 'object') {
+        collectGroupPeerAttributes(type, 'data', value as SzObject, prefix, '', classes);
+    } else if (key === 'aria' && typeof value === 'object') {
+        collectGroupPeerAttributes(type, 'aria', value as SzObject, prefix, '', classes);
+    } else if (isArbitraryGroupPeerKey(key)) {
+        appendVariantClasses(value, `${prefix}${type}-[${key}]:`, classes);
+    } else if (isKnownVariantKey(key)) {
+        appendVariantClasses(value, `${prefix}${type}-${getVariantPrefix(key)}:`, classes);
+    } else if (typeof value === 'object') {
+        collectNamedGroupPeer(type, key, value as SzObject, prefix, classes);
+    }
+}
+
+/** Collects has/data/aria attribute variants with an optional group name. */
+function collectGroupPeerAttributes(
+    type: 'group' | 'peer',
+    kind: 'has' | 'data' | 'aria',
+    values: SzObject,
+    prefix: string,
+    name: string,
+    classes: string[],
+): void {
+    for (const [attribute, value] of Object.entries(values)) {
+        if (isInactiveVariantValue(value)) continue;
+        const segment = groupPeerAttributeSegment(kind, attribute);
+        const suffix = name ? `/${name}` : '';
+        appendVariantClasses(value, `${prefix}${type}-${segment}${suffix}:`, classes);
+    }
+}
+
+/** Builds the Tailwind segment for a group/peer attribute variant. */
+function groupPeerAttributeSegment(kind: 'has' | 'data' | 'aria', attribute: string): string {
+    if (kind === 'has') return `has-[${attribute}]`;
+    if (kind === 'data') return `data-[${attribute}]`;
+    return ARIA_STATES.has(attribute) ? `aria-${attribute}` : `aria-[${attribute}]`;
+}
+
+/** Collects states nested under a named group or peer. */
+function collectNamedGroupPeer(
+    type: 'group' | 'peer',
+    name: string,
+    states: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    for (const [state, value] of Object.entries(states)) {
+        if (isInactiveVariantValue(value)) continue;
+        if ((state === 'data' || state === 'aria') && typeof value === 'object') {
+            collectGroupPeerAttributes(type, state, value as SzObject, prefix, name, classes);
+        } else {
+            appendVariantClasses(
+                value,
+                `${prefix}${type}-${getVariantPrefix(state)}/${name}:`,
+                classes,
+            );
+        }
+    }
+}
+
+/** Appends transformed classes for one variant value. */
+function appendVariantClasses(value: SzValue, prefix: string, classes: string[]): void {
+    const result = transform(value as SzObject, prefix);
+    if (result.className) classes.push(result.className);
+}
+
+/** Returns whether a variant value is intentionally absent. */
+function isInactiveVariantValue(value: SzValue): boolean {
+    return value === null || value === undefined || value === false;
+}
+
+/** Returns whether a group/peer key uses arbitrary selector syntax. */
+function isArbitraryGroupPeerKey(key: string): boolean {
+    return key.startsWith('.') || key.startsWith('#') || key.startsWith('[') || key.startsWith(':');
+}
+
+/** Returns whether a key names a supported variant. */
+function isKnownVariantKey(key: string): boolean {
+    return KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key));
+}
+
+/* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
  * Handles has variant with special syntax
