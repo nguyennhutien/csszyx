@@ -388,10 +388,50 @@ describe('No-mangle Scenarios', () => {
 // 9. Edge Cases and Stress Tests (10 tests)
 // ============================================================================
 describe('Edge Cases and Stress Tests', () => {
-    it('should handle selector with multiple escapes', () => {
-        const css = '.\\32 xl\\:p-12:hover { padding: 3rem; }';
+    it.each([
+        [
+            'a selector with multiple escapes',
+            '.\\32 xl\\:p-12:hover { padding: 3rem; }',
+            '.j:hover { padding: 3rem; }',
+        ],
+        [
+            'a very long selector',
+            '.dark .group:hover .flex > .items-center.justify-between:first-child .p-4 { opacity: 1; }',
+            '.dark .group:hover .s > .v.w:first-child .a { opacity: 1; }',
+        ],
+        [
+            'the Tailwind peer selector',
+            '.peer:focus ~ .peer-focus\\:ring { ring-width: 2px; }',
+            '.peer:focus ~ .l { ring-width: 2px; }',
+        ],
+        [
+            'the first variant',
+            '.first\\:mt-0:first-child { margin-top: 0; }',
+            '.aq:first-child { margin-top: 0; }',
+        ],
+        [
+            'the placeholder variant',
+            '.placeholder\\:text-gray-400::placeholder { color: #9ca3af; }',
+            '.au::placeholder { color: #9ca3af; }',
+        ],
+        [
+            'the file input variant',
+            '.file\\:mr-4::file-selector-button { margin-right: 1rem; }',
+            '.av::file-selector-button { margin-right: 1rem; }',
+        ],
+        [
+            'the marker variant',
+            '.marker\\:text-blue-500::marker { color: #3b82f6; }',
+            '.aw::marker { color: #3b82f6; }',
+        ],
+        [
+            'the selection variant',
+            '.selection\\:bg-blue-200::selection { background: #bfdbfe; }',
+            '.ax::selection { background: #bfdbfe; }',
+        ],
+    ])('should handle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.j:hover { padding: 3rem; }');
+        expect(result.css).toBe(expectedCSS);
     });
 
     it('should handle empty mangle map', () => {
@@ -399,13 +439,6 @@ describe('Edge Cases and Stress Tests', () => {
         const result = mangleCSSSync(css, {});
         expect(result.css).toBe('.p-4 { padding: 1rem; }');
         expect(result.transformedCount).toBe(0);
-    });
-
-    it('should handle very long selector', () => {
-        const css =
-            '.dark .group:hover .flex > .items-center.justify-between:first-child .p-4 { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .group:hover .s > .v.w:first-child .a { opacity: 1; }');
     });
 
     it('should preserve CSS structure and formatting', () => {
@@ -416,42 +449,6 @@ describe('Edge Cases and Stress Tests', () => {
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.css).toContain('.a {');
         expect(result.css).toContain('padding: 1rem;');
-    });
-
-    it('should handle special Tailwind peer selector', () => {
-        const css = '.peer:focus ~ .peer-focus\\:ring { ring-width: 2px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.peer:focus ~ .l { ring-width: 2px; }');
-    });
-
-    it('should handle first/last/odd/even variants', () => {
-        const css = '.first\\:mt-0:first-child { margin-top: 0; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.aq:first-child { margin-top: 0; }');
-    });
-
-    it('should handle placeholder variant', () => {
-        const css = '.placeholder\\:text-gray-400::placeholder { color: #9ca3af; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.au::placeholder { color: #9ca3af; }');
-    });
-
-    it('should handle file input variant', () => {
-        const css = '.file\\:mr-4::file-selector-button { margin-right: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.av::file-selector-button { margin-right: 1rem; }');
-    });
-
-    it('should handle marker variant', () => {
-        const css = '.marker\\:text-blue-500::marker { color: #3b82f6; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.aw::marker { color: #3b82f6; }');
-    });
-
-    it('should handle selection variant', () => {
-        const css = '.selection\\:bg-blue-200::selection { background: #bfdbfe; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.ax::selection { background: #bfdbfe; }');
     });
 });
 
