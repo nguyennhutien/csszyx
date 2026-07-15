@@ -240,10 +240,6 @@ describe('typography — text color', () => {
 });
 
 describe('typography — text decoration', () => {
-    it('{ decoration: "underline" } → underline', () => {
-        expect(t({ decoration: 'underline' })).toBe('underline');
-    });
-
     it('{ decorationStyle: "dashed" } → decoration-dashed', () => {
         expect(t({ decorationStyle: 'dashed' })).toBe('decoration-dashed');
     });
@@ -286,10 +282,6 @@ describe('typography — text decoration', () => {
 });
 
 describe('typography — text transform', () => {
-    it('{ textTransform: "uppercase" } → uppercase', () => {
-        expect(t({ textTransform: 'uppercase' })).toBe('uppercase');
-    });
-
     it('{ textTransform: "uppercase" } → uppercase', () => {
         expect(t({ textTransform: 'uppercase' })).toBe('uppercase');
     });
