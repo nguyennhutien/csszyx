@@ -1025,6 +1025,17 @@ interface RollupBundleAssetLike {
     source?: unknown;
 }
 
+/** Mutable output entry shape shared by Rollup and Vite's Rolldown adapter. */
+interface ViteBundleEntryLike {
+    type: string;
+    fileName: string;
+    source?: string | Uint8Array;
+    code?: string;
+}
+
+/** Bundle surface used by the post-processing stages across Rollup engines. */
+type ViteOutputBundleLike = Record<string, ViteBundleEntryLike>;
+
 /**
  *
  */
@@ -4453,6 +4464,85 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
     }
 
+    /**
+     * Rewrite one Vite bundle entry after the mangle map is complete.
+     *
+     * @param chunk Rollup output entry.
+     * @param file Output filename.
+     * @param shouldMangle Whether class mangling applies to this output.
+     * @param mangledSources Classes rewritten by csszyx.
+     * @param externalClasses Classes left under external ownership.
+     */
+    function rewriteViteBundleEntry(
+        chunk: ViteBundleEntryLike,
+        file: string,
+        shouldMangle: boolean,
+        mangledSources: Set<string>,
+        externalClasses: Set<string>,
+    ): void {
+        if (
+            chunk.type === 'asset' &&
+            chunk.fileName.endsWith('.css') &&
+            chunk.source !== undefined
+        ) {
+            const originalCss = chunk.source.toString();
+            const css = rewriteOutputCss(
+                originalCss,
+                file,
+                shouldMangle,
+                mangledSources,
+                externalClasses,
+            );
+            if (css !== originalCss) chunk.source = css;
+            return;
+        }
+        if (chunk.type !== 'chunk' || chunk.code === undefined) return;
+
+        const rewritten = shouldMangle
+            ? replacePlaceholders(mangleCodeClasses(chunk.code))
+            : replacePlaceholders(chunk.code);
+        if (rewritten !== chunk.code) chunk.code = rewritten;
+    }
+
+    /**
+     * Process a complete Vite bundle after all source modules were observed.
+     *
+     * @param bundle Rollup output bundle.
+     * @param emitAsset Asset emitter supplied by the Vite hook context.
+     */
+    function processViteBundle(
+        bundle: ViteOutputBundleLike,
+        emitAsset: (fileName: string, source: string) => void,
+    ): void {
+        finalizeMangleMap();
+        state.globalVarValidationResult = validateGlobalVarBundleInputs(
+            collectRollupGlobalVarCssAssets(bundle),
+        );
+        const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
+        emitAsset('csszyx-manifest.json', JSON.stringify(createBundleManifest(shouldMangle)));
+        if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
+            const globalVarMap = createGlobalVarMapAssetSource(
+                state.varMangleMap,
+                globalVarAliasPrefix,
+                state.globalVarValidationResult,
+            );
+            if (globalVarMap) emitAsset('.csszyx/global-var-map.json', globalVarMap);
+        }
+
+        const mangledSources = new Set<string>();
+        const externalClasses = new Set<string>();
+        for (const file in bundle) {
+            rewriteViteBundleEntry(
+                bundle[file],
+                file,
+                shouldMangle,
+                mangledSources,
+                externalClasses,
+            );
+        }
+        reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+    }
+
     const postPlugin = createUnplugin<PartialCsszyxConfig, boolean>(() => ({
         name: 'csszyx:post',
         enforce: 'post',
@@ -4475,149 +4565,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @param bundle - the output bundle containing chunks and assets to process
              */
             generateBundle(_options, bundle) {
-                finalizeMangleMap();
-                state.globalVarValidationResult = validateGlobalVarBundleInputs(
-                    collectRollupGlobalVarCssAssets(bundle),
-                );
-
-                // Emit CSS manifest for @csszyx/dynamic delta check.
-                // Lists all original class names (and mangle map if mangling enabled)
-                // so runtime dynamic() can skip injection for pre-built classes.
-                const manifestData: {
-                    version: string;
-                    buildId: string;
-                    classes: string[];
-                    mangleMap?: Record<string, string>;
-                    varMangleMap?: Record<string, CssVariableMangleValue>;
-                    globalVarAliases?: Record<string, string>;
-                    cssVarMetrics?: CSSVariableMetrics;
-                } = {
-                    version: '0.4.0',
-                    buildId: state.checksum,
-                    classes: Object.keys(state.mangleMap),
-                };
-                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                    manifestData.mangleMap = state.mangleMap;
-                }
-                if (Object.keys(state.varMangleMap).length > 0) {
-                    manifestData.varMangleMap = state.varMangleMap;
-                }
-                const globalVarAliases = extractGlobalVarAliasesForManifest(
-                    state.varMangleMap,
-                    globalVarAliasPrefix,
-                    state.globalVarValidationResult,
-                );
-                if (Object.keys(globalVarAliases).length > 0) {
-                    manifestData.globalVarAliases = globalVarAliases;
-                }
-                if (hasCSSVariableMetrics(state.cssVarMetrics)) {
-                    manifestData.cssVarMetrics = state.cssVarMetrics;
-                }
-                this.emitFile({
-                    type: 'asset',
-                    fileName: 'csszyx-manifest.json',
-                    source: JSON.stringify(manifestData),
+                processViteBundle(bundle, (fileName, source) => {
+                    this.emitFile({ type: 'asset', fileName, source });
                 });
-                if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
-                    const globalVarMapAsset = createGlobalVarMapAssetSource(
-                        state.varMangleMap,
-                        globalVarAliasPrefix,
-                        state.globalVarValidationResult,
-                    );
-                    if (globalVarMapAsset) {
-                        this.emitFile({
-                            type: 'asset',
-                            fileName: '.csszyx/global-var-map.json',
-                            source: globalVarMapAsset,
-                        });
-                    }
-                }
-
-                // Accumulated across every CSS asset so hybrid-mangle hazards can
-                // be reported once after the whole bundle is rewritten.
-                const mangledSources = new Set<string>();
-                const externalClasses = new Set<string>();
-
-                for (const file in bundle) {
-                    const chunk = bundle[file];
-
-                    if (chunk.type === 'asset' && chunk.fileName.endsWith('.css')) {
-                        const originalCss = chunk.source.toString();
-                        let css = rewriteCssWithValidatedGlobalVarPlan(
-                            originalCss,
-                            file,
-                            state.globalVarValidationResult,
-                        );
-                        if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                            try {
-                                const result = mangleCSSSync(css, state.mangleMap, {
-                                    debug: options.development?.debug,
-                                    from: file,
-                                });
-                                for (const c of result.mangledClasses) {
-                                    mangledSources.add(c);
-                                }
-                                for (const c of result.unmangledClasses) {
-                                    externalClasses.add(c);
-                                }
-                                if (result.transformedCount > 0) {
-                                    css = result.css;
-                                }
-                            } catch (e: unknown) {
-                                if (
-                                    e &&
-                                    typeof e === 'object' &&
-                                    'name' in e &&
-                                    (e as { name: string }).name === 'CssSyntaxError'
-                                ) {
-                                    // Ignore CSS syntax errors
-                                } else {
-                                    throw e;
-                                }
-                            }
-                        }
-                        if (css !== originalCss) {
-                            chunk.source = css;
-                        }
-                        continue;
-                    }
-
-                    if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                        if (chunk.type === 'chunk') {
-                            let mangledCode = mangleCodeClasses(chunk.code);
-                            mangledCode = replacePlaceholders(mangledCode);
-                            if (mangledCode !== chunk.code) {
-                                chunk.code = mangledCode;
-                            }
-                            continue;
-                        }
-                    }
-
-                    // Even when mangling is disabled, still replace placeholders in JS chunks
-                    if (
-                        chunk.type === 'chunk' &&
-                        (chunk.code.includes(CHECKSUM_PLACEHOLDER) ||
-                            chunk.code.includes(MANGLE_MAP_PLACEHOLDER))
-                    ) {
-                        const replaced = replacePlaceholders(chunk.code);
-                        if (replaced !== chunk.code) {
-                            chunk.code = replaced;
-                        }
-                    }
-                }
-
-                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                    const hazardMessage = mangleHybridHazardMessage(
-                        collectMangleHybridHazards(
-                            state.mangleMap,
-                            mangledSources,
-                            externalClasses,
-                        ),
-                    );
-                    if (hazardMessage) {
-                        console.warn(hazardMessage);
-                    }
-                }
             },
         },
     }));
