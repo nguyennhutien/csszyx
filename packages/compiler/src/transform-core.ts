@@ -2591,6 +2591,46 @@ function formatMaskRepeat(value: string): string {
     return value === 'no-repeat' ? 'mask-no-repeat' : `mask-${value}`;
 }
 
+const BORDER_COLOR_SIDES: Record<string, string> = {
+    borderTColor: 't',
+    borderRColor: 'r',
+    borderBColor: 'b',
+    borderLColor: 'l',
+    borderXColor: 'x',
+    borderYColor: 'y',
+};
+
+/** Collects content, border-color, transition, and drop-shadow utilities. */
+function collectContentBorderProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'alignContent') utility = `content-${value}`;
+    else if (key === 'content') utility = formatContentValue(value);
+    else if (BORDER_COLOR_SIDES[key]) utility = `border-${BORDER_COLOR_SIDES[key]}-${value}`;
+    else if (key === 'transitionBehavior') utility = `transition-${value}`;
+    else if (key === 'dropShadowColor') {
+        utility = value.startsWith('--') ? `drop-shadow-(color:${value})` : `drop-shadow-${value}`;
+    }
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats CSS generated-content values. */
+function formatContentValue(value: string): string {
+    if (value === 'none') return 'content-none';
+    if (value.startsWith('--')) return `content-(${value})`;
+    const inner =
+        value.startsWith('"') && value.endsWith('"') && value.length >= 2
+            ? `'${value.slice(1, -1)}'`
+            : value;
+    return `content-[${inner}]`;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2839,6 +2879,7 @@ function transformImpl(
             if (collectTextFlowProperty(rawKey, value, prefix, classes)) continue;
             if (collectDecorationProperty(rawKey, value, prefix, classes)) continue;
             if (collectEffectStringProperty(rawKey, value, prefix, classes)) continue;
+            if (collectContentBorderProperty(rawKey, value, prefix, classes)) continue;
 
             // bgImg handler
             if (rawKey === 'bgImg') {
@@ -2846,86 +2887,6 @@ function transformImpl(
                 continue;
             }
             if (collectBackgroundMaskProperty(rawKey, value, prefix, classes)) continue;
-
-            // alignContent → align-content via Tailwind content-* classes.
-            if (rawKey === 'alignContent') {
-                className += `content-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // content → CSS content property (for ::before / ::after).
-            // Values are arbitrary strings so must be wrapped: content-['hello'].
-            // Keeping separate from alignContent eliminates the naming collision:
-            // { alignContent: 'between', content: "''" } now works on one element.
-            if (rawKey === 'content') {
-                if (value === 'none') {
-                    className += 'content-none';
-                } else if (value.startsWith('--')) {
-                    className += `content-(${value})`;
-                } else {
-                    // Tailwind convention: content arbitrary values use single quotes → content-['hello'].
-                    // Normalize double-quote CSS strings to single-quote so both forms produce a
-                    // consistent class name that Tailwind JIT actually generates CSS for.
-                    const inner =
-                        value.startsWith('"') && value.endsWith('"') && value.length >= 2
-                            ? `'${value.slice(1, -1)}'`
-                            : value;
-                    className += `content-[${inner}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // Border side colors: borderTColor → border-t-{color}
-            if (rawKey === 'borderTColor') {
-                className += `border-t-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderRColor') {
-                className += `border-r-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderBColor') {
-                className += `border-b-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderLColor') {
-                className += `border-l-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderXColor') {
-                className += `border-x-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderYColor') {
-                className += `border-y-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // transitionBehavior: 'discrete' | 'normal' → transition-discrete, transition-normal
-            if (rawKey === 'transitionBehavior') {
-                className += `transition-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // dropShadowColor: 'red-500' → drop-shadow-red-500
-            if (rawKey === 'dropShadowColor') {
-                if (value.startsWith('--')) {
-                    className += `drop-shadow-(color:${value})`;
-                } else {
-                    className += `drop-shadow-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
 
             // Fix 10: Properties that need arbitrary brackets for complex values
             // (contains parens, underscores, % in multi-part values, etc.)
