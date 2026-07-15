@@ -16,6 +16,7 @@ describe('Tailwind 4.3 compatibility', () => {
             'm-1',
             '[&_.tab-item-header]:py-0!',
             '[&>span]:text-sm',
+            '[&[data-a="x"][data-b=\'y\']]:text-sm',
         ]);
 
         expect(css).toContain('grid-auto-columns: calc(var(--spacing) * 12)');
@@ -27,5 +28,7 @@ describe('Tailwind 4.3 compatibility', () => {
         expect(css).toContain('.tab-item-header');
         expect(css).toContain('padding-block: 0 !important');
         expect(css).toContain('&>span');
+        expect(css).toContain('[data-a="x"]');
+        expect(css).toContain("[data-b='y']");
     });
 });
