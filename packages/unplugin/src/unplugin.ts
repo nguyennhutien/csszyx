@@ -749,6 +749,19 @@ function findJsxExpressionEnd(code: string, bodyStart: number): number {
 }
 
 /**
+ * Warn that a prescan dropped a whole file after exceeding the AST node budget.
+ *
+ * @param filePath Source file the prescan skipped.
+ */
+function warnPrescanBudgetSkip(filePath: string): void {
+    console.warn(
+        `[csszyx] prescan skipped ${filePath}: the file exceeds the AST node budget, so ` +
+            'NONE of its classes reached the safelist and their CSS will not be generated. ' +
+            'Raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.',
+    );
+}
+
+/**
  * Resolve `compileSources` entries to absolute, realpath-resolved directories.
  * Each entry resolves like a Vite config path: relative to the project `root`
  * (`config.root`), absolute passes through. The result is realpath-resolved so a
@@ -2895,21 +2908,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const result = results.get(file.filePath);
             return result ? [{ filePath: file.filePath, result }] : [];
         });
-    }
-
-    /**
-     * Warns that the prescan dropped a whole file for exceeding the AST node
-     * budget. Under Tailwind `source(none)` every class in that file is
-     * silently dead CSS, so the skip must name the file and the fix.
-     *
-     * @param filePath Source file the prescan skipped.
-     */
-    function warnPrescanBudgetSkip(filePath: string): void {
-        console.warn(
-            `[csszyx] prescan skipped ${filePath}: the file exceeds the AST node budget, so ` +
-                'NONE of its classes reached the safelist and their CSS will not be generated. ' +
-                'Raise `build.astBudgetLimit` in the csszyx plugin options, or split the file.',
-        );
     }
 
     /**
