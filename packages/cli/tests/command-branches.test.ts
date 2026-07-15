@@ -194,6 +194,18 @@ describe('pure helper branches', () => {
         expect(out).toContain('[1, 2]');
     });
 
+    it('sz-codegen drops unsupported values without stringifying objects or functions', () => {
+        const out = generateSzObjectLiteral({
+            missing: undefined,
+            symbol: Symbol('unsafe'),
+            bigint: 1n,
+            callback: () => 'unsafe',
+        });
+        expect([...out.matchAll(/undefined/g)]).toHaveLength(4);
+        expect(out).not.toContain('Symbol(');
+        expect(out).not.toContain('unsafe');
+    });
+
     it('flattenColors expands a DEFAULT shade to the bare color name', () => {
         expect(flattenColors({ brand: { DEFAULT: '#000', '500': '#00f' } }).sort()).toEqual([
             'brand',

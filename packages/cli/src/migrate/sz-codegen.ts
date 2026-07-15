@@ -160,7 +160,9 @@ function formatValue(value: unknown, indent: number): string {
         return formatObjectValue(value as Record<string, unknown>, indent);
     }
 
-    return String(value);
+    // Unsupported sz values must not leak function source or invalid Symbol text
+    // into generated code. Keep the object shape while dropping the value.
+    return 'undefined';
 }
 
 /**
