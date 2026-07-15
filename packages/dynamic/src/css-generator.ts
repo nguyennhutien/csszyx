@@ -204,13 +204,13 @@ function resolveFraction(value: string): string | null {
     if (slash === -1) {
         return null;
     }
-    const numerator = parseFloat(value.slice(0, slash));
-    const denominator = parseFloat(value.slice(slash + 1));
+    const numerator = Number.parseFloat(value.slice(0, slash));
+    const denominator = Number.parseFloat(value.slice(slash + 1));
     if (Number.isNaN(numerator) || Number.isNaN(denominator) || denominator === 0) {
         return null;
     }
     const percentage = (numerator / denominator) * 100;
-    return `${parseFloat(percentage.toFixed(6))}%`;
+    return `${Number.parseFloat(percentage.toFixed(6))}%`;
 }
 
 /**
@@ -258,12 +258,12 @@ function resolveSpacingValue(v: string, prop?: string): string {
     }
 
     // Negative numeric: -4 → calc(var(--spacing) * -4)
-    if (v.startsWith('-') && !Number.isNaN(parseFloat(v.slice(1)))) {
+    if (v.startsWith('-') && !Number.isNaN(Number.parseFloat(v.slice(1)))) {
         return `calc(var(--spacing) * ${v})`;
     }
 
     // Numeric: 4 → calc(var(--spacing) * 4)
-    if (!Number.isNaN(parseFloat(v))) {
+    if (!Number.isNaN(Number.parseFloat(v))) {
         return `calc(var(--spacing) * ${v})`;
     }
 
@@ -349,7 +349,7 @@ function resolveColorValue(v: string): string {
         const colorVar = DIRECT_COLOR_KEYWORDS.has(colorPart)
             ? colorPart
             : `var(--color-${colorPart})`;
-        const opacityPct = v.includes('.') ? `${parseFloat(opacity) * 100}%` : `${opacity}%`;
+        const opacityPct = v.includes('.') ? `${Number.parseFloat(opacity) * 100}%` : `${opacity}%`;
         return `color-mix(in srgb, ${colorVar} ${opacityPct}, transparent)`;
     }
 
@@ -803,7 +803,7 @@ function resolveOpacityDeclaration(utility: string): string | null {
     if (!utility.startsWith('opacity-')) return null;
     const value = utility.slice(8);
     if (value.startsWith('[') && value.endsWith(']')) return `opacity: ${value.slice(1, -1)}`;
-    const numeric = parseInt(value, 10);
+    const numeric = Number.parseInt(value, 10);
     if (Number.isNaN(numeric)) return null;
     return `opacity: ${OPACITY_NAMED[numeric] ?? String(numeric / 100)}`;
 }
@@ -817,7 +817,7 @@ function resolveZIndexDeclaration(utility: string): string | null {
     const value = utility.slice(2);
     if (value === 'auto') return 'z-index: auto';
     if (value.startsWith('[') && value.endsWith(']')) return `z-index: ${value.slice(1, -1)}`;
-    return Number.isNaN(parseInt(value, 10)) ? null : `z-index: ${value}`;
+    return Number.isNaN(Number.parseInt(value, 10)) ? null : `z-index: ${value}`;
 }
 
 /**
@@ -903,7 +903,9 @@ function resolveLeadingDeclaration(utility: string): string | null {
     };
     if (value in named) return `line-height: ${named[value]}`;
     if (value.startsWith('[') && value.endsWith(']')) return `line-height: ${value.slice(1, -1)}`;
-    return Number.isNaN(parseFloat(value)) ? null : `line-height: calc(var(--spacing) * ${value})`;
+    return Number.isNaN(Number.parseFloat(value))
+        ? null
+        : `line-height: calc(var(--spacing) * ${value})`;
 }
 
 /**
@@ -1000,7 +1002,7 @@ function resolveFlexOrderDeclaration(utility: string): string | null {
     }
     if (!utility.startsWith('columns-')) return null;
     const value = utility.slice(8);
-    return Number.isNaN(parseInt(value, 10))
+    return Number.isNaN(Number.parseInt(value, 10))
         ? `columns: var(--container-${value})`
         : `columns: ${value}`;
 }
@@ -1046,10 +1048,10 @@ function resolveGridSpan(value: string, axis: 'column' | 'row'): string {
  */
 function resolveTransformDeclaration(utility: string): string | null {
     if (utility.startsWith('scale-x-'))
-        return `--tw-scale-x: ${parseFloat(utility.slice(8)) / 100}; scale: var(--tw-scale-x) var(--tw-scale-y, 1)`;
+        return `--tw-scale-x: ${Number.parseFloat(utility.slice(8)) / 100}; scale: var(--tw-scale-x) var(--tw-scale-y, 1)`;
     if (utility.startsWith('scale-y-'))
-        return `--tw-scale-y: ${parseFloat(utility.slice(8)) / 100}; scale: var(--tw-scale-x, 1) var(--tw-scale-y)`;
-    if (utility.startsWith('scale-')) return `scale: ${parseFloat(utility.slice(6)) / 100}`;
+        return `--tw-scale-y: ${Number.parseFloat(utility.slice(8)) / 100}; scale: var(--tw-scale-x, 1) var(--tw-scale-y)`;
+    if (utility.startsWith('scale-')) return `scale: ${Number.parseFloat(utility.slice(6)) / 100}`;
     if (utility.startsWith('rotate-')) {
         const value = utility.slice(7);
         return value.startsWith('[') ? `rotate: ${value.slice(1, -1)}` : `rotate: ${value}deg`;
