@@ -24,6 +24,8 @@ import { extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
+const BACKSLASH = String.fromCodePoint(92);
+
 type BenchMode = 'mangle-vars-off' | 'mangle-vars-on';
 type AssetGroup = 'all' | 'html' | 'js' | 'css' | 'other';
 
@@ -249,7 +251,8 @@ function summarizeFailure(output: string): string {
         'build failed'
     )
         .slice(0, 240)
-        .replaceAll('|', '\\|');
+        .split('|')
+        .join(`${BACKSLASH}|`);
 }
 
 /**

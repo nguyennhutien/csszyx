@@ -53,6 +53,7 @@ interface ReportPayload {
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DOCS_ROOT = join(REPO_ROOT, 'apps/docs');
+const BACKSLASH = String.fromCodePoint(92);
 const DIST_ROOT = join(DOCS_ROOT, 'dist');
 const REPORT_MD = join(REPO_ROOT, '.agent/reports/phase-f-docs-mangle-vars-size-bench.md');
 const REPORT_JSON = join(REPO_ROOT, '.agent/reports/phase-f-docs-mangle-vars-size-bench.json');
@@ -230,7 +231,7 @@ function groupForFile(file: string): Exclude<AssetGroup, 'all' | 'runtime' | 'to
  * @returns true when the file is the standalone global variable map
  */
 function isGlobalVarToolingMap(root: string, file: string): boolean {
-    return relative(root, file).replace(/\\/g, '/') === '.csszyx/global-var-map.json';
+    return relative(root, file).split(BACKSLASH).join('/') === '.csszyx/global-var-map.json';
 }
 
 /**
@@ -291,7 +292,8 @@ function summarizeFailure(output: string): string {
         'build failed'
     )
         .slice(0, 240)
-        .replaceAll('|', '\\|');
+        .split('|')
+        .join(`${BACKSLASH}|`);
 }
 
 /**
