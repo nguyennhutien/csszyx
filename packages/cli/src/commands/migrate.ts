@@ -152,321 +152,398 @@ async function askYesNo(question: string): Promise<boolean> {
  * @param options - Migration configuration options
  */
 export async function migrate(options: MigrateOptions = {}): Promise<void> {
+    const context = await prepareMigration(options);
+    if (!context) return;
+    const log = startMigrationLog(context);
+    const files = await scanMigrationFiles(context, log);
+    if (!files || files.length === 0) return;
+
+    const summary = createMigrationSummary();
+    const progress = spinner.start('Migrating...');
+    for (const filePath of files) processMigrationFile(filePath, context, summary, log);
+    progress.succeed('Migration complete');
+
+    reportMigrationSummary(context, summary, log);
+    if (!writeAuditMap(context, summary, log)) return;
+    reportRemainingTodos(context, summary, log);
+    reportUnusedImports(summary, log);
+    flushMigrationLog(context.cwd, log);
+}
+
+type MigrationLog = ReturnType<typeof createLogFile>;
+
+interface MigrationContext {
+    options: MigrateOptions;
+    cwd: string;
+    dryRun: boolean;
+    audit: boolean;
+    resolveTodosPath?: string;
+    injectTodos: boolean;
+    customMap?: CsszyxTodoMap;
+}
+
+interface MigrationSummary {
+    transformed: number;
+    skipped: number;
+    skippedComponent: number;
+    normalized: number;
+    files: number;
+    unrecognized: string[];
+    warnings: string[];
+    unusedImports: { file: string; imports: string[] }[];
+}
+
+/* eslint-disable jsdoc/require-param, jsdoc/require-returns -- Internal stages operate on the shared migration context. */
+
+/** Prepares mode flags, prompts, and an optional resolution map. */
+async function prepareMigration(options: MigrateOptions): Promise<MigrationContext | null> {
     const cwd = options.cwd || process.cwd();
-    let dryRun = options.dryRun || false;
-    const ignorePatterns = options.ignore || [];
     const audit = options.audit || false;
+    const dryRun = audit || options.dryRun || false;
     const resolveTodosPath = options.resolveTodos;
-    let customMap: CsszyxTodoMap | undefined, files: string[];
-
-    if (audit) {
-        dryRun = true; // force dry-run for audit so we don't mutate files
-    }
-
-    // When --resolve-todos is active, automatically re-inject @sz-todo comments
-    // for classes that remain unresolved after the resolution pass, so the user
-    // can see at a glance which entries in csszyx-todo.json still need attention.
-    let injectTodos = options.injectTodos || false;
-    if (resolveTodosPath && !injectTodos) {
-        injectTodos = true;
-    }
-
+    let injectTodos = options.injectTodos || Boolean(resolveTodosPath);
     printHeader('csszyx Migration Tool');
-
-    // ── TTY: ask about @sz-todo comment injection upfront ──────────────────
     if (process.stdout.isTTY && !injectTodos && !audit && !resolveTodosPath) {
-        const answer = await askYesNo(
+        injectTodos = await askYesNo(
             'Add {/* @sz-todo */} comments above elements with unrecognized classes? [y/N] ',
         );
-        if (answer) {
-            injectTodos = true;
-        }
     }
+    const customMap = resolveTodosPath ? loadResolutionMap(cwd, resolveTodosPath) : undefined;
+    if (resolveTodosPath && !customMap) return null;
+    reportMigrationMode(audit, dryRun);
+    return { options, cwd, dryRun, audit, resolveTodosPath, injectTodos, customMap };
+}
 
-    if (resolveTodosPath) {
-        try {
-            const absolutePath = path.resolve(cwd, resolveTodosPath);
-            const content = fs.readFileSync(absolutePath, 'utf-8');
-            customMap = JSON.parse(content);
-            printInfo(`Loaded resolution map from ${resolveTodosPath}`);
-        } catch {
-            printWarn(
-                `Could not load resolve map from ${resolveTodosPath}. Ensure the file exists and is valid JSON.`,
-            );
-            return;
-        }
+/** Loads a user-edited todo resolution map. */
+function loadResolutionMap(cwd: string, filePath: string): CsszyxTodoMap | undefined {
+    try {
+        const content = fs.readFileSync(path.resolve(cwd, filePath), 'utf-8');
+        const map = JSON.parse(content) as CsszyxTodoMap;
+        printInfo(`Loaded resolution map from ${filePath}`);
+        return map;
+    } catch {
+        printWarn(
+            `Could not load resolve map from ${filePath}. Ensure the file exists and is valid JSON.`,
+        );
+        return undefined;
     }
+}
 
+/** Reports the selected non-default migration mode. */
+function reportMigrationMode(audit: boolean, dryRun: boolean): void {
     if (audit) {
         printInfo('Audit mode — scanning for unrecognized classes to generate a mapping file...');
     } else if (dryRun) {
         printInfo('Dry run mode — no files will be modified');
     }
+}
 
-    // ── Create log file ─────────────────────────────────────────────────────
-    const log = createLogFile(cwd);
-    log.writeLine(
-        `Mode: ${audit ? 'audit' : dryRun ? 'dry-run' : 'migrate'}${resolveTodosPath ? ` (resolve-todos: ${resolveTodosPath})` : ''}`,
-    );
-    log.writeLine(`injectTodos: ${injectTodos}`);
+/** Creates and initializes the migration log. */
+function startMigrationLog(context: MigrationContext): MigrationLog {
+    const log = createLogFile(context.cwd);
+    const mode = context.audit ? 'audit' : context.dryRun ? 'dry-run' : 'migrate';
+    const resolution = context.resolveTodosPath
+        ? ` (resolve-todos: ${context.resolveTodosPath})`
+        : '';
+    log.writeLine(`Mode: ${mode}${resolution}`);
+    log.writeLine(`injectTodos: ${context.injectTodos}`);
     log.writeLine('');
-
-    // Warn if .csszyx directory is not gitignored
-    if (!isGitignored(cwd, '.csszyx')) {
+    if (!isGitignored(context.cwd, '.csszyx')) {
         printWarn(
             'Tip: add .csszyx/ to your .gitignore to exclude migration logs from version control.',
         );
     }
+    return log;
+}
 
-    // Find JSX/TSX/HTML files
-    const patterns = options.pattern ? [options.pattern] : ['**/*.{jsx,tsx,html}'];
-
+/** Scans migration input files and handles empty/error reporting. */
+async function scanMigrationFiles(
+    context: MigrationContext,
+    log: MigrationLog,
+): Promise<string[] | null> {
+    const patterns = context.options.pattern ? [context.options.pattern] : ['**/*.{jsx,tsx,html}'];
     const ignore = [
         '**/node_modules/**',
         '**/dist/**',
         '**/build/**',
         '**/.next/**',
         '**/.nuxt/**',
-        ...ignorePatterns,
+        ...(context.options.ignore || []),
     ];
-
-    const s = spinner.start('Scanning for files...');
+    const progress = spinner.start('Scanning for files...');
     try {
-        files = await fg(patterns, { cwd, ignore, absolute: true });
-    } catch (err) {
-        s.fail('File scan failed');
-        printWarn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
-        log.flush();
-        return;
-    }
-    s.succeed(`Found ${files.length} files`);
-
-    if (files.length === 0) {
+        const files = await fg(patterns, { cwd: context.cwd, ignore, absolute: true });
+        progress.succeed(`Found ${files.length} files`);
+        if (files.length === 0) reportNoMigrationFiles(context, log);
+        return files;
+    } catch (error) {
+        progress.fail('File scan failed');
         printWarn(
-            options.pattern
-                ? `No files found matching pattern: ${options.pattern}`
-                : 'No JSX/TSX/HTML files found',
+            `Could not scan files: ${error instanceof Error ? error.message : String(error)}`,
         );
-        log.writeLine('No files found.');
         log.flush();
-        return;
+        return null;
     }
+}
 
-    let totalTransformed = 0;
-    let totalSkipped = 0;
-    let totalSkippedComponent = 0;
-    let totalSzKeysNormalized = 0;
-    let totalFiles = 0;
-    const allUnrecognized: string[] = [];
-    const allWarnings: string[] = [];
-    const unusedImportFiles: { file: string; imports: string[] }[] = [];
+/** Reports an empty migration scan and persists its log. */
+function reportNoMigrationFiles(context: MigrationContext, log: MigrationLog): void {
+    printWarn(
+        context.options.pattern
+            ? `No files found matching pattern: ${context.options.pattern}`
+            : 'No JSX/TSX/HTML files found',
+    );
+    log.writeLine('No files found.');
+    log.flush();
+}
 
-    const s2 = spinner.start('Migrating...');
+/** Creates neutral aggregation state for one migration run. */
+function createMigrationSummary(): MigrationSummary {
+    return {
+        transformed: 0,
+        skipped: 0,
+        skippedComponent: 0,
+        normalized: 0,
+        files: 0,
+        unrecognized: [],
+        warnings: [],
+        unusedImports: [],
+    };
+}
 
-    for (const filePath of files) {
-        const source = fs.readFileSync(filePath, 'utf-8');
-        const isHtml = filePath.endsWith('.html');
+/** Processes and aggregates one candidate source file. */
+function processMigrationFile(
+    filePath: string,
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    const source = fs.readFileSync(filePath, 'utf-8');
+    const isHtml = filePath.endsWith('.html');
+    if (context.options.keysOnly && isHtml) return;
+    if (!hasMigrationAttributes(source, isHtml, Boolean(context.options.keysOnly))) return;
+    const processSource =
+        context.resolveTodosPath && !isHtml ? stripSzTodoComments(source) : source;
+    const result = isHtml
+        ? transformHtmlSourceSimple(processSource, filePath, {
+              braces: context.options.braces,
+              injectFouc: context.options.injectFouc,
+              injectRuntime: context.options.injectRuntime,
+              cdnUrl: context.options.cdnUrl,
+              localPath: context.options.localPath,
+          })
+        : transformSource(processSource, filePath, {
+              injectTodos: context.injectTodos,
+              customMap: context.customMap,
+              keysOnly: context.options.keysOnly,
+          });
+    summary.warnings.push(...result.warnings);
+    if (!result.changed) return;
+    aggregateMigrationResult(filePath, result, context, summary);
+    if (!writeMigratedFile(filePath, result.code, context, log)) return;
+    reportMigratedFile(filePath, result.stats, context, log);
+}
 
-        // keys-only normalizes sz props in JSX/TSX only — HTML has no sz objects.
-        if (options.keysOnly && isHtml) {
-            continue;
-        }
+/** Checks whether a source file contains attributes relevant to the selected mode. */
+function hasMigrationAttributes(source: string, isHtml: boolean, keysOnly: boolean): boolean {
+    if (isHtml) return source.includes('class=');
+    if (keysOnly) return source.includes('sz=');
+    return source.includes('className=') || source.includes('sz=');
+}
 
-        // Skip files with nothing to do. keys-only needs an sz prop; a normal run
-        // needs a className to convert OR an sz prop whose legacy keys to normalize.
-        const hasRelevantAttr = isHtml
-            ? source.includes('class=')
-            : options.keysOnly
-              ? source.includes('sz=')
-              : source.includes('className=') || source.includes('sz=');
-        if (!hasRelevantAttr) {
-            continue;
-        }
-
-        // Strip existing @sz-todo comments before re-processing.
-        // When --resolve-todos is active, resolved classes get no new comment;
-        // still-unresolved classes get a fresh comment via the injectTodos pass.
-        let processSource = source;
-        if (resolveTodosPath && !isHtml) {
-            processSource = stripSzTodoComments(processSource);
-        }
-
-        const result = isHtml
-            ? transformHtmlSourceSimple(processSource, filePath, {
-                  braces: options.braces,
-                  injectFouc: options.injectFouc,
-                  injectRuntime: options.injectRuntime,
-                  cdnUrl: options.cdnUrl,
-                  localPath: options.localPath,
-              })
-            : transformSource(processSource, filePath, {
-                  injectTodos,
-                  customMap,
-                  keysOnly: options.keysOnly,
-              });
-
-        // Collect warnings from every scanned file — not just changed ones.
-        // CVA warnings and other diagnostics are emitted regardless of whether
-        // any className was actually transformed (e.g. a file that only uses
-        // cva() with no static className strings still needs the szv() hint).
-        allWarnings.push(...result.warnings);
-
-        if (result.changed) {
-            totalFiles++;
-            totalTransformed += result.stats.classNamesTransformed;
-            totalSkipped += result.stats.classNamesSkipped;
-            totalSkippedComponent += result.stats.classNamesSkippedComponent;
-            totalSzKeysNormalized += result.stats.szKeysNormalized ?? 0;
-            allUnrecognized.push(...result.stats.classesUnrecognized);
-
-            // Track potentially unused imports
-            if (result.potentiallyUnusedImports.length > 0) {
-                const rel = path.relative(cwd, filePath);
-                unusedImportFiles.push({ file: rel, imports: result.potentiallyUnusedImports });
-            }
-
-            if (!dryRun) {
-                try {
-                    fs.writeFileSync(filePath, result.code, 'utf-8');
-                } catch (err) {
-                    const rel = path.relative(cwd, filePath);
-                    printWarn(
-                        `Could not write ${rel}: ${err instanceof Error ? err.message : String(err)}`,
-                    );
-                    log.writeLine(`  Write error: ${rel}`);
-                    continue;
-                }
-            }
-
-            const rel = path.relative(cwd, filePath);
-            const detail = options.keysOnly
-                ? `${result.stats.szKeysNormalized ?? 0} sz key(s) normalized`
-                : `${result.stats.classNamesTransformed} className(s) → sz`;
-            if (dryRun) {
-                printInfo(`  ${rel}: ${detail}`);
-            }
-            log.writeLine(`  ${rel}: ${detail}`);
-        }
+/** Aggregates one changed transformation result. */
+function aggregateMigrationResult(
+    filePath: string,
+    result: ReturnType<typeof transformSource>,
+    context: MigrationContext,
+    summary: MigrationSummary,
+): void {
+    summary.files++;
+    summary.transformed += result.stats.classNamesTransformed;
+    summary.skipped += result.stats.classNamesSkipped;
+    summary.skippedComponent += result.stats.classNamesSkippedComponent;
+    summary.normalized += result.stats.szKeysNormalized ?? 0;
+    summary.unrecognized.push(...result.stats.classesUnrecognized);
+    if (result.potentiallyUnusedImports.length > 0) {
+        summary.unusedImports.push({
+            file: path.relative(context.cwd, filePath),
+            imports: result.potentiallyUnusedImports,
+        });
     }
+}
 
-    s2.succeed('Migration complete');
+/** Writes one transformed source file unless the run is dry. */
+function writeMigratedFile(
+    filePath: string,
+    code: string,
+    context: MigrationContext,
+    log: MigrationLog,
+): boolean {
+    if (context.dryRun) return true;
+    try {
+        fs.writeFileSync(filePath, code, 'utf-8');
+        return true;
+    } catch (error) {
+        const relative = path.relative(context.cwd, filePath);
+        printWarn(
+            `Could not write ${relative}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        log.writeLine(`  Write error: ${relative}`);
+        return false;
+    }
+}
 
-    // ── Summary ──────────────────────────────────────────────────────────────
+/** Reports one changed file to the console and migration log. */
+function reportMigratedFile(
+    filePath: string,
+    stats: ReturnType<typeof transformSource>['stats'],
+    context: MigrationContext,
+    log: MigrationLog,
+): void {
+    const relative = path.relative(context.cwd, filePath);
+    const detail = context.options.keysOnly
+        ? `${stats.szKeysNormalized ?? 0} sz key(s) normalized`
+        : `${stats.classNamesTransformed} className(s) → sz`;
+    if (context.dryRun) printInfo(`  ${relative}: ${detail}`);
+    log.writeLine(`  ${relative}: ${detail}`);
+}
+
+/** Reports aggregate counts, warnings, and unknown classes. */
+function reportMigrationSummary(
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
     console.info();
-    printSuccess(`Files modified: ${totalFiles}`);
-    if (!options.keysOnly) {
-        printSuccess(`classNames converted: ${totalTransformed}`);
-    }
-    log.writeLine(`Files modified: ${totalFiles}`);
-    log.writeLine(`classNames converted: ${totalTransformed}`);
+    printSuccess(`Files modified: ${summary.files}`);
+    if (!context.options.keysOnly) printSuccess(`classNames converted: ${summary.transformed}`);
+    log.writeLine(`Files modified: ${summary.files}`);
+    log.writeLine(`classNames converted: ${summary.transformed}`);
+    reportOptionalCounts(summary, log);
+    reportUnknownClasses(summary.unrecognized, log);
+    reportMigrationWarnings(summary.warnings, log);
+}
 
-    if (totalSzKeysNormalized > 0) {
-        printSuccess(`legacy sz keys normalized: ${totalSzKeysNormalized}`);
-        log.writeLine(`legacy sz keys normalized: ${totalSzKeysNormalized}`);
+/** Reports non-zero normalization and skip counters. */
+function reportOptionalCounts(summary: MigrationSummary, log: MigrationLog): void {
+    if (summary.normalized > 0) {
+        printSuccess(`legacy sz keys normalized: ${summary.normalized}`);
+        log.writeLine(`legacy sz keys normalized: ${summary.normalized}`);
     }
+    if (summary.skipped > 0) {
+        printWarn(`classNames skipped (dynamic): ${summary.skipped}`);
+        log.writeLine(`classNames skipped (dynamic): ${summary.skipped}`);
+    }
+    if (summary.skippedComponent > 0) {
+        printWarn(`classNames kept on components (no sz support): ${summary.skippedComponent}`);
+        log.writeLine(`classNames kept on components (no sz support): ${summary.skippedComponent}`);
+    }
+}
 
-    if (totalSkipped > 0) {
-        printWarn(`classNames skipped (dynamic): ${totalSkipped}`);
-        log.writeLine(`classNames skipped (dynamic): ${totalSkipped}`);
+/** Reports unique unrecognized classes. */
+function reportUnknownClasses(classes: string[], log: MigrationLog): void {
+    if (classes.length === 0) return;
+    const unique = [...new Set(classes)];
+    printWarn(
+        `Unrecognized classes (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
+    );
+    log.writeLine(`Unrecognized classes (${unique.length}): ${unique.join(', ')}`);
+}
+
+/** Reports transformation diagnostics with a concise console cap. */
+function reportMigrationWarnings(warnings: string[], log: MigrationLog): void {
+    if (warnings.length === 0) return;
+    console.info();
+    for (const warning of warnings.slice(0, 5)) printWarn(warning);
+    if (warnings.length > 5) printWarn(`... and ${warnings.length - 5} more warnings`);
+    log.writeLine('');
+    log.writeLine('Warnings:');
+    for (const warning of warnings) log.writeLine(`  ${warning}`);
+}
+
+/** Writes the audit todo map when audit mode is active. */
+function writeAuditMap(
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): boolean {
+    if (!context.audit) return true;
+    const todoPath = path.join(context.cwd, '.csszyx-todo.json');
+    const unique = [...new Set(summary.unrecognized)];
+    console.info();
+    if (unique.length === 0) {
+        printSuccess('Audit complete. 100% of your classes are perfectly recognized by csszyx!');
+        log.writeLine('Audit: 100% recognized.');
+        return true;
     }
-    if (totalSkippedComponent > 0) {
-        printWarn(`classNames kept on components (no sz support): ${totalSkippedComponent}`);
-        log.writeLine(`classNames kept on components (no sz support): ${totalSkippedComponent}`);
-    }
-    if (allUnrecognized.length > 0) {
-        const unique = [...new Set(allUnrecognized)];
+    const todoObject = Object.fromEntries(unique.map(value => [value, 'sz:todo']));
+    try {
+        fs.writeFileSync(todoPath, JSON.stringify(todoObject, null, 2));
+    } catch (error) {
         printWarn(
-            `Unrecognized classes (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
+            `Could not write ${path.relative(context.cwd, todoPath)}: ${error instanceof Error ? error.message : String(error)}`,
         );
-        log.writeLine(`Unrecognized classes (${unique.length}): ${unique.join(', ')}`);
+        log.flush();
+        return false;
     }
-    if (allWarnings.length > 0) {
-        console.info();
-        for (const w of allWarnings.slice(0, 5)) {
-            printWarn(w);
-        }
-        if (allWarnings.length > 5) {
-            printWarn(`... and ${allWarnings.length - 5} more warnings`);
-        }
-        log.writeLine('');
-        log.writeLine('Warnings:');
-        for (const w of allWarnings) {
-            log.writeLine(`  ${w}`);
-        }
+    reportAuditMapWritten(context.cwd, todoPath, unique.length, log);
+    return true;
+}
+
+/** Reports a successfully written audit map. */
+function reportAuditMapWritten(
+    cwd: string,
+    todoPath: string,
+    count: number,
+    log: MigrationLog,
+): void {
+    const relative = path.relative(cwd, todoPath);
+    printSuccess(`Audit complete. Exported ${count} unrecognized classes to ${relative}.`);
+    printInfo(
+        'Edit this file to map custom classes, then run: npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json',
+    );
+    log.writeLine(`Audit: ${count} unrecognized classes written to ${relative}`);
+}
+
+/** Reports unresolved classes after applying a todo map. */
+function reportRemainingTodos(
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    if (!context.resolveTodosPath) return;
+    const unique = [...new Set(summary.unrecognized)];
+    if (unique.length === 0) return;
+    console.info();
+    printWarn(
+        `Still unresolved after this pass (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
+    );
+    printInfo('Re-run --audit to generate a fresh snapshot when ready.');
+    log.writeLine(`Still unresolved (${unique.length}): ${unique.join(', ')}`);
+}
+
+/** Reports imports that may be unused after migration. */
+function reportUnusedImports(summary: MigrationSummary, log: MigrationLog): void {
+    if (summary.unusedImports.length === 0) return;
+    console.info();
+    printWarn('Potentially unused imports (run ESLint to clean up):');
+    for (const { file, imports } of summary.unusedImports) {
+        printInfo(`  ${file}: ${imports.map(name => `import { ${name} }`).join(', ')}`);
+        log.writeLine(`  Unused import in ${file}: ${imports.join(', ')}`);
     }
+}
 
-    // ── Audit: write .csszyx-todo.json ───────────────────────────────────────
-    // Only --audit writes to the todo file. --resolve-todos is read-only: it
-    // never modifies the file the dev is editing. Remaining unknowns (including
-    // partial cascades from TW string values) are reported in log/console only —
-    // the dev re-runs --audit when they want a fresh snapshot.
-    if (audit) {
-        const todoPath = path.join(cwd, '.csszyx-todo.json');
-        const unique = [...new Set(allUnrecognized)];
-        console.info();
-
-        if (unique.length === 0) {
-            printSuccess(
-                'Audit complete. 100% of your classes are perfectly recognized by csszyx!',
-            );
-            log.writeLine('Audit: 100% recognized.');
-        } else {
-            const todoObj: Record<string, unknown> = {};
-            for (const u of unique) {
-                todoObj[u] = 'sz:todo';
-            }
-            try {
-                fs.writeFileSync(todoPath, JSON.stringify(todoObj, null, 2));
-            } catch (err) {
-                printWarn(
-                    `Could not write ${path.relative(cwd, todoPath)}: ${err instanceof Error ? err.message : String(err)}`,
-                );
-                log.flush();
-                return;
-            }
-            printSuccess(
-                `Audit complete. Exported ${unique.length} unrecognized classes to ${path.relative(cwd, todoPath)}.`,
-            );
-            printInfo(
-                'Edit this file to map custom classes, then run: npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json',
-            );
-            log.writeLine(
-                `Audit: ${unique.length} unrecognized classes written to ${path.relative(cwd, todoPath)}`,
-            );
-        }
-    }
-
-    // ── resolve-todos: report remaining unknowns (read-only, no file write) ──
-    if (resolveTodosPath) {
-        const unique = [...new Set(allUnrecognized)];
-        if (unique.length > 0) {
-            console.info();
-            printWarn(
-                `Still unresolved after this pass (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
-            );
-            printInfo('Re-run --audit to generate a fresh snapshot when ready.');
-            log.writeLine(`Still unresolved (${unique.length}): ${unique.join(', ')}`);
-        }
-    }
-
-    // ── Report potentially unused imports ─────────────────────────────────────
-    if (unusedImportFiles.length > 0) {
-        console.info();
-        printWarn('Potentially unused imports (run ESLint to clean up):');
-        for (const { file, imports } of unusedImportFiles) {
-            printInfo(`  ${file}: ${imports.map(i => `import { ${i} }`).join(', ')}`);
-            log.writeLine(`  Unused import in ${file}: ${imports.join(', ')}`);
-        }
-    }
-
-    // ── Flush log ─────────────────────────────────────────────────────────────
+/** Flushes the migration log without turning logging failures into command failures. */
+function flushMigrationLog(cwd: string, log: MigrationLog): void {
     try {
         log.flush();
         printInfo(`Migration log saved to ${path.relative(cwd, log.filePath)}`);
     } catch {
-        // Non-fatal: log flush failure should not crash the process
+        // Logging is diagnostic and must not invalidate a completed migration.
     }
 }
+
+/* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
  * Remove every `{/* @sz-todo: … *​/}` comment (with an optional trailing
