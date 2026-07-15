@@ -33,6 +33,9 @@ import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
 import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
 import { BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT, normalizeBase, stripVariant } from './split-box.js';
 
+/** Class string accepted by the public and generated merge helpers. */
+type ClassInput = string | false | null | undefined;
+
 /**
  * Utility prefixes that map to more than one CSS property. These route through
  * value-set classification (`merge-groups.ts`) instead of prefix-keyed merging
@@ -219,7 +222,7 @@ let memoDecodeRef: unknown;
  * @returns The merged className string.
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
-export function szcn(...inputs: (string | false | null | undefined)[]): string {
+export function szcn(...inputs: ClassInput[]): string {
     let key = '';
     for (const input of inputs) {
         if (input && typeof input === 'string') {
@@ -271,7 +274,7 @@ export function szcn(...inputs: (string | false | null | undefined)[]): string {
  * @param inputs - Class strings; falsy inputs (`false`/`null`/`undefined`/`''`) are skipped.
  * @returns The merged className string.
  */
-export function _szcn(...inputs: (string | false | null | undefined)[]): string {
+export function _szcn(...inputs: ClassInput[]): string {
     return mergeUncached(inputs);
 }
 
@@ -281,7 +284,7 @@ export function _szcn(...inputs: (string | false | null | undefined)[]): string 
  * @param inputs - Class strings; falsy inputs are skipped.
  * @returns The merged className string.
  */
-function mergeUncached(inputs: readonly (string | false | null | undefined)[]): string {
+function mergeUncached(inputs: readonly ClassInput[]): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
 
