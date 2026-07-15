@@ -29,6 +29,8 @@ import {
 import { generateSzExpression, generateSzHtmlValue } from './sz-codegen.js';
 import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
 
+const BACKSLASH = String.fromCodePoint(92);
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -779,7 +781,7 @@ export function transformSource(
     if (clsxImportNames.size > 0 && !clsxUsedOutsideClassName && replacements.length > 0) {
         // Simple check: see if any clsx-like name still appears as a call in modified output
         for (const name of clsxImportNames) {
-            const callPattern = new RegExp(`\\b${name}\\s*\\(`, 'g');
+            const callPattern = new RegExp(`${BACKSLASH}b${name}${BACKSLASH}s*${BACKSLASH}(`, 'g');
             if (!callPattern.test(output)) {
                 potentiallyUnusedImports.push(name);
             }
