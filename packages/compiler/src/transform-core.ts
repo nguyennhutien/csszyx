@@ -2858,6 +2858,40 @@ function finalizeTransformResult(
     return { className: outputClasses.join(' ') };
 }
 
+/** Collects the scalar property forms that remain after specialized dispatch. */
+function collectFallbackProperty(
+    rawKey: string,
+    key: string,
+    value: unknown,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): void {
+    warnUnknownSzProperty(rawKey, szProp);
+    if (/^\d+(?:\.\d+)?$/.test(rawKey)) return;
+    if (value === true) {
+        const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? BOOLEAN_TO_CLASS[rawKey] || key : key;
+        classes.push(`${prefix}${utility}`);
+        return;
+    }
+    if (rawKey === 'animationDelay') {
+        const delay = typeof value === 'number' ? `${value}ms` : String(value);
+        classes.push(`${prefix}[animation-delay:${delay}]`);
+        return;
+    }
+    if (typeof value === 'number') {
+        const utility =
+            value < 0 && NEGATIVE_ALLOWED.has(key)
+                ? `-${key}-${Math.abs(value)}`
+                : `${key}-${value}`;
+        classes.push(`${prefix}${utility}`);
+        return;
+    }
+    if (typeof value === 'string') {
+        classes.push(buildGenericStringClass(rawKey, key, value, prefix));
+    }
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -3090,8 +3124,6 @@ function transformImpl(
             key = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
         }
 
-        let className = prefix;
-
         // ================================================================
         // HANDLE SPECIAL PROPERTIES
         // ================================================================
@@ -3120,66 +3152,7 @@ function transformImpl(
         // ================================================================
         // GENERIC / FALLBACK HANDLERS
         // ================================================================
-
-        warnUnknownSzProperty(rawKey, szProp);
-
-        // A purely numeric key can never be a CSS property or Tailwind utility —
-        // it is almost always a numeric lookup table (`{ 50: 100 }`) swallowed by
-        // extraction, and the generic fallbacks below would mint garbage classes
-        // like `50-100` straight into the safelist. Skip it (the unknown-property
-        // dev warning above already fired).
-        if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE BOOLEAN TRUE VALUES
-        // ================================================================
-        if (value === true) {
-            // Check if it's a known boolean shorthand
-            if (BOOLEAN_SHORTHANDS.has(rawKey)) {
-                // Use the mapped class name if available
-                const mappedClass = BOOLEAN_TO_CLASS[rawKey] || key;
-                className += mappedClass;
-            } else {
-                className += key;
-            }
-            classes.push(className);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE animationDelay — no Tailwind utility, always arbitrary property
-        // 150 → [animation-delay:150ms],  '0.5s' → [animation-delay:0.5s]
-        // Placed before numeric/string blocks because it must intercept both types.
-        // ================================================================
-        if (rawKey === 'animationDelay') {
-            const ms = typeof value === 'number' ? `${value}ms` : String(value);
-            classes.push(`${className}[animation-delay:${ms}]`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE NUMERIC VALUES
-        // ================================================================
-        if (typeof value === 'number') {
-            // Handle negative values
-            if (value < 0 && NEGATIVE_ALLOWED.has(key)) {
-                className += `-${key}-${Math.abs(value)}`;
-            } else {
-                // Tailwind v4: all <number> values are dynamic — no brackets needed
-                className += `${key}-${value}`;
-            }
-            classes.push(className);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE STRING VALUES
-        // ================================================================
-        if (typeof value === 'string') {
-            classes.push(buildGenericStringClass(rawKey, key, value, prefix));
-        }
+        collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
     }
 
     return finalizeTransformResult(classes, mangleMap);
