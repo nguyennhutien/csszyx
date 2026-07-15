@@ -358,6 +358,205 @@ function mergeStyleProperties(
     );
 }
 
+/** One classified sz array element. */
+type SzArrayPart =
+    | { kind: 'obj'; sz: SzObject }
+    | { kind: 'str'; value: string }
+    | { kind: 'cond'; cond: t.Expression; classNames: string }
+    | { kind: 'dyn'; node: t.Expression };
+
+/** Result of compiling an sz array expression. */
+interface SzArrayTransformResult {
+    transformed: boolean;
+    usesSzcn: boolean;
+    usesSzPart: boolean;
+}
+
+/**
+ * Classifies a conditional sz array element.
+ *
+ * @param expression Conditional expression to classify.
+ * @param getBinding Babel binding resolver.
+ * @returns Compiled conditional or dynamic array part.
+ */
+function classifyConditionalArrayPart(
+    expression: t.LogicalExpression,
+    getBinding: GetBinding,
+): SzArrayPart {
+    const right = unwrapTsExpression(expression.right) ?? expression.right;
+    let classNames = t.isStringLiteral(right) ? right.value : null;
+    if (classNames === null) {
+        const resolved = tryResolveStaticSzObject(right, getBinding);
+        if (resolved !== null) classNames = transform(resolved).className;
+    }
+    if (classNames !== null) {
+        return { kind: 'cond', cond: expression.left, classNames };
+    }
+    return { kind: 'dyn', node: expression };
+}
+
+/**
+ * Classifies one non-spread sz array element, omitting inert values.
+ *
+ * @param element Array element to classify.
+ * @param getBinding Babel binding resolver.
+ * @returns Classified part, or null for an inert value.
+ */
+function classifySzArrayElement(
+    element: t.Expression | t.JSXNamespacedName | t.ArgumentPlaceholder | null,
+    getBinding: GetBinding,
+): SzArrayPart | null {
+    if (element === null) return null;
+    const inner = unwrapTsExpression(element) ?? element;
+    if (t.isBooleanLiteral(inner) && !inner.value) return null;
+    if (t.isNullLiteral(inner)) return null;
+    if (t.isIdentifier(inner) && inner.name === 'undefined') return null;
+    if (t.isStringLiteral(inner)) return { kind: 'str', value: inner.value };
+    if (t.isLogicalExpression(inner) && inner.operator === '&&') {
+        const part = classifyConditionalArrayPart(inner, getBinding);
+        return part.kind === 'cond' && part.classNames === '' ? null : part;
+    }
+    const resolved = tryResolveStaticSzObject(inner, getBinding);
+    if (resolved !== null) return { kind: 'obj', sz: resolved };
+    return { kind: 'dyn', node: element as t.Expression };
+}
+
+/**
+ * Returns classified array parts, or null when a spread requires runtime fallback.
+ *
+ * @param expression Array expression to classify.
+ * @param getBinding Babel binding resolver.
+ * @returns Classified parts, or null when a spread is present.
+ */
+function classifySzArrayParts(
+    expression: t.ArrayExpression,
+    getBinding: GetBinding,
+): SzArrayPart[] | null {
+    const parts: SzArrayPart[] = [];
+    for (const element of expression.elements) {
+        if (t.isSpreadElement(element)) return null;
+        const part = classifySzArrayElement(element, getBinding);
+        if (part) parts.push(part);
+    }
+    return parts;
+}
+
+/**
+ * Adds class tokens from a compiled string to Tailwind discovery.
+ *
+ * @param value Compiled class string.
+ * @param classes Tailwind discovery set.
+ */
+function collectClassTokens(value: string, classes: Set<string>): void {
+    for (const className of value.split(/\s+/)) {
+        if (className) classes.add(className);
+    }
+}
+
+/**
+ * Appends one classified sz array part to the runtime composition arguments.
+ *
+ * @param part Classified array part.
+ * @param args Runtime composition arguments.
+ * @param getBinding Babel binding resolver.
+ * @param classes Tailwind discovery set.
+ * @param diagnostics Compiler diagnostics.
+ * @returns Whether the part requires the runtime sz-part helper.
+ */
+function appendSzArrayArgument(
+    part: SzArrayPart,
+    args: t.Expression[],
+    getBinding: GetBinding,
+    classes: Set<string>,
+    diagnostics: string[],
+): boolean {
+    if (part.kind === 'obj') {
+        const compiled = transform(part.sz).className;
+        collectClassTokens(compiled, classes);
+        args.push(t.stringLiteral(compiled));
+        return false;
+    }
+    if (part.kind === 'str') {
+        collectClassTokens(part.value, classes);
+        args.push(t.stringLiteral(part.value));
+        return false;
+    }
+    if (part.kind === 'cond') {
+        collectClassTokens(part.classNames, classes);
+        args.push(t.logicalExpression('&&', part.cond, t.stringLiteral(part.classNames)));
+        return false;
+    }
+
+    collectDynamicElementCandidates(part.node, getBinding, classes);
+    const unwrapped = unwrapTsExpression(part.node);
+    if (unwrapped && t.isObjectExpression(unwrapped)) {
+        diagnostics.push(buildSzPartElementDiagnostic(part.node));
+    }
+    args.push(t.callExpression(t.identifier('_szPart'), [part.node]));
+    return true;
+}
+
+/**
+ * Compiles an sz array expression when it has no spread element.
+ *
+ * @param path sz attribute path.
+ * @param expression Array expression to compile.
+ * @param existing Existing JSX attributes for the opening element.
+ * @param classMergeUsage Runtime class merge usage.
+ * @param classes Tailwind discovery set.
+ * @param diagnostics Compiler diagnostics.
+ * @returns Array transform result and runtime helper usage.
+ */
+function transformSzArrayExpression(
+    path: babel.NodePath<t.JSXAttribute>,
+    expression: t.ArrayExpression,
+    existing: ExistingJsxAttributes,
+    classMergeUsage: ClassMergeUsage,
+    classes: Set<string>,
+    diagnostics: string[],
+): SzArrayTransformResult {
+    const getBinding: GetBinding = name => path.scope.getBinding(name);
+    const parts = classifySzArrayParts(expression, getBinding);
+    if (!parts) return { transformed: false, usesSzcn: false, usesSzPart: false };
+
+    if (parts.every(part => part.kind === 'obj')) {
+        const merged = (parts as Array<{ kind: 'obj'; sz: SzObject }>).reduce<SzObject>(
+            (accumulator, part) => deepMergeSzObjects(accumulator, part.sz),
+            {},
+        );
+        const compiled = transform(merged).className;
+        collectClassTokens(compiled, classes);
+        path.node.name.name = 'className';
+        path.node.value = mergeClassNameValue(
+            path,
+            t.stringLiteral(compiled),
+            existing,
+            classMergeUsage,
+        );
+        return { transformed: true, usesSzcn: false, usesSzPart: false };
+    }
+
+    const args: t.Expression[] = [];
+    let usesSzPart = false;
+    for (const part of parts) {
+        const partUsesSzPart = appendSzArrayArgument(part, args, getBinding, classes, diagnostics);
+        usesSzPart ||= partUsesSzPart;
+    }
+    if (existing.classExpression) {
+        args.unshift(existing.classExpression);
+        if (existing.classNameNode && path.parentPath?.isJSXOpeningElement()) {
+            path.parentPath.node.attributes = withoutJSXAttribute(
+                path.parentPath.node.attributes,
+                existing.classNameNode,
+            );
+            existing.classNameNode = null;
+        }
+    }
+    path.node.name.name = 'className';
+    path.node.value = t.jsxExpressionContainer(t.callExpression(t.identifier('_szcn'), args));
+    return { transformed: true, usesSzcn: true, usesSzPart };
+}
+
 /**
  * Resolves a literal or expression-container attribute value to an expression.
  *
@@ -922,217 +1121,21 @@ export function transformSourceCode(
                                 // property group at runtime (mirrors the oxc/rust
                                 // classification exactly).
                                 if (t.isArrayExpression(expression)) {
-                                    const getBindingForArray = (
-                                        name: string,
-                                    ): ReturnType<typeof path.scope.getBinding> =>
-                                        path.scope.getBinding(name);
-
-                                    /** One classified array element. */
-                                    type ArrayPart =
-                                        | { kind: 'obj'; sz: SzObject }
-                                        | { kind: 'str'; value: string }
-                                        | {
-                                              kind: 'cond';
-                                              cond: t.Expression;
-                                              classNames: string;
-                                          }
-                                        | { kind: 'dyn'; node: t.Expression };
-                                    const parts: ArrayPart[] = [];
-                                    let hasSpread = false;
-
-                                    for (const element of expression.elements) {
-                                        // Sparse hole, false, null, undefined → skip
-                                        if (element === null) {
-                                            continue;
-                                        }
-                                        if (t.isSpreadElement(element)) {
-                                            hasSpread = true;
-                                            break;
-                                        }
-                                        const inner = unwrapTsExpression(element) ?? element;
-                                        if (t.isBooleanLiteral(inner) && !inner.value) {
-                                            continue;
-                                        }
-                                        if (t.isNullLiteral(inner)) {
-                                            continue;
-                                        }
-                                        if (t.isIdentifier(inner) && inner.name === 'undefined') {
-                                            continue;
-                                        }
-                                        if (t.isStringLiteral(inner)) {
-                                            parts.push({ kind: 'str', value: inner.value });
-                                            continue;
-                                        }
-                                        if (
-                                            t.isLogicalExpression(inner) &&
-                                            inner.operator === '&&'
-                                        ) {
-                                            const right =
-                                                unwrapTsExpression(inner.right) ?? inner.right;
-                                            let condClasses: string | null = t.isStringLiteral(
-                                                right,
-                                            )
-                                                ? right.value
-                                                : null;
-                                            if (condClasses === null) {
-                                                const rightSz = tryResolveStaticSzObject(
-                                                    right,
-                                                    getBindingForArray,
-                                                );
-                                                if (rightSz !== null) {
-                                                    condClasses = transform(rightSz).className;
-                                                }
-                                            }
-                                            if (condClasses !== null) {
-                                                if (condClasses !== '') {
-                                                    parts.push({
-                                                        kind: 'cond',
-                                                        cond: inner.left,
-                                                        classNames: condClasses,
-                                                    });
-                                                }
-                                                continue;
-                                            }
-                                            parts.push({
-                                                kind: 'dyn',
-                                                node: element as t.Expression,
-                                            });
-                                            continue;
-                                        }
-                                        const sz = tryResolveStaticSzObject(
-                                            inner,
-                                            getBindingForArray,
-                                        );
-                                        if (sz !== null) {
-                                            parts.push({ kind: 'obj', sz });
-                                            continue;
-                                        }
-                                        parts.push({
-                                            kind: 'dyn',
-                                            node: element as t.Expression,
-                                        });
-                                    }
-
-                                    if (!hasSpread) {
-                                        if (parts.every(part => part.kind === 'obj')) {
-                                            // All static objects → deep merge (later
-                                            // leaf wins per key path), compile once.
-                                            const merged = (
-                                                parts as Array<{ kind: 'obj'; sz: SzObject }>
-                                            ).reduce<SzObject>(
-                                                (acc, part) => deepMergeSzObjects(acc, part.sz),
-                                                {},
-                                            );
-                                            const compiled = transform(merged).className;
-                                            for (const c of compiled.split(/\s+/)) {
-                                                if (c) {
-                                                    collectedClasses.add(c);
-                                                }
-                                            }
-                                            path.node.name.name = 'className';
-                                            path.node.value = mergeClassNameValue(
-                                                path,
-                                                t.stringLiteral(compiled),
-                                                existingAttributes,
-                                                classMergeUsage,
-                                            );
-                                            transformed = true;
-                                            return;
-                                        }
-                                        const args: t.Expression[] = [];
-                                        let anySzPart = false;
-                                        for (const part of parts) {
-                                            if (part.kind === 'obj') {
-                                                const compiled = transform(part.sz).className;
-                                                for (const c of compiled.split(/\s+/)) {
-                                                    if (c) {
-                                                        collectedClasses.add(c);
-                                                    }
-                                                }
-                                                args.push(t.stringLiteral(compiled));
-                                            } else if (part.kind === 'str') {
-                                                for (const c of part.value.split(/\s+/)) {
-                                                    if (c) {
-                                                        collectedClasses.add(c);
-                                                    }
-                                                }
-                                                args.push(t.stringLiteral(part.value));
-                                            } else if (part.kind === 'cond') {
-                                                for (const c of part.classNames.split(/\s+/)) {
-                                                    if (c) {
-                                                        collectedClasses.add(c);
-                                                    }
-                                                }
-                                                args.push(
-                                                    t.logicalExpression(
-                                                        '&&',
-                                                        part.cond,
-                                                        t.stringLiteral(part.classNames),
-                                                    ),
-                                                );
-                                            } else {
-                                                // Safelist best-effort for static
-                                                // object literals inside the dynamic
-                                                // expression (ternary branches, …).
-                                                collectDynamicElementCandidates(
-                                                    part.node,
-                                                    getBindingForArray,
-                                                    collectedClasses,
-                                                );
-                                                // An OBJECT LITERAL landing here means
-                                                // one runtime value dragged an otherwise
-                                                // visible element to _szPart — say so.
-                                                // Identifiers/calls are legitimate
-                                                // forwarded slots and stay silent.
-                                                const unwrappedPart = unwrapTsExpression(part.node);
-                                                if (
-                                                    unwrappedPart &&
-                                                    t.isObjectExpression(unwrappedPart)
-                                                ) {
-                                                    diagnostics.push(
-                                                        buildSzPartElementDiagnostic(part.node),
-                                                    );
-                                                }
-                                                args.push(
-                                                    t.callExpression(t.identifier('_szPart'), [
-                                                        part.node,
-                                                    ]),
-                                                );
-                                                anySzPart = true;
-                                            }
-                                        }
-                                        if (existingAttributes.classExpression) {
-                                            args.unshift(existingAttributes.classExpression);
-                                            if (
-                                                existingAttributes.classNameNode &&
-                                                path.parentPath?.isJSXOpeningElement()
-                                            ) {
-                                                path.parentPath.node.attributes =
-                                                    withoutJSXAttribute(
-                                                        path.parentPath.node.attributes,
-                                                        existingAttributes.classNameNode,
-                                                    );
-                                                existingAttributes.classNameNode = null;
-                                            }
-                                        }
-                                        path.node.name.name = 'className';
-                                        // `_szcn` = the unmemoized szcn twin:
-                                        // compiled arrays carry per-render
-                                        // runtime parts, which would thrash
-                                        // (and evict) the authored-szcn memo.
-                                        path.node.value = t.jsxExpressionContainer(
-                                            t.callExpression(t.identifier('_szcn'), args),
-                                        );
-                                        usesSzcn = true;
-                                        usesSzPart ||= anySzPart;
+                                    const arrayResult = transformSzArrayExpression(
+                                        path,
+                                        expression,
+                                        existingAttributes,
+                                        classMergeUsage,
+                                        collectedClasses,
+                                        diagnostics,
+                                    );
+                                    if (arrayResult.transformed) {
+                                        usesSzcn ||= arrayResult.usesSzcn;
+                                        usesSzPart ||= arrayResult.usesSzPart;
                                         transformed = true;
                                         return;
                                     }
-                                    // A spread keeps the whole array a runtime value —
-                                    // fall through to the runtime wrapper below
-                                    // (matches oxc/rust).
                                 }
-
                                 // Fallback: Runtime wrapper
                                 // Emit a dev-mode diagnostic so developers know why the fallback
                                 // happened and which alternative pattern to use instead.
