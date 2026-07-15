@@ -177,12 +177,9 @@ function collectStyleMethodDiagnostic(
         return;
     }
 
-    const kind =
-        method === 'setProperty'
-            ? 'style-set-property'
-            : method === 'getPropertyValue'
-              ? 'style-get-property'
-              : 'style-remove-property';
+    let kind: GlobalVarUsageDiagnostic['kind'] = 'style-remove-property';
+    if (method === 'setProperty') kind = 'style-set-property';
+    if (method === 'getPropertyValue') kind = 'style-get-property';
     diagnostics.push(createDiagnostic(kind, name, node, source, filename));
 }
 

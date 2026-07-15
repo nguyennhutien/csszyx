@@ -1191,7 +1191,8 @@ function appendOxcObjectProperty(
 ): string | null {
     if (!objectSource.endsWith('}')) return null;
     const body = objectSource.slice(0, -1);
-    const separator = !hasProperties ? '' : body.trimEnd().endsWith(',') ? ' ' : ', ';
+    let separator = '';
+    if (hasProperties) separator = body.trimEnd().endsWith(',') ? ' ' : ', ';
     return `${body}${separator}${propertySource}}`;
 }
 
@@ -1722,17 +1723,17 @@ function buildRuntimeFallbackDiagnostic(expression: OxcNode, source: string): st
     let suggestion: string;
     if (expression.type === 'CallExpression') {
         const callee = (expression as CallExpressionNode).callee;
-        const name =
-            callee.type === 'Identifier'
-                ? (callee as IdentifierNode).name
-                : callee.type === 'MemberExpression' &&
-                    ((callee as unknown as { property?: OxcNode }).property?.type ?? '') ===
-                        'Identifier'
-                  ? String(
-                        ((callee as unknown as { property: OxcNode }).property as IdentifierNode)
-                            .name,
-                    )
-                  : '?';
+        let name = '?';
+        if (callee.type === 'Identifier') {
+            name = (callee as IdentifierNode).name;
+        } else if (
+            callee.type === 'MemberExpression' &&
+            ((callee as unknown as { property?: OxcNode }).property?.type ?? '') === 'Identifier'
+        ) {
+            name = String(
+                ((callee as unknown as { property: OxcNode }).property as IdentifierNode).name,
+            );
+        }
         reason = `function call \`${name}()\` result is unknown at build time`;
         suggestion =
             'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().';
@@ -3819,14 +3820,14 @@ function buildPartialObjectTransform(
     }
 
     const className = classParts.filter(Boolean).join(' ');
-    const classNameAttr =
-        partial.conditionalClasses.length > 0
-            ? `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`
-            : className === ''
-              ? // An sz that lowers to zero classes emits `className={undefined}` so the
-                // DOM has no `class` attribute, instead of the noisy `class=""`.
-                'className={undefined}'
-              : staticOxcClassNameAttribute(className);
+    let classNameAttr = staticOxcClassNameAttribute(className);
+    if (partial.conditionalClasses.length > 0) {
+        classNameAttr = `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`;
+    } else if (className === '') {
+        // An sz that lowers to zero classes emits undefined so the DOM has no
+        // class attribute, instead of the noisy class="".
+        classNameAttr = 'className={undefined}';
+    }
     const styleProps = [...partial.dynamicProps.entries()]
         .filter(([id]) => !hoistedNames?.has(id))
         .map(
@@ -3960,12 +3961,10 @@ function normalizeGlobalVarAliases(
     if (!input) {
         return new Map();
     }
-    const entries =
-        input instanceof Map
-            ? input.entries()
-            : Array.isArray(input)
-              ? input
-              : Object.entries(input);
+    let entries: Iterable<[string, string]>;
+    if (input instanceof Map) entries = input.entries();
+    else if (Array.isArray(input)) entries = input;
+    else entries = Object.entries(input);
     const aliases = new Map<string, string>();
     for (const [original, alias] of entries) {
         if (original.startsWith('--') && alias.startsWith('--')) {

@@ -681,11 +681,11 @@ interface RuntimeFallbackDescription {
 function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescription {
     if (t.isCallExpression(expression)) {
         const callee = expression.callee;
-        const name = t.isIdentifier(callee)
-            ? callee.name
-            : t.isMemberExpression(callee) && t.isIdentifier(callee.property)
-              ? callee.property.name
-              : '?';
+        let name = '?';
+        if (t.isIdentifier(callee)) name = callee.name;
+        else if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) {
+            name = callee.property.name;
+        }
         return {
             reason: `function call \`${name}()\` result is unknown at build time`,
             suggestion:
@@ -2071,11 +2071,7 @@ function collectPartialObjectCandidates(
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
         }
-        const key = t.isIdentifier(prop.key)
-            ? prop.key.name
-            : t.isStringLiteral(prop.key)
-              ? prop.key.value
-              : null;
+        const key = getObjectPropertyKey(prop);
         if (key === null || !t.isExpression(prop.value)) {
             continue;
         }
@@ -2556,11 +2552,7 @@ function readConfigSubObjectNode(
         if (!t.isObjectProperty(prop) || prop.computed) {
             continue;
         }
-        const k = t.isIdentifier(prop.key)
-            ? prop.key.name
-            : t.isStringLiteral(prop.key)
-              ? prop.key.value
-              : null;
+        const k = getObjectPropertyKey(prop);
         if (k !== key) {
             continue;
         }
@@ -3304,7 +3296,8 @@ function buildConditionalClassExpr(
     const quasis: t.TemplateElement[] = [];
     const exprs: t.Expression[] = [];
     for (let i = 0; i < conditionalClasses.length; i++) {
-        const prefix = i === 0 ? (baseClasses ? `${baseClasses} ` : '') : ' ';
+        let prefix = ' ';
+        if (i === 0) prefix = baseClasses ? `${baseClasses} ` : '';
         quasis.push(t.templateElement({ raw: prefix, cooked: prefix }, false));
         exprs.push(makeCondExpr(conditionalClasses[i], false));
     }

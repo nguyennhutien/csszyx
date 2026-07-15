@@ -2280,14 +2280,17 @@ function collectFontModeProperty(
     classes: string[],
 ): boolean {
     if (key === 'fontStyle') {
-        const className = value === 'italic' ? 'italic' : value === 'normal' ? 'not-italic' : '';
+        let className = '';
+        if (value === 'italic') className = 'italic';
+        else if (value === 'normal') className = 'not-italic';
         if (className) classes.push(`${prefix}${className}`);
         else warnUnsupportedFontStyle(value);
         return true;
     }
     if (key !== 'fontSmoothing') return false;
-    const className =
-        value === 'grayscale' ? 'antialiased' : value === 'subpixel' ? 'subpixel-antialiased' : '';
+    let className = '';
+    if (value === 'grayscale') className = 'antialiased';
+    else if (value === 'subpixel') className = 'subpixel-antialiased';
     if (className) classes.push(`${prefix}${className}`);
     else if (szDevWarningsEnabled()) {
         console.warn(

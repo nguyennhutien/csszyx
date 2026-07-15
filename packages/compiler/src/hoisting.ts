@@ -53,11 +53,9 @@ function findLCA(
             // ancestor's JSXOpeningElement sits on a sibling branch, so accept
             // the wrapper and hoist onto its opening element. A direct
             // JSXOpeningElement in the chain (hand-built maps) still matches.
-            const opening = t.isJSXOpeningElement(current)
-                ? current
-                : t.isJSXElement(current)
-                  ? current.openingElement
-                  : null;
+            let opening: t.JSXOpeningElement | null = null;
+            if (t.isJSXOpeningElement(current)) opening = current;
+            else if (t.isJSXElement(current)) opening = current.openingElement;
             if (opening && opening !== nodeA && opening !== nodeB) {
                 return opening;
             }
