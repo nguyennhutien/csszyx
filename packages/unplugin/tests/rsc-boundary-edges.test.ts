@@ -81,29 +81,34 @@ describe('runtime import scanner malformed inputs', () => {
         expect(findRSCBoundaryViolation(code, '/repo/app/x.ts')).toBeNull();
     });
 
-    it('is not fooled by "import" appearing inside an identifier', () => {
-        const code = "'use server';\nconst reimportx = 1;\nimport { _sz } from '@csszyx/runtime';";
-        const violation = findRSCBoundaryViolation(code, '/repo/app/x.ts');
-        expect(violation?.symbol).toBe('_sz');
-    });
-
-    it('recovers from a malformed import with no from clause before a real one', () => {
-        const code = "'use server';\nimport foo;\nimport { _szMerge } from '@csszyx/runtime';";
-        const violation = findRSCBoundaryViolation(code, '/repo/app/x.ts');
-        expect(violation?.symbol).toBe('_szMerge');
-    });
-
-    it('ignores a from clause pointing at an unquoted specifier', () => {
-        const record = createRSCModuleRecord('import x from bareword;\n', '/repo/app/x.ts');
-        expect(record.imports).toEqual([]);
-        expect(record.runtimeImports).toEqual([]);
-    });
-
-    it('tolerates escaped and unterminated quotes in import specifiers', () => {
-        const code = "import { a } from 'weird\\name';\nimport y from 'trailing\\";
+    it.each([
+        {
+            label: 'import text inside an identifier',
+            code: "'use server';\nconst reimportx = 1;\nimport { _sz } from '@csszyx/runtime';",
+            symbol: '_sz',
+        },
+        {
+            label: 'a malformed import before a real import',
+            code: "'use server';\nimport foo;\nimport { _szMerge } from '@csszyx/runtime';",
+            symbol: '_szMerge',
+        },
+        {
+            label: 'an unquoted import specifier',
+            code: 'import x from bareword;\n',
+            symbol: undefined,
+            emptyImports: true,
+        },
+        {
+            label: 'escaped and unterminated import quotes',
+            code: "import { a } from 'weird\\name';\nimport y from 'trailing\\",
+            symbol: undefined,
+        },
+    ])('handles $label', ({ code, symbol, emptyImports }) => {
         const record = createRSCModuleRecord(code, '/repo/app/x.ts');
-        // No runtime helper source resolves out of these, so nothing is flagged.
-        expect(record.runtimeImports).toEqual([]);
+        const violation = findRSCBoundaryViolation(code, '/repo/app/x.ts');
+        expect(violation?.symbol).toBe(symbol);
+        expect(record.runtimeImports).toEqual(symbol ? [expect.anything()] : []);
+        if (emptyImports) expect(record.imports).toEqual([]);
     });
 
     it('flags a forbidden default import whose name contains a digit', () => {
