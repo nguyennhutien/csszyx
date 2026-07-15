@@ -5,7 +5,7 @@ export const themeSchema = z.object({
     css: z
         .string()
         .describe(
-            'CSS file content containing @theme blocks. Example: "@theme { --color-brand: #ff6b35; --font-display: \\"Cal Sans\\"; }"',
+            'CSS file content containing @theme blocks. Example: "@theme { --color-brand: #ff6b35; --font-display: "Cal Sans"; }"',
         ),
 });
 
