@@ -243,86 +243,63 @@ describe('mangleCodeClassesSync — Pass 2 (ternary className expressions)', () 
 });
 
 describe('mangleCodeClassesSync — Pass 2.5 (quoted class-attribute arguments)', () => {
-    it('mangles ternary class strings in Solid SSR ssrAttribute calls', () => {
-        // SolidJS SSR compiles a dynamic class expression (csszyx conditional
-        // spread, statically expanded into a ternary of strings) into:
-        const code =
-            'ssrAttribute("class", props.tone === "warn" ? "flex items-center" : "p-4 rounded-xl", false)';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('ssrAttribute("class", props.tone === "warn" ? "z h" : "c d", false)');
-    });
-
-    it('mangles ternary class strings in Solid client setProperty calls', () => {
-        // Minified solid-js/web client output: l(e,"className",cond?"...":"...")
-        const code = 'l(e,"className",r.tone==="warn"?"flex items-center":"p-4 rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('l(e,"className",r.tone==="warn"?"z h":"c d")');
-    });
-
-    it('preserves non-class condition operands in the ternary condition', () => {
-        const code = 'ssrAttribute("class", kind === "flex" ? "p-4" : "rounded-xl", false)';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // "flex" is a comparison operand inside the class-position ternary; the
-        // shared Pass 2 semantics mangle every quoted string in the expression,
-        // so condition operands that collide with class names are also mapped.
-        // csszyx-generated conditions compare props (tone === "warn"), which do
-        // not collide; this pins the known trade-off explicitly.
-        expect(result).toBe('ssrAttribute("class", kind === "z" ? "c" : "d", false)');
-    });
-
-    it('does not touch quoted object keys ("className": value)', () => {
-        const code = '{"className": cond?"flex":"p-4"}';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(code);
-    });
-
-    it('leaves non-ternary identifier arguments untouched', () => {
-        const code = 'ssrAttribute("class", someVar, false)';
-        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(code);
-    });
-
-    it('handles multiple ssrAttribute calls in one chunk', () => {
-        const code =
-            'ssrAttribute("class", a ? "flex" : "p-4", false) + ssrAttribute("class", b ? "items-center" : "rounded-xl", false)';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(
+    it.each([
+        [
+            'Solid SSR attributes',
+            'ssrAttribute("class", props.tone === "warn" ? "flex items-center" : "p-4 rounded-xl", false)',
+            'ssrAttribute("class", props.tone === "warn" ? "z h" : "c d", false)',
+        ],
+        [
+            'Solid client properties',
+            'l(e,"className",r.tone==="warn"?"flex items-center":"p-4 rounded-xl")',
+            'l(e,"className",r.tone==="warn"?"z h":"c d")',
+        ],
+        [
+            'a colliding condition operand',
+            'ssrAttribute("class", kind === "flex" ? "p-4" : "rounded-xl", false)',
+            'ssrAttribute("class", kind === "z" ? "c" : "d", false)',
+        ],
+        [
+            'a quoted object key',
+            '{"className": cond?"flex":"p-4"}',
+            '{"className": cond?"flex":"p-4"}',
+        ],
+        [
+            'a non-ternary argument',
+            'ssrAttribute("class", someVar, false)',
+            'ssrAttribute("class", someVar, false)',
+        ],
+        [
+            'multiple SSR attributes',
+            'ssrAttribute("class", a ? "flex" : "p-4", false) + ssrAttribute("class", b ? "items-center" : "rounded-xl", false)',
             'ssrAttribute("class", a ? "z" : "c", false) + ssrAttribute("class", b ? "h" : "d", false)',
-        );
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
 describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => {
-    it('mangles string after ( in _szMerge call', () => {
-        const code = '_szMerge("flex items-center","p-4")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z h","c")');
-    });
-
-    it('mangles string after , in _szMerge call', () => {
-        const code = '_szMerge("flex",pe&&"p-4")';
-        // "flex" is after ( → mangled, "p-4" is after && → should be mangled
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z",pe&&"c")');
-    });
-
-    it('mangles string after && — minified form (sz array conditional element)', () => {
-        // pe&&"text-right" — compiled from sz={[..., pe && { textAlign: 'right' }]}
-        // "p-4" stands in for any single-class string following &&
-        const code = '_szMerge("flex items-center",pe&&"p-4 rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z h",pe&&"c d")');
-    });
-
-    it('mangles string after && with space — unminified SSR form', () => {
-        const code = '_szMerge("flex items-center", pe && "p-4 rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z h", pe && "c d")');
-    });
-
-    it('skips string after && if any token is unknown', () => {
-        const code = '_szMerge("flex",pe&&"unknown-class")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z",pe&&"unknown-class")');
+    it.each([
+        ['a leading argument', '_szMerge("flex items-center","p-4")', '_szMerge("z h","c")'],
+        ['a conditional argument', '_szMerge("flex",pe&&"p-4")', '_szMerge("z",pe&&"c")'],
+        [
+            'a minified conditional string',
+            '_szMerge("flex items-center",pe&&"p-4 rounded-xl")',
+            '_szMerge("z h",pe&&"c d")',
+        ],
+        [
+            'an unminified conditional string',
+            '_szMerge("flex items-center", pe && "p-4 rounded-xl")',
+            '_szMerge("z h", pe && "c d")',
+        ],
+        [
+            'an unknown conditional string',
+            '_szMerge("flex",pe&&"unknown-class")',
+            '_szMerge("z",pe&&"unknown-class")',
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
