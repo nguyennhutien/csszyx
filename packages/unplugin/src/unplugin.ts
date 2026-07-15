@@ -415,10 +415,10 @@ function stripCssBlockComments(code: string): string {
     let i = 0;
     const n = code.length;
     while (i < n) {
-        if (code.charCodeAt(i) === SLASH && code.charCodeAt(i + 1) === STAR) {
+        if (code.codePointAt(i) === SLASH && code.codePointAt(i + 1) === STAR) {
             out += code.slice(last, i);
             i += 2;
-            while (i < n && !(code.charCodeAt(i) === STAR && code.charCodeAt(i + 1) === SLASH)) {
+            while (i < n && !(code.codePointAt(i) === STAR && code.codePointAt(i + 1) === SLASH)) {
                 i++;
             }
             i += 2; // skip past the closing */ (or past EOF if unterminated)
