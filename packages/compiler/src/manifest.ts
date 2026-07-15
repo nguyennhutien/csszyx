@@ -56,8 +56,8 @@ export interface RecoveryManifest {
  * Builder class for creating recovery manifests.
  */
 export class ManifestBuilder {
-    private tokens: Map<string, TokenData> = new Map();
-    private buildId: string;
+    private readonly tokens: Map<string, TokenData> = new Map();
+    private readonly buildId: string;
 
     /**
      * Creates a new manifest builder.

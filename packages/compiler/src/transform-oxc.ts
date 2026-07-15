@@ -725,17 +725,17 @@ function transformOxcUnsupportedObject(
         return completedUnsupportedObject(false, false);
     }
 
-    const partial = buildPartialObjectTransform(
-        context.expression,
-        context.filename,
-        context.bindings,
-        context.source,
-        context.options,
-        context.plannedUsageNames,
-        context.cssVariableMap,
-        context.reservedCSSVariableNames,
-        context.globalVarAliases,
-    );
+    const partial = buildPartialObjectTransform({
+        node: context.expression,
+        filename: context.filename,
+        bindings: context.bindings,
+        source: context.source,
+        options: context.options,
+        hoistedNames: context.plannedUsageNames,
+        cssVariableMap: context.cssVariableMap,
+        reservedNames: context.reservedCSSVariableNames,
+        globalVarAliases: context.globalVarAliases,
+    });
     if (
         !partial ||
         context.szAttrs.length !== 1 ||
@@ -3749,31 +3749,39 @@ function compileConditionalSpreadBranch(
     }
 }
 
+/** Inputs required to lower one partially-static Oxc sz object. */
+interface OxcPartialTransformContext {
+    node: ObjectExpressionNode;
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    source: string;
+    options?: TransformSourceCodeOptions;
+    hoistedNames?: ReadonlyMap<string, string>;
+    cssVariableMap?: Map<string, CssVariableMangleValue>;
+    reservedNames?: ReadonlySet<string>;
+    globalVarAliases: ReadonlyMap<string, string>;
+}
+
 /**
  * Build className/style fragments for a sz object with static and dynamic values.
  *
- * @param node Object expression used as the sz value.
- * @param filename Filename for diagnostics.
- * @param bindings Local object-literal bindings.
- * @param source Original source for preserving runtime expressions.
- * @param options Transform options controlling opt-in CSS variable behavior.
- * @param hoistedNames Dynamic prop keys that should use component-tier hoisted vars.
- * @param cssVariableMap Original-to-mangled CSS variable map to populate.
- * @param reservedNames User-authored CSS custom-property names to avoid.
- * @param globalVarAliases Exact global custom-property alias table.
+ * @param context Object AST, source state, and CSS-variable planning inputs.
  * @returns Transform fragments, or null when the object needs runtime fallback.
  */
 function buildPartialObjectTransform(
-    node: ObjectExpressionNode,
-    filename: string,
-    bindings: ReadonlyMap<string, ObjectExpressionNode>,
-    source: string,
-    options?: TransformSourceCodeOptions,
-    hoistedNames?: ReadonlyMap<string, string>,
-    cssVariableMap?: Map<string, CssVariableMangleValue>,
-    reservedNames?: ReadonlySet<string>,
-    globalVarAliases: ReadonlyMap<string, string> = new Map(),
+    context: OxcPartialTransformContext,
 ): OxcPartialTransform | null {
+    const {
+        node,
+        filename,
+        bindings,
+        source,
+        options,
+        hoistedNames,
+        cssVariableMap,
+        reservedNames,
+        globalVarAliases,
+    } = context;
     const partial = evaluatePartialObject(
         node,
         filename,
