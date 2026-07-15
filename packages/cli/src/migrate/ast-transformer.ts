@@ -360,7 +360,6 @@ interface JsxMigrationContext {
     replacements: Replacement[];
     warnings: string[];
     classesUnrecognized: string[];
-    clsxCallsitesMigrated: Set<number>;
     counters: TransformCounters;
 }
 
@@ -562,13 +561,7 @@ function migrateClassExpression(
         context.counters.classNamesSkipped++;
         return;
     }
-    applyDynamicClassMigration(result.pattern, range, parent, context, result.callsite);
-}
-
-/** Dynamic migration result plus an optional migrated callsite. */
-interface DynamicPatternMatch {
-    pattern: PatternResult;
-    callsite?: number;
+    applyDynamicClassMigration(result, range, parent, context);
 }
 
 /**
@@ -581,22 +574,19 @@ interface DynamicPatternMatch {
 function createDynamicPatternResult(
     expression: t.Expression | t.JSXEmptyExpression,
     context: JsxMigrationContext,
-): DynamicPatternMatch | null {
+): PatternResult | null {
     const { source, options } = context;
     if (t.isTemplateLiteral(expression)) {
-        return { pattern: handleTemplateLiteral(expression, source, t, options.customMap) };
+        return handleTemplateLiteral(expression, source, t, options.customMap);
     }
     if (isClsxCallExpression(expression)) {
-        return {
-            pattern: handleClsxCall(expression, source, t, options.customMap),
-            callsite: expression.start ?? undefined,
-        };
+        return handleClsxCall(expression, source, t, options.customMap);
     }
     if (t.isConditionalExpression(expression)) {
-        return { pattern: handleTernary(expression, source, t, options.customMap) };
+        return handleTernary(expression, source, t, options.customMap);
     }
     if (t.isLogicalExpression(expression) && expression.operator === '&&') {
-        return { pattern: handleLogicalAnd(expression, source, t, options.customMap) };
+        return handleLogicalAnd(expression, source, t, options.customMap);
     }
     return null;
 }
@@ -624,19 +614,16 @@ function isClsxCallExpression(
  * @param range - Attribute source range.
  * @param parent - Attribute parent node.
  * @param context - Shared migration state.
- * @param callsite - Optional clsx callsite offset.
  */
 function applyDynamicClassMigration(
     result: PatternResult,
     range: AttributeRange,
     parent: VisitNode | null,
     context: JsxMigrationContext,
-    callsite?: number,
 ): void {
     if (result.migrated) {
         context.replacements.push({ ...range, text: result.replacement });
         context.counters.classNamesTransformed += result.converted;
-        if (callsite !== undefined) context.clsxCallsitesMigrated.add(callsite);
     } else {
         context.counters.classNamesSkipped++;
         context.warnings.push(
@@ -674,7 +661,6 @@ export function transformSource(
     // Track clsx-like imports for unused import detection
     const clsxImportNames = new Set<string>();
     let clsxUsedOutsideClassName = false;
-    const clsxCallsitesMigrated = new Set<number>(); // node start positions
 
     // Track CVA imports — cva() is a variant utility incompatible with sz.
     // We warn the user to migrate to szv() instead of silently skipping.
@@ -756,7 +742,6 @@ export function transformSource(
                 replacements,
                 warnings,
                 classesUnrecognized,
-                clsxCallsitesMigrated,
                 counters,
             });
         },
