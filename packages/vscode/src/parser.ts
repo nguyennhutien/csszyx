@@ -206,10 +206,11 @@ export function parseSzContext(text: string): SzContext {
 
     const state = createSzContextScanState(start);
 
-    for (let i = 0; i < afterOpen.length; i++) {
-        const step = scanSzContextCharacter(afterOpen, i, start, state);
+    let index = 0;
+    while (index < afterOpen.length) {
+        const step = scanSzContextCharacter(afterOpen, index, start, state);
         if (step.closed) return NONE;
-        i = step.index;
+        index = step.index + 1;
     }
 
     if (state.depth <= 0) return NONE;
@@ -543,15 +544,18 @@ function scanExplicitSzExpression(text: string, hit: MarkerHit): SzExpressionSca
  */
 function findExplicitSzObjectEnd(text: string, start: number): number {
     let depth = 0;
-    for (let index = start; index < text.length; index++) {
+    let index = start;
+    while (index < text.length) {
         const character = text[index];
         if (character === '"' || character === "'") {
-            index = skipQuotedText(text, index, character);
+            index = skipQuotedText(text, index, character) + 1;
+            continue;
         } else if (character === '{') {
             depth++;
         } else if (character === '}' && --depth === 0) {
             return index + 1;
         }
+        index++;
     }
     return -1;
 }
@@ -585,12 +589,15 @@ function scanImplicitSzExpression(text: string, hit: MarkerHit): SzExpressionSca
  * @returns Terminator offset, or -1 when unterminated.
  */
 function findImplicitSzEnd(text: string, start: number, terminator: string): number {
-    for (let index = start; index < text.length; index++) {
+    let index = start;
+    while (index < text.length) {
         const character = text[index];
         if (character === terminator) return index;
         if (character === '"' || character === "'") {
-            index = skipQuotedText(text, index, character);
+            index = skipQuotedText(text, index, character) + 1;
+            continue;
         }
+        index++;
     }
     return -1;
 }
