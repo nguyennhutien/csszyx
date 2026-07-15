@@ -204,6 +204,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             style_attribute_index: None,
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
+            has_spread_attribute: false,
             last_attribute_end: None,
             element_name: "<>".to_string(),
             hoisted_dynamic_css_vars: Vec::new(),
@@ -225,10 +226,12 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         let mut style_attribute_index = None;
         let mut recovery_attribute_index = None;
         let mut has_recovery_token_attribute = false;
+        let mut has_spread_attribute = false;
         let mut last_attribute_end = None;
 
         for item in &element.attributes {
             let JSXAttributeItem::Attribute(attr) = item else {
+                has_spread_attribute = true;
                 continue;
             };
             last_attribute_end = Some(attr.span.end);
@@ -282,6 +285,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             style_attribute_index,
             recovery_attribute_index,
             has_recovery_token_attribute,
+            has_spread_attribute,
             last_attribute_end,
             element_name,
             hoisted_dynamic_css_vars: Vec::new(),

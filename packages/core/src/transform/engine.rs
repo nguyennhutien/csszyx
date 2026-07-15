@@ -249,6 +249,7 @@ fn transform_static_classes_with_options(
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
+    diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
     diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     diagnostics.extend(unknown_property_diagnostics(
@@ -463,6 +464,31 @@ fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceI
             format!(
                 "[csszyx] unresolvable sz spread at {}:{}: sz={{{{ ...x }}}} can't be resolved at build time and falls back to runtime (it may produce no styles in production). Use array form: sz={{[x, {{ … }}]}}.",
                 file.filename, attr.value_span.start
+            )
+        })
+        .collect()
+}
+
+/// Warn when generated style custom properties share an element with a prop
+/// spread that may also provide `style`. The explicit generated attribute wins
+/// in JSX source order, so the spread style can otherwise disappear silently.
+fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.jsx_opening_elements
+        .iter()
+        .filter(|element| element.has_spread_attribute)
+        .filter(|element| {
+            element.hoisted_dynamic_css_vars.iter().next().is_some()
+                || element.sz_attribute_indices.iter().any(|index| {
+                    ir.sz_attributes[*index]
+                        .dynamic_css_vars
+                        .iter()
+                        .any(|property| !property.hoisted)
+                })
+        })
+        .map(|_| {
+            format!(
+                "[csszyx] possible style override at {}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.",
+                file.filename
             )
         })
         .collect()

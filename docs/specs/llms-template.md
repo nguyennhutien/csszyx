@@ -340,6 +340,7 @@ sz={{ scale: shrunk ? 75 : 100 }}            // inline prop ternary — both lit
 - Use `sz={{ ...var, key: val }}` only when overriding/adding
 - Variables in array elements, ternary branches, and chained initializers all resolve at build time
 - `sz={{ key: cond ? a : b }}` — both literal branches compile to static classes; a runtime branch uses a CSS variable. An opposite `undefined`, `null`, `false`, or `''` branch omits the utility and variable value (`0` remains valid)
+- When runtime `sz` values emit an inline `style`, keep any authored style in an explicit `style={...}` attribute so the compiler can merge it. A JSX prop spread on the same element may also provide `style`; csszyx warns because the generated explicit attribute can override that spread value
 - `sz={{ ...(cond ? a : b), static: val }}` — conditional spread hoist: compiler resolves both branches at build time
 - Imported variables / function call results fall back to `_sz()` runtime — dev mode emits a build-time compiler warning explaining the fallback reason and suggesting `szv()` or `dynamic()`
 

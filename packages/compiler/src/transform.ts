@@ -455,6 +455,8 @@ function buildPartialObjectArtifacts(
  * @param existing Existing JSX attributes.
  * @param classMergeUsage Runtime class merge usage.
  * @param classes Tailwind discovery set.
+ * @param diagnostics Compiler diagnostics.
+ * @param filename Source filename.
  * @returns Object transform result and style-helper usage.
  */
 function transformSzObjectExpression(
@@ -463,6 +465,8 @@ function transformSzObjectExpression(
     existing: ExistingJsxAttributes,
     classMergeUsage: ClassMergeUsage,
     classes: Set<string>,
+    diagnostics: string[],
+    filename: string,
 ): SzObjectTransformResult {
     const unchanged: SzObjectTransformResult = {
         transformed: false,
@@ -507,6 +511,9 @@ function transformSzObjectExpression(
     }
 
     const artifacts = buildPartialObjectArtifacts(partial, classes);
+    if (artifacts.styleProperties.length > 0) {
+        warnStyleSpreadCollision(path, filename, diagnostics);
+    }
     applyCompiledClassExpression(
         path,
         artifacts.classExpression,
@@ -605,6 +612,30 @@ function hasTopLevelSpread(expression: t.ObjectExpression): boolean {
 }
 
 /**
+ * Warns when generated style props may override style supplied by a JSX spread.
+ *
+ * @param path sz attribute path.
+ * @param filename Source filename.
+ * @param diagnostics Compiler diagnostics.
+ */
+function warnStyleSpreadCollision(
+    path: babel.NodePath<t.JSXAttribute>,
+    filename: string,
+    diagnostics: string[],
+): void {
+    if (!path.parentPath?.isJSXOpeningElement()) return;
+    const hasSpread = path.parentPath.node.attributes.some(attribute =>
+        t.isJSXSpreadAttribute(attribute),
+    );
+    if (!hasSpread) return;
+    diagnostics.push(
+        `[csszyx] possible style override at ${filename}: ` +
+            'this element spreads props that may contain style, while sz emits an explicit style attribute. ' +
+            'Move the spread style to an explicit style prop so csszyx can merge both values.',
+    );
+}
+
+/**
  * Emits diagnostics and wraps one unresolved sz expression with the runtime helper.
  *
  * @param path sz attribute path.
@@ -682,6 +713,7 @@ function unchangedSzValueResult(): SzValueTransformResult {
  * @param classMergeUsage Runtime class merge usage.
  * @param classes Tailwind discovery set.
  * @param diagnostics Compiler diagnostics.
+ * @param filename Source filename.
  * @returns Transform status and runtime helper usage.
  */
 function transformSzAttributeValue(
@@ -690,6 +722,7 @@ function transformSzAttributeValue(
     classMergeUsage: ClassMergeUsage,
     classes: Set<string>,
     diagnostics: string[],
+    filename: string,
 ): SzValueTransformResult {
     const value = path.node.value;
     if (t.isStringLiteral(value)) {
@@ -706,6 +739,8 @@ function transformSzAttributeValue(
             existing,
             classMergeUsage,
             classes,
+            diagnostics,
+            filename,
         );
         if (objectResult.transformed) {
             return { ...objectResult, usesSzcn: false, usesSzPart: false };
@@ -1217,6 +1252,7 @@ export function transformSourceCode(
                                 classMergeUsage,
                                 collectedClasses,
                                 diagnostics,
+                                filename ?? 'file.tsx',
                             );
                             transformed ||= valueResult.transformed;
                             usesColorVar ||= valueResult.usesColorVar;

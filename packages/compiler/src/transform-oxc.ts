@@ -502,6 +502,12 @@ export function transformOxc(
                         szAttrs.length === 1 &&
                         !(partial.hasConditional && classNameAttr)
                     ) {
+                        warnOxcStyleSpreadCollision(
+                            partial.styleProps,
+                            openingAttributes.hasSpread,
+                            effectiveFilename,
+                            diagnostics,
+                        );
                         const mergedStyleProps =
                             hoistedStyleProps.length > 0
                                 ? [...hoistedStyleProps, ...partial.styleProps]
@@ -784,7 +790,40 @@ interface OxcOpeningAttributes {
     style: JsxAttributeNode | null;
     recovery: JsxAttributeNode | null;
     alreadyTagged: boolean;
+    hasSpread: boolean;
     last: JsxAttributeNode | null;
+}
+
+/**
+ * Builds the shared style-spread collision diagnostic.
+ *
+ * @param filename Source filename.
+ * @returns Actionable collision diagnostic.
+ */
+function styleSpreadCollisionDiagnostic(filename: string): string {
+    return (
+        `[csszyx] possible style override at ${filename}: ` +
+        'this element spreads props that may contain style, while sz emits an explicit style attribute. ' +
+        'Move the spread style to an explicit style prop so csszyx can merge both values.'
+    );
+}
+
+/**
+ * Warns when generated oxc style props may override style from a prop spread.
+ *
+ * @param styleProperties Generated inline style properties.
+ * @param hasSpread Whether the opening element spreads props.
+ * @param filename Source filename.
+ * @param diagnostics Compiler diagnostics.
+ */
+function warnOxcStyleSpreadCollision(
+    styleProperties: readonly string[],
+    hasSpread: boolean,
+    filename: string,
+    diagnostics: string[],
+): void {
+    if (styleProperties.length === 0 || !hasSpread) return;
+    diagnostics.push(styleSpreadCollisionDiagnostic(filename));
 }
 
 /**
@@ -801,10 +840,14 @@ function collectOxcOpeningAttributes(attributes: OxcNode[]): OxcOpeningAttribute
         style: null,
         recovery: null,
         alreadyTagged: false,
+        hasSpread: false,
         last: null,
     };
     for (const rawAttribute of attributes) {
-        if (rawAttribute.type !== 'JSXAttribute') continue;
+        if (rawAttribute.type !== 'JSXAttribute') {
+            collected.hasSpread = true;
+            continue;
+        }
         const attribute = rawAttribute as JsxAttributeNode;
         collected.last = attribute;
         const name = attribute.name?.name;

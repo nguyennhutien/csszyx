@@ -148,6 +148,9 @@ pub struct JsxOpeningElementIr {
     pub recovery_attribute_index: Option<usize>,
     /// Whether the opening element already has `data-sz-recovery-token`.
     pub has_recovery_token_attribute: bool,
+    /// Whether the opening element contains a JSX prop spread.
+    #[serde(default)]
+    pub has_spread_attribute: bool,
     /// End offset of the last JSX attribute on the opening element.
     pub last_attribute_end: Option<u32>,
     /// String form of the JSX element name used by recovery tokens.
@@ -474,6 +477,7 @@ mod tests {
                 style_attribute_index: None,
                 recovery_attribute_index: None,
                 has_recovery_token_attribute: false,
+                has_spread_attribute: false,
                 last_attribute_end: Some(72),
                 element_name: "div".to_string(),
                 hoisted_dynamic_css_vars: Vec::new(),
