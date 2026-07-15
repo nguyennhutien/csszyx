@@ -279,7 +279,7 @@ function parseGradientDirection(input: string, negative: boolean): string | numb
         return direction.slice(1, -1);
     }
     if (/^\d+$/.test(direction)) {
-        const angle = parseInt(direction, 10);
+        const angle = Number.parseInt(direction, 10);
         return negative ? -angle : angle;
     }
     return direction;
@@ -550,7 +550,7 @@ export function disambiguateFont(value: string): ParsedClass | null {
         return { prop: 'weight', value };
     }
     if (/^\d{3}$/.test(value)) {
-        return { prop: 'weight', value: parseInt(value, 10) };
+        return { prop: 'weight', value: Number.parseInt(value, 10) };
     }
     if (FONT_FAMILY_KEYWORDS.has(value)) {
         return { prop: 'fontFamily', value };
