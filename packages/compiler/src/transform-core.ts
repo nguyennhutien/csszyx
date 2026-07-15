@@ -2083,7 +2083,7 @@ function buildColorObjectClass(
 ): string {
     const utilityPrefix =
         PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-    const rawColor = String(color.color);
+    const rawColor = color.color;
     const colorValue = formatColorObjectBase(rawColor);
     if (color.op === undefined) return `${prefix}${utilityPrefix}-${colorValue}`;
     const opacity = formatOpacity(color.op);
