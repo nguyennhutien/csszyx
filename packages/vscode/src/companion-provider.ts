@@ -124,7 +124,8 @@ function memberValueItems(member: ObjectFormMember): vscode.CompletionItem[] {
         );
         item.insertText = numeric ? value : `'${value}'`;
         item.filterText = value;
-        item.detail = `${member.name}: ${numeric ? value : `'${value}'`}`;
+        const detailValue = numeric ? value : `'${value}'`;
+        item.detail = `${member.name}: ${detailValue}`;
         return item;
     });
 }

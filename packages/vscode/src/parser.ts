@@ -57,7 +57,9 @@ const NONE: SzContext = {
  */
 function normalizeKeySegment(segment: string): string {
     let seg = segment.trim();
-    if (seg.length >= 2 && (seg[0] === "'" || seg[0] === '"') && seg[seg.length - 1] === seg[0]) {
+    const singleQuoted = seg.startsWith("'") && seg.endsWith("'");
+    const doubleQuoted = seg.startsWith('"') && seg.endsWith('"');
+    if (seg.length >= 2 && (singleQuoted || doubleQuoted)) {
         seg = seg.slice(1, -1);
     }
     return /^[a-z_$][\w$]*$/i.test(seg) ? seg : '';
