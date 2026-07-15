@@ -544,42 +544,28 @@ describe('szv catalog extraction (VariableDeclarator)', () => {
 // `@csszyx/dynamic` (which contains "sz") so the visitor actually runs.
 const DYN = "import { dynamic } from '@csszyx/dynamic';\n";
 describe('dynamic()/szr() extraction (CallExpression)', () => {
-    it('ignores an unrelated call whose callee is neither dynamic nor szr', () => {
-        // `szx` contains "sz" so the source is parsed, but the callee check bails.
-        const jsx = 'const A = () => <div className={szx({ p: 4 })} />;';
+    it.each([
+        ['an unrelated call', 'const A = () => <div className={szx({ p: 4 })} />;', []],
+        ['dynamic() without arguments', DYN + 'const A = () => <div className={dynamic()} />;', []],
+        ['szr() without arguments', 'const A = () => <div className={szr()} />;', []],
+        [
+            'an inline szr object',
+            'const A = () => <div className={szr({ p: 4, m: 2 })} />;',
+            ['p-4', 'm-2'],
+        ],
+        [
+            'an inline static dynamic object',
+            DYN + 'const A = () => <div className={dynamic({ p: 4 })} />;',
+            ['p-4'],
+        ],
+        [
+            'a non-static dynamic object',
+            DYN + 'const A = ({ v }) => <div className={dynamic({ p: v })} />;',
+            [],
+        ],
+    ])('collects expected classes from %s', (_label, jsx, expectedClasses) => {
         const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('ignores dynamic() with no arguments', () => {
-        const jsx = DYN + 'const A = () => <div className={dynamic()} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('ignores szr() with no arguments', () => {
-        const jsx = 'const A = () => <div className={szr()} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('extracts classes from an inline szr object', () => {
-        const jsx = 'const A = () => <div className={szr({ p: 4, m: 2 })} />;';
-        const r = run(jsx);
-        expect(r.classes.has('p-4')).toBe(true);
-        expect(r.classes.has('m-2')).toBe(true);
-    });
-
-    it('extracts classes from an inline static dynamic() object', () => {
-        const jsx = DYN + 'const A = () => <div className={dynamic({ p: 4 })} />;';
-        const r = run(jsx);
-        expect(r.classes.has('p-4')).toBe(true);
-    });
-
-    it('does not extract from a non-static inline dynamic() object', () => {
-        const jsx = DYN + 'const A = ({ v }) => <div className={dynamic({ p: v })} />;';
-        const r = run(jsx);
-        expect(r.classes.has('p-4')).toBe(false);
+        expect([...r.classes]).toEqual(expectedClasses);
     });
 
     it('extracts from a const identifier with a satisfies wrapper', () => {
@@ -592,28 +578,24 @@ describe('dynamic()/szr() extraction (CallExpression)', () => {
         expect(r.classes.has('rounded-md')).toBe(true);
     });
 
-    it('skips a dynamic(identifier) with no binding at all', () => {
-        const jsx = DYN + 'const A = () => <div className={dynamic(GLOBALTHING)} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('skips a dynamic(identifier) bound to a non-object', () => {
-        const jsx = DYN + 'const n = 5; const A = () => <div className={dynamic(n)} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('skips a dynamic(identifier) bound to a non-static object', () => {
-        const jsx =
-            DYN + 'const s = { p: sizeVar }; const A = () => <div className={dynamic(s)} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('skips a dynamic(imported) unresolvable identifier', () => {
-        const jsx =
-            DYN + "import { s } from './s'; const A = () => <div className={dynamic(s)} />;";
+    it.each([
+        [
+            'an unbound identifier',
+            DYN + 'const A = () => <div className={dynamic(GLOBALTHING)} />;',
+        ],
+        [
+            'a non-object binding',
+            DYN + 'const n = 5; const A = () => <div className={dynamic(n)} />;',
+        ],
+        [
+            'a non-static object binding',
+            DYN + 'const s = { p: sizeVar }; const A = () => <div className={dynamic(s)} />;',
+        ],
+        [
+            'an imported binding',
+            DYN + "import { s } from './s'; const A = () => <div className={dynamic(s)} />;",
+        ],
+    ])('skips dynamic() with %s', (_label, jsx) => {
         const r = run(jsx);
         expect(r.classes.size).toBe(0);
     });
