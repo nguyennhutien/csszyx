@@ -41,6 +41,96 @@ function withoutJSXAttribute(
 }
 
 /**
+ * Collects literal class tokens from an existing class attribute.
+ *
+ * @param attribute Class or className attribute.
+ * @param rawClassNames Shared Tailwind discovery set.
+ */
+function collectRawClassNameAttribute(attribute: t.JSXAttribute, rawClassNames: Set<string>): void {
+    if (!t.isStringLiteral(attribute.value)) return;
+    for (const className of attribute.value.value.split(/\s+/)) {
+        if (className) rawClassNames.add(className);
+    }
+}
+
+/**
+ * Validates an inline recovery mode and attaches its deterministic token.
+ *
+ * @param path Recovery attribute path.
+ * @param filename Source filename for recovery metadata.
+ * @param diagnostics Shared compiler diagnostics.
+ * @param recoveryTokens Shared recovery-token catalog.
+ * @returns Whether a token attribute was attached.
+ */
+function transformRecoveryAttribute(
+    path: babel.NodePath<t.JSXAttribute>,
+    filename: string | undefined,
+    diagnostics: string[],
+    recoveryTokens: Map<string, TokenData>,
+): boolean {
+    const recoverValue = path.node.value;
+    if (!t.isStringLiteral(recoverValue)) {
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
+                'only string-literal values ("csr" | "dev-only") are supported. ' +
+                'Dynamic values disable token emission for this element.',
+        );
+        return false;
+    }
+    if (!isValidInlineRecoveryMode(recoverValue.value)) {
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
+                `unknown mode "${recoverValue.value}" — expected "csr" or "dev-only". ` +
+                'Token emission skipped.',
+        );
+        return false;
+    }
+    const opening = path.parentPath;
+    if (!opening?.isJSXOpeningElement() || hasRecoveryToken(opening.node.attributes)) return false;
+
+    const elementType = recoveryElementType(opening.node.name);
+    const line = path.node.loc?.start.line ?? 0;
+    const column = path.node.loc?.start.column ?? 0;
+    const file = filename ?? 'file.tsx';
+    const token = generateInlineRecoveryToken(file, line, column, elementType);
+    opening.node.attributes.push(
+        t.jsxAttribute(t.jsxIdentifier('data-sz-recovery-token'), t.stringLiteral(token)),
+    );
+    recoveryTokens.set(token, {
+        mode: recoverValue.value,
+        component: elementType,
+        path: `${file}:${line}:${column}`,
+    });
+    return true;
+}
+
+/**
+ * Returns whether an opening element already carries a recovery token.
+ *
+ * @param attributes Opening-element attributes.
+ * @returns Whether a recovery token is present.
+ */
+function hasRecoveryToken(attributes: Array<t.JSXAttribute | t.JSXSpreadAttribute>): boolean {
+    return attributes.some(
+        attribute =>
+            t.isJSXAttribute(attribute) &&
+            t.isJSXIdentifier(attribute.name) &&
+            attribute.name.name === 'data-sz-recovery-token',
+    );
+}
+
+/**
+ * Formats a stable component label for recovery metadata.
+ *
+ * @param name JSX opening-element name.
+ * @returns Stable recovery component label.
+ */
+function recoveryElementType(name: t.JSXOpeningElement['name']): string {
+    if (t.isJSXIdentifier(name)) return name.name;
+    return t.isJSXMemberExpression(name) ? '<member>' : '<unknown>';
+}
+
+/**
  * Options for {@link transformSourceCode}.
  */
 export interface TransformSourceCodeOptions {
@@ -247,14 +337,7 @@ export function transformSourceCode(
                             // These go into rawClassNames (TW JIT safelist only), NOT into
                             // collectedClasses, so they are never added to the mangle map.
                             if (attrName === 'className' || attrName === 'class') {
-                                const val = path.node.value;
-                                if (t.isStringLiteral(val)) {
-                                    for (const c of val.value.split(/\s+/)) {
-                                        if (c) {
-                                            rawClassNames.add(c);
-                                        }
-                                    }
-                                }
+                                collectRawClassNameAttribute(path.node, rawClassNames);
                                 return;
                             }
 
@@ -263,67 +346,16 @@ export function transformSourceCode(
                             // string-literal modes (`csr` / `dev-only`) are processed; expression
                             // values (`szRecover={mode}`) are left untouched and warned about.
                             if (attrName === 'szRecover') {
-                                const recoverValue = path.node.value;
-                                if (!t.isStringLiteral(recoverValue)) {
-                                    diagnostics.push(
-                                        `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
-                                            'only string-literal values ("csr" | "dev-only") are supported. ' +
-                                            'Dynamic values disable token emission for this element.',
-                                    );
-                                    return;
+                                if (
+                                    transformRecoveryAttribute(
+                                        path,
+                                        filename,
+                                        diagnostics,
+                                        recoveryTokens,
+                                    )
+                                ) {
+                                    transformed = true;
                                 }
-                                if (!isValidInlineRecoveryMode(recoverValue.value)) {
-                                    diagnostics.push(
-                                        `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
-                                            `unknown mode "${recoverValue.value}" — expected "csr" or "dev-only". ` +
-                                            'Token emission skipped.',
-                                    );
-                                    return;
-                                }
-
-                                const opening = path.parentPath;
-                                if (!opening?.isJSXOpeningElement()) {
-                                    return;
-                                }
-                                // Skip if a token is already attached (idempotent on re-visits, e.g. HMR).
-                                const alreadyTagged = opening.node.attributes.some(
-                                    attr =>
-                                        t.isJSXAttribute(attr) &&
-                                        t.isJSXIdentifier(attr.name) &&
-                                        attr.name.name === 'data-sz-recovery-token',
-                                );
-                                if (alreadyTagged) {
-                                    return;
-                                }
-
-                                const loc = path.node.loc;
-                                const elementType = t.isJSXIdentifier(opening.node.name)
-                                    ? opening.node.name.name
-                                    : t.isJSXMemberExpression(opening.node.name)
-                                      ? '<member>'
-                                      : '<unknown>';
-                                const line = loc?.start.line ?? 0;
-                                const column = loc?.start.column ?? 0;
-                                const file = filename ?? 'file.tsx';
-                                const token = generateInlineRecoveryToken(
-                                    file,
-                                    line,
-                                    column,
-                                    elementType,
-                                );
-
-                                opening.node.attributes.push(
-                                    t.jsxAttribute(
-                                        t.jsxIdentifier('data-sz-recovery-token'),
-                                        t.stringLiteral(token),
-                                    ),
-                                );
-                                recoveryTokens.set(token, {
-                                    mode: recoverValue.value,
-                                    component: elementType,
-                                    path: `${file}:${line}:${column}`,
-                                });
-                                transformed = true;
                                 return;
                             }
 
