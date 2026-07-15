@@ -371,7 +371,8 @@ export function transformOxc(
                 }
             }
             if (expression.type === 'ArrayExpression') {
-                const composition = buildArrayComposition(expression as ArrayExpressionNode, {
+                const arrayResult = transformOxcArrayExpression({
+                    expression: expression as ArrayExpressionNode,
                     filename: effectiveFilename,
                     bindings: objectBindings,
                     globalVarAliases,
@@ -379,47 +380,22 @@ export function transformOxc(
                     source,
                     classes,
                     diagnostics,
+                    szDerived,
+                    classNameAttr,
+                    szAttrs,
+                    szAttr,
+                    edits,
                 });
-                if (composition === null) {
-                    // Spread element etc. — the whole array stays a runtime value.
-                    collectArrayCandidateClasses(
-                        expression as ArrayExpressionNode,
-                        effectiveFilename,
-                        objectBindings,
-                        classes,
-                        '',
-                    );
+                if (arrayResult.kind === 'fallback') {
                     runtimeFallbackExpr = expression;
                     runtimeFallbackAttr = szAttr;
                     break;
                 }
-                if (composition.kind === 'static') {
-                    for (const c of composition.classes) {
-                        szDerived.push(c);
-                        classes.add(c);
-                    }
+                if (arrayResult.kind === 'continue') {
                     continue;
                 }
-                // szcn lane: later element wins per property group at runtime.
-                // An existing className joins as the FIRST argument, so sz
-                // composition (and its overrides) applies after it.
-                const existingExpression = classNameAttr
-                    ? classNameMergeArgument(classNameAttr, source)
-                    : null;
-                // `_szcn` = the unmemoized szcn twin: compiled arrays carry
-                // per-render runtime parts, which would thrash (and evict)
-                // the authored-szcn memo.
-                const call = existingExpression
-                    ? `_szcn(${existingExpression}, ${composition.args})`
-                    : `_szcn(${composition.args})`;
-                if (classNameAttr) {
-                    edits.overwrite(classNameAttr.start, classNameAttr.end, `className={${call}}`);
-                    edits.remove(whitespaceStart(source, szAttr.start), szAttr.end);
-                } else {
-                    edits.overwrite(szAttr.start, szAttr.end, `className={${call}}`);
-                }
                 usesSzcn = true;
-                usesSzPart ||= composition.usesSzPart;
+                usesSzPart ||= arrayResult.usesSzPart;
                 transformed = true;
                 return;
             }
@@ -665,6 +641,88 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/** Inputs required to lower one sz array without coupling to the JSX visitor. */
+interface OxcArrayTransformContext {
+    expression: ArrayExpressionNode;
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
+    source: string;
+    classes: Set<string>;
+    diagnostics: string[];
+    szDerived: string[];
+    classNameAttr: JsxAttributeNode | null;
+    szAttrs: JsxAttributeNode[];
+    szAttr: JsxAttributeNode;
+    edits: MagicString;
+}
+
+/** Control result returned to the element-level sz attribute loop. */
+type OxcArrayTransformResult =
+    | { kind: 'continue'; usesSzPart: false }
+    | { kind: 'fallback'; usesSzPart: false }
+    | { kind: 'complete'; usesSzPart: boolean };
+
+/**
+ * Lower one sz array into either static classes, a runtime fallback, or `_szcn`.
+ *
+ * @param context Array expression and element rewrite state.
+ * @returns Control action for the surrounding sz attribute loop.
+ */
+function transformOxcArrayExpression(context: OxcArrayTransformContext): OxcArrayTransformResult {
+    const composition = buildArrayComposition(context.expression, {
+        filename: context.filename,
+        bindings: context.bindings,
+        globalVarAliases: context.globalVarAliases,
+        cssVariableMap: context.cssVariableMap,
+        source: context.source,
+        classes: context.classes,
+        diagnostics: context.diagnostics,
+    });
+    if (composition === null) {
+        collectArrayCandidateClasses(
+            context.expression,
+            context.filename,
+            context.bindings,
+            context.classes,
+            '',
+        );
+        return { kind: 'fallback', usesSzPart: false };
+    }
+    if (composition.kind === 'static') {
+        for (const className of composition.classes) {
+            context.szDerived.push(className);
+            context.classes.add(className);
+        }
+        return { kind: 'continue', usesSzPart: false };
+    }
+
+    // Authored className is the first argument so later sz array entries retain
+    // the same override order as szcn. Compiled runtime parts use the unmemoized
+    // helper because their per-render values should not evict authored szcn keys.
+    const existingExpression = context.classNameAttr
+        ? classNameMergeArgument(context.classNameAttr, context.source)
+        : null;
+    const call = existingExpression
+        ? `_szcn(${existingExpression}, ${composition.args})`
+        : `_szcn(${composition.args})`;
+    if (context.classNameAttr) {
+        context.edits.overwrite(
+            context.classNameAttr.start,
+            context.classNameAttr.end,
+            `className={${call}}`,
+        );
+        context.edits.remove(
+            whitespaceStart(context.source, context.szAttr.start),
+            context.szAttr.end,
+        );
+    } else {
+        context.edits.overwrite(context.szAttr.start, context.szAttr.end, `className={${call}}`);
+    }
+    return { kind: 'complete', usesSzPart: composition.usesSzPart };
 }
 
 /** Result flags produced while merging one element's static class output. */
