@@ -14,6 +14,8 @@
 import postcss, { type Root, type Rule } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
 
+const BACKSLASH = String.fromCodePoint(92);
+
 /**
  * Mangle map type: original class name -> mangled ID.
  */
@@ -81,7 +83,7 @@ export function unescapeTailwindClass(escapedName: string): string {
     let i = 0;
 
     while (i < escapedName.length) {
-        if (escapedName[i] !== '\\') {
+        if (escapedName[i] !== BACKSLASH) {
             result += escapedName[i];
             i++;
             continue;
@@ -124,12 +126,12 @@ function readCssEscape(source: string, start: number): { value: string; next: nu
  */
 function escapeLeadingClassCharacter(className: string, char: string): string | null {
     if (/\d/.test(char)) {
-        return `\\3${char} `;
+        return `${BACKSLASH}3${char} `;
     }
     if (char === '-' && className.length > 1) {
         const next = className[1] as string;
         if (/\d/.test(next) || next === '-') {
-            return '\\-';
+            return `${BACKSLASH}-`;
         }
     }
     return null;
@@ -142,8 +144,15 @@ function escapeLeadingClassCharacter(className: string, char: string): string | 
  * @returns CSS-safe character representation.
  */
 function escapeClassCharacter(char: string): string {
-    if (/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/.test(char)) {
-        return `\\${char}`;
+    const codePoint = char.codePointAt(0) ?? 0;
+    const requiresEscape =
+        (codePoint >= 33 && codePoint <= 47 && codePoint !== 45) ||
+        (codePoint >= 58 && codePoint <= 64) ||
+        (codePoint >= 91 && codePoint <= 94) ||
+        codePoint === 96 ||
+        (codePoint >= 123 && codePoint <= 126);
+    if (requiresEscape) {
+        return `${BACKSLASH}${char}`;
     }
     return char;
 }

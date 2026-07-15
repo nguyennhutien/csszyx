@@ -453,7 +453,7 @@ describe('Edge Cases and Stress Tests', () => {
 });
 
 // ============================================================================
-// 10. Unescape/Escape Functions (5 tests)
+// 10. Unescape/Escape Functions (6 tests)
 // ============================================================================
 describe('Unescape/Escape Functions', () => {
     it('should unescape simple backslash', () => {
@@ -474,6 +474,22 @@ describe('Unescape/Escape Functions', () => {
 
     it('should escape class name for CSS', () => {
         expect(escapeCSSClassName('hover:bg-blue-500')).toBe('hover\\:bg-blue-500');
+    });
+
+    it('round-trips every ASCII punctuation character that requires escaping', () => {
+        let punctuation = '';
+        for (const [start, end] of [
+            [33, 47],
+            [58, 64],
+            [91, 94],
+            [96, 96],
+            [123, 126],
+        ]) {
+            for (let codePoint = start; codePoint <= end; codePoint++) {
+                punctuation += String.fromCodePoint(codePoint);
+            }
+        }
+        expect(unescapeTailwindClass(escapeCSSClassName(punctuation))).toBe(punctuation);
     });
 });
 
