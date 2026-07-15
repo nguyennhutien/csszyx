@@ -118,12 +118,9 @@ const NATIVE_RUST_AVAILABLE = tryPreloadRustBinding();
  */
 function tryPreloadRustBinding(): boolean {
     const libc = process.platform === 'linux' && isMusl() ? 'musl' : 'gnu';
-    const triple =
-        process.platform === 'linux'
-            ? `${process.platform}-${process.arch}-${libc}`
-            : process.platform === 'win32'
-              ? `${process.platform}-${process.arch}-msvc`
-              : `${process.platform}-${process.arch}`;
+    let triple = `${process.platform}-${process.arch}`;
+    if (process.platform === 'linux') triple += `-${libc}`;
+    else if (process.platform === 'win32') triple += '-msvc';
     const packageDir = resolve(REPO_ROOT, 'packages', `core-${triple}`);
     try {
         loadNativeBinding(packageDir);

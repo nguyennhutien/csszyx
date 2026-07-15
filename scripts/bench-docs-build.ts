@@ -678,7 +678,9 @@ function formatSignedMs(value: number): string {
     if (!Number.isFinite(value)) {
         return 'n/a';
     }
-    const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
+    let prefix = '';
+    if (value > 0) prefix = '+';
+    else if (value < 0) prefix = '-';
     const absolute = Math.abs(value);
     const formatted =
         absolute >= 1000 ? `${(absolute / 1000).toFixed(2)}s` : `${absolute.toFixed(1)}ms`;

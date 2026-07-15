@@ -51,6 +51,17 @@ interface ReportPayload {
     rows: BenchRow[];
 }
 
+function noteForMode(mode: BenchMode): string {
+    if (mode === 'mangle-vars-on') return 'Rust parser build with CSSZYX_BENCH_MANGLE_VARS=1.';
+    if (mode === 'global-vars-on') {
+        return 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1.';
+    }
+    if (mode === 'global-vars-no-map') {
+        return 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1 and standalone global-var map disabled.';
+    }
+    return 'Rust parser build with CSS variable optimizations left disabled.';
+}
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DOCS_ROOT = join(REPO_ROOT, 'apps/docs');
 const BACKSLASH = String.fromCodePoint(92);
@@ -132,14 +143,7 @@ function runBuildCase(mode: BenchMode): BenchRow {
         mode,
         status: 'measured',
         groups: collectOutputStats(DIST_ROOT),
-        note:
-            mode === 'mangle-vars-on'
-                ? 'Rust parser build with CSSZYX_BENCH_MANGLE_VARS=1.'
-                : mode === 'global-vars-on'
-                  ? 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1.'
-                  : mode === 'global-vars-no-map'
-                    ? 'Rust parser build with CSSZYX_BENCH_MANGLE_GLOBAL_VARS=1 and standalone global-var map disabled.'
-                    : 'Rust parser build with CSS variable optimizations left disabled.',
+        note: noteForMode(mode),
     };
 }
 

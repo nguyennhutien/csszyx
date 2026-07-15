@@ -178,12 +178,9 @@ function parseArgs(args: string[]): CliOptions {
  */
 function tryPreloadRustBinding(): boolean {
     const libc = process.platform === 'linux' && isMusl() ? 'musl' : 'gnu';
-    const triple =
-        process.platform === 'linux'
-            ? `${process.platform}-${process.arch}-${libc}`
-            : process.platform === 'win32'
-              ? `${process.platform}-${process.arch}-msvc`
-              : `${process.platform}-${process.arch}`;
+    let triple = `${process.platform}-${process.arch}`;
+    if (process.platform === 'linux') triple += `-${libc}`;
+    else if (process.platform === 'win32') triple += '-msvc';
     const packageDir = resolve(REPO_ROOT, 'packages', `core-${triple}`);
     try {
         loadNativeBinding(packageDir);
@@ -292,14 +289,14 @@ function transformFixtures(
     let transformedFiles = 0;
     const outputChunks: string[] = [];
 
-    const results =
-        parser === 'rust-batch'
-            ? transformRustBatch(fixtures, { mangleVars })
-            : fixtures.map(file =>
-                  parser === 'rust'
-                      ? transformRust(file.source, file.filename, { mangleVars })
-                      : transformOxc(file.source, file.filename, { mangleVars }),
-              );
+    let results: ReturnType<typeof transformOxc>[];
+    if (parser === 'rust-batch') {
+        results = transformRustBatch(fixtures, { mangleVars });
+    } else if (parser === 'rust') {
+        results = fixtures.map(file => transformRust(file.source, file.filename, { mangleVars }));
+    } else {
+        results = fixtures.map(file => transformOxc(file.source, file.filename, { mangleVars }));
+    }
 
     for (const result of results) {
         outputBytes += byteLength(result.code);
@@ -507,12 +504,12 @@ export function Panel${index}({ pad, color, active }) {
  * @returns row note.
  */
 function noteFor(parser: ParserMode, mangleVars: MangleMode): string {
-    const parserNote =
-        parser === 'rust-batch'
-            ? 'Rust native batch path amortizes one napi call across the fixture set.'
-            : parser === 'rust'
-              ? 'Rust native per-file path mirrors current compiler calls.'
-              : 'Oxc-JS path is the parity baseline.';
+    let parserNote = 'Oxc-JS path is the parity baseline.';
+    if (parser === 'rust-batch') {
+        parserNote = 'Rust native batch path amortizes one napi call across the fixture set.';
+    } else if (parser === 'rust') {
+        parserNote = 'Rust native per-file path mirrors current compiler calls.';
+    }
     const mangleNote =
         mangleVars === 'enabled'
             ? 'production.mangleVars enabled: scoped names plus component hoisting.'
