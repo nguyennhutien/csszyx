@@ -36,7 +36,7 @@ const compileData: CompileEntry[] = [
 
     // Abstract property combinations
     { sz: "{'[&>span]': {color: 'blue'}}", tw: "[&>span]:text-blue" },
-    { sz: "{before: {content: '\"\"', display: 'block'}}", tw: "before:content-['']" },
+    { sz: `{before: {content: '""', display: 'block'}}`, tw: "before:content-['']" },
     { sz: "{xl: {portrait: {bg: {gradient: 'to-r'}}}}", tw: "xl:portrait:bg-gradient-to-r" },
     { sz: "{lg: {landscape: {w: 'full'}}}", tw: "lg:landscape:w-full" },
     { sz: "{print: {display: 'none'}}", tw: "print:hidden" },
@@ -133,7 +133,7 @@ function highlightSz(text: string): string {
 
 class TextScrambler {
   el: HTMLElement;
-  chars = '!<>-_\\/[]{}—=+*^?#________';
+  chars = String.raw`!<>-_\/[]{}—=+*^?#________`;
   queue: Array<{ from: string; to: string; start: number; end: number; char?: string }> = [];
   frame = 0;
   frameRequest = 0;
