@@ -128,7 +128,7 @@ export function parseObjectLiteral(objStr: string): SzObject | null {
         if (parsed.errors.length > 0) return null;
         const decl = (parsed.program as unknown as OxcNode).body as OxcNode[];
         const init = ((decl[0].declarations as OxcNode[])[0].init as OxcNode) ?? null;
-        if (!init || init.type !== 'ObjectExpression') return null;
+        if (init?.type !== 'ObjectExpression') return null;
         return (extractObjectNode(init) as SzObject) ?? null;
     } catch {
         return null;
