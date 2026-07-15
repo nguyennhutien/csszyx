@@ -1850,150 +1850,179 @@ function collectCandidateClassesFromObjectExpression(
     classes: Set<string>,
     variantPrefix: string,
 ): void {
-    try {
-        const compiled = compileSzObject(astObjectToSzObject(node, filename, bindings));
-        for (const cls of prefixVariantClasses(compiled.className, variantPrefix).split(/\s+/)) {
-            if (cls) {
-                classes.add(cls);
-            }
-        }
-        return;
-    } catch (err) {
-        if (!(err instanceof OxcNotImplementedError)) {
-            throw err;
+    const context: CandidateClassContext = { filename, bindings, classes, variantPrefix };
+    collectCandidateObject(node, context);
+}
+
+/** Shared state for best-effort candidate collection. */
+interface CandidateClassContext {
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    classes: Set<string>;
+    variantPrefix: string;
+}
+
+/**
+ * Collects one object as a whole, falling back to property-level discovery.
+ *
+ * @param node Object expression to inspect.
+ * @param context Candidate collection state.
+ */
+function collectCandidateObject(node: ObjectExpressionNode, context: CandidateClassContext): void {
+    if (tryCollectWholeCandidateObject(node, context)) return;
+    for (const property of node.properties) {
+        if (property.type === 'SpreadElement') {
+            collectCandidateSpread(property as SpreadElementNode, context);
+        } else if (property.type === 'Property') {
+            collectCandidateProperty(property as PropertyNode, context);
         }
     }
+}
 
-    for (const propRaw of node.properties) {
-        if (propRaw.type === 'SpreadElement') {
-            const spread = propRaw as SpreadElementNode;
-            const spreadArg = unwrapExpression(spread.argument);
-            if (spreadArg.type === 'Identifier') {
-                const bound = bindings.get(String((spreadArg as IdentifierNode).name));
-                if (bound) {
-                    collectCandidateClassesFromObjectExpression(
-                        bound,
-                        filename,
-                        bindings,
-                        classes,
-                        variantPrefix,
-                    );
-                }
-            } else {
-                collectCandidateClassesFromExpression(
-                    spread.argument,
-                    filename,
-                    bindings,
-                    classes,
-                    variantPrefix,
-                );
-            }
-        } else if (propRaw.type === 'Property') {
-            const prop = propRaw as PropertyNode;
-            if (prop.computed) {
-                continue;
-            }
-            const key = extractKeyName(prop.key);
-            if (key === null) {
-                continue;
-            }
-            const val = unwrapExpression(prop.value);
-            if (val.type === 'ObjectExpression') {
-                if (isKnownVariant(key)) {
-                    const nestedVariant = variantPrefix ? `${variantPrefix}:${key}` : key;
-                    collectCandidateClassesFromObjectExpression(
-                        val as ObjectExpressionNode,
-                        filename,
-                        bindings,
-                        classes,
-                        nestedVariant,
-                    );
-                } else {
-                    try {
-                        const propertyVal = astObjectToSzObject(
-                            val as ObjectExpressionNode,
-                            filename,
-                            bindings,
-                        );
-                        const singleObject = { [key]: propertyVal };
-                        const compiled = compileSzObject(singleObject);
-                        for (const c of prefixVariantClasses(
-                            compiled.className,
-                            variantPrefix,
-                        ).split(/\s+/)) {
-                            if (c) classes.add(c);
-                        }
-                    } catch {
-                        collectCandidateClassesFromExpression(
-                            val,
-                            filename,
-                            bindings,
-                            classes,
-                            variantPrefix,
-                        );
-                    }
-                }
-            } else if (val.type === 'ConditionalExpression') {
-                const cond = val as ConditionalExpressionNode;
-                try {
-                    const consequentVal = astValueToSzValue(cond.consequent, filename, bindings);
-                    const singleConsequent = { [key]: consequentVal };
-                    const compiledConsequent = compileSzObject(singleConsequent);
-                    for (const c of prefixVariantClasses(
-                        compiledConsequent.className,
-                        variantPrefix,
-                    ).split(/\s+/)) {
-                        if (c) classes.add(c);
-                    }
-                } catch {
-                    collectCandidateClassesFromExpression(
-                        cond.consequent,
-                        filename,
-                        bindings,
-                        classes,
-                        variantPrefix,
-                    );
-                }
-                try {
-                    const alternateVal = astValueToSzValue(cond.alternate, filename, bindings);
-                    const singleAlternate = { [key]: alternateVal };
-                    const compiledAlternate = compileSzObject(singleAlternate);
-                    for (const c of prefixVariantClasses(
-                        compiledAlternate.className,
-                        variantPrefix,
-                    ).split(/\s+/)) {
-                        if (c) classes.add(c);
-                    }
-                } catch {
-                    collectCandidateClassesFromExpression(
-                        cond.alternate,
-                        filename,
-                        bindings,
-                        classes,
-                        variantPrefix,
-                    );
-                }
-            } else {
-                try {
-                    const propertyVal = astValueToSzValue(val, filename, bindings);
-                    const singleObject = { [key]: propertyVal };
-                    const compiled = compileSzObject(singleObject);
-                    for (const c of prefixVariantClasses(compiled.className, variantPrefix).split(
-                        /\s+/,
-                    )) {
-                        if (c) classes.add(c);
-                    }
-                } catch {
-                    collectCandidateClassesFromExpression(
-                        val,
-                        filename,
-                        bindings,
-                        classes,
-                        variantPrefix,
-                    );
-                }
-            }
-        }
+/**
+ * Attempts to compile one candidate object without partial fallback.
+ *
+ * @param node Object expression to compile.
+ * @param context Candidate collection state.
+ * @returns Whether whole-object compilation succeeded.
+ */
+function tryCollectWholeCandidateObject(
+    node: ObjectExpressionNode,
+    context: CandidateClassContext,
+): boolean {
+    try {
+        const object = astObjectToSzObject(node, context.filename, context.bindings);
+        addPrefixedCandidateClasses(compileSzObject(object).className, context);
+        return true;
+    } catch (error) {
+        if (error instanceof OxcNotImplementedError) return false;
+        throw error;
+    }
+}
+
+/**
+ * Collects a spread candidate from a bound object or dynamic expression.
+ *
+ * @param spread Spread element.
+ * @param context Candidate collection state.
+ */
+function collectCandidateSpread(spread: SpreadElementNode, context: CandidateClassContext): void {
+    const argument = unwrapExpression(spread.argument);
+    if (argument.type === 'Identifier') {
+        const bound = context.bindings.get(String((argument as IdentifierNode).name));
+        if (bound) collectCandidateObject(bound, context);
+        return;
+    }
+    collectCandidateExpression(spread.argument, context);
+}
+
+/**
+ * Collects candidates from one static-key property.
+ *
+ * @param property Object property.
+ * @param context Candidate collection state.
+ */
+function collectCandidateProperty(property: PropertyNode, context: CandidateClassContext): void {
+    if (property.computed) return;
+    const key = extractKeyName(property.key);
+    if (key === null) return;
+    const value = unwrapExpression(property.value);
+    if (value.type === 'ObjectExpression') {
+        collectCandidateObjectProperty(key, value as ObjectExpressionNode, context);
+    } else if (value.type === 'ConditionalExpression') {
+        collectCandidateConditionalProperty(key, value as ConditionalExpressionNode, context);
+    } else {
+        collectCandidateValueProperty(key, value, context);
+    }
+}
+
+/**
+ * Collects an object-valued property, preserving nested variant prefixes.
+ *
+ * @param key Property key.
+ * @param value Object value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateObjectProperty(
+    key: string,
+    value: ObjectExpressionNode,
+    context: CandidateClassContext,
+): void {
+    if (isKnownVariant(key)) {
+        const variantPrefix = context.variantPrefix ? `${context.variantPrefix}:${key}` : key;
+        collectCandidateObject(value, { ...context, variantPrefix });
+        return;
+    }
+    try {
+        const propertyValue = astObjectToSzObject(value, context.filename, context.bindings);
+        addPrefixedCandidateClasses(compileSzObject({ [key]: propertyValue }).className, context);
+    } catch {
+        collectCandidateExpression(value, context);
+    }
+}
+
+/**
+ * Collects both branches of a conditional property.
+ *
+ * @param key Property key.
+ * @param conditional Conditional value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateConditionalProperty(
+    key: string,
+    conditional: ConditionalExpressionNode,
+    context: CandidateClassContext,
+): void {
+    collectCandidateValueProperty(key, conditional.consequent, context);
+    collectCandidateValueProperty(key, conditional.alternate, context);
+}
+
+/**
+ * Compiles one property value or falls back to expression discovery.
+ *
+ * @param key Property key.
+ * @param value Property value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateValueProperty(
+    key: string,
+    value: OxcNode,
+    context: CandidateClassContext,
+): void {
+    try {
+        const propertyValue = astValueToSzValue(value, context.filename, context.bindings);
+        addPrefixedCandidateClasses(compileSzObject({ [key]: propertyValue }).className, context);
+    } catch {
+        collectCandidateExpression(value, context);
+    }
+}
+
+/**
+ * Delegates expression discovery with the current candidate context.
+ *
+ * @param value Expression to inspect.
+ * @param context Candidate collection state.
+ */
+function collectCandidateExpression(value: OxcNode, context: CandidateClassContext): void {
+    collectCandidateClassesFromExpression(
+        value,
+        context.filename,
+        context.bindings,
+        context.classes,
+        context.variantPrefix,
+    );
+}
+
+/**
+ * Adds compiled classes after applying the current variant prefix.
+ *
+ * @param className Compiled class string.
+ * @param context Candidate collection state.
+ */
+function addPrefixedCandidateClasses(className: string, context: CandidateClassContext): void {
+    const prefixed = prefixVariantClasses(className, context.variantPrefix);
+    for (const candidate of prefixed.split(/\s+/)) {
+        if (candidate) context.classes.add(candidate);
     }
 }
 
@@ -3562,149 +3591,274 @@ function evaluatePartialObject(
     cssVariableMap: Map<string, CssVariableMangleValue> | undefined,
     variantChain = '',
 ): OxcPartialObjectResult | null {
-    const staticProps: SzObject = {};
-    const dynamicProps = new Map<string, OxcDynamicPropInfo>();
-    const conditionalClasses: OxcConditionalClassEntry[] = [];
-    let usesColorVar = false;
-    let usesSpacingVar = false;
-    let usesUnitVar = false;
-
-    for (const propRaw of node.properties) {
-        if (propRaw.type === 'SpreadElement') {
-            const spread = propRaw as SpreadElementNode;
-            const objectNode = resolveObjectExpression(spread.argument, bindings);
-            if (!objectNode) {
-                return null;
-            }
-            try {
-                Object.assign(staticProps, astObjectToSzObject(objectNode, filename, bindings));
-                continue;
-            } catch (err) {
-                if (err instanceof OxcNotImplementedError) {
-                    return null;
-                }
-                throw err;
-            }
-        }
-        if (propRaw.type !== 'Property') {
-            return null;
-        }
-        const prop = propRaw as PropertyNode;
-        if (prop.computed) {
-            return null;
-        }
-        const key = extractKeyName(prop.key);
-        if (key === null) {
-            return null;
-        }
-
-        const value = unwrapExpression(prop.value);
-        try {
-            if (value.type === 'ObjectExpression') {
-                staticProps[key] = astObjectToSzObject(
-                    value as ObjectExpressionNode,
-                    filename,
-                    bindings,
-                );
-                continue;
-            }
-            staticProps[key] = astValueToSzValue(value, filename, bindings);
-            continue;
-        } catch (err) {
-            if (!(err instanceof OxcNotImplementedError)) {
-                throw err;
-            }
-        }
-
-        if (value.type === 'ObjectExpression' && isKnownVariant(key)) {
-            const nestedVariant = variantChain ? `${variantChain}-${key}` : key;
-            const nested = evaluatePartialObject(
-                value as ObjectExpressionNode,
-                filename,
-                bindings,
-                source,
-                globalVarAliases,
-                cssVariableMap,
-                nestedVariant,
-            );
-            if (!nested) {
-                return null;
-            }
-            if (Object.keys(nested.staticProps).length > 0) {
-                staticProps[key] = nested.staticProps;
-            }
-            for (const [nestedKey, nestedInfo] of nested.dynamicProps) {
-                dynamicProps.set(nestedKey, nestedInfo);
-            }
-            conditionalClasses.push(...nested.conditionalClasses);
-            usesColorVar ||= nested.usesColorVar;
-            usesSpacingVar ||= nested.usesSpacingVar;
-            usesUnitVar ||= nested.usesUnitVar;
-            continue;
-        }
-
-        if (value.type === 'ConditionalExpression') {
-            const conditional = value as ConditionalExpressionNode;
-            const consequent = extractStaticLiteralValue(conditional.consequent);
-            const alternate = extractStaticLiteralValue(conditional.alternate);
-            if (consequent !== null && alternate !== null) {
-                const { className: consequentClasses } = compileSzObject(
-                    applyGlobalVarAliasesToSzObject(
-                        { [key]: consequent },
-                        globalVarAliases,
-                        cssVariableMap,
-                    ),
-                );
-                const { className: alternateClasses } = compileSzObject(
-                    applyGlobalVarAliasesToSzObject(
-                        { [key]: alternate },
-                        globalVarAliases,
-                        cssVariableMap,
-                    ),
-                );
-                conditionalClasses.push({
-                    test: conditional.test,
-                    consequent: prefixVariantClasses(consequentClasses, variantChain),
-                    alternate: prefixVariantClasses(alternateClasses, variantChain),
-                });
-                continue;
-            }
-        }
-
-        if (!isRuntimeExpression(value)) {
-            return null;
-        }
-
-        const twPrefix =
-            PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-        const category = getPropertyCategory(key);
-        const varName = getCSSVariableName(key, variantChain || undefined);
-        const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
-        if (COLOR_PROPERTIES.has(key)) {
-            usesColorVar = true;
-        } else if (category === PropertyCategory.SPACING) {
-            usesSpacingVar = true;
-        } else if (category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION) {
-            usesUnitVar = true;
-        }
-        dynamicProps.set(uniqueKey, {
-            expression: value,
-            category,
-            szKey: key,
-            varName,
-            twPrefix,
-            variantChain,
-        });
-    }
-
-    return {
-        staticProps,
-        dynamicProps,
-        conditionalClasses,
-        usesColorVar,
-        usesSpacingVar,
-        usesUnitVar,
+    const context: PartialObjectContext = {
+        filename,
+        bindings,
+        source,
+        globalVarAliases,
+        cssVariableMap,
+        variantChain,
     };
+    const result = createPartialObjectResult();
+    for (const property of node.properties) {
+        if (!evaluatePartialProperty(property, context, result)) return null;
+    }
+    return result;
+}
+
+/** Shared inputs for partial Oxc object evaluation. */
+interface PartialObjectContext {
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    source: string;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue> | undefined;
+    variantChain: string;
+}
+
+/**
+ * Creates an empty partial-evaluation result.
+ *
+ * @returns Neutral partial object result.
+ */
+function createPartialObjectResult(): OxcPartialObjectResult {
+    return {
+        staticProps: {},
+        dynamicProps: new Map(),
+        conditionalClasses: [],
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
+    };
+}
+
+/**
+ * Evaluates one object member into static, conditional, or dynamic output.
+ *
+ * @param property Raw object member.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether the member is supported.
+ */
+function evaluatePartialProperty(
+    property: OxcNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    if (property.type === 'SpreadElement') {
+        return evaluatePartialSpread(property as SpreadElementNode, context, result);
+    }
+    if (property.type !== 'Property') return false;
+    const objectProperty = property as PropertyNode;
+    const key = objectProperty.computed ? null : extractKeyName(objectProperty.key);
+    if (key === null) return false;
+
+    const value = unwrapExpression(objectProperty.value);
+    if (tryEvaluateStaticPartialProperty(key, value, context, result)) return true;
+    if (value.type === 'ObjectExpression' && isKnownVariant(key)) {
+        return evaluateNestedPartialVariant(key, value as ObjectExpressionNode, context, result);
+    }
+    if (
+        value.type === 'ConditionalExpression' &&
+        evaluatePartialConditional(key, value as ConditionalExpressionNode, context, result)
+    ) {
+        return true;
+    }
+    return evaluateDynamicPartialProperty(key, value, context, result);
+}
+
+/**
+ * Resolves and merges one static object spread.
+ *
+ * @param spread Spread element.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether the spread is statically supported.
+ */
+function evaluatePartialSpread(
+    spread: SpreadElementNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    const object = resolveObjectExpression(spread.argument, context.bindings);
+    if (!object) return false;
+    try {
+        Object.assign(
+            result.staticProps,
+            astObjectToSzObject(object, context.filename, context.bindings),
+        );
+        return true;
+    } catch (error) {
+        if (error instanceof OxcNotImplementedError) return false;
+        throw error;
+    }
+}
+
+/**
+ * Attempts static evaluation of one property.
+ *
+ * @param key Static property key.
+ * @param value Unwrapped property value.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether static evaluation succeeded.
+ */
+function tryEvaluateStaticPartialProperty(
+    key: string,
+    value: OxcNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    try {
+        result.staticProps[key] =
+            value.type === 'ObjectExpression'
+                ? astObjectToSzObject(
+                      value as ObjectExpressionNode,
+                      context.filename,
+                      context.bindings,
+                  )
+                : astValueToSzValue(value, context.filename, context.bindings);
+        return true;
+    } catch (error) {
+        if (error instanceof OxcNotImplementedError) return false;
+        throw error;
+    }
+}
+
+/**
+ * Recursively evaluates a nested variant object.
+ *
+ * @param key Variant key.
+ * @param value Variant object.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether the nested object is supported.
+ */
+function evaluateNestedPartialVariant(
+    key: string,
+    value: ObjectExpressionNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    const variantChain = context.variantChain ? `${context.variantChain}-${key}` : key;
+    const nested = evaluatePartialObject(
+        value,
+        context.filename,
+        context.bindings,
+        context.source,
+        context.globalVarAliases,
+        context.cssVariableMap,
+        variantChain,
+    );
+    if (!nested) return false;
+    if (Object.keys(nested.staticProps).length > 0) result.staticProps[key] = nested.staticProps;
+    for (const [nestedKey, nestedInfo] of nested.dynamicProps) {
+        result.dynamicProps.set(nestedKey, nestedInfo);
+    }
+    result.conditionalClasses.push(...nested.conditionalClasses);
+    result.usesColorVar ||= nested.usesColorVar;
+    result.usesSpacingVar ||= nested.usesSpacingVar;
+    result.usesUnitVar ||= nested.usesUnitVar;
+    return true;
+}
+
+/**
+ * Compiles a finite conditional property into two static class branches.
+ *
+ * @param key Static property key.
+ * @param conditional Conditional value.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether both branches are static literals.
+ */
+function evaluatePartialConditional(
+    key: string,
+    conditional: ConditionalExpressionNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    const consequent = extractStaticLiteralValue(conditional.consequent);
+    const alternate = extractStaticLiteralValue(conditional.alternate);
+    if (consequent === null || alternate === null) return false;
+    const consequentClasses = compileAliasedPartialClass(key, consequent, context);
+    const alternateClasses = compileAliasedPartialClass(key, alternate, context);
+    result.conditionalClasses.push({
+        test: conditional.test,
+        consequent: prefixVariantClasses(consequentClasses, context.variantChain),
+        alternate: prefixVariantClasses(alternateClasses, context.variantChain),
+    });
+    return true;
+}
+
+/**
+ * Compiles one aliased static property value.
+ *
+ * @param key Static property key.
+ * @param value Static property value.
+ * @param context Shared evaluation inputs.
+ * @returns Compiled class string.
+ */
+function compileAliasedPartialClass(
+    key: string,
+    value: string | number | boolean,
+    context: PartialObjectContext,
+): string {
+    const object = applyGlobalVarAliasesToSzObject(
+        { [key]: value },
+        context.globalVarAliases,
+        context.cssVariableMap,
+    );
+    return compileSzObject(object).className;
+}
+
+/**
+ * Records one runtime property and its required value helper.
+ *
+ * @param key Static property key.
+ * @param value Runtime expression.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether the expression can be evaluated at runtime.
+ */
+function evaluateDynamicPartialProperty(
+    key: string,
+    value: OxcNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    if (!isRuntimeExpression(value)) return false;
+    const twPrefix = PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    const category = getPropertyCategory(key);
+    const uniqueKey = context.variantChain ? `${context.variantChain}-${key}` : key;
+    markPartialRuntimeHelper(key, category, result);
+    result.dynamicProps.set(uniqueKey, {
+        expression: value,
+        category,
+        szKey: key,
+        varName: getCSSVariableName(key, context.variantChain || undefined),
+        twPrefix,
+        variantChain: context.variantChain,
+    });
+    return true;
+}
+
+/**
+ * Marks the runtime helper required by one property category.
+ *
+ * @param key Static property key.
+ * @param category Property category.
+ * @param result Mutable partial result.
+ */
+function markPartialRuntimeHelper(
+    key: string,
+    category: PropertyCategory,
+    result: OxcPartialObjectResult,
+): void {
+    if (COLOR_PROPERTIES.has(key)) result.usesColorVar = true;
+    else if (category === PropertyCategory.SPACING) result.usesSpacingVar = true;
+    else if (category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION) {
+        result.usesUnitVar = true;
+    }
 }
 
 /**

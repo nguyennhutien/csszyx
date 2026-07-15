@@ -1114,151 +1114,14 @@ export function transformSourceCode(
                         // it emits a no-op catalog array so Tailwind JIT can scan all variant
                         // class strings — even when szv is called at runtime with dynamic args.
                         VariableDeclarator(path: babel.NodePath<t.VariableDeclarator>) {
-                            const init = path.node.init;
-                            if (!t.isCallExpression(init)) {
-                                return;
-                            }
-                            if (!t.isIdentifier(init.callee) || init.callee.name !== 'szv') {
-                                return;
-                            }
-                            if (init.arguments.length === 0) {
-                                return;
-                            }
-                            if (!t.isIdentifier(path.node.id)) {
-                                return;
-                            }
-
-                            // Resolve the config to an object literal — written
-                            // inline, or a same-scope `const` identifier bound to
-                            // one (`const cfg = {…}; szv(cfg)`). Only a constant
-                            // binding is followed (never a reassigned `let`).
-                            const configArg = resolveToConstObjectExpression(
-                                init.arguments[0],
-                                path.scope,
-                            );
-                            if (!configArg) {
-                                return;
-                            }
-                            // Read `base` and `variants` INDEPENDENTLY, and convert
-                            // both PER KEY: one unresolvable leaf (a runtime
-                            // conditional, a call, a template) used to null the
-                            // entire catalog — every static sibling key and every
-                            // other variant included — silently missing CSS under
-                            // Tailwind `source(none)`. The lenient walk keeps
-                            // everything it can classify, expands finite
-                            // conditionals into BOTH branches (the runtime picks
-                            // one, so both must be safelisted), and skips only what
-                            // it genuinely cannot read. A base/variants value may
-                            // itself be a const identifier bound to an object.
-                            const budget: CatalogExtrasBudget = {
-                                extras: MAX_CATALOG_BRANCH_EXTRAS,
-                                explores: MAX_CATALOG_BRANCH_EXTRAS,
-                                objectMemo: new Map(),
-                                valueMemo: new Map(),
-                            };
-                            const baseNode = readConfigSubObjectNode(configArg, 'base', path.scope);
-                            const baseCandidates = baseNode
-                                ? lenientCatalogObjects(baseNode, path.scope, new Set(), 0, budget)
-                                : [{} as SzObject];
-                            const base = baseCandidates[0] ?? ({} as SzObject);
-
-                            const classStrings: string[] = [];
-                            const pushCompiled = (object: SzObject): void => {
-                                const result = transform(object);
-                                const cls = typeof result === 'string' ? result : result.className;
-                                if (cls) {
-                                    classStrings.push(cls);
-                                }
-                            };
-
-                            // Point unknown/numeric-key warnings emitted while
-                            // compiling the catalog objects at the `szv()` call, so
-                            // `csszyx check` reports `at <file>:<line>` for a bad key
-                            // in a variant table instead of a location-less message.
-                            // transform() reads (never clears) this, so one set
-                            // covers every pushCompiled below; cleared after the walk.
-                            setSzWarnLocation(
-                                formatSzWarnLocation(
-                                    filename ?? 'file.tsx',
-                                    init.loc?.start.line,
+                            if (
+                                extractSzvCatalog(
+                                    path,
+                                    collectedClasses,
+                                    filename,
                                     options?.rootDir,
-                                ),
-                            );
-
-                            // Emit the base styles alone (covers defaultVariants case)
-                            pushCompiled(base);
-                            for (const extra of baseCandidates.slice(1)) {
-                                pushCompiled(extra);
-                            }
-
-                            // Emit base merged with each variant candidate — per
-                            // dimension, not cross-product. Covers all unique
-                            // classes in O(total variant values + branches).
-                            const variantsNode = readConfigSubObjectNode(
-                                configArg,
-                                'variants',
-                                path.scope,
-                            );
-                            for (const dimensionRaw of variantsNode?.properties ?? []) {
-                                if (!t.isObjectProperty(dimensionRaw) || dimensionRaw.computed) {
-                                    continue;
-                                }
-                                const dimensionValue = resolveCatalogObjectExpression(
-                                    dimensionRaw.value,
-                                    path.scope,
-                                    new Set(),
-                                );
-                                if (!dimensionValue) {
-                                    continue;
-                                }
-                                for (const variantRaw of dimensionValue.properties) {
-                                    if (!t.isObjectProperty(variantRaw) || variantRaw.computed) {
-                                        continue;
-                                    }
-                                    for (const candidate of lenientCatalogObjectCandidates(
-                                        variantRaw.value,
-                                        path.scope,
-                                        new Set(),
-                                        0,
-                                        budget,
-                                    )) {
-                                        pushCompiled({ ...base, ...candidate });
-                                    }
-                                }
-                            }
-
-                            // Done compiling catalog objects — stop attributing later
-                            // warnings to this szv() call.
-                            setSzWarnLocation(undefined);
-
-                            if (classStrings.length === 0) {
-                                return;
-                            }
-
-                            // Feed individual tokens into collectedClasses so that
-                            // prescanAndWriteClasses() includes them in csszyx-classes.html
-                            // → Tailwind JIT scans the file and generates CSS for all variants.
-                            for (const combined of classStrings) {
-                                for (const c of combined.split(/\s+/)) {
-                                    if (c) {
-                                        collectedClasses.add(c);
-                                    }
-                                }
-                            }
-
-                            // const _szv_catalog_X = ["flex flex-col ...", "flex flex-row ..."]
-                            const catalogDecl = t.variableDeclaration('const', [
-                                t.variableDeclarator(
-                                    t.identifier(`_szv_catalog_${path.node.id.name}`),
-                                    t.arrayExpression(classStrings.map(s => t.stringLiteral(s))),
-                                ),
-                            ]);
-
-                            const parentPath = path.parentPath;
-                            if (parentPath && t.isVariableDeclaration(parentPath.node)) {
-                                (parentPath as babel.NodePath<t.VariableDeclaration>).insertAfter(
-                                    catalogDecl,
-                                );
+                                )
+                            ) {
                                 transformed = true;
                             }
                         },
@@ -1272,88 +1135,12 @@ export function transformSourceCode(
                         // resolves at runtime, so without this its classes were silently
                         // dead under Tailwind `source(none)`.
                         CallExpression(path: babel.NodePath<t.CallExpression>) {
-                            const callee = path.node.callee;
-                            if (
-                                !t.isIdentifier(callee) ||
-                                (callee.name !== 'dynamic' && callee.name !== 'szr')
-                            ) {
-                                return;
-                            }
-                            if (path.node.arguments.length === 0) {
-                                return;
-                            }
-
-                            // TS wrappers (`satisfies` / `as`) are type-level; look
-                            // through them before shape-testing the argument.
-                            const arg = unwrapTsExpression(path.node.arguments[0]);
-
-                            // Locate unknown/numeric-key warnings from a static
-                            // `szr({...})` argument at the call, so `csszyx check`
-                            // reports `at <file>:<line>`. Only szr — a mangleable,
-                            // build-resolved call; `dynamic()` values are runtime and
-                            // keep the location-less message.
-                            const catalogWarnAt =
-                                callee.name === 'szr'
-                                    ? formatSzWarnLocation(
-                                          filename ?? 'file.tsx',
-                                          path.node.loc?.start.line,
-                                          options?.rootDir,
-                                      )
-                                    : undefined;
-
-                            // Case 1: dynamic({ key: value, ... }) — inline literal object
-                            if (t.isObjectExpression(arg)) {
-                                const staticObj = evaluateStaticObject(arg);
-                                if (!staticObj) {
-                                    return;
-                                }
-                                setSzWarnLocation(catalogWarnAt);
-                                const { className } = transform(staticObj as SzObject);
-                                setSzWarnLocation(undefined);
-                                for (const c of className.split(/\s+/)) {
-                                    if (c) {
-                                        collectedClasses.add(c);
-                                    }
-                                }
-                                return;
-                            }
-
-                            // Case 2: dynamic(IDENTIFIER) — module-level const reference
-                            // (wrappers were already unwrapped above).
-                            const argExpr = arg;
-                            if (t.isIdentifier(argExpr)) {
-                                const binding = path.scope.getBinding(argExpr.name);
-                                if (!binding) {
-                                    return;
-                                }
-                                const declarator = binding.path.node;
-                                if (!t.isVariableDeclarator(declarator) || !declarator.init) {
-                                    return;
-                                }
-                                // Unwrap `as const` / `satisfies T` wrappers
-                                let initExpr = declarator.init;
-                                while (
-                                    t.isTSAsExpression(initExpr) ||
-                                    t.isTSSatisfiesExpression(initExpr)
-                                ) {
-                                    initExpr = initExpr.expression;
-                                }
-                                if (!t.isObjectExpression(initExpr)) {
-                                    return;
-                                }
-                                const staticObj = evaluateStaticObject(initExpr);
-                                if (!staticObj) {
-                                    return;
-                                }
-                                setSzWarnLocation(catalogWarnAt);
-                                const { className } = transform(staticObj as SzObject);
-                                setSzWarnLocation(undefined);
-                                for (const c of className.split(/\s+/)) {
-                                    if (c) {
-                                        collectedClasses.add(c);
-                                    }
-                                }
-                            }
+                            collectRuntimeLiteralClasses(
+                                path,
+                                collectedClasses,
+                                filename,
+                                options?.rootDir,
+                            );
                         },
                     },
                 }),
@@ -1407,6 +1194,249 @@ export function transformSourceCode(
             cssVariableMap,
         };
     }
+}
+
+/**
+ * Extracts and inserts a static class catalog for one szv declaration.
+ *
+ * @param path Variable declarator path.
+ * @param collectedClasses Shared class collection.
+ * @param filename Source filename for diagnostics.
+ * @param rootDir Project root for relative diagnostics.
+ * @returns Whether a catalog declaration was inserted.
+ */
+function extractSzvCatalog(
+    path: babel.NodePath<t.VariableDeclarator>,
+    collectedClasses: Set<string>,
+    filename?: string,
+    rootDir?: string,
+): boolean {
+    const init = path.node.init;
+    if (!isStaticSzvDeclaration(path.node, init)) return false;
+    const config = resolveToConstObjectExpression(init.arguments[0], path.scope);
+    if (!config) return false;
+
+    const classStrings = collectSzvCatalogClasses(config, path.scope, init, filename, rootDir);
+    if (classStrings.length === 0) return false;
+    for (const classString of classStrings) addClassTokens(classString, collectedClasses);
+    return insertSzvCatalogDeclaration(path, classStrings);
+}
+
+/**
+ * Narrows a variable declarator to a named szv call with a config argument.
+ *
+ * @param declarator Variable declarator.
+ * @param init Declarator initializer.
+ * @returns Whether the declaration can produce a catalog.
+ */
+function isStaticSzvDeclaration(
+    declarator: t.VariableDeclarator,
+    init: t.Expression | null | undefined,
+): init is t.CallExpression {
+    return (
+        t.isCallExpression(init) &&
+        t.isIdentifier(init.callee) &&
+        init.callee.name === 'szv' &&
+        init.arguments.length > 0 &&
+        t.isIdentifier(declarator.id)
+    );
+}
+
+/**
+ * Compiles every finite base and per-dimension variant candidate.
+ *
+ * @param config Static szv config object.
+ * @param scope Babel scope used for const resolution.
+ * @param init szv call expression.
+ * @param filename Source filename for diagnostics.
+ * @param rootDir Project root for relative diagnostics.
+ * @returns Compiled catalog class strings.
+ */
+function collectSzvCatalogClasses(
+    config: t.ObjectExpression,
+    scope: babel.NodePath['scope'],
+    init: t.CallExpression,
+    filename?: string,
+    rootDir?: string,
+): string[] {
+    const budget: CatalogExtrasBudget = {
+        extras: MAX_CATALOG_BRANCH_EXTRAS,
+        explores: MAX_CATALOG_BRANCH_EXTRAS,
+        objectMemo: new Map(),
+        valueMemo: new Map(),
+    };
+    const baseNode = readConfigSubObjectNode(config, 'base', scope);
+    const baseCandidates = baseNode
+        ? lenientCatalogObjects(baseNode, scope, new Set(), 0, budget)
+        : [{} as SzObject];
+    const base = baseCandidates[0] ?? ({} as SzObject);
+    const classStrings: string[] = [];
+    const warningLocation = formatSzWarnLocation(
+        filename ?? 'file.tsx',
+        init.loc?.start.line,
+        rootDir,
+    );
+    setSzWarnLocation(warningLocation);
+    try {
+        for (const candidate of baseCandidates) compileCatalogObject(candidate, classStrings);
+        collectSzvVariantClasses(config, scope, base, budget, classStrings);
+    } finally {
+        setSzWarnLocation(undefined);
+    }
+    return classStrings;
+}
+
+/**
+ * Compiles one catalog object and appends a non-empty class string.
+ *
+ * @param object Static sz object.
+ * @param classStrings Catalog output sink.
+ */
+function compileCatalogObject(object: SzObject, classStrings: string[]): void {
+    const result = transform(object);
+    const className = typeof result === 'string' ? result : result.className;
+    if (className) classStrings.push(className);
+}
+
+/**
+ * Compiles every readable variant value merged with the catalog base.
+ *
+ * @param config Static szv config object.
+ * @param scope Babel scope used for const resolution.
+ * @param base Static base styles.
+ * @param budget Finite branch exploration budget.
+ * @param classStrings Catalog output sink.
+ */
+function collectSzvVariantClasses(
+    config: t.ObjectExpression,
+    scope: babel.NodePath['scope'],
+    base: SzObject,
+    budget: CatalogExtrasBudget,
+    classStrings: string[],
+): void {
+    const variants = readConfigSubObjectNode(config, 'variants', scope);
+    for (const dimension of variants?.properties ?? []) {
+        const values = resolveCatalogPropertyObject(dimension, scope);
+        if (!values) continue;
+        for (const variant of values.properties) {
+            if (!t.isObjectProperty(variant) || variant.computed) continue;
+            const candidates = lenientCatalogObjectCandidates(
+                variant.value,
+                scope,
+                new Set(),
+                0,
+                budget,
+            );
+            for (const candidate of candidates) {
+                compileCatalogObject({ ...base, ...candidate }, classStrings);
+            }
+        }
+    }
+}
+
+/**
+ * Resolves one variants dimension to an object expression.
+ *
+ * @param property Variants dimension property.
+ * @param scope Babel scope used for const resolution.
+ * @returns Resolved variants table, or null for unsupported shapes.
+ */
+function resolveCatalogPropertyObject(
+    property: t.ObjectMethod | t.ObjectProperty | t.SpreadElement,
+    scope: babel.NodePath['scope'],
+): t.ObjectExpression | null {
+    if (!t.isObjectProperty(property) || property.computed) return null;
+    return resolveCatalogObjectExpression(property.value, scope, new Set());
+}
+
+/**
+ * Inserts a no-op catalog declaration after its szv declaration.
+ *
+ * @param path Variable declarator path.
+ * @param classStrings Compiled catalog class strings.
+ * @returns Whether the declaration was inserted.
+ */
+function insertSzvCatalogDeclaration(
+    path: babel.NodePath<t.VariableDeclarator>,
+    classStrings: string[],
+): boolean {
+    if (!t.isIdentifier(path.node.id) || !path.parentPath?.isVariableDeclaration()) return false;
+    const catalog = t.variableDeclaration('const', [
+        t.variableDeclarator(
+            t.identifier(`_szv_catalog_${path.node.id.name}`),
+            t.arrayExpression(classStrings.map(classString => t.stringLiteral(classString))),
+        ),
+    ]);
+    path.parentPath.insertAfter(catalog);
+    return true;
+}
+
+/**
+ * Collects classes from a static dynamic()/szr() object or const reference.
+ *
+ * @param path Call-expression path.
+ * @param collectedClasses Shared class collection.
+ * @param filename Source filename for diagnostics.
+ * @param rootDir Project root for relative diagnostics.
+ */
+function collectRuntimeLiteralClasses(
+    path: babel.NodePath<t.CallExpression>,
+    collectedClasses: Set<string>,
+    filename?: string,
+    rootDir?: string,
+): void {
+    const callee = path.node.callee;
+    if (!isRuntimeLiteralCall(callee) || path.node.arguments.length === 0) return;
+    const object = resolveRuntimeLiteralObject(path.node.arguments[0], path.scope);
+    if (!object) return;
+
+    const warningLocation =
+        callee.name === 'szr'
+            ? formatSzWarnLocation(filename ?? 'file.tsx', path.node.loc?.start.line, rootDir)
+            : undefined;
+    setSzWarnLocation(warningLocation);
+    try {
+        const result = transform(object);
+        addClassTokens(result.className, collectedClasses);
+    } finally {
+        setSzWarnLocation(undefined);
+    }
+}
+
+/**
+ * Narrows a callee to a dynamic or szr identifier.
+ *
+ * @param callee Call-expression callee.
+ * @returns Whether the call supports literal class extraction.
+ */
+function isRuntimeLiteralCall(
+    callee: t.Expression | t.V8IntrinsicIdentifier,
+): callee is t.Identifier {
+    return t.isIdentifier(callee) && (callee.name === 'dynamic' || callee.name === 'szr');
+}
+
+/**
+ * Resolves an inline object or same-scope const reference to a static sz object.
+ *
+ * @param argument First call argument.
+ * @param scope Babel scope used for const resolution.
+ * @returns Evaluated sz object, or null when dynamic.
+ */
+function resolveRuntimeLiteralObject(
+    argument: t.CallExpression['arguments'][number],
+    scope: babel.NodePath['scope'],
+): SzObject | null {
+    const unwrapped = unwrapTsExpression(argument);
+    if (t.isObjectExpression(unwrapped)) {
+        return (evaluateStaticObject(unwrapped) as SzObject | null) ?? null;
+    }
+    if (!t.isIdentifier(unwrapped)) return null;
+    const binding = scope.getBinding(unwrapped.name);
+    const declarator = binding?.path.node;
+    if (!t.isVariableDeclarator(declarator) || !declarator.init) return null;
+    const initializer = unwrapTsExpression(declarator.init);
+    if (!t.isObjectExpression(initializer)) return null;
+    return (evaluateStaticObject(initializer) as SzObject | null) ?? null;
 }
 
 /**
@@ -2908,207 +2938,273 @@ function evaluatePartialObject(
     node: t.ObjectExpression,
     variantChain = '',
 ): PartialObjectResult | null {
-    const staticProps: SzObject = {};
-    const dynamicProps = new Map<string, DynamicPropInfo>();
-    const rawClasses: string[] = [];
-    const conditionalClasses: ConditionalClassEntry[] = [];
-    let usesColorVar = false;
-    let usesSpacingVar = false;
-    let usesUnitVar = false;
-
-    const registerDynamicProp = (key: string, expression: t.Expression): void => {
-        const registration = createDynamicPropRegistration(key, expression, variantChain);
-        const { category } = registration.info;
-        usesColorVar ||= COLOR_PROPERTIES.has(key);
-        usesSpacingVar ||= category === PropertyCategory.SPACING;
-        usesUnitVar ||=
-            category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION;
-        dynamicProps.set(registration.uniqueKey, registration.info);
-    };
-
+    const result = createPartialObjectResult();
     for (const prop of node.properties) {
-        if (!t.isObjectProperty(prop) || prop.computed) {
-            return null;
-        }
-        const key = getObjectPropertyKey(prop);
-        if (key === null) {
-            return null;
-        }
+        if (!evaluatePartialProperty(prop, variantChain, result)) return null;
+    }
+    return result;
+}
 
-        const value = prop.value;
+/**
+ * Creates the neutral accumulator for partial sz object evaluation.
+ * @returns Empty partial-object state
+ */
+function createPartialObjectResult(): PartialObjectResult {
+    return {
+        staticProps: {},
+        dynamicProps: new Map<string, DynamicPropInfo>(),
+        rawClasses: [],
+        conditionalClasses: [],
+        hasSpread: false,
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
+    };
+}
 
-        // Try static evaluation first
-        if (t.isStringLiteral(value)) {
-            staticProps[key] = value.value;
-        } else if (t.isNumericLiteral(value)) {
-            staticProps[key] = value.value;
-        } else if (t.isBooleanLiteral(value)) {
-            staticProps[key] = value.value;
-        } else if (
-            t.isUnaryExpression(value) &&
-            value.operator === '-' &&
-            t.isNumericLiteral(value.argument)
-        ) {
-            staticProps[key] = -value.argument.value;
-        } else if (t.isObjectExpression(value)) {
-            // Check if it's a static nested object (variant or color object)
-            const nested = evaluateStaticObject(value);
-            if (nested !== null) {
-                staticProps[key] = nested;
-            } else {
-                // Check if it's a color object { color: ..., op: ... } with dynamic op
-                const colorObjProps = new Map<string, t.ObjectProperty>();
-                for (const p of value.properties) {
-                    if (t.isObjectProperty(p) && !p.computed && t.isIdentifier(p.key)) {
-                        colorObjProps.set(p.key.name, p);
-                    }
-                }
-                if (colorObjProps.has('color') && COLOR_PROPERTIES.has(key)) {
-                    const colorProp = colorObjProps.get('color');
-                    if (!colorProp) {
-                        continue;
-                    }
-                    const opProp = colorObjProps.get('op');
-                    const twPrefix =
-                        PROPERTY_MAP[key] ||
-                        key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+/**
+ * Evaluates one property into an existing partial-object accumulator.
+ * @param property - Object member to evaluate
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ * @returns Whether the property can be represented by partial evaluation
+ */
+function evaluatePartialProperty(
+    property: t.ObjectMethod | t.ObjectProperty | t.SpreadElement,
+    variantChain: string,
+    result: PartialObjectResult,
+): boolean {
+    if (!t.isObjectProperty(property) || property.computed) return false;
+    const key = getObjectPropertyKey(property);
+    if (key === null) return false;
+    const value = property.value;
+    const staticValue = extractStaticLiteralValue(t.isExpression(value) ? value : t.nullLiteral());
+    if (staticValue !== null) {
+        result.staticProps[key] = staticValue;
+        return true;
+    }
+    if (t.isObjectExpression(value)) {
+        return evaluatePartialObjectProperty(key, value, variantChain, result);
+    }
+    if (t.isConditionalExpression(value)) {
+        evaluatePartialConditional(key, value, variantChain, result);
+        return true;
+    }
+    if (!t.isExpression(value)) return false;
+    registerPartialDynamicProp(key, value, variantChain, result);
+    return true;
+}
 
-                    // Extract static color
-                    let colorStr: string | null = null;
-                    if (t.isStringLiteral(colorProp.value)) {
-                        colorStr = colorProp.value.value;
-                    }
+/**
+ * Evaluates a nested static object, color object, or variant object.
+ * @param key - Parent sz property key
+ * @param value - Nested object value
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ * @returns Whether the nested object has a supported representation
+ */
+function evaluatePartialObjectProperty(
+    key: string,
+    value: t.ObjectExpression,
+    variantChain: string,
+    result: PartialObjectResult,
+): boolean {
+    const nested = evaluateStaticObject(value);
+    if (nested !== null) {
+        result.staticProps[key] = nested;
+        return true;
+    }
+    const properties = collectIdentifierObjectProperties(value);
+    if (properties.has('color') && COLOR_PROPERTIES.has(key)) {
+        evaluatePartialColorObject(key, properties, variantChain, result);
+        return true;
+    }
+    if (!isKnownBabelVariant(key)) return false;
+    return evaluatePartialVariant(key, value, variantChain, result);
+}
 
-                    if (colorStr && opProp) {
-                        // Static color + dynamic op → bg-red-500/[var(--_sz-bg-op)]
-                        const opVarName = getCSSVariableName(
-                            `${key}-op`,
-                            variantChain || undefined,
-                        );
-                        const uniqueKey = variantChain ? `${variantChain}-${key}-op` : `${key}-op`;
-
-                        if (t.isStringLiteral(opProp.value) || t.isNumericLiteral(opProp.value)) {
-                            // Both static — should have been caught above, but handle anyway
-                            const opVal = opProp.value.value;
-                            staticProps[key] = { color: colorStr, op: opVal } as unknown as SzValue;
-                        } else if (t.isExpression(opProp.value)) {
-                            // Static color + dynamic op — Tailwind v4 CSS variable shorthand
-                            // Build final class directly: bg-red-500/(--_sz-bg-op)
-                            const variantPfx = variantChain ? `${variantChain}:` : '';
-                            rawClasses.push(`${variantPfx}${twPrefix}-${colorStr}/(${opVarName})`);
-                            dynamicProps.set(uniqueKey, {
-                                expression: opProp.value,
-                                category: PropertyCategory.UNITLESS,
-                                szKey: key,
-                                varName: opVarName,
-                                twPrefix: `${twPrefix}-op`,
-                                variantChain: variantChain || '',
-                                skipClass: true,
-                            });
-                        }
-                    } else if (!colorStr && opProp) {
-                        // Both dynamic — fall through to CSS variable for entire bg
-                        const varName = getCSSVariableName(key, variantChain || undefined);
-                        const uniqueKey = variantChain ? `${variantChain}-${key}` : key;
-                        usesColorVar = true;
-                        dynamicProps.set(uniqueKey, {
-                            expression: t.isExpression(colorProp.value)
-                                ? colorProp.value
-                                : t.stringLiteral(''),
-                            category: PropertyCategory.COLOR,
-                            szKey: key,
-                            varName,
-                            twPrefix,
-                            variantChain: variantChain || '',
-                        });
-                    } else if (colorStr && !opProp) {
-                        // Static color, no op → just static
-                        staticProps[key] = colorStr as unknown as SzValue;
-                    }
-                } else {
-                    // Dynamic nested object — check if it's a variant
-                    const isVariant =
-                        KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key));
-                    if (isVariant) {
-                        // Recursively evaluate variant's children
-                        const variantKey = variantChain ? `${variantChain}-${key}` : key;
-                        const nestedResult = evaluatePartialObject(value, variantKey);
-                        if (nestedResult === null) {
-                            return null;
-                        }
-
-                        // Merge static props under variant key
-                        if (Object.keys(nestedResult.staticProps).length > 0) {
-                            staticProps[key] = nestedResult.staticProps;
-                        }
-                        // Merge dynamic props
-                        for (const [k, v] of nestedResult.dynamicProps) {
-                            dynamicProps.set(k, v);
-                        }
-                        // Merge raw classes (e.g. from color object with dynamic op)
-                        rawClasses.push(...nestedResult.rawClasses);
-                        // Merge conditional classes (already have variant prefix applied)
-                        conditionalClasses.push(...nestedResult.conditionalClasses);
-                        if (nestedResult.usesColorVar) {
-                            usesColorVar = true;
-                        }
-                        if (nestedResult.usesSpacingVar) {
-                            usesSpacingVar = true;
-                        }
-                        if (nestedResult.usesUnitVar) {
-                            usesUnitVar = true;
-                        }
-                    } else {
-                        return null; // Unknown nested dynamic object
-                    }
-                }
-            }
-        } else if (t.isConditionalExpression(value)) {
-            // Ternary where both branches are static literals:
-            //   scale: shrunkA ? 75 : 100  →  shrunkA ? 'scale-75' : 'scale-100'
-            // Compile each branch at build time instead of falling back to CSS variables.
-            const consVal = extractStaticLiteralValue(value.consequent);
-            const altVal = extractStaticLiteralValue(value.alternate);
-            if (consVal !== null && altVal !== null) {
-                const { className: classA } = transform({ [key]: consVal });
-                const { className: classB } = transform({ [key]: altVal });
-                // Apply variant prefix (e.g. 'hover' → 'hover:scale-75')
-                const vPfx = variantChain ? `${getVariantPrefix(variantChain)}:` : '';
-                const prefixed = (cls: string): string =>
-                    vPfx
-                        ? cls
-                              .split(/\s+/)
-                              .filter(Boolean)
-                              .map(c => vPfx + c)
-                              .join(' ')
-                        : cls;
-                conditionalClasses.push({
-                    test: value.test,
-                    consequent: prefixed(classA),
-                    alternate: prefixed(classB),
-                });
-            } else {
-                // At least one branch is dynamic — fall back to CSS variable
-                registerDynamicProp(key, value);
-            }
-        } else if (t.isExpression(value)) {
-            // Fully dynamic expression → CSS variable
-            registerDynamicProp(key, value);
-        } else {
-            return null;
+/**
+ * Indexes non-computed identifier properties for structured object handling.
+ * @param node - Object expression to index
+ * @returns Identifier-keyed object properties
+ */
+function collectIdentifierObjectProperties(
+    node: t.ObjectExpression,
+): Map<string, t.ObjectProperty> {
+    const properties = new Map<string, t.ObjectProperty>();
+    for (const property of node.properties) {
+        if (t.isObjectProperty(property) && !property.computed && t.isIdentifier(property.key)) {
+            properties.set(property.key.name, property);
         }
     }
+    return properties;
+}
 
-    return {
-        staticProps,
-        dynamicProps,
-        rawClasses,
-        conditionalClasses,
-        hasSpread: false,
-        usesColorVar,
-        usesSpacingVar,
-        usesUnitVar,
-    };
+/**
+ * Evaluates supported static/dynamic color-object combinations.
+ * @param key - Color sz property key
+ * @param properties - Indexed color object members
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ */
+function evaluatePartialColorObject(
+    key: string,
+    properties: ReadonlyMap<string, t.ObjectProperty>,
+    variantChain: string,
+    result: PartialObjectResult,
+): void {
+    const colorProperty = properties.get('color');
+    if (!colorProperty) return;
+    const opacityProperty = properties.get('op');
+    const color = t.isStringLiteral(colorProperty.value) ? colorProperty.value.value : null;
+    if (color && opacityProperty) {
+        evaluatePartialColorOpacity(key, color, opacityProperty, variantChain, result);
+    } else if (!color && opacityProperty) {
+        registerPartialDynamicColor(key, colorProperty, variantChain, result);
+    } else if (color) {
+        result.staticProps[key] = color as unknown as SzValue;
+    }
+}
+
+/**
+ * Evaluates the opacity half of a color object.
+ * @param key - Color sz property key
+ * @param color - Static color token
+ * @param opacityProperty - Static or dynamic opacity member
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ */
+function evaluatePartialColorOpacity(
+    key: string,
+    color: string,
+    opacityProperty: t.ObjectProperty,
+    variantChain: string,
+    result: PartialObjectResult,
+): void {
+    const opacity = opacityProperty.value;
+    if (t.isStringLiteral(opacity) || t.isNumericLiteral(opacity)) {
+        result.staticProps[key] = { color, op: opacity.value } as unknown as SzValue;
+        return;
+    }
+    if (!t.isExpression(opacity)) return;
+    const variable = getCSSVariableName(`${key}-op`, variantChain || undefined);
+    const uniqueKey = variantChain ? `${variantChain}-${key}-op` : `${key}-op`;
+    const prefix = PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    result.rawClasses.push(
+        `${variantChain ? `${variantChain}:` : ''}${prefix}-${color}/(${variable})`,
+    );
+    result.dynamicProps.set(uniqueKey, {
+        expression: opacity,
+        category: PropertyCategory.UNITLESS,
+        szKey: key,
+        varName: variable,
+        twPrefix: `${prefix}-op`,
+        variantChain,
+        skipClass: true,
+    });
+}
+
+/**
+ * Registers a fully dynamic color object.
+ * @param key - Color sz property key
+ * @param colorProperty - Dynamic color member
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ */
+function registerPartialDynamicColor(
+    key: string,
+    colorProperty: t.ObjectProperty,
+    variantChain: string,
+    result: PartialObjectResult,
+): void {
+    const expression = t.isExpression(colorProperty.value)
+        ? colorProperty.value
+        : t.stringLiteral('');
+    const registration = createDynamicPropRegistration(key, expression, variantChain);
+    result.usesColorVar = true;
+    result.dynamicProps.set(registration.uniqueKey, {
+        ...registration.info,
+        category: PropertyCategory.COLOR,
+    });
+}
+
+/**
+ * Recursively evaluates and merges a dynamic nested variant.
+ * @param key - Variant key to merge under
+ * @param value - Nested variant object
+ * @param variantChain - Parent variant path
+ * @param result - Parent partial-object state
+ * @returns Whether every nested member can be partially evaluated
+ */
+function evaluatePartialVariant(
+    key: string,
+    value: t.ObjectExpression,
+    variantChain: string,
+    result: PartialObjectResult,
+): boolean {
+    const variantKey = variantChain ? `${variantChain}-${key}` : key;
+    const nested = evaluatePartialObject(value, variantKey);
+    if (nested === null) return false;
+    if (Object.keys(nested.staticProps).length > 0) result.staticProps[key] = nested.staticProps;
+    for (const [nestedKey, info] of nested.dynamicProps) {
+        result.dynamicProps.set(nestedKey, info);
+    }
+    result.rawClasses.push(...nested.rawClasses);
+    result.conditionalClasses.push(...nested.conditionalClasses);
+    result.usesColorVar ||= nested.usesColorVar;
+    result.usesSpacingVar ||= nested.usesSpacingVar;
+    result.usesUnitVar ||= nested.usesUnitVar;
+    return true;
+}
+
+/**
+ * Compiles a conditional property when both branches are static.
+ * @param key - sz property key
+ * @param value - Conditional property expression
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ */
+function evaluatePartialConditional(
+    key: string,
+    value: t.ConditionalExpression,
+    variantChain: string,
+    result: PartialObjectResult,
+): void {
+    const consequent = extractStaticLiteralValue(value.consequent);
+    const alternate = extractStaticLiteralValue(value.alternate);
+    if (consequent === null || alternate === null) {
+        registerPartialDynamicProp(key, value, variantChain, result);
+        return;
+    }
+    const classA = transform({ [key]: consequent }).className;
+    const classB = transform({ [key]: alternate }).className;
+    result.conditionalClasses.push({
+        test: value.test,
+        consequent: variantChain ? prefixClasses(classA, variantChain) : classA,
+        alternate: variantChain ? prefixClasses(classB, variantChain) : classB,
+    });
+}
+
+/**
+ * Registers a runtime-valued property and its required helper family.
+ * @param key - sz property key
+ * @param expression - Runtime value expression
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ */
+function registerPartialDynamicProp(
+    key: string,
+    expression: t.Expression,
+    variantChain: string,
+    result: PartialObjectResult,
+): void {
+    const registration = createDynamicPropRegistration(key, expression, variantChain);
+    const { category } = registration.info;
+    result.usesColorVar ||= COLOR_PROPERTIES.has(key);
+    result.usesSpacingVar ||= category === PropertyCategory.SPACING;
+    result.usesUnitVar ||=
+        category === PropertyCategory.ANGLE || category === PropertyCategory.DURATION;
+    result.dynamicProps.set(registration.uniqueKey, registration.info);
 }
 
 /**
@@ -3293,135 +3389,182 @@ function collectCandidatesFromBabelObj(
     classes: Set<string>,
     variantPrefix: string,
 ): void {
-    const getBinding = (name: string): ReturnType<typeof path.scope.getBinding> =>
-        path.scope.getBinding(name);
-
-    for (const prop of node.properties) {
-        if (t.isSpreadElement(prop)) {
-            const spreadArg = prop.argument;
-            if (t.isIdentifier(spreadArg)) {
-                const binding = getBinding(spreadArg.name);
-                if (binding?.path.isVariableDeclarator()) {
-                    let init = binding.path.node.init;
-                    if (init) {
-                        while (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) {
-                            init = init.expression;
-                        }
-                        if (t.isObjectExpression(init)) {
-                            collectCandidatesFromBabelObj(init, path, classes, variantPrefix);
-                            continue;
-                        }
-                    }
-                }
-            }
-            collectCandidatesFromBabelExpr(spreadArg as t.Expression, path, classes);
-        } else if (t.isObjectProperty(prop)) {
-            let key: string;
-            if (t.isIdentifier(prop.key)) {
-                key = prop.key.name;
-            } else if (t.isStringLiteral(prop.key)) {
-                key = prop.key.value;
-            } else if (t.isNumericLiteral(prop.key)) {
-                key = String(prop.key.value);
-            } else {
-                continue;
-            }
-
-            const val = prop.value as t.Expression;
-            if (t.isObjectExpression(val)) {
-                if (isKnownBabelVariant(key)) {
-                    const nestedVariant = variantPrefix ? `${variantPrefix}:${key}` : key;
-                    collectCandidatesFromBabelObj(val, path, classes, nestedVariant);
-                } else {
-                    const flatVal = resolveObjectSpreads(val, getBinding) ?? val;
-                    const staticObj = evaluateStaticObject(flatVal);
-                    if (staticObj !== null) {
-                        const { className } = transform({ [key]: staticObj });
-                        const prefixed = variantPrefix
-                            ? prefixClasses(className, variantPrefix)
-                            : className;
-                        for (const c of prefixed.split(/\s+/)) {
-                            if (c) classes.add(c);
-                        }
-                    } else {
-                        collectCandidatesFromBabelExpr(val, path, classes);
-                    }
-                }
-            } else if (t.isConditionalExpression(val)) {
-                const consequent = val.consequent as t.Expression;
-                const alternate = val.alternate as t.Expression;
-
-                const staticCons =
-                    t.isStringLiteral(consequent) ||
-                    t.isNumericLiteral(consequent) ||
-                    t.isBooleanLiteral(consequent) ||
-                    t.isObjectExpression(consequent)
-                        ? evaluateStaticObject(
-                              t.objectExpression([t.objectProperty(t.identifier(key), consequent)]),
-                          )
-                        : null;
-                if (staticCons !== null) {
-                    const { className } = transform(staticCons);
-                    const prefixed = variantPrefix
-                        ? prefixClasses(className, variantPrefix)
-                        : className;
-                    for (const c of prefixed.split(/\s+/)) {
-                        if (c) classes.add(c);
-                    }
-                } else {
-                    collectCandidatesFromBabelExpr(consequent, path, classes);
-                }
-
-                const staticAlt =
-                    t.isStringLiteral(alternate) ||
-                    t.isNumericLiteral(alternate) ||
-                    t.isBooleanLiteral(alternate) ||
-                    t.isObjectExpression(alternate)
-                        ? evaluateStaticObject(
-                              t.objectExpression([t.objectProperty(t.identifier(key), alternate)]),
-                          )
-                        : null;
-                if (staticAlt !== null) {
-                    const { className } = transform(staticAlt);
-                    const prefixed = variantPrefix
-                        ? prefixClasses(className, variantPrefix)
-                        : className;
-                    for (const c of prefixed.split(/\s+/)) {
-                        if (c) classes.add(c);
-                    }
-                } else {
-                    collectCandidatesFromBabelExpr(alternate, path, classes);
-                }
-            } else {
-                const staticVal =
-                    t.isStringLiteral(val) || t.isNumericLiteral(val) || t.isBooleanLiteral(val)
-                        ? evaluateStaticObject(
-                              t.objectExpression([t.objectProperty(t.identifier(key), val)]),
-                          )
-                        : null;
-                if (staticVal !== null) {
-                    const { className } = transform(staticVal);
-                    const prefixed = variantPrefix
-                        ? /**
-                           *
-                           * @param classesStr
-                           * @param variantChain
-                           */
-                          prefixClasses(className, variantPrefix)
-                        : className;
-                    for (const c of prefixed.split(/\s+/)) {
-                        if (c) classes.add(c);
-                    }
-                } else {
-                    collectCandidatesFromBabelExpr(val, path, classes);
-                }
-                /**
-                 *
-                 * @param key
-                 */
-            }
-        }
+    const context: BabelCandidateContext = { path, classes, variantPrefix };
+    for (const property of node.properties) {
+        if (t.isSpreadElement(property)) collectBabelCandidateSpread(property, context);
+        else if (t.isObjectProperty(property)) collectBabelCandidateProperty(property, context);
     }
+}
+
+/** Shared state for Babel candidate collection. */
+interface BabelCandidateContext {
+    path: babel.NodePath;
+    classes: Set<string>;
+    variantPrefix: string;
+}
+
+/**
+ * Collects a spread from a bound object or dynamic expression.
+ *
+ * @param spread Spread element.
+ * @param context Candidate collection state.
+ */
+function collectBabelCandidateSpread(
+    spread: t.SpreadElement,
+    context: BabelCandidateContext,
+): void {
+    const argument = spread.argument;
+    const boundObject = t.isIdentifier(argument)
+        ? resolveBoundBabelObject(argument, context.path)
+        : null;
+    if (boundObject) {
+        collectCandidatesFromBabelObj(
+            boundObject,
+            context.path,
+            context.classes,
+            context.variantPrefix,
+        );
+        return;
+    }
+    collectCandidatesFromBabelExpr(argument as t.Expression, context.path, context.classes);
+}
+
+/**
+ * Resolves an identifier binding to an unwrapped object initializer.
+ *
+ * @param identifier Bound identifier.
+ * @param path Babel path used for binding lookup.
+ * @returns Object initializer, or null when dynamic.
+ */
+function resolveBoundBabelObject(
+    identifier: t.Identifier,
+    path: babel.NodePath,
+): t.ObjectExpression | null {
+    const binding = path.scope.getBinding(identifier.name);
+    if (!binding?.path.isVariableDeclarator()) return null;
+    const initializer = unwrapTsExpression(binding.path.node.init);
+    return t.isObjectExpression(initializer) ? initializer : null;
+}
+
+/**
+ * Collects candidates from one static-key Babel property.
+ *
+ * @param property Object property.
+ * @param context Candidate collection state.
+ */
+function collectBabelCandidateProperty(
+    property: t.ObjectProperty,
+    context: BabelCandidateContext,
+): void {
+    const key = getObjectPropertyKey(property);
+    if (key === null || !t.isExpression(property.value)) return;
+    const value = property.value;
+    if (t.isObjectExpression(value)) {
+        collectBabelObjectProperty(key, value, context);
+    } else if (t.isConditionalExpression(value)) {
+        collectBabelConditionalProperty(key, value, context);
+    } else {
+        collectBabelValueProperty(key, value, context);
+    }
+}
+
+/**
+ * Collects an object-valued property with nested variant support.
+ *
+ * @param key Property key.
+ * @param value Object value.
+ * @param context Candidate collection state.
+ */
+function collectBabelObjectProperty(
+    key: string,
+    value: t.ObjectExpression,
+    context: BabelCandidateContext,
+): void {
+    if (isKnownBabelVariant(key)) {
+        const variantPrefix = context.variantPrefix ? `${context.variantPrefix}:${key}` : key;
+        collectCandidatesFromBabelObj(value, context.path, context.classes, variantPrefix);
+        return;
+    }
+    const getBinding = (name: string): ReturnType<typeof context.path.scope.getBinding> =>
+        context.path.scope.getBinding(name);
+    const flattened = resolveObjectSpreads(value, getBinding) ?? value;
+    if (!tryCollectStaticBabelProperty(key, flattened, context)) {
+        collectCandidatesFromBabelExpr(value, context.path, context.classes);
+    }
+}
+
+/**
+ * Collects both branches of a conditional property.
+ *
+ * @param key Property key.
+ * @param conditional Conditional value.
+ * @param context Candidate collection state.
+ */
+function collectBabelConditionalProperty(
+    key: string,
+    conditional: t.ConditionalExpression,
+    context: BabelCandidateContext,
+): void {
+    collectBabelValueProperty(key, conditional.consequent, context);
+    collectBabelValueProperty(key, conditional.alternate, context);
+}
+
+/**
+ * Compiles a finite property value or falls back to expression discovery.
+ *
+ * @param key Property key.
+ * @param value Property value.
+ * @param context Candidate collection state.
+ */
+function collectBabelValueProperty(
+    key: string,
+    value: t.Expression,
+    context: BabelCandidateContext,
+): void {
+    if (!tryCollectStaticBabelProperty(key, value, context)) {
+        collectCandidatesFromBabelExpr(value, context.path, context.classes);
+    }
+}
+
+/**
+ * Attempts to compile one static Babel property value.
+ *
+ * @param key Property key.
+ * @param value Property value.
+ * @param context Candidate collection state.
+ * @returns Whether static compilation succeeded.
+ */
+function tryCollectStaticBabelProperty(
+    key: string,
+    value: t.Expression,
+    context: BabelCandidateContext,
+): boolean {
+    if (!isBabelCandidateLiteral(value)) return false;
+    const object = evaluateStaticObject(
+        t.objectExpression([t.objectProperty(t.identifier(key), value)]),
+    );
+    if (object === null) return false;
+    const result = transform(object);
+    const className = context.variantPrefix
+        ? prefixClasses(result.className, context.variantPrefix)
+        : result.className;
+    addClassTokens(className, context.classes);
+    return true;
+}
+
+/**
+ * Returns whether a Babel value shape can be evaluated for candidate discovery.
+ *
+ * @param value Property value.
+ * @returns Whether static evaluation should be attempted.
+ */
+function isBabelCandidateLiteral(value: t.Expression): boolean {
+    return (
+        t.isStringLiteral(value) ||
+        t.isNumericLiteral(value) ||
+        t.isBooleanLiteral(value) ||
+        t.isObjectExpression(value)
+    );
 }
 
 /**
