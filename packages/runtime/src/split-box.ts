@@ -474,69 +474,63 @@ function partitionSz(
     const forceInner = options.inner ?? [];
     const forceOuter = options.outer ?? [];
     const fallback: BoxRole = options.fallback ?? 'outer';
+    const context: SzPartitionContext = {
+        options,
+        outer,
+        inner,
+        depth,
+        forceInner,
+        forceOuter,
+        fallback,
+    };
 
     for (const key of Object.keys(obj)) {
         if (!isForbiddenSzKey(key)) {
-            partitionSzEntry(
-                key,
-                obj[key],
-                options,
-                outer,
-                inner,
-                depth,
-                forceInner,
-                forceOuter,
-                fallback,
-            );
+            partitionSzEntry(key, obj[key], context);
         }
     }
+}
+
+/** Shared state for routing one sz entry into box buckets. */
+interface SzPartitionContext {
+    options: SplitBoxSzOptions;
+    outer: SzObject;
+    inner: SzObject;
+    depth: number;
+    forceInner: readonly BoxSelector[];
+    forceOuter: readonly BoxSelector[];
+    fallback: BoxRole;
 }
 
 /**
  * Route one sz entry to its box bucket, recursing for variant containers.
  * @param key - Sz key to route.
  * @param value - Sz value associated with the key.
- * @param options - Partition configuration.
- * @param outer - Outer bucket accumulator.
- * @param inner - Inner bucket accumulator.
- * @param depth - Current recursion depth.
- * @param forceInner - Inner override selectors.
- * @param forceOuter - Outer override selectors.
- * @param fallback - Bucket for unclassified values.
+ * @param context - Partition configuration and bucket accumulators.
  */
-function partitionSzEntry(
-    key: string,
-    value: SzValue,
-    options: SplitBoxSzOptions,
-    outer: SzObject,
-    inner: SzObject,
-    depth: number,
-    forceInner: readonly BoxSelector[],
-    forceOuter: readonly BoxSelector[],
-    fallback: BoxRole,
-): void {
+function partitionSzEntry(key: string, value: SzValue, context: SzPartitionContext): void {
     const entry = BOX_ROLE_BY_KEY.get(key);
-    if (anyMatchKey(key, entry, forceInner)) {
-        inner[key] = value;
+    if (anyMatchKey(key, entry, context.forceInner)) {
+        context.inner[key] = value;
         return;
     }
-    if (anyMatchKey(key, entry, forceOuter)) {
-        outer[key] = value;
+    if (anyMatchKey(key, entry, context.forceOuter)) {
+        context.outer[key] = value;
         return;
     }
     if (entry) {
-        (entry.role === 'inner' ? inner : outer)[key] = value;
+        (entry.role === 'inner' ? context.inner : context.outer)[key] = value;
         return;
     }
     if (!isPlainObject(value)) {
-        (fallback === 'inner' ? inner : outer)[key] = value;
+        (context.fallback === 'inner' ? context.inner : context.outer)[key] = value;
         return;
     }
     const subOuter: SzObject = {};
     const subInner: SzObject = {};
-    partitionSz(value, options, subOuter, subInner, depth + 1);
-    if (Object.keys(subOuter).length > 0) outer[key] = subOuter;
-    if (Object.keys(subInner).length > 0) inner[key] = subInner;
+    partitionSz(value, context.options, subOuter, subInner, context.depth + 1);
+    if (Object.keys(subOuter).length > 0) context.outer[key] = subOuter;
+    if (Object.keys(subInner).length > 0) context.inner[key] = subInner;
 }
 
 /**
