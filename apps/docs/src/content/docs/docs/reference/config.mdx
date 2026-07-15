@@ -139,19 +139,23 @@ interface ProductionConfig {
 ```
 
 :::tip[Inspecting CSS / hybrid apps]
-Mangling rewrites every csszyx-owned class name to a short alias (`z`, `y`, …), so
+Mangling rewrites every eligible csszyx-owned class name to a short alias (`z`, `y`, …), so
 the production bundle no longer contains the original utility names. Set
 `production: { mangle: false }` to keep readable class names — the supported way to
-verify the CSS a build emits, and recommended for **hybrid apps** that also ship
-non-csszyx stylesheets keyed on the original names. To check a single `sz` object
-without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
+verify the CSS a build emits. Classes that also appear as static literals in
+`class`/`className` (including `clsx(...)` expressions) automatically retain their
+original names, so raw and `sz` consumers keep matching the same CSS rule. To check
+a single `sz` object without a build, run
+`csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 :::
 
 :::caution[Mangling can clash with literal short class names in a hybrid build]
-Mangling is a **production-only** step, applied at **build time**. It assumes
-csszyx owns the entire class namespace, which breaks when a **separate Tailwind
-plugin owns the utility CSS** and/or **hand-written CSS uses literal class names**,
-in two ways:
+Mangling is a **production-only** step, applied at **build time**. Static
+`class`/`className` literals that overlap `sz` output are excluded automatically,
+even when the literal sits inside `clsx(...)`. Hybrid builds can still fail when a
+**separate Tailwind plugin owns the utility CSS**, hand-written CSS occupies short
+alias names, or a raw class is assembled dynamically and cannot be discovered, in
+two ways:
 
 - **Token collision.** Short aliases start at single letters (`z`, `y`, `x`, …).
   If your own CSS already styles a literal `.x`/`.y` class (e.g. axis markers,
@@ -173,8 +177,8 @@ in order:
    libraries or teammates, so a specific name is the more robust fix regardless of
    mangling.
 3. **Exclude — escape hatch for code you can't change.** Only when a name lives in
-   a **third-party stylesheet** you cannot rename, reserve it so no token equals
-   it:
+   a **third-party stylesheet** you cannot rename, or is assembled dynamically
+   outside a statically visible class expression, reserve it so no token equals it:
 
    ```ts
    production: { mangle: true, mangleExclude: ['x', 'y'] }

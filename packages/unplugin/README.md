@@ -69,7 +69,7 @@ module.exports = {
 - **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings. Defaults to the **native Rust engine** through the optional `@csszyx/core-*` platform package; opt back into the previous oxc-parser JavaScript path with `build.parser: "oxc"`, or fall through to Babel with `build.parser: "babel"`.
 - **HTML injection** -- Injects mangle maps and checksums for SSR hydration
 - **HMR support** -- Updates styles instantly during development
-- **CSS mangling** -- Compresses class names (e.g., `text-center` -> `z`) in production builds
+- **CSS mangling** -- Compresses owned class names (e.g., `text-center` -> `z`) while retaining names shared with static `className`/`clsx` literals
 - **File filters** -- Top-level `include` / `exclude` (glob or RegExp) skip large generated files before the AST budget guard fires; see [Config Overview](https://csszyx.com/config/overview#file-filters)
 
 ## Parser selection

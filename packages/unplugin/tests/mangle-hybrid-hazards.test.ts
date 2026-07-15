@@ -1,6 +1,50 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectMangleHybridHazards, mangleHybridHazardMessage } from '../src/unplugin.js';
+import {
+    collectAuthoredClassNames,
+    collectMangleHybridHazards,
+    mangleEligibleClasses,
+    mangleHybridHazardMessage,
+} from '../src/unplugin.js';
+
+describe('hybrid raw-class ownership', () => {
+    it('collects mixed known and unknown tokens inside clsx expressions', () => {
+        const source = `
+            export const Panel = ({ className }) => (
+                <div className={clsx('bg-bg text-text h-screen overflow-hidden', className)} />
+            );
+        `;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual([
+            'bg-bg',
+            'h-screen',
+            'overflow-hidden',
+            'text-text',
+        ]);
+    });
+
+    it('keeps shared raw/sz classes out of the mangle map', () => {
+        const owned = new Set(['bg-bg', 'h-screen', 'overflow-hidden', 'p-4']);
+        const authored = new Set(['bg-bg', 'text-text', 'h-screen', 'overflow-hidden']);
+
+        expect(mangleEligibleClasses(owned, authored)).toEqual(['p-4']);
+    });
+
+    it('collects direct class attributes without unrelated string assignments', () => {
+        const source = `
+            const label = 'h-screen';
+            const A = () => <div className="h-screen raw" title="overflow-hidden" />;
+        `;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual(['h-screen', 'raw']);
+    });
+
+    it('normalizes escaped characters before ownership comparison', () => {
+        const source = String.raw`<div className="before:content-['\"\"']" />`;
+
+        expect([...collectAuthoredClassNames(source)]).toEqual([`before:content-['""']`]);
+    });
+});
 
 describe('collectMangleHybridHazards', () => {
     it('flags tokens that collide with literal class names in external CSS', () => {
