@@ -378,6 +378,9 @@ jobs:
       - name: Lint (eslint)
         run: pnpm exec eslint .
 
+      - name: Test TypeScript repository scripts
+        run: pnpm test:scripts
+
       # ReDoS gate — recheck-backed, on its own config. Catches the
       # polynomial / search-position class that neither eslint-plugin-regexp
       # rule detects and that previously reached main as CodeQL-only findings.

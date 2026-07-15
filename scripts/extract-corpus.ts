@@ -24,6 +24,8 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { extractClassStrings } from './extract-corpus-classes.js';
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const CORPUS_DIR = join(__dirname, 'corpus');
 const COMBO_DIR = join(__dirname, 'corpus-combo');
@@ -81,104 +83,6 @@ const FRAMEWORKS: FrameworkConfig[] = [
 
 // Source file extensions to scan
 const SOURCE_EXTS = new Set(['.tsx', '.ts', '.jsx', '.js', '.html', '.svelte', '.vue']);
-
-// Tailwind class token pattern:
-// optional ! (important) + optional variant(s) ending in : + core utility chars
-const TW_TOKEN_RE = /^!?(?:[\w-]+:)*[\w\-./[\]()@#%]+$/;
-
-// CSS function names that indicate a value is a CSS expression, not a TW class
-const CSS_FN_RE = /^(?:calc|var|url|rgb|rgba|hsl|hsla|oklch|color|env|min|max|clamp)\(/;
-
-/**
- * Returns true if the token looks like a valid Tailwind class.
- * @param token - The token to validate
- * @returns True if the token matches the Tailwind class pattern
- */
-function isValidTwToken(token: string): boolean {
-    if (token === '-' || token === '/' || CSS_FN_RE.test(token)) {
-        return false;
-    }
-    return TW_TOKEN_RE.test(token) && token.length >= 1 && token.length <= 120;
-}
-
-/**
- * Extract static className/class attribute string values from source content.
- * Only captures plain string literals — skips template literals and expressions.
- * @param content - Source file content to scan
- * @returns One string per element className (may contain multiple space-separated classes)
- */
-function extractClassStrings(content: string): string[] {
-    const results: string[] = [];
-
-    // Capture string literals from multiple patterns:
-    // 1. className="..." / class="..." / className={'...'}
-    // 2. First arg to class helpers: cn("..."), clsx("..."), cva("..."), cx("...")
-    // 3. Any double/single-quoted string literal that looks like TW classes
-    //    (catches theme object properties like base: "flex items-center ...",
-    //     variant strings, etc. — validated by the 80% TW token threshold below)
-    const patterns = [
-        /className="([^"\\]+)"/g,
-        /className='([^'\\]+)'/g,
-        /className=\{'([^'\\]+)'\}/g,
-        /\bclass="([^"\\]+)"/g,
-        /\bclass='([^'\\]+)'/g,
-        // First string argument to common class composition utilities
-        /\bcn\("([^"\\]+)"/g,
-        /\bcn\('([^'\\]+)'/g,
-        /\bclsx\("([^"\\]+)"/g,
-        /\bclsx\('([^'\\]+)'/g,
-        /\bcva\("([^"\\]+)"/g,
-        /\bcva\('([^'\\]+)'/g,
-        /\bcx\("([^"\\]+)"/g,
-        /\bcx\('([^'\\]+)'/g,
-        // Generic: any string literal that might be a TW class list
-        // (handles theme objects, variant maps, etc.)
-        // Note: validated separately — requires TW-specific tokens to avoid prose
-        /"([a-z!][a-z0-9 !:/.[\\()\]@#%]{15,})"/g,
-        /'([a-z!][a-z0-9 !:/.[\\()\]@#%]{15,})'/g,
-    ];
-
-    // Patterns that came from targeted contexts (className=, cn(), etc.)
-    // vs the generic fallback patterns that need extra validation
-    const GENERIC_PATTERN_START = 13; // index of first generic pattern above
-
-    for (let pi = 0; pi < patterns.length; pi++) {
-        const re = patterns[pi];
-        const isGeneric = pi >= GENERIC_PATTERN_START;
-        for (const match of content.matchAll(re)) {
-            const value = match[1];
-            if (!value) {
-                continue;
-            }
-
-            const tokens = value.split(/\s+/).filter(Boolean);
-            if (tokens.length < 2) {
-                continue;
-            } // single-class elements uninteresting for combo
-
-            // Keep only tokens that look like TW classes; require ≥80% valid
-            const valid = tokens.filter(isValidTwToken);
-            if (valid.length < 2 || valid.length / tokens.length < 0.8) {
-                continue;
-            }
-
-            // Generic patterns: require at least one token with a TW-specific
-            // character (hyphen, colon, slash) to filter out English prose
-            if (isGeneric) {
-                const hasTwSpecific = valid.some(
-                    t => t.includes('-') || t.includes(':') || t.includes('/'),
-                );
-                if (!hasTwSpecific) {
-                    continue;
-                }
-            }
-
-            results.push(valid.join(' '));
-        }
-    }
-
-    return results;
-}
 
 /**
  * Recursively find all source files under a directory.
