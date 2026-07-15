@@ -2743,6 +2743,44 @@ function unknownSzPropertyMessage(key: string): string {
     );
 }
 
+/** Builds the fallback class for a string-valued property. */
+function buildGenericStringClass(
+    rawKey: string,
+    key: string,
+    value: string,
+    prefix: string,
+): string {
+    const importantValue = handleImportant(value);
+    const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
+    const className =
+        finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)
+            ? `-${prefix}${key}-${finalValue.substring(1)}`
+            : `${prefix}${key}-${finalValue}`;
+    return importantValue.important ? `${className}!` : className;
+}
+
+/** Normalizes string values into Tailwind utility suffix syntax. */
+function normalizeGenericStringValue(rawKey: string, key: string, value: string): string {
+    if (isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('))) {
+        return `[${normalizeArbitraryValue(value)}]`;
+    }
+    if (value.startsWith('--')) {
+        const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
+        return typeHint ? `(${typeHint}:${value})` : `(${value})`;
+    }
+    if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
+    if (/^\d+\/\d+$/.test(value)) {
+        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
+    }
+    if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) {
+        return /^\d+\/\d+$/.test(value) ? value : `[${value}]`;
+    }
+    if (needsArbitraryBrackets(value) || /^\d+\.\d+%$/.test(value)) {
+        return `[${normalizeArbitraryValue(value)}]`;
+    }
+    return value;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -3063,68 +3101,7 @@ function transformImpl(
         // HANDLE STRING VALUES
         // ================================================================
         if (typeof value === 'string') {
-            // Check for important modifier (Fix #4)
-            const { value: cleanValue, important } = handleImportant(value);
-            let finalValue = cleanValue;
-
-            // Tailwind build-time functions are arbitrary values, not CSS custom
-            // properties. Classify them before the `--var` sugar so
-            // `--spacing(4)` becomes `[--spacing(4)]`, never `(--spacing(4))`.
-            if (isTailwindBuildFunction(finalValue)) {
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            } else if (finalValue.startsWith('--') && finalValue.includes('(')) {
-                // Function-shaped but malformed/unsupported values remain
-                // arbitrary; they must never be mislabeled as CSS variables.
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            } else if (finalValue.startsWith('--')) {
-                // v4 Variable Syntax: '--color' → '(--color)'
-                // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'
-                const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
-                if (typeHint) {
-                    finalValue = `(${typeHint}:${finalValue})`;
-                } else {
-                    finalValue = `(${finalValue})`;
-                }
-            } else if (finalValue.startsWith('var(')) {
-                // var(--x) should be wrapped in brackets for arbitrary value syntax
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            } else if (/^\d+\/\d+$/.test(finalValue)) {
-                // Check if it's a bare fraction (e.g. 3/4, 1/2)
-                if (!FRACTION_SUPPORTED_PROPS.has(rawKey)) {
-                    // Not in whitelist — wrap in brackets (col-[3/4])
-                    finalValue = `[${finalValue}]`;
-                }
-                // else: allowed bare fraction (w-1/2, basis-1/3)
-            } else if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(finalValue)) {
-                if (
-                    finalValue === 'auto' ||
-                    finalValue === 'square' ||
-                    finalValue === 'video' ||
-                    /^\d+\/\d+$/.test(finalValue)
-                ) {
-                    // standard
-                } else {
-                    finalValue = `[${finalValue}]`;
-                }
-            } else if (needsArbitraryBrackets(finalValue) || /^\d+\.\d+%$/.test(finalValue)) {
-                // Check if needs arbitrary brackets (aspect ratio, percentages with decimals, numbers passed to stroke-width, etc.)
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            }
-
-            // check negative string values (-px, -1/2)
-            if (finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)) {
-                className = `-${prefix}${key}-${finalValue.substring(1)}`;
-            } else {
-                // Build final class name
-                className += `${key}-${finalValue}`;
-            }
-
-            // Add important modifier
-            if (important) {
-                className += '!';
-            }
-
-            classes.push(className);
+            classes.push(buildGenericStringClass(rawKey, key, value, prefix));
         }
     }
 
