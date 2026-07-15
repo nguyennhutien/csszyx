@@ -2697,6 +2697,52 @@ function formatPerspectiveOrigin(value: string): string {
         : `perspective-origin-[${normalizeArbitraryValue(value)}]`;
 }
 
+/** Warns when a fallback key cannot produce a supported sz utility. */
+function warnUnknownSzProperty(key: string, szProp: SzObject): void {
+    if (!szDevWarningsEnabled() || isKnownSzPropertyKey(key)) return;
+    let message = unknownSzPropertyMessage(key);
+    if (!szWarnLocation) message += runtimeSzWarnContext(szProp);
+    console.warn(message);
+    hintProjectScanOnce(szWarnLocation);
+}
+
+/** Returns whether a key belongs to any supported property or variant family. */
+function isKnownSzPropertyKey(key: string): boolean {
+    return Boolean(
+        PROPERTY_MAP[key] ||
+            BOOLEAN_SHORTHANDS.has(key) ||
+            SNAP_DIRECT_MAP[key] ||
+            isGradientPositionKey(key) ||
+            key.startsWith('--') ||
+            key.startsWith('[') ||
+            key.startsWith('@') ||
+            KNOWN_VARIANTS.has(key) ||
+            SPECIAL_VARIANTS.has(key) ||
+            key === 'min' ||
+            key === 'max',
+    );
+}
+
+/** Builds the diagnostic for an unsupported key without runtime context. */
+function unknownSzPropertyMessage(key: string): string {
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const suggestion = SUGGESTION_MAP[key];
+    if (suggestion) {
+        return `[csszyx] Use the canonical key "${suggestion}" instead of "${key}"${at}.`;
+    }
+    if (/^\d+(?:\.\d+)?$/.test(key)) {
+        return (
+            `[csszyx] sz received a numeric key "${key}"${at}. This usually ` +
+            'means an array or a spread was passed where an object of sz ' +
+            'keys was expected. The value is ignored.'
+        );
+    }
+    return (
+        `[csszyx] Unknown property "${key}" in sz prop${at}. ` +
+        'This will be ignored. Check for typos.'
+    );
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2960,62 +3006,7 @@ function transformImpl(
         // GENERIC / FALLBACK HANDLERS
         // ================================================================
 
-        // Dev-mode warning for unknown properties
-        if (szDevWarningsEnabled()) {
-            // Check if key is known
-            // We use 'key' (resolved kebab-case) for some checks, 'rawKey' for others
-            const isKnown =
-                PROPERTY_MAP[rawKey] ||
-                BOOLEAN_SHORTHANDS.has(rawKey) ||
-                SNAP_DIRECT_MAP[rawKey] ||
-                rawKey === 'fromPos' ||
-                rawKey === 'viaPos' ||
-                rawKey === 'toPos' ||
-                rawKey.startsWith('--') ||
-                rawKey.startsWith('[') ||
-                rawKey.startsWith('@') ||
-                // Variants that fell through (e.g. empty object)
-                KNOWN_VARIANTS.has(rawKey) ||
-                // Parametric/scope variants (group, peer, has, not, data, aria, supports)
-                SPECIAL_VARIANTS.has(rawKey) ||
-                rawKey === 'min' ||
-                rawKey === 'max';
-
-            if (!isKnown) {
-                // ` at <relativePath>:<line>` when a build engine set the location;
-                // empty on the runtime/browser path (no source file to point at).
-                const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-                const suggestion = SUGGESTION_MAP[rawKey];
-                let message: string;
-                if (suggestion) {
-                    message = `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}"${at}.`;
-                } else if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
-                    // A numeric (or sequential 0,1,2…) key is almost never a typo:
-                    // it means an array or a spread reached `sz` where an object of
-                    // sz keys was expected (`sz={{ ...someArray }}`, or a value that
-                    // leaked into key position). "Check for typos" points the wrong
-                    // way, so name the actual cause.
-                    message =
-                        `[csszyx] sz received a numeric key "${rawKey}"${at}. This usually ` +
-                        'means an array or a spread was passed where an object of sz ' +
-                        'keys was expected. The value is ignored.';
-                } else {
-                    message =
-                        `[csszyx] Unknown property "${rawKey}" in sz prop${at}. ` +
-                        'This will be ignored. Check for typos.';
-                }
-                // A build warning already carries `at file:line`. A runtime one
-                // (an sz built from a variable / spread / szv()/dynamic() result)
-                // has no static span, so attach what makes it traceable in the
-                // browser/SSR console: the offending object's shape and the first
-                // user stack frame (which the console renders click-to-source).
-                if (!szWarnLocation) {
-                    message += runtimeSzWarnContext(szProp);
-                }
-                console.warn(message);
-                hintProjectScanOnce(szWarnLocation);
-            }
-        }
+        warnUnknownSzProperty(rawKey, szProp);
 
         // A purely numeric key can never be a CSS property or Tailwind utility —
         // it is almost always a numeric lookup table (`{ 50: 100 }`) swallowed by
