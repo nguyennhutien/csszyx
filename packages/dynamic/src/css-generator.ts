@@ -36,6 +36,16 @@ function warnUnsafeArbitrary(utility: string): void {
     );
 }
 
+/**
+ * Expand Tailwind arbitrary-value underscores without requiring ES2021 String APIs.
+ *
+ * @param value Encoded arbitrary value.
+ * @returns Value with underscore space markers expanded.
+ */
+function expandArbitrarySpaces(value: string): string {
+    return value.split('_').join(' ');
+}
+
 // ── Variant metadata ──────────────────────────────────────────────────────────
 
 /** Breakpoint tiers (min-width values, Tailwind v4 defaults). */
@@ -243,7 +253,7 @@ function resolveSpacingValue(v: string, prop?: string): string {
 
     // Arbitrary value: [13px], [calc(100%-2rem)], etc.
     if (v.startsWith('[') && v.endsWith(']')) {
-        return v.slice(1, -1).replace(/_/g, ' ');
+        return expandArbitrarySpaces(v.slice(1, -1));
     }
 
     // CSS variable shorthand: (--my-var) → var(--my-var)
@@ -329,7 +339,7 @@ function resolveColorValue(v: string): string {
 
     // Arbitrary: [#ff6b35], [color:var(--my)]
     if (v.startsWith('[') && v.endsWith(']')) {
-        const inner = v.slice(1, -1).replace(/_/g, ' ');
+        const inner = expandArbitrarySpaces(v.slice(1, -1));
         if (inner.startsWith('color:')) {
             return inner.slice(6);
         }
@@ -882,7 +892,7 @@ function resolveTextDeclaration(utility: string): string | null {
         return `font-size: var(--text-${value}); line-height: var(--tw-leading, var(--text-${value}--line-height))`;
     }
     return value.startsWith('[') && value.endsWith(']')
-        ? `font-size: ${value.slice(1, -1).replace(/_/g, ' ')}`
+        ? `font-size: ${expandArbitrarySpaces(value.slice(1, -1))}`
         : null;
 }
 
@@ -943,7 +953,7 @@ function resolveFontDeclaration(utility: string): string | null {
     };
     if (value in families) return `font-family: ${families[value]}`;
     return value.startsWith('[') && value.endsWith(']')
-        ? `font-family: ${value.slice(1, -1).replace(/_/g, ' ')}`
+        ? `font-family: ${expandArbitrarySpaces(value.slice(1, -1))}`
         : null;
 }
 
@@ -956,7 +966,7 @@ function resolveShadowDeclaration(utility: string): string | null {
     if (!utility.startsWith('shadow-')) return null;
     const value = utility.slice(7);
     if (value.startsWith('[') && value.endsWith(']')) {
-        return `box-shadow: ${value.slice(1, -1).replace(/_/g, ' ')}`;
+        return `box-shadow: ${expandArbitrarySpaces(value.slice(1, -1))}`;
     }
     const sizes = new Set(['xs', 'sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
     if (!sizes.has(value)) return null;
@@ -1027,7 +1037,7 @@ function resolveGridDeclaration(utility: string): string | null {
 function resolveGridTemplate(value: string, axis: 'columns' | 'rows'): string {
     if (value === 'none' || value === 'subgrid') return `grid-template-${axis}: ${value}`;
     if (value.startsWith('['))
-        return `grid-template-${axis}: ${value.slice(1, -1).replace(/_/g, ' ')}`;
+        return `grid-template-${axis}: ${expandArbitrarySpaces(value.slice(1, -1))}`;
     return `grid-template-${axis}: repeat(${value}, minmax(0, 1fr))`;
 }
 
@@ -1138,7 +1148,7 @@ function resolveSpacingDeclaration(utility: string): string | null {
  */
 function resolveArbitraryPropertyDeclaration(utility: string): string | null {
     if (!utility.startsWith('[') || !utility.endsWith(']') || !utility.includes(':')) return null;
-    const inner = utility.slice(1, -1).replace(/_/g, ' ');
+    const inner = expandArbitrarySpaces(utility.slice(1, -1));
     const colon = inner.indexOf(':');
     return `${inner.slice(0, colon)}: ${inner.slice(colon + 1)}`;
 }
