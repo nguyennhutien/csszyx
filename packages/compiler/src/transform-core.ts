@@ -2631,6 +2631,72 @@ function formatContentValue(value: string): string {
     return `content-[${inner}]`;
 }
 
+const COMPLEX_TRANSFORM_KEYS = new Set([
+    'origin',
+    'ease',
+    'animate',
+    'filter',
+    'backdropFilter',
+    'dropShadow',
+]);
+const STANDARD_PERSPECTIVE = new Set(['none', 'normal', 'dramatic', 'midrange']);
+const STANDARD_PERSPECTIVE_ORIGINS = new Set([
+    'center',
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'top-left',
+    'top-right',
+    'bottom-left',
+    'bottom-right',
+]);
+
+/** Collects complex transform, perspective, and backface string utilities. */
+function collectTransformStringProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (COMPLEX_TRANSFORM_KEYS.has(key) && isComplexUtilityValue(value)) {
+        utility = `${PROPERTY_MAP[key] || key}-[${normalizeArbitraryValue(value)}]`;
+    } else if (key === 'transformStyle') utility = `transform-${value}`;
+    else if (key === 'perspective') utility = formatPerspective(value);
+    else if (key === 'perspectiveOrigin') utility = formatPerspectiveOrigin(value);
+    else if (key === 'backface') utility = `backface-${value}`;
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Returns whether a utility value requires arbitrary brackets. */
+function isComplexUtilityValue(value: string): boolean {
+    return (
+        needsArbitraryBrackets(value) ||
+        value.includes('(') ||
+        value.includes('_') ||
+        value.includes('%')
+    );
+}
+
+/** Formats a perspective utility. */
+function formatPerspective(value: string): string {
+    if (STANDARD_PERSPECTIVE.has(value)) return `perspective-${value}`;
+    if (value.startsWith('--')) return `perspective-(${value})`;
+    return needsArbitraryBrackets(value)
+        ? `perspective-[${normalizeArbitraryValue(value)}]`
+        : `perspective-${value}`;
+}
+
+/** Formats a perspective-origin utility. */
+function formatPerspectiveOrigin(value: string): string {
+    return STANDARD_PERSPECTIVE_ORIGINS.has(value)
+        ? `perspective-origin-${value}`
+        : `perspective-origin-[${normalizeArbitraryValue(value)}]`;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2880,6 +2946,7 @@ function transformImpl(
             if (collectDecorationProperty(rawKey, value, prefix, classes)) continue;
             if (collectEffectStringProperty(rawKey, value, prefix, classes)) continue;
             if (collectContentBorderProperty(rawKey, value, prefix, classes)) continue;
+            if (collectTransformStringProperty(rawKey, value, prefix, classes)) continue;
 
             // bgImg handler
             if (rawKey === 'bgImg') {
@@ -2887,81 +2954,6 @@ function transformImpl(
                 continue;
             }
             if (collectBackgroundMaskProperty(rawKey, value, prefix, classes)) continue;
-
-            // Fix 10: Properties that need arbitrary brackets for complex values
-            // (contains parens, underscores, % in multi-part values, etc.)
-            if (
-                rawKey === 'origin' ||
-                rawKey === 'ease' ||
-                rawKey === 'animate' ||
-                rawKey === 'filter' ||
-                rawKey === 'backdropFilter' ||
-                rawKey === 'dropShadow'
-            ) {
-                const sVal = String(value);
-                const prop = PROPERTY_MAP[rawKey] || rawKey;
-                if (
-                    needsArbitraryBrackets(sVal) ||
-                    sVal.includes('(') ||
-                    sVal.includes('_') ||
-                    sVal.includes('%')
-                ) {
-                    classes.push(`${className}${prop}-[${normalizeArbitraryValue(sVal)}]`);
-                    continue;
-                }
-            }
-
-            // transformStyle: 'flat' | '3d' → transform-flat, transform-3d
-            if (rawKey === 'transformStyle') {
-                className += `transform-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // perspective: keywords → perspective-*, values → perspective-[value]
-            if (rawKey === 'perspective') {
-                const STANDARD_PERSPECTIVE = new Set(['none', 'normal', 'dramatic', 'midrange']);
-                if (STANDARD_PERSPECTIVE.has(value)) {
-                    className += `perspective-${value}`;
-                } else if (value.startsWith('--')) {
-                    className += `perspective-(${value})`;
-                } else if (needsArbitraryBrackets(value)) {
-                    className += `perspective-[${normalizeArbitraryValue(value)}]`;
-                } else {
-                    className += `perspective-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // perspectiveOrigin: 'center' | '33%_75%' → perspective-origin-center, perspective-origin-[33%_75%]
-            if (rawKey === 'perspectiveOrigin') {
-                const STANDARD_ORIGINS = new Set([
-                    'center',
-                    'top',
-                    'right',
-                    'bottom',
-                    'left',
-                    'top-left',
-                    'top-right',
-                    'bottom-left',
-                    'bottom-right',
-                ]);
-                if (STANDARD_ORIGINS.has(value)) {
-                    className += `perspective-origin-${value}`;
-                } else {
-                    className += `perspective-origin-[${normalizeArbitraryValue(value)}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // backfaceVisibility: 'hidden' | 'visible' → backface-hidden, backface-visible
-            if (rawKey === 'backface') {
-                className += `backface-${value}`;
-                classes.push(className);
-                continue;
-            }
         }
 
         // ================================================================
