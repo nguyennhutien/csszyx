@@ -771,7 +771,8 @@ export function transformSource(
 
     // ── Step 3: Apply replacements (from end to start to preserve positions) ─
     let output = source;
-    const sorted = replacements.sort((a, b) => b.start - a.start);
+    const sorted = [...replacements];
+    sorted.sort((a, b) => b.start - a.start);
     for (const r of sorted) {
         output = output.slice(0, r.start) + r.text + output.slice(r.end);
     }
