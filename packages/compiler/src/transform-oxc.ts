@@ -299,30 +299,9 @@ export function transformOxc(
                 );
             }
             const expression = (value as unknown as { expression: OxcNode }).expression;
+            let staticConditional: ConditionalExpressionNode | undefined;
             if (expression.type === 'ConditionalExpression') {
-                const conditionalClassExpr = buildStaticConditionalClassExpression(
-                    expression as ConditionalExpressionNode,
-                    effectiveFilename,
-                    objectBindings,
-                    source,
-                    classes,
-                    globalVarAliases,
-                    cssVariableMap,
-                );
-                if (conditionalClassExpr) {
-                    if (classNameAttr || szAttrs.length > 1) {
-                        runtimeFallbackExpr = expression;
-                        runtimeFallbackAttr = szAttr;
-                        break;
-                    }
-                    edits.overwrite(
-                        szAttr.start,
-                        szAttr.end,
-                        `className={${conditionalClassExpr}}`,
-                    );
-                    transformed = true;
-                    return;
-                }
+                staticConditional = expression as ConditionalExpressionNode;
             }
             if (expression.type === 'Identifier') {
                 const identifierName = String((expression as IdentifierNode).name);
@@ -343,31 +322,30 @@ export function transformOxc(
                     }
                     continue;
                 }
-                const conditional = conditionalBindings.get(identifierName);
-                if (conditional) {
-                    const conditionalClassExpr = buildStaticConditionalClassExpression(
-                        conditional,
-                        effectiveFilename,
-                        objectBindings,
-                        source,
-                        classes,
-                        globalVarAliases,
-                        cssVariableMap,
-                    );
-                    if (conditionalClassExpr) {
-                        if (classNameAttr || szAttrs.length > 1) {
-                            runtimeFallbackExpr = expression;
-                            runtimeFallbackAttr = szAttr;
-                            break;
-                        }
-                        edits.overwrite(
-                            szAttr.start,
-                            szAttr.end,
-                            `className={${conditionalClassExpr}}`,
-                        );
-                        transformed = true;
-                        return;
-                    }
+                staticConditional = conditionalBindings.get(identifierName);
+            }
+            if (staticConditional) {
+                const conditionalResult = transformOxcStaticConditional({
+                    conditional: staticConditional,
+                    filename: effectiveFilename,
+                    bindings: objectBindings,
+                    source,
+                    classes,
+                    globalVarAliases,
+                    cssVariableMap,
+                    classNameAttr,
+                    szAttributeCount: szAttrs.length,
+                    szAttr,
+                    edits,
+                });
+                if (conditionalResult === 'fallback') {
+                    runtimeFallbackExpr = expression;
+                    runtimeFallbackAttr = szAttr;
+                    break;
+                }
+                if (conditionalResult === 'complete') {
+                    transformed = true;
+                    return;
                 }
             }
             if (expression.type === 'ArrayExpression') {
@@ -641,6 +619,49 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/** Inputs for lowering a statically resolvable conditional sz expression. */
+interface OxcStaticConditionalContext {
+    conditional: ConditionalExpressionNode;
+    filename: string;
+    bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    source: string;
+    classes: Set<string>;
+    globalVarAliases: ReadonlyMap<string, string>;
+    cssVariableMap: Map<string, CssVariableMangleValue>;
+    classNameAttr: JsxAttributeNode | null;
+    szAttributeCount: number;
+    szAttr: JsxAttributeNode;
+    edits: MagicString;
+}
+
+/**
+ * Rewrite a finite conditional directly, or select the merge fallback lane.
+ *
+ * @param context Conditional expression and element rewrite state.
+ * @returns Whether the caller should continue, fall back, or finish the element.
+ */
+function transformOxcStaticConditional(
+    context: OxcStaticConditionalContext,
+): 'continue' | 'fallback' | 'complete' {
+    const classExpression = buildStaticConditionalClassExpression(
+        context.conditional,
+        context.filename,
+        context.bindings,
+        context.source,
+        context.classes,
+        context.globalVarAliases,
+        context.cssVariableMap,
+    );
+    if (!classExpression) return 'continue';
+    if (context.classNameAttr || context.szAttributeCount > 1) return 'fallback';
+    context.edits.overwrite(
+        context.szAttr.start,
+        context.szAttr.end,
+        `className={${classExpression}}`,
+    );
+    return 'complete';
 }
 
 /** Inputs required to lower one sz array without coupling to the JSX visitor. */
