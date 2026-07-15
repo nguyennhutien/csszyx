@@ -441,7 +441,7 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
     content = `${content.slice(0, insertAt)}\n${importBlock}${content.slice(insertAt)}`;
 
     // Inject ...csszyx() as first plugin, before tailwindcss() if present
-    const pluginsMatch = content.match(/plugins\s*:\s*\[/);
+    const pluginsMatch = /plugins\s*:\s*\[/.exec(content);
     if (pluginsMatch?.index === undefined) {
         return false;
     }
@@ -518,7 +518,7 @@ async function setupTsconfig(cwd: string): Promise<void> {
         return;
     }
 
-    const includeMatch = content.match(/"include"\s*:\s*\[/);
+    const includeMatch = /"include"\s*:\s*\[/.exec(content);
     if (includeMatch?.index !== undefined) {
         const insertPos = includeMatch.index + includeMatch[0].length;
         content =
@@ -570,7 +570,7 @@ async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> 
         if (content.includes(entry)) {
             return;
         }
-        const includeMatch = content.match(/"include"\s*:\s*\[/);
+        const includeMatch = /"include"\s*:\s*\[/.exec(content);
         if (includeMatch?.index !== undefined) {
             const insertPos = includeMatch.index + includeMatch[0].length;
             await fs.writeFile(

@@ -163,7 +163,7 @@ function mapContainerVariant(variant: string): string[] {
     if (slashIndex !== -1) {
         return [normalizeVariantKey(variant.slice(0, slashIndex)), variant.slice(slashIndex + 1)];
     }
-    const arbitraryRange = variant.match(/^(@min|@max)-\[(.+)\]$/);
+    const arbitraryRange = /^(@min|@max)-\[(.+)\]$/.exec(variant);
     return arbitraryRange ? [arbitraryRange[1], arbitraryRange[2]] : [normalizeVariantKey(variant)];
 }
 
