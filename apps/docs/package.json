@@ -8,6 +8,7 @@
         "dev": "astro dev",
         "prebuild": "node -e \"require('fs').copyFileSync(require.resolve('csszyx/browser'), 'public/csszyx.js')\"",
         "build": "astro build",
+        "test": "vitest run --config vitest.config.ts",
         "preview": "astro preview",
         "clean:build": "rm -rf dist",
         "clean": "rm -rf node_modules && clean:build",

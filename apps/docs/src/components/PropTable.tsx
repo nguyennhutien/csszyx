@@ -2,6 +2,8 @@ import React from 'react';
 import { szv } from '@csszyx/runtime';
 import { dynamic } from '@csszyx/dynamic';
 
+import { parseSzObjectEntries } from '../utils/parse-sz-object.js';
+
 interface PropTableRow {
     sz: string;
     tw: string;
@@ -590,46 +592,6 @@ function resolveViz(viz: React.ReactNode): React.ReactNode {
     return viz;
 }
 
-/** Parse `key: val, key2: val2` into entries, respecting quoted strings and nested {}. */
-function parseObjEntries(inner: string): Array<{ key: string; val: string }> {
-    const entries: Array<{ key: string; val: string }> = [];
-    let i = 0;
-
-    while (i < inner.length) {
-        while (i < inner.length && (inner[i] === ' ' || inner[i] === ',')) i++;
-        if (i >= inner.length) break;
-
-        const colonPos = inner.indexOf(': ', i);
-        if (colonPos === -1) break;
-        const key = inner.slice(i, colonPos).trim();
-        i = colonPos + 2;
-        while (i < inner.length && inner[i] === ' ') i++;
-
-        let val = '';
-        if (inner[i] === '{') {
-            let depth = 0, start = i;
-            while (i < inner.length) {
-                if (inner[i] === '{') depth++;
-                else if (inner[i] === '}') { depth--; if (depth === 0) { i++; break; } }
-                i++;
-            }
-            val = inner.slice(start, i);
-        } else if (inner[i] === "'" || inner[i] === '"') {
-            const q = inner[i], start = i++;
-            while (i < inner.length && inner[i] !== q) i++;
-            val = inner.slice(start, ++i);
-        } else {
-            const start = i;
-            while (i < inner.length && inner[i] !== ',') i++;
-            val = inner.slice(start, i).trim();
-        }
-
-        if (key) entries.push({ key, val });
-    }
-
-    return entries;
-}
-
 /**
  * Renders an sz prop entry as a syntax-highlighted object token.
  * Handles multi-property and nested objects via recursive entry parsing.
@@ -642,7 +604,7 @@ export function SzToken({ value }: { value: string }) {
         ? trimmed.slice(1, -1).trim()
         : trimmed;
 
-    const entries = parseObjEntries(inner);
+    const entries = parseSzObjectEntries(inner);
 
     // Bare key with no value (e.g. { nowrap })
     if (entries.length === 0) {
