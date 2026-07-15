@@ -46,35 +46,15 @@ function base(overrides: Partial<Parameters<typeof transformNextSource>[0]> = {}
 }
 
 describe('fail-closed lexer does not trip on non-sz constructs', () => {
-    it('handles an escaped forward slash inside a regex literal', () => {
-        const result = transformNextSource(base({ source: 'const r = /a\\/sz={{ p: 4 }}b/;\n' }));
-        expect(result.result.transformed).toBe(false);
-    });
-
-    it('handles a character class inside a regex literal', () => {
-        const result = transformNextSource(base({ source: 'const r = /[sz]={{ p: 4 }}/;\n' }));
-        expect(result.result.transformed).toBe(false);
-    });
-
-    it('handles regex flags after the closing slash', () => {
-        const result = transformNextSource(base({ source: 'const r = /sz={{ p: 4 }}/gi;\n' }));
-        expect(result.result.transformed).toBe(false);
-    });
-
-    it('handles an escaped quote inside a string literal', () => {
-        const result = transformNextSource(base({ source: 'const s = "a\\" sz={{ p: 4 }} b";\n' }));
-        expect(result.result.transformed).toBe(false);
-    });
-
-    it('handles a regex literal at the very start of the source', () => {
-        const result = transformNextSource(base({ source: '/sz={{ p: 4 }}/.test(input);\n' }));
-        expect(result.result.transformed).toBe(false);
-    });
-
-    it('handles a regex literal that ends exactly at end-of-source', () => {
-        // No trailing character after the closing slash → the flag scan reads
-        // past the end and must tolerate the undefined lookahead.
-        const result = transformNextSource(base({ source: 'const r = /sz={{ p: 4 }}/' }));
+    it.each([
+        ['an escaped regex slash', 'const r = /a\\/sz={{ p: 4 }}b/;\n'],
+        ['a regex character class', 'const r = /[sz]={{ p: 4 }}/;\n'],
+        ['regex flags', 'const r = /sz={{ p: 4 }}/gi;\n'],
+        ['an escaped string quote', 'const s = "a\\" sz={{ p: 4 }} b";\n'],
+        ['a leading regex', '/sz={{ p: 4 }}/.test(input);\n'],
+        ['a regex ending at EOF', 'const r = /sz={{ p: 4 }}/'],
+    ])('ignores sz-like text inside %s', (_label, source) => {
+        const result = transformNextSource(base({ source }));
         expect(result.result.transformed).toBe(false);
     });
 });

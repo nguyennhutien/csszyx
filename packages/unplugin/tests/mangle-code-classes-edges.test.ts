@@ -37,30 +37,29 @@ describe('mangleCodeClassesSync — no-change short circuits', () => {
 });
 
 describe('mangleCodeClassesSync — template literal (Pass 1.5) edges', () => {
-    it('preserves a whitespace-only trailing quasi', () => {
-        const code = 'className:`${cond?"flex":"p-4"}   `';
-        const result = mangleCodeClassesSync(code, MAP);
-        expect(result).toBe('className:`${cond?"z":"c"}   `');
-    });
-
-    it('preserves a whitespace-only leading quasi between interpolations', () => {
-        const code = 'className:`   ${cond?"flex":"p-4"}`';
-        const result = mangleCodeClassesSync(code, MAP);
-        expect(result).toBe('className:`   ${cond?"z":"c"}`');
-    });
-
-    it('handles nested braces inside an interpolation', () => {
-        const code = 'className:`flex ${f({x:1})?"p-4":"items-center"}`';
-        const result = mangleCodeClassesSync(code, MAP);
-        // quasi "flex" → "z"; ternary strings mangled; the nested object braces
-        // are copied through verbatim.
-        expect(result).toBe('className:`z ${f({x:1})?"c":"h"}`');
-    });
-
-    it('leaves an empty quoted string inside an interpolation untouched', () => {
-        const code = 'className:`flex ${cond?"":"p-4"}`';
-        const result = mangleCodeClassesSync(code, MAP);
-        expect(result).toBe('className:`z ${cond?"":"c"}`');
+    it.each([
+        [
+            'a whitespace-only trailing quasi',
+            'className:`${cond?"flex":"p-4"}   `',
+            'className:`${cond?"z":"c"}   `',
+        ],
+        [
+            'a whitespace-only leading quasi',
+            'className:`   ${cond?"flex":"p-4"}`',
+            'className:`   ${cond?"z":"c"}`',
+        ],
+        [
+            'nested interpolation braces',
+            'className:`flex ${f({x:1})?"p-4":"items-center"}`',
+            'className:`z ${f({x:1})?"c":"h"}`',
+        ],
+        [
+            'an empty interpolation branch',
+            'className:`flex ${cond?"":"p-4"}`',
+            'className:`z ${cond?"":"c"}`',
+        ],
+    ])('preserves %s while mangling classes', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, MAP)).toBe(expected);
     });
 });
 
