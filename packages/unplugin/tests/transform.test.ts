@@ -157,60 +157,44 @@ describe('mangleCodeClassesSync — Pass 1 (direct static className strings)', (
 });
 
 describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', () => {
-    it('mangles the static quasi prefix in a className template literal', () => {
-        // Generated when sz={{ display: 'flex', items: 'center', flexDir: isRow ? 'row' : 'col' }}
-        // Pre-plugin output (in bundle form):  className:`flex items-center ${isRow?"flex-row":"flex-col"}`
-        const code = 'className:`flex items-center ${isRow?"flex-row":"flex-col"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z h ${isRow?"a":"b"}`');
-    });
-
-    it('mangles multiple quasi segments (between several interpolations)', () => {
-        // className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`
-        const code =
-            'className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z ${c1?"a":"b"} h ${c2?"i":"j"}`');
-    });
-
-    it('does not mangle unknown classes in quasi (skips the quasi unchanged)', () => {
-        const code = 'className:`unknown-class ${cond?"flex-row":"flex-col"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // unknown-class is not in map → mangleClassString returns it unchanged → quasi unchanged
-        expect(result).toContain('unknown-class');
-        // but the ternary strings are still mangled by Pass 2
-        expect(result).toContain('"a"');
-        expect(result).toContain('"b"');
-    });
-
-    it('leaves non-className template literals untouched', () => {
-        const code = 'const x = `flex items-center ${a?"flex-row":"flex-col"}`;';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // No className: prefix → pass 1.5 does not touch it
-        expect(result).toBe(code);
-    });
-
-    it('handles trailing quasi (text after the last interpolation)', () => {
-        const code = 'className:`${cond?"flex-row":"flex-col"} flex items-center`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`${cond?"a":"b"} z h`');
-    });
-
-    it('mangles unminified SSR bundle form with space after colon (className: `...`)', () => {
-        // Unminified SSR bundles emit `className: \`...\`` (space after colon)
-        // versus the minified client bundle form `className:\`...\`` (no space).
-        const code = 'className: `flex items-center ${isRow?"flex-row":"flex-col"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z h ${isRow?"a":"b"}`');
-    });
-
-    it('mangles chained ternary inside interpolation (size/variant pattern)', () => {
-        // sz={{ display: 'flex', size: s==="sm" ? "rounded-xl" : s==="md" ? "rounded-full" : "p-4", items: "center" }}
-        // Non-class strings ("sm", "md") are values of a comparison, not class names — preserved.
-        const code =
-            'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z ${s==="sm"?"d":s==="md"?"e":"c"} h`');
+    it.each([
+        [
+            'a static prefix',
+            'className:`flex items-center ${isRow?"flex-row":"flex-col"}`',
+            'className:`z h ${isRow?"a":"b"}`',
+        ],
+        [
+            'multiple quasi segments',
+            'className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`',
+            'className:`z ${c1?"a":"b"} h ${c2?"i":"j"}`',
+        ],
+        [
+            'an unknown quasi class',
+            'className:`unknown-class ${cond?"flex-row":"flex-col"}`',
+            'className:`unknown-class ${cond?"a":"b"}`',
+        ],
+        [
+            'a non-className template',
+            'const x = `flex items-center ${a?"flex-row":"flex-col"}`;',
+            'const x = `flex items-center ${a?"flex-row":"flex-col"}`;',
+        ],
+        [
+            'a trailing quasi',
+            'className:`${cond?"flex-row":"flex-col"} flex items-center`',
+            'className:`${cond?"a":"b"} z h`',
+        ],
+        [
+            'an unminified className separator',
+            'className: `flex items-center ${isRow?"flex-row":"flex-col"}`',
+            'className:`z h ${isRow?"a":"b"}`',
+        ],
+        [
+            'a chained interpolation ternary',
+            'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`',
+            'className:`z ${s==="sm"?"d":s==="md"?"e":"c"} h`',
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
