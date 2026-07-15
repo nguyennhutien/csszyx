@@ -77,8 +77,7 @@ export function _sz(...classes: SzStringInput[]): string {
     let result = '';
     let needsSpace = false;
 
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
+    for (const cls of classes) {
         if (process.env.NODE_ENV !== 'production') {
             assertNotObject(cls, '_sz');
         }
@@ -113,8 +112,7 @@ export function _szMerge(...classes: SzStringInput[]): string {
     const seen = new Set<string>();
     const result: string[] = [];
 
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
+    for (const cls of classes) {
         if (process.env.NODE_ENV !== 'production') {
             assertNotObject(cls, '_szMerge');
         }
