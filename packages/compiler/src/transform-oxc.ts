@@ -308,114 +308,20 @@ export function transformOxc(
             }
         }
 
-        // szs handling: compile each slot VALUE of the slot-map to its class
-        // string (keeping the key) so the component can forward
-        // `props.szs?.<slot>` into a child className. Runs BEFORE the sz loop
-        // because that loop returns early on several paths. The v1 contract
-        // (identifier keys; pure-literal object or class-string values) is
-        // enforced identically across all three engines.
-        for (const szsAttr of szsAttrs) {
-            if (isHostOpeningElementName(openingNode.name as unknown as OxcNode)) {
-                diagnostics.push(
-                    `[csszyx] szs at ${effectiveFilename}: ` +
-                        'szs has no effect on a host element — it maps slot names of a ' +
-                        'custom component. Attribute left unchanged.',
-                );
-                continue;
-            }
-            const szsValue = szsAttr.value;
-            const szsExpression =
-                szsValue && szsValue.type === 'JSXExpressionContainer'
-                    ? (szsValue as unknown as { expression: OxcNode }).expression
-                    : null;
-            if (!szsExpression || szsExpression.type !== 'ObjectExpression') {
-                diagnostics.push(szsUnsupportedMessage(effectiveFilename));
-                continue;
-            }
-            const slotMap = szsExpression as ObjectExpressionNode;
-            if (!isValidSzsSlotMap(slotMap)) {
-                diagnostics.push(szsUnsupportedMessage(effectiveFilename));
-                continue;
-            }
-            const { line: szsWarnLine } = offsetToLineColumn(source, szsAttr.start);
-            setSzWarnLocation(
-                formatSzWarnLocation(effectiveFilename, szsWarnLine, options?.rootDir),
-            );
-            // Two phases so a failure never leaves the attribute partially
-            // rewritten: compile everything first, then emit.
-            const slotEntries: Array<{ keyText: string; classNames: string; text: string }> = [];
-            let slotFailed = false;
-            for (const propRaw of slotMap.properties) {
-                const prop = propRaw as PropertyNode;
-                const keyText = source.slice(prop.key.start, prop.key.end);
-                const propValue = prop.value;
-                const literal =
-                    propValue.type === 'Literal'
-                        ? (propValue as unknown as { value: unknown }).value
-                        : null;
-                if (typeof literal === 'string') {
-                    // Raw class string (also pass-1 output, so the transform is
-                    // idempotent): safelist, keep the original text.
-                    slotEntries.push({
-                        keyText,
-                        classNames: literal,
-                        text: source.slice(propValue.start, propValue.end),
-                    });
-                    continue;
-                }
-                try {
-                    const slotObject = astObjectToSzObject(
-                        propValue as ObjectExpressionNode,
-                        effectiveFilename,
-                        objectBindings,
-                    );
-                    const compiled = compileSzObject(
-                        applyGlobalVarAliasesToSzObject(
-                            slotObject,
-                            globalVarAliases,
-                            cssVariableMap,
-                        ),
-                    ).className;
-                    slotEntries.push({
-                        keyText,
-                        classNames: compiled,
-                        text: JSON.stringify(compiled),
-                    });
-                } catch (err) {
-                    if (err instanceof OxcNotImplementedError) {
-                        slotFailed = true;
-                        break;
-                    }
-                    throw err;
-                }
-            }
-            setSzWarnLocation(undefined);
-            if (slotFailed) {
-                diagnostics.push(szsUnsupportedMessage(effectiveFilename));
-                continue;
-            }
-            // The compiled map lands on `szsc` — the read-side prop typed as
-            // strings — so the authoring prop `szs` never reaches runtime and
-            // the component forwards `szsc?.<slot>` into a child className
-            // with no cast. Renamed even when every slot was already a class
-            // string (the component reads only `szsc`); idempotent because
-            // `szsc` attributes are never matched by this loop.
-            const body = slotEntries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
-            edits.overwrite(
-                szsAttr.start,
-                szsAttr.end,
-                body === '' ? 'szsc={{}}' : `szsc={{ ${body} }}`,
-            );
-            transformed = true;
-            for (const entry of slotEntries) {
-                for (const c of entry.classNames.split(/\s+/)) {
-                    if (c) {
-                        szsPendingClasses.push(c);
-                    }
-                }
-            }
-        }
-
+        transformed =
+            transformOxcSzsAttributes(
+                szsAttrs,
+                openingNode,
+                effectiveFilename,
+                options?.rootDir,
+                objectBindings,
+                source,
+                edits,
+                diagnostics,
+                szsPendingClasses,
+                globalVarAliases,
+                cssVariableMap,
+            ) || transformed;
         if (szAttrs.length === 0) {
             applyHoistedStyleProps();
             return;
@@ -906,6 +812,197 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/** One compiled oxc szs slot entry. */
+interface OxcSzsEntry {
+    keyText: string;
+    classNames: string;
+    text: string;
+}
+
+/**
+ * Compiles every validated slot entry without editing source.
+ *
+ * @param slotMap Validated szs slot map.
+ * @param filename Source filename.
+ * @param bindings Static object bindings.
+ * @param source Original source.
+ * @param globalVarAliases Global CSS variable aliases.
+ * @param cssVariableMap Emitted CSS variable mapping.
+ * @returns Compiled entries, or null when one entry is unsupported.
+ */
+function compileOxcSzsEntries(
+    slotMap: ObjectExpressionNode,
+    filename: string,
+    bindings: Map<string, ObjectExpressionNode>,
+    source: string,
+    globalVarAliases: Map<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
+): OxcSzsEntry[] | null {
+    const entries: OxcSzsEntry[] = [];
+    for (const propertyNode of slotMap.properties) {
+        const property = propertyNode as PropertyNode;
+        const keyText = source.slice(property.key.start, property.key.end);
+        const literal =
+            property.value.type === 'Literal'
+                ? (property.value as unknown as { value: unknown }).value
+                : null;
+        if (typeof literal === 'string') {
+            entries.push({
+                keyText,
+                classNames: literal,
+                text: source.slice(property.value.start, property.value.end),
+            });
+            continue;
+        }
+        try {
+            const slotObject = astObjectToSzObject(
+                property.value as ObjectExpressionNode,
+                filename,
+                bindings,
+            );
+            const compiled = compileSzObject(
+                applyGlobalVarAliasesToSzObject(slotObject, globalVarAliases, cssVariableMap),
+            ).className;
+            entries.push({ keyText, classNames: compiled, text: JSON.stringify(compiled) });
+        } catch (error) {
+            if (error instanceof OxcNotImplementedError) return null;
+            throw error;
+        }
+    }
+    return entries;
+}
+
+/**
+ * Compiles one oxc szs attribute.
+ *
+ * @param attribute szs attribute.
+ * @param openingNode Owning JSX opening element.
+ * @param filename Source filename.
+ * @param rootDir Project root for diagnostics.
+ * @param bindings Static object bindings.
+ * @param source Original source.
+ * @param edits Pending source edits.
+ * @param diagnostics Compiler diagnostics.
+ * @param pendingClasses Ordered szs class collection.
+ * @param globalVarAliases Global CSS variable aliases.
+ * @param cssVariableMap Emitted CSS variable mapping.
+ * @returns Whether the attribute was transformed.
+ */
+function transformOxcSzsAttribute(
+    attribute: JsxAttributeNode,
+    openingNode: JsxOpeningElementNode,
+    filename: string,
+    rootDir: string | undefined,
+    bindings: Map<string, ObjectExpressionNode>,
+    source: string,
+    edits: MagicString,
+    diagnostics: string[],
+    pendingClasses: string[],
+    globalVarAliases: Map<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
+): boolean {
+    if (isHostOpeningElementName(openingNode.name as unknown as OxcNode)) {
+        diagnostics.push(
+            `[csszyx] szs at ${filename}: ` +
+                'szs has no effect on a host element — it maps slot names of a ' +
+                'custom component. Attribute left unchanged.',
+        );
+        return false;
+    }
+    const value = attribute.value;
+    const expression =
+        value && value.type === 'JSXExpressionContainer'
+            ? (value as unknown as { expression: OxcNode }).expression
+            : null;
+    if (!expression || expression.type !== 'ObjectExpression') {
+        diagnostics.push(szsUnsupportedMessage(filename));
+        return false;
+    }
+    const slotMap = expression as ObjectExpressionNode;
+    if (!isValidSzsSlotMap(slotMap)) {
+        diagnostics.push(szsUnsupportedMessage(filename));
+        return false;
+    }
+
+    const { line } = offsetToLineColumn(source, attribute.start);
+    setSzWarnLocation(formatSzWarnLocation(filename, line, rootDir));
+    const entries = compileOxcSzsEntries(
+        slotMap,
+        filename,
+        bindings,
+        source,
+        globalVarAliases,
+        cssVariableMap,
+    );
+    setSzWarnLocation(undefined);
+    if (!entries) {
+        diagnostics.push(szsUnsupportedMessage(filename));
+        return false;
+    }
+
+    const body = entries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
+    edits.overwrite(
+        attribute.start,
+        attribute.end,
+        body === '' ? 'szsc={{}}' : `szsc={{ ${body} }}`,
+    );
+    for (const entry of entries) {
+        for (const className of entry.classNames.split(/\s+/)) {
+            if (className) pendingClasses.push(className);
+        }
+    }
+    return true;
+}
+
+/**
+ * Compiles all szs attributes on one opening element.
+ *
+ * @param attributes szs attributes.
+ * @param openingNode Owning JSX opening element.
+ * @param filename Source filename.
+ * @param rootDir Project root for diagnostics.
+ * @param bindings Static object bindings.
+ * @param source Original source.
+ * @param edits Pending source edits.
+ * @param diagnostics Compiler diagnostics.
+ * @param pendingClasses Ordered szs class collection.
+ * @param globalVarAliases Global CSS variable aliases.
+ * @param cssVariableMap Emitted CSS variable mapping.
+ * @returns Whether any attribute was transformed.
+ */
+function transformOxcSzsAttributes(
+    attributes: JsxAttributeNode[],
+    openingNode: JsxOpeningElementNode,
+    filename: string,
+    rootDir: string | undefined,
+    bindings: Map<string, ObjectExpressionNode>,
+    source: string,
+    edits: MagicString,
+    diagnostics: string[],
+    pendingClasses: string[],
+    globalVarAliases: Map<string, string>,
+    cssVariableMap: Map<string, CssVariableMangleValue>,
+): boolean {
+    let transformed = false;
+    for (const attribute of attributes) {
+        transformed =
+            transformOxcSzsAttribute(
+                attribute,
+                openingNode,
+                filename,
+                rootDir,
+                bindings,
+                source,
+                edits,
+                diagnostics,
+                pendingClasses,
+                globalVarAliases,
+                cssVariableMap,
+            ) || transformed;
+    }
+    return transformed;
 }
 
 /**
