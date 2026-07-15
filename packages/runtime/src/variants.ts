@@ -290,12 +290,36 @@ function warnInvalidSelection<V extends VariantSchema>(
             continue;
         }
         const value = (selection as Record<string, unknown>)[key];
-        if (value !== null && value !== undefined && !(String(value) in (variants?.[key] ?? {}))) {
+        if (value === null || value === undefined) {
+            continue;
+        }
+        const valueKey = selectionValueKey(value);
+        if (valueKey === null || !(valueKey in (variants?.[key] ?? {}))) {
             devWarn(
-                `szv()(selection): "${String(value)}" is not a value of variant "${key}" — it has no styles.`,
+                `szv()(selection): "${valueKey ?? describe(value)}" is not a value of variant "${key}" — it has no styles.`,
             );
         }
     }
+}
+
+/**
+ * Convert a primitive selection to the string key used by variant tables.
+ * Objects and functions are invalid selections and deliberately remain unstringified.
+ *
+ * @param value Candidate selection value.
+ * @returns Variant-table key, or null for a structurally invalid selection.
+ */
+function selectionValueKey(value: unknown): string | null {
+    if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean' ||
+        typeof value === 'bigint' ||
+        typeof value === 'symbol'
+    ) {
+        return String(value);
+    }
+    return null;
 }
 
 /**
