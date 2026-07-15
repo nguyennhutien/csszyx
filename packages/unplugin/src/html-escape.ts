@@ -5,6 +5,8 @@
  * nesting; a separate scanner-only section preserves exact candidate bytes.
  */
 
+import { replaceEveryLiteral } from './string-escape.js';
+
 /**
  * Escape a string for safe interpolation into an HTML double-quoted attribute.
  *
@@ -12,11 +14,10 @@
  * @returns the string with HTML-sensitive characters replaced by entities.
  */
 export function escapeHtmlAttribute(value: string): string {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+    let escaped = replaceEveryLiteral(value, '&', '&amp;');
+    escaped = replaceEveryLiteral(escaped, '"', '&quot;');
+    escaped = replaceEveryLiteral(escaped, '<', '&lt;');
+    return replaceEveryLiteral(escaped, '>', '&gt;');
 }
 
 /** Marker separating structural HTML from exact Tailwind scanner candidates. */

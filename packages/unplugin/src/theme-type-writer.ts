@@ -17,7 +17,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { escapeSingleQuotedString } from './string-escape.js';
+import { escapeSingleQuotedString, replaceEveryLiteral } from './string-escape.js';
 import type { ParsedTheme } from './theme-scanner.js';
 
 /** Options for generating the theme .d.ts file. */
@@ -41,7 +41,8 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
     const timestamp = new Date().toISOString();
     // Strip newlines so a path can never break out of the `// Source:` line
     // comment onto a new line of generated TypeScript.
-    const sources = sourceFiles.join(', ').replace(/[\r\n]/g, ' ');
+    const withoutCarriageReturns = replaceEveryLiteral(sourceFiles.join(', '), '\r', ' ');
+    const sources = replaceEveryLiteral(withoutCarriageReturns, '\n', ' ');
 
     const toUnion = (tokens: string[]): string =>
         tokens.map(t => `'${escapeSingleQuotedString(t)}'`).join(' | ');
