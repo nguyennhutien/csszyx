@@ -57,6 +57,7 @@ import {
 } from './html-transformer.js';
 import { escapeForDoubleQuotedString, escapeJsonForInlineScript } from './inline-script-escape.js';
 import { resolveParserMode } from './parser-mode.js';
+import { normalizePathSeparators } from './path-normalization.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -722,7 +723,7 @@ export function shouldEmitWarning(
  * @returns The normalized path.
  */
 function normalizeForMatch(p: string): string {
-    const n = p.replace(/\\/g, '/');
+    const n = normalizePathSeparators(p);
     return n.length > 1 && n.endsWith('/') ? n.slice(0, -1) : n;
 }
 
@@ -907,8 +908,8 @@ export function computeSafelistRelPath(
     safelistFilename: string,
     cssId: string,
 ): string {
-    const safelistPath = path.join(rootDir, safelistFilename).replace(/\\/g, '/');
-    const cssDir = path.dirname(cssId).replace(/\\/g, '/');
+    const safelistPath = normalizePathSeparators(path.join(rootDir, safelistFilename));
+    const cssDir = normalizePathSeparators(path.dirname(cssId));
     let relPath = path.posix.relative(cssDir, safelistPath);
     if (!relPath.startsWith('.')) {
         relPath = `./${relPath}`;
@@ -1667,7 +1668,7 @@ function findPackageVersionFromFile(file: string, fallback: string): string {
  * @returns Filename with POSIX separators.
  */
 function normalizeSourceFilename(filename: string): string {
-    return filename.replace(/\\/g, '/');
+    return normalizePathSeparators(filename);
 }
 
 /** TS/JS extensions accepted by the plain script-id gates. */
