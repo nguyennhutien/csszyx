@@ -261,6 +261,16 @@ function parseGradientType(
 }
 
 /**
+ * Decode Tailwind arbitrary-value underscore space markers without ES2021 APIs.
+ *
+ * @param value Encoded arbitrary value.
+ * @returns Value with underscore markers expanded.
+ */
+function decodeArbitrarySpaces(value: string): string {
+    return value.split('_').join(' ');
+}
+
+/**
  * Parse the optional gradient direction suffix.
  *
  * @param input Gradient suffix before interpolation mode.
@@ -273,7 +283,7 @@ function parseGradientDirection(input: string, negative: boolean): string | numb
     }
     const direction = input.slice(1);
     if (direction.startsWith('[') && direction.endsWith(']')) {
-        return direction.slice(1, -1).replace(/_/g, ' ');
+        return decodeArbitrarySpaces(direction.slice(1, -1));
     }
     if (direction.startsWith('(') && direction.endsWith(')')) {
         return direction.slice(1, -1);
@@ -611,7 +621,7 @@ function disambiguateBg(value: string): ParsedClass | null {
     // (e.g. bg-[center_top_1rem]). A color or image arbitrary value never takes
     // this shape, so single-token / non-position arbitraries still fall through.
     if (value.startsWith('[') && value.endsWith(']')) {
-        const inner = value.slice(1, -1).replace(/_/g, ' ');
+        const inner = decodeArbitrarySpaces(value.slice(1, -1));
         if (inner.includes(' ') && BG_POSITION_KEYWORDS.has(inner.split(' ')[0])) {
             return { prop: 'bgPos', value: inner };
         }
@@ -1048,7 +1058,7 @@ function isValidSpacingValue(value: string): boolean {
  */
 export function parseValue(prefix: string, value: string, negative: boolean): unknown {
     if (value.startsWith('[') && value.endsWith(']')) {
-        return parseArbitraryValue(prefix, value.slice(1, -1).replace(/_/g, ' '), negative);
+        return parseArbitraryValue(prefix, decodeArbitrarySpaces(value.slice(1, -1)), negative);
     }
 
     if (value.startsWith('(') && value.endsWith(')')) {
@@ -1139,7 +1149,7 @@ function parseNumericOrString(prefix: string, value: string, negative: boolean):
 function parseStringValue(value: string): string {
     // Handle arbitrary values
     if (value.startsWith('[') && value.endsWith(']')) {
-        return value.slice(1, -1).replace(/_/g, ' ');
+        return decodeArbitrarySpaces(value.slice(1, -1));
     }
     // Handle CSS variable sugar
     if (value.startsWith('(') && value.endsWith(')')) {
