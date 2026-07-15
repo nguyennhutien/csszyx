@@ -2965,6 +2965,71 @@ function collectNestedVariant(
     if (nestedResult.className) classes.push(nestedResult.className);
 }
 
+/** Suppresses a removed boolean shorthand and emits its migration warning. */
+function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
+    if (value !== true) return false;
+    const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
+    if (!removed) return false;
+    if (szDevWarningsEnabled()) {
+        console.warn(
+            `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
+                `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
+        );
+    }
+    return true;
+}
+
+/** Collects string shortcuts that must run before property-name resolution. */
+function collectUnresolvedStringProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string') return false;
+    if (rawKey.startsWith('@')) {
+        classes.push(`${prefix}${VARIANT_MAP[rawKey] || rawKey}/${value}`);
+        return true;
+    }
+    if (rawKey === 'group' || rawKey === 'peer') {
+        classes.push(`${prefix}${rawKey}/${value}`);
+        return true;
+    }
+    if (
+        PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR &&
+        !validateColorPropertyString(rawKey, value.replace(/!$/, ''))
+    ) {
+        return true;
+    }
+    const snapClass = SNAP_DIRECT_MAP[rawKey]?.[value];
+    if (snapClass) {
+        classes.push(`${prefix}${snapClass}`);
+        return true;
+    }
+    if (KNOWN_VARIANTS.has(rawKey)) {
+        classes.push(`${prefix}${getVariantPrefix(rawKey)}:${value}`);
+        return true;
+    }
+    return false;
+}
+
+/** Collects custom-property declarations and the container utility forms. */
+function collectUnresolvedDirectProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (rawKey.startsWith('--')) {
+        classes.push(`${prefix}[${rawKey}:${value}]`);
+        return true;
+    }
+    if (rawKey !== 'container') return false;
+    if (value === true) classes.push(`${prefix}container`);
+    else if (typeof value === 'string') classes.push(`${prefix}@container/${value}`);
+    return true;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2992,94 +3057,11 @@ function transformImpl(
         // Dev: flag an alignment prop given a CSS-longhand value (dead class).
         warnAlignmentValue(rawKey, value);
 
-        // Removed boolean-sugar keys (flex/absolute/italic/...): emit nothing and,
-        // in dev, point to the canonical form. Only the boolean `true` form was sugar;
-        // `flex` also names the flex-grow shorthand (`flex: 1`, `flex: 'auto'`), which is
-        // NOT sugar and must pass through, so the intercept is guarded on `value === true`.
-        // The canonical key is one-per-property, so duplicates like
-        // { position:'absolute', relative:true } can no longer occur.
-        if (value === true) {
-            const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
-            if (removed) {
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
-                            `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
-                    );
-                }
-                continue;
-            }
-        }
+        if (collectRemovedBooleanSugar(rawKey, value)) continue;
 
         if (collectObjectProperty(rawKey, value, prefix, classes)) continue;
-
-        // { @container: "sidebar" } → @container/sidebar (string value with @ prefix)
-        if (rawKey.startsWith('@') && typeof value === 'string') {
-            const mappedKey = VARIANT_MAP[rawKey] || rawKey;
-            classes.push(`${prefix}${mappedKey}/${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE NAMED GROUP/PEER (string value → group/name, peer/name)
-        // ================================================================
-        if ((rawKey === 'group' || rawKey === 'peer') && typeof value === 'string') {
-            classes.push(`${prefix}${rawKey}/${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // VALIDATE STRING VALUES FOR COLOR PROPERTIES
-        // Slash opacity → warn + suppress (use object form instead)
-        // Unrecognized pattern → warn + suppress
-        // This runs before all specific property handlers, covering all
-        // 18 COLOR-category properties uniformly via PROPERTY_CATEGORY_MAP.
-        // ================================================================
-        if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR) {
-            if (!validateColorPropertyString(rawKey, value.replace(/!$/, ''))) continue;
-        }
-
-        // Check snap direct mappings
-        if (SNAP_DIRECT_MAP[rawKey] && typeof value === 'string') {
-            const mapped = SNAP_DIRECT_MAP[rawKey][value as string];
-            if (mapped) {
-                classes.push(`${prefix}${mapped}`);
-                continue;
-            }
-        }
-
-        // ================================================================
-        // HANDLE STRING VALUES THAT ARE ACTUALLY VARIANT SHORTCUTS
-        // ================================================================
-        // e.g., { hover: "bg-sky-700" } → hover:bg-sky-700
-        if (typeof value === 'string' && KNOWN_VARIANTS.has(rawKey)) {
-            const variantName = getVariantPrefix(rawKey);
-            classes.push(`${prefix}${variantName}:${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE CSS CUSTOM PROPERTY DECLARATIONS
-        // ================================================================
-        // { "--my-var": "10px" } → [--my-var:10px]
-        if (rawKey.startsWith('--')) {
-            classes.push(`${prefix}[${rawKey}:${value}]`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE CONTAINER PROPERTY
-        // ================================================================
-        // { container: true } → container (the utility class)
-        // { container: "sidebar" } → @container/sidebar (named container)
-        if (rawKey === 'container') {
-            if (value === true) {
-                classes.push(`${prefix}container`);
-            } else if (typeof value === 'string') {
-                classes.push(`${prefix}@container/${value}`);
-            }
-            continue;
-        }
+        if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) continue;
+        if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) continue;
 
         // ================================================================
         // RESOLVE PROPERTY NAME
