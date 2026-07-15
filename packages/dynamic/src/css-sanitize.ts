@@ -43,6 +43,20 @@ function scanUnquotedCssCharacter(char: string, state: CssValueScanState): boole
 }
 
 /**
+ * Consume one character inside a quoted CSS string.
+ * @param value - Complete candidate CSS value.
+ * @param index - Current character index.
+ * @param state - Scanner state to update.
+ * @returns The index consumed by this step.
+ */
+function scanQuotedCssCharacter(value: string, index: number, state: CssValueScanState): number {
+    const char = value[index];
+    if (char === '\\') return index + 1;
+    if (char === state.quote) state.quote = null;
+    return index;
+}
+
+/**
  * True when a single CSS *property value* cannot break out of its declaration.
  * Tracks quote and parenthesis state with a linear scan (no backtracking regex):
  * `{`/`}`/`<`/`>` are rejected outside quotes (never valid in a value), a `;` is
@@ -61,13 +75,7 @@ export function isSafeCssValue(value: string): boolean {
         }
         const char = value[i] as string;
         if (state.quote !== null) {
-            if (char === '\\') {
-                i++; // skip the escaped character
-                continue;
-            }
-            if (char === state.quote) {
-                state.quote = null;
-            }
+            i = scanQuotedCssCharacter(value, i, state);
             continue;
         }
         if (!scanUnquotedCssCharacter(char, state)) {

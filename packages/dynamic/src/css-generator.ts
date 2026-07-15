@@ -202,6 +202,7 @@ const SIZE_KEYWORDS: Record<string, string> = {
     '7xl': 'var(--container-7xl)',
     prose: 'var(--container-prose)',
 };
+const HEIGHT_SIZE_PROPERTIES = new Set(['height', 'min-height', 'max-height']);
 
 /**
  * Resolve a finite fraction token to a percentage.
@@ -224,6 +225,28 @@ function resolveFraction(value: string): string | null {
 }
 
 /**
+ * Resolve keyword, screen, arbitrary, and CSS-variable spacing tokens.
+ * @param value - Tailwind spacing token.
+ * @param property - Optional CSS property used to select the screen axis.
+ * @returns Resolved CSS value, or null for numeric/fraction fallbacks.
+ */
+function resolveNamedSpacingValue(value: string, property?: string): string | null {
+    if (value === '0') return '0';
+    if (value === 'px') return '1px';
+    if (value === 'screen') {
+        return property && HEIGHT_SIZE_PROPERTIES.has(property) ? '100vh' : '100vw';
+    }
+    if (value in SIZE_KEYWORDS) return SIZE_KEYWORDS[value];
+    if (value.startsWith('[') && value.endsWith(']')) {
+        return expandArbitrarySpaces(value.slice(1, -1));
+    }
+    if (value.startsWith('(') && value.endsWith(')') && value.includes('--')) {
+        return `var(${value.slice(1, -1)})`;
+    }
+    return null;
+}
+
+/**
  * Resolves a Tailwind spacing/size value to a CSS value string.
  * Handles: 0, px, auto, full, numeric, fraction, arbitrary.
  *
@@ -232,34 +255,8 @@ function resolveFraction(value: string): string | null {
  * @returns CSS value string (e.g. "calc(var(--spacing) * 4)", "1px", "auto")
  */
 function resolveSpacingValue(v: string, prop?: string): string {
-    if (v === '0') {
-        return '0';
-    }
-    if (v === 'px') {
-        return '1px';
-    }
-
-    // Height screen → 100vh, width screen → 100vw
-    if (v === 'screen') {
-        if (prop && (prop === 'height' || prop === 'min-height' || prop === 'max-height')) {
-            return '100vh';
-        }
-        return '100vw';
-    }
-
-    if (v in SIZE_KEYWORDS) {
-        return SIZE_KEYWORDS[v];
-    }
-
-    // Arbitrary value: [13px], [calc(100%-2rem)], etc.
-    if (v.startsWith('[') && v.endsWith(']')) {
-        return expandArbitrarySpaces(v.slice(1, -1));
-    }
-
-    // CSS variable shorthand: (--my-var) → var(--my-var)
-    if (v.startsWith('(') && v.endsWith(')') && v.includes('--')) {
-        return `var(${v.slice(1, -1)})`;
-    }
+    const namedValue = resolveNamedSpacingValue(v, prop);
+    if (namedValue !== null) return namedValue;
 
     // Fraction: 1/2 → 50%
     const fraction = resolveFraction(v);
