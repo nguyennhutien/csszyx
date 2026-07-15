@@ -224,9 +224,7 @@ export function injectRule(className: string, cssRule: string, tier: Tier = 'bas
     } // unknown class — still mark as "seen" to avoid repeat lookups
 
     if (supportsConstructableSheets()) {
-        if (!sheets) {
-            sheets = initSheets();
-        }
+        sheets ??= initSheets();
         const resolved = sheets.get(tier) ?? sheets.get('base');
         if (!resolved) {
             return;
@@ -240,9 +238,7 @@ export function injectRule(className: string, cssRule: string, tier: Tier = 'bas
         }
     } else {
         // Fallback: append to a <style> element
-        if (!fallbackStyle) {
-            fallbackStyle = initFallbackStyle();
-        }
+        fallbackStyle ??= initFallbackStyle();
         const rule = wrapForTier(cssRule, tier);
         fallbackStyle.sheet?.insertRule(rule, fallbackStyle.sheet.cssRules.length);
     }
