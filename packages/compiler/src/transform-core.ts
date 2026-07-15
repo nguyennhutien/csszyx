@@ -2348,6 +2348,63 @@ function collectTextKeywordProperty(
     return false;
 }
 
+const WORD_BREAK_CLASSES: Record<string, string> = {
+    normal: 'break-normal',
+    all: 'break-all',
+    keep: 'break-keep',
+    'break-normal': 'break-normal',
+    'break-all': 'break-all',
+    'break-keep': 'break-keep',
+};
+const OVERFLOW_WRAP_CLASSES: Record<string, string> = {
+    normal: 'wrap-normal',
+    'break-word': 'wrap-break-word',
+    anywhere: 'wrap-anywhere',
+    'wrap-normal': 'wrap-normal',
+    'wrap-break-word': 'wrap-break-word',
+    'wrap-anywhere': 'wrap-anywhere',
+};
+
+/** Collects text flow, line clamp, and list utilities. */
+function collectTextFlowProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'break') utility = WORD_BREAK_CLASSES[value] || `break-${value}`;
+    else if (key === 'wrap') utility = OVERFLOW_WRAP_CLASSES[value] || `wrap-${value}`;
+    else if (key === 'textOverflow') utility = formatTextOverflow(value);
+    else if (key === 'lineClamp') utility = formatLineClamp(value);
+    else if (key === 'list' || key === 'listStyle') utility = formatListStyle(value);
+    else if (key === 'listPos') utility = `list-${value}`;
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats a text-overflow utility. */
+function formatTextOverflow(value: string): string {
+    return value === 'ellipsis' || value === 'clip' ? `text-${value}` : `text-[${value}]`;
+}
+
+/** Formats a line-clamp utility. */
+function formatLineClamp(value: string): string {
+    if (value === 'none') return 'line-clamp-none';
+    if (value.startsWith('--')) return `line-clamp-(${value})`;
+    const numeric = Number(value);
+    return !Number.isNaN(numeric) && Number.isInteger(numeric)
+        ? `line-clamp-${value}`
+        : `line-clamp-[${value}]`;
+}
+
+/** Formats a list-style utility. */
+function formatListStyle(value: string): string {
+    if (value.startsWith('--')) return `list-(${value})`;
+    return LIST_STYLE_STANDARD.has(value) ? `list-${value}` : `list-[${value}]`;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2593,87 +2650,7 @@ function transformImpl(
         if (typeof value === 'string') {
             if (collectFontModeProperty(rawKey, value, prefix, classes)) continue;
             if (collectTextKeywordProperty(rawKey, value, prefix, classes)) continue;
-
-            // break: 'normal' | 'all' | 'keep' → break-normal, break-all, break-keep
-            if (rawKey === 'break') {
-                const wbMap: Record<string, string> = {
-                    normal: 'break-normal',
-                    all: 'break-all',
-                    keep: 'break-keep',
-                    'break-normal': 'break-normal',
-                    'break-all': 'break-all',
-                    'break-keep': 'break-keep',
-                };
-                className += wbMap[value] || `break-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // wrap: 'normal' | 'break-word' | 'anywhere' → wrap-normal, wrap-break-word, wrap-anywhere
-            if (rawKey === 'wrap') {
-                const owMap: Record<string, string> = {
-                    normal: 'wrap-normal',
-                    'break-word': 'wrap-break-word',
-                    anywhere: 'wrap-anywhere',
-                    'wrap-normal': 'wrap-normal',
-                    'wrap-break-word': 'wrap-break-word',
-                    'wrap-anywhere': 'wrap-anywhere',
-                };
-                className += owMap[value] || `wrap-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // textOverflow: 'ellipsis' → text-ellipsis, 'clip' → text-clip
-            if (rawKey === 'textOverflow') {
-                if (value === 'ellipsis' || value === 'clip') {
-                    classes.push(`${prefix}text-${value}`);
-                } else {
-                    classes.push(`${prefix}text-[${value}]`);
-                }
-                continue;
-            }
-
-            // Fix 4: Line Clamp 7+ Arbitrary
-            if (rawKey === 'lineClamp') {
-                const sValue = String(value);
-                if (sValue === 'none') {
-                    className += 'line-clamp-none';
-                } else if (sValue.startsWith('--')) {
-                    className += `line-clamp-(${sValue})`;
-                } else {
-                    // Tailwind v4: line-clamp accepts any number dynamically
-                    const numVal = Number(sValue);
-                    if (!Number.isNaN(numVal) && Number.isInteger(numVal)) {
-                        className += `line-clamp-${sValue}`;
-                    } else {
-                        className += `line-clamp-[${sValue}]`;
-                    }
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // Fix 5: List Style Arbitrary
-            if (rawKey === 'list' || rawKey === 'listStyle') {
-                const sValue = String(value);
-                if (sValue.startsWith('--')) {
-                    className += `list-(${sValue})`;
-                } else if (LIST_STYLE_STANDARD.has(sValue)) {
-                    className += `list-${sValue}`;
-                } else {
-                    className += `list-[${sValue}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // listPosition: 'inside' | 'outside' → list-inside, list-outside
-            if (rawKey === 'listPos') {
-                className += `list-${value}`;
-                classes.push(className);
-                continue;
-            }
+            if (collectTextFlowProperty(rawKey, value, prefix, classes)) continue;
 
             // divideStyle: 'solid' | 'dashed' | etc → divide-solid, divide-dashed
             if (rawKey === 'divideStyle') {
