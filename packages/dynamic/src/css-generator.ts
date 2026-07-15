@@ -750,6 +750,400 @@ export function parseVariants(cls: string): ParsedVariants {
     return { tier, pseudoSuffix, selectorPrefix, utility };
 }
 
+/** One stage in the ordered utility-to-declaration pipeline. */
+type DeclarationResolver = (utility: string) => string | null;
+
+const BORDER_SIDES: Record<string, string> = {
+    t: 'border-top-width',
+    r: 'border-right-width',
+    b: 'border-bottom-width',
+    l: 'border-left-width',
+    x: 'border-inline-width',
+    y: 'border-block-width',
+    s: 'border-inline-start-width',
+    e: 'border-inline-end-width',
+};
+
+const ROUNDED_DIRECTIONS: Record<string, string> = {
+    t: 'border-top-left-radius: var(--radius); border-top-right-radius: var(--radius)',
+    r: 'border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius)',
+    b: 'border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius)',
+    l: 'border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius)',
+    tl: 'border-top-left-radius: var(--radius)',
+    tr: 'border-top-right-radius: var(--radius)',
+    bl: 'border-bottom-left-radius: var(--radius)',
+    br: 'border-bottom-right-radius: var(--radius)',
+};
+
+const DECLARATION_RESOLVERS: readonly DeclarationResolver[] = [
+    resolveOpacityDeclaration,
+    resolveZIndexDeclaration,
+    resolveBorderDeclaration,
+    resolveRadiusDeclaration,
+    resolveTextDeclaration,
+    resolveLeadingDeclaration,
+    resolveTrackingDeclaration,
+    resolveFontDeclaration,
+    resolveShadowDeclaration,
+    resolveOutlineDeclaration,
+    resolveRingDeclaration,
+    resolveFlexOrderDeclaration,
+    resolveGridDeclaration,
+    resolveTransformDeclaration,
+    resolveTransitionDeclaration,
+    resolveColorDeclaration,
+    resolveSpacingDeclaration,
+    resolveArbitraryPropertyDeclaration,
+];
+
+/* eslint-disable jsdoc/require-param-description, jsdoc/require-returns -- Internal resolvers share the DeclarationResolver contract. */
+
+/**
+ * Resolves an opacity utility.
+ * @param utility
+ */
+function resolveOpacityDeclaration(utility: string): string | null {
+    if (!utility.startsWith('opacity-')) return null;
+    const value = utility.slice(8);
+    if (value.startsWith('[') && value.endsWith(']')) return `opacity: ${value.slice(1, -1)}`;
+    const numeric = parseInt(value, 10);
+    if (Number.isNaN(numeric)) return null;
+    return `opacity: ${OPACITY_NAMED[numeric] ?? String(numeric / 100)}`;
+}
+
+/**
+ * Resolves a z-index utility.
+ * @param utility
+ */
+function resolveZIndexDeclaration(utility: string): string | null {
+    if (!utility.startsWith('z-')) return null;
+    const value = utility.slice(2);
+    if (value === 'auto') return 'z-index: auto';
+    if (value.startsWith('[') && value.endsWith(']')) return `z-index: ${value.slice(1, -1)}`;
+    return Number.isNaN(parseInt(value, 10)) ? null : `z-index: ${value}`;
+}
+
+/**
+ * Resolves border width utilities.
+ * @param utility
+ */
+function resolveBorderDeclaration(utility: string): string | null {
+    if (utility === 'border') return 'border-width: 1px';
+    if (/^border-[trblxyse]$/.test(utility)) {
+        const property = BORDER_SIDES[utility.slice(7)];
+        return property ? `${property}: 1px` : null;
+    }
+    if (/^border-\d+$/.test(utility)) return `border-width: ${utility.slice(7)}px`;
+    const sideWidth = utility.match(/^border-([trblxse])-(\d+)$/);
+    if (!sideWidth) return null;
+    const property = BORDER_SIDES[sideWidth[1]];
+    return property ? `${property}: ${sideWidth[2]}px` : null;
+}
+
+/**
+ * Resolves border radius utilities.
+ * @param utility
+ */
+function resolveRadiusDeclaration(utility: string): string | null {
+    if (utility === 'rounded') return 'border-radius: var(--radius)';
+    if (!utility.startsWith('rounded-')) return null;
+    const value = utility.slice(8);
+    if (value === 'none') return 'border-radius: 0';
+    if (value === 'full') return 'border-radius: calc(infinity * 1px)';
+    if (RADIUS_SIZES.has(value)) return `border-radius: var(--radius-${value})`;
+    if (value in ROUNDED_DIRECTIONS) return ROUNDED_DIRECTIONS[value];
+    const directional = value.match(/^([trblse]+)-(.+)$/);
+    if (directional && directional[1] in ROUNDED_DIRECTIONS) {
+        return ROUNDED_DIRECTIONS[directional[1]].replace(
+            /var\(--radius\)/g,
+            resolveRadiusValue(directional[2]),
+        );
+    }
+    return value.startsWith('[') && value.endsWith(']')
+        ? `border-radius: ${value.slice(1, -1)}`
+        : null;
+}
+
+/**
+ * Resolves a directional radius size.
+ * @param size
+ */
+function resolveRadiusValue(size: string): string {
+    if (RADIUS_SIZES.has(size)) return `var(--radius-${size})`;
+    if (size === 'full') return 'calc(infinity * 1px)';
+    return size === 'none' ? '0' : size;
+}
+
+/**
+ * Resolves text-size utilities.
+ * @param utility
+ */
+function resolveTextDeclaration(utility: string): string | null {
+    if (!utility.startsWith('text-') || utility.startsWith('text-opacity')) return null;
+    const value = utility.slice(5);
+    if (TEXT_SIZES.has(value)) {
+        return `font-size: var(--text-${value}); line-height: var(--tw-leading, var(--text-${value}--line-height))`;
+    }
+    return value.startsWith('[') && value.endsWith(']')
+        ? `font-size: ${value.slice(1, -1).replace(/_/g, ' ')}`
+        : null;
+}
+
+/**
+ * Resolves line-height utilities.
+ * @param utility
+ */
+function resolveLeadingDeclaration(utility: string): string | null {
+    if (!utility.startsWith('leading-')) return null;
+    const value = utility.slice(8);
+    const named: Record<string, string> = {
+        none: '1',
+        tight: '1.25',
+        snug: '1.375',
+        normal: '1.5',
+        relaxed: '1.625',
+        loose: '2',
+    };
+    if (value in named) return `line-height: ${named[value]}`;
+    if (value.startsWith('[') && value.endsWith(']')) return `line-height: ${value.slice(1, -1)}`;
+    return Number.isNaN(parseFloat(value)) ? null : `line-height: calc(var(--spacing) * ${value})`;
+}
+
+/**
+ * Resolves letter-spacing utilities.
+ * @param utility
+ */
+function resolveTrackingDeclaration(utility: string): string | null {
+    if (!utility.startsWith('tracking-')) return null;
+    const value = utility.slice(9);
+    const named: Record<string, string> = {
+        tighter: 'var(--tracking-tighter)',
+        tight: 'var(--tracking-tight)',
+        normal: 'var(--tracking-normal)',
+        wide: 'var(--tracking-wide)',
+        wider: 'var(--tracking-wider)',
+        widest: 'var(--tracking-widest)',
+    };
+    if (value in named) return `letter-spacing: ${named[value]}`;
+    return value.startsWith('[') && value.endsWith(']')
+        ? `letter-spacing: ${value.slice(1, -1)}`
+        : null;
+}
+
+/**
+ * Resolves font-family utilities.
+ * @param utility
+ */
+function resolveFontDeclaration(utility: string): string | null {
+    if (!utility.startsWith('font-') || KEYWORD_RULES[utility]) return null;
+    const value = utility.slice(5);
+    const families: Record<string, string> = {
+        sans: 'var(--font-sans, ui-sans-serif, system-ui, sans-serif)',
+        serif: 'var(--font-serif, ui-serif, Georgia, serif)',
+        mono: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
+    };
+    if (value in families) return `font-family: ${families[value]}`;
+    return value.startsWith('[') && value.endsWith(']')
+        ? `font-family: ${value.slice(1, -1).replace(/_/g, ' ')}`
+        : null;
+}
+
+/**
+ * Resolves shadow utilities.
+ * @param utility
+ */
+function resolveShadowDeclaration(utility: string): string | null {
+    if (utility === 'shadow') return 'box-shadow: var(--shadow)';
+    if (!utility.startsWith('shadow-')) return null;
+    const value = utility.slice(7);
+    if (value.startsWith('[') && value.endsWith(']')) {
+        return `box-shadow: ${value.slice(1, -1).replace(/_/g, ' ')}`;
+    }
+    const sizes = new Set(['xs', 'sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
+    if (!sizes.has(value)) return null;
+    return value === 'none' ? 'box-shadow: none' : `box-shadow: var(--shadow-${value})`;
+}
+
+/**
+ * Resolves outline utilities.
+ * @param utility
+ */
+function resolveOutlineDeclaration(utility: string): string | null {
+    if (utility === 'outline-none') return 'outline: 2px solid transparent; outline-offset: 2px';
+    if (!utility.startsWith('outline-')) return null;
+    const value = utility.slice(8);
+    return /^\d+$/.test(value) ? `outline-width: ${value}px` : null;
+}
+
+/**
+ * Resolves ring utilities.
+ * @param utility
+ */
+function resolveRingDeclaration(utility: string): string | null {
+    if (utility === 'ring') return '--tw-ring-shadow: 0 0 0 3px var(--tw-ring-color, #3b82f680)';
+    if (!utility.startsWith('ring-')) return null;
+    const value = utility.slice(5);
+    return /^\d+$/.test(value)
+        ? `--tw-ring-shadow: 0 0 0 ${value}px var(--tw-ring-color, #3b82f680)`
+        : null;
+}
+
+/**
+ * Resolves flex sizing, order, and columns.
+ * @param utility
+ */
+function resolveFlexOrderDeclaration(utility: string): string | null {
+    if (utility.startsWith('grow-')) return `flex-grow: ${utility.slice(5)}`;
+    if (utility.startsWith('shrink-')) return `flex-shrink: ${utility.slice(7)}`;
+    if (utility.startsWith('order-')) {
+        const value = utility.slice(6);
+        if (value === 'first') return 'order: -9999';
+        if (value === 'last') return 'order: 9999';
+        return value === 'none' ? 'order: 0' : `order: ${value}`;
+    }
+    if (!utility.startsWith('columns-')) return null;
+    const value = utility.slice(8);
+    return Number.isNaN(parseInt(value, 10))
+        ? `columns: var(--container-${value})`
+        : `columns: ${value}`;
+}
+
+/**
+ * Resolves grid template and span utilities.
+ * @param utility
+ */
+function resolveGridDeclaration(utility: string): string | null {
+    if (utility.startsWith('grid-cols-')) return resolveGridTemplate(utility.slice(10), 'columns');
+    if (utility.startsWith('grid-rows-')) return resolveGridTemplate(utility.slice(10), 'rows');
+    if (utility.startsWith('col-span-')) return resolveGridSpan(utility.slice(9), 'column');
+    if (utility.startsWith('row-span-')) return resolveGridSpan(utility.slice(9), 'row');
+    return null;
+}
+
+/**
+ * Resolves a grid template value.
+ * @param value
+ * @param axis
+ */
+function resolveGridTemplate(value: string, axis: 'columns' | 'rows'): string {
+    if (value === 'none' || value === 'subgrid') return `grid-template-${axis}: ${value}`;
+    if (value.startsWith('['))
+        return `grid-template-${axis}: ${value.slice(1, -1).replace(/_/g, ' ')}`;
+    return `grid-template-${axis}: repeat(${value}, minmax(0, 1fr))`;
+}
+
+/**
+ * Resolves a grid span value.
+ * @param value
+ * @param axis
+ */
+function resolveGridSpan(value: string, axis: 'column' | 'row'): string {
+    return value === 'full'
+        ? `grid-${axis}: 1 / -1`
+        : `grid-${axis}: span ${value} / span ${value}`;
+}
+
+/**
+ * Resolves scale, rotate, and translate utilities.
+ * @param utility
+ */
+function resolveTransformDeclaration(utility: string): string | null {
+    if (utility.startsWith('scale-x-'))
+        return `--tw-scale-x: ${parseFloat(utility.slice(8)) / 100}; scale: var(--tw-scale-x) var(--tw-scale-y, 1)`;
+    if (utility.startsWith('scale-y-'))
+        return `--tw-scale-y: ${parseFloat(utility.slice(8)) / 100}; scale: var(--tw-scale-x, 1) var(--tw-scale-y)`;
+    if (utility.startsWith('scale-')) return `scale: ${parseFloat(utility.slice(6)) / 100}`;
+    if (utility.startsWith('rotate-')) {
+        const value = utility.slice(7);
+        return value.startsWith('[') ? `rotate: ${value.slice(1, -1)}` : `rotate: ${value}deg`;
+    }
+    if (utility.startsWith('translate-x-'))
+        return `translate: ${resolveSpacingValue(utility.slice(12), 'width')} var(--tw-translate-y, 0)`;
+    if (utility.startsWith('translate-y-'))
+        return `translate: var(--tw-translate-x, 0) ${resolveSpacingValue(utility.slice(12), 'height')}`;
+    return null;
+}
+
+/**
+ * Resolves transition utilities.
+ * @param utility
+ */
+function resolveTransitionDeclaration(utility: string): string | null {
+    if (utility === 'transition')
+        return 'transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter; transition-timing-function: var(--tw-ease, ease); transition-duration: var(--tw-duration, 150ms)';
+    if (utility === 'transition-all')
+        return 'transition-property: all; transition-timing-function: var(--tw-ease, ease); transition-duration: var(--tw-duration, 150ms)';
+    if (utility === 'transition-none') return 'transition-property: none';
+    if (utility.startsWith('duration-'))
+        return resolveTimedTransition(utility.slice(9), 'duration');
+    if (utility.startsWith('delay-')) return resolveTimedTransition(utility.slice(6), 'delay');
+    if (!utility.startsWith('ease-')) return null;
+    const value = utility.slice(5);
+    const eases: Record<string, string> = {
+        linear: 'linear',
+        in: 'cubic-bezier(0.4, 0, 1, 1)',
+        out: 'cubic-bezier(0, 0, 0.2, 1)',
+        'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+    };
+    return `transition-timing-function: ${eases[value] ?? `var(--ease-${value})`}`;
+}
+
+/**
+ * Resolves a transition time.
+ * @param value
+ * @param kind
+ */
+function resolveTimedTransition(value: string, kind: 'duration' | 'delay'): string {
+    return `transition-${kind}: ${value.startsWith('[') ? value.slice(1, -1) : `${value}ms`}`;
+}
+
+/**
+ * Resolves color utilities.
+ * @param utility
+ */
+function resolveColorDeclaration(utility: string): string | null {
+    const prefixes = Object.keys(COLOR_PROPS).sort((a, b) => b.length - a.length);
+    for (const prefix of prefixes) {
+        if (utility !== prefix && !utility.startsWith(`${prefix}-`)) continue;
+        const value = utility.slice(prefix.length + 1);
+        if (!value) continue;
+        return `${COLOR_PROPS[prefix]}: ${resolveColorValue(value)}`;
+    }
+    return null;
+}
+
+/**
+ * Resolves spacing utilities, including leading-dash negatives.
+ * @param utility
+ */
+function resolveSpacingDeclaration(utility: string): string | null {
+    const prefixes = Object.keys(SPACING_PROPS).sort((a, b) => b.length - a.length);
+    for (const prefix of prefixes) {
+        const dashPrefix = `${prefix}-`;
+        const negative = utility.startsWith(`-${dashPrefix}`);
+        const matchPrefix = negative ? `-${dashPrefix}` : dashPrefix;
+        if (!utility.startsWith(matchPrefix)) continue;
+        const rawValue = utility.slice(matchPrefix.length);
+        const properties = SPACING_PROPS[prefix];
+        const resolved = resolveSpacingValue(negative ? `-${rawValue}` : rawValue, properties[0]);
+        if (resolved) return properties.map(property => `${property}: ${resolved}`).join('; ');
+    }
+    return null;
+}
+
+/**
+ * Resolves an arbitrary property utility.
+ * @param utility
+ */
+function resolveArbitraryPropertyDeclaration(utility: string): string | null {
+    if (!utility.startsWith('[') || !utility.endsWith(']') || !utility.includes(':')) return null;
+    const inner = utility.slice(1, -1).replace(/_/g, ' ');
+    const colon = inner.indexOf(':');
+    return `${inner.slice(0, colon)}: ${inner.slice(colon + 1)}`;
+}
+
+/* eslint-enable jsdoc/require-param-description, jsdoc/require-returns */
+
 // ── Main generator ────────────────────────────────────────────────────────────
 
 /**
@@ -774,429 +1168,10 @@ export function generateDeclarations(utility: string): string {
     if (utility in KEYWORD_RULES) {
         return KEYWORD_RULES[utility];
     }
-
-    // ── 2. Opacity ──────────────────────────────────────────────────────────
-    if (utility.startsWith('opacity-')) {
-        const val = utility.slice(8);
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `opacity: ${val.slice(1, -1)}`;
-        }
-        const n = parseInt(val, 10);
-        if (!Number.isNaN(n)) {
-            const v = OPACITY_NAMED[n] ?? String(n / 100);
-            return `opacity: ${v}`;
-        }
+    for (const resolver of DECLARATION_RESOLVERS) {
+        const declaration = resolver(utility);
+        if (declaration !== null) return declaration;
     }
-
-    // ── 3. Z-index ──────────────────────────────────────────────────────────
-    if (utility.startsWith('z-')) {
-        const val = utility.slice(2);
-        if (val === 'auto') {
-            return 'z-index: auto';
-        }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `z-index: ${val.slice(1, -1)}`;
-        }
-        if (!Number.isNaN(parseInt(val, 10))) {
-            return `z-index: ${val}`;
-        }
-    }
-
-    // ── 4. Border width ──────────────────────────────────────────────────────
-    if (utility === 'border') {
-        return 'border-width: 1px';
-    }
-    if (/^border-[trblxyse]$/.test(utility)) {
-        const side = utility.slice(7);
-        const cssSide: Record<string, string> = {
-            t: 'border-top-width',
-            r: 'border-right-width',
-            b: 'border-bottom-width',
-            l: 'border-left-width',
-            x: 'border-inline-width',
-            y: 'border-block-width',
-            s: 'border-inline-start-width',
-            e: 'border-inline-end-width',
-        };
-        if (side in cssSide) {
-            return `${cssSide[side]}: 1px`;
-        }
-    }
-    if (/^border-\d+$/.test(utility)) {
-        const n = utility.slice(7);
-        return `border-width: ${n}px`;
-    }
-    // border-t-2, border-r-4, etc.
-    const borderSideWidth = utility.match(/^border-([trblxse])-(\d+)$/);
-    if (borderSideWidth) {
-        const [, side, n] = borderSideWidth;
-        const cssSide: Record<string, string> = {
-            t: 'border-top-width',
-            r: 'border-right-width',
-            b: 'border-bottom-width',
-            l: 'border-left-width',
-            x: 'border-inline-width',
-            y: 'border-block-width',
-            s: 'border-inline-start-width',
-            e: 'border-inline-end-width',
-        };
-        if (side in cssSide) {
-            return `${cssSide[side]}: ${n}px`;
-        }
-    }
-
-    // ── 5. Border radius ────────────────────────────────────────────────────
-    if (utility === 'rounded') {
-        return 'border-radius: var(--radius)';
-    }
-    if (utility.startsWith('rounded-')) {
-        const val = utility.slice(8);
-        if (val === 'none') {
-            return 'border-radius: 0';
-        }
-        if (val === 'full') {
-            return 'border-radius: calc(infinity * 1px)';
-        }
-        if (RADIUS_SIZES.has(val)) {
-            return `border-radius: var(--radius-${val})`;
-        }
-        // Directional: rounded-t, rounded-b, etc.
-        const roundedDir: Record<string, string> = {
-            t: 'border-top-left-radius: var(--radius); border-top-right-radius: var(--radius)',
-            r: 'border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius)',
-            b: 'border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius)',
-            l: 'border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius)',
-            tl: 'border-top-left-radius: var(--radius)',
-            tr: 'border-top-right-radius: var(--radius)',
-            bl: 'border-bottom-left-radius: var(--radius)',
-            br: 'border-bottom-right-radius: var(--radius)',
-        };
-        if (val in roundedDir) {
-            return roundedDir[val];
-        }
-        // rounded-t-lg, rounded-tr-sm, etc.
-        const m = val.match(/^([trblse]+)-(.+)$/);
-        if (m) {
-            const [, dir, size] = m;
-            const sizeVal = RADIUS_SIZES.has(size)
-                ? `var(--radius-${size})`
-                : size === 'full'
-                  ? 'calc(infinity * 1px)'
-                  : size === 'none'
-                    ? '0'
-                    : size;
-            if (dir in roundedDir) {
-                return roundedDir[dir].replace(/var\(--radius\)/g, sizeVal);
-            }
-        }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `border-radius: ${val.slice(1, -1)}`;
-        }
-        if (RADIUS_SIZES.has(val)) {
-            return `border-radius: var(--radius-${val})`;
-        }
-    }
-
-    // ── 6. Text size ────────────────────────────────────────────────────────
-    if (utility.startsWith('text-') && !utility.startsWith('text-opacity')) {
-        const val = utility.slice(5);
-        // Text color: handled by color utilities below
-        // Text size: xs, sm, base, lg, xl, 2xl, ...
-        if (TEXT_SIZES.has(val)) {
-            return `font-size: var(--text-${val}); line-height: var(--tw-leading, var(--text-${val}--line-height))`;
-        }
-        // Arbitrary text size
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `font-size: ${val.slice(1, -1).replace(/_/g, ' ')}`;
-        }
-        // Color (text-blue-500, text-white, etc.) — falls through to color section
-    }
-
-    // ── 7. Leading (line-height) ────────────────────────────────────────────
-    if (utility.startsWith('leading-')) {
-        const val = utility.slice(8);
-        const named: Record<string, string> = {
-            none: '1',
-            tight: '1.25',
-            snug: '1.375',
-            normal: '1.5',
-            relaxed: '1.625',
-            loose: '2',
-        };
-        if (val in named) {
-            return `line-height: ${named[val]}`;
-        }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `line-height: ${val.slice(1, -1)}`;
-        }
-        if (!Number.isNaN(parseFloat(val))) {
-            return `line-height: calc(var(--spacing) * ${val})`;
-        }
-    }
-
-    // ── 8. Tracking (letter-spacing) ───────────────────────────────────────
-    if (utility.startsWith('tracking-')) {
-        const val = utility.slice(9);
-        const named: Record<string, string> = {
-            tighter: 'var(--tracking-tighter)',
-            tight: 'var(--tracking-tight)',
-            normal: 'var(--tracking-normal)',
-            wide: 'var(--tracking-wide)',
-            wider: 'var(--tracking-wider)',
-            widest: 'var(--tracking-widest)',
-        };
-        if (val in named) {
-            return `letter-spacing: ${named[val]}`;
-        }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `letter-spacing: ${val.slice(1, -1)}`;
-        }
-    }
-
-    // ── 9. Font family ──────────────────────────────────────────────────────
-    if (utility.startsWith('font-') && !KEYWORD_RULES[utility]) {
-        const val = utility.slice(5);
-        const familyNames: Record<string, string> = {
-            sans: 'var(--font-sans, ui-sans-serif, system-ui, sans-serif)',
-            serif: 'var(--font-serif, ui-serif, Georgia, serif)',
-            mono: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
-        };
-        if (val in familyNames) {
-            return `font-family: ${familyNames[val]}`;
-        }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `font-family: ${val.slice(1, -1).replace(/_/g, ' ')}`;
-        }
-    }
-
-    // ── 10. Shadow ──────────────────────────────────────────────────────────
-    if (utility === 'shadow') {
-        return 'box-shadow: var(--shadow)';
-    }
-    if (utility.startsWith('shadow-')) {
-        const val = utility.slice(7);
-        if (val.startsWith('[') && val.endsWith(']')) {
-            return `box-shadow: ${val.slice(1, -1).replace(/_/g, ' ')}`;
-        }
-        const shadows = new Set(['xs', 'sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
-        if (shadows.has(val)) {
-            return val === 'none' ? 'box-shadow: none' : `box-shadow: var(--shadow-${val})`;
-        }
-    }
-
-    // ── 11. Outline ─────────────────────────────────────────────────────────
-    if (utility === 'outline-none') {
-        return 'outline: 2px solid transparent; outline-offset: 2px';
-    }
-    if (utility.startsWith('outline-')) {
-        const val = utility.slice(8);
-        if (/^\d+$/.test(val)) {
-            return `outline-width: ${val}px`;
-        }
-    }
-
-    // ── 12. Ring ────────────────────────────────────────────────────────────
-    if (utility === 'ring') {
-        return '--tw-ring-shadow: 0 0 0 3px var(--tw-ring-color, #3b82f680)';
-    }
-    if (utility.startsWith('ring-')) {
-        const val = utility.slice(5);
-        if (/^\d+$/.test(val)) {
-            return `--tw-ring-shadow: 0 0 0 ${val}px var(--tw-ring-color, #3b82f680)`;
-        }
-    }
-
-    // ── 13. Grow / shrink numbers ───────────────────────────────────────────
-    if (utility.startsWith('grow-')) {
-        return `flex-grow: ${utility.slice(5)}`;
-    }
-    if (utility.startsWith('shrink-')) {
-        return `flex-shrink: ${utility.slice(7)}`;
-    }
-
-    // ── 14. Order ───────────────────────────────────────────────────────────
-    if (utility.startsWith('order-')) {
-        const val = utility.slice(6);
-        if (val === 'first') {
-            return 'order: -9999';
-        }
-        if (val === 'last') {
-            return 'order: 9999';
-        }
-        if (val === 'none') {
-            return 'order: 0';
-        }
-        return `order: ${val}`;
-    }
-
-    // ── 15. Columns ─────────────────────────────────────────────────────────
-    if (utility.startsWith('columns-')) {
-        const val = utility.slice(8);
-        if (!Number.isNaN(parseInt(val, 10))) {
-            return `columns: ${val}`;
-        }
-        return `columns: var(--container-${val})`;
-    }
-
-    // ── 16. Grid cols/rows ──────────────────────────────────────────────────
-    if (utility.startsWith('grid-cols-')) {
-        const val = utility.slice(10);
-        if (val === 'none') {
-            return 'grid-template-columns: none';
-        }
-        if (val === 'subgrid') {
-            return 'grid-template-columns: subgrid';
-        }
-        if (val.startsWith('[')) {
-            return `grid-template-columns: ${val.slice(1, -1).replace(/_/g, ' ')}`;
-        }
-        return `grid-template-columns: repeat(${val}, minmax(0, 1fr))`;
-    }
-    if (utility.startsWith('grid-rows-')) {
-        const val = utility.slice(10);
-        if (val === 'none') {
-            return 'grid-template-rows: none';
-        }
-        if (val === 'subgrid') {
-            return 'grid-template-rows: subgrid';
-        }
-        if (val.startsWith('[')) {
-            return `grid-template-rows: ${val.slice(1, -1).replace(/_/g, ' ')}`;
-        }
-        return `grid-template-rows: repeat(${val}, minmax(0, 1fr))`;
-    }
-
-    // ── 17. Col/row span ────────────────────────────────────────────────────
-    if (utility.startsWith('col-span-')) {
-        const val = utility.slice(9);
-        return val === 'full' ? 'grid-column: 1 / -1' : `grid-column: span ${val} / span ${val}`;
-    }
-    if (utility.startsWith('row-span-')) {
-        const val = utility.slice(9);
-        return val === 'full' ? 'grid-row: 1 / -1' : `grid-row: span ${val} / span ${val}`;
-    }
-
-    // ── 18. Scale / rotate / translate (CSS transforms in v4) ───────────────
-    if (utility.startsWith('scale-x-')) {
-        const val = utility.slice(8);
-        return `--tw-scale-x: ${parseFloat(val) / 100}; scale: var(--tw-scale-x) var(--tw-scale-y, 1)`;
-    }
-    if (utility.startsWith('scale-y-')) {
-        const val = utility.slice(8);
-        return `--tw-scale-y: ${parseFloat(val) / 100}; scale: var(--tw-scale-x, 1) var(--tw-scale-y)`;
-    }
-    if (utility.startsWith('scale-')) {
-        const val = utility.slice(6);
-        const n = parseFloat(val) / 100;
-        return `scale: ${n}`;
-    }
-    if (utility.startsWith('rotate-')) {
-        const val = utility.slice(7);
-        if (val.startsWith('[')) {
-            return `rotate: ${val.slice(1, -1)}`;
-        }
-        return `rotate: ${val}deg`;
-    }
-    if (utility.startsWith('translate-x-')) {
-        const val = utility.slice(12);
-        const v = resolveSpacingValue(val, 'width');
-        return `translate: ${v} var(--tw-translate-y, 0)`;
-    }
-    if (utility.startsWith('translate-y-')) {
-        const val = utility.slice(12);
-        const v = resolveSpacingValue(val, 'height');
-        return `translate: var(--tw-translate-x, 0) ${v}`;
-    }
-
-    // ── 19. Transitions ─────────────────────────────────────────────────────
-    if (utility === 'transition') {
-        return 'transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter; transition-timing-function: var(--tw-ease, ease); transition-duration: var(--tw-duration, 150ms)';
-    }
-    if (utility === 'transition-all') {
-        return 'transition-property: all; transition-timing-function: var(--tw-ease, ease); transition-duration: var(--tw-duration, 150ms)';
-    }
-    if (utility === 'transition-none') {
-        return 'transition-property: none';
-    }
-    if (utility.startsWith('duration-')) {
-        const val = utility.slice(9);
-        if (val.startsWith('[')) {
-            return `transition-duration: ${val.slice(1, -1)}`;
-        }
-        return `transition-duration: ${val}ms`;
-    }
-    if (utility.startsWith('ease-')) {
-        const eases: Record<string, string> = {
-            linear: 'linear',
-            in: 'cubic-bezier(0.4, 0, 1, 1)',
-            out: 'cubic-bezier(0, 0, 0.2, 1)',
-            'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
-        };
-        const val = utility.slice(5);
-        if (val in eases) {
-            return `transition-timing-function: ${eases[val]}`;
-        }
-        return `transition-timing-function: var(--ease-${val})`;
-    }
-    if (utility.startsWith('delay-')) {
-        const val = utility.slice(6);
-        if (val.startsWith('[')) {
-            return `transition-delay: ${val.slice(1, -1)}`;
-        }
-        return `transition-delay: ${val}ms`;
-    }
-
-    // ── 20. Color utilities (color properties) ──────────────────────────────
-    // Try all color prefixes, longest match first to avoid partial matches
-    const colorPrefixes = Object.keys(COLOR_PROPS).sort((a, b) => b.length - a.length);
-    for (const prefix of colorPrefixes) {
-        if (utility === prefix || utility.startsWith(`${prefix}-`)) {
-            const rest = utility.slice(prefix.length + 1);
-            if (!rest && utility !== prefix) {
-                continue;
-            } // prefix without value
-            if (!rest && utility === prefix) {
-                continue;
-            } // bare prefix, no color value
-            const cssProp = COLOR_PROPS[prefix];
-            const colorVal = resolveColorValue(rest);
-            return `${cssProp}: ${colorVal}`;
-        }
-    }
-
-    // ── 21. Spacing utilities ────────────────────────────────────────────────
-    // Try all spacing prefixes, longest match first
-    const spacingPrefixes = Object.keys(SPACING_PROPS).sort((a, b) => b.length - a.length);
-    for (const prefix of spacingPrefixes) {
-        const dashPrefix = `${prefix}-`;
-        // Negative: -m-4 → the class name is "-m-4" (leading dash on the whole
-        // utility, per the compiler's own output — NOT "m--4"). Match that form
-        // first so a negative utility isn't silently skipped by the loop below.
-        const negative = utility.startsWith(`-${dashPrefix}`);
-        const matchPrefix = negative ? `-${dashPrefix}` : dashPrefix;
-        if (utility.startsWith(matchPrefix)) {
-            const rawVal = utility.slice(matchPrefix.length);
-            const props = SPACING_PROPS[prefix];
-
-            const resolved = resolveSpacingValue(negative ? `-${rawVal}` : rawVal, props[0]);
-            if (!resolved) {
-                continue;
-            }
-
-            return props.map(p => `${p}: ${resolved}`).join('; ');
-        }
-    }
-
-    // ── 22. Arbitrary property: [property:value] ────────────────────────────
-    if (utility.startsWith('[') && utility.endsWith(']') && utility.includes(':')) {
-        const inner = utility.slice(1, -1).replace(/_/g, ' ');
-        const colonIdx = inner.indexOf(':');
-        const prop = inner.slice(0, colonIdx);
-        const val = inner.slice(colonIdx + 1);
-        return `${prop}: ${val}`;
-    }
-
-    // Unknown class — return empty (graceful no-op)
     return '';
 }
 
