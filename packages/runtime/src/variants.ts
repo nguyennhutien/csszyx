@@ -283,22 +283,33 @@ function warnInvalidSelection<V extends VariantSchema>(
     }
 
     for (const key of Object.keys(selection)) {
-        if (!(key in (variants ?? {}))) {
-            devWarn(
-                `szv()(selection): unknown variant "${key}" — not declared in config.variants.`,
-            );
-            continue;
-        }
         const value = (selection as Record<string, unknown>)[key];
-        if (value === null || value === undefined) {
-            continue;
-        }
-        const valueKey = selectionValueKey(value);
-        if (valueKey === null || !(valueKey in (variants?.[key] ?? {}))) {
-            devWarn(
-                `szv()(selection): "${valueKey ?? describe(value)}" is not a value of variant "${key}" — it has no styles.`,
-            );
-        }
+        warnInvalidSelectionValue(key, value, variants);
+    }
+}
+
+/**
+ * Warn for one selected variant dimension/value pair.
+ * @param key - Selected dimension name.
+ * @param value - Selected dimension value.
+ * @param variants - Configured variant dimensions.
+ */
+function warnInvalidSelectionValue(
+    key: string,
+    value: unknown,
+    variants: VariantSchema | undefined,
+): void {
+    if (!(key in (variants ?? {}))) {
+        devWarn(`szv()(selection): unknown variant "${key}" — not declared in config.variants.`);
+        return;
+    }
+    if (value === null || value === undefined) return;
+
+    const valueKey = selectionValueKey(value);
+    if (valueKey === null || !(valueKey in (variants?.[key] ?? {}))) {
+        devWarn(
+            `szv()(selection): "${valueKey ?? describe(value)}" is not a value of variant "${key}" — it has no styles.`,
+        );
     }
 }
 
