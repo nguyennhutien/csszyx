@@ -1538,10 +1538,10 @@ function transformOxcSzsAttribute(
     }
     const value = attribute.value;
     const expression =
-        value && value.type === 'JSXExpressionContainer'
+        value?.type === 'JSXExpressionContainer'
             ? (value as unknown as { expression: OxcNode }).expression
             : null;
-    if (!expression || expression.type !== 'ObjectExpression') {
+    if (expression?.type !== 'ObjectExpression') {
         diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
@@ -5299,7 +5299,7 @@ function collectObjectBindings(
             };
             const id = declarator.id;
             const init = declarator.init;
-            if (!id || id.type !== 'Identifier' || !init) {
+            if (id?.type !== 'Identifier' || !init) {
                 continue;
             }
             const unwrapped = unwrapExpression(init);
@@ -5338,7 +5338,7 @@ function collectConstInitializers(root: OxcNode): Map<string, OxcNode> {
                 id?: OxcNode;
                 init?: OxcNode | null;
             };
-            if (!declarator.id || declarator.id.type !== 'Identifier' || !declarator.init) {
+            if (declarator.id?.type !== 'Identifier' || !declarator.init) {
                 continue;
             }
             inits.set(
@@ -5364,7 +5364,7 @@ function collectConditionalBindings(root: OxcNode): Map<string, ConditionalExpre
         }
         const id = (node as unknown as { id?: OxcNode }).id;
         const init = (node as unknown as { init?: OxcNode | null }).init;
-        if (!id || id.type !== 'Identifier' || !init) {
+        if (id?.type !== 'Identifier' || !init) {
             return;
         }
         const unwrapped = unwrapExpression(init);

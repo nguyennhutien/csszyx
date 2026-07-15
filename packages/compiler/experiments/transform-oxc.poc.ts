@@ -108,7 +108,7 @@ function isSzJsxAttribute(node: OxcNode): node is JsxAttributeNode {
  * @returns Class names mock-derived from the sz object.
  */
 function mockCompileSz(value: OxcNode | null): string[] {
-    if (!value || value.type !== 'JSXExpressionContainer') {
+    if (value?.type !== 'JSXExpressionContainer') {
         return [];
     }
     const expression = (value as unknown as { expression: OxcNode }).expression;
