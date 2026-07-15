@@ -280,22 +280,22 @@ describe('Tailwind-specific Escapes', () => {
 // 6. Arbitrary Values (6 tests)
 // ============================================================================
 describe('Arbitrary Values', () => {
-    it('should mangle arbitrary pixel value', () => {
-        const css = '.top-\\[117px\\] { top: 117px; }';
+    it.each([
+        ['arbitrary pixel value', '.top-\\[117px\\] { top: 117px; }', '.o { top: 117px; }'],
+        [
+            'arbitrary hex color',
+            '.bg-\\[\\#123456\\] { background: #123456; }',
+            '.p { background: #123456; }',
+        ],
+        ['arbitrary font size', '.text-\\[14px\\] { font-size: 14px; }', '.q { font-size: 14px; }'],
+        [
+            'negative arbitrary value',
+            '.-translate-x-1\\/2 { transform: translateX(-50%); }',
+            '.aj { transform: translateX(-50%); }',
+        ],
+    ])('should mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.o { top: 117px; }');
-    });
-
-    it('should mangle arbitrary hex color', () => {
-        const css = '.bg-\\[\\#123456\\] { background: #123456; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.p { background: #123456; }');
-    });
-
-    it('should mangle arbitrary font size', () => {
-        const css = '.text-\\[14px\\] { font-size: 14px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.q { font-size: 14px; }');
+        expect(result.css).toBe(expectedCSS);
     });
 
     it('should mangle before:content empty string class (before:content)', () => {
@@ -304,12 +304,6 @@ describe('Arbitrary Values', () => {
         const css = `${selector} { content: ''; }`;
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.css).toContain('.ay::before');
-    });
-
-    it('should mangle negative arbitrary value', () => {
-        const css = '.-translate-x-1\\/2 { transform: translateX(-50%); }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.aj { transform: translateX(-50%); }');
     });
 
     it('should preserve unmatched arbitrary value class', () => {
