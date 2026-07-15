@@ -23,6 +23,8 @@ import {
     transformBatch,
 } from '../packages/core/native/index.js';
 
+const BACKSLASH = String.fromCodePoint(92);
+
 interface CliOptions {
     /** Source roots to scan. */
     roots: string[];
@@ -191,7 +193,7 @@ function collectFiles(roots: string[]): ObservedFile[] {
             continue;
         }
         for (const filename of walk(absRoot)) {
-            const repoRelative = relative(REPO_ROOT, filename).replace(/\\/g, '/');
+            const repoRelative = relative(REPO_ROOT, filename).split(BACKSLASH).join('/');
             if (repoRelative.endsWith('.d.ts')) {
                 continue;
             }

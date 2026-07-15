@@ -491,7 +491,7 @@ function slugify(text: string): string {
  * @returns The stripped string.
  */
 function stripMarkdown(text: string): string {
-    return text.replace(/`/g, '').replace(/\*\*/g, '').replace(/\*/g, '').trim();
+    return text.split('`').join('').split('**').join('').split('*').join('').trim();
 }
 
 /**
