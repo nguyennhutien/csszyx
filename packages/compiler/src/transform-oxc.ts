@@ -200,14 +200,12 @@ export function transformOxc(
             return;
         }
         const openingNode = node as unknown as JsxOpeningElementNode;
-        const attrs = openingNode.attributes ?? [];
-        const szAttrs: JsxAttributeNode[] = [];
-        const szsAttrs: JsxAttributeNode[] = [];
-        let classNameAttr: JsxAttributeNode | null = null;
-        let styleAttr: JsxAttributeNode | null = null;
-        let szRecoverAttr: JsxAttributeNode | null = null;
-        let alreadyTagged = false;
-        let lastAttr: JsxAttributeNode | null = null;
+        const openingAttributes = collectOxcOpeningAttributes(openingNode.attributes ?? []);
+        const szAttrs = openingAttributes.sz;
+        const szsAttrs = openingAttributes.szs;
+        const classNameAttr = openingAttributes.className;
+        const styleAttr = openingAttributes.style;
+        const lastAttr = openingAttributes.last;
         let appliedHoistedStyleProps = false;
         const elementId = elementIdForOpening(openingNode);
         const hoistedStyleProps = componentHoists?.stylePropsByTarget.get(elementId) ?? [];
@@ -227,86 +225,19 @@ export function transformOxc(
             transformed = true;
         };
 
-        for (const attrRaw of attrs) {
-            if (attrRaw.type !== 'JSXAttribute') {
-                continue;
-            }
-            const attr = attrRaw as JsxAttributeNode;
-            lastAttr = attr;
-            const name = attr.name?.name;
-            if (name === 'sz') {
-                szAttrs.push(attr);
-            } else if (name === 'szs') {
-                szsAttrs.push(attr);
-            } else if (name === 'className' || name === 'class') {
-                classNameAttr = attr;
-            } else if (name === 'style') {
-                styleAttr = attr;
-            } else if (name === 'szRecover') {
-                szRecoverAttr = attr;
-            } else if (name === 'data-sz-recovery-token') {
-                alreadyTagged = true;
-            }
-        }
-
-        // szRecover handling (mirrors transform.ts:152-219). Emits an
-        // inline recovery token + appends a `data-sz-recovery-token`
-        // attribute. Idempotent across HMR re-runs via `alreadyTagged`.
-        if (szRecoverAttr && !alreadyTagged) {
-            const recoverValue = stringLiteralValue(szRecoverAttr.value);
-            if (recoverValue === null) {
-                diagnostics.push(
-                    `[csszyx] szRecover at ${effectiveFilename}: ` +
-                        'only string-literal values ("csr" | "dev-only") are supported. ' +
-                        'Dynamic values disable token emission for this element.',
-                );
-            } else if (!isValidInlineRecoveryMode(recoverValue)) {
-                diagnostics.push(
-                    `[csszyx] szRecover at ${effectiveFilename}: ` +
-                        `unknown mode "${recoverValue}" — expected "csr" or "dev-only". ` +
-                        'Token emission skipped.',
-                );
-            } else {
-                const elementType = extractElementName(openingNode.name);
-                // Babel uses the szRecover attribute's loc (see
-                // `transform.ts:190` — `path.node.loc`), NOT the opening
-                // element's. Matching that ensures token hashes line up
-                // byte-for-byte with the existing manifest format.
-                const { line, column } = offsetToLineColumn(source, szRecoverAttr.start);
-                const token = generateInlineRecoveryToken(
-                    effectiveFilename,
-                    line,
-                    column,
-                    elementType,
-                );
-                // Insert the new attribute after the last existing one,
-                // before the (possibly self-closing) tag terminator. Use
-                // `appendRight` (not `appendLeft`) because a later
-                // `overwrite()` of the same range — when `sz` is the last
-                // attribute — wipes any prior `appendLeft` at its end
-                // boundary but leaves `appendRight` intact.
-                if (lastAttr) {
-                    edits.appendRight(lastAttr.end, ` data-sz-recovery-token="${token}"`);
-                }
-                recoveryTokens.set(token, {
-                    mode: recoverValue,
-                    component: elementType,
-                    path: `${effectiveFilename}:${line}:${column}`,
-                });
-                transformed = true;
-            }
-        }
-
-        if (classNameAttr) {
-            const rawValue = stringLiteralValue(classNameAttr.value);
-            if (rawValue !== null) {
-                for (const c of rawValue.split(/\s+/)) {
-                    if (c) {
-                        rawClassNames.add(c);
-                    }
-                }
-            }
-        }
+        transformed =
+            transformOxcRecoveryAttribute(
+                openingAttributes.recovery,
+                openingAttributes.alreadyTagged,
+                lastAttr,
+                openingNode,
+                effectiveFilename,
+                source,
+                edits,
+                diagnostics,
+                recoveryTokens,
+            ) || transformed;
+        collectOxcRawClassName(classNameAttr, rawClassNames);
 
         transformed =
             transformOxcSzsAttributes(
@@ -812,6 +743,124 @@ export function transformOxc(
         recoveryTokens,
         cssVariableMap,
     };
+}
+
+/** Relevant attributes collected from one oxc JSX opening element. */
+interface OxcOpeningAttributes {
+    sz: JsxAttributeNode[];
+    szs: JsxAttributeNode[];
+    className: JsxAttributeNode | null;
+    style: JsxAttributeNode | null;
+    recovery: JsxAttributeNode | null;
+    alreadyTagged: boolean;
+    last: JsxAttributeNode | null;
+}
+
+/**
+ * Collects relevant attributes from one oxc JSX opening element.
+ *
+ * @param attributes Raw opening-element attributes.
+ * @returns Classified attributes and recovery metadata.
+ */
+function collectOxcOpeningAttributes(attributes: OxcNode[]): OxcOpeningAttributes {
+    const collected: OxcOpeningAttributes = {
+        sz: [],
+        szs: [],
+        className: null,
+        style: null,
+        recovery: null,
+        alreadyTagged: false,
+        last: null,
+    };
+    for (const rawAttribute of attributes) {
+        if (rawAttribute.type !== 'JSXAttribute') continue;
+        const attribute = rawAttribute as JsxAttributeNode;
+        collected.last = attribute;
+        const name = attribute.name?.name;
+        if (name === 'sz') collected.sz.push(attribute);
+        else if (name === 'szs') collected.szs.push(attribute);
+        else if (name === 'className' || name === 'class') collected.className = attribute;
+        else if (name === 'style') collected.style = attribute;
+        else if (name === 'szRecover') collected.recovery = attribute;
+        else if (name === 'data-sz-recovery-token') collected.alreadyTagged = true;
+    }
+    return collected;
+}
+
+/**
+ * Emits one validated inline recovery token.
+ *
+ * @param attribute Recovery attribute.
+ * @param alreadyTagged Whether the element already has a token.
+ * @param lastAttribute Last JSX attribute for insertion.
+ * @param openingNode Owning opening element.
+ * @param filename Source filename.
+ * @param source Original source.
+ * @param edits Pending source edits.
+ * @param diagnostics Compiler diagnostics.
+ * @param recoveryTokens Recovery token catalog.
+ * @returns Whether a token was emitted.
+ */
+function transformOxcRecoveryAttribute(
+    attribute: JsxAttributeNode | null,
+    alreadyTagged: boolean,
+    lastAttribute: JsxAttributeNode | null,
+    openingNode: JsxOpeningElementNode,
+    filename: string,
+    source: string,
+    edits: MagicString,
+    diagnostics: string[],
+    recoveryTokens: Map<string, TokenData>,
+): boolean {
+    if (!attribute || alreadyTagged) return false;
+    const recoveryValue = stringLiteralValue(attribute.value);
+    if (recoveryValue === null) {
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename}: ` +
+                'only string-literal values ("csr" | "dev-only") are supported. ' +
+                'Dynamic values disable token emission for this element.',
+        );
+        return false;
+    }
+    if (!isValidInlineRecoveryMode(recoveryValue)) {
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename}: ` +
+                `unknown mode "${recoveryValue}" — expected "csr" or "dev-only". ` +
+                'Token emission skipped.',
+        );
+        return false;
+    }
+
+    const elementType = extractElementName(openingNode.name);
+    const { line, column } = offsetToLineColumn(source, attribute.start);
+    const token = generateInlineRecoveryToken(filename, line, column, elementType);
+    if (lastAttribute) {
+        edits.appendRight(lastAttribute.end, ` data-sz-recovery-token="${token}"`);
+    }
+    recoveryTokens.set(token, {
+        mode: recoveryValue,
+        component: elementType,
+        path: `${filename}:${line}:${column}`,
+    });
+    return true;
+}
+
+/**
+ * Adds a literal oxc class attribute to Tailwind discovery.
+ *
+ * @param attribute Existing class attribute.
+ * @param rawClassNames Tailwind raw-class discovery set.
+ */
+function collectOxcRawClassName(
+    attribute: JsxAttributeNode | null,
+    rawClassNames: Set<string>,
+): void {
+    if (!attribute) return;
+    const value = stringLiteralValue(attribute.value);
+    if (value === null) return;
+    for (const className of value.split(/\s+/)) {
+        if (className) rawClassNames.add(className);
+    }
 }
 
 /** One compiled oxc szs slot entry. */
