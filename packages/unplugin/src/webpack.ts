@@ -1,3 +1,1 @@
-import { webpackPlugin } from './unplugin';
-
-export default webpackPlugin;
+export { webpackPlugin as default } from './unplugin';

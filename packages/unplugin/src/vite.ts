@@ -19,6 +19,4 @@
  * });
  * ```
  */
-import { vitePlugin } from './unplugin';
-
-export default vitePlugin;
+export { vitePlugin as default } from './unplugin';
