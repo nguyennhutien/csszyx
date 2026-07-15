@@ -34,11 +34,11 @@ export interface MigrateOptions {
     cdnUrl?: string;
     /** Local script path for --inject-runtime local. */
     localPath?: string;
-    /** Scan without modifying files, and generate a .csszyx-todo.json map of unrecognized classes */
+    /** Scan without modifying files and generate a resolution map for unrecognized classes. */
     audit?: boolean;
-    /** Inject {/* @sz-todo *\/} comments above unrecognized classes instead of failing */
+    /** Inject migration follow-up comments above unrecognized classes instead of failing. */
     injectTodos?: boolean;
-    /** Path to a JSON mapping file (like .csszyx-todo.json) to resolve previously unrecognized classes */
+    /** Path to a JSON map that resolves previously unrecognized classes. */
     resolveTodos?: string;
     /**
      * Only normalize legacy sz-prop keys to their single-way canonical (e.g.
@@ -79,7 +79,7 @@ function createLogFile(cwd: string): {
 }
 
 /**
- * Find the exclusive end offset of one valid sz-todo comment.
+ * Find the exclusive end offset of one valid migration follow-up comment.
  *
  * @param source Source containing the comment opener.
  * @param open Comment opener offset.
@@ -214,7 +214,7 @@ async function prepareMigration(options: MigrateOptions): Promise<MigrationConte
     return { options, cwd, dryRun, audit, resolveTodosPath, injectTodos, customMap };
 }
 
-/** Loads a user-edited todo resolution map. */
+/** Loads a user-edited migration-resolution map. */
 function loadResolutionMap(cwd: string, filePath: string): CsszyxTodoMap | undefined {
     try {
         const content = fs.readFileSync(path.resolve(cwd, filePath), 'utf-8');
@@ -463,7 +463,7 @@ function reportMigrationWarnings(warnings: string[], log: MigrationLog): void {
     for (const warning of warnings) log.writeLine(`  ${warning}`);
 }
 
-/** Writes the audit todo map when audit mode is active. */
+/** Writes the audit resolution map when audit mode is active. */
 function writeAuditMap(
     context: MigrationContext,
     summary: MigrationSummary,
@@ -507,7 +507,7 @@ function reportAuditMapWritten(
     log.writeLine(`Audit: ${count} unrecognized classes written to ${relative}`);
 }
 
-/** Reports unresolved classes after applying a todo map. */
+/** Reports unresolved classes after applying a migration-resolution map. */
 function reportRemainingTodos(
     context: MigrationContext,
     summary: MigrationSummary,
@@ -549,16 +549,16 @@ function flushMigrationLog(cwd: string, log: MigrationLog): void {
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
- * Remove every `{/* @sz-todo: … *​/}` comment (with an optional trailing
+ * Remove every migration follow-up comment (with an optional trailing
  * newline), the linear equivalent of
- * `/\{\/\*\s*@sz-todo:\s*(\S(?:.*\S)?)\s*\*\/\}\n?/g` used with an empty
+ * regular-expression replacement used with an empty
  * replacement. The old `\S(?:.*\S)?` content run was quadratic-by-search; this
  * finds each `{/*` opener once and scans forward to its `*​/}`. Content is
  * line-scoped (the regex used `.`), so a comment that has no `*​/}` before the
  * next newline is left intact, exactly as the regex left it.
  *
- * @param source - Source to strip todo comments from.
- * @returns Source with the todo comments removed.
+ * @param source - Source to strip migration follow-up comments from.
+ * @returns Source with the migration follow-up comments removed.
  */
 function stripSzTodoComments(source: string): string {
     const OPEN = '{/*';

@@ -71,7 +71,7 @@ export function isClsxLikeName(name: string): boolean {
  * @param node - The CallExpression AST node
  * @param source - The original source string (for extracting expression text)
  * @param t - Babel types module (passed to avoid import issues)
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns PatternResult with replacement string
  */
 export function handleClsxCall(
@@ -176,7 +176,7 @@ function cannotMigrateClsxArgument(
  * @param node - The ConditionalExpression AST node
  * @param source - The original source string
  * @param t - Babel types module
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns PatternResult with replacement string
  */
 export function handleTernary(
@@ -217,7 +217,7 @@ export function handleTernary(
  * @param node - The LogicalExpression AST node
  * @param source - The original source string
  * @param t - Babel types module
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns PatternResult with replacement string
  */
 export function handleLogicalAnd(
@@ -273,7 +273,7 @@ export function handleLogicalAnd(
  * @param node - The TemplateLiteral AST node
  * @param source - The original source string
  * @param t - Babel types module
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns PatternResult with replacement string
  */
 export function handleTemplateLiteral(
@@ -415,7 +415,7 @@ interface InnerResult {
  * @param node - The ConditionalExpression AST node.
  * @param source - The original source string.
  * @param t - Babel types module.
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns InnerResult or null if migration is not possible.
  */
 function handleTernaryInner(
@@ -485,7 +485,7 @@ function handleTernaryInner(
  * @param node - The LogicalExpression AST node.
  * @param source - The original source string.
  * @param t - Babel types module.
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns InnerResult or null if migration is not possible.
  */
 function handleLogicalAndInner(
@@ -516,7 +516,7 @@ function handleLogicalAndInner(
  * Migrates a static className string to an sz object literal.
  * Returns null if zero classes were recognized.
  * @param className - The Tailwind class string to migrate.
- * @param customMap - Optional parsed .csszyx-todo.json resolution map.
+ * @param customMap - Optional parsed migration-resolution map.
  * @returns Object literal string and unrecognized classes, or null.
  */
 function migrateString(

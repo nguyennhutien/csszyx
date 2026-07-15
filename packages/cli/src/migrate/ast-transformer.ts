@@ -82,7 +82,7 @@ interface AstVisitors {
 const VISITOR_KEYS = (t as unknown as { VISITOR_KEYS: Record<string, string[]> }).VISITOR_KEYS;
 
 /**
- * Injects a @sz-todo JSX comment before the opening element
+ * Injects a migration follow-up JSX comment before the opening element
  * when injectTodos is enabled and there are unrecognized classes.
  * @param unrecognized - Array of unrecognized class names.
  * @param parent - The parent Babel AST node (must be JSXOpeningElement).
@@ -330,7 +330,7 @@ function pushSzKeyReplacement(
  * Options for source transformation.
  */
 export interface TransformOptions {
-    /** If true, injects {/* @sz-todo *\/} comments above nodes with unrecognized classes */
+    /** If true, injects follow-up comments above nodes with unrecognized classes. */
     injectTodos?: boolean;
     /** Map of custom classes to sz objects, used to override unrecognized classes */
     customMap?: CsszyxTodoMap;
@@ -835,7 +835,7 @@ function processStaticString(classNameStr: string, customMap?: CsszyxTodoMap): S
     const szExpr = generateSzExpression(szObject);
 
     // Classes that stay in className: unrecognized (parser didn't know them)
-    // + keepInClassName (user explicitly marked "sz:keep" in csszyx-todo.json)
+    // + keepInClassName (user explicitly selected the keep sentinel in the resolution map)
     const remainingClassName = [...keepInClassName, ...unrecognized];
 
     if (remainingClassName.length > 0) {
