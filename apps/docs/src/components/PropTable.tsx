@@ -134,6 +134,20 @@ const hatchSz = szv({
     },
 });
 
+function resolveMarginKind(dir: 'right' | 'left' | 'bottom' | 'top', magnitude: number): MarginKind {
+    if (dir === 'right') return magnitude === 4 ? 'mr4' : 'mr2';
+    if (dir === 'left') return 'ml2';
+    if (dir === 'bottom') return magnitude === 8 ? 'mb8' : 'mb6';
+    return 'mt4';
+}
+
+function paddingOverrideClass(p: number | 'px' | '5px' | '--p'): string {
+    if (p === 4) return dynamic(_O_P4);
+    if (p === 'px') return dynamic(_O_PPX);
+    if (p === '5px') return dynamic(_O_P5PX);
+    return dynamic(_O_PVAR);
+}
+
 /**
  * Spacing viz — padding and margin.
  *
@@ -167,13 +181,7 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
         const adjCls = dynamic(adjBoxSz({ dir }));
 
         const mAbs = Math.abs(mr ?? ml ?? mb ?? mt ?? mx ?? my ?? m ?? 0);
-        const marginKind: MarginKind =
-            dir === 'right'  && mAbs === 4 ? 'mr4' :
-            dir === 'right'                ? 'mr2' :
-            dir === 'left'                 ? 'ml2' :
-            dir === 'bottom' && mAbs === 8 ? 'mb8' :
-            dir === 'bottom'               ? 'mb6' :
-                                             'mt4';
+        const marginKind = resolveMarginKind(dir, mAbs);
         const targetCls    = dynamic(targetMarginSz({ kind: marginKind }));
         const fakeMarginCls = dynamic(fakeMarginSz({  kind: marginKind }));
 
@@ -205,13 +213,7 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
     let padOverrideCls = '';
     let padTargetCls = '';
     if (p != null) {
-      padOverrideCls = p === 4
-        ? dynamic(_O_P4)
-        : p === 'px'
-          ? dynamic(_O_PPX)
-          : p === '5px'
-            ? dynamic(_O_P5PX)
-            : dynamic(_O_PVAR);
+      padOverrideCls = paddingOverrideClass(p);
       padTargetCls = p === 4 || p === '5px' || p === '--p'
         ? ''
         : dynamic(_T_PAD);
@@ -285,16 +287,29 @@ const sizingVizSz = szv({
 
 type SizingMode = 's4' | 'sFull' | 'sHalf' | 'sPx' | 'w4' | 'wFull' | 'wHalf' | 'wThird' | 'wPx' | 'h4' | 'hFull';
 
+const SQUARE_SIZING_MODES: Record<string, SizingMode> = {
+    full: 'sFull',
+    '1/2': 'sHalf',
+    px: 'sPx',
+};
+const WIDTH_SIZING_MODES: Record<string, SizingMode> = {
+    full: 'wFull',
+    '1/2': 'wHalf',
+    '1/3': 'wThird',
+    px: 'wPx',
+};
+
+function resolveSizingMode(w: number | string | undefined, h: number | string | undefined): SizingMode {
+    if (w !== undefined && h !== undefined) return SQUARE_SIZING_MODES[String(w)] ?? 's4';
+    if (w !== undefined) return WIDTH_SIZING_MODES[String(w)] ?? 'w4';
+    if (h === 4) return 'h4';
+    if (h !== undefined) return 'hFull';
+    return 's4';
+}
+
 /** Width/height sizing viz. Accepts the actual sz value ('1/2', 'px', …). */
 export function SizingViz({ w, h }: { w?: number | string; h?: number | string }) {
-    const mode: SizingMode =
-        w !== undefined && h !== undefined
-            ? (w === 'full' ? 'sFull' : w === '1/2' ? 'sHalf' : w === 'px' ? 'sPx' : 's4')
-            : w !== undefined
-                ? (w === 'full' ? 'wFull' : w === '1/2' ? 'wHalf' : w === '1/3' ? 'wThird' : w === 'px' ? 'wPx' : 'w4')
-                : h !== undefined
-                    ? (h === 4 ? 'h4' : 'hFull')
-                    : 's4';
+    const mode = resolveSizingMode(w, h);
     return <VizCell justify="start"><div className={dynamic(sizingVizSz({ mode }))} /></VizCell>;
 }
 
@@ -327,20 +342,29 @@ const borderVizSz = szv({
     },
 });
 
+type BorderKind = 'none' | 'b1' | 'b2' | 'b4' | 'solid' | 'dashed' | 'dotted' | 'double';
+
+function resolveBorderKind(border: number | boolean, borderStyle: string | undefined): BorderKind {
+    if (border === 0) return 'none';
+    if (
+        borderStyle === 'dashed' ||
+        borderStyle === 'dotted' ||
+        borderStyle === 'double' ||
+        borderStyle === 'solid'
+    ) {
+        return borderStyle;
+    }
+    if (border === 4) return 'b4';
+    if (border === 2) return 'b2';
+    return 'b1';
+}
+
 /** Border width / style viz. Accepts sz prop names (`border`, `borderStyle`). */
 export function BorderViz({ border = true, borderStyle }: {
     border?: number | boolean; borderStyle?: string;
 }) {
-    const kind =
-        border === 0            ? 'none'   :
-        borderStyle === 'dashed'? 'dashed' :
-        borderStyle === 'dotted'? 'dotted' :
-        borderStyle === 'double'? 'double' :
-        borderStyle === 'solid' ? 'solid'  :
-        border === 4            ? 'b4'     :
-        border === 2            ? 'b2'     :
-                                  'b1';
-    return <VizCell><div className={dynamic(borderVizSz({ kind: kind as 'none' | 'b1' | 'b2' | 'b4' | 'solid' | 'dashed' | 'dotted' | 'double' }))} /></VizCell>;
+    const kind = resolveBorderKind(border, borderStyle);
+    return <VizCell><div className={dynamic(borderVizSz({ kind }))} /></VizCell>;
 }
 
 // ── RadiusViz — szv over all rounded values used in borders.mdx ───────────────
@@ -456,6 +480,13 @@ const COL_SLOTS  = ['c0',  'c1',  'c2' ] as const;
 const ROW_SLOTS  = ['r0',  'r1',  'r2' ] as const;
 const ROWH_SLOTS = ['r0h', 'r1h', 'r2h'] as const;
 
+function resolveFlexSlot(wrap: boolean, isColumn: boolean, needsHeight: boolean, index: number) {
+    if (wrap) return 'wx';
+    if (isColumn) return COL_SLOTS[index];
+    if (needsHeight) return ROWH_SLOTS[index];
+    return ROW_SLOTS[index];
+}
+
 /** Flex layout viz. */
 export function FlexViz({ direction = 'row', wrap = false, justify = 'flex-start', items = 'stretch' }: {
     direction?: string; wrap?: boolean; justify?: string; items?: string;
@@ -479,10 +510,7 @@ export function FlexViz({ direction = 'row', wrap = false, justify = 'flex-start
             }))}>
                 {divs.map(i => (
                     <div key={i} className={dynamic(boxItemSz({
-                        slot: wrap    ? 'wx'
-                            : isCol   ? COL_SLOTS[i]
-                            : needsH  ? ROWH_SLOTS[i]
-                            :           ROW_SLOTS[i],
+                        slot: resolveFlexSlot(wrap, isCol, needsH, i),
                         idx: i,
                         color: isReverse ? 'reverse' : 'normal',
                     }))} />
@@ -635,10 +663,10 @@ export function SzToken({ value }: { value: string }) {
                 const isBool = val === 'true' || val === 'false';
                 const isStr  = /^['"]/.test(val);
                 const isObj  = val.startsWith('{');
-                const valClass = isNum  ? 'sz-val-num'
-                    : isBool ? 'sz-val-bool'
-                    : isStr  ? 'sz-val-str'
-                    : 'sz-punct';
+                let valClass = 'sz-punct';
+                if (isNum) valClass = 'sz-val-num';
+                else if (isBool) valClass = 'sz-val-bool';
+                else if (isStr) valClass = 'sz-val-str';
                 return (
                     <React.Fragment key={i}>
                         {i > 0 && <span className="sz-punct">{', '}</span>}
