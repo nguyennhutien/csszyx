@@ -3695,7 +3695,7 @@ function generateStyleValueExpression(info: DynamicPropInfo): t.Expression {
  */
 function collectFromExpr(node: t.Expression, classes: Set<string>): void {
     if (t.isStringLiteral(node)) {
-        collectClassWords(node.value, classes);
+        collectClassTokens(node.value, classes);
         return;
     }
     if (t.isConditionalExpression(node)) {
@@ -3707,24 +3707,13 @@ function collectFromExpr(node: t.Expression, classes: Set<string>): void {
 }
 
 /**
- * Add whitespace-separated class candidates in source order.
- * @param value - Whitespace-separated class text.
- * @param classes - Candidate set to update.
- */
-function collectClassWords(value: string, classes: Set<string>): void {
-    for (const className of value.split(/\s+/)) {
-        if (className) classes.add(className);
-    }
-}
-
-/**
  * Collect interleaved static and conditional pieces from a template.
  * @param node - Template expression to traverse.
  * @param classes - Candidate set to update.
  */
 function collectFromTemplateExpr(node: t.TemplateLiteral, classes: Set<string>): void {
     for (let index = 0; index < node.quasis.length; index++) {
-        collectClassWords(node.quasis[index].value.cooked ?? '', classes);
+        collectClassTokens(node.quasis[index].value.cooked ?? '', classes);
         const expression = node.expressions[index];
         if (expression && t.isExpression(expression)) {
             collectFromExpr(expression, classes);
