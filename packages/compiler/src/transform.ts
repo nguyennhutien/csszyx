@@ -372,6 +372,157 @@ interface SzArrayTransformResult {
     usesSzPart: boolean;
 }
 
+/** Result of compiling an sz object expression. */
+interface SzObjectTransformResult {
+    transformed: boolean;
+    usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
+}
+
+/** Generated class and style expressions for a partially static sz object. */
+interface PartialObjectArtifacts {
+    classExpression: t.Expression;
+    styleProperties: t.ObjectProperty[];
+}
+
+/**
+ * Writes one compiled class expression and records its Tailwind candidates.
+ *
+ * @param path sz attribute path.
+ * @param expression Compiled class expression.
+ * @param existing Existing JSX attributes.
+ * @param classMergeUsage Runtime class merge usage.
+ * @param classes Tailwind discovery set.
+ */
+function applyCompiledClassExpression(
+    path: babel.NodePath<t.JSXAttribute>,
+    expression: t.Expression,
+    existing: ExistingJsxAttributes,
+    classMergeUsage: ClassMergeUsage,
+    classes: Set<string>,
+): void {
+    path.node.name.name = 'className';
+    path.node.value = mergeClassNameValue(path, expression, existing, classMergeUsage);
+    if (t.isStringLiteral(expression)) collectClassTokens(expression.value, classes);
+    else collectFromExpr(expression, classes);
+}
+
+/**
+ * Builds class and inline-style expressions for a partially static object.
+ *
+ * @param partial Partial object evaluation.
+ * @param classes Tailwind discovery set.
+ * @returns Generated class and style expressions.
+ */
+function buildPartialObjectArtifacts(
+    partial: PartialObjectResult,
+    classes: Set<string>,
+): PartialObjectArtifacts {
+    const staticClasses: string[] = [];
+    if (Object.keys(partial.staticProps).length > 0) {
+        const compiled = transform(partial.staticProps).className;
+        if (compiled) staticClasses.push(compiled);
+    }
+
+    const cssVarClasses: string[] = [];
+    const styleProperties: t.ObjectProperty[] = [];
+    for (const [, info] of partial.dynamicProps) {
+        if (!info.skipClass) cssVarClasses.push(buildCSSVarClassName(info));
+        styleProperties.push(
+            t.objectProperty(t.stringLiteral(info.varName), generateStyleValueExpression(info)),
+        );
+    }
+
+    const baseClasses = [...staticClasses, ...partial.rawClasses, ...cssVarClasses].join(' ');
+    collectClassTokens(baseClasses, classes);
+    for (const conditional of partial.conditionalClasses) {
+        collectClassTokens(conditional.consequent, classes);
+        collectClassTokens(conditional.alternate, classes);
+    }
+    const classExpression =
+        partial.conditionalClasses.length > 0
+            ? buildConditionalClassExpr(baseClasses, partial.conditionalClasses)
+            : t.stringLiteral(baseClasses);
+    return { classExpression, styleProperties };
+}
+
+/**
+ * Compiles one object-literal sz expression when enough of it is static.
+ *
+ * @param path sz attribute path.
+ * @param expression Object expression to compile.
+ * @param existing Existing JSX attributes.
+ * @param classMergeUsage Runtime class merge usage.
+ * @param classes Tailwind discovery set.
+ * @returns Object transform result and style-helper usage.
+ */
+function transformSzObjectExpression(
+    path: babel.NodePath<t.JSXAttribute>,
+    expression: t.ObjectExpression,
+    existing: ExistingJsxAttributes,
+    classMergeUsage: ClassMergeUsage,
+    classes: Set<string>,
+): SzObjectTransformResult {
+    const unchanged: SzObjectTransformResult = {
+        transformed: false,
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
+    };
+    const getBinding: GetBinding = name => path.scope.getBinding(name);
+    const flatExpression = resolveObjectSpreads(expression, getBinding) ?? expression;
+
+    const staticObject = evaluateStaticObject(flatExpression);
+    if (staticObject !== null) {
+        applyCompiledClassExpression(
+            path,
+            t.stringLiteral(transform(staticObject).className),
+            existing,
+            classMergeUsage,
+            classes,
+        );
+        return { ...unchanged, transformed: true };
+    }
+
+    const hoisted = tryHoistConditionalSpread(expression, getBinding);
+    if (hoisted !== null) {
+        applyCompiledClassExpression(path, hoisted, existing, classMergeUsage, classes);
+        return { ...unchanged, transformed: true };
+    }
+
+    const nestedConditional = tryHoistNestedConditional(flatExpression, getBinding);
+    if (nestedConditional !== null) {
+        applyCompiledClassExpression(path, nestedConditional, existing, classMergeUsage, classes);
+        return { ...unchanged, transformed: true };
+    }
+
+    const partial = evaluatePartialObject(flatExpression);
+    if (
+        partial === null ||
+        partial.hasSpread ||
+        (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)
+    ) {
+        return unchanged;
+    }
+
+    const artifacts = buildPartialObjectArtifacts(partial, classes);
+    applyCompiledClassExpression(
+        path,
+        artifacts.classExpression,
+        existing,
+        classMergeUsage,
+        classes,
+    );
+    mergeStyleProperties(path, artifacts.styleProperties, existing);
+    return {
+        transformed: true,
+        usesColorVar: partial.usesColorVar,
+        usesSpacingVar: partial.usesSpacingVar,
+        usesUnitVar: partial.usesUnitVar,
+    };
+}
+
 /**
  * Classifies a conditional sz array element.
  *
@@ -865,175 +1016,21 @@ export function transformSourceCode(
 
                                 // Static Extraction Logic: sz={{ p: 4, bg: 'blue' }}
                                 if (t.isObjectExpression(expression)) {
-                                    // Flatten SpreadElements from local variable bindings before
-                                    // static/partial evaluation. Falls back to original expression
-                                    // if any spread can't be statically resolved.
-                                    const getBinding = (
-                                        name: string,
-                                    ): ReturnType<typeof path.scope.getBinding> =>
-                                        path.scope.getBinding(name);
-                                    const flatExpression =
-                                        resolveObjectSpreads(expression, getBinding) ?? expression;
-
-                                    const staticObject = evaluateStaticObject(flatExpression);
-                                    if (staticObject !== null) {
-                                        // Compile time transformation
-                                        const { className } = transform(staticObject);
-                                        for (const c of className.split(/\s+/)) {
-                                            if (c) {
-                                                collectedClasses.add(c);
-                                            }
-                                        }
-                                        path.node.name.name = 'className';
-                                        path.node.value = mergeClassNameValue(
-                                            path,
-                                            t.stringLiteral(className),
-                                            existingAttributes,
-                                            classMergeUsage,
-                                        );
-
-                                        transformed = true;
-                                        return;
-                                    }
-
-                                    // Hoist conditional spread: { ...(cond ? varA : varB), key: 'val' }
-                                    // → className={cond ? "classes-a key-val" : "classes-b key-val"}
-                                    const hoisted = tryHoistConditionalSpread(
+                                    const objectResult = transformSzObjectExpression(
+                                        path,
                                         expression,
-                                        getBinding,
+                                        existingAttributes,
+                                        classMergeUsage,
+                                        collectedClasses,
                                     );
-                                    if (hoisted !== null) {
-                                        path.node.name.name = 'className';
-                                        path.node.value = mergeClassNameValue(
-                                            path,
-                                            hoisted,
-                                            existingAttributes,
-                                            classMergeUsage,
-                                        );
-                                        collectFromExpr(hoisted, collectedClasses);
-                                        transformed = true;
-                                        return;
-                                    }
-
-                                    // Hoist a finite conditional nested in a value
-                                    // (`{ borderColor: { color: cond ? a : b, op } }`)
-                                    // into both branches — matches the native engine,
-                                    // instead of falling to the runtime/CSS-var path.
-                                    const hoistedNested = tryHoistNestedConditional(
-                                        flatExpression,
-                                        getBinding,
-                                    );
-                                    if (hoistedNested !== null) {
-                                        path.node.name.name = 'className';
-                                        path.node.value = mergeClassNameValue(
-                                            path,
-                                            hoistedNested,
-                                            existingAttributes,
-                                            classMergeUsage,
-                                        );
-                                        collectFromExpr(hoistedNested, collectedClasses);
-                                        transformed = true;
-                                        return;
-                                    }
-
-                                    // CSS Variable Auto-Compile: partial static/dynamic
-                                    const partial = evaluatePartialObject(flatExpression);
-                                    if (
-                                        partial !== null &&
-                                        !partial.hasSpread &&
-                                        (partial.dynamicProps.size > 0 ||
-                                            partial.conditionalClasses.length > 0)
-                                    ) {
-                                        // Build static class string from static props
-                                        const staticClasses: string[] = [];
-                                        if (Object.keys(partial.staticProps).length > 0) {
-                                            const { className: sc } = transform(
-                                                partial.staticProps,
-                                            );
-                                            if (sc) {
-                                                staticClasses.push(sc);
-                                            }
-                                        }
-
-                                        // Build CSS variable class strings (truly dynamic props)
-                                        const cssVarClasses: string[] = [];
-                                        const styleProps: t.ObjectProperty[] = [];
-
-                                        for (const [, info] of partial.dynamicProps) {
-                                            if (!info.skipClass) {
-                                                cssVarClasses.push(buildCSSVarClassName(info));
-                                            }
-                                            styleProps.push(
-                                                t.objectProperty(
-                                                    t.stringLiteral(info.varName),
-                                                    generateStyleValueExpression(info),
-                                                ),
-                                            );
-                                        }
-
-                                        // Collect all classes for Tailwind safelist
-                                        const baseClasses = [
-                                            ...staticClasses,
-                                            ...partial.rawClasses,
-                                            ...cssVarClasses,
-                                        ].join(' ');
-                                        for (const c of baseClasses.split(/\s+/)) {
-                                            if (c) {
-                                                collectedClasses.add(c);
-                                            }
-                                        }
-                                        for (const cc of partial.conditionalClasses) {
-                                            for (const c of cc.consequent.split(/\s+/)) {
-                                                if (c) {
-                                                    collectedClasses.add(c);
-                                                }
-                                            }
-                                            for (const c of cc.alternate.split(/\s+/)) {
-                                                if (c) {
-                                                    collectedClasses.add(c);
-                                                }
-                                            }
-                                        }
-
-                                        // Build className expression
-                                        // - no conditionals: plain string (same as before)
-                                        // - has conditionals: template literal or bare ternary
-                                        const classExpr =
-                                            partial.conditionalClasses.length > 0
-                                                ? buildConditionalClassExpr(
-                                                      baseClasses,
-                                                      partial.conditionalClasses,
-                                                  )
-                                                : t.stringLiteral(baseClasses);
-
-                                        // Set className
-                                        path.node.name.name = 'className';
-                                        path.node.value = mergeClassNameValue(
-                                            path,
-                                            classExpr,
-                                            existingAttributes,
-                                            classMergeUsage,
-                                        );
-
-                                        // Inject style attribute (only when CSS variables are needed)
-                                        mergeStyleProperties(path, styleProps, existingAttributes);
-
-                                        // Track runtime style-var helper usage
-                                        if (partial.usesColorVar) {
-                                            usesColorVar = true;
-                                        }
-                                        if (partial.usesSpacingVar) {
-                                            usesSpacingVar = true;
-                                        }
-                                        if (partial.usesUnitVar) {
-                                            usesUnitVar = true;
-                                        }
-
+                                    if (objectResult.transformed) {
+                                        usesColorVar ||= objectResult.usesColorVar;
+                                        usesSpacingVar ||= objectResult.usesSpacingVar;
+                                        usesUnitVar ||= objectResult.usesUnitVar;
                                         transformed = true;
                                         return;
                                     }
                                 }
-
                                 // Identifier resolution: sz={mySzVar}
                                 // Resolve variable binding and try to pre-compile
                                 if (
