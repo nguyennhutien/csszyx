@@ -104,6 +104,65 @@ export type SpacingValue =
 /** Negative spacing value */
 export type NegativeSpacingValue = SpacingValue | number;
 
+/** Shared overflow utility values. */
+type OverflowValue = 'auto' | 'hidden' | 'clip' | 'visible' | 'scroll';
+
+/** Shared overscroll utility values. */
+type OverscrollValue = 'auto' | 'contain' | 'none';
+
+/** Shared explicit grid line value. */
+type GridLineValue =
+    | 'auto'
+    | 1
+    | 2
+    | 3
+    | 4
+    | 5
+    | 6
+    | 7
+    | 8
+    | 9
+    | 10
+    | 11
+    | 12
+    | 13
+    | number
+    | (string & {});
+
+/** Shared minimum and maximum height value. */
+type HeightBoundaryValue =
+    | SpacingScale
+    | 'px'
+    | 'full'
+    | 'screen'
+    | 'svh'
+    | 'lvh'
+    | 'dvh'
+    | 'min'
+    | 'max'
+    | 'fit'
+    | (string & {});
+
+/** Shared border-width shorthand value. */
+type BorderWidthValue = boolean | 0 | 2 | 4 | 8 | (string & {});
+
+/** Shared boolean filter value with an explicit zero form. */
+type BinaryFilterValue = boolean | 0 | (string & {});
+
+/** Shared transition duration and delay scale. */
+type TransitionTimeValue =
+    | 0
+    | 75
+    | 100
+    | 150
+    | 200
+    | 300
+    | 500
+    | 700
+    | 1000
+    | number
+    | (string & {});
+
 /** Tailwind color names */
 export type ColorName =
     | 'inherit'
@@ -351,14 +410,14 @@ export interface LayoutProps {
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/overflow */
-    overflow?: 'auto' | 'hidden' | 'clip' | 'visible' | 'scroll';
-    overflowX?: 'auto' | 'hidden' | 'clip' | 'visible' | 'scroll';
-    overflowY?: 'auto' | 'hidden' | 'clip' | 'visible' | 'scroll';
+    overflow?: OverflowValue;
+    overflowX?: OverflowValue;
+    overflowY?: OverflowValue;
 
     /** @see https://tailwindcss.com/docs/overscroll-behavior */
-    overscroll?: 'auto' | 'contain' | 'none';
-    overscrollX?: 'auto' | 'contain' | 'none';
-    overscrollY?: 'auto' | 'contain' | 'none';
+    overscroll?: OverscrollValue;
+    overscrollX?: OverscrollValue;
+    overscrollY?: OverscrollValue;
 
     /** @see https://tailwindcss.com/docs/position */
     position?: 'static' | 'fixed' | 'absolute' | 'relative' | 'sticky';
@@ -471,78 +530,14 @@ export interface FlexboxGridProps {
     /** @see https://tailwindcss.com/docs/grid-column */
     col?: 'auto' | number | (string & {});
     colSpan?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 'full' | number | (string & {});
-    colStart?:
-        | 'auto'
-        | 1
-        | 2
-        | 3
-        | 4
-        | 5
-        | 6
-        | 7
-        | 8
-        | 9
-        | 10
-        | 11
-        | 12
-        | 13
-        | number
-        | (string & {});
-    colEnd?:
-        | 'auto'
-        | 1
-        | 2
-        | 3
-        | 4
-        | 5
-        | 6
-        | 7
-        | 8
-        | 9
-        | 10
-        | 11
-        | 12
-        | 13
-        | number
-        | (string & {});
+    colStart?: GridLineValue;
+    colEnd?: GridLineValue;
 
     /** @see https://tailwindcss.com/docs/grid-row */
     row?: 'auto' | number | (string & {});
     rowSpan?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 'full' | number | (string & {});
-    rowStart?:
-        | 'auto'
-        | 1
-        | 2
-        | 3
-        | 4
-        | 5
-        | 6
-        | 7
-        | 8
-        | 9
-        | 10
-        | 11
-        | 12
-        | 13
-        | number
-        | (string & {});
-    rowEnd?:
-        | 'auto'
-        | 1
-        | 2
-        | 3
-        | 4
-        | 5
-        | 6
-        | 7
-        | 8
-        | 9
-        | 10
-        | 11
-        | 12
-        | 13
-        | number
-        | (string & {});
+    rowStart?: GridLineValue;
+    rowEnd?: GridLineValue;
 
     /** @see https://tailwindcss.com/docs/grid-auto-flow */
     gridFlow?: 'row' | 'col' | 'dense' | 'row-dense' | 'col-dense';
@@ -760,32 +755,10 @@ export interface SizingProps {
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/min-height */
-    minH?:
-        | SpacingScale
-        | 'px'
-        | 'full'
-        | 'screen'
-        | 'svh'
-        | 'lvh'
-        | 'dvh'
-        | 'min'
-        | 'max'
-        | 'fit'
-        | (string & {});
+    minH?: HeightBoundaryValue;
 
     /** @see https://tailwindcss.com/docs/max-height */
-    maxH?:
-        | SpacingScale
-        | 'px'
-        | 'full'
-        | 'screen'
-        | 'svh'
-        | 'lvh'
-        | 'dvh'
-        | 'min'
-        | 'max'
-        | 'fit'
-        | (string & {});
+    maxH?: HeightBoundaryValue;
 
     /** @see https://tailwindcss.com/docs/size */
     size?: SpacingScale | 'px' | 'auto' | 'full' | 'min' | 'max' | 'fit' | (string & {});
@@ -1159,19 +1132,19 @@ export interface BorderProps {
     roundedEe?: BorderRadiusValue;
 
     /** @see https://tailwindcss.com/docs/border-width — use `borderColor` for border color */
-    border?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderX?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderY?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderT?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderR?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderB?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderL?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderS?: boolean | 0 | 2 | 4 | 8 | (string & {});
-    borderE?: boolean | 0 | 2 | 4 | 8 | (string & {});
+    border?: BorderWidthValue;
+    borderX?: BorderWidthValue;
+    borderY?: BorderWidthValue;
+    borderT?: BorderWidthValue;
+    borderR?: BorderWidthValue;
+    borderB?: BorderWidthValue;
+    borderL?: BorderWidthValue;
+    borderS?: BorderWidthValue;
+    borderE?: BorderWidthValue;
     /** border-block-start width */
-    borderBs?: boolean | 0 | 2 | 4 | 8 | (string & {});
+    borderBs?: BorderWidthValue;
     /** border-block-end width */
-    borderBe?: boolean | 0 | 2 | 4 | 8 | (string & {});
+    borderBe?: BorderWidthValue;
 
     /** @see https://tailwindcss.com/docs/border-color */
     borderColor?: ColorPropValue;
@@ -1333,19 +1306,19 @@ export interface FilterProps {
     dropShadow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none' | true | (string & {});
 
     /** @see https://tailwindcss.com/docs/grayscale */
-    grayscale?: boolean | 0 | (string & {});
+    grayscale?: BinaryFilterValue;
 
     /** @see https://tailwindcss.com/docs/hue-rotate */
     hueRotate?: 0 | 15 | 30 | 60 | 90 | 180 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/invert */
-    invert?: boolean | 0 | (string & {});
+    invert?: BinaryFilterValue;
 
     /** @see https://tailwindcss.com/docs/saturate */
     saturate?: 0 | 50 | 100 | 150 | 200 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/sepia */
-    sepia?: boolean | 0 | (string & {});
+    sepia?: BinaryFilterValue;
 
     /** @see https://tailwindcss.com/docs/backdrop-blur */
     backdropBlur?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | true | (string & {});
@@ -1370,13 +1343,13 @@ export interface FilterProps {
     backdropContrast?: 0 | 50 | 75 | 100 | 125 | 150 | 200 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/backdrop-grayscale */
-    backdropGrayscale?: boolean | 0 | (string & {});
+    backdropGrayscale?: BinaryFilterValue;
 
     /** @see https://tailwindcss.com/docs/backdrop-hue-rotate */
     backdropHueRotate?: 0 | 15 | 30 | 60 | 90 | 180 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/backdrop-invert */
-    backdropInvert?: boolean | 0 | (string & {});
+    backdropInvert?: BinaryFilterValue;
 
     /** @see https://tailwindcss.com/docs/backdrop-opacity */
     backdropOpacity?:
@@ -1408,7 +1381,7 @@ export interface FilterProps {
     backdropSaturate?: 0 | 50 | 100 | 150 | 200 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/backdrop-sepia */
-    backdropSepia?: boolean | 0 | (string & {});
+    backdropSepia?: BinaryFilterValue;
 }
 
 // ============================================================================
@@ -1505,13 +1478,13 @@ export interface TransitionAnimationProps {
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/transition-duration */
-    duration?: 0 | 75 | 100 | 150 | 200 | 300 | 500 | 700 | 1000 | number | (string & {});
+    duration?: TransitionTimeValue;
 
     /** @see https://tailwindcss.com/docs/transition-timing-function */
     ease?: 'linear' | 'in' | 'out' | 'in-out' | (string & {});
 
     /** @see https://tailwindcss.com/docs/transition-delay */
-    delay?: 0 | 75 | 100 | 150 | 200 | 300 | 500 | 700 | 1000 | number | (string & {});
+    delay?: TransitionTimeValue;
 
     /** @see https://tailwindcss.com/docs/animation */
     animate?: 'none' | 'spin' | 'ping' | 'pulse' | 'bounce' | (string & {});
