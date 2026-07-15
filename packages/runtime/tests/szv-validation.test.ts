@@ -91,7 +91,7 @@ describe('szv config/selection validation (dev)', () => {
 
     it('warns on a forbidden (prototype-polluting) key in a variant value', () => {
         const hostile = JSON.parse('{"size":{"sm":{"__proto__":{"px":9}}}}');
-        szv({ variants: hostile.size ? hostile : hostile });
+        szv({ variants: hostile });
         expect(warned(/forbidden key "__proto__"/)).toBe(true);
     });
 

@@ -44,7 +44,7 @@ describe('_sz', () => {
 
     it('should handle array arguments', () => {
         expect(_sz(['a', 'b'])).toBe('a b');
-        expect(_sz(['a', false && 'b', 'c'])).toBe('a c');
+        expect(_sz(['a', false, 'c'])).toBe('a c');
     });
 
     it('should handle nested array arguments recursively', () => {
@@ -52,8 +52,8 @@ describe('_sz', () => {
     });
 
     it('should handle array arguments with objects', () => {
-        expect(_sz([{ w: 8, h: 8 }, false && { textAlign: 'right' }])).toBe('w-8 h-8');
-        expect(_sz([{ w: 8, h: 8 }, true && { textAlign: 'right' }])).toBe('w-8 h-8 text-right');
+        expect(_sz([{ w: 8, h: 8 }, false])).toBe('w-8 h-8');
+        expect(_sz([{ w: 8, h: 8 }, { textAlign: 'right' }])).toBe('w-8 h-8 text-right');
     });
 });
 describe('_sz2', () => {
