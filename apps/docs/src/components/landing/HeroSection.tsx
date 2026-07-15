@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import { highlightSzTokens } from '../../utils/highlight-sz-tokens.js';
+
 // ── Compiler animation data ────────────────────────────────────────
 // Object form is intentional: property values sit after `:` in the bundle, which is
 // outside the lookbehind of the mangler's Pass 3 regex (?<=(?:[,(]|&&)\s*).
@@ -109,30 +111,12 @@ const compileData: CompileEntry[] = [
 ];
 
 const mangleChars = 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA';
-const SZ_HIGHLIGHT_PATTERN =
-  /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g;
 let mangleIdx = 0;
 function getNextMangle(): string {
   const i = mangleIdx++;
   return i < mangleChars.length
     ? mangleChars[i]
     : mangleChars[i % mangleChars.length] + Math.floor(i / mangleChars.length);
-}
-
-function highlightSzTokens(text: string, classPrefix: '' | 'ho-'): string {
-  return text.replace(SZ_HIGHLIGHT_PATTERN, (match, ...captures) => {
-    const [stringToken, key, booleanPrefix, booleanValue, numberPrefix, numberValue, symbol] = captures;
-    if (stringToken) return `<span class="${classPrefix}string">${stringToken}</span>`;
-    if (key) return `<span class="${classPrefix}key">${key}</span>`;
-    if (booleanValue) return `${booleanPrefix}<span class="${classPrefix}boolean">${booleanValue}</span>`;
-    if (numberValue) return `${numberPrefix}<span class="${classPrefix}number">${numberValue}</span>`;
-    if (symbol) {
-      return classPrefix
-        ? `<span class="${classPrefix}symbol">${symbol}</span>`
-        : `<span style="color:light-dark(#94a3b8,#475569)">${symbol}</span>`;
-    }
-    return match;
-  });
 }
 
 function highlightSz(text: string): string {
