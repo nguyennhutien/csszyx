@@ -12,6 +12,10 @@ import { createHash } from 'node:crypto';
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
 import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
 import { sortStrings } from './sort.js';
+import { replaceEveryLiteral, unicodeEscape } from './string-escape.js';
+
+const LINE_SEPARATOR = String.fromCodePoint(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCodePoint(0x2029);
 
 /**
  * Escape JSON for safe embedding inside an HTML `<script>` tag.
@@ -28,12 +32,11 @@ import { sortStrings } from './sort.js';
  */
 export function safeJsonForScriptTag(value: unknown, prettyPrint = false): string {
     const json = prettyPrint ? JSON.stringify(value, null, 2) : JSON.stringify(value);
-    return json
-        .replace(/</g, '\\u003C')
-        .replace(/>/g, '\\u003E')
-        .replace(/&/g, '\\u0026')
-        .replace(/\u2028/g, '\\u2028')
-        .replace(/\u2029/g, '\\u2029');
+    let escaped = replaceEveryLiteral(json, '<', unicodeEscape('003C'));
+    escaped = replaceEveryLiteral(escaped, '>', unicodeEscape('003E'));
+    escaped = replaceEveryLiteral(escaped, '&', unicodeEscape('0026'));
+    escaped = replaceEveryLiteral(escaped, LINE_SEPARATOR, unicodeEscape('2028'));
+    return replaceEveryLiteral(escaped, PARAGRAPH_SEPARATOR, unicodeEscape('2029'));
 }
 
 /**
