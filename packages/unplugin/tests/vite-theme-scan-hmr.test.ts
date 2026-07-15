@@ -12,6 +12,24 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { vitePlugin } from '../src/unplugin.js';
 
 const tempDirs: string[] = [];
+const hookContext = { warn() {}, error() {} };
+
+async function invokeHook(
+    plugins: ReturnType<typeof vitePlugin>,
+    hookName: string,
+    ...args: unknown[]
+): Promise<unknown> {
+    const plugin = plugins.find(candidate =>
+        Boolean(candidate && hookName in (candidate as Record<string, unknown>)),
+    );
+    if (!plugin) return undefined;
+    const hook = (plugin as Record<string, unknown>)[hookName];
+    const handler = (
+        typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler
+    ) as ((...hookArgs: unknown[]) => unknown) | undefined;
+    return handler ? await handler.apply(hookContext, args) : undefined;
+}
+
 afterEach(() => {
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -24,18 +42,8 @@ describe('vite theme scan on hot update', () => {
         fs.writeFileSync(themeCss, '@theme {\n  --color-brand: #123456;\n}\n', 'utf8');
 
         const plugins = vitePlugin({ build: { scanCss: ['theme.css'] } });
-        const ctx = { warn() {}, error() {} };
-        const invoke = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
-            const plugin = plugins.find(p => p && hookName in (p as Record<string, unknown>));
-            if (!plugin) return undefined;
-            const hook = (plugin as Record<string, unknown>)[hookName];
-            const fn = (
-                typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler
-            ) as ((...a: unknown[]) => unknown) | undefined;
-            return fn ? await fn.apply(ctx, args) : undefined;
-        };
 
-        await invoke('configResolved', { root, command: 'serve' });
+        await invokeHook(plugins, 'configResolved', { root, command: 'serve' });
 
         const server = {
             config: { root },
@@ -44,7 +52,7 @@ describe('vite theme scan on hot update', () => {
         };
         // Changing the watched theme file triggers the theme rescan branch.
         await expect(
-            invoke('handleHotUpdate', { file: themeCss, server, modules: [] }),
+            invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] }),
         ).resolves.not.toThrow();
 
         // The scan wrote the generated theme declaration file.
@@ -56,17 +64,7 @@ describe('vite theme scan on hot update', () => {
         tempDirs.push(root);
 
         const plugins = vitePlugin({ build: { scanCss: ['does-not-exist.css'] } });
-        const ctx = { warn() {}, error() {} };
-        const invoke = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
-            const plugin = plugins.find(p => p && hookName in (p as Record<string, unknown>));
-            if (!plugin) return undefined;
-            const hook = (plugin as Record<string, unknown>)[hookName];
-            const fn = (
-                typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler
-            ) as ((...a: unknown[]) => unknown) | undefined;
-            return fn ? await fn.apply(ctx, args) : undefined;
-        };
-        await invoke('configResolved', { root, command: 'serve' });
+        await invokeHook(plugins, 'configResolved', { root, command: 'serve' });
 
         // No matching CSS → the scan returns early and never writes theme.d.ts.
         expect(fs.existsSync(path.join(root, '.csszyx', 'theme.d.ts'))).toBe(false);
