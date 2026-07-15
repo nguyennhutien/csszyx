@@ -864,29 +864,31 @@ describe('partial-path static value shapes', () => {
         expect(r.classes.has('hover:p-(--_sz-hover-p)')).toBe(true);
     });
 
-    it('emits a variant-scoped CSS var for a fully-dynamic conditional inside a variant', () => {
-        const jsx = 'const A = ({ c, d1, d2 }) => <div sz={{ hover: { m: c ? d1 : d2 } }} />;';
+    it.each([
+        {
+            label: 'a fully dynamic variant conditional',
+            jsx: 'const A = ({ c, d1, d2 }) => <div sz={{ hover: { m: c ? d1 : d2 } }} />;',
+            expectedCode: 'hover:m-(--_sz-hover-m)',
+        },
+        {
+            label: 'a dynamic sibling in a color object',
+            jsx: 'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: "20", extra: d } }} />;',
+            usesRuntime: true,
+        },
+        {
+            label: 'a string-literal key',
+            jsx: "const A = ({ v }) => <div sz={{ 'p': v }} />;",
+            expectedCode: 'p-(--_sz-p)',
+        },
+        {
+            label: 'a numeric-literal key',
+            jsx: 'const A = ({ v }) => <div sz={{ 2: v }} />;',
+            expectedCode: '--_sz-2',
+        },
+    ])('handles $label on the partial path', ({ jsx, expectedCode, usesRuntime }) => {
         const r = run(jsx);
-        expect(r.code).toContain('hover:m-(--_sz-hover-m)');
-    });
-
-    it('handles a static color + static string op inside an otherwise-dynamic color object', () => {
-        const jsx =
-            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: "20", extra: d } }} />;';
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-    });
-
-    it('supports a string-literal key with a dynamic value', () => {
-        const jsx = "const A = ({ v }) => <div sz={{ 'p': v }} />;";
-        const r = run(jsx);
-        expect(r.code).toContain('p-(--_sz-p)');
-    });
-
-    it('supports a numeric-literal key with a dynamic value', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ 2: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('--_sz-2');
+        if (expectedCode) expect(r.code).toContain(expectedCode);
+        if (usesRuntime) expect(r.usesRuntime).toBe(true);
     });
 });
 
@@ -1205,35 +1207,37 @@ describe('final reachable branches', () => {
         expect(r.usesRuntime).toBe(true);
     });
 
-    it('walks an object-valued catalog leaf through the values lane', () => {
-        const jsx =
-            'const x = szv({ base: { hover: { p: 1 } }, variants: { s: { a: { w: 2 } } } });';
+    it.each([
+        {
+            label: 'an object-valued catalog leaf',
+            jsx: 'const x = szv({ base: { hover: { p: 1 } }, variants: { s: { a: { w: 2 } } } });',
+            expectedClasses: ['hover:p-1', 'w-2'],
+        },
+        {
+            label: 'a shared const catalog leaf',
+            jsx: 'const G = 4; const x = szv({ base: { mx: G, my: G }, variants: { s: { a: { w: 2 } } } });',
+            expectedClasses: ['mx-4', 'my-4'],
+        },
+        {
+            label: 'an unknown camelCase dynamic key',
+            jsx: 'const A = ({ c, dv }) => <div sz={{ hover: { fooBar: c ? 4 : dv } }} />;',
+            expectedCode: 'hover:foo-bar-(--_sz-hover-foo-bar)',
+        },
+        {
+            label: 'an unresolvable nested spread',
+            jsx:
+                "import { imp, imp2 } from './x';\n" +
+                'const A = () => <div sz={{ ...imp, card: { ...imp2, m: 2 } }} />;',
+            expectedClasses: ['m-2'],
+            usesRuntime: true,
+        },
+    ])('covers $label in final branches', ({ jsx, expectedClasses, expectedCode, usesRuntime }) => {
         const r = run(jsx);
-        expect(r.classes.has('hover:p-1')).toBe(true);
-        expect(r.classes.has('w-2')).toBe(true);
-    });
-
-    it('memoizes a const leaf referenced twice in a catalog object (value lane)', () => {
-        const jsx =
-            'const G = 4; const x = szv({ base: { mx: G, my: G }, variants: { s: { a: { w: 2 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('mx-4')).toBe(true);
-        expect(r.classes.has('my-4')).toBe(true);
-    });
-
-    it('kebab-cases an unknown camelCase conditional-dynamic key inside a variant', () => {
-        const jsx = 'const A = ({ c, dv }) => <div sz={{ hover: { fooBar: c ? 4 : dv } }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('hover:foo-bar-(--_sz-hover-foo-bar)');
-    });
-
-    it('collects a nested non-variant object with an unresolvable spread in a fallback', () => {
-        const jsx =
-            "import { imp, imp2 } from './x';\n" +
-            'const A = () => <div sz={{ ...imp, card: { ...imp2, m: 2 } }} />;';
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-        expect(r.classes.has('m-2')).toBe(true);
+        if (expectedClasses) {
+            expect([...r.classes]).toEqual(expect.arrayContaining(expectedClasses));
+        }
+        if (expectedCode) expect(r.code).toContain(expectedCode);
+        if (usesRuntime) expect(r.usesRuntime).toBe(true);
     });
 
     it('prefixes a variant conditional-both-static prop when the object is not hoistable', () => {
