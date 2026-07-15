@@ -1,6 +1,12 @@
+function beamShadow(color: string): string {
+  if (color.startsWith('rgba(34')) return '0 0 28px 2px rgba(34,211,238,0.5)';
+  if (color.startsWith('rgba(45')) return '0 0 28px 2px rgba(45,213,151,0.5)';
+  return '0 0 28px 2px rgba(139,92,246,0.5)';
+}
+
 function BeamEdge({ color, delay1, delay2 }: { color: string; delay1: string; delay2: string }) {
   const gradient = `linear-gradient(to right,transparent,${color} 35%,${color} 65%,transparent)`;
-  const shadow = color.startsWith('rgba(34') ? '0 0 28px 2px rgba(34,211,238,0.5)' : color.startsWith('rgba(45') ? '0 0 28px 2px rgba(45,213,151,0.5)' : '0 0 28px 2px rgba(139,92,246,0.5)';
+  const shadow = beamShadow(color);
 
   return (
     <div className="beam-wrapper" sz={{ position: 'absolute', inset: 0, z: 20, pointerEvents: 'none', rounded: '3xl', overflow: 'hidden' }}>
