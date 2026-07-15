@@ -659,6 +659,12 @@ const MIN_BREAKPOINTS = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
 const MAX_BREAKPOINTS = new Set(['max-sm', 'max-md', 'max-lg', 'max-xl', 'max-2xl']);
 const CONTAINER_MIN = new Set(['@sm', '@md', '@lg', '@xl', '@2xl']);
 const CONTAINER_MAX = new Set(['@max-sm', '@max-md', '@max-lg', '@max-xl', '@max-2xl']);
+const RESPONSIVE_TIERS = new Set([
+    ...MIN_BREAKPOINTS,
+    ...MAX_BREAKPOINTS,
+    ...CONTAINER_MIN,
+    ...CONTAINER_MAX,
+]);
 
 /**
  *
@@ -719,16 +725,7 @@ export function parseVariants(cls: string): ParsedVariants {
     for (let i = 0; i < parts.length - 1; i++) {
         const variant = parts[i];
 
-        if (MIN_BREAKPOINTS.has(variant)) {
-            tier = variant as Tier;
-            utilityIdx = i + 1;
-        } else if (MAX_BREAKPOINTS.has(variant)) {
-            tier = variant as Tier;
-            utilityIdx = i + 1;
-        } else if (CONTAINER_MIN.has(variant)) {
-            tier = variant as Tier;
-            utilityIdx = i + 1;
-        } else if (CONTAINER_MAX.has(variant)) {
+        if (RESPONSIVE_TIERS.has(variant)) {
             tier = variant as Tier;
             utilityIdx = i + 1;
         } else if (variant === 'dark') {
