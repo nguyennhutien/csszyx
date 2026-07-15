@@ -70,5 +70,6 @@ export function buildScopeId(node: ChildNode): string {
         }
         current = current.parent as ChildNode | Root | undefined;
     }
-    return parts.reverse().join(' > ') || DEFAULT_SCOPE_ID;
+    parts.reverse();
+    return parts.join(' > ') || DEFAULT_SCOPE_ID;
 }

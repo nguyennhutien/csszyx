@@ -497,7 +497,8 @@ function renderTailwindSourceHtml(classNames: readonly string[]): string {
     const structuralHtml = classNames
         .map(className => `<div class="${escapeHtmlAttribute(className)}"></div>`)
         .join('\n');
-    return `${structuralHtml}\n${renderTailwindScannerCandidates(classNames)}`;
+    const scannerCandidates = renderTailwindScannerCandidates(classNames);
+    return `${structuralHtml}\n${scannerCandidates}`;
 }
 
 /**

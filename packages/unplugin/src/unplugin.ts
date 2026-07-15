@@ -37,6 +37,7 @@ import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 
 import { mangleCSSSync } from './css-mangler.js';
+import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
     createGlobalVarAliasValidationOptions,
@@ -265,9 +266,6 @@ const TRANSFORM_MEMORY_CACHE_MAX_CODE_CHARS = 32_000_000;
 const MAX_SAFELIST_CLASSES = 100_000;
 const DEFAULT_VAR_MANGLE_MAP_MAX_BYTES = 100 * 1024;
 const GLOBAL_VAR_ALIAS_MAP_OWNER = '\0csszyx:global-var-aliases';
-const DIRECTIVE_PROLOGUE_PREFIX_RE =
-    /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
-
 // Runtime-helper import detection now lives in runtime-import-scan.ts as a
 // linear forward scan — the previous `\{[^{}]*\bNAME\b[^{}]*\}` regexes were
 // quadratic-by-search (two open runs around the needle).
@@ -1707,12 +1705,7 @@ function matchesScriptExtension(id: string, extensions: readonly string[]): bool
  * @returns code with the import inserted
  */
 function insertRuntimeImport(code: string, importStmt: string): string {
-    const directiveMatch = code.match(DIRECTIVE_PROLOGUE_PREFIX_RE);
-    if (!directiveMatch) {
-        return `${importStmt}${code}`;
-    }
-
-    return code.replace(directiveMatch[0], `${directiveMatch[1]}${directiveMatch[2]}${importStmt}`);
+    return insertAfterUseDirective(code, importStmt);
 }
 
 /**

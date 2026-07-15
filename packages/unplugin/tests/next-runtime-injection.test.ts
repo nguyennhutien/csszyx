@@ -35,6 +35,18 @@ describe('Next runtime import injection', () => {
         );
     });
 
+    it('preserves leading trivia and a use server directive before injected imports', () => {
+        const source =
+            '/* license */\n// server action\n\n"use server";\nexport const run = () => _sz({});';
+        const result = injectNextRuntimeImports(source, { usesRuntime: true });
+
+        expect(result.code).toBe(
+            '/* license */\n// server action\n\n"use server";\n' +
+                "import { _sz } from '@csszyx/runtime';\n" +
+                'export const run = () => _sz({});',
+        );
+    });
+
     it('injects only helpers missing from an existing runtime import', () => {
         const result = injectNextRuntimeImports(
             "import { _sz } from '@csszyx/runtime';\nexport const App = () => _szMerge('p-4');",
