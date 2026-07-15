@@ -45,11 +45,12 @@ import { App } from './App.tsx';
 // Side effect so the component (and its class strings) survive tree-shaking.
 document.body.textContent = JSON.stringify(App({ wide: false }));
 `,
-    // Two same-prefix spacing classes so the merge assertion has a real
-    // conflict pair, plus a non-owned app class that must survive untouched.
+    // `p-4` is deliberately shared by sz and a mixed raw clsx string. It must
+    // stay readable while sz-only utilities still take the optimized path.
     'src/App.tsx': `
+const clsx = (...values) => values.filter(Boolean).join(' ');
 export const App = ({ wide }) => (
-    <div className={wide ? undefined : 'dems-panel'} sz={{ mx: 0 }}>
+    <div className={clsx('p-4 dems-panel', wide ? 'wide-panel' : undefined)} sz={{ p: 4, m: 3, mx: 0 }}>
         <span sz={{ mx: 4, color: 'red-500', hover: { bg: 'zinc-100' } }} />
     </div>
 );
@@ -59,6 +60,8 @@ export const App = ({ wide }) => (
     'src/styles.css': `
 .mx-0 { margin-left: 0; }
 .mx-4 { margin-left: 1rem; }
+.p-4 { padding: 1rem; }
+.m-3 { margin: .75rem; }
 .text-red-500 { color: red; }
 .dems-panel { border: 1px solid; }
 `,
@@ -78,7 +81,7 @@ const tempDirs: string[] = [];
  * @param parser - engine under test.
  * @returns normalized JS + CSS output and the mangle map from the built HTML.
  */
-async function buildWithMangle(parser: 'rust' | 'oxc'): Promise<MangleArtifacts> {
+async function buildWithMangle(parser: 'rust' | 'oxc' | 'babel'): Promise<MangleArtifacts> {
     // realpath the temp root so the path handed to vite matches the realpath
     // vite's build-html plugin resolves internally. On macOS os.tmpdir() is a
     // /var -> /private/var symlink; without this the emitted index.html name is
@@ -128,16 +131,18 @@ async function buildWithMangle(parser: 'rust' | 'oxc'): Promise<MangleArtifacts>
     return { js, css, map: JSON.parse(mapSource) as Record<string, string> };
 }
 
-const OWNED_CLASSES = ['mx-0', 'mx-4', 'text-red-500', 'hover:bg-zinc-100'];
+const OWNED_CLASSES = ['m-3', 'mx-0', 'mx-4', 'text-red-500', 'hover:bg-zinc-100'];
 
 describe('production mangle — real-build round-trip (rust vs oxc)', () => {
     let rust: MangleArtifacts;
     let oxc: MangleArtifacts;
+    let babel: MangleArtifacts;
 
     beforeAll(async () => {
         loadNativeBinding();
         rust = await buildWithMangle('rust');
         oxc = await buildWithMangle('oxc');
+        babel = await buildWithMangle('babel');
     }, 60_000);
 
     afterAll(() => {
@@ -148,11 +153,13 @@ describe('production mangle — real-build round-trip (rust vs oxc)', () => {
 
     it('both engines produce the identical mangle map', () => {
         expect(rust.map).toEqual(oxc.map);
+        expect(rust.map).toEqual(babel.map);
     });
 
     it('both engines produce identical JS and CSS artifacts', () => {
         expect(rust.js).toBe(oxc.js);
         expect(rust.css).toBe(oxc.css);
+        expect(rust.css).toBe(babel.css);
     });
 
     it('the map covers every owned class and is bijective', () => {
@@ -161,6 +168,7 @@ describe('production mangle — real-build round-trip (rust vs oxc)', () => {
         }
         const tokens = Object.values(rust.map);
         expect(new Set(tokens).size, 'mangled tokens must not collide').toBe(tokens.length);
+        expect(rust.map['p-4'], 'shared raw/sz class must remain readable').toBeUndefined();
     });
 
     it('owned classes are mangled out of the JS bundle, tokens are in', () => {
@@ -173,13 +181,15 @@ describe('production mangle — real-build round-trip (rust vs oxc)', () => {
     });
 
     it('CSS selectors are rewritten per the same map; app classes untouched', () => {
-        for (const cls of ['mx-0', 'mx-4', 'text-red-500']) {
+        for (const cls of ['m-3', 'mx-0', 'mx-4', 'text-red-500']) {
             const token = rust.map[cls];
             expect(rust.css, `selector .${cls} must be rewritten`).not.toContain(`.${cls} `);
             expect(rust.css, `selector for ${cls} token must exist`).toContain(`.${token}`);
         }
         expect(rust.css, 'non-owned app selector must survive').toContain('.dems-panel');
         expect(rust.js, 'non-owned app class string must survive').toContain('dems-panel');
+        expect(rust.css, 'shared selector must survive').toContain('.p-4');
+        expect(rust.js, 'mixed clsx token must survive').toContain('p-4 dems-panel');
     });
 
     it('szcn dedupes mangled tokens through the decode bridge built from the map', () => {

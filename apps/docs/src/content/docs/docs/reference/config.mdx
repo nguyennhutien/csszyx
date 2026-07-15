@@ -142,10 +142,10 @@ interface ProductionConfig {
 Mangling rewrites every eligible csszyx-owned class name to a short alias (`z`, `y`, …), so
 the production bundle no longer contains the original utility names. Set
 `production: { mangle: false }` to keep readable class names — the supported way to
-verify the CSS a build emits. Classes that also appear as static literals in
-`class`/`className` (including `clsx(...)` expressions) automatically retain their
-original names, so raw and `sz` consumers keep matching the same CSS rule. To check
-a single `sz` object without a build, run
+verify the CSS a build emits. Classes that also appear as static strings or template
+quasis in source-level `class`/`className` attributes or properties (including
+`clsx(...)` expressions) automatically retain their original names, so raw and `sz`
+consumers keep matching the same CSS rule. To check a single `sz` object without a build, run
 `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 :::
 
@@ -177,8 +177,10 @@ in order:
    libraries or teammates, so a specific name is the more robust fix regardless of
    mangling.
 3. **Exclude — escape hatch for code you can't change.** Only when a name lives in
-   a **third-party stylesheet** you cannot rename, or is assembled dynamically
-   outside a statically visible class expression, reserve it so no token equals it:
+   a **third-party stylesheet** you cannot rename, or is assembled outside a
+   statically visible class expression (for example an imported constant,
+   `classList.add`, `setAttribute`, `querySelector`, an ignored dependency, or a
+   downstream macro), reserve it so no token equals it:
 
    ```ts
    production: { mangle: true, mangleExclude: ['x', 'y'] }

@@ -43,7 +43,9 @@ function createFixture(): string {
         join(src, 'App.tsx'),
         [
             "import { createRoot } from 'react-dom/client';",
+            "import { mangleMap } from 'virtual:csszyx/mangle-map';",
             "import { Author } from './Author';",
+            'document.documentElement.dataset.fixtureMap = JSON.stringify(mangleMap);',
             'const App = () => <div sz={{ p: 4, m: 3 }}><Author /></div>;',
             "createRoot(document.getElementById('root')!).render(<App />);",
         ].join('\n'),
@@ -54,7 +56,7 @@ function createFixture(): string {
         join(src, 'Author.tsx'),
         [
             "const clsx = (...values: string[]) => values.join(' ');",
-            "export const Author = () => <div className={clsx('p-4 main-body')}>author</div>;",
+            "export const Author = () => <div className={clsx('z p-4 main-body')}>author</div>;",
         ].join('\n'),
     );
     return root;
@@ -102,6 +104,7 @@ describe('mangle ownership', () => {
 
         // The sz-only class remains eligible for the optimization.
         expect(mangleMap['m-3']).toBeDefined();
+        expect(mangleMap['m-3']).not.toBe('z');
         // The shared raw/sz class is excluded, even inside a mixed clsx string.
         expect(mangleMap['p-4']).toBeUndefined();
         expect(mangleMap['main-body']).toBeUndefined();
@@ -109,6 +112,8 @@ describe('mangle ownership', () => {
         const bundle = readBuiltJavaScript(root);
         expect(bundle).toContain('p-4');
         expect(bundle).toContain('main-body');
+        expect(bundle).toContain('z p-4 main-body');
+        expect(bundle).not.toMatch(/["']p-4["']\s*:/);
     });
 });
 
@@ -131,6 +136,7 @@ function readBuiltJavaScript(root: string): string {
     const assetsDir = join(root, 'dist/assets');
     return readdirSync(assetsDir)
         .filter(file => file.endsWith('.js'))
+        .sort()
         .map(file => readFileSync(join(assetsDir, file), 'utf8'))
         .join('\n');
 }

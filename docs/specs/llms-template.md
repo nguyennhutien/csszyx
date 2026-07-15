@@ -704,11 +704,12 @@ In production, class names are mangled for maximum compression:
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
 
-If an `sz`-generated utility also appears as a static literal in `class` or
-`className` (including a `clsx(...)` expression), csszyx keeps that class unmangled.
-This ensures raw and `sz` consumers continue to reference the same emitted rule.
-Use `mangleExclude` for class values assembled dynamically where no literal is
-available to the build scan.
+If an `sz`-generated utility also appears as a static string or template quasi in a
+source-level `class` or `className` attribute/property (including a `clsx(...)`
+expression), csszyx keeps that class unmangled. This ensures raw and `sz` consumers
+continue to reference the same emitted rule. Use `mangleExclude` when the class is
+only visible through an imported constant, DOM selector/class API, ignored
+dependency, downstream macro, or another value unavailable to the source scan.
 
 Set `production: { mangle: false }` to keep readable class names — the supported way to
 inspect the emitted CSS. To check what a single `sz` object

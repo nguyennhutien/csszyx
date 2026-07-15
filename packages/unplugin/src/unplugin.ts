@@ -35,7 +35,7 @@ import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
 import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
-
+import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { mangleCSSSync } from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
@@ -740,17 +740,7 @@ function normalizeForMatch(p: string): string {
  * @returns Exclusive expression-body end offset.
  */
 function findJsxExpressionEnd(code: string, bodyStart: number): number {
-    let depth = 1;
-    let index = bodyStart;
-    while (index < code.length && depth > 0) {
-        if (code[index] === '{') {
-            depth++;
-        } else if (code[index] === '}') {
-            depth--;
-        }
-        index++;
-    }
-    return index - 1;
+    return findBalancedCodeEnd(code, bodyStart);
 }
 
 /**
@@ -885,67 +875,6 @@ export function fileMayContainSafelistableSz(content: string): boolean {
 }
 
 /**
- * Add whitespace-delimited class candidates to a set.
- *
- * @param target Class candidate sink.
- * @param value Authored class string.
- */
-function collectClassTokens(target: Set<string>, value: string): void {
-    for (const className of value.split(/\s+/)) {
-        if (className) target.add(className.replace(/\\(.)/g, '$1'));
-    }
-}
-
-/**
- * Collect quoted strings from a class expression without a backtracking regex.
- *
- * @param target Class candidate sink.
- * @param expression JSX className expression body.
- */
-function collectQuotedClassTokens(target: Set<string>, expression: string): void {
-    let cursor = 0;
-    while (cursor < expression.length) {
-        const quote = expression[cursor];
-        if (quote !== '"' && quote !== "'") {
-            cursor++;
-            continue;
-        }
-        const valueStart = ++cursor;
-        while (cursor < expression.length && expression[cursor] !== quote) {
-            cursor += expression[cursor] === '\\' ? 2 : 1;
-        }
-        collectClassTokens(target, expression.slice(valueStart, cursor));
-        cursor++;
-    }
-}
-
-/**
- * Collect author-written class candidates from JSX/HTML attributes and quoted
- * strings inside className expression containers.
- *
- * @param code Source module text before csszyx transforms it.
- * @returns Class candidates that must retain their authored spelling.
- */
-export function collectAuthoredClassNames(code: string): Set<string> {
-    const classes = new Set<string>();
-    const directPatterns = [
-        /\bclass(?:Name)?\s*=\s*"((?:[^"\\]|\\.)*)"/g,
-        /\bclass(?:Name)?\s*=\s*'((?:[^'\\]|\\.)*)'/g,
-    ];
-    for (const pattern of directPatterns) {
-        for (const match of code.matchAll(pattern)) {
-            collectClassTokens(classes, match[1] ?? '');
-        }
-    }
-    for (const match of code.matchAll(/className\s*=\s*\{/g)) {
-        const bodyStart = (match.index ?? 0) + match[0].length;
-        const expression = code.slice(bodyStart, findJsxExpressionEnd(code, bodyStart));
-        collectQuotedClassTokens(classes, expression);
-    }
-    return classes;
-}
-
-/**
  * Return csszyx-owned classes that are safe to rename.
  *
  * @param ownedClasses Classes emitted from sz transforms.
@@ -956,7 +885,7 @@ export function mangleEligibleClasses(
     ownedClasses: ReadonlySet<string>,
     authoredClasses: ReadonlySet<string>,
 ): string[] {
-    return [...ownedClasses].filter(className => !authoredClasses.has(className));
+    return sortStrings([...ownedClasses].filter(className => !authoredClasses.has(className)));
 }
 
 /**
@@ -3172,7 +3101,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         discoveredClasses: Set<string>,
         rawDiscoveredClasses: Set<string>,
     ): void {
-        if (content !== undefined) recordAuthoredClasses(content);
         const budgetExceeded = result.diagnostics.some(diagnostic =>
             diagnostic.includes('AST budget exceeded'),
         );
@@ -3234,6 +3162,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             } catch {
                 return;
             }
+            // Ownership must be complete before a virtual mangle-map module can
+            // load. Raw-only modules therefore participate even when they do not
+            // need the expensive sz parser pass.
+            recordAuthoredClasses(content);
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
             }
@@ -3527,7 +3459,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         let tokenIndex = 0;
         for (const className of mangleEligibleClasses(state.ownedClasses, state.authoredClasses)) {
             let token = encode(tokenIndex);
-            while (mangleReserved.has(token)) {
+            while (mangleReserved.has(token) || state.authoredClasses.has(token)) {
                 tokenIndex++;
                 token = encode(tokenIndex);
             }
