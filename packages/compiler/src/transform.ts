@@ -524,6 +524,131 @@ function transformSzObjectExpression(
 }
 
 /**
+ * Resolves identifier and conditional sz expressions at build time.
+ *
+ * @param path sz attribute path.
+ * @param expression Expression to resolve.
+ * @returns Compiled class expression, or null when unresolved.
+ */
+function resolveStaticSzExpression(
+    path: babel.NodePath<t.JSXAttribute>,
+    expression: t.Expression | t.JSXEmptyExpression,
+): t.Expression | null {
+    const getBinding: GetBinding = name => path.scope.getBinding(name);
+    if (t.isConditionalExpression(expression)) {
+        return tryStaticTransformNode(expression, getBinding);
+    }
+    if (!t.isIdentifier(expression)) return null;
+    const binding = path.scope.getBinding(expression.name);
+    if (!binding?.path.isVariableDeclarator() || !binding.path.node.init) return null;
+    return tryStaticTransformNode(binding.path.node.init, getBinding);
+}
+
+/** Runtime fallback reason and its actionable replacement guidance. */
+interface RuntimeFallbackDescription {
+    reason: string;
+    suggestion: string;
+}
+
+/**
+ * Describes why one sz expression requires runtime evaluation.
+ *
+ * @param expression Unresolved sz expression.
+ * @returns Runtime fallback reason and suggestion.
+ */
+function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescription {
+    if (t.isCallExpression(expression)) {
+        const callee = expression.callee;
+        const name = t.isIdentifier(callee)
+            ? callee.name
+            : t.isMemberExpression(callee) && t.isIdentifier(callee.property)
+              ? callee.property.name
+              : '?';
+        return {
+            reason: `function call \`${name}()\` result is unknown at build time`,
+            suggestion:
+                'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().',
+        };
+    }
+    if (t.isIdentifier(expression)) {
+        return {
+            reason: `identifier \`${expression.name}\` could not be resolved to a static value`,
+            suggestion:
+                "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
+        };
+    }
+    if (t.isMemberExpression(expression)) {
+        return {
+            reason: 'member expression is not statically resolvable',
+            suggestion:
+                'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
+        };
+    }
+    return {
+        reason: `expression of type \`${expression.type}\` is not statically analyzable`,
+        suggestion:
+            'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
+    };
+}
+
+/**
+ * Whether an object expression contains a top-level spread.
+ *
+ * @param expression Object expression to inspect.
+ * @returns Whether a top-level spread is present.
+ */
+function hasTopLevelSpread(expression: t.ObjectExpression): boolean {
+    for (const property of expression.properties) {
+        if (t.isSpreadElement(property)) return true;
+    }
+    return false;
+}
+
+/**
+ * Emits diagnostics and wraps one unresolved sz expression with the runtime helper.
+ *
+ * @param path sz attribute path.
+ * @param expression Unresolved sz expression.
+ * @param existing Existing JSX attributes.
+ * @param classMergeUsage Runtime class merge usage.
+ * @param classes Tailwind discovery set.
+ * @param diagnostics Compiler diagnostics.
+ */
+function transformRuntimeSzFallback(
+    path: babel.NodePath<t.JSXAttribute>,
+    expression: t.Expression,
+    existing: ExistingJsxAttributes,
+    classMergeUsage: ClassMergeUsage,
+    classes: Set<string>,
+    diagnostics: string[],
+): void {
+    const lineColumn = expression.loc
+        ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
+        : '?';
+    const description = describeRuntimeFallback(expression);
+    diagnostics.push(
+        `sz fallback at ${lineColumn}: ${description.reason}.\n  Suggestion: ${description.suggestion}`,
+    );
+    if (t.isObjectExpression(expression) && hasTopLevelSpread(expression)) {
+        diagnostics.push(
+            `[csszyx] unresolvable sz spread at ${lineColumn}: ` +
+                'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
+                'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
+        );
+    }
+
+    path.node.name.name = 'className';
+    collectCandidatesFromBabelExpr(expression, path, classes);
+    path.node.value = mergeClassNameValue(
+        path,
+        t.callExpression(t.identifier('_sz'), [expression]),
+        existing,
+        classMergeUsage,
+    );
+    classMergeUsage.runtime = true;
+}
+
+/**
  * Classifies a conditional sz array element.
  *
  * @param expression Conditional expression to classify.
@@ -1031,86 +1156,21 @@ export function transformSourceCode(
                                         return;
                                     }
                                 }
-                                // Identifier resolution: sz={mySzVar}
-                                // Resolve variable binding and try to pre-compile
-                                if (
-                                    t.isIdentifier(expression) &&
-                                    !t.isJSXEmptyExpression(expression)
-                                ) {
-                                    const binding = path.scope.getBinding(expression.name);
-                                    if (binding?.path.isVariableDeclarator()) {
-                                        const init = binding.path.node.init;
-                                        if (init) {
-                                            const gbIdent = (
-                                                name: string,
-                                            ): ReturnType<typeof path.scope.getBinding> =>
-                                                path.scope.getBinding(name);
-                                            const resolved = tryStaticTransformNode(init, gbIdent);
-                                            if (resolved !== null) {
-                                                path.node.name.name = 'className';
-                                                if (t.isStringLiteral(resolved)) {
-                                                    path.node.value = mergeClassNameValue(
-                                                        path,
-                                                        resolved,
-                                                        existingAttributes,
-                                                        classMergeUsage,
-                                                    );
-                                                    for (const c of resolved.value.split(/\s+/)) {
-                                                        if (c) {
-                                                            collectedClasses.add(c);
-                                                        }
-                                                    }
-                                                } else {
-                                                    path.node.value = mergeClassNameValue(
-                                                        path,
-                                                        resolved,
-                                                        existingAttributes,
-                                                        classMergeUsage,
-                                                    );
-                                                    collectFromExpr(resolved, collectedClasses);
-                                                }
-                                                transformed = true;
-                                                return;
-                                            }
-                                        }
-                                    }
+                                const staticExpression = resolveStaticSzExpression(
+                                    path,
+                                    expression,
+                                );
+                                if (staticExpression !== null) {
+                                    applyCompiledClassExpression(
+                                        path,
+                                        staticExpression,
+                                        existingAttributes,
+                                        classMergeUsage,
+                                        collectedClasses,
+                                    );
+                                    transformed = true;
+                                    return;
                                 }
-
-                                // Conditional expression: sz={cond ? {...} : {...}}
-                                if (t.isConditionalExpression(expression)) {
-                                    const gbCond = (
-                                        name: string,
-                                    ): ReturnType<typeof path.scope.getBinding> =>
-                                        path.scope.getBinding(name);
-                                    const resolved = tryStaticTransformNode(expression, gbCond);
-                                    if (resolved !== null) {
-                                        path.node.name.name = 'className';
-                                        if (t.isStringLiteral(resolved)) {
-                                            path.node.value = mergeClassNameValue(
-                                                path,
-                                                resolved,
-                                                existingAttributes,
-                                                classMergeUsage,
-                                            );
-                                            for (const c of resolved.value.split(/\s+/)) {
-                                                if (c) {
-                                                    collectedClasses.add(c);
-                                                }
-                                            }
-                                        } else {
-                                            path.node.value = mergeClassNameValue(
-                                                path,
-                                                resolved,
-                                                existingAttributes,
-                                                classMergeUsage,
-                                            );
-                                            collectFromExpr(resolved, collectedClasses);
-                                        }
-                                        transformed = true;
-                                        return;
-                                    }
-                                }
-
                                 // Array expression: sz={[obj1, cond && obj2, ...]} —
                                 // later-wins composition. All-static-object arrays
                                 // deep-merge at build; anything else emits szcn()
@@ -1133,72 +1193,14 @@ export function transformSourceCode(
                                         return;
                                     }
                                 }
-                                // Fallback: Runtime wrapper
-                                // Emit a dev-mode diagnostic so developers know why the fallback
-                                // happened and which alternative pattern to use instead.
-                                const loc = (expression as t.Expression).loc;
-                                const lineCol = loc
-                                    ? `${loc.start.line}:${loc.start.column + 1}`
-                                    : '?';
-                                let reason: string, suggestion: string;
-                                if (t.isCallExpression(expression)) {
-                                    const callee = expression.callee;
-                                    const name = t.isIdentifier(callee)
-                                        ? callee.name
-                                        : t.isMemberExpression(callee) &&
-                                            t.isIdentifier(callee.property)
-                                          ? callee.property.name
-                                          : '?';
-                                    reason = `function call \`${name}()\` result is unknown at build time`;
-                                    suggestion =
-                                        'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().';
-                                } else if (t.isIdentifier(expression)) {
-                                    reason = `identifier \`${expression.name}\` could not be resolved to a static value`;
-                                    suggestion =
-                                        "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().";
-                                } else if (t.isMemberExpression(expression)) {
-                                    reason = 'member expression is not statically resolvable';
-                                    suggestion =
-                                        'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().';
-                                } else {
-                                    reason = `expression of type \`${(expression as t.Expression).type}\` is not statically analyzable`;
-                                    suggestion =
-                                        'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().';
-                                }
-                                diagnostics.push(
-                                    `sz fallback at ${lineCol}: ${reason}.\n  Suggestion: ${suggestion}`,
-                                );
-                                // A top-level object spread can't be resolved at build
-                                // time and may render no styles in production — surface it
-                                // with a marker the bundler promotes to a build-log warning
-                                // (kept identical to the oxc engine for parity).
-                                if (
-                                    t.isObjectExpression(expression) &&
-                                    expression.properties.some(prop => t.isSpreadElement(prop))
-                                ) {
-                                    diagnostics.push(
-                                        `[csszyx] unresolvable sz spread at ${lineCol}: ` +
-                                            'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
-                                            'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
-                                    );
-                                }
-
-                                path.node.name.name = 'className';
-                                const szCall = t.callExpression(t.identifier('_sz'), [
-                                    expression as t.Expression,
-                                ]);
-                                collectCandidatesFromBabelExpr(
-                                    expression as t.Expression,
+                                transformRuntimeSzFallback(
                                     path,
-                                    collectedClasses,
-                                );
-                                path.node.value = mergeClassNameValue(
-                                    path,
-                                    szCall,
+                                    expression as t.Expression,
                                     existingAttributes,
                                     classMergeUsage,
+                                    collectedClasses,
+                                    diagnostics,
                                 );
-                                classMergeUsage.runtime = true;
                                 transformed = true;
                             }
                         },
