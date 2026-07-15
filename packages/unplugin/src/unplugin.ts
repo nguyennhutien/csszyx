@@ -3497,6 +3497,272 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return result;
     }
 
+    /** Per-module output accumulated before final class discovery. */
+    interface PreTransformOutput {
+        code: string;
+        transformed: boolean;
+        usesRuntime: boolean;
+        usesMerge: boolean;
+        usesSzcn: boolean;
+        usesSzPart: boolean;
+        usesColorVar: boolean;
+        usesSpacingVar: boolean;
+        usesUnitVar: boolean;
+        szClasses?: Set<string>;
+    }
+
+    /**
+     * Create the unchanged transform state used by adapter and compiler lanes.
+     *
+     * @param code Original module source.
+     * @returns Transform state with every helper flag disabled.
+     */
+    function unchangedPreTransform(code: string): PreTransformOutput {
+        return {
+            code,
+            transformed: false,
+            usesRuntime: false,
+            usesMerge: false,
+            usesSzcn: false,
+            usesSzPart: false,
+            usesColorVar: false,
+            usesSpacingVar: false,
+            usesUnitVar: false,
+        };
+    }
+
+    /**
+     * Process a Tailwind CSS entry and inject the generated-class source.
+     *
+     * @param code CSS source.
+     * @param id Bundler module identifier.
+     * @returns Rewritten CSS result when a directive was added, otherwise null.
+     */
+    function transformTailwindCssEntry(
+        code: string,
+        id: string,
+    ): { code: string; map: null } | null {
+        state.sawAnyCss = true;
+        if (!cssImportsTailwind(code)) return null;
+        state.sawTailwindEntry = true;
+        if (cssHasContentScope(code)) state.tailwindEntryScoped = true;
+        if (!hasInjectableTailwindCandidate(state.classes)) return null;
+
+        const relPath = computeSafelistRelPath(state.rootDir, SAFELIST_FILENAME, id);
+        const transformed = appendTailwindSourceDirective(code, relPath);
+        return transformed === null ? null : { code: transformed, map: null };
+    }
+
+    /**
+     * Surface compiler diagnostics through their production-safe channels.
+     *
+     * @param result Compiler transform result.
+     * @param id Bundler module identifier.
+     * @param warn Bundler warning callback.
+     */
+    function reportTransformDiagnostics(
+        result: SourceTransformResult,
+        id: string,
+        warn: (message: string) => void,
+    ): void {
+        for (const message of result.diagnostics) {
+            if (message.includes('unresolvable sz spread')) {
+                state.spreadWarnings.add(`${id}\n  ${message}`);
+            } else if (message.includes('AST budget exceeded')) {
+                console.warn(`[csszyx] ${id}\n  ${message}`);
+            }
+        }
+        if (quiet || result.diagnostics.length === 0 || process.env.NODE_ENV === 'production') {
+            return;
+        }
+        for (const message of result.diagnostics) {
+            if (
+                message.includes('unresolvable sz spread') ||
+                message.includes('AST budget exceeded')
+            ) {
+                continue;
+            }
+            warn(`[csszyx] ${id}\n  ${message}`);
+        }
+    }
+
+    /**
+     * Convert a compiler result into the shared pre-transform state.
+     *
+     * @param result Compiler transform result.
+     * @returns Transform output carrying compiler helper usage and classes.
+     */
+    function compilerPreTransformOutput(result: SourceTransformResult): PreTransformOutput {
+        return {
+            code: result.code,
+            transformed: result.transformed,
+            usesRuntime: result.usesRuntime,
+            usesMerge: result.usesMerge,
+            usesSzcn: result.usesSzcn,
+            usesSzPart: result.usesSzPart,
+            usesColorVar: result.usesColorVar,
+            usesSpacingVar: result.usesSpacingVar,
+            usesUnitVar: result.usesUnitVar,
+            szClasses: result.classes,
+        };
+    }
+
+    /**
+     * Dispatch one sz-bearing source module to its framework/compiler lane.
+     *
+     * @param code Source module contents.
+     * @param id Bundler module identifier.
+     * @param warn Bundler warning callback.
+     * @returns Adapter or compiler output with runtime-helper usage.
+     */
+    function transformSzSource(
+        code: string,
+        id: string,
+        warn: (message: string) => void,
+    ): PreTransformOutput {
+        if (id.endsWith('.vue')) {
+            const result = vuePreprocess(code, options as VueAdapterOptions);
+            return { ...unchangedPreTransform(result.code), transformed: result.transformed };
+        }
+        if (id.endsWith('.svelte')) {
+            const result = sveltePreprocess(code, options as SvelteAdapterOptions);
+            return result
+                ? { ...unchangedPreTransform(result.code), transformed: true }
+                : unchangedPreTransform(code);
+        }
+
+        const transformStarted = performance.now();
+        const result = transformConfiguredSource(code, id);
+        traceBenchTiming('transform-hook', id, performance.now() - transformStarted);
+        recordFileVarMangleEntries(state, id, cssVariableEntries(result));
+        recordFileCSSVariableMetrics(state, id, result.code);
+        reportTransformDiagnostics(result, id, warn);
+        for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
+        return compilerPreTransformOutput(result);
+    }
+
+    /**
+     * Inject checksum/debug placeholders into an SSR document module.
+     *
+     * @param code Transformed source module.
+     * @param id Bundler module identifier.
+     * @returns Rewritten source for a layout document, otherwise null.
+     */
+    function injectLayoutHydration(code: string, id: string): string | null {
+        if (!code.includes('<html') || !/(?:layout|Root|Document|app)\.tsx?$/i.test(id)) {
+            return null;
+        }
+        let transformedCode = code;
+        const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
+        const htmlTag = findOpeningTag(transformedCode, 'html');
+        if (htmlTag) {
+            transformedCode = `${transformedCode.slice(0, htmlTag.close)} ${attrName}="${CHECKSUM_PLACEHOLDER}"${transformedCode.slice(htmlTag.close)}`;
+        }
+
+        const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+        const bodyTag = findOpeningTag(transformedCode, 'body');
+        if (bodyTag) {
+            transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${debugScript}${transformedCode.slice(bodyTag.close + 1)}`;
+        }
+        return transformedCode;
+    }
+
+    /**
+     * Collect runtime helpers required by one compiler transform.
+     *
+     * @param output Pre-transform helper usage.
+     * @returns Runtime export names in stable import order.
+     */
+    function requiredRuntimeHelpers(output: PreTransformOutput): string[] {
+        const helpers: string[] = [];
+        if (output.usesRuntime) helpers.push('_sz');
+        if (output.usesMerge) helpers.push('_szMerge');
+        if (output.usesSzcn) helpers.push('_szcn');
+        if (output.usesSzPart) helpers.push('_szPart');
+        if (output.usesColorVar) helpers.push('__szColorVar');
+        if (output.usesSpacingVar) helpers.push('__szSpacingVar');
+        if (output.usesUnitVar) helpers.push('__szUnitVar');
+        return helpers;
+    }
+
+    /**
+     * Inject compiler runtime helpers that are not already imported.
+     *
+     * @param code Transformed source module.
+     * @param output Pre-transform helper usage.
+     * @returns Rewritten source when imports were added, otherwise null.
+     */
+    function injectRuntimeHelpers(code: string, output: PreTransformOutput): string | null {
+        const imports = requiredRuntimeHelpers(output);
+        const hasRuntimeImport = imports.length > 0 && code.includes('@csszyx/runtime');
+        const needed = hasRuntimeImport
+            ? imports.filter(name => !importsRuntimeHelper(code, name))
+            : imports;
+        if (needed.length === 0) return null;
+
+        const existingImport = findRuntimeImportClause(code);
+        if (existingImport) {
+            return code.replace(
+                existingImport.statement,
+                `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
+            );
+        }
+        const importStatement = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
+        return insertRuntimeImport(code, importStatement);
+    }
+
+    /**
+     * Inject theme-group registration into modules that can call szcn.
+     *
+     * @param code Original source used for authored szcn detection.
+     * @param transformedCode Current transformed source.
+     * @param id Bundler module identifier.
+     * @param usesSzcn Whether the compiler emitted szcn usage.
+     * @returns Rewritten source when registration is needed, otherwise null.
+     */
+    function injectThemeGroups(
+        code: string,
+        transformedCode: string,
+        id: string,
+        usesSzcn: boolean,
+    ): string | null {
+        if (
+            (!usesSzcn && !/\bszcn\s*\(/.test(code)) ||
+            transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) ||
+            !shouldProcessSource(id)
+        ) {
+            return null;
+        }
+        return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
+    }
+
+    /**
+     * Register class candidates and decide whether the hook returns source.
+     *
+     * @param output Completed pre-transform state.
+     * @returns Bundler transform output when class discovery ran, otherwise null.
+     */
+    function collectPreTransformClasses(
+        output: PreTransformOutput,
+    ): { code: string; map: null } | null {
+        if (
+            !output.transformed &&
+            !output.code.includes('class=') &&
+            !output.code.includes('className=')
+        ) {
+            return null;
+        }
+        if (output.szClasses) {
+            for (const className of output.szClasses) {
+                addSafelistClass(className);
+                state.ownedClasses.add(className);
+            }
+        } else {
+            extractClasses(output.code);
+        }
+        return { code: output.code, map: null };
+    }
+
     const prePlugin = createUnplugin<PartialCsszyxConfig, boolean>(
         (_pluginOptions: PartialCsszyxConfig) => ({
             name: 'csszyx:pre',
@@ -3602,260 +3868,47 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     assertNoRSCBoundaryViolation(code, id);
                 }
 
-                // CSS transform: inject @source so Tailwind sees csszyx-generated class names.
-                // @tailwindcss/vite scans files through the Vite module graph; csszyx-classes.html
-                // is not imported anywhere, so it's invisible to Tailwind. Appending an @source
-                // directive to the CSS that imports tailwindcss is the reliable way to ensure
-                // Tailwind generates CSS for the classes that csszyx transforms sz props into.
                 if (matchesScriptExtension(id, ['.css'])) {
-                    // Record that we observed the CSS pipeline at all — the
-                    // missing-entry warning is only trustworthy once we have.
-                    state.sawAnyCss = true;
-                    if (cssImportsTailwind(code)) {
-                        // A Tailwind entry exists, so the build-end warning below
-                        // must not fire even if there is nothing to inject yet.
-                        state.sawTailwindEntry = true;
-                        // Record whether this entry scopes content detection, so
-                        // the unscoped-monorepo warning can stay silent when handled.
-                        if (cssHasContentScope(code)) {
-                            state.tailwindEntryScoped = true;
-                        }
-                        if (hasInjectableTailwindCandidate(state.classes)) {
-                            const relPath = computeSafelistRelPath(
-                                state.rootDir,
-                                SAFELIST_FILENAME,
-                                id,
-                            );
-                            const transformed = appendTailwindSourceDirective(code, relPath);
-                            if (transformed !== null) {
-                                return { code: transformed, map: null };
-                            }
-                        }
-                    }
-                    return null;
+                    return transformTailwindCssEntry(code, id);
                 }
 
-                let transformedCode = code;
-                let usesRuntime = false;
-                let usesMerge = false;
-                let usesSzcn = false;
-                let usesSzPart = false;
-                let usesColorVar = false;
-                let usesSpacingVar = false;
-                let usesUnitVar = false;
-                let transformed = false;
-                let szClasses: Set<string> | undefined;
-
-                // Detect sz prop in both JSX (sz="...", sz={{...}}) and JS/JSX-transformed (sz: "...", sz: {...}) formats
                 const hasSzProp =
                     code.includes('sz=') ||
                     code.includes('szs=') ||
                     /\bsz\s*:\s*["'{]/.test(code) ||
                     code.includes('sz: "');
-
-                if (hasSzProp) {
-                    if (id.endsWith('.vue')) {
-                        const result = vuePreprocess(code, options as VueAdapterOptions);
-                        if (result.transformed) {
-                            transformedCode = result.code;
-                            transformed = true;
-                        }
-                    } else if (id.endsWith('.svelte')) {
-                        const result = sveltePreprocess(code, options as SvelteAdapterOptions);
-                        if (result) {
-                            transformedCode = result.code;
-                            transformed = true;
-                        }
-                    } else {
-                        const transformStarted = performance.now();
-                        const result = transformConfiguredSource(code, id);
-                        traceBenchTiming(
-                            'transform-hook',
-                            id,
-                            performance.now() - transformStarted,
-                        );
-                        transformedCode = result.code;
-                        usesRuntime = result.usesRuntime;
-                        usesMerge = result.usesMerge;
-                        usesSzcn = result.usesSzcn;
-                        usesSzPart = result.usesSzPart;
-                        usesColorVar = result.usesColorVar;
-                        usesSpacingVar = result.usesSpacingVar;
-                        usesUnitVar = result.usesUnitVar;
-                        transformed = result.transformed;
-                        szClasses = result.classes;
-                        recordFileVarMangleEntries(state, id, cssVariableEntries(result));
-                        recordFileCSSVariableMetrics(state, id, result.code);
-                        // Unresolvable-spread warnings are collected and surfaced
-                        // at buildEnd in EVERY mode — the build log is not the
-                        // shipped bundle, so the prod path-leak concern doesn't
-                        // apply, and a spread that ships silently is the worst
-                        // failure mode. Other diagnostics stay dev-only below.
-                        for (const msg of result.diagnostics) {
-                            if (msg.includes('unresolvable sz spread')) {
-                                state.spreadWarnings.add(`${id}\n  ${msg}`);
-                            } else if (msg.includes('AST budget exceeded')) {
-                                // Every mode, like the spread warnings: the file's
-                                // sz attributes were NOT rewritten (wrong output),
-                                // and the native lane cannot throw the way the JS
-                                // lanes surface this.
-                                console.warn(`[csszyx] ${id}\n  ${msg}`);
-                            }
-                        }
-                        // Emit remaining dev-mode warnings when the compiler had to fall back to
-                        // _sz() runtime. Suppressed in production to avoid leaking source paths.
-                        if (
-                            !quiet &&
-                            result.diagnostics.length > 0 &&
-                            process.env.NODE_ENV !== 'production'
-                        ) {
-                            for (const msg of result.diagnostics) {
-                                if (
-                                    msg.includes('unresolvable sz spread') ||
-                                    msg.includes('AST budget exceeded')
-                                ) {
-                                    continue;
-                                }
-                                this.warn(`[csszyx] ${id}\n  ${msg}`);
-                            }
-                        }
-                        for (const [token, data] of result.recoveryTokens) {
-                            state.recoveryTokens.set(token, data);
-                        }
-                    }
-                } else if (shouldProcessSource(id)) {
+                const output = hasSzProp
+                    ? transformSzSource(code, id, message => this.warn(message))
+                    : unchangedPreTransform(code);
+                if (!hasSzProp && shouldProcessSource(id)) {
                     recordFileVarMangleEntries(state, id, []);
                     recordFileCSSVariableMetrics(state, id, null);
                 }
 
-                // Layout injection (SSR frameworks like Next.js)
-                // Uses placeholders that are replaced in processAssets after all classes are collected
-                if (
-                    transformedCode.includes('<html') &&
-                    /(?:layout|Root|Document|app)\.tsx?$/i.test(id)
-                ) {
-                    const attrName = options.production?.minify ? 'data-sz-cs' : 'data-sz-checksum';
-                    const htmlTag = findOpeningTag(transformedCode, 'html');
-                    if (htmlTag) {
-                        // Insert the attribute just before the `>`, after any
-                        // existing attributes — matching `<html$1 attr>`.
-                        transformedCode = `${transformedCode.slice(0, htmlTag.close)} ${attrName}="${CHECKSUM_PLACEHOLDER}"${transformedCode.slice(htmlTag.close)}`;
-                    }
-
-                    // Inject mangle map debug script with placeholders
-                    const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
-                    const bodyTag = findOpeningTag(transformedCode, 'body');
-                    if (bodyTag) {
-                        // Insert the debug script right after the `<body …>` tag.
-                        transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${debugScript}${transformedCode.slice(bodyTag.close + 1)}`;
-                    }
-                    transformed = true;
+                const layoutCode = injectLayoutHydration(output.code, id);
+                if (layoutCode !== null) {
+                    output.code = layoutCode;
+                    output.transformed = true;
                 }
 
-                // Runtime + color var import injection
-                {
-                    const imports: string[] = [];
-                    if (usesRuntime) {
-                        imports.push('_sz');
-                    }
-                    if (usesMerge) {
-                        imports.push('_szMerge');
-                    }
-                    if (usesSzcn) {
-                        imports.push('_szcn');
-                    }
-                    if (usesSzPart) {
-                        imports.push('_szPart');
-                    }
-                    if (usesColorVar) {
-                        imports.push('__szColorVar');
-                    }
-                    if (usesSpacingVar) {
-                        imports.push('__szSpacingVar');
-                    }
-                    if (usesUnitVar) {
-                        imports.push('__szUnitVar');
-                    }
-                    // Filter out helpers already imported from @csszyx/runtime.
-                    // The literal package name only appears in modules that
-                    // already import a helper, so a single `.includes()`
-                    // short-circuit skips the regex tests entirely for the
-                    // common case where no `@csszyx/runtime` import exists.
-                    // The regexes themselves are cached at module scope so we
-                    // don't recompile them per file.
-                    const hasRuntimeImport =
-                        imports.length > 0 && transformedCode.includes('@csszyx/runtime');
-                    const needed = hasRuntimeImport
-                        ? imports.filter(name => !importsRuntimeHelper(transformedCode, name))
-                        : imports;
-                    if (needed.length > 0) {
-                        const existingImport = findRuntimeImportClause(transformedCode);
-                        if (existingImport) {
-                            // Append to the existing @csszyx/runtime import
-                            transformedCode = transformedCode.replace(
-                                existingImport.statement,
-                                `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
-                            );
-                        } else {
-                            const importStmt = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
-                            transformedCode = insertRuntimeImport(transformedCode, importStmt);
-                        }
-                        transformed = true;
-                    }
+                const runtimeCode = injectRuntimeHelpers(output.code, output);
+                if (runtimeCode !== null) {
+                    output.code = runtimeCode;
+                    output.transformed = true;
                 }
 
-                // Theme-groups injection: a module that merges classes at runtime
-                // needs the app's custom @theme tokens registered into szcn's
-                // merge groups. Injecting the side-effect import into every
-                // szcn-USING module (rather than one entry) means the same
-                // registration travels with the code into every bundle that can
-                // call szcn — client, SSR, edge — so merge results (and rendered
-                // classNames) stay identical across environments. The module is
-                // generated from the theme scan; with no scan it registers
-                // nothing and szcn keeps its keep-both fail-safe.
-                if (
-                    (usesSzcn || /\bszcn\s*\(/.test(code)) &&
-                    !transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) &&
-                    shouldProcessSource(id)
-                ) {
-                    transformedCode = `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
-                    transformed = true;
+                const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
+                if (themedCode !== null) {
+                    output.code = themedCode;
+                    output.transformed = true;
                 }
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
-                    assertNoRSCBoundaryViolation(transformedCode, id);
-                    const record = createRSCModuleRecord(transformedCode, id);
+                    assertNoRSCBoundaryViolation(output.code, id);
+                    const record = createRSCModuleRecord(output.code, id);
                     state.rscModules.set(record.id, record);
                 }
-
-                // Extract classes for the mangle map but DON'T mangle yet.
-                // Mangling is deferred to processAssets/generateBundle where we have the complete map.
-                if (
-                    transformed ||
-                    transformedCode.includes('class=') ||
-                    transformedCode.includes('className=')
-                ) {
-                    if (szClasses !== undefined) {
-                        // TSX/JSX sz file: use piggyback classes from Babel JSXAttribute visitor.
-                        // No regex needed — classes were collected during the existing Babel traverse
-                        // at zero extra cost, with no false positives from text content or JSDoc.
-                        // szClasses are sz-generated, so they are csszyx-owned: safelisted AND
-                        // eligible to mangle. Raw className values (szRawClassNames) are excluded
-                        // from szClasses upstream — they are author classes (custom CSS, or TW
-                        // utilities an external stylesheet/JS owns by name) that must not be mangled.
-                        for (const cls of szClasses) {
-                            addSafelistClass(cls);
-                            state.ownedClasses.add(cls);
-                        }
-                    } else {
-                        // Non-sz file (fast-path, no Babel ran) or Vue/Svelte adapter: regex-scan
-                        // className attributes into the safelist only. Owned and author classes
-                        // are indistinguishable here, so none are mangled (see extractClasses).
-                        extractClasses(transformedCode);
-                    }
-                    return { code: transformedCode, map: null };
-                }
-                return null;
+                return collectPreTransformClasses(output);
             },
 
             /** Finalizes the mangle map after all source modules have been processed. */
