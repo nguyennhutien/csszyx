@@ -33,7 +33,7 @@ const nativePackageNames = new Set(
 const requireBinaries = process.argv.includes("--require-binaries");
 
 assertNativeOptionalDependencies(corePackage);
-assertSupportedArchitectures(rootPackage);
+assertSupportedArchitectures(workspaceYaml);
 assertReleaseMatrix(releaseWorkflow);
 assertNativeTypes(nativeTypes);
 assertNativeDocs(nativeDocs);
@@ -169,25 +169,68 @@ function assertNativeOptionalDependencies(pkg) {
  * Assert pnpm installs every optional native workspace package for pack/publish
  * rewrite regardless of the current host platform.
  *
- * @param {{ pnpm?: { supportedArchitectures?: { os?: string[], cpu?: string[], libc?: string[] } } }} pkg Root package.
+ * pnpm 11 moved this config from package.json#pnpm to pnpm-workspace.yaml, so
+ * the values are read from the workspace file rather than the root package.
+ *
+ * @param {string} workspaceYaml pnpm-workspace.yaml contents.
  */
-function assertSupportedArchitectures(pkg) {
-  const supported = pkg.pnpm?.supportedArchitectures;
+function assertSupportedArchitectures(workspaceYaml) {
+  const supported = parseSupportedArchitectures(workspaceYaml);
   for (const packageInfo of NATIVE_PLATFORM_PACKAGES) {
     assertIncludes(
-      supported?.os,
+      supported.os,
       packageInfo.os[0],
-      "pnpm.supportedArchitectures.os",
+      "supportedArchitectures.os",
     );
     assertIncludes(
-      supported?.cpu,
+      supported.cpu,
       packageInfo.cpu[0],
-      "pnpm.supportedArchitectures.cpu",
+      "supportedArchitectures.cpu",
     );
     for (const libc of packageInfo.libc ?? []) {
-      assertIncludes(supported?.libc, libc, "pnpm.supportedArchitectures.libc");
+      assertIncludes(supported.libc, libc, "supportedArchitectures.libc");
     }
   }
+}
+
+/**
+ * Read the os/cpu/libc arrays from the `supportedArchitectures:` block of
+ * pnpm-workspace.yaml. The block is a fixed shape (top-level key, three nested
+ * list keys with `- value` items), so a small indentation-aware scan is enough
+ * and avoids adding a YAML dependency to this validator.
+ *
+ * @param {string} workspaceYaml pnpm-workspace.yaml contents.
+ * @returns {{ os: string[], cpu: string[], libc: string[] }}
+ */
+function parseSupportedArchitectures(workspaceYaml) {
+  const result = { os: [], cpu: [], libc: [] };
+  const lines = workspaceYaml.split("\n");
+  const start = lines.findIndex((line) => line.startsWith("supportedArchitectures:"));
+  if (start === -1) {
+    fail("pnpm-workspace.yaml is missing supportedArchitectures.");
+    return result;
+  }
+  let currentKey = null;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() === "") {
+      continue;
+    }
+    // A non-indented line ends the block.
+    if (!line.startsWith(" ")) {
+      break;
+    }
+    const keyMatch = /^ {2}(os|cpu|libc):\s*$/.exec(line);
+    if (keyMatch) {
+      currentKey = keyMatch[1];
+      continue;
+    }
+    const itemMatch = /^ {4}-\s*(\S+)\s*$/.exec(line);
+    if (itemMatch && currentKey) {
+      result[currentKey].push(itemMatch[1]);
+    }
+  }
+  return result;
 }
 
 /**

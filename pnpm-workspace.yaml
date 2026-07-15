@@ -55,3 +55,12 @@ managePackageManagerVersions: false
 # the lefthook ts-js gate. pnpm 10 had no such precheck; the sync-lockfile hook and
 # CI's frozen install already guard staleness, so restore the pnpm 10 behavior.
 verifyDepsBeforeRun: false
+
+# Install/hoisting behavior. pnpm 11 no longer reads these from .npmrc, so they
+# move here. shamefullyHoist keeps the flat node_modules the repo relies on
+# (several playgrounds import packages like @vitejs/plugin-react that a parent
+# hoists but they do not declare); dropping it breaks their build with
+# ERR_MODULE_NOT_FOUND. These reproduce the pre-pnpm-11 .npmrc values exactly.
+shamefullyHoist: true
+strictPeerDependencies: false
+autoInstallPeers: true
