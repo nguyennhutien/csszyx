@@ -660,41 +660,34 @@ describe('runtime-fallback safelist candidate collection', () => {
 
 // ── color-object + style-value edge cases ────────────────────────────────────
 describe('partial color-object and style-value categories', () => {
-    it('emits ANGLE-category style value (deg) for a dynamic rotate', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ rotate: v }} />;';
+    it.each([
+        [
+            'ANGLE',
+            'const A = ({ v }) => <div sz={{ rotate: v }} />;',
+            '__szUnitVar(v, "deg", "rotate")',
+        ],
+        [
+            'DURATION',
+            'const A = ({ v }) => <div sz={{ duration: v }} />;',
+            '__szUnitVar(v, "ms", "duration")',
+        ],
+        ['UNITLESS', 'const A = ({ v }) => <div sz={{ opacity: v }} />;', '"--_sz-opacity": v'],
+    ])('emits the %s dynamic style category', (_category, jsx, expectedCode) => {
         const r = run(jsx);
-        expect(r.code).toContain('__szUnitVar(v, "deg", "rotate")');
+        expect(r.code).toContain(expectedCode);
     });
 
-    it('emits DURATION-category style value (ms) for a dynamic duration', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ duration: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('__szUnitVar(v, "ms", "duration")');
-    });
-
-    it('emits a bare unitless style value for a dynamic opacity', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ opacity: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('"--_sz-opacity": v');
-    });
-
-    it('handles a static color + static op inside an otherwise-dynamic color object', () => {
-        const jsx =
-            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: 20, extra: d } }} />;';
-        const r = run(jsx);
-        // The color+op pair resolves statically; the extra dynamic key pushes the
-        // whole thing to runtime fallback.
-        expect(r.usesRuntime).toBe(true);
-    });
-
-    it('handles a static color with no op inside an otherwise-dynamic color object', () => {
-        const jsx = 'const A = ({ d }) => <div sz={{ bg: { color: "red-500", extra: d } }} />;';
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-    });
-
-    it('falls back for an unknown dynamic nested object (not a color, not a variant)', () => {
-        const jsx = 'const A = ({ d }) => <div sz={{ unknownKey: { p: d } }} />;';
+    it.each([
+        [
+            'a static color and opacity',
+            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: 20, extra: d } }} />;',
+        ],
+        [
+            'a static color without opacity',
+            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", extra: d } }} />;',
+        ],
+        ['an unknown nested object', 'const A = ({ d }) => <div sz={{ unknownKey: { p: d } }} />;'],
+    ])('uses runtime fallback for %s with dynamic siblings', (_label, jsx) => {
         const r = run(jsx);
         expect(r.usesRuntime).toBe(true);
         expect(r.code).toContain('_sz(');
