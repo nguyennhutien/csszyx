@@ -3297,7 +3297,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const kv of objStr.matchAll(numKv)) {
             try {
                 collectTransformClasses(
-                    transform({ [kv[1]]: parseFloat(kv[2]) }),
+                    transform({ [kv[1]]: Number.parseFloat(kv[2]) }),
                     discoveredClasses,
                 );
             } catch {

@@ -111,7 +111,7 @@ function readCssEscape(source: string, start: number): { value: string; next: nu
         next++;
     }
     if (source[next] === ' ') next++;
-    const codePoint = parseInt(hex, 16);
+    const codePoint = Number.parseInt(hex, 16);
     return { value: codePoint > 0 ? String.fromCodePoint(codePoint) : '', next };
 }
 
