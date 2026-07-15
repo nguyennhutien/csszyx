@@ -29,28 +29,26 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     });
 
     describe('mixed static + dynamic', () => {
-        it('should handle mixed static and dynamic props', () => {
-            const source = "const App = () => <div sz={{ p: dynamicValue, bg: 'blue-500' }} />";
+        it.each([
+            [
+                'mixed static and dynamic props',
+                "const App = () => <div sz={{ p: dynamicValue, bg: 'blue-500' }} />",
+                ['bg-blue-500', 'p-(--_sz-p)'],
+            ],
+            [
+                'static boolean props',
+                'const App = () => <div sz={{ display: "flex", p: dynamicValue }} />',
+                ['flex', 'p-(--_sz-p)'],
+            ],
+            [
+                'static number props',
+                'const App = () => <div sz={{ p: 4, m: dynamicValue }} />',
+                ['p-4', 'm-(--_sz-m)'],
+            ],
+        ])('should keep %s alongside CSS variables', (_label, source, expectedCode) => {
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
-            expect(result.code).toContain('bg-blue-500');
-            expect(result.code).toContain('p-(--_sz-p)');
-        });
-
-        it('should keep static boolean props static', () => {
-            const source = 'const App = () => <div sz={{ display: "flex", p: dynamicValue }} />';
-            const result = transformSourceCode(source);
-            expect(result.transformed).toBe(true);
-            expect(result.code).toContain('flex');
-            expect(result.code).toContain('p-(--_sz-p)');
-        });
-
-        it('should keep static number props static', () => {
-            const source = 'const App = () => <div sz={{ p: 4, m: dynamicValue }} />';
-            const result = transformSourceCode(source);
-            expect(result.transformed).toBe(true);
-            expect(result.code).toContain('p-4');
-            expect(result.code).toContain('m-(--_sz-m)');
+            for (const fragment of expectedCode) expect(result.code).toContain(fragment);
         });
     });
 
@@ -254,26 +252,22 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
             expect(result.code).not.toContain('(--_sz');
         });
 
-        it('should still use CSS var when ternary branch is non-literal (dynamic)', () => {
-            // One branch is an identifier (dynamic) → cannot compile statically → CSS variable
-            const source = 'const App = () => <div sz={{ p: isLarge ? 8 : dynamicVal }} />';
+        it.each([
+            [
+                'a non-literal ternary branch',
+                'const App = () => <div sz={{ p: isLarge ? 8 : dynamicVal }} />',
+                '(--_sz',
+            ],
+            ['an identifier', 'const App = () => <div sz={{ gap: gapSize }} />', 'gap-(--_sz-gap)'],
+            [
+                'a member expression',
+                'const App = () => <div sz={{ p: theme.spacing.md }} />',
+                '(--_sz',
+            ],
+        ])('should use a CSS variable for %s', (_label, source, expectedCode) => {
             const result = transformSourceCode(source);
             expect(result.transformed).toBe(true);
-            expect(result.code).toContain('(--_sz');
-        });
-
-        it('should handle identifier value as dynamic', () => {
-            const source = 'const App = () => <div sz={{ gap: gapSize }} />';
-            const result = transformSourceCode(source);
-            expect(result.transformed).toBe(true);
-            expect(result.code).toContain('gap-(--_sz-gap)');
-        });
-
-        it('should handle member expression as dynamic', () => {
-            const source = 'const App = () => <div sz={{ p: theme.spacing.md }} />';
-            const result = transformSourceCode(source);
-            expect(result.transformed).toBe(true);
-            expect(result.code).toContain('(--_sz');
+            expect(result.code).toContain(expectedCode);
         });
     });
 
