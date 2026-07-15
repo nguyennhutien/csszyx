@@ -2445,6 +2445,72 @@ function formatFontStretch(value: string): string {
         : `font-stretch-${value}`;
 }
 
+const ARBITRARY_EFFECT_KEYS = new Set([
+    'brightness',
+    'contrast',
+    'saturate',
+    'scale',
+    'backdropBrightness',
+    'backdropContrast',
+    'backdropSaturate',
+]);
+
+/** Collects shadow, filter, scale, and gradient-stop string utilities. */
+function collectEffectStringProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    let includePrefix = true;
+    if (key === 'maxW' && value === 'container') {
+        utility = 'container';
+        includePrefix = false;
+    } else if (key === 'shadowColor') {
+        utility = value.startsWith('--') ? `shadow-(color:${value})` : `shadow-${value}`;
+        includePrefix = false;
+    } else if (key === 'insetShadowColor') {
+        utility = value.startsWith('--')
+            ? `inset-shadow-(color:${value})`
+            : `inset-shadow-${value}`;
+    } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
+        utility = formatArbitraryEffect(key, value);
+        includePrefix = key === 'scale' && value === '3d';
+    } else if (key === 'textShadow') utility = formatTextShadow(value);
+    else if (key === 'textShadowColor') utility = `text-shadow-${value}`;
+    else if (isGradientPositionKey(key)) {
+        utility = formatGradientPosition(key, value);
+        includePrefix = false;
+    }
+    if (utility === null) return false;
+    classes.push(`${includePrefix ? prefix : ''}${utility}`);
+    return true;
+}
+
+/** Formats string-valued filters and scale without numeric coercion. */
+function formatArbitraryEffect(key: string, value: string): string {
+    if (key === 'scale' && value === '3d') return 'scale-3d';
+    const property = key.startsWith('backdrop') ? `backdrop-${key.slice(8).toLowerCase()}` : key;
+    return value.startsWith('--') ? `${property}-(${value})` : `${property}-[${value}]`;
+}
+
+/** Formats a text-shadow utility. */
+function formatTextShadow(value: string): string {
+    if (value === 'none') return 'text-shadow-none';
+    if (value === '') return 'text-shadow';
+    return needsArbitraryBrackets(value)
+        ? `text-shadow-[${normalizeArbitraryValue(value)}]`
+        : `text-shadow-${value}`;
+}
+
+/** Formats a string-valued gradient stop position. */
+function formatGradientPosition(key: string, value: string): string {
+    const property = key.replace('Pos', '');
+    if (value.startsWith('--')) return `${property}-(${value})`;
+    return /^\d+%$/.test(value) ? `${property}-${value}` : `${property}-[${value}]`;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2692,95 +2758,7 @@ function transformImpl(
             if (collectTextKeywordProperty(rawKey, value, prefix, classes)) continue;
             if (collectTextFlowProperty(rawKey, value, prefix, classes)) continue;
             if (collectDecorationProperty(rawKey, value, prefix, classes)) continue;
-
-            // Fix 12: maxW: 'container' Sugar
-            if (rawKey === 'maxW' && value === 'container') {
-                classes.push('container');
-                continue;
-            }
-
-            // Fix 8: Shadow Color
-            if (rawKey === 'shadowColor') {
-                if (String(value).startsWith('--')) {
-                    classes.push(`shadow-(color:${value})`);
-                } else {
-                    classes.push(`shadow-${value}`);
-                }
-                continue;
-            }
-
-            // insetShadowColor: 'red-500' → inset-shadow-red-500
-            if (rawKey === 'insetShadowColor') {
-                if (String(value).startsWith('--')) {
-                    classes.push(`${prefix}inset-shadow-(color:${value})`);
-                } else {
-                    classes.push(`${prefix}inset-shadow-${value}`);
-                }
-                continue;
-            }
-
-            // Fix 2: Brightness/Contrast/Saturate/Scale — strings are NEVER parsed as numbers
-            if (
-                rawKey === 'brightness' ||
-                rawKey === 'contrast' ||
-                rawKey === 'saturate' ||
-                rawKey === 'scale' ||
-                rawKey === 'backdropBrightness' ||
-                rawKey === 'backdropContrast' ||
-                rawKey === 'backdropSaturate'
-            ) {
-                const prop = rawKey.startsWith('backdrop')
-                    ? `backdrop-${rawKey.slice(8).toLowerCase()}`
-                    : rawKey;
-                const sValue = String(value);
-                if (sValue === '3d' && rawKey === 'scale') {
-                    classes.push(`${prefix}scale-3d`);
-                } else if (sValue.startsWith('--')) {
-                    classes.push(`${prop}-(${sValue})`);
-                } else {
-                    // String values always go to arbitrary []
-                    classes.push(`${prop}-[${sValue}]`);
-                }
-                continue;
-            }
-            // textShadow: 'sm' | 'md' → text-shadow (default), text-shadow-sm, etc.
-            if (rawKey === 'textShadow') {
-                if (value === 'none') {
-                    className += 'text-shadow-none';
-                } else if (value === '') {
-                    className += 'text-shadow';
-                } else if (needsArbitraryBrackets(value)) {
-                    className += `text-shadow-[${normalizeArbitraryValue(value)}]`;
-                } else {
-                    className += `text-shadow-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // textShadowColor: 'blue-500' → text-shadow-blue-500
-            if (rawKey === 'textShadowColor') {
-                className += `text-shadow-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // fromPos/viaPos/toPos: '10%' → from-10%, to-50%, etc.
-            // Tailwind v4: any integer % is dynamic (bare), decimals need brackets
-            if (rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') {
-                const gradPrefix = rawKey.replace('Pos', '');
-                const sValue = String(value);
-                if (value.startsWith('--')) {
-                    classes.push(`${gradPrefix}-(${value})`);
-                } else if (/^\d+%$/.test(sValue)) {
-                    // Integer percentage: bare (e.g. from-15%, to-88%)
-                    classes.push(`${gradPrefix}-${sValue}`);
-                } else {
-                    // Decimal percentage or other: brackets (e.g. from-[13.5%])
-                    classes.push(`${gradPrefix}-[${sValue}]`);
-                }
-                continue;
-            }
+            if (collectEffectStringProperty(rawKey, value, prefix, classes)) continue;
 
             // bgImg handler
             if (rawKey === 'bgImg') {
