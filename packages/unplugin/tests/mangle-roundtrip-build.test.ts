@@ -9,7 +9,7 @@
  * hybrid breakage) came from exactly this layer.
  *
  * Round-trip contract asserted here:
- *   1. rust and oxc produce identical artifacts (JS + CSS + HTML map);
+ *   1. rust, oxc, and babel produce identical artifacts (JS + CSS + HTML map);
  *   2. the injected mangle map is bijective and covers every owned class;
  *   3. owned classes are actually mangled OUT of the JS bundle and the CSS
  *      selectors, and the map decodes every token back to its original;
@@ -28,10 +28,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-
 import { szcn } from '@csszyx/runtime';
-import { build } from 'vite';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { compile } from '@tailwindcss/node';
+import { build, type Plugin } from 'vite';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
 import { vitePlugin } from '../src/unplugin.js';
 
@@ -55,14 +55,10 @@ export const App = ({ wide }) => (
     </div>
 );
 `,
-    // Handwritten rules for owned classes — the css-mangler must rewrite these
-    // selectors to the mangled tokens; the app-owned selector stays.
+    // Tailwind receives candidates only through csszyx's generated safelist.
+    // The custom app-owned selector must stay readable.
     'src/styles.css': `
-.mx-0 { margin-left: 0; }
-.mx-4 { margin-left: 1rem; }
-.p-4 { padding: 1rem; }
-.m-3 { margin: .75rem; }
-.text-red-500 { color: red; }
+@import "tailwindcss" source(none);
 .dems-panel { border: 1px solid; }
 `,
 };
@@ -74,6 +70,33 @@ interface MangleArtifacts {
 }
 
 const tempDirs: string[] = [];
+
+/**
+ * Compile the fixture's source(none) stylesheet from csszyx's exact safelist.
+ *
+ * @param root Fixture root containing csszyx-classes.html.
+ * @returns Vite transform plugin standing in for Tailwind's final CSS phase.
+ */
+function tailwindSourceNonePlugin(root: string): Plugin {
+    return {
+        name: 'fixture-tailwind-source-none',
+        enforce: 'pre',
+        async transform(code, id) {
+            if (!id.endsWith('/src/styles.css')) return null;
+            const compiler = await compile(code, {
+                base: process.cwd(),
+                onDependency: () => undefined,
+            });
+            const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+            const candidates = (
+                safelist.split('<!-- csszyx exact scanner candidates -->\n')[1] ?? ''
+            )
+                .split(/\s+/)
+                .filter(Boolean);
+            return { code: compiler.build(candidates), map: null };
+        },
+    };
+}
 
 /**
  * Build the fixture app with production mangling and extract the artifacts.
@@ -97,7 +120,10 @@ async function buildWithMangle(parser: 'rust' | 'oxc' | 'babel'): Promise<Mangle
     await build({
         root,
         logLevel: 'silent',
-        plugins: [vitePlugin({ build: { parser, cache: false }, production: { mangle: true } })],
+        plugins: [
+            vitePlugin({ build: { parser, cache: false }, production: { mangle: true } }),
+            tailwindSourceNonePlugin(root),
+        ],
         esbuild: {
             jsx: 'transform',
             jsxFactory: 'h',
@@ -133,16 +159,26 @@ async function buildWithMangle(parser: 'rust' | 'oxc' | 'babel'): Promise<Mangle
 
 const OWNED_CLASSES = ['m-3', 'mx-0', 'mx-4', 'text-red-500', 'hover:bg-zinc-100'];
 
-describe('production mangle — real-build round-trip (rust vs oxc)', () => {
+describe('production mangle — real-build round-trip (all parsers)', () => {
     let rust: MangleArtifacts;
     let oxc: MangleArtifacts;
     let babel: MangleArtifacts;
+    const buildWarnings: string[] = [];
 
     beforeAll(async () => {
         loadNativeBinding();
-        rust = await buildWithMangle('rust');
-        oxc = await buildWithMangle('oxc');
-        babel = await buildWithMangle('babel');
+        const originalWarn = console.warn;
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            buildWarnings.push(args.map(String).join(' '));
+            originalWarn(...args);
+        });
+        try {
+            rust = await buildWithMangle('rust');
+            oxc = await buildWithMangle('oxc');
+            babel = await buildWithMangle('babel');
+        } finally {
+            warnSpy.mockRestore();
+        }
     }, 60_000);
 
     afterAll(() => {
@@ -151,15 +187,21 @@ describe('production mangle — real-build round-trip (rust vs oxc)', () => {
         }
     });
 
-    it('both engines produce the identical mangle map', () => {
+    it('all parsers produce the identical mangle map', () => {
         expect(rust.map).toEqual(oxc.map);
         expect(rust.map).toEqual(babel.map);
     });
 
-    it('both engines produce identical JS and CSS artifacts', () => {
+    it('all parsers produce identical JS and CSS artifacts', () => {
         expect(rust.js).toBe(oxc.js);
         expect(rust.css).toBe(oxc.css);
         expect(rust.css).toBe(babel.css);
+    });
+
+    it('source(none) safelisting emits every owned CSS rule without hybrid hazards', () => {
+        expect(
+            buildWarnings.filter(message => message.includes('production mangle found')),
+        ).toEqual([]);
     });
 
     it('the map covers every owned class and is bijective', () => {
