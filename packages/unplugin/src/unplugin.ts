@@ -1744,6 +1744,33 @@ function insertRuntimeImport(code: string, importStmt: string): string {
 }
 
 /**
+ * Scan a class-value expression until its first depth-zero terminator.
+ *
+ * @param source Code being scanned.
+ * @param from Index of the first expression character.
+ * @returns Index one past the last expression character.
+ */
+function scanClassExpression(source: string, from: number): number {
+    let depth = 0;
+    let index = from;
+    while (index < source.length) {
+        const char = source[index];
+        if (char === '(' || char === '[') {
+            depth++;
+        } else if (char === ')' || char === ']') {
+            if (depth === 0) {
+                break;
+            }
+            depth--;
+        } else if (depth === 0 && (char === ',' || char === ';' || char === '\n' || char === '}')) {
+            break;
+        }
+        index++;
+    }
+    return index;
+}
+
+/**
  * Mangles class strings in bundled code (JS/HTML assets) using the given mangle map.
  *
  * Exported for unit testing; the plugin calls this via the thin private wrapper that
@@ -1918,34 +1945,6 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     //
     // Skip `className:"..."`, `className:'...'`, `className:\`...\`` — Pass 1/1.5
     // handle those; re-mangling would corrupt already-mangled tokens.
-
-    /**
-     * Scans a class-value expression starting at `from` and returns its end.
-     * Stops at depth-0 terminators (, ; newline } ] )) so adjacent object
-     * properties and call arguments are never consumed.
-     * @param source - code being scanned
-     * @param from - index of the first expression character
-     * @returns index one past the last expression character
-     */
-    function scanClassExpression(source: string, from: number): number {
-        let depth = 0;
-        let j = from;
-        while (j < source.length) {
-            const ch = source[j];
-            if (ch === '(' || ch === '[') {
-                depth++;
-            } else if (ch === ')' || ch === ']') {
-                if (depth === 0) {
-                    break;
-                }
-                depth--;
-            } else if (depth === 0 && (ch === ',' || ch === ';' || ch === '\n' || ch === '}')) {
-                break;
-            }
-            j++;
-        }
-        return j;
-    }
 
     /**
      * Mangles every double-quoted class string inside a ternary expression.
