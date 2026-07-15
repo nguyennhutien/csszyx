@@ -756,100 +756,83 @@ describe('szv catalog internals', () => {
         expect(r.classes.has('p-1')).toBe(true);
     });
 
-    it('resolves a spread inside a catalog object', () => {
-        const jsx =
-            'const SH = { p: 3 }; const x = szv({ base: { ...SH, m: 1 }, variants: { s: { a: { w: 2 } } } });';
+    it.each([
+        [
+            'an object spread',
+            'const SH = { p: 3 }; const x = szv({ base: { ...SH, m: 1 }, variants: { s: { a: { w: 2 } } } });',
+            ['p-3', 'm-1', 'w-2'],
+        ],
+        [
+            'nullish leaves with siblings',
+            'const x = szv({ base: { p: null, m: undefined, w: 2 }, variants: { s: { a: { h: 1 } } } });',
+            ['w-2', 'h-1'],
+        ],
+        [
+            'unary numeric leaves',
+            'const x = szv({ base: { mx: -2, my: +3 }, variants: { s: { a: { h: 1 } } } });',
+            ['-mx-2', 'my-3'],
+        ],
+        [
+            'a skipped call leaf',
+            'const x = szv({ base: { p: fn() }, variants: { s: { a: { h: 1 } } } });',
+            ['h-1'],
+        ],
+        [
+            'an unresolvable identifier leaf',
+            'const x = szv({ base: { p: EXT }, variants: { s: { a: { h: 1 } } } });',
+            ['h-1'],
+        ],
+        [
+            'conditional object branches',
+            'const x = szv({ base: { p: 1 }, variants: { s: { a: cond ? { w: 2 } : { w: 8 } } } });',
+            ['w-2', 'w-8'],
+        ],
+        [
+            'a const-bound variant object',
+            'const V = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { s: { a: V } } });',
+            ['w-5'],
+        ],
+        [
+            'a shared const variant object',
+            'const S = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { d: { a: S, b: S } } });',
+            ['w-5'],
+        ],
+    ])('collects catalog classes through %s', (_label, jsx, expectedClasses) => {
         const r = run(jsx);
-        expect(r.classes.has('p-3')).toBe(true);
-        expect(r.classes.has('m-1')).toBe(true);
-        expect(r.classes.has('w-2')).toBe(true);
+        expect([...r.classes]).toEqual(expect.arrayContaining(expectedClasses));
     });
 
-    it('skips null / undefined leaf values but keeps siblings', () => {
-        const jsx =
-            'const x = szv({ base: { p: null, m: undefined, w: 2 }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-2')).toBe(true);
-        expect(r.classes.has('h-1')).toBe(true);
-    });
-
-    it('handles unary +/- leaf values', () => {
-        const jsx =
-            'const x = szv({ base: { mx: -2, my: +3 }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('-mx-2')).toBe(true);
-        expect(r.classes.has('my-3')).toBe(true);
-    });
-
-    it('skips a call-expression leaf but keeps siblings', () => {
-        const jsx = 'const x = szv({ base: { p: fn() }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('h-1')).toBe(true);
-    });
-
-    it('skips an unresolvable const leaf identifier', () => {
-        const jsx = 'const x = szv({ base: { p: EXT }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('h-1')).toBe(true);
-    });
-
-    it('expands a conditional-object variant value into both branches', () => {
-        const jsx =
-            'const x = szv({ base: { p: 1 }, variants: { s: { a: cond ? { w: 2 } : { w: 8 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-2')).toBe(true);
-        expect(r.classes.has('w-8')).toBe(true);
-    });
-
-    it('resolves a const-bound variant object value', () => {
-        const jsx =
-            'const V = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { s: { a: V } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-5')).toBe(true);
-    });
-
-    it('memoizes a shared const referenced from two variant values', () => {
-        const jsx =
-            'const S = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { d: { a: S, b: S } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-5')).toBe(true);
-    });
-
-    it('ignores a reassignable (let) config binding', () => {
-        const jsx = 'let cfg = { base: { p: 1 } }; const x = szv(cfg);';
+    it.each([
+        ['a reassignable binding', 'let cfg = { base: { p: 1 } }; const x = szv(cfg);'],
+        ['a runtime member argument', 'const x = szv(props.cfg); const A = () => <i sz="m-1" />;'],
+        [
+            'a destructured declarator',
+            'const [a] = szv({ base: { p: 1 } }); const A = () => <i sz="m-1" />;',
+        ],
+    ])('does not inject a catalog for %s', (_label, jsx) => {
         const r = run(jsx);
         expect(r.code).not.toContain('_szv_catalog');
     });
 
-    it('ignores a runtime (member-expression) config argument', () => {
-        const jsx = 'const x = szv(props.cfg); const A = () => <i sz="m-1" />;';
+    it.each([
+        [
+            'a computed dimension key',
+            "const x = szv({ base: { p: 1 }, variants: { ['s']: { a: { w: 2 } } } });",
+            'p-1',
+        ],
+        [
+            'a computed value key',
+            "const x = szv({ base: { p: 1 }, variants: { s: { ['a']: { w: 2 } } } });",
+            'p-1',
+        ],
+        [
+            'a numeric leaf key',
+            'const x = szv({ base: { 2: 4 }, variants: { s: { a: { w: 2 } } } });',
+            'w-2',
+        ],
+    ])('keeps valid siblings beside %s', (_label, jsx, expectedClass) => {
         const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('ignores a non-identifier declarator id (array destructure)', () => {
-        const jsx = 'const [a] = szv({ base: { p: 1 } }); const A = () => <i sz="m-1" />;';
-        const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('skips a computed variant dimension key', () => {
-        const jsx = "const x = szv({ base: { p: 1 }, variants: { ['s']: { a: { w: 2 } } } });";
-        const r = run(jsx);
-        expect(r.classes.has('p-1')).toBe(true);
-    });
-
-    it('skips a computed variant value key', () => {
-        const jsx = "const x = szv({ base: { p: 1 }, variants: { s: { ['a']: { w: 2 } } } });";
-        const r = run(jsx);
-        expect(r.classes.has('p-1')).toBe(true);
-    });
-
-    it('handles a numeric leaf key in a catalog object', () => {
-        const jsx = 'const x = szv({ base: { 2: 4 }, variants: { s: { a: { w: 2 } } } });';
-        const r = run(jsx);
-        // Numeric key ignored by transform; sibling variant class still emitted.
-        expect(r.classes.has('w-2')).toBe(true);
+        expect(r.classes.has(expectedClass)).toBe(true);
     });
 });
 
