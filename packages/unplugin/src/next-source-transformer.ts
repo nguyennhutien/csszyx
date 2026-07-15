@@ -7,7 +7,7 @@ import {
     transformRust,
     transformSourceCode,
 } from '@csszyx/compiler';
-
+import { normalizePathSeparators } from './path-normalization.js';
 import {
     createTransformCacheKey,
     readTransformCache,
@@ -312,7 +312,7 @@ function createNextSourceTransformCacheInput(
  * @param filename
  */
 function normalizeSourceFilename(filename: string): string {
-    return filename.replace(/\\/g, '/');
+    return normalizePathSeparators(filename);
 }
 
 /**

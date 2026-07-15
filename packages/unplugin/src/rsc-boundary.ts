@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { normalizePathSeparators } from './path-normalization.js';
+
 const SERVER_DIRECTIVE_RE = /^['"]use server['"];?$/;
 const CLIENT_DIRECTIVE_RE = /^['"]use client['"];?$/;
 
@@ -164,8 +166,8 @@ export function createRSCModuleRecord(code: string, id: string): RSCModuleRecord
  */
 export function deleteRSCModuleRecord(records: Map<string, RSCModuleRecord>, id: string): boolean {
     const normalized = normalizeModuleId(id);
-    const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
-    const resolved = path.resolve(clean).replace(/\\/g, '/');
+    const clean = normalizePathSeparators(id.split('?')[0] ?? id);
+    const resolved = normalizePathSeparators(path.resolve(clean));
     pruneRSCModulePathCaches(new Set([normalized, resolved, clean]));
 
     let deleted = records.delete(normalized);
@@ -244,7 +246,7 @@ const APP_ROUTER_ENTRIES = new Set([
  * @returns true for supported Next App Router route entry filenames
  */
 function isNextAppRouterEntry(id: string): boolean {
-    const clean = id.split('?')[0]?.replace(/\\/g, '/') ?? id;
+    const clean = normalizePathSeparators(id.split('?')[0] ?? id);
     if (!clean.includes('/app/') && !clean.startsWith('app/')) return false;
     const basename = clean.split('/').pop() ?? '';
     const dotIdx = basename.indexOf('.');
@@ -936,9 +938,9 @@ function normalizeModuleId(id: string): string {
     }
     let normalized: string;
     try {
-        normalized = fs.realpathSync.native(clean).replace(/\\/g, '/');
+        normalized = normalizePathSeparators(fs.realpathSync.native(clean));
     } catch {
-        normalized = path.resolve(clean).replace(/\\/g, '/');
+        normalized = normalizePathSeparators(path.resolve(clean));
     }
     normalizedModuleIdCache.set(clean, normalized);
     return normalized;
@@ -1007,7 +1009,7 @@ function resolveLocalModule(importer: string, source: string): string | null {
  */
 function pruneRSCModulePathCaches(moduleIds: Set<string>): void {
     for (const [key, value] of normalizedModuleIdCache) {
-        const normalizedKey = key.replace(/\\/g, '/');
+        const normalizedKey = normalizePathSeparators(key);
         if (moduleIds.has(value) || moduleIds.has(normalizedKey)) {
             normalizedModuleIdCache.delete(key);
         }
