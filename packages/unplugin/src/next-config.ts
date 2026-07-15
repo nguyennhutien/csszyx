@@ -79,7 +79,7 @@ export function csszyxTurbopack(
     return {
         ...existing,
         rules: {
-            ...(existing.rules ?? {}),
+            ...existing.rules,
             [glob]: {
                 loaders: [
                     {
