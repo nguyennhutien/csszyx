@@ -481,29 +481,26 @@ describe('Unescape/Escape Functions', () => {
 // 11. Additional Coverage for 50+ Tests
 // ============================================================================
 describe('Additional Coverage', () => {
-    it('should handle gradient classes', () => {
-        const css =
-            '.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }';
+    it.each([
+        [
+            'gradient classes',
+            '.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }',
+            '.ak {',
+        ],
+        ['backdrop filter classes', '.backdrop-blur-sm { backdrop-filter: blur(4px); }', '.an {'],
+        [
+            'divide utilities',
+            '.divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; }',
+            '.ao >',
+        ],
+        [
+            'space utilities',
+            '.space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }',
+            '.x >',
+        ],
+    ])('should handle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.ak {');
-    });
-
-    it('should handle backdrop filter classes', () => {
-        const css = '.backdrop-blur-sm { backdrop-filter: blur(4px); }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.an {');
-    });
-
-    it('should handle divide utilities', () => {
-        const css = '.divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.ao >');
-    });
-
-    it('should handle space utilities', () => {
-        const css = '.space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.x >');
+        expect(result.css).toContain(expectedCSS);
     });
 
     it('should return correct mangledClasses list', () => {
