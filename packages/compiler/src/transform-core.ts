@@ -2212,6 +2212,57 @@ function isArbitraryContainerBreakpoint(
     );
 }
 
+const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
+
+/** Collects special properties that emit one direct utility. */
+function collectBasicSpecialProperty(
+    rawKey: string,
+    key: string,
+    value: SzValue,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (rawKey === 'willChange' && typeof value === 'string') {
+        classes.push(`${prefix}${formatWillChange(value)}`);
+        return true;
+    }
+    if (typeof value === 'string' && isDirectKeywordProperty(key)) {
+        classes.push(`${prefix}${formatDirectKeywordProperty(key, value)}`);
+        return true;
+    }
+    if (isGradientPositionKey(rawKey) && typeof value === 'number') {
+        classes.push(`${prefix}${rawKey.replace('Pos', '')}-${value}%`);
+        return true;
+    }
+    return false;
+}
+
+/** Formats a will-change value. */
+function formatWillChange(value: string): string {
+    if (WILL_CHANGE_KEYWORDS.has(value)) return `will-change-${value}`;
+    return value.startsWith('--')
+        ? `will-change-(${value})`
+        : `will-change-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Returns whether a property maps its string value directly to a utility. */
+function isDirectKeywordProperty(key: string): boolean {
+    return key === 'display' || key === 'position' || key === 'visibility' || key === 'isolation';
+}
+
+/** Formats display, position, visibility, and isolation values. */
+function formatDirectKeywordProperty(key: string, value: string): string {
+    if (key === 'display') return value === 'none' ? 'hidden' : value;
+    if (key === 'visibility') return value === 'hidden' ? 'invisible' : value;
+    if (key === 'isolation') return value === 'isolate' ? 'isolate' : `isolation-${value}`;
+    return value;
+}
+
+/** Returns whether a key controls a gradient stop position. */
+function isGradientPositionKey(key: string): boolean {
+    return key === 'fromPos' || key === 'viaPos' || key === 'toPos';
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2449,85 +2500,7 @@ function transformImpl(
         // ================================================================
         // HANDLE SPECIAL PROPERTIES
         // ================================================================
-
-        // Handle will-change (opt-in mapping)
-        if (rawKey === 'willChange' && typeof value === 'string') {
-            const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
-            if (WILL_CHANGE_KEYWORDS.has(value)) {
-                classes.push(`${prefix}will-change-${value}`);
-            } else if (value.startsWith('--')) {
-                classes.push(`${prefix}will-change-(${value})`);
-            } else {
-                classes.push(`${prefix}will-change-[${normalizeArbitraryValue(value)}]`);
-            }
-            continue;
-        }
-
-        // Handle display property (special mapping)
-        if (key === 'display') {
-            if (typeof value === 'string') {
-                if (value === 'none') {
-                    className += 'hidden';
-                } else {
-                    className += value;
-                }
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // Handle position property (direct value)
-        if (key === 'position') {
-            if (typeof value === 'string') {
-                className += value;
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // Handle visibility property (direct value mapping)
-        // { visibility: "visible" } → visible
-        // { visibility: "hidden" } → invisible
-        // { visibility: "collapse" } → collapse
-        if (key === 'visibility') {
-            if (typeof value === 'string') {
-                if (value === 'hidden') {
-                    className += 'invisible';
-                } else {
-                    className += value; // visible, collapse
-                }
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // Handle isolation property (direct value only for "isolate")
-        // { isolation: "isolate" } → isolate
-        // { isolation: "auto" } → isolation-auto
-        if (key === 'isolation') {
-            if (typeof value === 'string') {
-                if (value === 'isolate') {
-                    className += 'isolate';
-                } else {
-                    className += `isolation-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // ================================================================
-        // HANDLE fromPos/viaPos/toPos NUMBER VALUES
-        // { fromPos: 50 } → from-50%, { viaPos: 30 } → via-30%, { toPos: 100 } → to-100%
-        // ================================================================
-        if (
-            (rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') &&
-            typeof value === 'number'
-        ) {
-            const gradPrefix = rawKey.replace('Pos', '');
-            classes.push(`${prefix}${gradPrefix}-${value}%`);
-            continue;
-        }
+        if (collectBasicSpecialProperty(rawKey, key, value, prefix, classes)) continue;
 
         // ================================================================
         // HANDLE DIRECT OUTPUT PROPERTIES (shorthands)
