@@ -8,12 +8,10 @@
  * the curated parity fixtures alone.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
 import { getNativePackageName, loadNativeBinding } from '@csszyx/core/native';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { extractCorpusSnippets } from './extracted-corpus.js';
 import { compareRustVsOxc, type RustParityComparison } from './transform-rust-harness.js';
 
 type RustCorpusCategory =
@@ -23,12 +21,6 @@ type RustCorpusCategory =
     | 'class-divergence'
     | 'metadata-divergence'
     | 'rust-unavailable';
-
-interface ExtractedSnippet {
-    file: string;
-    index: number;
-    source: string;
-}
 
 // ZERO-DIVERGENCE POLICY: every divergence budget below is 0 and stays 0. A
 // nonzero count is never an acceptable expectation — a field report proved that
@@ -83,49 +75,6 @@ describe('Rust native engine — extracted compiler corpus', () => {
         expect(summary.counts.parity + summary.counts['rust-ahead']).toBeGreaterThan(0);
     });
 });
-
-function extractCorpusSnippets(): ExtractedSnippet[] {
-    const testsDir = path.resolve(__dirname);
-    const snippets: ExtractedSnippet[] = [];
-
-    for (const file of fs.readdirSync(testsDir).sort()) {
-        // `*-branch-coverage.test.ts` files exist to drive per-file branch
-        // coverage with edge-case inputs; they are not curated parity-corpus
-        // entries. Excluding them keeps this signal a stable, hand-picked set
-        // instead of drifting with every coverage-oriented snippet added.
-        if (
-            !file.endsWith('.test.ts') ||
-            file.startsWith('oxc-') ||
-            file.includes('branch-coverage')
-        ) {
-            continue;
-        }
-        const content = fs.readFileSync(path.join(testsDir, file), 'utf-8');
-        const re = /const\s+(?:source|src)\s*=\s*(['"`])([\s\S]*?)\1\s*;/g;
-        let index = 0;
-        for (const match of content.matchAll(re)) {
-            const source = decodeLiteral(match[1], match[2]);
-            if (!source || !/\bsz(?:Recover)?\s*=/.test(source)) {
-                continue;
-            }
-            snippets.push({ file, index, source });
-            index++;
-        }
-    }
-
-    return snippets;
-}
-
-function decodeLiteral(quote: string, raw: string): string | null {
-    if (quote === '`') {
-        return raw.includes('${') ? null : raw;
-    }
-    try {
-        return Function(`return ${quote}${raw}${quote}`)() as string;
-    } catch {
-        return null;
-    }
-}
 
 function summarise(snippets: readonly ExtractedSnippet[]): {
     counts: Record<RustCorpusCategory, number>;

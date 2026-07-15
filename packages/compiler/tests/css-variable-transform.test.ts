@@ -29,6 +29,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     });
 
     describe('mixed static + dynamic', () => {
+        // @extracted-corpus-source-column
         it.each([
             [
                 'mixed static and dynamic props',
@@ -252,6 +253,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
             expect(result.code).not.toContain('(--_sz');
         });
 
+        // @extracted-corpus-source-column
         it.each([
             [
                 'a non-literal ternary branch',
