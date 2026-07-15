@@ -2405,6 +2405,46 @@ function formatListStyle(value: string): string {
     return LIST_STYLE_STANDARD.has(value) ? `list-${value}` : `list-[${value}]`;
 }
 
+/** Collects divide, text-decoration, and font-stretch utilities. */
+function collectDecorationProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'divideStyle') utility = `divide-${value}`;
+    else if (key === 'decorationStyle' || key === 'textDecorationStyle') {
+        utility = `decoration-${value}`;
+    } else if (key === 'decorationColor' || key === 'textDecorationColor') {
+        utility = `decoration-${value}`;
+    } else if (key === 'decorationThickness' || key === 'textDecorationThickness') {
+        utility = formatDecorationThickness(value);
+    } else if (key === 'fontStretch') utility = formatFontStretch(value);
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats text-decoration thickness. */
+function formatDecorationThickness(value: string): string {
+    if (needsArbitraryBrackets(value)) {
+        return `decoration-[${normalizeArbitraryValue(value)}]`;
+    }
+    return value.startsWith('--') ? `decoration-(${value})` : `decoration-${value}`;
+}
+
+/** Formats font-stretch keywords, variables, and percentages. */
+function formatFontStretch(value: string): string {
+    if (FONT_STRETCH_KEYWORDS.has(value)) return `font-${value}`;
+    if (value.startsWith('--')) return `font-stretch-(${value})`;
+    if (!/^\d+(\.\d+)?%$/.test(value)) return `font-stretch-[${value}]`;
+    const numeric = parseFloat(value);
+    return value.includes('.') || !Number.isInteger(numeric)
+        ? `font-stretch-[${value}]`
+        : `font-stretch-${value}`;
+}
+
 /* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
@@ -2651,66 +2691,7 @@ function transformImpl(
             if (collectFontModeProperty(rawKey, value, prefix, classes)) continue;
             if (collectTextKeywordProperty(rawKey, value, prefix, classes)) continue;
             if (collectTextFlowProperty(rawKey, value, prefix, classes)) continue;
-
-            // divideStyle: 'solid' | 'dashed' | etc → divide-solid, divide-dashed
-            if (rawKey === 'divideStyle') {
-                className += `divide-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // decorationStyle: 'solid' | 'dashed' | etc → decoration-solid, decoration-dashed
-            if (rawKey === 'decorationStyle' || rawKey === 'textDecorationStyle') {
-                className += `decoration-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // decorationColor: 'red-500' → decoration-red-500
-            if (rawKey === 'decorationColor' || rawKey === 'textDecorationColor') {
-                className += `decoration-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // decorationThickness: '2' | '3px' → decoration-2, decoration-[3px]
-            if (rawKey === 'decorationThickness' || rawKey === 'textDecorationThickness') {
-                if (needsArbitraryBrackets(value)) {
-                    className += `decoration-[${normalizeArbitraryValue(value)}]`;
-                } else if (value.startsWith('--')) {
-                    className += `decoration-(${value})`;
-                } else {
-                    className += `decoration-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // fontStretch: '50%' | '125%' → font-stretch-50%, font-stretch-[125%]
-            // fontStretch: '50%' | '125%' → font-stretch-50%, font-stretch-[125%]
-            // Fix 6: Font Stretch Keywords
-            if (rawKey === 'fontStretch') {
-                const sValue = String(value);
-                if (FONT_STRETCH_KEYWORDS.has(sValue)) {
-                    // Keywords use font- prefix: font-ultra-condensed
-                    className += `font-${sValue}`;
-                } else if (sValue.startsWith('--')) {
-                    className += `font-stretch-(${sValue})`;
-                } else if (/^\d+(\.\d+)?%$/.test(sValue)) {
-                    // Percentage values: font-stretch-50%, font-stretch-[110%]
-                    const valNum = parseFloat(sValue);
-                    // Standard tailwind v4 values don't need brackets
-                    if (sValue.includes('.') || !Number.isInteger(valNum)) {
-                        className += `font-stretch-[${sValue}]`;
-                    } else {
-                        className += `font-stretch-${sValue}`;
-                    }
-                } else {
-                    className += `font-stretch-[${sValue}]`;
-                }
-                classes.push(className);
-                continue;
-            }
+            if (collectDecorationProperty(rawKey, value, prefix, classes)) continue;
 
             // Fix 12: maxW: 'container' Sugar
             if (rawKey === 'maxW' && value === 'container') {
