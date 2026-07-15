@@ -82,6 +82,20 @@ describe('sz-codegen', () => {
         const result = generateSzExpression({ 'display:grid': { display: 'flex' } });
         expect(result).toContain("'display:grid'");
     });
+
+    it('escapes quoted keys and string values without emitting raw line breaks', () => {
+        const result = generateSzExpression({ "custom'key": 'one\\two\nthree' });
+        expect(result).toBe("{{ 'custom\\'key': 'one\\\\two\\nthree' }}");
+    });
+
+    it('escapes structured gradient strings', () => {
+        const result = generateSzExpression({
+            bgImg: { gradient: "lin'ear", dir: 'to\\right', in: 'ok\nlab' },
+        });
+        expect(result).toContain("gradient: 'lin\\'ear'");
+        expect(result).toContain("dir: 'to\\\\right'");
+        expect(result).toContain("in: 'ok\\nlab'");
+    });
 });
 
 describe('ast-transformer (simple)', () => {
