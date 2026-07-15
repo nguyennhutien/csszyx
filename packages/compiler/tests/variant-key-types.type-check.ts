@@ -35,10 +35,11 @@ const variants: SzProps = {
     '@container': true,
     '@container/sidebar': true,
 };
-void variants;
 
 // Over-loosening guard: a scalar typo key must STILL be a tsc error. If the index
 // signatures were too broad this `@ts-expect-error` would be unused → compile error.
 // @ts-expect-error - bgColor is not a valid sz key (canonical is `bg`)
 const typo: SzProps = { bgColor: 'red-500' };
-void typo;
+
+// Exports keep the compile-time fixtures live without runtime-only `void` expressions.
+export { typo, variants };
