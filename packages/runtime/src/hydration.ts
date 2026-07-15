@@ -674,7 +674,7 @@ export function getSSRContext(): SSRContext | null {
     }
 
     const timestampAttr = htmlElement.dataset.szTimestamp;
-    const timestamp = timestampAttr ? parseInt(timestampAttr, 10) : 0;
+    const timestamp = timestampAttr ? Number.parseInt(timestampAttr, 10) : 0;
 
     const hasRecoveryTokens = document.querySelector('[data-sz-recovery-token]') !== null;
 
