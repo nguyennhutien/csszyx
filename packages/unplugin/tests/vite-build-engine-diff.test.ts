@@ -28,7 +28,7 @@ export const App = ({ isMobile }) => (
         <div sz={{
             '[&_.tab-item-header]': { py: '0!' },
             '[&>span]': { text: 'sm' },
-            "[&[data-state='open']]": { bg: 'brand' },
+            '[&[data-state="open"]]': { bg: 'brand' },
         }} />
     </div>
 );
@@ -162,7 +162,7 @@ describe('vite production build — engine diff (rust vs oxc)', () => {
             'hover:bg-zinc-100',
             '[&_.tab-item-header]:py-0!',
             '[&>span]:text-sm',
-            "[&[data-state='open']]:bg-brand",
+            '[&[data-state="open"]]:bg-brand',
             'mx-0',
             'bg-tag-blue-bg',
             'bg-tag-red-bg',

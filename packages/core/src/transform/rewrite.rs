@@ -655,6 +655,8 @@ fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class
     // noisy `class=""`.
     let replacement = if class_name.is_empty() {
         "className={undefined}".to_string()
+    } else if class_name.contains('"') {
+        format!("className={{{}}}", js_string_literal(class_name))
     } else {
         format!("className=\"{class_name}\"")
     };

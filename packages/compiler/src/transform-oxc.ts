@@ -848,7 +848,7 @@ function mergeOxcStaticElementClasses(
     const mergedAttr =
         mergedClasses.length === 0
             ? 'className={undefined}'
-            : `className="${mergedClasses.join(' ')}"`;
+            : staticOxcClassNameAttribute(mergedClasses.join(' '));
 
     if (!classNameAttr) {
         const [firstSz, ...rest] = szAttrs;
@@ -892,6 +892,18 @@ function removeOxcAttributes(
     for (const attribute of attributes) {
         edits.remove(whitespaceStart(source, attribute.start), attribute.end);
     }
+}
+
+/**
+ * Serialize a static className without letting selector quotes break JSX syntax.
+ *
+ * @param className Compiled class string.
+ * @returns JSX className attribute source.
+ */
+function staticOxcClassNameAttribute(className: string): string {
+    return className.includes('"')
+        ? `className={${JSON.stringify(className)}}`
+        : `className="${className}"`;
 }
 
 /**
@@ -3661,7 +3673,7 @@ function buildPartialObjectTransform(
               ? // An sz that lowers to zero classes emits `className={undefined}` so the
                 // DOM has no `class` attribute, instead of the noisy `class=""`.
                 'className={undefined}'
-              : `className="${className}"`;
+              : staticOxcClassNameAttribute(className);
     const styleProps = [...partial.dynamicProps.entries()]
         .filter(([id]) => !hoistedNames?.has(id))
         .map(
