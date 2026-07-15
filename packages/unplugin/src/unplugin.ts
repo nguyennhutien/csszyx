@@ -193,6 +193,15 @@ interface PrescanTransformResult {
     result: SourceTransformResult;
 }
 
+/** One Rust prescan input not satisfied by the transform cache. */
+interface RustPrescanMiss {
+    filePath: string;
+    effectiveFilename: string;
+    content: string;
+    cacheInput: TransformCacheKeyInput;
+    cacheKey: TransformCacheKey | null;
+}
+
 /**
  * Placeholders injected during transform, replaced in processAssets/generateBundle
  * with actual values once the complete mangle map is available.
@@ -1694,6 +1703,96 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             .join(' ');
     }
 
+    /**
+     * Mangles static quasis and quoted branches in one className template.
+     *
+     * @param fullMatch Complete className property match.
+     * @param templateContent Template contents without backticks.
+     * @returns Mangled property or the original match when unchanged.
+     */
+    function mangleClassTemplate(fullMatch: string, templateContent: string): string {
+        let changed = false;
+        let output = '';
+        let cursor = 0;
+        while (cursor < templateContent.length) {
+            const interpolationStart = templateContent.indexOf('${', cursor);
+            const quasiEnd =
+                interpolationStart === -1 ? templateContent.length : interpolationStart;
+            const quasi = mangleTemplateQuasi(templateContent.slice(cursor, quasiEnd));
+            output += quasi.value;
+            changed ||= quasi.changed;
+            if (interpolationStart === -1) break;
+
+            const interpolationEnd = findTemplateInterpolationEnd(
+                templateContent,
+                interpolationStart + 2,
+            );
+            const inner = templateContent.slice(interpolationStart + 2, interpolationEnd - 1);
+            const interpolation = mangleTemplateInterpolation(inner);
+            output += `\${${interpolation.value}}`;
+            changed ||= interpolation.changed;
+            cursor = interpolationEnd;
+        }
+        return changed ? `className:\`${output}\`` : fullMatch;
+    }
+
+    /** Mangled text fragment and whether a replacement occurred. */
+    interface MangledTemplateFragment {
+        value: string;
+        changed: boolean;
+    }
+
+    /**
+     * Mangles the non-whitespace content of one template quasi.
+     *
+     * @param quasi Static template fragment.
+     * @returns Mangled fragment and change marker.
+     */
+    function mangleTemplateQuasi(quasi: string): MangledTemplateFragment {
+        const trimmed = quasi.trim();
+        if (!trimmed) return { value: quasi, changed: false };
+        const mangled = mangleClassString(trimmed);
+        return {
+            value: mangled === trimmed ? quasi : quasi.replace(trimmed, mangled),
+            changed: mangled !== trimmed,
+        };
+    }
+
+    /**
+     * Finds the offset after a balanced template interpolation.
+     *
+     * @param templateContent Template contents without backticks.
+     * @param bodyStart Offset after the opening interpolation delimiter.
+     * @returns Offset after the closing brace, or content length when unterminated.
+     */
+    function findTemplateInterpolationEnd(templateContent: string, bodyStart: number): number {
+        let depth = 0;
+        for (let cursor = bodyStart; cursor < templateContent.length; cursor++) {
+            if (templateContent[cursor] === '{') depth++;
+            else if (templateContent[cursor] === '}' && depth-- === 0) return cursor + 1;
+        }
+        return templateContent.length;
+    }
+
+    /**
+     * Mangles double-quoted class strings within an interpolation.
+     *
+     * @param inner Interpolation body.
+     * @returns Mangled body and change marker.
+     */
+    function mangleTemplateInterpolation(inner: string): MangledTemplateFragment {
+        let changed = false;
+        const value = inner.replace(/"([^"]*)"/g, (quoted: string, classString: string) => {
+            const parts = classString.split(/\s+/).filter(Boolean);
+            if (parts.length === 0) return quoted;
+            const mangled = parts.map(className => mangleMap[className] || className).join(' ');
+            if (mangled === classString) return quoted;
+            changed = true;
+            return `"${mangled}"`;
+        });
+        return { value, changed };
+    }
+
     // Pass 1: Direct className="..." / class="..." / className:"..."
     // Use separate patterns for double-quoted and single-quoted strings so that
     // class names containing single quotes (e.g. before:content-['']) are mangled
@@ -1727,77 +1826,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // The \s* allows the optional space after the colon that appears in unminified SSR output.
     // Pass 1 skips template literals (only targets "..." strings).
     // Pass 2 mangles the quoted parts of the ternary but leaves the quasi text unmangled.
-    result = result.replace(/className:\s*`([^`]+)`/g, (fullMatch, tplContent) => {
-        let changed = false;
-        let out = '';
-        let i = 0;
-        while (i < tplContent.length) {
-            const interStart = tplContent.indexOf('${', i);
-            if (interStart === -1) {
-                // Trailing quasi — rest of the template literal is static text
-                const quasi = tplContent.slice(i);
-                const trimmed = quasi.trim();
-                if (trimmed) {
-                    const m = mangleClassString(trimmed);
-                    if (m !== trimmed) {
-                        changed = true;
-                        out += quasi.replace(trimmed, m);
-                    } else {
-                        out += quasi;
-                    }
-                } else {
-                    out += quasi;
-                }
-                break;
-            }
-            // Quasi text before the next ${...} interpolation
-            const quasi = tplContent.slice(i, interStart);
-            const trimmed = quasi.trim();
-            if (trimmed) {
-                const m = mangleClassString(trimmed);
-                if (m !== trimmed) {
-                    changed = true;
-                    out += quasi.replace(trimmed, m);
-                } else {
-                    out += quasi;
-                }
-            } else {
-                out += quasi;
-            }
-            // Mangle quoted strings inside the ${...} interpolation (ternary branch strings)
-            // then copy the interpolation with its surrounding ${ and } delimiters.
-            let j = interStart + 2;
-            let depth = 0;
-            while (j < tplContent.length) {
-                if (tplContent[j] === '{') {
-                    depth++;
-                } else if (tplContent[j] === '}') {
-                    if (depth === 0) {
-                        j++;
-                        break;
-                    }
-                    depth--;
-                }
-                j++;
-            }
-            const interInner = tplContent.slice(interStart + 2, j - 1);
-            const mangledInner = interInner.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
-                const parts = inner.split(/\s+/).filter(Boolean);
-                if (parts.length === 0) {
-                    return qm;
-                }
-                const m = parts.map((p: string) => mangleMap[p] || p).join(' ');
-                if (m === inner) {
-                    return qm;
-                }
-                changed = true;
-                return `"${m}"`;
-            });
-            out += `\${${mangledInner}}`;
-            i = j;
-        }
-        return changed ? `className:\`${out}\`` : fullMatch;
-    });
+    result = result.replace(/className:\s*`([^`]+)`/g, mangleClassTemplate);
 
     // Pass 2: className:EXPR with ternary operators containing quoted strings.
     // Handles all forms produced by the compiler:
@@ -2666,19 +2695,36 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const compilerOptions = createCompilerOptions(prescanAstBudget);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
         const results = new Map<string, SourceTransformResult>();
-        const misses: Array<{
-            filePath: string;
-            effectiveFilename: string;
-            content: string;
-            cacheInput: TransformCacheKeyInput;
-            cacheKey: TransformCacheKey | null;
-        }> = [];
 
-        if (cacheEnabled) {
-            evictTransformCacheOnce();
-        }
+        if (cacheEnabled) evictTransformCacheOnce();
         ensureRustTransformAvailable();
+        const misses = collectRustPrescanMisses(files, compilerOptions, cacheRoot, results);
+        if (misses.length === 0) return orderPrescanResults(files, results);
 
+        try {
+            runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
+        } catch {
+            runRustPrescanFallback(misses, results);
+        }
+        return orderPrescanResults(files, results);
+    }
+
+    /**
+     * Resolves cached Rust prescan inputs and returns the remaining misses.
+     *
+     * @param files Source files discovered during prescan.
+     * @param compilerOptions Effective compiler options.
+     * @param cacheRoot Transform cache directory.
+     * @param results Result sink keyed by authored file path.
+     * @returns Inputs requiring a native batch transform.
+     */
+    function collectRustPrescanMisses(
+        files: PrescanSourceFile[],
+        compilerOptions: TransformSourceCodeOptions,
+        cacheRoot: string,
+        results: Map<string, SourceTransformResult>,
+    ): RustPrescanMiss[] {
+        const misses: RustPrescanMiss[] = [];
         for (const file of files) {
             const effectiveFilename = normalizeSourceFilename(file.filePath);
             const cacheInput = createConfiguredTransformCacheInput(
@@ -2687,86 +2733,104 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 compilerOptions,
             );
             const cacheKey = cacheEnabled ? createTransformCacheKey(cacheInput) : null;
-
-            if (cacheEnabled && cacheKey) {
-                const memoryCached = transformMemoryCache.get(cacheKey.key);
-                if (memoryCached) {
-                    transformMemoryCache.delete(cacheKey.key);
-                    transformMemoryCache.set(cacheKey.key, memoryCached);
-                    results.set(file.filePath, memoryCached);
-                    continue;
-                }
-
-                const cached = readTransformCache(cacheRoot, cacheInput, cacheKey);
-                if (cached) {
-                    rememberTransformCacheEntry(cacheKey.key, cached);
-                    results.set(file.filePath, cached);
-                    continue;
-                }
-            }
-
-            misses.push({
-                filePath: file.filePath,
-                effectiveFilename,
-                content: file.content,
-                cacheInput,
-                cacheKey,
-            });
+            const cached = cacheKey
+                ? findConfiguredTransformCacheEntry(
+                      cacheRoot,
+                      cacheInput,
+                      cacheKey,
+                      effectiveFilename,
+                      prescanAstBudget,
+                  )
+                : null;
+            if (cached) results.set(file.filePath, cached);
+            else misses.push({ ...file, effectiveFilename, cacheInput, cacheKey });
         }
+        return misses;
+    }
 
-        if (misses.length === 0) {
-            return files
-                .map(file => {
-                    const result = results.get(file.filePath);
-                    return result ? { filePath: file.filePath, result } : null;
-                })
-                .filter((entry): entry is PrescanTransformResult => entry !== null);
+    /**
+     * Executes and stores one native Rust prescan batch.
+     *
+     * @param misses Inputs requiring transformation.
+     * @param compilerOptions Effective compiler options.
+     * @param cacheRoot Transform cache directory.
+     * @param results Result sink keyed by authored file path.
+     */
+    function runRustPrescanBatch(
+        misses: RustPrescanMiss[],
+        compilerOptions: TransformSourceCodeOptions,
+        cacheRoot: string,
+        results: Map<string, SourceTransformResult>,
+    ): void {
+        const batchResults = transformRustBatch(
+            misses.map(file => ({ filename: file.effectiveFilename, source: file.content })),
+            compilerOptions,
+        );
+        for (let index = 0; index < misses.length; index++) {
+            const miss = misses[index];
+            const result = batchResults[index];
+            if (!miss || !result) continue;
+            cacheRustPrescanResult(miss, result, cacheRoot);
+            results.set(miss.filePath, result);
         }
+    }
 
-        try {
-            const batchResults = transformRustBatch(
-                misses.map(file => ({
-                    filename: file.effectiveFilename,
-                    source: file.content,
-                })),
-                compilerOptions,
-            );
-            for (let index = 0; index < misses.length; index++) {
-                const miss = misses[index];
-                const result = batchResults[index];
-                if (!miss || !result) {
-                    continue;
-                }
-                if (cacheEnabled && miss.cacheKey) {
-                    writeTransformCache(cacheRoot, miss.cacheInput, result, miss.cacheKey);
-                    rememberTransformCacheEntry(miss.cacheKey.key, result);
-                }
+    /**
+     * Caches one successful Rust prescan result when caching is enabled.
+     *
+     * @param miss Original cache miss metadata.
+     * @param result Transform result.
+     * @param cacheRoot Transform cache directory.
+     */
+    function cacheRustPrescanResult(
+        miss: RustPrescanMiss,
+        result: SourceTransformResult,
+        cacheRoot: string,
+    ): void {
+        if (!cacheEnabled || !miss.cacheKey) return;
+        writeTransformCache(cacheRoot, miss.cacheInput, result, miss.cacheKey);
+        rememberTransformCacheEntry(miss.cacheKey.key, result);
+    }
+
+    /**
+     * Retries failed native batches one file at a time.
+     *
+     * @param misses Inputs from the failed batch.
+     * @param results Result sink keyed by authored file path.
+     */
+    function runRustPrescanFallback(
+        misses: RustPrescanMiss[],
+        results: Map<string, SourceTransformResult>,
+    ): void {
+        for (const miss of misses) {
+            try {
+                const result = transformConfiguredSource(
+                    miss.content,
+                    miss.effectiveFilename,
+                    prescanAstBudget,
+                );
                 results.set(miss.filePath, result);
-            }
-        } catch {
-            for (const miss of misses) {
-                try {
-                    results.set(
-                        miss.filePath,
-                        transformConfiguredSource(
-                            miss.content,
-                            miss.effectiveFilename,
-                            prescanAstBudget,
-                        ),
-                    );
-                } catch {
-                    // Preserve historical prescan behavior: a file that cannot
-                    // transform during safelist discovery is skipped.
-                }
+            } catch {
+                // Safelist discovery intentionally skips files that cannot transform.
             }
         }
+    }
 
-        return files
-            .map(file => {
-                const result = results.get(file.filePath);
-                return result ? { filePath: file.filePath, result } : null;
-            })
-            .filter((entry): entry is PrescanTransformResult => entry !== null);
+    /**
+     * Restores source discovery order while omitting failed transforms.
+     *
+     * @param files Source files in discovery order.
+     * @param results Results keyed by authored file path.
+     * @returns Successful transforms in discovery order.
+     */
+    function orderPrescanResults(
+        files: PrescanSourceFile[],
+        results: Map<string, SourceTransformResult>,
+    ): PrescanTransformResult[] {
+        return files.flatMap(file => {
+            const result = results.get(file.filePath);
+            return result ? [{ filePath: file.filePath, result }] : [];
+        });
     }
 
     /**

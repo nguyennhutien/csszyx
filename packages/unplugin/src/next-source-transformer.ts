@@ -126,61 +126,19 @@ function stripJsCommentsAndStrings(source: string): string {
         const peek = index + 1 < length ? source[index + 1] : '';
 
         if (char === '/' && peek === '/') {
-            index += 2;
-            while (index < length && source[index] !== '\n') {
-                index++;
-            }
+            index = skipLineComment(source, index);
             continue;
         }
         if (char === '/' && peek === '*') {
-            index += 2;
-            while (index + 1 < length && !(source[index] === '*' && source[index + 1] === '/')) {
-                index++;
-            }
-            index = Math.min(length, index + 2);
+            index = skipBlockComment(source, index);
             continue;
         }
         if (char === '/' && isRegexLiteralStart(out)) {
-            index++;
-            let inCharClass = false;
-            while (index < length) {
-                const current = source[index];
-                if (current === '\\' && index + 1 < length) {
-                    index += 2;
-                    continue;
-                }
-                if (current === '[') {
-                    inCharClass = true;
-                    index++;
-                    continue;
-                }
-                if (current === ']') {
-                    inCharClass = false;
-                    index++;
-                    continue;
-                }
-                if (current === '/' && !inCharClass) {
-                    index++;
-                    while (/[a-z]/i.test(source[index] ?? '')) {
-                        index++;
-                    }
-                    break;
-                }
-                index++;
-            }
+            index = skipRegexLiteral(source, index);
             continue;
         }
         if (char === '"' || char === "'" || char === '`') {
-            const quote = char;
-            index++;
-            while (index < length && source[index] !== quote) {
-                if (source[index] === '\\' && index + 1 < length) {
-                    index += 2;
-                } else {
-                    index++;
-                }
-            }
-            index++;
+            index = skipQuotedSource(source, index, char);
             continue;
         }
 
@@ -188,6 +146,87 @@ function stripJsCommentsAndStrings(source: string): string {
         index++;
     }
     return out;
+}
+
+/**
+ * Skips a line comment without consuming its newline.
+ *
+ * @param source
+ * @param start
+ * @returns Next source offset.
+ */
+function skipLineComment(source: string, start: number): number {
+    const newline = source.indexOf('\n', start + 2);
+    return newline === -1 ? source.length : newline;
+}
+
+/**
+ * Skips a block comment, including its closing delimiter when present.
+ *
+ * @param source
+ * @param start
+ * @returns Next source offset.
+ */
+function skipBlockComment(source: string, start: number): number {
+    const close = source.indexOf('*/', start + 2);
+    return close === -1 ? source.length : close + 2;
+}
+
+/**
+ * Skips a regex literal, escaped characters, character classes, and flags.
+ *
+ * @param source
+ * @param start
+ * @returns Next source offset.
+ */
+function skipRegexLiteral(source: string, start: number): number {
+    let index = start + 1;
+    let inCharClass = false;
+    while (index < source.length) {
+        const current = source[index];
+        if (current === '\\' && index + 1 < source.length) {
+            index += 2;
+            continue;
+        }
+        if (current === '[') {
+            inCharClass = true;
+        } else if (current === ']') {
+            inCharClass = false;
+        } else if (current === '/' && !inCharClass) {
+            return skipRegexFlags(source, index + 1);
+        }
+        index++;
+    }
+    return index;
+}
+
+/**
+ * Skips ASCII regex flags after a closing delimiter.
+ *
+ * @param source
+ * @param start
+ * @returns Next source offset.
+ */
+function skipRegexFlags(source: string, start: number): number {
+    let index = start;
+    while (/[a-z]/i.test(source[index] ?? '')) index++;
+    return index;
+}
+
+/**
+ * Skips a quoted string or template literal with escape handling.
+ *
+ * @param source
+ * @param start
+ * @param quote
+ * @returns Next source offset.
+ */
+function skipQuotedSource(source: string, start: number, quote: string): number {
+    let index = start + 1;
+    while (index < source.length && source[index] !== quote) {
+        index += source[index] === '\\' && index + 1 < source.length ? 2 : 1;
+    }
+    return index + 1;
 }
 
 /**

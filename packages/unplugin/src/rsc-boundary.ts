@@ -468,6 +468,12 @@ interface StaticImport {
     source: string;
 }
 
+/** Result of scanning one import keyword. */
+interface StaticImportScanResult {
+    nextCursor: number;
+    value?: StaticImport;
+}
+
 /**
  * Finds static imports with a linear lexical scan that supports multiline clauses.
  *
@@ -479,64 +485,105 @@ function findStaticImports(code: string): StaticImport[] {
     let cursor = 0;
     while (cursor < code.length) {
         const importStart = code.indexOf('import', cursor);
-        if (importStart === -1) {
-            break;
-        }
-        cursor = importStart + 6;
-        if (
-            (importStart > 0 && isIdentifierPart(code.charCodeAt(importStart - 1))) ||
-            isIdentifierPart(code.charCodeAt(cursor))
-        ) {
-            continue;
-        }
-
-        let position = skipAsciiWhitespace(code, cursor);
-        const opener = code.charAt(position);
-        if (opener === '(') {
-            continue;
-        }
-        if (opener === '"' || opener === "'") {
-            const literal = readQuotedString(code, position);
-            if (literal) {
-                imports.push({ clause: null, source: literal.value });
-                cursor = literal.end;
-            }
-            continue;
-        }
-
-        const clauseStart = position;
-        let fromStart = -1;
-        while (position < code.length) {
-            if (
-                code.startsWith('from', position) &&
-                (position === clauseStart || !isIdentifierPart(code.charCodeAt(position - 1))) &&
-                !isIdentifierPart(code.charCodeAt(position + 4))
-            ) {
-                fromStart = position;
-                break;
-            }
-            if (code.charAt(position) === ';') {
-                break;
-            }
-            position += 1;
-        }
-        if (fromStart === -1) {
-            continue;
-        }
-
-        const clause = code.slice(clauseStart, fromStart).trim();
-        if (splitAsciiWhitespace(clause)[0] === 'type') {
-            cursor = fromStart + 4;
-            continue;
-        }
-        position = skipAsciiWhitespace(code, fromStart + 4);
-        const literal = readQuotedString(code, position);
-        if (literal) {
-            imports.push({ clause, source: literal.value });
-            cursor = literal.end;
-        }
+        if (importStart === -1) break;
+        const result = scanStaticImport(code, importStart);
+        cursor = result.nextCursor;
+        if (result.value) imports.push(result.value);
     }
     return imports;
+}
+
+/**
+ * Scans one import keyword and separates static imports from dynamic calls.
+ *
+ * @param code - Module source with comments removed.
+ * @param importStart - Offset of the import keyword.
+ * @returns Next scan cursor and an optional static import.
+ */
+function scanStaticImport(code: string, importStart: number): StaticImportScanResult {
+    const afterKeyword = importStart + 6;
+    if (
+        (importStart > 0 && isIdentifierPart(code.charCodeAt(importStart - 1))) ||
+        isIdentifierPart(code.charCodeAt(afterKeyword))
+    ) {
+        return { nextCursor: afterKeyword };
+    }
+
+    const clauseStart = skipAsciiWhitespace(code, afterKeyword);
+    const opener = code.charAt(clauseStart);
+    if (opener === '(') return { nextCursor: afterKeyword };
+    if (opener === '"' || opener === "'") {
+        return scanSideEffectImport(code, clauseStart, afterKeyword);
+    }
+    return scanImportClause(code, clauseStart, afterKeyword);
+}
+
+/**
+ * Reads a side-effect-only static import.
+ *
+ * @param code - Module source.
+ * @param literalStart - Opening quote offset.
+ * @param fallbackCursor - Cursor used for a malformed literal.
+ * @returns Import scan result.
+ */
+function scanSideEffectImport(
+    code: string,
+    literalStart: number,
+    fallbackCursor: number,
+): StaticImportScanResult {
+    const literal = readQuotedString(code, literalStart);
+    return literal
+        ? { nextCursor: literal.end, value: { clause: null, source: literal.value } }
+        : { nextCursor: fallbackCursor };
+}
+
+/**
+ * Reads a static import clause and its source literal.
+ *
+ * @param code - Module source.
+ * @param clauseStart - First non-whitespace offset after import.
+ * @param fallbackCursor - Cursor used when the clause is incomplete.
+ * @returns Import scan result.
+ */
+function scanImportClause(
+    code: string,
+    clauseStart: number,
+    fallbackCursor: number,
+): StaticImportScanResult {
+    const fromStart = findImportFromKeyword(code, clauseStart);
+    if (fromStart === -1) return { nextCursor: fallbackCursor };
+
+    const clause = code.slice(clauseStart, fromStart).trim();
+    if (splitAsciiWhitespace(clause)[0] === 'type') {
+        return { nextCursor: fromStart + 4 };
+    }
+
+    const literalStart = skipAsciiWhitespace(code, fromStart + 4);
+    const literal = readQuotedString(code, literalStart);
+    return literal
+        ? { nextCursor: literal.end, value: { clause, source: literal.value } }
+        : { nextCursor: fallbackCursor };
+}
+
+/**
+ * Finds the standalone `from` keyword before an import terminator.
+ *
+ * @param code - Module source.
+ * @param clauseStart - Import clause start offset.
+ * @returns Keyword offset, or -1 when absent.
+ */
+function findImportFromKeyword(code: string, clauseStart: number): number {
+    for (let position = clauseStart; position < code.length; position += 1) {
+        if (code.charAt(position) === ';') return -1;
+        if (
+            code.startsWith('from', position) &&
+            (position === clauseStart || !isIdentifierPart(code.charCodeAt(position - 1))) &&
+            !isIdentifierPart(code.charCodeAt(position + 4))
+        ) {
+            return position;
+        }
+    }
+    return -1;
 }
 
 /**
@@ -1121,13 +1168,7 @@ function stripCommentsForImportScan(code: string): string {
 
         if (quote) {
             out += ch;
-            if (escaped) {
-                escaped = false;
-            } else if (ch === '\\') {
-                escaped = true;
-            } else if (ch === quote) {
-                quote = null;
-            }
+            ({ quote, escaped } = advanceQuotedImportScan(ch, quote, escaped));
             i++;
             continue;
         }
@@ -1140,29 +1181,16 @@ function stripCommentsForImportScan(code: string): string {
         }
 
         if (ch === '/' && next === '/') {
-            out += '  ';
-            i += 2;
-            while (i < code.length && code[i] !== '\n') {
-                out += ' ';
-                i++;
-            }
+            const masked = maskLineComment(code, i);
+            out += masked.value;
+            i = masked.end;
             continue;
         }
 
         if (ch === '/' && next === '*') {
-            out += '  ';
-            i += 2;
-            while (i < code.length) {
-                const blockCh = code[i];
-                const blockNext = code[i + 1];
-                if (blockCh === '*' && blockNext === '/') {
-                    out += '  ';
-                    i += 2;
-                    break;
-                }
-                out += blockCh === '\n' ? '\n' : ' ';
-                i++;
-            }
+            const masked = maskBlockComment(code, i);
+            out += masked.value;
+            i = masked.end;
             continue;
         }
 
@@ -1171,4 +1199,64 @@ function stripCommentsForImportScan(code: string): string {
     }
 
     return out;
+}
+
+/**
+ * Advances quote and escape state for one character inside a string.
+ *
+ * @param character - Current source character.
+ * @param quote - Active quote delimiter.
+ * @param escaped - Whether the current character is escaped.
+ * @returns Updated quote and escape state.
+ */
+function advanceQuotedImportScan(
+    character: string,
+    quote: '"' | "'" | '`',
+    escaped: boolean,
+): { quote: '"' | "'" | '`' | null; escaped: boolean } {
+    if (escaped) return { quote, escaped: false };
+    if (character === '\\') return { quote, escaped: true };
+    return { quote: character === quote ? null : quote, escaped: false };
+}
+
+/** Masked comment fragment and the next source offset. */
+interface MaskedComment {
+    end: number;
+    value: string;
+}
+
+/**
+ * Replaces a line comment with spaces without consuming its newline.
+ *
+ * @param code - Module source.
+ * @param start - Slash offset.
+ * @returns Masked comment and next source offset.
+ */
+function maskLineComment(code: string, start: number): MaskedComment {
+    const newline = code.indexOf('\n', start + 2);
+    const end = newline === -1 ? code.length : newline;
+    return { end, value: ' '.repeat(end - start) };
+}
+
+/**
+ * Replaces a block comment with whitespace while preserving newlines.
+ *
+ * @param code - Module source.
+ * @param start - Slash offset.
+ * @returns Masked comment and next source offset.
+ */
+function maskBlockComment(code: string, start: number): MaskedComment {
+    let end = start + 2;
+    while (end < code.length) {
+        if (code.charAt(end) === '*' && code.charAt(end + 1) === '/') {
+            end += 2;
+            break;
+        }
+        end += 1;
+    }
+    let value = '';
+    for (let index = start; index < end; index += 1) {
+        value += code.charAt(index) === '\n' ? '\n' : ' ';
+    }
+    return { end, value };
 }

@@ -24,6 +24,7 @@ import {
     handleTemplateLiteral,
     handleTernary,
     isClsxLikeName,
+    type PatternResult,
 } from './dynamic-patterns.js';
 import { generateSzExpression, generateSzHtmlValue } from './sz-codegen.js';
 import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
@@ -177,79 +178,19 @@ function isCleanCanonicalTarget(target: string): boolean {
 function normalizeSzObject(obj: t.ObjectExpression, replacements: Replacement[]): number {
     let count = 0;
     for (const prop of obj.properties) {
-        if (!t.isObjectProperty(prop) || prop.computed) {
-            continue; // spread / computed keys are not safely rewritable
-        }
-        const key = prop.key;
-        let keyName: string | null = null;
-        if (t.isIdentifier(key)) {
-            keyName = key.name;
-        } else if (t.isStringLiteral(key)) {
-            keyName = key.value;
-        }
-        if (keyName === null) {
-            continue;
-        }
+        if (!t.isObjectProperty(prop) || prop.computed) continue;
+        const keyName = readSzPropertyKey(prop.key);
+        if (keyName === null) continue;
 
-        // Removed boolean sugar: replace the whole `flex: true` property.
-        const sugar = REMOVED_BOOLEAN_SUGAR[keyName];
-        if (
-            sugar &&
-            t.isBooleanLiteral(prop.value) &&
-            prop.value.value === true &&
-            prop.start != null &&
-            prop.end != null
-        ) {
-            replacements.push({
-                start: prop.start,
-                end: prop.end,
-                text: `${sugar.key}: '${sugar.value}'`,
-            });
+        if (normalizeRemovedBooleanSugar(prop, keyName, replacements)) {
             count++;
             continue;
         }
-
-        // Ambiguous passthrough `font` key: its SUGGESTION_MAP entry is a prose
-        // hint ("weight (for font-weight) or fontFamily (for family)"), so the
-        // clean-rename below skips it and `font` would survive the migration. But
-        // it IS resolvable from the value, exactly like the class migration does
-        // for `font-*`: `{ font: 'bold' }` → `{ weight: 'bold' }`,
-        // `{ font: 'sans' }` → `{ fontFamily: 'sans' }`. Keep the value untouched.
-        if (keyName === 'font' && key.start != null && key.end != null) {
-            let fontValue: string | null = null;
-            if (t.isStringLiteral(prop.value)) {
-                fontValue = prop.value.value;
-            } else if (t.isNumericLiteral(prop.value)) {
-                fontValue = String(prop.value.value);
-            }
-            const resolved = fontValue !== null ? disambiguateFont(fontValue)?.prop : undefined;
-            if (resolved && resolved !== 'font') {
-                replacements.push({
-                    start: key.start,
-                    end: key.end,
-                    text: t.isStringLiteral(key) ? `'${resolved}'` : resolved,
-                });
-                count++;
-                continue;
-            }
-        }
-
-        // Clean rename: rewrite only the key identifier, keep the value as-is.
-        const suggestion = SUGGESTION_MAP[keyName];
-        if (
-            suggestion &&
-            isCleanCanonicalTarget(suggestion) &&
-            suggestion !== keyName &&
-            key.start != null &&
-            key.end != null
-        ) {
-            replacements.push({
-                start: key.start,
-                end: key.end,
-                text: t.isStringLiteral(key) ? `'${suggestion}'` : suggestion,
-            });
+        if (normalizeAmbiguousFontProperty(prop, keyName, replacements)) {
             count++;
+            continue;
         }
+        if (normalizeCanonicalSzKey(prop, keyName, replacements)) count++;
 
         // Recurse into nested variant objects (disjoint from the key edit above).
         if (t.isObjectExpression(prop.value)) {
@@ -257,6 +198,126 @@ function normalizeSzObject(obj: t.ObjectExpression, replacements: Replacement[])
         }
     }
     return count;
+}
+
+/**
+ * Reads an identifier or quoted object-property key.
+ *
+ * @param key - Babel object-property key.
+ * @returns Static key name, or null for unsupported shapes.
+ */
+function readSzPropertyKey(key: t.ObjectProperty['key']): string | null {
+    if (t.isIdentifier(key)) return key.name;
+    return t.isStringLiteral(key) ? key.value : null;
+}
+
+/**
+ * Rewrites a removed boolean shorthand to its canonical key/value pair.
+ *
+ * @param prop - Babel object property.
+ * @param keyName - Static property key.
+ * @param replacements - Source-edit sink.
+ * @returns Whether the whole property was replaced.
+ */
+function normalizeRemovedBooleanSugar(
+    prop: t.ObjectProperty,
+    keyName: string,
+    replacements: Replacement[],
+): boolean {
+    const sugar = REMOVED_BOOLEAN_SUGAR[keyName];
+    if (
+        !sugar ||
+        !t.isBooleanLiteral(prop.value) ||
+        !prop.value.value ||
+        prop.start == null ||
+        prop.end == null
+    ) {
+        return false;
+    }
+    replacements.push({
+        start: prop.start,
+        end: prop.end,
+        text: `${sugar.key}: '${sugar.value}'`,
+    });
+    return true;
+}
+
+/**
+ * Resolves the legacy ambiguous font key from its literal value.
+ *
+ * @param prop - Babel object property.
+ * @param keyName - Static property key.
+ * @param replacements - Source-edit sink.
+ * @returns Whether the key was replaced.
+ */
+function normalizeAmbiguousFontProperty(
+    prop: t.ObjectProperty,
+    keyName: string,
+    replacements: Replacement[],
+): boolean {
+    if (keyName !== 'font' || prop.key.start == null || prop.key.end == null) return false;
+    const fontValue = readFontLiteralValue(prop.value);
+    const resolved = fontValue === null ? undefined : disambiguateFont(fontValue)?.prop;
+    if (!resolved || resolved === 'font') return false;
+    pushSzKeyReplacement(prop.key, resolved, replacements);
+    return true;
+}
+
+/**
+ * Reads a string or numeric font value used by the legacy migration.
+ *
+ * @param value - Babel property value.
+ * @returns Font token, or null for dynamic values.
+ */
+function readFontLiteralValue(value: t.ObjectProperty['value']): string | null {
+    if (t.isStringLiteral(value)) return value.value;
+    return t.isNumericLiteral(value) ? String(value.value) : null;
+}
+
+/**
+ * Rewrites a clean single-target suggestion while retaining the value.
+ *
+ * @param prop - Babel object property.
+ * @param keyName - Static property key.
+ * @param replacements - Source-edit sink.
+ * @returns Whether the key was replaced.
+ */
+function normalizeCanonicalSzKey(
+    prop: t.ObjectProperty,
+    keyName: string,
+    replacements: Replacement[],
+): boolean {
+    const suggestion = SUGGESTION_MAP[keyName];
+    if (
+        !suggestion ||
+        !isCleanCanonicalTarget(suggestion) ||
+        suggestion === keyName ||
+        prop.key.start == null ||
+        prop.key.end == null
+    ) {
+        return false;
+    }
+    pushSzKeyReplacement(prop.key, suggestion, replacements);
+    return true;
+}
+
+/**
+ * Adds a source edit for an object-property key.
+ *
+ * @param key - Babel object-property key.
+ * @param replacement - Canonical key name.
+ * @param replacements - Source-edit sink.
+ */
+function pushSzKeyReplacement(
+    key: t.ObjectProperty['key'],
+    replacement: string,
+    replacements: Replacement[],
+): void {
+    replacements.push({
+        start: key.start as number,
+        end: key.end as number,
+        text: t.isStringLiteral(key) ? `'${replacement}'` : replacement,
+    });
 }
 
 // ============================================================================
@@ -279,6 +340,26 @@ export interface TransformOptions {
      * TRANSITIONAL: part of the same legacy-key normalizer; remove at v1.
      */
     keysOnly?: boolean;
+}
+
+/** Mutable counters produced by the JSX migration walk. */
+interface TransformCounters {
+    classNamesTransformed: number;
+    classNamesSkipped: number;
+    classNamesSkippedComponent: number;
+    szKeysNormalized: number;
+}
+
+/** Shared state used while migrating className attributes. */
+interface JsxMigrationContext {
+    source: string;
+    filePath: string;
+    options: TransformOptions;
+    replacements: Replacement[];
+    warnings: string[];
+    classesUnrecognized: string[];
+    clsxCallsitesMigrated: Set<number>;
+    counters: TransformCounters;
 }
 
 /**
@@ -320,6 +401,250 @@ function fastPathResult(source: string, keysOnly: boolean): TransformResult | nu
     return null;
 }
 
+/** Inclusive/exclusive source range for one JSX attribute. */
+interface AttributeRange {
+    start: number;
+    end: number;
+}
+
+/**
+ * Migrates one sz or className JSX attribute.
+ *
+ * @param node - JSX attribute.
+ * @param parent - Parent AST node.
+ * @param context - Shared migration state.
+ */
+function handleJsxAttribute(
+    node: t.JSXAttribute,
+    parent: VisitNode | null,
+    context: JsxMigrationContext,
+): void {
+    if (t.isJSXIdentifier(node.name) && node.name.name === 'sz') {
+        normalizeExistingSzAttribute(node, context);
+        return;
+    }
+    if (context.options.keysOnly || !isClassNameAttribute(node)) return;
+    if (isCustomComponentAttribute(parent)) {
+        context.counters.classNamesSkippedComponent++;
+        return;
+    }
+    if (hasSiblingSzAttribute(parent)) {
+        context.counters.classNamesSkipped++;
+        return;
+    }
+
+    const range = readAttributeRange(node);
+    if (!range) return;
+    if (t.isStringLiteral(node.value)) {
+        applyStaticClassMigration(node.value.value, range, parent, context);
+        return;
+    }
+    if (t.isJSXExpressionContainer(node.value)) {
+        migrateClassExpression(node.value.expression, range, parent, context);
+        return;
+    }
+    context.counters.classNamesSkipped++;
+}
+
+/**
+ * Normalizes legacy keys inside an existing static sz object.
+ *
+ * @param node - sz JSX attribute.
+ * @param context - Shared migration state.
+ */
+function normalizeExistingSzAttribute(node: t.JSXAttribute, context: JsxMigrationContext): void {
+    const value = node.value;
+    if (t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)) {
+        context.counters.szKeysNormalized += normalizeSzObject(
+            value.expression,
+            context.replacements,
+        );
+    }
+}
+
+/**
+ * Returns whether an attribute is a className target.
+ *
+ * @param node - JSX attribute.
+ * @returns Whether the attribute name is className.
+ */
+function isClassNameAttribute(node: t.JSXAttribute): boolean {
+    return t.isJSXIdentifier(node.name) && node.name.name === 'className';
+}
+
+/**
+ * Returns whether the owning JSX element is a custom component.
+ *
+ * @param parent - Attribute parent node.
+ * @returns Whether className must be retained for component forwarding.
+ */
+function isCustomComponentAttribute(parent: VisitNode | null): boolean {
+    if (!t.isJSXOpeningElement(parent)) return false;
+    return (
+        (t.isJSXIdentifier(parent.name) && /^[A-Z]/.test(parent.name.name)) ||
+        t.isJSXMemberExpression(parent.name)
+    );
+}
+
+/**
+ * Returns whether the owning element already declares sz.
+ *
+ * @param parent - Attribute parent node.
+ * @returns Whether migration would create a duplicate sz attribute.
+ */
+function hasSiblingSzAttribute(parent: VisitNode | null): boolean {
+    if (!t.isJSXOpeningElement(parent)) return false;
+    return parent.attributes.some(
+        attribute =>
+            t.isJSXAttribute(attribute) &&
+            t.isJSXIdentifier(attribute.name) &&
+            attribute.name.name === 'sz',
+    );
+}
+
+/**
+ * Reads a complete Babel source range.
+ *
+ * @param node - JSX attribute.
+ * @returns Attribute range, or null when parser offsets are absent.
+ */
+function readAttributeRange(node: t.JSXAttribute): AttributeRange | null {
+    return node.start == null || node.end == null ? null : { start: node.start, end: node.end };
+}
+
+/**
+ * Applies migration for a static class string.
+ *
+ * @param value - Authored class string.
+ * @param range - Attribute source range.
+ * @param parent - Attribute parent node.
+ * @param context - Shared migration state.
+ */
+function applyStaticClassMigration(
+    value: string,
+    range: AttributeRange,
+    parent: VisitNode | null,
+    context: JsxMigrationContext,
+): void {
+    const result = processStaticString(value, context.options.customMap);
+    if (!result) {
+        context.counters.classNamesSkipped++;
+        return;
+    }
+    context.replacements.push({ ...range, text: result.replacement });
+    context.counters.classNamesTransformed++;
+    context.classesUnrecognized.push(...result.unrecognized);
+    injectTodoComment(result.unrecognized, parent, context.options, context.replacements);
+}
+
+/**
+ * Dispatches a className expression to its supported migration handler.
+ *
+ * @param expression - JSX expression.
+ * @param range - Attribute source range.
+ * @param parent - Attribute parent node.
+ * @param context - Shared migration state.
+ */
+function migrateClassExpression(
+    expression: t.Expression | t.JSXEmptyExpression,
+    range: AttributeRange,
+    parent: VisitNode | null,
+    context: JsxMigrationContext,
+): void {
+    if (t.isStringLiteral(expression)) {
+        applyStaticClassMigration(expression.value, range, parent, context);
+        return;
+    }
+    const result = createDynamicPatternResult(expression, context);
+    if (!result) {
+        context.counters.classNamesSkipped++;
+        return;
+    }
+    applyDynamicClassMigration(result.pattern, range, parent, context, result.callsite);
+}
+
+/** Dynamic migration result plus an optional migrated callsite. */
+interface DynamicPatternMatch {
+    pattern: PatternResult;
+    callsite?: number;
+}
+
+/**
+ * Selects the dynamic-pattern handler for a supported expression shape.
+ *
+ * @param expression - JSX expression.
+ * @param context - Shared migration state.
+ * @returns Pattern result, or null for an unsupported expression.
+ */
+function createDynamicPatternResult(
+    expression: t.Expression | t.JSXEmptyExpression,
+    context: JsxMigrationContext,
+): DynamicPatternMatch | null {
+    const { source, options } = context;
+    if (t.isTemplateLiteral(expression)) {
+        return { pattern: handleTemplateLiteral(expression, source, t, options.customMap) };
+    }
+    if (isClsxCallExpression(expression)) {
+        return {
+            pattern: handleClsxCall(expression, source, t, options.customMap),
+            callsite: expression.start ?? undefined,
+        };
+    }
+    if (t.isConditionalExpression(expression)) {
+        return { pattern: handleTernary(expression, source, t, options.customMap) };
+    }
+    if (t.isLogicalExpression(expression) && expression.operator === '&&') {
+        return { pattern: handleLogicalAnd(expression, source, t, options.customMap) };
+    }
+    return null;
+}
+
+/**
+ * Returns whether an expression invokes a supported clsx-like helper.
+ *
+ * @param expression - JSX expression.
+ * @returns Whether the expression is a supported call.
+ */
+function isClsxCallExpression(
+    expression: t.Expression | t.JSXEmptyExpression,
+): expression is t.CallExpression {
+    return (
+        t.isCallExpression(expression) &&
+        t.isIdentifier(expression.callee) &&
+        isClsxLikeName(expression.callee.name)
+    );
+}
+
+/**
+ * Applies a dynamic migration result and preserves skipped-pattern diagnostics.
+ *
+ * @param result - Dynamic-pattern result.
+ * @param range - Attribute source range.
+ * @param parent - Attribute parent node.
+ * @param context - Shared migration state.
+ * @param callsite - Optional clsx callsite offset.
+ */
+function applyDynamicClassMigration(
+    result: PatternResult,
+    range: AttributeRange,
+    parent: VisitNode | null,
+    context: JsxMigrationContext,
+    callsite?: number,
+): void {
+    if (result.migrated) {
+        context.replacements.push({ ...range, text: result.replacement });
+        context.counters.classNamesTransformed += result.converted;
+        if (callsite !== undefined) context.clsxCallsitesMigrated.add(callsite);
+    } else {
+        context.counters.classNamesSkipped++;
+        context.warnings.push(
+            ...result.warnings.map(warning => `[${context.filePath}] ${warning}`),
+        );
+    }
+    context.classesUnrecognized.push(...result.unrecognized);
+    injectTodoComment(result.unrecognized, parent, context.options, context.replacements);
+}
+
 /**
  * Transform a JSX/TSX source file, replacing className with sz props.
  * Uses Babel AST for accurate, context-aware transformation.
@@ -335,10 +660,12 @@ export function transformSource(
     options: TransformOptions = {},
 ): TransformResult {
     const warnings: string[] = [];
-    let classNamesTransformed = 0;
-    let classNamesSkipped = 0;
-    let classNamesSkippedComponent = 0;
-    let szKeysNormalized = 0;
+    const counters: TransformCounters = {
+        classNamesTransformed: 0,
+        classNamesSkipped: 0,
+        classNamesSkippedComponent: 0,
+        szKeysNormalized: 0,
+    };
     const classesUnrecognized: string[] = [];
     const replacements: Replacement[] = [];
 
@@ -420,223 +747,16 @@ export function transformSource(
         },
 
         JSXAttribute(node, parent) {
-            const attrName = node.name;
-
-            // TRANSITIONAL (0.9.10 → 0.10.0): normalize legacy keys inside an
-            // existing sz={{…}} object literal to the single-way canonical.
-            // Remove at v1 — redundant once consumers have migrated.
-            if (t.isJSXIdentifier(attrName) && attrName.name === 'sz') {
-                const szValue = node.value;
-                if (
-                    t.isJSXExpressionContainer(szValue) &&
-                    t.isObjectExpression(szValue.expression)
-                ) {
-                    szKeysNormalized += normalizeSzObject(szValue.expression, replacements);
-                }
-                return;
-            }
-
-            // keys-only upgrade: leave className (and everything else) untouched —
-            // only the sz-prop key normalization above runs. (Transitional; v1.)
-            if (options.keysOnly) {
-                return;
-            }
-
-            // Only process className attributes
-            if (!t.isJSXIdentifier(attrName) || attrName.name !== 'className') {
-                return;
-            }
-
-            // Skip className on custom (capitalized) components — they accept className
-            // as a prop to pass down; we cannot replace it with sz on the call site.
-            // e.g. <MyComponent className="..." /> — skip silently.
-            if (t.isJSXOpeningElement(parent)) {
-                const elementName = parent.name;
-                const isCapitalized =
-                    (t.isJSXIdentifier(elementName) && /^[A-Z]/.test(elementName.name)) ||
-                    t.isJSXMemberExpression(elementName);
-                if (isCapitalized) {
-                    classNamesSkippedComponent++;
-                    return;
-                }
-            }
-
-            // Skip if sibling sz attribute already exists
-            if (t.isJSXOpeningElement(parent)) {
-                const hasSz = parent.attributes.some(
-                    attr =>
-                        t.isJSXAttribute(attr) &&
-                        t.isJSXIdentifier(attr.name) &&
-                        attr.name.name === 'sz',
-                );
-                if (hasSz) {
-                    classNamesSkipped++;
-                    return;
-                }
-            }
-
-            const value = node.value;
-            const attrStart = node.start;
-            const attrEnd = node.end;
-            if (
-                attrStart === null ||
-                attrStart === undefined ||
-                attrEnd === null ||
-                attrEnd === undefined
-            ) {
-                return;
-            }
-
-            // ─── CASE 1: StringLiteral — className="..." ──────────────
-            if (t.isStringLiteral(value)) {
-                const result = processStaticString(value.value, options.customMap);
-                if (result) {
-                    replacements.push({ start: attrStart, end: attrEnd, text: result.replacement });
-                    classNamesTransformed++;
-                    classesUnrecognized.push(...result.unrecognized);
-                    injectTodoComment(result.unrecognized, parent, options, replacements);
-                } else {
-                    classNamesSkipped++;
-                }
-                return;
-            }
-
-            // ─── CASE 2: JSXExpressionContainer — className={...} ─────
-            if (t.isJSXExpressionContainer(value)) {
-                const expr = value.expression;
-
-                // 2a: String literal in braces — className={'...'}
-                if (t.isStringLiteral(expr)) {
-                    const result = processStaticString(expr.value, options.customMap);
-                    if (result) {
-                        replacements.push({
-                            start: attrStart,
-                            end: attrEnd,
-                            text: result.replacement,
-                        });
-                        classNamesTransformed++;
-                        classesUnrecognized.push(...result.unrecognized);
-                        injectTodoComment(result.unrecognized, parent, options, replacements);
-                    } else {
-                        classNamesSkipped++;
-                    }
-                    return;
-                }
-
-                // 2b: Template literal — className={`...`}
-                if (t.isTemplateLiteral(expr)) {
-                    const result = handleTemplateLiteral(expr, source, t, options.customMap);
-                    if (result.migrated) {
-                        replacements.push({
-                            start: attrStart,
-                            end: attrEnd,
-                            text: result.replacement,
-                        });
-                        classNamesTransformed += result.converted;
-                        classesUnrecognized.push(...result.unrecognized);
-                    } else {
-                        classNamesSkipped++;
-                        warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
-                        // Even when the dynamic pattern is skipped, its static
-                        // parts were scanned. Surface any unrecognized custom
-                        // classes (e.g. design-system tokens) so they appear in
-                        // the summary and audit todo file instead of being hidden
-                        // behind a single "skipped" count.
-                        classesUnrecognized.push(...result.unrecognized);
-                    }
-                    injectTodoComment(result.unrecognized, parent, options, replacements);
-                    return;
-                }
-
-                // 2c: Call expression — className={clsx(...)} / cn(...)
-                if (
-                    t.isCallExpression(expr) &&
-                    t.isIdentifier(expr.callee) &&
-                    isClsxLikeName(expr.callee.name)
-                ) {
-                    const result = handleClsxCall(expr, source, t, options.customMap);
-                    if (result.migrated) {
-                        replacements.push({
-                            start: attrStart,
-                            end: attrEnd,
-                            text: result.replacement,
-                        });
-                        classNamesTransformed += result.converted;
-                        classesUnrecognized.push(...result.unrecognized);
-                        if (expr.start !== null && expr.start !== undefined) {
-                            clsxCallsitesMigrated.add(expr.start);
-                        }
-                    } else {
-                        classNamesSkipped++;
-                        warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
-                        // Even when the dynamic pattern is skipped, its static
-                        // parts were scanned. Surface any unrecognized custom
-                        // classes (e.g. design-system tokens) so they appear in
-                        // the summary and audit todo file instead of being hidden
-                        // behind a single "skipped" count.
-                        classesUnrecognized.push(...result.unrecognized);
-                    }
-                    injectTodoComment(result.unrecognized, parent, options, replacements);
-                    return;
-                }
-
-                // 2d: Conditional expression — className={cond ? 'a' : 'b'}
-                if (t.isConditionalExpression(expr)) {
-                    const result = handleTernary(expr, source, t, options.customMap);
-                    if (result.migrated) {
-                        replacements.push({
-                            start: attrStart,
-                            end: attrEnd,
-                            text: result.replacement,
-                        });
-                        classNamesTransformed += result.converted;
-                        classesUnrecognized.push(...result.unrecognized);
-                    } else {
-                        classNamesSkipped++;
-                        warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
-                        // Even when the dynamic pattern is skipped, its static
-                        // parts were scanned. Surface any unrecognized custom
-                        // classes (e.g. design-system tokens) so they appear in
-                        // the summary and audit todo file instead of being hidden
-                        // behind a single "skipped" count.
-                        classesUnrecognized.push(...result.unrecognized);
-                    }
-                    injectTodoComment(result.unrecognized, parent, options, replacements);
-                    return;
-                }
-
-                // 2e: Logical expression — className={cond && 'classes'}
-                if (t.isLogicalExpression(expr) && expr.operator === '&&') {
-                    const result = handleLogicalAnd(expr, source, t, options.customMap);
-                    if (result.migrated) {
-                        replacements.push({
-                            start: attrStart,
-                            end: attrEnd,
-                            text: result.replacement,
-                        });
-                        classNamesTransformed += result.converted;
-                        classesUnrecognized.push(...result.unrecognized);
-                    } else {
-                        classNamesSkipped++;
-                        warnings.push(...result.warnings.map(w => `[${filePath}] ${w}`));
-                        // Even when the dynamic pattern is skipped, its static
-                        // parts were scanned. Surface any unrecognized custom
-                        // classes (e.g. design-system tokens) so they appear in
-                        // the summary and audit todo file instead of being hidden
-                        // behind a single "skipped" count.
-                        classesUnrecognized.push(...result.unrecognized);
-                    }
-                    injectTodoComment(result.unrecognized, parent, options, replacements);
-                    return;
-                }
-
-                // 2f: Unhandled expression → skip silently
-                classNamesSkipped++;
-                return;
-            }
-
-            // JSXExpressionContainer with JSXEmptyExpression, or null → skip
-            classNamesSkipped++;
+            handleJsxAttribute(node, parent, {
+                source,
+                filePath,
+                options,
+                replacements,
+                warnings,
+                classesUnrecognized,
+                clsxCallsitesMigrated,
+                counters,
+            });
         },
     });
 
@@ -671,11 +791,11 @@ export function transformSource(
         changed: replacements.length > 0,
         warnings,
         stats: {
-            classNamesTransformed,
-            classNamesSkipped,
-            classNamesSkippedComponent,
+            classNamesTransformed: counters.classNamesTransformed,
+            classNamesSkipped: counters.classNamesSkipped,
+            classNamesSkippedComponent: counters.classNamesSkippedComponent,
             classesUnrecognized,
-            szKeysNormalized,
+            szKeysNormalized: counters.szKeysNormalized,
         },
         potentiallyUnusedImports,
     };
