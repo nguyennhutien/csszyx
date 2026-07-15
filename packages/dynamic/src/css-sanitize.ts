@@ -47,13 +47,13 @@ function scanUnquotedCssCharacter(char: string, state: CssValueScanState): boole
  * @param value - Complete candidate CSS value.
  * @param index - Current character index.
  * @param state - Scanner state to update.
- * @returns The index consumed by this step.
+ * @returns The next character index to scan.
  */
 function scanQuotedCssCharacter(value: string, index: number, state: CssValueScanState): number {
     const char = value[index];
-    if (char === '\\') return index + 1;
+    if (char === '\\') return index + 2;
     if (char === state.quote) state.quote = null;
-    return index;
+    return index + 1;
 }
 
 /**
@@ -68,7 +68,8 @@ function scanQuotedCssCharacter(value: string, index: number, state: CssValueSca
  */
 export function isSafeCssValue(value: string): boolean {
     const state: CssValueScanState = { quote: null, parenDepth: 0 };
-    for (let i = 0; i < value.length; i++) {
+    let i = 0;
+    while (i < value.length) {
         const codePoint = value.codePointAt(i);
         if (codePoint !== undefined && codePoint < 0x20) {
             return false; // raw control char / CR / LF / tab
@@ -81,6 +82,7 @@ export function isSafeCssValue(value: string): boolean {
         if (!scanUnquotedCssCharacter(char, state)) {
             return false;
         }
+        i++;
     }
     return state.quote === null && state.parenDepth === 0;
 }
