@@ -376,7 +376,7 @@ function findDirectiveStatementEnd(code: string, start: number): number {
  */
 function readDirectivePrologue(code: string): string[] {
     const out: string[] = [];
-    let i = code.charCodeAt(0) === 0xfeff ? 1 : 0;
+    let i = readCodePoint(code, 0) === 0xfeff ? 1 : 0;
 
     while (i < code.length) {
         i = skipWhitespaceAndComments(code, i);
@@ -503,8 +503,8 @@ function findStaticImports(code: string): StaticImport[] {
 function scanStaticImport(code: string, importStart: number): StaticImportScanResult {
     const afterKeyword = importStart + 6;
     if (
-        (importStart > 0 && isIdentifierPart(code.charCodeAt(importStart - 1))) ||
-        isIdentifierPart(code.charCodeAt(afterKeyword))
+        (importStart > 0 && isIdentifierPart(readCodePoint(code, importStart - 1))) ||
+        isIdentifierPart(readCodePoint(code, afterKeyword))
     ) {
         return { nextCursor: afterKeyword };
     }
@@ -577,8 +577,8 @@ function findImportFromKeyword(code: string, clauseStart: number): number {
         if (code.charAt(position) === ';') return -1;
         if (
             code.startsWith('from', position) &&
-            (position === clauseStart || !isIdentifierPart(code.charCodeAt(position - 1))) &&
-            !isIdentifierPart(code.charCodeAt(position + 4))
+            (position === clauseStart || !isIdentifierPart(readCodePoint(code, position - 1))) &&
+            !isIdentifierPart(readCodePoint(code, position + 4))
         ) {
             return position;
         }
@@ -628,7 +628,7 @@ function readQuotedString(code: string, start: number): { end: number; value: st
 function skipAsciiWhitespace(code: string, start: number): number {
     let index = start;
     while (index < code.length) {
-        const charCode = code.charCodeAt(index);
+        const charCode = readCodePoint(code, index);
         if (charCode !== 9 && charCode !== 10 && charCode !== 13 && charCode !== 32) {
             break;
         }
@@ -1103,11 +1103,11 @@ function readImportedSymbols(clause: string): string[] {
  * @returns Whether the token is an identifier.
  */
 function isIdentifier(value: string): boolean {
-    if (value.length === 0 || !isIdentifierStart(value.charCodeAt(0))) {
+    if (value.length === 0 || !isIdentifierStart(readCodePoint(value, 0))) {
         return false;
     }
     for (let index = 1; index < value.length; index += 1) {
-        const code = value.charCodeAt(index);
+        const code = readCodePoint(value, index);
         if (!isIdentifierStart(code) && (code < 48 || code > 57)) {
             return false;
         }
@@ -1126,6 +1126,17 @@ function isIdentifierStart(code: number): boolean {
 }
 
 /**
+ * Read a Unicode code point while preserving the scanner's UTF-16 offsets.
+ *
+ * @param value Source text.
+ * @param index UTF-16 offset.
+ * @returns The code point, or a non-identifier sentinel outside the string.
+ */
+function readCodePoint(value: string, index: number): number {
+    return value.codePointAt(index) ?? -1;
+}
+
+/**
  * Splits import syntax on JavaScript ASCII whitespace in linear time.
  *
  * @param value Import syntax fragment.
@@ -1135,7 +1146,7 @@ function splitAsciiWhitespace(value: string): string[] {
     const parts: string[] = [];
     let start = -1;
     for (let index = 0; index <= value.length; index += 1) {
-        const code = index < value.length ? value.charCodeAt(index) : 32;
+        const code = index < value.length ? readCodePoint(value, index) : 32;
         const whitespace = code === 9 || code === 10 || code === 13 || code === 32;
         if (whitespace) {
             if (start !== -1) {

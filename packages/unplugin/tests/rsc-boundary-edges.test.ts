@@ -38,6 +38,10 @@ describe('directive prologue lexing', () => {
         expect(hasUseClientDirective('﻿"use client";\nexport const X = 1;')).toBe(true);
     });
 
+    it('detects a directive after a comment containing astral text', () => {
+        expect(hasUseClientDirective('// deploy 🚀\n"use client";')).toBe(true);
+    });
+
     it('keeps reading directives after an escaped-string prologue literal', () => {
         // The first literal contains a backslash escape; the lexer must consume
         // the escape and still find the real directive that follows.
