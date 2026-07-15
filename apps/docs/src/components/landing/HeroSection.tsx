@@ -109,6 +109,8 @@ const compileData: CompileEntry[] = [
 ];
 
 const mangleChars = 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA';
+const SZ_HIGHLIGHT_PATTERN =
+  /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g;
 let mangleIdx = 0;
 function getNextMangle(): string {
   const i = mangleIdx++;
@@ -117,18 +119,24 @@ function getNextMangle(): string {
     : mangleChars[i % mangleChars.length] + Math.floor(i / mangleChars.length);
 }
 
-function highlightSz(text: string): string {
-  return text.replace(
-    /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g,
-    (match, s, k, cb, b, cn, n, sym) => {
-      if (s)   return `<span class="string">${s}</span>`;
-      if (k)   return `<span class="key">${k}</span>`;
-      if (b)   return `${cb}<span class="boolean">${b}</span>`;
-      if (n)   return `${cn}<span class="number">${n}</span>`;
-      if (sym) return `<span style="color:light-dark(#94a3b8,#475569)">${sym}</span>`;
-      return match;
+function highlightSzTokens(text: string, classPrefix: '' | 'ho-'): string {
+  return text.replace(SZ_HIGHLIGHT_PATTERN, (match, ...captures) => {
+    const [stringToken, key, booleanPrefix, booleanValue, numberPrefix, numberValue, symbol] = captures;
+    if (stringToken) return `<span class="${classPrefix}string">${stringToken}</span>`;
+    if (key) return `<span class="${classPrefix}key">${key}</span>`;
+    if (booleanValue) return `${booleanPrefix}<span class="${classPrefix}boolean">${booleanValue}</span>`;
+    if (numberValue) return `${numberPrefix}<span class="${classPrefix}number">${numberValue}</span>`;
+    if (symbol) {
+      return classPrefix
+        ? `<span class="${classPrefix}symbol">${symbol}</span>`
+        : `<span style="color:light-dark(#94a3b8,#475569)">${symbol}</span>`;
     }
-  );
+    return match;
+  });
+}
+
+function highlightSz(text: string): string {
+  return highlightSzTokens(text, '');
 }
 
 class TextScrambler {
@@ -332,17 +340,7 @@ export default function HeroSection() {
     const hoSzText = "sz={{\n  p: 4,\n  bg: 'blue-500',\n  hover: {\n    bg: 'blue-600',\n  },\n}}";
     let hoTyped = 0;
 
-    const highlight = (text: string) => text.replace(
-      /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g,
-      (m, s, k, cb, b, cn, n, sym) => {
-        if (s)   return `<span class="ho-string">${s}</span>`;
-        if (k)   return `<span class="ho-key">${k}</span>`;
-        if (b)   return `${cb}<span class="ho-boolean">${b}</span>`;
-        if (n)   return `${cn}<span class="ho-number">${n}</span>`;
-        if (sym) return `<span class="ho-symbol">${sym}</span>`;
-        return m;
-      }
-    );
+    const highlight = (text: string) => highlightSzTokens(text, 'ho-');
 
     setTimeout(() => { if (hoLabel) hoLabel.style.opacity = '1'; }, 250);
     setTimeout(() => {
