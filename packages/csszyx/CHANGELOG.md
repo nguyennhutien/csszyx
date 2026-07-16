@@ -2,10 +2,30 @@
 
 ## [0.11.8](https://github.com/nguyennhutien/csszyx/compare/v0.11.7...v0.11.8) (2026-07-16)
 
-
 ### Bug Fixes
 
-* resolve vui 0.11.7 issues and hybrid production mangling ([#160](https://github.com/nguyennhutien/csszyx/issues/160)) ([d07ff0c](https://github.com/nguyennhutien/csszyx/commit/d07ff0c5f5f7261386056cb6826e61d98e646967))
+* resolve vui 0.11.7 issues and hybrid production mangling ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** omit nullable dynamic utilities ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** warn on spread style collisions ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** preserve raw class discovery order ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **runtime:** align generated class merging with szcn ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** precompile finite ternaries in sz arrays ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** preserve style through safe prop spreads ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** recognize boolean text overflow keys ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** recognize css escape hatch in diagnostics ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **unplugin:** preserve arbitrary variants in safelists ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **unplugin:** retain exact arbitrary selector bytes ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **compiler:** serialize quoted arbitrary variants safely ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **tooling:** sync text overflow keys ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **runtime:** reject object variant selections cleanly ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **cli:** drop unsupported codegen values ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **mcp-server:** show quoted theme CSS literally ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **runtime:** retain lite input alias compatibility ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **tooling:** route playground lint locally ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **unplugin:** preserve shared raw class names ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **unplugin:** harden raw class ownership scan ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **unplugin:** align standalone bundler mangling ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
+* **unplugin:** close raw scanner lexical gaps ([#160](https://github.com/nguyennhutien/csszyx/issues/160))
 
 ## [0.11.7](https://github.com/nguyennhutien/csszyx/compare/v0.11.6...v0.11.7) (2026-07-14)
 
