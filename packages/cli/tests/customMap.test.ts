@@ -1,17 +1,17 @@
 /**
- * Custom Map (csszyx-todo.json) tests.
+ * Custom resolution-map tests.
  *
  * Covers all value routes in the customMap:
  *   - Object     → merge into sz
  *   - "sz:keep"  → retain in className (keepInClassName[])
  *   - "sz:remove"→ omit from output entirely
- *   - "sz:todo"  → skip conversion; stays in unrecognized[] (not yet decided)
+ *   - unresolved sentinel → skip conversion; stays in unrecognized[]
  *   - TW string  → auto-convert recognized classes to sz
  *   - Partial TW → recognized → sz, unrecognized → bubble up to unrecognized[]
- *   - null / false / missing → same as sz:todo (backwards compat)
+ *   - null / false / missing → same as the unresolved sentinel (backwards compat)
  *
  * Note: --resolve-todos is read-only. Remaining unknowns surface in log/console
- * only — the todo file is never written during --resolve-todos.
+ * only — the resolution file is never written during --resolve-todos.
  *
  * Also tests transformSource() with customMap (the --resolve-todos flow).
  */
@@ -154,7 +154,7 @@ describe('classNameToSzObject — customMap routes', () => {
         });
     });
 
-    // ── "sz:todo" route ───────────────────────────────────────────────────────
+    // ── Unresolved-sentinel route ─────────────────────────────────────────────
     describe('"sz:todo" route', () => {
         it('treats sz:todo as unresolved (goes to unrecognized[])', () => {
             const customMap = { 'custom-shadow': 'sz:todo' };
@@ -184,7 +184,7 @@ describe('classNameToSzObject — customMap routes', () => {
 
         it('sz:todo on a valid TW class blocks conversion — stays unresolved, NOT converted', () => {
             // "flex" is a perfectly valid TW class the parser knows.
-            // But the dev marked it sz:todo = "not yet decided" — so resolve-todos
+            // But the developer marked it unresolved, so the resolution pass
             // must NOT silently convert it. It stays in unrecognized[].
             const customMap = { flex: 'sz:todo' };
             const { szObject, unrecognized } = classNameToSzObject('flex', customMap);
@@ -337,7 +337,7 @@ describe('classNameToSzObject — customMap routes', () => {
             // sz:remove — gone from everywhere
             expect(keepInClassName).not.toContain('old-badge');
             expect(unrecognized).not.toContain('old-badge');
-            // sz:todo — in unrecognized
+            // Unresolved sentinel — retained in unrecognized.
             expect(unrecognized).toContain('brand-color');
             // shadow-blue-100 is NOT a valid TW class (shadow color) → cascades
             // Note: shadow-blue-100 may or may not be recognized; just verify no crash
@@ -494,7 +494,7 @@ describe('transformSource — customMap (--resolve-todos)', () => {
             injectTodos: true,
         });
         expect(result.changed).toBe(true);
-        // sz:keep is intentional — should NOT generate a @sz-todo comment
+        // The keep sentinel is intentional and must not generate an unresolved marker.
         expect(result.code).not.toContain('@sz-todo');
     });
 
@@ -533,9 +533,9 @@ describe('transformSource — customMap (--resolve-todos)', () => {
 
 describe('customMap priority — token in map is never parsed as plain TW', () => {
     it('sz:todo on any class — valid or custom — always goes to unrecognized[]', () => {
-        // sz:todo = "not yet decided". resolve-todos skips it entirely.
+        // The unresolved sentinel means "not yet decided", so resolution skips it.
         // Even if the class is valid TW (like 'flex'), it must NOT be converted.
-        // The @sz-todo comment should be re-injected so the dev sees it's still pending.
+        // Re-inject the marker so the developer can see that it remains pending.
         const customMap: CsszyxTodoMap = { flex: 'sz:todo' };
         const { szObject, unrecognized } = classNameToSzObject('flex', customMap);
         expect(unrecognized).toContain('flex'); // stays pending

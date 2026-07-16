@@ -30,7 +30,7 @@ import type { CsszyxTodoMap } from '../src/migrate/variant-parser.js';
  * @param source - JSX source string.
  * @param opts - Transform options.
  * @param opts.injectTodos - Whether to inject @sz-todo comments.
- * @param opts.customMap - Optional parsed .csszyx-todo.json map.
+ * @param opts.customMap - Optional parsed resolution map.
  * @returns TransformResult.
  */
 function migrate(
@@ -588,7 +588,7 @@ import { cn } from '@/lib/utils';
         expect(result.code).toContain('className="bg-blue-500"');
     });
 
-    // ── @sz-todo comment injection ─────────────────────────────────────────────
+    // ── Unresolved-marker injection ────────────────────────────────────────────
     it('injectTodos: adds comment for elements with unrecognized classes', () => {
         const source = '<div className="p-4 my-custom-component-class flex" />';
         const result = migrate(source, { injectTodos: true });
@@ -672,7 +672,7 @@ class MyComponent extends React.Component {
 });
 
 // ============================================================================
-// @sz-todo COMMENT ROUND-TRIP (resolve flow)
+// UNRESOLVED-MARKER ROUND-TRIP (resolve flow)
 // ============================================================================
 
 describe('@sz-todo comment round-trip', () => {
@@ -692,7 +692,7 @@ describe('@sz-todo comment round-trip', () => {
         const result = transformSource(stripped, 'test.tsx', { customMap, injectTodos: true });
 
         expect(result.changed).toBe(true);
-        // ds-card resolved → no new @sz-todo comment for it
+        // ds-card resolved → no new unresolved marker for it.
         expect(result.code).not.toMatch(/@sz-todo:.*ds-card/);
         expect(result.code).toContain("rounded: 'lg'");
     });
@@ -703,10 +703,10 @@ describe('@sz-todo comment round-trip', () => {
         const result = transformSource(source, 'test.tsx', { customMap, injectTodos: true });
 
         expect(result.changed).toBe(true);
-        // still-unknown → gets @sz-todo comment
+        // still-unknown → gets an unresolved marker.
         expect(result.code).toContain('@sz-todo');
         expect(result.code).toContain('still-unknown');
-        // resolved-token → resolved, should NOT be in @sz-todo
+        // resolved-token → resolved, so it must not appear in the marker.
         expect(result.code).not.toMatch(/@sz-todo:.*resolved-token/);
     });
 });

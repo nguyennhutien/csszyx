@@ -2,7 +2,7 @@
  * Branch coverage for the migrate command's edge paths: empty/no-match scans,
  * the gitignore check, keys-only skipping HTML, files with no migratable
  * attribute, component-className skips, unrecognized-class overflow, audit's
- * all-recognized branch, write failures, and the @sz-todo strip corner cases.
+ * all-recognized branch, write failures, and unresolved-marker strip corner cases.
  */
 import fs, { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -211,9 +211,9 @@ describe('migrate @sz-todo strip corner cases', () => {
         writeFileSync(join(dir, '.csszyx-todo.json'), JSON.stringify({ mysteryclassx: { m: 1 } }));
         await migrate({ cwd: dir, resolveTodos: '.csszyx-todo.json' });
         const out = readFileSync(file, 'utf8');
-        // The complete todo with content (and its trailing newline) was removed.
+        // The complete marker with content (and its trailing newline) was removed.
         expect(out).not.toContain('real-note');
-        // A non-todo comment is left untouched.
+        // An ordinary comment is left untouched.
         expect(out).toContain('keep-this-comment');
         expect(out).toContain('m: 1');
     });
