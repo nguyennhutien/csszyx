@@ -50,6 +50,13 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      # Diff-informed analysis (default on) restricts PR results to lines in
+      # the PR diff, so a change that creates an alert elsewhere (new taint
+      # flow, shifted fingerprint) only surfaces after merging to main.
+      # Full analysis uploads every result; GitHub still compares against the
+      # base branch, so the PR check only flags alerts new to the PR.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
