@@ -3,6 +3,7 @@ import {
     escapeForDoubleQuotedString,
     escapeJsonForInlineScript,
 } from '../src/inline-script-escape.js';
+import { runGeneratedCode } from './vm-test-utils.js';
 
 const LS = String.fromCharCode(0x2028);
 const PS = String.fromCharCode(0x2029);
@@ -42,11 +43,13 @@ describe('escapeJsonForInlineScript', () => {
         // Paste into a template literal exactly like the injected debug
         // script does, evaluate it, and reconstruct the embedded object.
         // Interpolation must NOT have executed.
-        // biome-ignore lint/security/noGlobalEval: evaluating the generated construct is the property under test
-        const body = eval(`\`var m=${escaped};\``) as string;
-        expect((globalThis as Record<string, unknown>).pwned).toBeUndefined();
-        // biome-ignore lint/security/noGlobalEval: reconstructs the embedded object to prove value equivalence
-        const reconstructed = eval(`(${body.slice('var m='.length, -1)})`) as unknown;
+        const sandbox: Record<string, unknown> = {};
+        const body = runGeneratedCode(`\`var m=${escaped};\``, sandbox) as string;
+        expect(sandbox.pwned).toBeUndefined();
+        const reconstructed = runGeneratedCode(
+            `(${body.slice('var m='.length, -1)})`,
+            Object.create(null),
+        ) as unknown;
         expect(reconstructed).toEqual(map);
     });
 
@@ -69,8 +72,7 @@ describe('escapeForDoubleQuotedString', () => {
 
         // The outer eval string parse must yield back the inline-script-escaped
         // JSON exactly — including the \uXXXX escapes (so `<` stays neutralised).
-        // biome-ignore lint/security/noGlobalEval: reparsing the embedded string is the property under test
-        const afterEvalParse = eval(`"${embedded}"`) as string;
+        const afterEvalParse = runGeneratedCode(`"${embedded}"`) as string;
         expect(afterEvalParse).toBe(escapeJsonForInlineScript(JSON.stringify(map)));
         expect(afterEvalParse).not.toContain('<');
         expect(JSON.parse(afterEvalParse)).toEqual(map);

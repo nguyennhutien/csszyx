@@ -2,7 +2,7 @@
  * docs-proptable-sync — CI gate for PropTable documentation accuracy.
  *
  * Every { sz, tw } row in the reference MDX files is extracted and verified:
- *   transform(eval(sz)).className === tw
+ *   transform(parse(sz)).className === tw
  *
  * This ensures the TW class shown in the docs stays in sync with the actual
  * compiler output. When the compiler changes, this test fails → update docs.
@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { parseStaticObjectLiteral } from '../src/static-object-parser.js';
 import { transform } from '../src/transform.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -64,16 +65,17 @@ function extractRows(content: string): DocRow[] {
 }
 
 /**
- * Evaluate a sz display string into a real sz object.
- * The MDX string uses \" for inner double quotes — unescape before eval.
+ * Parse a sz display string into a real sz object.
+ * The MDX string uses \" for inner double quotes — unescape before parsing.
  * e.g. "{ content: '\"\"' }" → { content: '""' }
  * @param raw - Raw escaped sz string from MDX (e.g. `{ p: 4 }`)
  * @returns Parsed sz object ready for transform()
  */
-function evalSz(raw: string): Parameters<typeof transform>[0] {
+function parseSz(raw: string): Parameters<typeof transform>[0] {
     const unescaped = raw.replace(/\\"/g, '"');
-
-    return new Function(`return ${unescaped}`)() as Parameters<typeof transform>[0];
+    const parsed = parseStaticObjectLiteral(unescaped);
+    if (!parsed) throw new Error(`Documentation sz row is not a static object: ${raw}`);
+    return parsed;
 }
 
 for (const filename of MDX_FILES) {
@@ -83,7 +85,7 @@ for (const filename of MDX_FILES) {
     describe(`docs/reference/${filename} (${rows.length} rows)`, () => {
         for (const { sz, tw } of rows) {
             it(`${sz} → "${tw}"`, () => {
-                const szObj = evalSz(sz);
+                const szObj = parseSz(sz);
                 const result = transform(szObj).className;
                 expect(result).toBe(tw);
             });
