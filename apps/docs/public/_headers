@@ -1,9 +1,12 @@
 # Security hardening headers for the docs site (Cloudflare Pages).
 # Applied to every response. 'unsafe-inline' is kept only because Starlight
-# injects inline theme styles/scripts. Google Fonts is allowlisted because
-# Starlight loads its UI fonts AND the Material Symbols icon font from there:
-# the stylesheet comes from fonts.googleapis.com (style-src) and the font files
-# from fonts.gstatic.com (font-src) — both must be permitted or the icon font
+# injects inline theme styles/scripts. 'wasm-unsafe-eval' permits WebAssembly
+# compilation ONLY (never JS eval/new Function) — Pagefind's search index is a
+# WASM module, so without it every search on the site throws CompileError and
+# hangs at "Searching…". Google Fonts is allowlisted because Starlight loads
+# its UI fonts AND the Material Symbols icon font from there: the stylesheet
+# comes from fonts.googleapis.com (style-src) and the font files from
+# fonts.gstatic.com (font-src) — both must be permitted or the icon font
 # silently disappears. Inventory any new third-party origin before adding it.
 /*
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
@@ -12,4 +15,4 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'

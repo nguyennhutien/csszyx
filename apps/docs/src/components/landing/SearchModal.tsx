@@ -11,14 +11,17 @@ interface SearchResult {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pagefindApi: any = null;
 
-// Use new Function to prevent Vite's import-analysis from resolving this path at
-// transform time. Pagefind is a build-time artifact that doesn't exist in dev mode.
-const dynamicImport = new Function('path', 'return import(path)') as (path: string) => Promise<unknown>;
+// Runtime URL kept in a variable (not an import() literal) so neither Vite's
+// import-analysis nor TypeScript tries to resolve it at build time. The
+// previous `new Function('return import(...)')` trick did the same job but
+// counts as eval under the site's CSP — it threw at module scope and took
+// the whole landing-header island (and this modal) down with it.
+const PAGEFIND_URL = '/pagefind/pagefind.js';
 
 async function loadPagefind() {
     if (pagefindApi) return pagefindApi;
     try {
-        pagefindApi = await dynamicImport('/pagefind/pagefind.js');
+        pagefindApi = await import(/* @vite-ignore */ PAGEFIND_URL);
         await pagefindApi.init();
     } catch {
         pagefindApi = null;
