@@ -173,22 +173,17 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (!norm) {
         return null;
     }
-    // A BEM-style modifier (`tab-item-header--active`) is a DISTINCT class from its
-    // base (`tab-item-header`), not a value-pair of the same utility — collapsing
-    // them last-wins would drop the base (e.g. `tab-item-header` happens to start
-    // with the real `tab` utility prefix). `--` never appears in a Tailwind utility
-    // class (arbitrary values use `[…]`/`(…)`), so a token containing one — other
-    // than a leading CSS-variable class — keys by itself and is never merged away.
-    if (base.indexOf('--') > 0) {
-        return null;
-    }
     const firstSegment = norm.split('-', 1)[0] as string;
     // A token that belongs to an ambiguous prefix AND classifies to a concrete
-    // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`) is a
+    // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`, or a
+    // data-type-hinted variable like `text-(color:--x)` → `text:color`) is a
     // single mutually-exclusive property, so it must last-wins even when it also
-    // appears in the box-role map. Resolve that BEFORE the box-role under-merge
-    // below, which would otherwise keep both. (Measured: only text-ellipsis and
-    // text-clip are in both sets; every other box-role token classifies to null.)
+    // appears in the box-role map or contains `--` (the hinted-variable forms
+    // do). Resolve that BEFORE the BEM `--` guard and the box-role under-merge
+    // below, which would otherwise keep both. A BEM name under an ambiguous
+    // prefix (`text-foo--active`) classifies to null and still falls through to
+    // the guard. (Measured: only text-ellipsis and text-clip sit in both the
+    // classifier and the box-role map; every other box-role token is null here.)
     if (AMBIGUOUS_PREFIXES.has(firstSegment)) {
         const value = norm === firstSegment ? '' : norm.slice(firstSegment.length + 1);
         const group = classifyAmbiguousValue(firstSegment, value);
@@ -196,6 +191,16 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
             const key = `${variant} ${group}`;
             return { key, covers: [key] };
         }
+    }
+    // A BEM-style modifier (`tab-item-header--active`) is a DISTINCT class from its
+    // base (`tab-item-header`), not a value-pair of the same utility — collapsing
+    // them last-wins would drop the base (e.g. `tab-item-header` happens to start
+    // with the real `tab` utility prefix). `--` never appears in a PLAIN Tailwind
+    // utility class, so a token containing one — other than a leading CSS-variable
+    // class or a classified hinted variable above — keys by itself and is never
+    // merged away.
+    if (base.indexOf('--') > 0) {
+        return null;
     }
     // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
     // properties under one category, so under-merge to avoid dropping a sibling.

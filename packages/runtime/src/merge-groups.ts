@@ -362,6 +362,12 @@ function isColorValue(rawValue: string): boolean {
     if (NAMED_COLORS.has(value) || customTokens.colors.has(value)) {
         return true;
     }
+    // Explicit Tailwind data-type hint: `text-(color:--x)` / `text-[color:var(--x)]`
+    // declare the value IS a color, so classify it even though the var name is
+    // unknown. (A bare `text-(--x)` stays unclassified — it could be a size.)
+    if (value.startsWith('[color:') || value.startsWith('(color:')) {
+        return true;
+    }
     const shadeAt = value.lastIndexOf('-');
     if (shadeAt > 0 && PALETTE_SHADES.has(value.slice(shadeAt + 1))) {
         return true;
@@ -417,6 +423,11 @@ function classifyTextValue(value: string): string | null {
         return 'text:size';
     }
     if (isLengthArbitrary(sizeValue)) {
+        return 'text:size';
+    }
+    // Explicit data-type hint: `text-(length:--x)` / `text-[length:var(--x)]`
+    // declare a font-size value, mirroring the color hint in isColorValue.
+    if (sizeValue.startsWith('[length:') || sizeValue.startsWith('(length:')) {
         return 'text:size';
     }
     if (TEXT_ALIGNS.has(value)) {
