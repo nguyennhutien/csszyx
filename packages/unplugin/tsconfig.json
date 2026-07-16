@@ -2,6 +2,7 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "composite": true,
+        "lib": ["ES2021", "DOM"],
         "incremental": true,
         "isolatedDeclarations": true,
         "declaration": true,
