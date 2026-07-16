@@ -2,6 +2,7 @@
  * The virtual-module generators/resolvers and the package-version fallback —
  * small build-plumbing helpers with no direct suite of their own.
  */
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { readPackageVersion } from '../src/next-package-version';
@@ -105,14 +106,14 @@ describe('small guard branches', () => {
         const { runNextPrebuild } = await import('../src/next-prebuild');
         expect(() =>
             runNextPrebuild({
-                root: '/tmp/does-not-matter',
+                root: resolve('test-fixtures/next-prebuild'),
                 patterns: [],
                 compilerOptions: { mangleVars: true },
             } as never),
         ).toThrow(/does not support production CSS variable mangling/);
         expect(() =>
             runNextPrebuild({
-                root: '/tmp/does-not-matter',
+                root: resolve('test-fixtures/next-prebuild'),
                 patterns: [],
                 config: { mangleVars: true },
             } as never),

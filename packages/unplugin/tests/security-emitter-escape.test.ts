@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { escapeHtmlAttribute, renderTailwindScannerCandidates } from '../src/html-escape.js';
 import { generateThemeDts, type ThemeTypeWriterOptions } from '../src/theme-type-writer.js';
@@ -15,7 +16,7 @@ const emptyTheme = {
 
 function dts(theme: Partial<typeof emptyTheme>): string {
     const opts: ThemeTypeWriterOptions = {
-        outputPath: '/tmp/theme.d.ts',
+        outputPath: resolve('test-fixtures/theme.d.ts'),
         sourceFiles: ['app.css'],
         theme: { ...emptyTheme, ...theme },
     };

@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
@@ -24,7 +26,7 @@ async function mangleMapWith(exclude?: string[]): Promise<Record<string, string>
         return fn ? await fn.apply(ctx, args) : undefined;
     };
 
-    const root = '/tmp/csszyx-mangle-exclude-fixture';
+    const root = resolve(homedir(), '.cache/csszyx-tests/mangle-exclude');
     await call('configResolved', { root, command: 'build' });
     // Enough distinct sz classes that the allocator reaches the low single-letter
     // tokens `z`, `y`, `x`, … where a literal `.x`/`.y` collision would happen.
