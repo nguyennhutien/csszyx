@@ -13,7 +13,6 @@ const repoRoot = path.resolve(__dirname, "../../..");
 let errors = 0;
 
 const corePackagePath = path.join(repoRoot, "packages/core/package.json");
-const rootPackagePath = path.join(repoRoot, "package.json");
 const workspacePath = path.join(repoRoot, "pnpm-workspace.yaml");
 const releaseWorkflowPath = path.join(
   repoRoot,
@@ -22,7 +21,6 @@ const releaseWorkflowPath = path.join(
 const nativeTypesPath = path.join(repoRoot, "packages/core/native/index.d.ts");
 const nativeDocsPath = path.join(repoRoot, "packages/core/NATIVE-TRANSFORM.md");
 const corePackage = JSON.parse(readFileSync(corePackagePath, "utf8"));
-const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
 const workspaceYaml = readFileSync(workspacePath, "utf8");
 const releaseWorkflow = readFileSync(releaseWorkflowPath, "utf8");
 const nativeTypes = readFileSync(nativeTypesPath, "utf8");
