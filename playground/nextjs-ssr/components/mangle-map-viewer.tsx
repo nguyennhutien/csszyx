@@ -31,10 +31,17 @@ export function MangleMapViewer() {
     const [sortDir, setSortDir] = useState<SortDir>('desc');
 
     useEffect(() => {
+        // One-time post-hydration read of the csszyx runtime snapshot that the
+        // build injects onto `window.__csszyx`. This is a legitimate "read from an
+        // external system on mount" effect (the whole point of this demo is to
+        // display that runtime state); the react-hooks perf heuristic over-flags
+        // the synchronous setState here, so it is disabled for this block only.
         const helper = window.__csszyx;
         if (helper) {
+            /* eslint-disable react-hooks/set-state-in-effect -- mount-time external DOM/window snapshot read */
             setMangleMap(helper.mangleMap);
             setChecksum(helper.checksum);
+            /* eslint-enable react-hooks/set-state-in-effect */
         }
     }, []);
 
