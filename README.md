@@ -9,6 +9,7 @@ CSS-in-JS framework for the AI era — Tailwind-v4 object syntax, build-time cla
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://img.shields.io/github/actions/workflow/status/nguyennhutien/csszyx/ci.yml?branch=main)](https://github.com/nguyennhutien/csszyx/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=nguyennhutien_csszyx&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=nguyennhutien_csszyx)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13447/badge)](https://www.bestpractices.dev/projects/13447)
 
 ## Quick Start
 
