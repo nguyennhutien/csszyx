@@ -32,7 +32,10 @@ test.describe('Next.js SSR Playground', () => {
 
         // The state update is the observable hydration signal; Playwright also
         // waits for the button to be actionable before dispatching the click.
-        await page.getByRole('button', { name: 'Increase' }).click();
+        // Scope to the counter card: other demos on the page (edge-cases,
+        // css-var spacing) also have "Increase" buttons, so an unscoped role
+        // locator matches several and trips strict mode.
+        await page.getByTestId('client-counter').getByRole('button', { name: 'Increase' }).click();
 
         // Wait for React state update
         await expect(counter).toHaveText(String(count + 1), { timeout: 5000 });
