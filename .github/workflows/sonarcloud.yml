@@ -39,6 +39,14 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+      # Use a runner-managed JRE so transient failures from SonarCloud's JRE
+      # provisioning endpoint cannot prevent the scanner from starting.
+      - name: Setup Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
       # @csszyx/core#build runs wasm-pack, so the WASM toolchain must be present.
       - name: Setup WASM toolchain
         uses: ./.github/actions/setup-wasm
@@ -73,3 +81,4 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_SCANNER_SKIP_JRE_PROVISIONING: "true"
