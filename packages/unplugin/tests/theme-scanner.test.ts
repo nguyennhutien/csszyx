@@ -46,6 +46,11 @@ body { margin: 0; }
         expect(parseThemeBlocks('@themes { --color-decoy: red; }').colors).toEqual([]);
     });
 
+    it('ignores unterminated theme preludes and blocks', () => {
+        expect(parseThemeBlocks('@theme static').colors).toEqual([]);
+        expect(parseThemeBlocks('@theme { --color-decoy: red;').colors).toEqual([]);
+    });
+
     it('strips trailing numeric shade suffix from color tokens', () => {
         const css = `
 @theme {
