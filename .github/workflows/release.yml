@@ -139,16 +139,23 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: node scripts/enrich-release-changelog.mjs
 
-      # Chain the VS Code Marketplace publish. release-vscode.yml listens on
-      # `v*` tag pushes, but the tags release-please creates carry this
-      # workflow's GITHUB_TOKEN, and GitHub never triggers workflows from
-      # events made with a workflow's own token — Marketplace publishes went
-      # silent from v0.9.1 until this dispatch was added. An explicit
+      # Chain the VS Code Marketplace publish. The tags release-please creates
+      # carry this workflow's GITHUB_TOKEN, and GitHub never triggers workflows
+      # from events made with a workflow's own token — Marketplace publishes
+      # went silent from v0.9.1 until this dispatch was added. An explicit
       # workflow_dispatch API call is exempt from that rule; the dispatched
       # job still pauses on the `vscode-publish` environment for maintainer
       # approval (same gate model as npm-publish), so this only STARTS the
       # run, it cannot publish anything by itself. Mirrors the npm publish
       # condition: a fresh release, or tags repaired by the recovery step.
+      #
+      # The dispatch runs on main, NOT the release tag: the vscode-publish
+      # environment's deployment policy only allows main, so a tag-ref run is
+      # rejected by protection rules before its first step (broke every
+      # extension release v0.11.4–v0.11.8). This job runs on the release-PR
+      # merge commit, so main here IS the released commit; the extension
+      # version is read from packages/vscode/package.json, which release-please
+      # has already bumped.
       - name: Dispatch VS Code Marketplace publish
         if: >-
           steps.release.outputs.releases_created == 'true' ||
@@ -156,15 +163,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
-          # Prefer the exact tag so the extension builds the released commit;
-          # recovery runs may not expose a tag output — fall back to main,
-          # whose package.json version release-please has already bumped.
-          ref="${TAG_NAME:-main}"
-          echo "Dispatching release-vscode.yml on ${ref}"
-          gh workflow run release-vscode.yml --ref "${ref}"
+          echo "Dispatching release-vscode.yml on main"
+          gh workflow run release-vscode.yml --ref main
 
   build-native-artifacts:
     name: Build native package artifacts

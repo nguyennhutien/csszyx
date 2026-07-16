@@ -6,6 +6,51 @@ Security fixes target the latest published release of the `csszyx`
 packages on npm. Older versions are not patched retroactively —
 upgrade to the latest release to receive fixes.
 
+## Verifying Releases
+
+CSSzyx distributes its public packages through the npm registry. Each package
+is built and published by the repository's GitHub Actions release workflow with
+npm provenance enabled. The resulting Sigstore attestations link a package to
+the source commit and workflow that produced it; keyless signing uses a
+short-lived certificate instead of a long-lived project signing key.
+
+To verify an installed release, follow npm's
+[provenance verification guidance](https://docs.npmjs.com/viewing-package-provenance/)
+using the latest npm CLI (provenance verification requires npm 9.5.0 or later):
+
+```bash
+npm install --ignore-scripts csszyx@<version>
+npm audit signatures
+```
+
+The audit verifies both npm registry signatures and provenance attestations for
+the installed dependency tree. A missing or invalid signature or attestation
+causes the command to fail. To inspect the complete Sigstore bundles, including
+their verification material and transparency-log entries, run:
+
+```bash
+npm audit signatures --json --include-attestations
+```
+
+The same provenance can be inspected without installing the package. Open the
+chosen version on [npm](https://www.npmjs.com/package/csszyx), select the green
+provenance check mark, and verify that it identifies:
+
+- repository `nguyennhutien/csszyx`;
+- build workflow `.github/workflows/release.yml`;
+- the source commit corresponding to the release; and
+- a public transparency-log entry.
+
+The official [CSSzyx VS Code extension](https://marketplace.visualstudio.com/items?itemName=csszyx.csszyx)
+is distributed through the Visual Studio Marketplace. The Marketplace signs
+published extensions, and VS Code verifies that signature during installation.
+Install the extension through the Marketplace and do not disable the
+`extensions.verifySignature` setting.
+
+Provenance and marketplace signatures establish the origin and integrity of an
+artifact; they do not prove that its source code is free of vulnerabilities.
+Security issues should still be reported through the private process below.
+
 ## Reporting a Vulnerability
 
 Please **do not** open a public issue for security problems.
@@ -27,12 +72,12 @@ reporter unless anonymity is requested.
 
 We aim to meet the following targets for every valid report:
 
-| Stage | Target |
-| --- | --- |
-| Acknowledge the report | within 7 days |
-| Initial assessment + severity | within 14 days |
-| Fix or mitigation for a confirmed high-severity issue | within 30 days |
-| Public disclosure | coordinated with the reporter, after a fix is available |
+| Stage                                                 | Target                                                  |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| Acknowledge the report                                | within 7 days                                           |
+| Initial assessment + severity                         | within 14 days                                          |
+| Fix or mitigation for a confirmed high-severity issue | within 30 days                                          |
+| Public disclosure                                     | coordinated with the reporter, after a fix is available |
 
 If a report stalls, send a polite follow-up via the same private advisory
 thread.
