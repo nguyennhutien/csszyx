@@ -113,6 +113,24 @@ Do not mention target versions in `feat:` or `fix:` commit subjects or
 message bodies. release-please decides versions from the commit history.
 If a specific version is required, use a `Release-As: x.y.z` footer.
 
+## Testing expectations
+
+Behavior changes and bug fixes must include an automated test that would fail
+without the change. Add the test at the narrowest level that proves the public
+behavior:
+
+- **Unit tests** for isolated functions, validation, and error handling.
+- **Integration tests** for behavior spanning packages or build stages.
+- **Parity tests** when compiler engines or framework adapters must produce the
+  same result.
+- **End-to-end tests** for browser behavior, framework integration, SSR, or
+  release-critical user flows.
+
+A bug fix should reproduce the reported failure before asserting the corrected
+behavior. New functionality should cover its main success path and meaningful
+failure or edge cases. If an automated test is impractical, explain why in the
+pull request and describe the repeatable verification performed instead.
+
 ## Local checks
 
 ```bash
