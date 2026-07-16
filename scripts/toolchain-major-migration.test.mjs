@@ -85,3 +85,30 @@ test('pnpm 11 pins stay synchronized and workspace config uses the v11 location'
     const npmrc = readFileSync(path.join(root, '.npmrc'), 'utf8');
     assert.doesNotMatch(npmrc, /^shamefully-hoist/m);
 });
+
+test('node version pins stay synchronized and clear the pnpm 11 floor', () => {
+    const mise = readFileSync(path.join(root, '.mise.toml'), 'utf8');
+    const toolVersions = readFileSync(path.join(root, '.tool-versions'), 'utf8');
+
+    // .mise.toml is the single source of truth for the node version. .tool-versions
+    // exists only because Cloudflare Pages' asdf build image reads it (it does not
+    // read .mise.toml), so the two must agree — a drift here silently broke the CF
+    // docs deploy once (.tool-versions lagged at 22.12.0 while .mise.toml was
+    // 22.22.1). This guard fails fast instead of surfacing at deploy time.
+    const miseNode = mise.match(/^node = "(\d+)\.(\d+)\.(\d+)"$/m);
+    const toolNode = toolVersions.match(/^nodejs (\d+)\.(\d+)\.(\d+)$/m);
+    assert.ok(miseNode, '.mise.toml must pin an exact node version');
+    assert.ok(toolNode, '.tool-versions must pin an exact nodejs version');
+    assert.equal(
+        toolNode[0].replace('nodejs ', ''),
+        `${miseNode[1]}.${miseNode[2]}.${miseNode[3]}`,
+    );
+
+    // pnpm 11.13.0 requires Node >= 22.13; anything below that cannot activate it
+    // via corepack (the exact CF Pages failure). Guard the floor explicitly.
+    const [major, minor] = [Number(miseNode[1]), Number(miseNode[2])];
+    assert.ok(
+        major > 22 || (major === 22 && minor >= 13),
+        `node ${miseNode[0]} is below the pnpm 11 floor (>= 22.13)`,
+    );
+});
