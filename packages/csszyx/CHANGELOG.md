@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.11.8](https://github.com/nguyennhutien/csszyx/compare/v0.11.7...v0.11.8) (2026-07-16)
+
+
+### Bug Fixes
+
+* resolve vui 0.11.7 issues and hybrid production mangling ([#160](https://github.com/nguyennhutien/csszyx/issues/160)) ([d07ff0c](https://github.com/nguyennhutien/csszyx/commit/d07ff0c5f5f7261386056cb6826e61d98e646967))
+
 ## [0.11.7](https://github.com/nguyennhutien/csszyx/compare/v0.11.6...v0.11.7) (2026-07-14)
 
 ### Bug Fixes
